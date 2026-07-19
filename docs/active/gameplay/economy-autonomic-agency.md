@@ -10,9 +10,11 @@
 > North-star constraint: [negative-space-economy.md](../../planned/negative-space-economy.md).
 >
 > **Scope note.** This is *autonomic-light*: free (capacity-bounded, no treasury), needs-driven, no
-> embodied agents. The full treasury-funded faction brain is a later slice — now the *player's control
-> surface* under the grand-strategy pivot ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md)
-> Phase 3). The personal trade-logistics layer (marketplace arbitrage, bounties) is retired with the pivot.
+> embodied agents. The player now has a control surface over the build half of this machinery — per-domain
+> automation switches and manual construction/colonisation verbs that share the same pool and queue —
+> see [player-seat.md](./player-seat.md). The treasury-funded faction purse remains a later slice
+> ([player-seat-roadmap.md](../../planned/player-seat-roadmap.md)). The personal trade-logistics layer
+> (marketplace arbitrage, bounties) is retired with the pivot.
 
 ---
 
@@ -181,16 +183,42 @@ growing. Three mechanisms, in causal order:
 The planner is a clean **decision → gate → pacing** pipeline. The **decision** ranks rate-deficit
 opportunities (served ÷ route cost); the **gate** sizes each to the whole-level count the site's spare
 labour and general space admit, co-building the academies/complex it needs; and **pacing** is the
-construction throughput pool alone — the planner proposes toward the physical ceilings and holds no
-build budget of its own. Capacity grows only through **committed construction projects**, never instant
-accretion. The auto queue policy proposes whole-level projects toward these ceilings — aware of the levels
-already in flight, so it never double-commits — and a **per-faction throughput pool** (`Σ developed
-population × throughput rate`) funds the front-first queue at a **per-build absorption cap**. A level is
+construction pool alone — the planner proposes toward the physical ceilings and holds no build budget of
+its own. Capacity grows only through **committed construction projects**, never instant accretion. The
+auto queue policy proposes whole-level projects toward these ceilings — aware of the levels already in
+flight, so it never double-commits — and the **per-faction construction pool** (`factionConstructionPool`,
+`lib/engine/construction.ts`) funds the front-first queue at a **per-build absorption cap**. A level is
 *under construction* (contributing nothing) until its accumulated work reaches its cost, then it **lands**
 as a full staffable level; build duration is therefore *emergent* (`work ÷ absorbed`, a floor wealth cannot
 buy past) and a larger pool spreads across more parallel fronts rather than finishing any one build faster.
 The gates sequence the work on their own: a system with no spare labour queues only housing (and only if
 fed and calm), and industry is queued only where spare labour already exists.
+
+### The pool — eligible heads, substituted by Construction Centres
+
+The pool is not raw population — it is **eligible heads**: population minus the heads actually *employed*
+in technician/engineer jobs (`computeLabourAllocation` — employment-bounded, so a licensed head with no
+skilled job still swings a hammer; only actually staffing your educated pops costs pool, education alone
+is free). A faction that industrialises absorbs heads into skilled jobs and its base construction labour
+erodes automatically — nobody wrote a "rich factions build slower" rule; it falls out of eligibility once
+skilled employment exists.
+
+A **Construction Centre** (`CONSTRUCTION_CENTRE_TYPE`) is a non-producing building — normal general-space
+footprint, a tier-1-factory-like labour draw (mostly unskilled + a technician draw) — that substitutes
+capital for the labour a skilled economy has absorbed: each staffed level adds
+`CONSTRUCTION.POINTS_PER_LEVEL × min(labourFulfil, skill1Fulfil)` to the faction pool per pulse, gated by
+its own staffing (an unstaffable centre sheds levels via ordinary idle-decay like any building). A centre
+serves no market demand, so it carries no invented value — instead **a construction point is worth the
+best work the pool can't yet fund**: per faction per pulse, `planCentreProposal`
+(`lib/engine/construction-centre.ts`) walks the backlog (in-flight projects + this pulse's ordered
+proposals) against what the pool drains within `CONSTRUCTION.BACKLOG_WINDOW` reference months; the best
+ROI beyond that frontier prices at most one centre proposal (`value = POINTS_PER_LEVEL × r ×
+PAYBACK_HORIZON`), sited at the developed system with the most spare labour and space. It then competes
+in the ordinary ROI ordering like any other proposal. Emergent and self-limiting: a deep backlog of
+*valuable* work prices a centre in; a draining backlog or a backlog of junk never does; a landed centre
+grows the pool, pushing the frontier out and depressing the next centre's value. A centre project is
+**persist-if-funded** — like a colony, an unfunded centre is dropped and re-priced next pulse rather than
+queue-jumping later work with a stale commitment.
 
 ---
 
@@ -269,7 +297,8 @@ committed queue); both processors on their monthly resolution pulse.
 - **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy
   pivot** (personal trading is cut; the deleted scaling-rework doc's bounty/marketplace fork is moot).
 - **Treasury & money** — the budget is a physical work allowance, not a cost; treasury funding, the
-  logistics-efficiency band, and the "faction prefers a player did it" payout asymmetry → SP5-full.
+  logistics-efficiency band, and the "faction prefers a player did it" payout asymmetry →
+  [player-seat-roadmap.md](../../planned/player-seat-roadmap.md) (the purse).
 - **Route consequences** — per-system transit cost, event/revolt blocking, cargo damage, visible
   raidable convoys → SP5-full / war.
 - **Strategic bottleneck-relief weighting** — faction-wide chokepoint targeting + doctrine bias (the
@@ -287,7 +316,9 @@ committed queue); both processors on their monthly resolution pulse.
 - Logistics: the budget generation rate; surplus/deficit margins; hop budget / max logistics distance; the
   hop-vs-fuel blend in route cost.
 - Build: `settleMargin` (housing headroom ahead of population); `D_settle` / `unrest_settle` (the
-  fed-and-calm gate); the construction throughput-pool rate and per-build absorption cap (construction pace).
+  fed-and-calm gate); `CONSTRUCTION.THROUGHPUT_PER_POP` and the per-build absorption cap (construction
+  pace); `CONSTRUCTION.POINTS_PER_LEVEL` / `PAYBACK_HORIZON` / `BACKLOG_WINDOW` (Construction Centre
+  output and valuation).
 
 Per the standing approach, calibrate to a **coarse** health bar — precise tuning is perishable and waits
 until SP4 / SP5-full land.

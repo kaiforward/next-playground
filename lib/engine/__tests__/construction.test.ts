@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionConstructionPool, proposalRoi, orderProposals } from "@/lib/engine/construction";
+import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionConstructionPool, proposalRoi, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
 import type { Proposal, ColonyProposal } from "@/lib/engine/directed-build";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE, CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE } from "@/lib/constants/industry";
@@ -13,7 +13,7 @@ function project(
   workDone = 0,
   workTotal = levels * workCostPerLevel(buildingType),
 ): WorldConstructionProject {
-  return { kind: "build", id, factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
+  return { kind: "build", id, origin: "auto", factionId: "f1", systemId: "s1", buildingType, levels, workTotal, workDone };
 }
 
 describe("factionConstructionPool", () => {
@@ -177,7 +177,7 @@ function projectAt(
   workDone: number,
   workTotal: number,
 ): WorldConstructionProject {
-  return { kind: "build", id, factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
+  return { kind: "build", id, origin: "auto", factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
 }
 
 describe("developmentFloorShare", () => {
@@ -330,6 +330,28 @@ describe("orderProposals — colony interleaving", () => {
     const order1 = orderProposals([a, b]).map((p) => p.systemId);
     const order2 = orderProposals([b, a]).map((p) => p.systemId);
     expect(order1).toEqual(order2);
+  });
+});
+
+describe("orderOpenProjects", () => {
+  const row = (id: string, origin: "auto" | "player", workDone: number): WorldConstructionProject => ({
+    kind: "build", id, factionId: "f1", systemId: "s1", origin,
+    buildingType: "metals", levels: 1, workTotal: 20, workDone,
+  });
+
+  it("moves fresh player orders behind committed work, preserving relative order (FIFO)", () => {
+    const stored = [row("p1", "player", 0), row("a1", "auto", 5), row("p2", "player", 0), row("a2", "auto", 0)];
+    expect(orderOpenProjects(stored).map((p) => p.id)).toEqual(["a1", "a2", "p1", "p2"]);
+  });
+
+  it("is an identity on queues with no fresh player rows (AI queues untouched)", () => {
+    const stored = [row("a1", "auto", 0), row("a2", "auto", 7), row("a3", "auto", 0)];
+    expect(orderOpenProjects(stored).map((p) => p.id)).toEqual(["a1", "a2", "a3"]);
+  });
+
+  it("keeps a player row that has received work in its committed position", () => {
+    const stored = [row("p1", "player", 3), row("a1", "auto", 0)];
+    expect(orderOpenProjects(stored).map((p) => p.id)).toEqual(["p1", "a1"]);
   });
 });
 

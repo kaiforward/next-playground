@@ -50,6 +50,21 @@ describe("depositRows", () => {
     expect(rows[0].worked).toBe(0);
     expect(rows[0].health).toBe("stable");
   });
+
+  it("surfaces one type entry per catalog extractor on a shared resource, in catalog order, zeroing an unbuilt type", () => {
+    // arable is shared by food + textiles (catalog order: food, textiles). Only food is built here —
+    // textiles should still get a zeroed, stable entry so the player can see it and quick-add it.
+    const rows = depositRows([deposit("arable", 5)], [extractor("food", 2, 1.5, 6)], 0, T);
+    expect(rows[0].types.map((t) => t.buildingType)).toEqual(["food", "textiles"]);
+    expect(rows[0].types[0]).toEqual({ buildingType: "food", built: 2, worked: 1.5, output: 6, health: "stable" });
+    expect(rows[0].types[1]).toEqual({ buildingType: "textiles", built: 0, worked: 0, output: 0, health: "stable" });
+  });
+
+  it("carries exactly one type entry for a resource worked by a single catalog extractor", () => {
+    const rows = depositRows([deposit("water", 3)], [extractor("water", 1, 1, 4)], 0, T);
+    expect(rows[0].types).toHaveLength(1);
+    expect(rows[0].types[0]).toEqual({ buildingType: "water", built: 1, worked: 1, output: 4, health: "stable" });
+  });
 });
 
 describe("generalLand", () => {

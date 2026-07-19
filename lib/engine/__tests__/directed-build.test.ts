@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findStructuralDeficits, buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { findStructuralDeficits, buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
@@ -1097,7 +1097,7 @@ describe("planFactionProposals", () => {
     });
     // Ten housing levels already under construction cover the whole pace-ahead target → no new housing.
     const open: WorldConstructionProject[] = [
-      { kind: "build", id: "h", factionId: "f1", systemId: "X", buildingType: HOUSING_TYPE, levels: 10, workTotal: 80, workDone: 0 },
+      { kind: "build", id: "h", origin: "auto", factionId: "f1", systemId: "X", buildingType: HOUSING_TYPE, levels: 10, workTotal: 80, workDone: 0 },
     ];
     expect(planFactionProposals([site], () => 1, [], DEV_REFS).some((p) => p.role === "housing")).toBe(true);
     expect(planFactionProposals([site], () => 1, open, DEV_REFS).some((p) => p.role === "housing")).toBe(false);
@@ -1320,7 +1320,7 @@ describe("planFactionColonyProposals", () => {
     const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
     const c = candidate({ systemId: "c1", habitableSpace: 100 });
     const open: WorldColonyEstablishProject[] = [
-      { kind: "colony_establish", id: "e", factionId: "f1", systemId: "c1", sourceSystemId: "home", seedPop: 50, housingLevels: 3, workTotal: 84, workDone: 20 },
+      { kind: "colony_establish", id: "e", origin: "auto", factionId: "f1", systemId: "c1", sourceSystemId: "home", seedPop: 50, housingLevels: 3, workTotal: 84, workDone: 20 },
     ];
     expect(planFactionColonyProposals("f1", developed, [c], [], COLONY_PARAMS)).toHaveLength(1);
     expect(planFactionColonyProposals("f1", developed, [c], open, COLONY_PARAMS)).toHaveLength(0);
@@ -1421,5 +1421,24 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
   it("does not gate when minSettlerSupply is 0 (disabled)", () => {
     const candidates = Array.from({ length: 8 }, (_, i) => candidate({ systemId: `c${i}`, habitableSpace: 100 }));
     expect(planFactionColonyProposals("f1", [supplyCore], candidates, [], COLONY_PARAMS)).toHaveLength(8);
+  });
+});
+
+describe("sizeColonyEstablish", () => {
+  const params = { seedPop: 500, establishWork: 100 };
+
+  it("sizes seed to the whole-level habitable cap with housing to house it", () => {
+    const s = sizeColonyEstablish(3, params); // habitable 3 → 3 whole housing levels possible
+    expect(s).not.toBeNull();
+    if (s === null) return;
+    // habitableSpace 3 / housingCost 1 → maxHousingLevels 3 → habitableCap 60; seedPop
+    // min(500, 60) = 60; housingLevels min(3, ceil(60/20)=3) = 3 exactly.
+    expect(s.housingLevels).toBe(3);
+    expect(s.seedPop).toBeLessThanOrEqual(params.seedPop);
+    expect(s.work).toBe(params.establishWork + s.housingLevels * workCostPerLevel(HOUSING_TYPE));
+  });
+
+  it("returns null when the site cannot hold one whole housing level", () => {
+    expect(sizeColonyEstablish(0.4, params)).toBeNull();
   });
 });

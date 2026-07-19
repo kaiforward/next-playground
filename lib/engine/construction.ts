@@ -187,6 +187,24 @@ export function fundQueueWithFloor(
   return { projects: open, landed };
 }
 
+/**
+ * Funding order over a faction's STORED open set: everything already committed keeps its stored
+ * order (front-first — including unfunded auto rows and floor-funded rows the stored order
+ * interleaves); fresh player orders (origin "player" with no work yet) move to the back of it,
+ * preserving their own insertion (FIFO) order. The caller appends this pulse's new proposals after,
+ * so the full priority reads: committed work → player orders → new autonomic proposals. Pure;
+ * identity for queues with no fresh player rows.
+ */
+export function orderOpenProjects(projects: WorldConstructionProject[]): WorldConstructionProject[] {
+  const committed: WorldConstructionProject[] = [];
+  const freshPlayer: WorldConstructionProject[] = [];
+  for (const p of projects) {
+    if (p.origin === "player" && p.workDone <= 0) freshPlayer.push(p);
+    else committed.push(p);
+  }
+  return [...committed, ...freshPlayer];
+}
+
 /** ROI of a proposal on the shared construction pool: served value ÷ whole-bundle work (0 if no work). */
 export function proposalRoi(p: Proposal): number {
   return p.work > 0 ? p.value / p.work : 0;
@@ -263,4 +281,59 @@ export function forecastEtaPulses(
     queue = open;
   }
   return projects.map((p) => landedAt.get(p.id) ?? null);
+}
+
+/**
+ * ETA for several INDEPENDENT single-project hypotheticals that all share one committed queue —
+ * as if each were forecast on its own via `forecastEtaPulses([...committed, hypothetical], …)`,
+ * without the other hypotheticals competing for the same trailing pool-share (they never actually
+ * queue behind one another — each represents its own "what if I ordered just this one" probe).
+ *
+ * Front-first funding means the committed prefix's own landing schedule never depends on what
+ * trails it, so committed funding is simulated ONCE; each hypothetical then draws independently off
+ * that shared "pool left after committed" series. This is O(pulses × (committed + hypotheticals))
+ * instead of O(hypotheticals × pulses × committed) for calling `forecastEtaPulses` once per
+ * hypothetical, and returns identical numbers to that per-call approach.
+ */
+export function forecastIndependentEtaPulses(
+  committed: WorldConstructionProject[],
+  hypotheticals: WorldConstructionProject[],
+  pool: number,
+  cap: number,
+  maxPulses = 999,
+): (number | null)[] {
+  if (!Number.isFinite(pool) || pool <= 0 || !Number.isFinite(cap) || cap <= 0) {
+    return hypotheticals.map(() => null);
+  }
+  let queue = committed.map((p) => ({ ...p }));
+  const remaining = hypotheticals.map((h) => Math.max(0, h.workTotal - h.workDone));
+  // A hypothetical with no remaining work at all lands on the very first pulse it's considered —
+  // matching forecastEtaPulses, which would find it already at workTotal on pulse 1 regardless of
+  // how much the committed prefix absorbs first.
+  const landedAt: (number | null)[] = remaining.map((r) => (r <= 0 ? 1 : null));
+
+  for (let pulse = 1; pulse <= maxPulses; pulse++) {
+    const allHypDone = remaining.every((r) => r <= 0);
+    if (queue.length === 0 && allHypDone) break;
+
+    let leftover = pool;
+    if (queue.length > 0) {
+      // fundQueue doesn't expose its internal leftover pool, so derive it from the work each
+      // committed project actually absorbed this pulse (new workDone − old workDone).
+      const before = new Map(queue.map((p) => [p.id, p.workDone]));
+      const { projects: open, landed } = fundQueue(queue, pool, cap);
+      let absorbedByCommitted = 0;
+      for (const p of [...open, ...landed]) absorbedByCommitted += p.workDone - (before.get(p.id) ?? p.workDone);
+      leftover = pool - absorbedByCommitted;
+      queue = open;
+    }
+
+    for (let i = 0; i < hypotheticals.length; i++) {
+      if (remaining[i] <= 0) continue;
+      const take = Math.min(cap, remaining[i], leftover);
+      remaining[i] -= take;
+      if (remaining[i] <= 0) landedAt[i] = pulse;
+    }
+  }
+  return landedAt;
 }

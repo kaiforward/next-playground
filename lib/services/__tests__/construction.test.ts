@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
-import { setWorld, clearWorld } from "@/lib/world/store";
+import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getFactionConstruction, getSystemConstruction } from "@/lib/services/construction";
+import { orderBuild } from "@/lib/services/construction-orders";
 import { ServiceError } from "@/lib/services/errors";
-import { CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE } from "@/lib/constants/industry";
+import { CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE, HOUSING_TYPE } from "@/lib/constants/industry";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 let world: World;
@@ -27,8 +28,8 @@ beforeEach(() => {
   for (const s of [ctrlWithColony, ctrlEmpty]) { s.factionId = factionId; s.control = "controlled"; s.population = 0; }
 
   world.constructionProjects = [
-    { kind: "build", id: "b1", factionId, systemId: dev.id, buildingType: "housing", levels: 4, workTotal: 40, workDone: 32 },
-    { kind: "colony_establish", id: "c1", factionId, systemId: ctrlWithColony.id, sourceSystemId: dev.id, seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62 },
+    { kind: "build", id: "b1", origin: "auto", factionId, systemId: dev.id, buildingType: "housing", levels: 4, workTotal: 40, workDone: 32 },
+    { kind: "colony_establish", id: "c1", origin: "auto", factionId, systemId: ctrlWithColony.id, sourceSystemId: dev.id, seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62 },
   ];
   setWorld(world);
 });
@@ -36,13 +37,14 @@ beforeEach(() => {
 afterEach(() => { clearWorld(); });
 
 describe("getFactionConstruction", () => {
-  it("groups expansion and build-out with a positive pool", () => {
+  it("groups build systems and colonies with a positive pool", () => {
     const data = getFactionConstruction(factionId);
     expect(data.pool).toBeGreaterThan(0);
-    expect(data.expandCount).toBe(1);
-    expect(data.buildCount).toBe(1);
-    expect(data.expansion[0].kind).toBe("colony_establish");
-    expect(data.buildOut[0].buildingLabel).toBe("Housing");
+    expect(data.colonies.length).toBe(1);
+    expect(data.colonies[0].systemId).toBe(ctrlWithColony.id);
+    expect(data.buildSystems.length).toBe(1);
+    expect(data.buildSystems[0].systemId).toBe(dev.id);
+    expect(data.buildSystems[0].count).toBe(1);
   });
   it("throws ServiceError(404) naming the id for an unknown faction", () => {
     expect(() => getFactionConstruction("nope")).toThrow(ServiceError);
@@ -72,6 +74,31 @@ describe("getFactionConstruction", () => {
     const data = getFactionConstruction(factionId);
     expect(data.poolCentres).toBeGreaterThan(0);
     expect(data.poolBase + data.poolCentres).toBeCloseTo(data.pool, 6);
+  });
+});
+
+describe("getFactionConstruction — command summary", () => {
+  // A player-seat world: the player faction owns a developed homeworld with automation defaults.
+  function seatWorld() {
+    return generateWorld({
+      systemCount: 60, seed: 42,
+      playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
+    });
+  }
+  beforeEach(() => { setWorld(seatWorld()); });
+
+  it("summarises the queue as link lists and surfaces the player's switches", () => {
+    const w = getWorld();
+    const pid = w.player!.controlledFactionId;
+    const home = w.factions.find((f) => f.id === pid)!.homeworldId;
+    orderBuild({ systemId: home, buildingType: HOUSING_TYPE, levels: 1 });
+    const data = getFactionConstruction(pid);
+    expect(data.automation).toEqual({ build: true, colonisation: true });
+    expect(data.buildSystems.some((s) => s.systemId === home && s.count >= 1)).toBe(true);
+    expect(data.orderedCount).toBeGreaterThanOrEqual(1);
+    // An AI faction reports no switches.
+    const ai = w.factions.find((f) => f.id !== pid)!;
+    expect(getFactionConstruction(ai.id).automation).toBeNull();
   });
 });
 

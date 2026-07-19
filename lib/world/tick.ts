@@ -831,6 +831,9 @@ export async function runWorldTick(
             employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
           },
         },
+        player: world.player
+          ? { factionId: world.player.controlledFactionId, automation: world.player.automation }
+          : undefined,
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
       systems = applyClaims(systems, dbWorld.claims);

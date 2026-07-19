@@ -265,9 +265,15 @@ Further magnitude tuning is future work.
 
 ---
 
-## Player-directed founding (deferred)
+## Player-directed founding
 
-Colonies are founded by the faction planner's value-ordered proposals; the player has no surface to direct a
-colony by hand yet. Player-initiated founding is designed to inject a colony-establish proposal into the same
-build queue, funded from the same pool — keeping one mechanism for AI and player — see
-[grand-strategy-vision.md](../../planned/grand-strategy-vision.md).
+Colonies are founded either by the faction planner's value-ordered proposals or, for the player's own
+faction, a direct **establish colony** verb on a controlled system's Overview — one mechanism, two
+originators. The verb shares the planner's own eligibility check and sizing function
+(`colonyEligibility` / `sizeColonyEstablish`), so a player-ordered colony is identical in shape to an
+autonomic one: same habitable floor, same reachable-seed-source requirement, same land-sized seed +
+bundled housing. It enters the same `world.constructionProjects` queue with `origin: "player"`, funds from
+the same per-faction pool, and — unlike an autonomic colony-establish — is never dropped for going
+unfunded a pulse (persist-if-funded is auto-only; a player order is a standing commitment until funded or
+cancelled). Player rows also outrank new autonomic proposals in funding order. Full verb + UI detail:
+[player-seat.md](./player-seat.md).

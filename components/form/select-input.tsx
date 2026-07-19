@@ -43,6 +43,14 @@ interface SelectInputProps<T = string> extends SelectInputVariants {
   placeholder?: string;
   isSearchable?: boolean;
   id?: string;
+  /**
+   * Element the dropdown menu portals into. Defaults to document.body.
+   * Pass the host `<dialog>` element when this select lives inside a modal
+   * dialog: anything portaled to document.body renders BENEATH a top-layer
+   * `<dialog>` (showModal()), so the menu must portal inside the dialog itself
+   * to stay visible.
+   */
+  menuPortalTarget?: HTMLElement | null;
 }
 
 function darkStyles<T>(): StylesConfig<SelectOption<T>, false> {
@@ -137,6 +145,7 @@ export function SelectInput<T = string>({
   isSearchable = true,
   size,
   id,
+  menuPortalTarget,
 }: SelectInputProps<T>) {
   const autoId = useId();
   const inputId = id ?? autoId;
@@ -145,6 +154,13 @@ export function SelectInput<T = string>({
   const styles = selectInputVariants({ size });
   const selected = options.find((o) => toKey(o.value) === currentKey) ?? null;
   const resolvedDarkStyles = useMemo(() => darkStyles<T>(), []);
+  // Explicit target (e.g. a host <dialog>) overrides the document.body default;
+  // "fixed" positioning is required alongside it since document.body's absolute
+  // math (scroll-offset based) does not apply once the menu lives in the dialog.
+  const hasCustomTarget = menuPortalTarget !== undefined;
+  const resolvedPortalTarget = hasCustomTarget
+    ? menuPortalTarget
+    : typeof document !== "undefined" ? document.body : null;
 
   return (
     <div>
@@ -165,7 +181,8 @@ export function SelectInput<T = string>({
         placeholder={placeholder}
         isSearchable={isSearchable}
         styles={resolvedDarkStyles}
-        menuPortalTarget={typeof document !== "undefined" ? document.body : null}
+        menuPortalTarget={resolvedPortalTarget}
+        menuPosition={hasCustomTarget ? "fixed" : "absolute"}
         menuPlacement="auto"
         menuShouldScrollIntoView={false}
       />

@@ -1,14 +1,14 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
 import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
-import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals } from "@/lib/engine/construction";
+import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
 import { planCentreProposal } from "@/lib/engine/construction-centre";
 import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
-import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
+import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedBuildWorld,
@@ -61,6 +61,9 @@ export interface DirectedBuildProcessorParams {
     candidateProvider: (factionId: string) => ColonyEstablishCandidate[];
     params: ColonyEstablishParams;
   };
+  /** The human seat, when one exists: gates PROPOSAL GENERATION for this faction per domain.
+   *  Funding of committed work and manual orders is never gated. Omitted → no gating (harness). */
+  player?: { factionId: string; automation: WorldPlayer["automation"] };
 }
 
 /** Build the engine's per-system build state: capacity + per-good market state (shared derivation). */
@@ -175,15 +178,21 @@ export async function runDirectedBuildProcessor(
     const pool = poolRef.total * catchUp;
 
     const existing = openByFaction.get(factionId) ?? [];
+    // The human seat's per-domain switches: off = skip PROPOSAL GENERATION for this faction in that
+    // domain. Committed funding always continues below; manual orders arrive via `existing`.
+    const automation = params.player?.factionId === factionId ? params.player.automation : null;
+    const skipBuild = automation !== null && !automation.build;
+    const skipColonise = automation !== null && !automation.colonisation;
+
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
     // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
     const buildStates = group.map(toBuildState);
-    const buildProposals = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs);
+    const buildProposals = skipBuild ? [] : planFactionProposals(buildStates, params.routeCost, existing, developmentRefs);
 
     // Colony-establish proposals compete with builds on the same pool. Only faction-owned systems can
     // colonise (a null-faction group is independents — never); the develop param is omitted in build-only tests.
     let colonyProposals: ColonyProposal[] = [];
-    if (params.develop && factionId !== null) {
+    if (params.develop && factionId !== null && !skipColonise) {
       const developedStates = buildStates.filter((s) => isEconomicallyActive(s.control));
       const openColonies = existing.filter(
         (p): p is WorldColonyEstablishProject => p.kind === "colony_establish",
@@ -212,7 +221,8 @@ export async function runDirectedBuildProcessor(
 
     // At most one centre proposal per pulse, priced off the backlog frontier; it re-enters the
     // ROI ordering as a normal proposal (independent systems — null faction — never build centres).
-    if (factionId !== null) {
+    // A centre is a build-domain proposal, so it is gated by the same switch as ordinary builds.
+    if (factionId !== null && !skipBuild) {
       const centre = planCentreProposal(factionId, ordered, existing, buildStates, poolRef.total, {
         pointsPerLevel: params.construction.pointsPerLevel,
         paybackHorizon: params.construction.paybackHorizon,
@@ -231,6 +241,7 @@ export async function runDirectedBuildProcessor(
           newProjects.push({
             kind: "build",
             id: params.construction.mintId(),
+            origin: "auto",
             factionId: p.factionId,
             systemId: p.systemId,
             buildingType: item.buildingType,
@@ -243,6 +254,7 @@ export async function runDirectedBuildProcessor(
         newProjects.push({
           kind: "colony_establish",
           id: params.construction.mintId(),
+          origin: "auto",
           factionId: p.factionId,
           systemId: p.systemId,
           sourceSystemId: p.sourceSystemId,
@@ -254,20 +266,21 @@ export async function runDirectedBuildProcessor(
       }
     }
 
-    // Fund front-first (in-flight work finishes before new commitments), with the development-scaled
-    // colony floor reserved ahead of the ROI order; land completed levels.
+    // Fund front-first (in-flight work finishes before new commitments, then fresh player orders,
+    // then this pulse's new autonomic proposals), with the development-scaled colony floor reserved
+    // ahead of the ROI order; land completed levels.
     const { projects: fundedOpen, landed } = fundQueueWithFloor(
-      [...existing, ...newProjects], pool, cap, reserved,
+      [...orderOpenProjects(existing), ...newProjects], pool, cap, reserved,
       (p) => p.kind === "build" && (floorBySystem.get(p.systemId) ?? 0) > 0,
     );
     for (const p of fundedOpen) {
-      // Persist-if-funded for colonies AND centres: a project of either kind that got NO work this
-      // pulse is dropped and re-scored next pulse — colonies so the open queue never balloons,
-      // centres so their frontier price stays live instead of a stale commitment queue-jumping
-      // later pulses. In-flight rows always have workDone > 0, so they persist. Ordinary builds
-      // persist regardless (their in-flight subtraction already bounds them).
-      if (p.kind === "colony_establish" && p.workDone <= 0) continue;
-      if (p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE && p.workDone <= 0) continue;
+      // Persist-if-funded applies to AUTONOMIC colonies and centres only — they are re-emitted and
+      // re-priced next pulse, so a workless row is dropped to keep the queue live. A player order is
+      // a standing commitment with no re-emitter: it always persists until funded or cancelled.
+      if (p.origin !== "player") {
+        if (p.kind === "colony_establish" && p.workDone <= 0) continue;
+        if (p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE && p.workDone <= 0) continue;
+      }
       nextOpen.push(p);
     }
     for (const l of landed) {

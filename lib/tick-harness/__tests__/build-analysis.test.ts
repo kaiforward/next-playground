@@ -48,7 +48,7 @@ function project(
   systemId: string, buildingType: string,
   { levels = 1, workTotal = 100, workDone = 0 }: { levels?: number; workTotal?: number; workDone?: number } = {},
 ): WorldConstructionProject {
-  return { kind: "build", id: `${systemId}:${buildingType}`, factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
+  return { kind: "build", id: `${systemId}:${buildingType}`, origin: "auto", factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
 }
 
 describe("summarizeColonisation — per-class build-out", () => {
@@ -174,7 +174,7 @@ describe("summarizeColonisation — construction queue split", () => {
 
   it("counts open centre projects under kind 'centre'", () => {
     const summary = summarizeColonisation([], new Set(), [
-      { kind: "build", id: "c1", factionId: "f1", systemId: "x",
+      { kind: "build", id: "c1", origin: "auto", factionId: "f1", systemId: "x",
         buildingType: CONSTRUCTION_CENTRE_TYPE, levels: 1,
         workTotal: workCostPerLevel(CONSTRUCTION_CENTRE_TYPE), workDone: 0 },
     ]);
@@ -190,7 +190,7 @@ describe("summarizeColonisation — construction queue split", () => {
 
   it("excludes colony-establish projects from the queue split (reported in PR4, no NaN)", () => {
     const colony: WorldConstructionProject = {
-      kind: "colony_establish", id: "c1:establish", factionId: "f1", systemId: "c1",
+      kind: "colony_establish", id: "c1:establish", origin: "auto", factionId: "f1", systemId: "c1",
       sourceSystemId: "hw", seedPop: 50, housingLevels: 3, workTotal: 84, workDone: 40,
     };
     const summary = summarizeColonisation([], new Set(["hw"]), [
@@ -213,7 +213,7 @@ describe("summarizeConstructionPool", () => {
       buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1, vocational_school: 1 },
     });
     const projects: WorldConstructionProject[] = [
-      { kind: "build", id: "p1", factionId: "f1", systemId: sys.id, buildingType: "metals",
+      { kind: "build", id: "p1", origin: "auto", factionId: "f1", systemId: sys.id, buildingType: "metals",
         levels: 2, workTotal: 40, workDone: 10 },
     ];
     const s = summarizeConstructionPool([sys], projects);
@@ -227,7 +227,7 @@ describe("summarizeConstructionPool", () => {
 
   it("reports a null ETA when nothing funds the queue", () => {
     const s = summarizeConstructionPool([], [
-      { kind: "build", id: "p1", factionId: "f1", systemId: "x", buildingType: "metals",
+      { kind: "build", id: "p1", origin: "auto", factionId: "f1", systemId: "x", buildingType: "metals",
         levels: 1, workTotal: 20, workDone: 0 },
     ]);
     expect(s.queueEtaPulses).toBeNull();
