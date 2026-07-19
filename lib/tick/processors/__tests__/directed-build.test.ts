@@ -756,3 +756,48 @@ describe("runDirectedBuildProcessor: player automation gating (proposal generati
     expect(w.constructionProjects.length).toBeGreaterThan(0); // f1 planned as usual
   });
 });
+
+describe("construction funding gate", () => {
+  // One developed system, one standing player order with a huge remaining work total, a cap
+  // larger than the pool → absorbed work per pulse equals the pool exactly, making the
+  // funded-fraction scaling directly observable via workPerformedByFaction.
+  const row = (): SystemBuildRow => ({
+    systemId: "s1", factionId: "f1", control: "developed" as const,
+    population: 100, unrest: 0, buildings: {},
+    yields: emptyResourceVector(), slotCap: emptyResourceVector(),
+    generalSpace: 0, habitableSpace: 0, markets: [],
+  });
+  const order = (): WorldConstructionProject => ({
+    kind: "build" as const, id: "p1", origin: "player" as const,
+    factionId: "f1", systemId: "s1", buildingType: "ore", levels: 5,
+    workTotal: 100_000, workDone: 0,
+  });
+  const params = (fundingByFaction?: ReadonlyMap<string, number>) => ({
+    interval: 24,
+    routeCost: () => null,
+    construction: {
+      cap: 1_000_000, throughputPerPop: 1, floorBase: 0, floorKnee: 0,
+      pointsPerLevel: 0, paybackHorizon: 1, backlogWindow: 1,
+      mintId: () => "new-id",
+    },
+    fundingByFaction,
+  });
+
+  it("scales the funded pool by the faction's funded.construction", async () => {
+    // catchUpFactor(24) = 1 → full pool = 100 pop × 1/pop = 100 points.
+    const full = new MemoryDirectedBuildWorld([row()], [order()]);
+    const fullResult = await runDirectedBuildProcessor(full, { tick: 0 }, params());
+    expect(fullResult.workPerformedByFaction?.get("f1")).toBeCloseTo(100, 6);
+
+    const half = new MemoryDirectedBuildWorld([row()], [order()]);
+    const halfResult = await runDirectedBuildProcessor(half, { tick: 0 }, params(new Map([["f1", 0.5]])));
+    expect(halfResult.workPerformedByFaction?.get("f1")).toBeCloseTo(50, 6);
+
+    // funded 0 → the queue waits: no work, and the standing player order persists untouched.
+    const starved = new MemoryDirectedBuildWorld([row()], [order()]);
+    const starvedResult = await runDirectedBuildProcessor(starved, { tick: 0 }, params(new Map([["f1", 0]])));
+    expect(starvedResult.workPerformedByFaction?.get("f1")).toBeUndefined();
+    expect(starved.constructionProjects).toHaveLength(1);
+    expect(starved.constructionProjects[0].workDone).toBe(0);
+  });
+});

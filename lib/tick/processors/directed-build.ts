@@ -64,6 +64,9 @@ export interface DirectedBuildProcessorParams {
   /** The human seat, when one exists: gates PROPOSAL GENERATION for this faction per domain.
    *  Funding of committed work and manual orders is never gated. Omitted → no gating (harness). */
   player?: { factionId: string; automation: WorldPlayer["automation"] };
+  /** Latched funded.construction per faction (0–1) — scales the funded pool. Missing
+   *  faction or omitted map → 1 (ungated: engine tests, independents). */
+  fundingByFaction?: ReadonlyMap<string, number>;
 }
 
 /** Build the engine's per-system build state: capacity + per-good market state (shared derivation). */
@@ -176,7 +179,11 @@ export async function runDirectedBuildProcessor(
         pointsPerLevel: params.construction.pointsPerLevel,
       },
     );
-    const pool = poolRef.total * catchUp;
+    // Money is fuel, not capacity: the funded fraction scales what share of the
+    // physical pool's throughput runs this pulse. Valuation (centre pricing, ROI)
+    // keeps reading the unscaled reference pool.
+    const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
+    const pool = poolRef.total * catchUp * funded;
 
     const existing = openByFaction.get(factionId) ?? [];
     // The human seat's per-domain switches: off = skip PROPOSAL GENERATION for this faction in that

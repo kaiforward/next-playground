@@ -854,6 +854,7 @@ export async function runWorldTick(
         player: world.player
           ? { factionId: world.player.controlledFactionId, automation: world.player.automation }
           : undefined,
+        fundingByFaction: new Map([...fundedByFaction].map(([id, f]) => [id, f.construction])),
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
       systems = applyClaims(systems, dbWorld.claims);
