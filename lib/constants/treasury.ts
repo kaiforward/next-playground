@@ -21,11 +21,11 @@ export const TREASURY = {
   /** A processed good's reference value never falls below this share of its own base price. */
   REFERENCE_VALUE_FLOOR_SHARE: 0.25,
   /** Monthly upkeep per unit of build-work embodied in standing building levels. */
-  MAINTENANCE_RATE_PER_WORK: 0.002,
+  MAINTENANCE_RATE_PER_WORK: 0.016,
   /** Money per construction point actually absorbed by the queue. */
-  CONSTRUCTION_RATE_PER_WORK: 0.5,
+  CONSTRUCTION_RATE_PER_WORK: 4,
   /** Money per unit of logistics work-budget actually consumed (S-normalised at accrual). */
-  LOGISTICS_RATE_PER_WORK: 0.05,
+  LOGISTICS_RATE_PER_WORK: 0.4,
   /** The maintenance slider's floor — the 50-100% range charges only flow (recoverable). */
   MAINTENANCE_SLIDER_FLOOR: 0.5,
 } as const;
