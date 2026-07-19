@@ -1,0 +1,10 @@
+# Purse hoard re-validation: a long run to check the treasury balance-to-income
+# trajectory settles rather than climbs once Plan 2's effects (funded fractions
+# gating construction/logistics, the maintenance malus + decay-buffer curve, tax
+# unrest pressure) give hoards their first real sink pressure. Read
+# treasurySummary + treasurySnapshots in the saved experiments/*.json — the
+# balance growth rate across the run's later windows is the health signal (see
+# the BACKLOG hoard item this run resolves).
+label: purse-hoard-3000
+seed: 42
+ticks: 3000

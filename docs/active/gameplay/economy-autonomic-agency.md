@@ -9,11 +9,13 @@
 > [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13 item 5.
 > North-star constraint: [negative-space-economy.md](../../planned/negative-space-economy.md).
 >
-> **Scope note.** This is *autonomic-light*: free (capacity-bounded, no treasury), needs-driven, no
-> embodied agents. The player now has a control surface over the build half of this machinery — per-domain
-> automation switches and manual construction/colonisation verbs that share the same pool and queue —
-> see [player-seat.md](./player-seat.md). The treasury-funded faction purse remains a later slice
-> ([player-seat-roadmap.md](../../planned/player-seat-roadmap.md)). The personal trade-logistics layer
+> **Scope note.** This is *autonomic-light*: capacity-bounded, needs-driven, no embodied agents. The
+> player now has a control surface over the build half of this machinery — per-domain automation
+> switches and manual construction/colonisation verbs that share the same pool and queue — see
+> [player-seat.md](./player-seat.md). Both mechanisms are also treasury-funded: the owning faction's
+> latched funded fraction scales what share of each pool's physical throughput runs — money is fuel,
+> never a source of capacity above the physical ceilings this doc specifies (see
+> [player-seat-purse.md](../../planned/player-seat-purse.md)). The personal trade-logistics layer
 > (marketplace arbitrage, bounties) is retired with the pivot.
 
 ---
@@ -35,9 +37,11 @@ it **builds viable systems up toward their potential**. Two mechanisms, one slow
 > **Autonomic build:** a faction builds its systems up toward viable potential — housing leads,
 > population fills it, industry follows the resident workforce.
 
-Both are **needs-driven, free, and capacity-bounded** in this slice (no money, no treasury). The budget is
-deliberately smaller than total need, so a permanent residual remains — the **negative space**, and the
-standing player opportunity the later scaling/bounty rework turns into contestable trade.
+Both are **needs-driven and capacity-bounded**, treasury-funded on top: the owning faction's latched
+funded fraction scales what share of each pool's throughput runs, never past the physical ceiling. The
+physical budget is deliberately smaller than total need, so a permanent residual remains — the
+**negative space**, and the standing player opportunity the later scaling/bounty rework turns into
+contestable trade.
 
 The two halves reinforce each other and are why **logistics-first** was the correct sequencing: logistics
 delivers supply → a system becomes *fed and calm* → a fed, calm system is what the build planner grows.
@@ -53,7 +57,7 @@ diffusion. It shares the intra-faction edge substrate with population migration 
 | Flow | Driver | Funded | Legibility |
 |---|---|---|---|
 | **Migration** | unrest + headroom | n/a | ambient |
-| **Directed logistics** (this slice) | faction need / surplus | free (v1) | map "Logistics" overlay |
+| **Directed logistics** (this slice) | faction need / surplus | treasury-funded (`funded.logistics`) | map "Logistics" overlay |
 
 Both act only on **developed** systems: migration's open edges are gated to developed-both endpoints and
 directed logistics only routes between developed participants, so an unclaimed or controlled system neither
@@ -107,14 +111,15 @@ some, need more) are still sinks.
 Each system generates a per-cycle **logistics work-budget** (a simple function of its population), and
 these **sum to a faction-wide pool** — the total work the matcher may spend. Per-system-generates /
 faction-spends means a strong hub can fund a haul to a struggling neighbour, while capacity stays grounded
-in the systems that produce it. Free and population-scaled in this slice; treasury-funded and
-upgrade-multiplied later. It is a **rate, not a stock** — a fresh pool each cycle, no carry-over.
+in the systems that produce it. Population-scaled, then scaled again by the faction's latched
+`funded.logistics` fraction (upgrade-multiplied later). It is a **rate, not a stock** — a fresh pool each
+cycle, no carry-over.
 
 **Work = quantity × route cost**, where route cost combines hop count and total fuel cost along the path.
 This one choice does triple duty:
 
 1. **Limiter** — match until the pool is spent, then stop. Pool < total need ⇒ residual ⇒ negative space.
-2. **Logistics unit** — free + population-scaled now; treasury-funded later.
+2. **Logistics unit** — population-scaled, treasury-funded (`funded.logistics`).
 3. **Distance-as-cost** — near deficits are cheap, distant ones expensive, so the matcher feeds nearby
    suppliable systems and leaves the stranded few unfed, exactly as designed, with no money model.
 
@@ -296,9 +301,10 @@ committed queue); both processors on their monthly resolution pulse.
 **Deferred (explicitly out):**
 - **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy
   pivot** (personal trading is cut; the deleted scaling-rework doc's bounty/marketplace fork is moot).
-- **Treasury & money** — the budget is a physical work allowance, not a cost; treasury funding, the
-  logistics-efficiency band, and the "faction prefers a player did it" payout asymmetry →
-  [player-seat-roadmap.md](../../planned/player-seat-roadmap.md) (the purse).
+- **Treasury & money beyond funding the pools** — the budget is still a physical work allowance, not a
+  cost; treasury funding now scales it (see [player-seat-purse.md](../../planned/player-seat-purse.md)),
+  but the logistics-efficiency band and the "faction prefers a player did it" payout asymmetry remain
+  deferred → [player-seat-roadmap.md](../../planned/player-seat-roadmap.md).
 - **Route consequences** — per-system transit cost, event/revolt blocking, cargo damage, visible
   raidable convoys → SP5-full / war.
 - **Strategic bottleneck-relief weighting** — faction-wide chokepoint targeting + doctrine bias (the
