@@ -9,6 +9,11 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // Several tests drive whole-world sim runs (generateWorld + N real ticks, some twice for
+    // invariance pairs). Alone they finish in ~1-2 s, but transform/import contention in a
+    // parallel full-suite run can push any of them past vitest's 5 s default — a flake that
+    // migrates between files. 30 s only changes when a genuine hang is declared.
+    testTimeout: 30_000,
     // Pin the economy scale to 1 for tests: their magnitude assertions are written at unit scale, and
     // the code default is 100 (the game's scale).
     //
