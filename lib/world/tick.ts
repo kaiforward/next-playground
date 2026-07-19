@@ -9,13 +9,16 @@
  * Stage order is the processors' dependency topological order:
  * ship-arrivals → events → economy → infrastructure-decay →
  * population → migration → directed-logistics → directed-build
- * → relations. Economy signals flow between stages via the in-memory
- * `TickContext.results` map.
+ * → treasury → relations. Economy signals flow between stages via the
+ * in-memory `TickContext.results` map; treasury also reads the work
+ * directed-logistics and directed-build each performed this tick.
  *
  * Only ship-arrivals and events run every tick. Everything from economy to
  * directed-build resolves on the monthly pulse (`isPulseTick`), and its setup is
  * gated on that same predicate rather than built and discarded — the bodies bail
- * internally too, so the gate is an optimisation, not the rule. Relations keeps its
+ * internally too, so the gate is an optimisation, not the rule. Treasury settles
+ * on the same monthly pulse but also runs off-pulse to accrue work performed by
+ * directed-logistics/directed-build's own (finer) cadences. Relations keeps its
  * own `RELATIONS_FREQUENCY` cadence.
  *
  * Some of `World`'s flat rows (`WorldSystem`, …) don't match the adapters'
@@ -54,6 +57,8 @@ import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { isEconomicallyActive } from "@/lib/engine/control";
+import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
+import { TREASURY, REFERENCE_VALUE } from "@/lib/constants/treasury";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
@@ -70,6 +75,7 @@ import { runMigrationProcessor } from "@/lib/tick/processors/migration";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
 import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build";
 import { runRelationsProcessor } from "@/lib/tick/processors/relations";
+import { runTreasuryProcessor } from "@/lib/tick/processors/treasury";
 
 import { InMemoryShipArrivalsWorld } from "@/lib/tick/adapters/memory/ship-arrivals";
 import { InMemoryEventsWorld } from "@/lib/tick/adapters/memory/events";
@@ -80,6 +86,7 @@ import { InMemoryMigrationWorld } from "@/lib/tick/adapters/memory/migration";
 import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directed-logistics";
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
 import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
+import { InMemoryTreasuryWorld } from "@/lib/tick/adapters/memory/treasury";
 
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
 import { isPulseTick } from "@/lib/tick/shard";
@@ -475,9 +482,9 @@ function rebuildWorldModifiers(
 /**
  * Run one world tick: ship-arrivals → events → economy → infrastructure-decay
  * → population → migration → directed-logistics →
- * directed-build → relations (gated by `RELATIONS_FREQUENCY`). Pure and
- * immutable-spread style — never mutates `world`; returns the next world plus
- * this tick's broadcast events.
+ * directed-build → treasury → relations (gated by `RELATIONS_FREQUENCY`). Pure
+ * and immutable-spread style — never mutates `world`; returns the next world
+ * plus this tick's broadcast events.
  *
  * Async because the shared processor bodies are async (in-memory adapters
  * resolve immediately, but `await` still requires an async caller) — same
@@ -523,6 +530,7 @@ export async function runWorldTick(
   let relations = world.relations;
   let alliancePacts = world.alliancePacts;
   let constructionProjects = world.constructionProjects;
+  let treasuries = world.treasuries;
   let nextId = world.nextId;
   // Preserves each event's metadata across the events stage, whose row type
   // (`TickEvent`, lib/tick/rows.ts) has no metadata field — re-attached at the
@@ -649,6 +657,11 @@ export async function runWorldTick(
   //
   // The flowEvents retention prune is deliberately NOT in here: it is cheap, and it
   // runs every tick today (see below the block).
+  //
+  // The two work maps are declared here (outside the block) rather than as locals inside
+  // it, because the treasury stage below reads them after the block closes.
+  let constructionWorkByFaction: Map<string, number> | undefined;
+  let logisticsWorkByFaction: Map<string, number> | undefined;
   const migrationResolves = isPulseTick(tick, cadence.month);
   const logisticsResolves = isPulseTick(tick, cadence.logistics);
   const buildResolves = isPulseTick(tick, cadence.construction);
@@ -715,7 +728,7 @@ export async function runWorldTick(
         logisticsMarketRows,
       );
       const dlWorld = new MemoryDirectedLogisticsWorld(rows);
-      await runDirectedLogisticsProcessor(dlWorld, { tick }, {
+      const dlResult = await runDirectedLogisticsProcessor(dlWorld, { tick }, {
         interval: cadence.logistics,
         routeCost,
       });
@@ -723,6 +736,7 @@ export async function runWorldTick(
       dlStockUpdates = dlWorld.stockUpdates;
       const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
       flowEvents = [...flowEvents, ...newLogisticsFlows];
+      logisticsWorkByFaction = dlResult.workPerformedByFaction;
       processorsRun.push("directed-logistics");
     }
 
@@ -798,7 +812,7 @@ export async function runWorldTick(
 
       const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
-      await runDirectedBuildProcessor(dbWorld, { tick }, {
+      const dbResult = await runDirectedBuildProcessor(dbWorld, { tick }, {
         interval: cadence.construction,
         routeCost,
         construction: {
@@ -839,10 +853,55 @@ export async function runWorldTick(
       systems = applyClaims(systems, dbWorld.claims);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
+      constructionWorkByFaction = dbResult.workPerformedByFaction;
       processorsRun.push("directed-build");
     }
 
   } // ── end monthly pulse ──
+
+  // ── treasury (monthly settlement; off-pulse it only accrues band-pulse work) ──
+  {
+    const treasuryResolves = isPulseTick(tick, cadence.month);
+    const hasWork =
+      (constructionWorkByFaction?.size ?? 0) > 0 || (logisticsWorkByFaction?.size ?? 0) > 0;
+    if (treasuries.length > 0 && (treasuryResolves || hasWork)) {
+      const treasuryWorld = new InMemoryTreasuryWorld({
+        treasuries,
+        systems: systems
+          .filter((s) => s.factionId !== null && isEconomicallyActive(s.control))
+          .map((s) => ({
+            systemId: s.id,
+            factionId: s.factionId ?? "",
+            population: s.population,
+            buildings: s.buildings,
+          })),
+      });
+      await runTreasuryProcessor(
+        treasuryWorld,
+        {
+          tick,
+          results: economySignals ? new Map([["economy", { economySignals }]]) : new Map(),
+        },
+        {
+          interval: cadence.month,
+          economyScale: ECONOMY_SCALE,
+          constructionWorkByFaction: constructionWorkByFaction ?? new Map(),
+          logisticsWorkByFaction: logisticsWorkByFaction ?? new Map(),
+          rates: {
+            headsTaxPerMonth: TREASURY.HEADS_TAX_PER_MONTH,
+            headsWeights: { ...TREASURY.HEADS_WEIGHTS },
+            productionTaxRate: TREASURY.PRODUCTION_TAX_RATE,
+            referenceValues: REFERENCE_VALUE,
+            maintenanceRatePerWork: TREASURY.MAINTENANCE_RATE_PER_WORK,
+            constructionRatePerWork: TREASURY.CONSTRUCTION_RATE_PER_WORK,
+            logisticsRatePerWork: TREASURY.LOGISTICS_RATE_PER_WORK,
+          },
+        },
+      );
+      treasuries = treasuryWorld.treasuries;
+      processorsRun.push("treasury");
+    }
+  }
 
   // Directed-logistics is the only writer of flowEvents, and it only appends on the
   // pulse — but the prune stays every-tick, outside the gate above, so the retention
@@ -918,6 +977,7 @@ export async function runWorldTick(
     flowEvents,
     relations,
     alliancePacts,
+    treasuries,
     nextId,
   };
 
