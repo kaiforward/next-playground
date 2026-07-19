@@ -60,4 +60,27 @@ describe("treasury over the live tick", () => {
       expect(t.pendingWork).toEqual({ logistics: 0, construction: 0 });
     }
   });
+
+  it("a zero-funded construction band performs no construction work (the queue waits)", async () => {
+    // Divergent cadences so construction pulses mid-month and its work lands in
+    // pendingWork (observable before settlement clears it).
+    const cadence = { month: 48, construction: 24, logistics: 24 };
+    let world = generateWorld({ systemCount: 40, seed: 11 });
+    const starvedId = world.factions[0].id;
+    world = {
+      ...world,
+      treasuries: world.treasuries.map((t) =>
+        t.factionId === starvedId ? { ...t, funded: { ...t.funded, construction: 0 } } : t,
+      ),
+    };
+    for (let tick = 1; tick <= 24; tick++) {
+      const result = await runWorldTick(world, { cadence });
+      world = result.world;
+    }
+    const starved = world.treasuries.find((t) => t.factionId === starvedId)!;
+    expect(starved.pendingWork.construction).toBe(0);
+    // The gate is per-faction: fully-funded factions still worked this pulse.
+    const others = world.treasuries.filter((t) => t.factionId !== starvedId);
+    expect(others.reduce((acc, t) => acc + t.pendingWork.construction, 0)).toBeGreaterThan(0);
+  });
 });
