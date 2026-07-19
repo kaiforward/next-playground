@@ -123,6 +123,15 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     expect(w.constructionProjects.length).toBeGreaterThan(0); // but the work is committed
   });
 
+  it("reports work performed by the faction, bounded by its construction pool", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    // pool = 5000 × 0.05 = 250; cap = 4 → the front of the queue absorbs a cap's worth this pulse.
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const absorbed = result.workPerformedByFaction!.get("f1");
+    expect(absorbed).toBeGreaterThan(0);
+    expect(absorbed).toBeLessThanOrEqual(5000 * 0.05);
+  });
+
   it("commits and funds nothing on an off-boundary tick (monthly pulse)", async () => {
     const w = new MemoryDirectedBuildWorld(scenario(0, 0));
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });

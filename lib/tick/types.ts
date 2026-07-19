@@ -68,6 +68,10 @@ export interface TickProcessorResult {
   globalEvents?: Partial<GlobalEventMap>;
   /** Transient cross-processor signals (economy → population). Not broadcast. */
   economySignals?: EconomySignals;
+  /** Work actually performed this pulse per faction (directed-build: construction
+   *  points absorbed; directed-logistics: work-budget consumed). Transient input
+   *  to the treasury settlement — not broadcast, not persisted. */
+  workPerformedByFaction?: Map<string, number>;
 }
 
 /** The full payload one tick's run hands to the broadcast layer. */

@@ -162,6 +162,7 @@ export async function runDirectedBuildProcessor(
   const landedBySystem = new Map<string, Map<string, number>>();
   const developments: SystemDevelopment[] = [];
   const nextOpen: WorldConstructionProject[] = [];
+  const workPerformedByFaction = new Map<string, number>();
 
   for (const [factionId, group] of byFaction) {
     // The faction's per-pulse pool: eligible heads + centre output over developed systems
@@ -269,10 +270,11 @@ export async function runDirectedBuildProcessor(
     // Fund front-first (in-flight work finishes before new commitments, then fresh player orders,
     // then this pulse's new autonomic proposals), with the development-scaled colony floor reserved
     // ahead of the ROI order; land completed levels.
-    const { projects: fundedOpen, landed } = fundQueueWithFloor(
+    const { projects: fundedOpen, landed, absorbed } = fundQueueWithFloor(
       [...orderOpenProjects(existing), ...newProjects], pool, cap, reserved,
       (p) => p.kind === "build" && (floorBySystem.get(p.systemId) ?? 0) > 0,
     );
+    if (factionId !== null && absorbed > 0) workPerformedByFaction.set(factionId, absorbed);
     for (const p of fundedOpen) {
       // Persist-if-funded applies to AUTONOMIC colonies and centres only — they are re-emitted and
       // re-priced next pulse, so a workless row is dropped to keep the queue live. A player order is
@@ -316,5 +318,5 @@ export async function runDirectedBuildProcessor(
   // always, so a project that just landed is removed from the queue.
   await world.applyConstructionUpdates(dueKeys, nextOpen);
 
-  return {};
+  return { workPerformedByFaction };
 }

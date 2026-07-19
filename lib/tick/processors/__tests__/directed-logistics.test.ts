@@ -68,6 +68,27 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(world.stockUpdates.has("mB")).toBe(true);
   });
 
+  it("reports work performed by the faction, equal to the planned transfer cost", async () => {
+    const systems = [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    const result = await runDirectedLogisticsProcessor(
+      world,
+      { tick: DUE_TICK },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
+    );
+    // routeCost is a flat 1/unit, so the planned cost equals the moved quantity.
+    expect(result.workPerformedByFaction!.get("f1")).toBeCloseTo(world.flows[0].quantity, 6);
+  });
+
   it("fills a deficit toward its anchor in one delivery — never overshoots into surplus", async () => {
     // Regression for the catch-up overshoot: a single delivery is a level-fill toward the
     // days-of-supply anchor (targetStock), NOT a rate that scales with the shard interval.

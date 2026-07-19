@@ -7,6 +7,7 @@ import {
   systemLogisticsGeneration,
   type SystemLogisticsState,
   type RouteCost,
+  type PlannedTransfer,
 } from "@/lib/engine/directed-logistics";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
@@ -97,9 +98,16 @@ export async function runDirectedLogisticsProcessor(
     }
   }
 
-  const allTransfers = [...byFaction.values()].flatMap((group) =>
-    matchFactionTransfers(group.map((r) => toLogisticsState(r, catchUp)), params.routeCost),
-  );
+  const workPerformedByFaction = new Map<string, number>();
+  const allTransfers: PlannedTransfer[] = [];
+  for (const [factionId, group] of byFaction) {
+    const transfers = matchFactionTransfers(group.map((r) => toLogisticsState(r, catchUp)), params.routeCost);
+    allTransfers.push(...transfers);
+    if (factionId === null) continue;
+    let work = 0;
+    for (const t of transfers) work += t.cost;
+    if (work > 0) workPerformedByFaction.set(factionId, work);
+  }
 
   // Apply: clamp both endpoints, accumulate absolute writes, record flow rows.
   const updates = new Map<string, number>();
@@ -146,5 +154,5 @@ export async function runDirectedLogisticsProcessor(
   }
   if (flows.length > 0) await world.appendLogisticsFlows(flows);
 
-  return {};
+  return { workPerformedByFaction };
 }
