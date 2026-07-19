@@ -144,7 +144,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
           What the population consumes and how well each want is met — unmet needs drive unrest.
         </p>
         {needs.length === 0 ? (
-          <EmptyState message="No demand." />
+          <EmptyState message="No needs." />
         ) : (
           <NeedsLedger needs={needs} />
         )}
