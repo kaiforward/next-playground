@@ -185,5 +185,6 @@ describe("computeFactionConstruction", () => {
     ];
     const r = computeFactionConstruction(originProjects, systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4);
     expect(r.all.map((row) => row.origin)).toEqual(["auto", "player"]);
+    expect(r.all.every((row) => row.kind === "build" && row.buildingType === "housing")).toBe(true);
   });
 });

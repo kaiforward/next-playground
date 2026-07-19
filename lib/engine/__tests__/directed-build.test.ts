@@ -1431,7 +1431,9 @@ describe("sizeColonyEstablish", () => {
     const s = sizeColonyEstablish(3, params); // habitable 3 → 3 whole housing levels possible
     expect(s).not.toBeNull();
     if (s === null) return;
-    expect(s.housingLevels).toBeGreaterThanOrEqual(1);
+    // habitableSpace 3 / housingCost 1 → maxHousingLevels 3 → habitableCap 60; seedPop
+    // min(500, 60) = 60; housingLevels min(3, ceil(60/20)=3) = 3 exactly.
+    expect(s.housingLevels).toBe(3);
     expect(s.seedPop).toBeLessThanOrEqual(params.seedPop);
     expect(s.work).toBe(params.establishWork + s.housingLevels * workCostPerLevel(HOUSING_TYPE));
   });

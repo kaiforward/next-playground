@@ -4,6 +4,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { getWorld } from "@/lib/world/store";
 import { orderBuild, orderColony, cancelOrder, setAutomation } from "@/lib/services/construction-orders";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
+import type { WorldBuildProject } from "@/lib/world/types";
 
 /** A small authored world: the player faction owns a developed homeworld. */
 function seatWorld() {
@@ -42,6 +43,18 @@ describe("construction order services", () => {
     expect(r.ok).toBe(false);
   });
 
+  it("rejects a build with no free deposit slots, with the exact reason string", () => {
+    // Force the ore deposit exhausted regardless of what world-gen rolled here (mirrors the
+    // manufactured-eligibility idiom the colony test below uses): zero the homeworld's ore slots,
+    // then ask for one more ore extractor level.
+    const h = home();
+    h.slotOre = 0;
+    const r = orderBuild({ systemId: h.id, buildingType: "ore", levels: 1 });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe("No free deposit slots for that building here.");
+  });
+
   it("rejects builds at systems the player does not control", () => {
     const w = getWorld();
     const foreign = w.systems.find(
@@ -54,6 +67,19 @@ describe("construction order services", () => {
   it("cancels only player-originated projects", () => {
     const placed = orderBuild({ systemId: home().id, buildingType: HOUSING_TYPE, levels: 1 });
     if (!placed.ok) throw new Error("setup failed");
+
+    // Seed an auto-originated row for the same faction directly into the world — cancelOrder must
+    // refuse it (origin !== "player") and leave it in place, not just refuse a made-up id.
+    const w = getWorld();
+    if (!w.player) throw new Error("fixture: expected a player seat");
+    const autoProject: WorldBuildProject = {
+      kind: "build", id: "auto-1", origin: "auto", factionId: w.player.controlledFactionId,
+      systemId: home().id, buildingType: HOUSING_TYPE, levels: 1, workTotal: 10, workDone: 0,
+    };
+    setWorld({ ...w, constructionProjects: [...w.constructionProjects, autoProject] });
+    expect(cancelOrder({ projectId: "auto-1" }).ok).toBe(false);
+    expect(getWorld().constructionProjects.some((p) => p.id === "auto-1")).toBe(true);
+
     expect(cancelOrder({ projectId: placed.data.projectId }).ok).toBe(true);
     expect(getWorld().constructionProjects.some((p) => p.id === placed.data.projectId)).toBe(false);
     expect(cancelOrder({ projectId: "no-such-project" }).ok).toBe(false);

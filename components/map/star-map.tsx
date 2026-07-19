@@ -20,6 +20,7 @@ import { usePopulation } from "@/lib/hooks/use-population";
 import { useDevelopment } from "@/lib/hooks/use-development";
 import { useMigration } from "@/lib/hooks/use-migration";
 import { buildSystemRegionMap } from "@/lib/utils/region";
+import { resolveCarriedSegment } from "@/components/map/segment-carry";
 
 /** Default zoom the camera settles at when focusing/centring on a location. */
 const FOCUS_ZOOM = 1.2;
@@ -224,11 +225,9 @@ export function StarMap({
   // to the base path.
   const onSelectSystem = useCallback(
     (systemId: string) => {
-      const match = /^\/system\/[^/]+\/([^/?]+)/.exec(pathname);
-      const segment = match ? match[1] : null;
       const isDeveloped = ownership.get(systemId)?.developed ?? true;
-      const keepSegment = segment === "astrography" || (segment !== null && isDeveloped);
-      const path = keepSegment ? `/system/${systemId}/${segment}` : `/system/${systemId}`;
+      const segment = resolveCarriedSegment(pathname, isDeveloped);
+      const path = segment ? `/system/${systemId}/${segment}` : `/system/${systemId}`;
       router.push(path);
     },
     [router, pathname, ownership],

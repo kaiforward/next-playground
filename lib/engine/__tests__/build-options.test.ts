@@ -50,4 +50,19 @@ describe("computeBuildOptions", () => {
     // Housing draws nobody — always fully "staffed".
     expect(byType(computeBuildOptions(tight, {}), HOUSING_TYPE).estStaffing).toBe(1);
   });
+
+  it("reflects a skill2 (engineer) shortfall specifically, not skill1, on a tier-2 producer", () => {
+    // ship_frames' real labour override is { unskilled: 35, skill1: 25, skill2: 20 } — one level's
+    // hypothetical demand. One vocational_school licenses SKILL1_PER_SCHOOL (150) skill1 seats,
+    // comfortably covering that 25 (skill1Fulfil = min(1, 150/25) = 1). Zero research institutes
+    // means skill2Cap = 0 against a skill2Demand of 20, so skill2Fulfil = min(1, 0/20) = 0.
+    // Population (500, the sys() default) is ample relative to the ~95-head total demand, so
+    // labourFulfil = 1 too — only the skill2 ceiling pulls estStaffing below 1. Were skill2Fulfil
+    // swapped for skill1Fulfil in computeBuildOptions' min(...), this would read 1 instead of 0.
+    const shipFramesType = "ship_frames";
+    expect(BUILDING_TYPES[shipFramesType].labour?.skill2).toBeGreaterThan(0);
+    const noInstitute = sys({ buildings: { [VOCATIONAL_SCHOOL_TYPE]: 1 } });
+    const shipFrames = byType(computeBuildOptions(noInstitute, {}), shipFramesType);
+    expect(shipFrames.estStaffing).toBe(0);
+  });
 });
