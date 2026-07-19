@@ -11,6 +11,7 @@ import type { EventTypeId } from "@/lib/constants/events";
 import type { GovernmentType } from "@/lib/types/game";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
+import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 
 // ── Calibration harness config ──────────────────────────────────
 
@@ -188,4 +189,8 @@ export interface HarnessResults {
   initialBuildingTotal: number;
   /** Population snapshots sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
   populationSnapshots: Array<Map<string, number>>;
+  /** Faction-treasury health at simulation end — balances, income mix, funded fractions, shortfalls. */
+  treasurySummary: TreasurySummary;
+  /** Treasury balance trajectory sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
+  treasurySnapshots: TreasurySnapshot[];
 }

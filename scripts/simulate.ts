@@ -275,6 +275,25 @@ function formatTable(results: HarnessResults): string {
     );
   }
 
+  // Faction treasury health — the coarse health bar for money.
+  {
+    const ts = results.treasurySummary;
+    lines.push("");
+    lines.push("Treasury (end of simulation):");
+    lines.push(
+      `Treasury: ${ts.factionCount} factions | balance mean ${fmtNum(ts.meanBalance)} ` +
+        `(min ${fmtNum(ts.minBalance)}, max ${fmtNum(ts.maxBalance)}) | ` +
+        `income ${(ts.headsShare * 100).toFixed(0)}% heads / ${(ts.productionShare * 100).toFixed(0)}% production`,
+    );
+    lines.push(
+      `  funded: maint ${(ts.fundedMeans.maintenance * 100).toFixed(0)}% | ` +
+        `logi ${(ts.fundedMeans.logistics * 100).toFixed(0)}% | ` +
+        `constr ${(ts.fundedMeans.construction * 100).toFixed(0)}%` +
+        (ts.firstShortfallTick !== null ? ` | first shortfall t=${ts.firstShortfallTick}` : " | never shorted") +
+        (ts.invalidRows > 0 ? ` | ⚠ ${ts.invalidRows} INVALID ROWS` : ""),
+    );
+  }
+
   // Logistics activity — did directed-logistics actually move anything?
   {
     const lg = logisticsActivity;
