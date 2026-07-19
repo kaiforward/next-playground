@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { GOODS } from "@/lib/constants/goods";
+import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
 
 describe("generateWorld", () => {
   const world = generateWorld({ systemCount: 120, seed: 42 });
@@ -223,5 +224,29 @@ describe("generateWorld — player faction", () => {
   it("seats the player with both automation switches on", () => {
     const world = generateWorld({ ...base, playerFaction: authored });
     expect(world.player?.automation).toEqual({ build: true, colonisation: true });
+  });
+});
+
+describe("treasury seeding", () => {
+  const world = generateWorld({ systemCount: 40, seed: 7 });
+
+  it("seeds one zero-balance treasury per faction with full bands", () => {
+    expect(world.treasuries).toHaveLength(world.factions.length);
+    const byFaction = new Set(world.treasuries.map((t) => t.factionId));
+    for (const f of world.factions) expect(byFaction.has(f.id)).toBe(true);
+    for (const t of world.treasuries) {
+      expect(t.balance).toBe(0);
+      expect(t.bands).toEqual({ maintenance: 1, logistics: 1, construction: 1 });
+      expect(t.funded).toEqual({ maintenance: 1, logistics: 1, construction: 1 });
+      expect(t.pendingWork).toEqual({ logistics: 0, construction: 0 });
+      expect(t.lastSettlement).toBeNull();
+    }
+  });
+
+  it("flavours the default tax level by government", () => {
+    for (const t of world.treasuries) {
+      const faction = world.factions.find((f) => f.id === t.factionId)!;
+      expect(t.taxLevel).toBe(DEFAULT_TAX_LEVEL[faction.governmentType]);
+    }
   });
 });

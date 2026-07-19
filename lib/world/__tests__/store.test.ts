@@ -28,6 +28,7 @@ function fakeWorld(): World {
     factions: [],
     relations: [],
     alliancePacts: [],
+    treasuries: [],
     events: [],
     modifiers: [],
     ships: [],

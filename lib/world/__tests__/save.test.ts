@@ -57,12 +57,12 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 7 (automation + project origin)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(7);
+  it("is at save format version 8 (faction treasuries)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(8);
   });
 
-  it("rejects a prior-version (v6) save — saves break on the shape bump", () => {
-    const json = JSON.stringify({ formatVersion: 6, world });
+  it("rejects a prior-version (v7) save — saves break on the shape bump", () => {
+    const json = JSON.stringify({ formatVersion: 7, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });

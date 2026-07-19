@@ -12,6 +12,7 @@ import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
 import { slotColumns, qualColumns, yieldColumns } from "@/lib/engine/resources";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
+import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
 import type {
   World,
   WorldRegion,
@@ -22,6 +23,7 @@ import type {
   WorldMarket,
   WorldFaction,
   WorldFactionRelation,
+  WorldFactionTreasury,
 } from "./types";
 
 export interface GenerateWorldOptions {
@@ -211,6 +213,18 @@ export function generateWorld(options: GenerateWorldOptions): World {
     }
   }
 
+  // ── Treasuries (zero start — solvency is a calibration outcome, not a handout) ──
+  const treasuries: WorldFactionTreasury[] = factions.map((f) => ({
+    factionId: f.id,
+    balance: 0,
+    taxLevel: DEFAULT_TAX_LEVEL[f.governmentType],
+    bands: { maintenance: 1, logistics: 1, construction: 1 },
+    funded: { maintenance: 1, logistics: 1, construction: 1 },
+    pendingWork: { logistics: 0, construction: 0 },
+    lastSettlement: null,
+    updatedAtTick: 0,
+  }));
+
   const player =
     universe.playerFactionIndex !== null
       ? {
@@ -236,6 +250,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
     markets,
     factions,
     relations,
+    treasuries,
     // No war/diplomacy/ship/trade-flow state at generation time — Phase 3+ builds these up at runtime.
     alliancePacts: [],
     events: [],
