@@ -10,6 +10,12 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
+- **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips deliberately ship with
+  figures plus the single sentence "Higher-pressure needs create more unrest." (a needs-visibility build
+  decision: final wording waits for a dedicated nested-tooltip pass). When that pass happens, also
+  consider folding the two near-duplicate tooltip bodies (`NeedTooltip` in `population-panel.tsx`,
+  `PopShortTooltipBody` in `industry-panel.tsx` — shared header/footer, divergent middles) into a shared
+  shell; the duplication was sanctioned at build time.
 - **[M] Type `goodId` as a `GoodId` union instead of `string`** — `GOODS` is declared
   `Record<string, GoodDefinition>` (`lib/constants/goods.ts`) and every `goodId` is a bare `string`, so
   `GOODS[goodId]` type-checks as `GoodDefinition` and never narrows to `undefined` — a typo'd or stale id

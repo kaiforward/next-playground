@@ -118,8 +118,8 @@ vitals grid; the faction screen split into tabs; and faction/region roll-ups bec
 - **`[Sys 2]` Stale industry labels fixed** — health re-grounded on the infrastructure-decay engine's exact
   triggers and renamed **stable / contracting / collapsing**, so a healthy system reads green (no threshold
   guesswork; the old idle-fraction constants are gone).
-- **`[Sys 3]` Tech/engineer consumption shown** — resolved **additive**; the Population tab's demand chart
-  segments each good into base / technician / engineer.
+- **`[Sys 3]` Tech/engineer consumption shown** — resolved **additive**; the Population tab segments each
+  good's consumption into base / technician / engineer (today in the needs-ledger row tooltips).
 - **Faction screen tabbed** (Overview / Diplomacy / Territory) over the same vitals grid. The Overview
   aggregates **and** the map's zoomed-out numbers are quantity-aware — extensive magnitudes sum, stability
   is population-weighted — so a faction spreading into new systems no longer reads as decline.
