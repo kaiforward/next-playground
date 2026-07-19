@@ -540,6 +540,11 @@ export async function runWorldTick(
 
   const newTickCtx = (): TickContext => ({ tick, results: new Map() });
 
+  // ── latched treasury funding (read at tick START = last settlement's latch;
+  // the treasury stage settles LAST, so every consumer below runs one month
+  // behind — the accepted funding lag, same shape as construction's) ──
+  const fundedByFaction = new Map(treasuries.map((t) => [t.factionId, t.funded]));
+
   // ── ship-arrivals ──
   {
     const shipsWorld = new InMemoryShipArrivalsWorld({ ships }, systems);
@@ -731,6 +736,7 @@ export async function runWorldTick(
       const dlResult = await runDirectedLogisticsProcessor(dlWorld, { tick }, {
         interval: cadence.logistics,
         routeCost,
+        fundingByFaction: new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
       });
       markets = applyStockUpdates(markets, dlWorld.stockUpdates);
       dlStockUpdates = dlWorld.stockUpdates;
