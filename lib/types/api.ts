@@ -299,7 +299,7 @@ export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
 
 // ── Player build-options surface (per-system verbs: colonise / build) ────────
 import type { BuildOption } from "@/lib/engine/build-options";
-import type { ColonyBlockReason } from "@/lib/services/construction-orders";
+import type { ColonyBlockReason } from "@/lib/types/colonisation";
 
 /** One dialog/quick-add option: engine feasibility + display label + queue-aware ETA. */
 export interface BuildOptionData extends BuildOption {

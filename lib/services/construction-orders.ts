@@ -9,22 +9,13 @@
  */
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
 import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject } from "@/lib/world/types";
-import { toTickConnections } from "@/lib/world/tick";
 import { computeBuildOptions } from "@/lib/engine/build-options";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
-import { boundedHopsFromOrigin } from "@/lib/engine/pathfinding";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
-import { COLONISATION } from "@/lib/constants/colonisation";
-import { EXPANSION } from "@/lib/constants/expansion";
-import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
-
-/** The hop radius the tick's shared BFS uses — seed-source reach for the colony verb matches it. */
-export const COLONY_REACH_HOPS = Math.max(
-  DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS,
-);
+import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
+import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
 
 type Seat = { world: World; factionId: string };
 
@@ -137,51 +128,6 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
     nextId: seat.world.nextId + 1,
   });
   return { ok: true, data: { projectId: project.id, levels: project.levels } };
-}
-
-/** Why a controlled system can't take a colony order right now (mirrors planner eligibility). */
-export type ColonyBlockReason = "already_forming" | "below_habitable_floor" | "no_seed_source";
-
-/** User-facing copy for each block reason — shared by the order error and the Industry-tab UI. */
-export const COLONY_BLOCK_COPY: Record<ColonyBlockReason, string> = {
-  already_forming: "A colony is already forming here.",
-  below_habitable_floor: "Below the habitable floor — this world cannot hold a colony.",
-  no_seed_source: "No developed system in range to seed a colony from.",
-};
-
-/** Nearest developed same-faction seed source within the tick's reach radius, or null. */
-export function findSeedSource(world: World, factionId: string, systemId: string): string | null {
-  const hops = boundedHopsFromOrigin(systemId, toTickConnections(world), COLONY_REACH_HOPS);
-  let best: { id: string; h: number } | null = null;
-  for (const s of world.systems) {
-    if (s.factionId !== factionId || s.control !== "developed") continue;
-    const h = hops.get(s.id);
-    if (h === undefined || h <= 0) continue;
-    if (best === null || h < best.h || (h === best.h && s.id < best.id)) best = { id: s.id, h };
-  }
-  return best?.id ?? null;
-}
-
-/** Planner-equivalent eligibility for the direct-colony verb at a CONTROLLED player system. */
-export function colonyEligibility(
-  world: World, factionId: string, system: WorldSystem,
-): { eligible: true; sourceSystemId: string } | { eligible: false; reason: ColonyBlockReason } {
-  if (world.constructionProjects.some((p) => p.kind === "colony_establish" && p.systemId === system.id)) {
-    return { eligible: false, reason: "already_forming" };
-  }
-  if (system.habitableSpace < EXPANSION.DEVELOP_HABITABLE_FLOOR) {
-    return { eligible: false, reason: "below_habitable_floor" };
-  }
-  if (sizeColonyEstablish(system.habitableSpace, sizingParams()) === null) {
-    return { eligible: false, reason: "below_habitable_floor" };
-  }
-  const source = findSeedSource(world, factionId, system.id);
-  if (source === null) return { eligible: false, reason: "no_seed_source" };
-  return { eligible: true, sourceSystemId: source };
-}
-
-export function sizingParams(): { seedPop: number; establishWork: number } {
-  return { seedPop: EXPANSION.COLONY_SEED_POP, establishWork: COLONISATION.COLONY_ESTABLISH_WORK };
 }
 
 export type OrderColonyResult =

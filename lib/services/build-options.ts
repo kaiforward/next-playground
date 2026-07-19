@@ -11,7 +11,7 @@ import {
   factionConstructionPool, forecastEtaPulses, orderOpenProjects,
 } from "@/lib/engine/construction";
 import { buildingLabel } from "@/lib/engine/construction-readout";
-import { colonyEligibility, sizingParams } from "@/lib/services/construction-orders";
+import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";

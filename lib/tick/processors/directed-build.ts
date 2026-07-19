@@ -8,7 +8,7 @@ import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
-import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
+import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedBuildWorld,
@@ -63,7 +63,7 @@ export interface DirectedBuildProcessorParams {
   };
   /** The human seat, when one exists: gates PROPOSAL GENERATION for this faction per domain.
    *  Funding of committed work and manual orders is never gated. Omitted → no gating (harness). */
-  player?: { factionId: string; automation: { build: boolean; colonisation: boolean } };
+  player?: { factionId: string; automation: WorldPlayer["automation"] };
 }
 
 /** Build the engine's per-system build state: capacity + per-good market state (shared derivation). */

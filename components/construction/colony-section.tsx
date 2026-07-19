@@ -7,7 +7,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConstructionRow } from "@/components/construction/construction-row";
 import { formatMagnitude } from "@/lib/utils/format";
-import { COLONY_BLOCK_COPY } from "@/lib/services/construction-orders";
+import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
 
 /**
  * A controlled system's founding entry, rendered on the system Overview for a not-yet-developed

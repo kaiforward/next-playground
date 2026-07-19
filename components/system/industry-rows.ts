@@ -58,13 +58,14 @@ export function depositRows(
   unrest: number,
   unrestThreshold: number,
 ): DepositRow[] {
-  const byResource = new Map<ResourceType, { built: number; worked: number; output: number; health: IndustryHealth }>();
+  type DepositResourceAgg = { built: number; worked: number; output: number; health: IndustryHealth };
+  const byResource = new Map<ResourceType, DepositResourceAgg>();
   const byType = new Map<string, DepositTypeRow>();
   for (const b of extractors) {
     const resource = BUILDING_TYPES[b.buildingType]?.resource;
     if (!resource) continue;
     const h = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: unrestThreshold });
-    const acc = byResource.get(resource) ?? { built: 0, worked: 0, output: 0, health: "stable" as IndustryHealth };
+    const acc: DepositResourceAgg = byResource.get(resource) ?? { built: 0, worked: 0, output: 0, health: "stable" };
     acc.built += b.count;
     acc.worked += b.used;
     acc.output += b.output ?? 0;
@@ -75,10 +76,10 @@ export function depositRows(
   return deposits
     .filter((d) => d.slotCap > 0)
     .map((d) => {
-      const agg = byResource.get(d.resource) ?? { built: 0, worked: 0, output: 0, health: "stable" as IndustryHealth };
+      const agg: DepositResourceAgg = byResource.get(d.resource) ?? { built: 0, worked: 0, output: 0, health: "stable" };
       const types = Object.keys(BUILDING_TYPES)
         .filter((t) => BUILDING_TYPES[t].resource === d.resource)
-        .map((t) => byType.get(t) ?? { buildingType: t, built: 0, worked: 0, output: 0, health: "stable" as IndustryHealth });
+        .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, built: 0, worked: 0, output: 0, health: "stable" });
       return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, slotCap: d.slotCap, ...agg, types };
     });
 }
