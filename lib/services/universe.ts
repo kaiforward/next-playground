@@ -11,7 +11,9 @@ import {
   extractorsByResource,
   summariseSpace,
   summariseDeposits,
+  computeSystemLabourSnapshot,
 } from "@/lib/engine/industry";
+import { computePopNeeds } from "@/lib/engine/pop-needs";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
@@ -209,6 +211,12 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   );
   const worked = extractorsByResource(buildings);
 
+  const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
+  const popNeeds = computePopNeeds(basis, marketsBySystem().get(systemId) ?? []).map((n) => ({
+    ...n,
+    goodName: GOODS[n.goodId]?.name ?? n.goodId,
+  }));
+
   return {
     visibility: "visible",
     unrest: system.unrest,
@@ -225,5 +233,6 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
     deposits: summariseDeposits(slotCap, worked, yields),
     goods: capacityGoodRates(buildings, system.population, yields),
+    popNeeds,
   };
 }

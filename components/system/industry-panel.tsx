@@ -25,7 +25,7 @@ import { describeBuilding, TIER_LABELS } from "@/lib/constants/building-descript
 import { buildingHealth, familyAnchorBuff, industryHealth, perGradeStaffing, skillLicensing } from "@/lib/engine/industry";
 import type { IndustryHealth, SystemIndustryReadout, SystemLabour, LabourPool, LabourAllocation, SkillBasketEntry } from "@/lib/engine/industry";
 import type { GoodTier } from "@/lib/types/game";
-import type { BuildOptionData } from "@/lib/types/api";
+import type { BuildOptionData, PopNeedData } from "@/lib/types/api";
 import { formatMagnitude, formatPeople, formatUnitsShort } from "@/lib/utils/format";
 import { formatEta } from "@/lib/utils/construction-format";
 import { Card } from "@/components/ui/card";
@@ -37,6 +37,7 @@ import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/
 import { useDialog } from "@/components/ui/dialog";
 import { depositRows, generalLand, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
+import { buildProblems, needSeverity, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { QuickAddButton } from "@/components/construction/quick-add-button";
 import { BuildDialog } from "@/components/construction/build-dialog";
 
@@ -167,8 +168,16 @@ function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributo
   );
 }
 
-/** Rich per-building tooltip: header · description · per-grade filled/needed · footer. Producers get the grade split. */
-function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLabour }) {
+/** Rich per-building tooltip: header · description · per-grade filled/needed · inputs · footer. Producers get the grade split + input gates. */
+function BuildingTooltipBody({
+  b,
+  labour,
+  supply,
+}: {
+  b: BuildingEntry;
+  labour: SystemLabour;
+  supply?: SystemIndustryReadout["supplyChain"][number];
+}) {
   const isAcademy = ACADEMY_TYPES.includes(b.buildingType);
   const isComplex = COMPLEX_TYPES.includes(b.buildingType);
   const isSupport = SUPPORT_TYPES.includes(b.buildingType);
@@ -185,6 +194,7 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
   const tierLabel = b.tier >= 0 ? TIER_LABELS[goodTier] : undefined;
   const complexFamily = isComplex ? COMPLEX_BY_TYPE[b.buildingType] : undefined;
   const familyBuff = complexFamily ? familyAnchorBuff({ [b.buildingType]: b.count }, complexFamily.goods[0] ?? "") : 1;
+  const recipeInputs = isProducer && b.outputGood ? Object.keys(GOOD_RECIPES[b.outputGood] ?? {}) : [];
 
   return (
     <div className="space-y-1.5">
@@ -222,6 +232,22 @@ function BuildingTooltipBody({ b, labour }: { b: BuildingEntry; labour: SystemLa
               </span>
             </div>
           ))}
+        </div>
+      )}
+
+      {recipeInputs.length > 0 && (
+        <div className="space-y-0.5 border-t border-border/60 pt-1.5">
+          <p className="font-mono text-[9px] uppercase tracking-wider text-text-tertiary/80">inputs</p>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            {recipeInputs.map((input) => {
+              const short = supply?.throttledBy.includes(input) ?? false;
+              return (
+                <span key={input} className={`font-mono text-[11px] ${short ? "text-status-amber-light" : "text-status-green-light"}`}>
+                  {short ? "⚠" : "✓"} {label(input)}{short && supply ? ` ${Math.round(supply.inputGate * 100)}%` : ""}
+                </span>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -417,32 +443,61 @@ function DepositTable({
   );
 }
 
-/** Supply-chain "needs" line: each recipe input, green ✓ or red ⚠ with the throttle %. */
-function NeedsLine({ supply }: { supply: SystemIndustryReadout["supplyChain"][number] }) {
-  const inputs = Object.keys(GOOD_RECIPES[supply.goodId] ?? {});
-  if (inputs.length === 0) return null;
+/** Pop-short tooltip body for a problem-line item: header · figures · the standard sentence. */
+function PopShortTooltipBody({ n }: { n: PopNeedData }) {
+  const sev = needSeverity(n.satisfaction);
+  const gap = n.want - n.delivered;
+  return (
+    <div className="space-y-1 text-xs">
+      <div className="flex items-baseline justify-between gap-3 border-b border-border/60 pb-1">
+        <span className="font-display text-text-primary">{n.goodName}</span>
+        <span className={`font-mono ${SEVERITY_TEXT[sev]}`}>{SEVERITY_GLYPH[sev]} {Math.round(n.satisfaction * 100)}% met</span>
+      </div>
+      <p className="font-mono text-text-secondary">
+        want {n.want.toFixed(1)}/cyc · delivered {n.delivered.toFixed(1)}/cyc · gap {gap.toFixed(1)}/cyc · pressure {n.pressure.toFixed(2)}
+      </p>
+      <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
+    </div>
+  );
+}
+
+/** Exception-only problem sub-row: one item per actual problem (input throttle or pop shortage), nothing when healthy. */
+function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNeedData }) {
+  if (items.length === 0) return null;
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-4 text-[11px]">
-      <span className="font-mono uppercase tracking-wide text-text-tertiary/80">needs</span>
-      {inputs.map((input) => {
-        const short = supply.throttledBy.includes(input);
-        return (
-          <span key={input} className={`font-mono ${short ? "text-status-red-light" : "text-status-green-light"}`}>
-            {short ? "⚠" : "✓"} {label(input)}{short ? ` ${Math.round(supply.inputGate * 100)}%` : ""}
+      {items.map((item, i) => {
+        const chip = (
+          <span className={`font-mono ${SEVERITY_TEXT[item.severity]}`}>
+            {SEVERITY_GLYPH[item.severity]} {item.label}
           </span>
+        );
+        return (
+          <Fragment key={`${item.kind}-${item.label}`}>
+            {i > 0 && <span className="text-text-tertiary">·</span>}
+            {item.kind === "pops" && popNeed ? (
+              <Tooltip>
+                <TooltipTriggerLabel>{chip}</TooltipTriggerLabel>
+                <TooltipContent className="w-56"><PopShortTooltipBody n={popNeed} /></TooltipContent>
+              </Tooltip>
+            ) : (
+              chip
+            )}
+          </Fragment>
         );
       })}
     </span>
   );
 }
 
-/** One general-land building row — health glyph · name (tooltip) · worked/built · output, with a needs sub-row.
+/** One general-land building row — health glyph · name (tooltip) · worked/built · output, with an exception-only problem sub-row.
  *  On the player's own systems, a trailing quick-add column offers +1 level when a feasibility option exists. */
 function BuildingRow({
   b,
   labour,
   unrest,
   supply,
+  popNeed,
   systemId,
   canOrder,
   option,
@@ -451,23 +506,25 @@ function BuildingRow({
   labour: SystemLabour;
   unrest: number;
   supply?: SystemIndustryReadout["supplyChain"][number];
+  popNeed?: PopNeedData;
   systemId: string;
   canOrder: boolean;
   option?: BuildOptionData;
 }) {
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
-  const hasNeeds = supply && Object.keys(GOOD_RECIPES[supply.goodId] ?? {}).length > 0;
+  const items = buildProblems(supply, popNeed, label);
+  const hasProblems = items.length > 0;
   return (
-    <tr className={hasNeeds ? "" : "border-b border-border/40"}>
-      <td className={`px-1.5 pt-1 text-[12px] text-text-primary ${hasNeeds ? "pb-0.5" : "pb-1"}`}>
+    <tr className={hasProblems ? "" : "border-b border-border/40"}>
+      <td className={`px-1.5 pt-1 text-[12px] text-text-primary ${hasProblems ? "pb-0.5" : "pb-1"}`}>
         <span className="flex items-center gap-1.5">
           <HealthGlyph health={health} className="text-[9px]" />
           <Tooltip>
             <TooltipTriggerLabel>{label(b.buildingType)}</TooltipTriggerLabel>
-            <TooltipContent className="w-64"><BuildingTooltipBody b={b} labour={labour} /></TooltipContent>
+            <TooltipContent className="w-64"><BuildingTooltipBody b={b} labour={labour} supply={supply} /></TooltipContent>
           </Tooltip>
         </span>
-        {hasNeeds && supply && <NeedsLine supply={supply} />}
+        <ProblemLine items={items} popNeed={popNeed} />
       </td>
       <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Worked worked={b.used} total={b.count} health={health} /></td>
       <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
@@ -490,6 +547,7 @@ function BuildingsTable({
   labour,
   unrest,
   supplyByGood,
+  popNeedByGood,
   systemId,
   canOrder,
   optionByType,
@@ -501,6 +559,7 @@ function BuildingsTable({
   labour: SystemLabour;
   unrest: number;
   supplyByGood: Map<string, SystemIndustryReadout["supplyChain"][number]>;
+  popNeedByGood: Map<string, PopNeedData>;
   systemId: string;
   canOrder: boolean;
   optionByType: Map<string, BuildOptionData>;
@@ -534,6 +593,7 @@ function BuildingsTable({
                 labour={labour}
                 unrest={unrest}
                 supply={b.outputGood ? supplyByGood.get(b.outputGood) : undefined}
+                popNeed={b.outputGood ? popNeedByGood.get(b.outputGood) : undefined}
                 systemId={systemId}
                 canOrder={canOrder}
                 option={optionByType.get(b.buildingType)}
@@ -770,7 +830,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     return <EmptyState message="This system isn't developed yet — no industry to survey." />;
   }
 
-  const { space, deposits, labour, labourAllocation, labourFulfillment, supplyChain, unrest, skillBaskets } = data;
+  const { space, deposits, labour, labourAllocation, labourFulfillment, supplyChain, unrest, skillBaskets, popNeeds } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -808,6 +868,9 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   ];
 
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));
+  const popNeedByGood = new Map(popNeeds.map((n) => [n.goodId, n]));
+  // Already pressure-sorted (computePopNeeds), so unmet[0]/[1] are the two highest-pressure shortages.
+  const unmet = popNeeds.filter((n) => needSeverity(n.satisfaction) !== "met");
   const depRows = depositRows(deposits, extractors, unrest, THRESHOLD);
   const contributorsFor = (resource: DepositRow["resource"]) =>
     extractors.filter((b) => BUILDING_TYPES[b.buildingType]?.resource === resource);
@@ -829,6 +892,28 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
             <HealthGlyph health={sysHealth} className="mr-1 text-xs" decorative />
             {HEALTH[sysHealth].label}
           </Badge>
+          {unmet.length > 0 && (
+            <Tooltip>
+              <TooltipTriggerLabel className="inline-flex items-center gap-1.5 border border-border bg-surface-active px-2 py-0.5 text-[11px]">
+                <span aria-hidden className={`font-mono text-[10px] ${SEVERITY_TEXT[needSeverity(unmet[0].satisfaction)]}`}>{SEVERITY_GLYPH[needSeverity(unmet[0].satisfaction)]}</span>
+                Pops short: <strong>{unmet[0].goodName}</strong>
+                {unmet[1] && <> · {unmet[1].goodName}</>}
+                {unmet.length > 2 && <span className="text-text-tertiary">+{unmet.length - 2}</span>}
+              </TooltipTriggerLabel>
+              <TooltipContent className="w-64">
+                <div className="space-y-1 text-xs">
+                  <div className="space-y-0.5">
+                    {unmet.map((n) => (
+                      <p key={n.goodId} className="font-mono text-text-secondary">
+                        {n.goodName} — {Math.round(n.satisfaction * 100)}% met · want {n.want.toFixed(1)} · delivered {n.delivered.toFixed(1)}
+                      </p>
+                    ))}
+                  </div>
+                  <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
           <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
             <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
             <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
@@ -900,6 +985,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           labour={labour}
           unrest={unrest}
           supplyByGood={supplyByGood}
+          popNeedByGood={popNeedByGood}
           systemId={systemId}
           canOrder={canOrder}
           optionByType={optionByType}

@@ -269,6 +269,8 @@ export type SystemIndustryData =
       deposits: SystemDepositSummary[];
       /** Per-good production vs consumption from the built base + population (real yields). */
       goods: SubstrateGoodRate[];
+      /** Pop needs, pressure-sorted — drives the strip chip and per-row pop-short markers. */
+      popNeeds: PopNeedData[];
     } & SystemIndustryReadout)
   | { visibility: "unknown" };
 export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
