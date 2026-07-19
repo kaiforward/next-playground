@@ -60,6 +60,20 @@ describe("getSystemIndustry", () => {
       expect(Number.isFinite(g.production)).toBe(true);
       expect(Number.isFinite(g.consumption)).toBe(true);
     }
+
+    // Pop needs ride the industry readout (strip chip + per-row pop-short
+    // markers) — pressure-sorted, internally consistent, goodName-resolved.
+    expect(data.popNeeds.length).toBeGreaterThan(6);
+    for (let i = 1; i < data.popNeeds.length; i++) {
+      expect(data.popNeeds[i - 1].pressure).toBeGreaterThanOrEqual(data.popNeeds[i].pressure);
+    }
+    for (const n of data.popNeeds) {
+      expect(n.satisfaction).toBeGreaterThanOrEqual(0);
+      expect(n.satisfaction).toBeLessThanOrEqual(1);
+      expect(n.delivered).toBeCloseTo(n.want * n.satisfaction, 6);
+    }
+    const water = data.popNeeds.find((n) => n.goodId === "water");
+    expect(water?.goodName).toBe("Water");
   });
 
   it("throws ServiceError(404) for an unknown system", () => {

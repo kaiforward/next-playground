@@ -5,7 +5,6 @@ import {
   civilianDemandRateForGood,
   totalDemandRateForGood,
   MIN_DEMAND,
-  demandFootprint,
 } from "../market-economy";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { inputDemandForGood, facilityStorageForGood } from "@/lib/engine/industry";
@@ -159,21 +158,5 @@ describe("getInitialStock", () => {
     expect(seedProducer).toBeGreaterThanOrEqual(Math.floor(band.minStock));
     expect(seedProducer).toBeLessThanOrEqual(Math.ceil(band.maxStock));
     expect(seedProducer).toBeGreaterThan(seedConsumer); // producer is deeper-stocked (cheaper)
-  });
-});
-
-describe("demandFootprint", () => {
-  it("lists consumed goods descending by demand, scaled by population", () => {
-    const f = demandFootprint(popOnly(10_000));
-    expect(f.length).toBeGreaterThan(0);
-    for (let i = 1; i < f.length; i++) {
-      expect(f[i - 1].civilianDemandRate).toBeGreaterThanOrEqual(f[i].civilianDemandRate);
-    }
-    expect(f[0].civilianDemandRate).toBeCloseTo(civilianDemandRateForGood(f[0].goodId, popOnly(10_000)), 6);
-    // water/food carry the highest per-capita need (0.004), so they lead at scale.
-    expect(["water", "food"]).toContain(f[0].goodId);
-  });
-  it("floors every good at MIN_DEMAND for a zero population", () => {
-    expect(demandFootprint(popOnly(0)).every((e) => e.civilianDemandRate === MIN_DEMAND)).toBe(true);
   });
 });

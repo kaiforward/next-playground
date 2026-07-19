@@ -50,13 +50,17 @@ undeveloped system).
   forming, or the disabled verb with its blocking reason); then a quiet 2-up context strip (faction ·
   government · danger · astrography) and an events banner.
 - **Population** — magnitude, `popCap` utilisation, unrest/stability, strike state, and a
-  **consumer-segmented demand chart**: one stacked bar per good split into base / technician / engineer
-  demand, the `MIN_DEMAND` floor drawn as a hatched "market minimum" tail.
+  **needs ledger**: one row per consumed good (severity glyph ✓/⚠/▼ · % met · want · delivered),
+  pressure-sorted with met needs collapsed behind an expandable row; each row's tooltip carries the
+  want/delivered/pressure figures and the base / technician / engineer tier breakdown. Want is the
+  unfloored civilian consumption rate (the `MIN_DEMAND` pricing floor stays engine-side, unrendered).
 - **Industry** — the deposit/space breakdown as compact tables: a per-deposit row (health glyph ·
   resource · `worked/slots` · yield · output, multi-type deposits carrying per-type sub-rows under a
   shared slot pool) and a general-land magnitude bar + a buildings table grouped **Housing · Academies ·
-  Specialisation · Production · Support** with per-input supply-chain rows, plus the skill-tiered Labour
-  card. Health reads **stable / contracting / collapsing**, grounded on the infrastructure-decay engine's
+  Specialisation · Production · Support** with exception-only problem sub-rows (input throttles and
+  pop shortages; the full per-input list lives in the building tooltip), plus the skill-tiered Labour
+  card and a pop-pressure chip on the health strip naming the top unmet needs. Health reads
+  **stable / contracting / collapsing**, grounded on the infrastructure-decay engine's
   exact triggers (contracting = a whole idle level `floor(built − used) ≥ 1`; collapsing = the unrest
   teardown), so a healthy system reads stable. On the player's own systems, in-flight builds render as
   ghost rows in place with a quick-add `+` per row and a **New industry** dialog; see

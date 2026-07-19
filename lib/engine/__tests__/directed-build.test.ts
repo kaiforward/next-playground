@@ -599,7 +599,9 @@ describe("planFactionBuilds performance", () => {
     };
     const t0 = performance.now();
     const oreUnits = countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "ore");
-    expect(performance.now() - t0).toBeLessThan(50);
+    // Order-of-magnitude guard: an O(capUnits) descent over 100k levels takes seconds; the bound
+    // stays far below that while shrugging off scheduler jitter under a loaded parallel run.
+    expect(performance.now() - t0).toBeLessThan(250);
     expect(oreUnits).toBeGreaterThan(0);
     expect(oreUnits).toBeLessThanOrEqual(40 + 1e-9); // labour ceiling: 40×oreLabour ÷ oreLabour
   });

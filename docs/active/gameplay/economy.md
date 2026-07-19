@@ -230,7 +230,7 @@ Chronic unmet demand climbs unrest; relief decays it. This is an integral over t
 
 The system screen surfaces dynamic population and stability through two views, both tick-invalidated (separate from the static Astrography/substrate read, which is `staleTime: Infinity`):
 
-- **Population tab** — shows the current population magnitude, `popCap` utilisation, unrest/stability (via the stability badge), current strike state, and a per-good demand footprint (how each good's consumption demand distributes across the population).
+- **Population tab** — shows the current population magnitude, `popCap` utilisation, unrest/stability (via the stability badge), current strike state, and a per-good **needs ledger**: want vs delivered per consumed good, severity-glyphed and pressure-sorted — the read-side projection of the same satisfaction signal the unrest spine integrates (`computePopNeeds`, `lib/engine/pop-needs.ts`). The base/technician/engineer consumption split lives in each row's tooltip. The Industry tab reads the same needs for its pop-pressure chip and per-row pop-short markers.
 - **Overview stability row** — a quick stability badge on the system Overview, so the current unrest level is visible without switching tabs.
 
 > **Prosperity is retired.** The former `prosperity` value (a trade-volume proxy for supply-response scaling, 0.3× crisis to 1.3× booming) is removed. SP1 already moved the smooth supply response onto `population` (via `labourFulfillment`), so the proxy became redundant. Population is now the smooth health channel; `unrest` is the consequence channel.

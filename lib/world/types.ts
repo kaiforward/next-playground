@@ -218,8 +218,8 @@ export interface WorldMarket {
   /**
    * Total days-of-supply demand denominator: civilian consumption **plus** industrial input draw.
    * This is the pricing anchor (targetStock = TARGET_COVER × demandRate) and the directed-logistics
-   * deficit anchor — NOT the civilian-only footprint the Population panel renders (that is
-   * `civilianDemandRateForGood`). Recomputed each economy pulse by the population processor via
+   * deficit anchor — NOT the civilian-only want the Population panel's needs ledger renders (that is
+   * `consumptionRate`, unfloored). Recomputed each economy pulse by the population processor via
    * `totalDemandRateForGood`; seeded civilian-only at world-gen and overwritten with the
    * civilian+industrial total on the first pulse.
    */

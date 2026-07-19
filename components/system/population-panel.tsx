@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useSystemPopulation } from "@/lib/hooks/use-system-population";
-import type { PopulationDemandEntry } from "@/lib/types/api";
+import type { PopNeedData } from "@/lib/types/api";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -9,103 +10,74 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { PopulationSummary } from "@/components/system/population-summary";
-import { demandBars, DEMAND_SERIES, DEMAND_TIERS, type DemandBar } from "@/components/system/demand-chart";
+import { needSeverity, splitNeedsLedger, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
+import { NeedCells, NeedsTable } from "@/components/system/needs-table";
 
-// Faint neutral hatch = the "market minimum" floor tail (consumption floored up to a tradeable minimum).
-const FLOOR_HATCH = "repeating-linear-gradient(135deg, rgba(201,209,217,0.28) 0 2px, transparent 2px 5px)";
+// Tier swatch colours match the dataviz-validated categorical set (base copper /
+// technician deep-cyan / engineer purple) used elsewhere for consumer tiers.
+const TIER_META = [
+  { key: "base", label: "Base population", color: "#d06a42" },
+  { key: "technicians", label: "Technicians", color: "#0891b2" },
+  { key: "engineers", label: "Engineers", color: "#a855f7" },
+] as const;
 
-/** A swatch keyed to the demand palette (solid for a tier, hatched for the floor) — legend + tooltip share it. */
-function DemandSwatch({ seriesKey, className = "" }: { seriesKey: DemandBar["segments"][number]["key"]; className?: string }) {
-  const floor = seriesKey === "floor";
+function NeedTooltip({ n }: { n: PopNeedData }) {
+  const sev = needSeverity(n.satisfaction);
   return (
-    <span
-      className={`inline-block h-2.5 w-2.5 align-middle ${floor ? "border border-border" : ""} ${className}`}
-      style={floor ? { backgroundImage: FLOOR_HATCH } : { backgroundColor: DEMAND_SERIES[seriesKey].color }}
-    />
-  );
-}
-
-/** Always-present legend — the three consumer tiers plus the market-minimum floor. */
-function DemandLegend() {
-  return (
-    <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-secondary">
-      {DEMAND_TIERS.map((k) => (
-        <span key={k} className="inline-flex items-center gap-1.5">
-          <DemandSwatch seriesKey={k} /> {DEMAND_SERIES[k].label}
-        </span>
-      ))}
-      <span className="inline-flex items-center gap-1.5">
-        <DemandSwatch seriesKey="floor" /> {DEMAND_SERIES.floor.label}
-      </span>
+    <div className="space-y-1 text-xs">
+      <div className="flex items-baseline justify-between gap-3 border-b border-border/60 pb-1">
+        <span className="font-display text-text-primary">{n.goodName}</span>
+        <span className={`font-mono ${SEVERITY_TEXT[sev]}`}>{SEVERITY_GLYPH[sev]} {Math.round(n.satisfaction * 100)}% met</span>
+      </div>
+      <p className="font-mono text-text-secondary">
+        want {n.want.toFixed(2)}/cyc · delivered {n.delivered.toFixed(2)}/cyc · pressure {n.pressure.toFixed(2)}
+      </p>
+      <div className="space-y-0.5 border-t border-border/60 pt-1">
+        {TIER_META.map((t) => (
+          <div key={t.key} className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 text-text-secondary">
+              <span aria-hidden className="inline-block h-2 w-2" style={{ backgroundColor: t.color }} /> {t.label}
+            </span>
+            <span className="font-mono text-text-primary">{n.breakdown[t.key].toFixed(2)}/cyc</span>
+          </div>
+        ))}
+      </div>
+      <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
     </div>
   );
 }
 
-/** Per-bar hover tooltip: the good's total demand, then each segment's contribution. */
-function DemandTooltip({ bar }: { bar: DemandBar }) {
-  return (
-    <dl className="space-y-0.5 text-xs">
-      <div className="mb-1 flex items-baseline justify-between gap-3 border-b border-border/60 pb-1">
-        <dt className="font-display text-text-primary">{bar.goodName}</dt>
-        <dd className="font-mono text-text-secondary">{bar.total.toFixed(2)}/cyc</dd>
-      </div>
-      {bar.segments.map((s) => (
-        <div key={s.key} className="flex items-center justify-between gap-3">
-          <dt className="flex items-center gap-1.5 text-text-secondary">
-            <DemandSwatch seriesKey={s.key} /> {DEMAND_SERIES[s.key].label}
-          </dt>
-          <dd className="font-mono text-text-primary">{s.value.toFixed(2)}/cyc</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-/** One good = one stacked bar: name · segmented bar (base/tech/eng + floor tail) · total. */
-function DemandBarRow({ bar }: { bar: DemandBar }) {
+function NeedRow({ n }: { n: PopNeedData }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div tabIndex={0} className="flex items-center gap-2 outline-none focus-visible:ring-1 focus-visible:ring-accent">
-          <span className="w-24 shrink-0 truncate text-xs text-text-secondary" title={bar.goodName}>{bar.goodName}</span>
-          <div className="relative h-3 flex-1 bg-surface-active">
-            {/* the whole coloured region = this good's share of the biggest good (magnitude); internal splits = composition */}
-            <div className="absolute inset-y-0 left-0 flex" style={{ width: `${bar.scale * 100}%` }}>
-              {bar.segments.map((s, i) => (
-                <div
-                  key={s.key}
-                  className={`h-full ${i > 0 ? "border-l-2 border-surface" : ""}`}
-                  style={{
-                    width: `${s.fraction * 100}%`,
-                    backgroundColor: s.key === "floor" ? undefined : DEMAND_SERIES[s.key].color,
-                    backgroundImage: s.key === "floor" ? FLOOR_HATCH : undefined,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-          <span className="w-12 shrink-0 text-right font-mono text-xs text-text-secondary">{bar.total.toFixed(2)}</span>
-        </div>
+        <tr tabIndex={0} className="border-b border-border/40 outline-none last:border-b-0 focus-visible:ring-1 focus-visible:ring-accent">
+          <NeedCells n={n} density="panel" />
+        </tr>
       </TooltipTrigger>
-      <TooltipContent className="w-52">
-        <DemandTooltip bar={bar} />
-      </TooltipContent>
+      <TooltipContent className="w-64"><NeedTooltip n={n} /></TooltipContent>
     </Tooltip>
   );
 }
 
-/** Consumer-segmented demand chart — one stacked bar per good, demand-sorted, base/tech/eng split visible. */
-function DemandChart({ demand }: { demand: PopulationDemandEntry[] }) {
-  const bars = demandBars(demand);
+function NeedsLedger({ needs }: { needs: PopNeedData[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const { problems, met } = splitNeedsLedger(needs);
   return (
-    <>
-      <DemandLegend />
-      <div className="space-y-1">
-        {bars.map((b) => (
-          <DemandBarRow key={b.goodId} bar={b} />
-        ))}
-      </div>
-    </>
+    <NeedsTable density="panel">
+      {problems.map((n) => <NeedRow key={n.goodId} n={n} />)}
+      {met.length > 0 && !expanded && (
+        <tr>
+          <td colSpan={4} className="px-1.5 py-1.5 text-xs text-text-tertiary">
+            <button type="button" onClick={() => setExpanded(true)} className="inline-flex items-center gap-1.5 hover:text-text-secondary">
+              <span aria-hidden className="font-mono text-[10px] text-status-green-light">✓</span>
+              {met.length} needs met <span className="font-mono text-[10px]">▸ expand</span>
+            </button>
+          </td>
+        </tr>
+      )}
+      {expanded && met.map((n) => <NeedRow key={n.goodId} n={n} />)}
+    </NeedsTable>
   );
 }
 
@@ -118,9 +90,9 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
     );
   }
 
-  const { population, popCap, unrest, striking, demand } = pop;
+  const { population, popCap, unrest, striking, needs } = pop;
 
-  // Uninhabited: no housing capacity → no population, no demand. The deposits are
+  // Uninhabited: no housing capacity → no population, no needs. The deposits are
   // still charted on the Astrography tab (the colonisation hook).
   if (popCap <= 0) {
     return (
@@ -152,14 +124,14 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
       </Card>
 
       <Card variant="bordered" padding="md">
-        <SectionHeader as="h4" className="mb-1">Demand footprint</SectionHeader>
+        <SectionHeader as="h4" className="mb-1">Needs</SectionHeader>
         <p className="mb-3 text-xs text-text-tertiary">
-          What these inhabitants consume each economic cycle, split by consumer tier — this is what drives the system&apos;s market demand.
+          What the population consumes and how well each want is met — unmet needs drive unrest.
         </p>
-        {demand.length === 0 ? (
-          <EmptyState message="No demand." />
+        {needs.length === 0 ? (
+          <EmptyState message="No needs." />
         ) : (
-          <DemandChart demand={demand} />
+          <NeedsLedger needs={needs} />
         )}
       </Card>
     </div>

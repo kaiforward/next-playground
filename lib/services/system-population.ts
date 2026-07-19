@@ -2,17 +2,15 @@ import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
-import { demandFootprint } from "@/lib/constants/market-economy";
+import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
-import { consumptionBreakdown } from "@/lib/engine/physical-economy";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import { GOODS } from "@/lib/constants/goods";
 import type { SystemPopulationData } from "@/lib/types/api";
 
 /**
  * Dynamic population & social state for one system — population, popCap, unrest,
- * a strike flag, and the demand footprint. Unlike the substrate read, these
- * fields change every economy tick, so the hook (`useSystemPopulation`) is
+ * a strike flag, and the pressure-sorted needs ledger. Unlike the substrate read,
+ * these fields change every economy tick, so the hook (`useSystemPopulation`) is
  * tick-invalidated.
  */
 export function getSystemPopulation(systemId: string): SystemPopulationData {
@@ -23,14 +21,7 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
   const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
-
-  // Full consumption footprint (already filtered to consumed goods, demand-sorted).
-  const demand = demandFootprint(basis).map((e) => ({
-    goodId: e.goodId,
-    goodName: GOODS[e.goodId]?.name ?? e.goodId,
-    demandRate: e.civilianDemandRate,
-    breakdown: consumptionBreakdown(e.goodId, basis),
-  }));
+  const needs = systemPopNeeds(systemId, basis);
 
   return {
     visibility: "visible",
@@ -38,6 +29,6 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
     popCap: system.popCap,
     unrest: system.unrest,
     striking: system.unrest >= STRIKE_PARAMS.threshold,
-    demand,
+    needs,
   };
 }
