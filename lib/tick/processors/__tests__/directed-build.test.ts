@@ -123,6 +123,30 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     expect(w.constructionProjects.length).toBeGreaterThan(0); // but the work is committed
   });
 
+  it("reports work performed by the faction, equal to the work that entered the queue", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    // pool = 5000 × 0.05 = 250; cap = 4 (< any level's work cost, so nothing lands) →
+    // absorbed must equal exactly the workDone advanced across the persisted queue.
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const absorbed = result.workPerformedByFaction?.get("f1");
+    const queuedWork = w.constructionProjects.reduce((acc, p) => acc + p.workDone, 0);
+    expect(queuedWork).toBeGreaterThan(0);
+    expect(absorbed).toBeCloseTo(queuedWork, 6);
+    expect(absorbed).toBeLessThanOrEqual(5000 * 0.05);
+  });
+
+  it("plans nothing for a null-faction (independents) group and attributes no treasury work", async () => {
+    // The engine skips null-faction systems at the proposal stage (only faction-owned
+    // systems can be developed), so independents absorb nothing; this pins that invariant
+    // and the treasury export's null-faction exclusion together — if independents ever
+    // gain building, this fails and forces a conscious attribution decision.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0).map((r) => ({ ...r, factionId: null })));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.constructionProjects).toHaveLength(0);
+    expect(w.buildingUpdates).toHaveLength(0);
+    expect(result.workPerformedByFaction?.size ?? 0).toBe(0);
+  });
+
   it("commits and funds nothing on an off-boundary tick (monthly pulse)", async () => {
     const w = new MemoryDirectedBuildWorld(scenario(0, 0));
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });

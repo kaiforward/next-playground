@@ -423,6 +423,31 @@ describe("economy processor: supply-chain input-gating", () => {
 
 // ── outputUptake signal ───────────────────────────────────────────
 
+describe("economy processor: realized production signal", () => {
+  it("exports realized production per (system, good) in economySignals", async () => {
+    const systems = [makeProducerSystem("sys-1", 0)];
+    // Active-production zone (below the operating ceiling, targetStock × holdCover
+    // ≈ 52) — same reasoning as the strike-suppression tests above. Stock at the
+    // fixture's default 100 sits above the ceiling and yields zero output.
+    const markets = [makeMarket("sys-1", "food", FIXTURE_BAND.targetStock - 2)];
+    const world = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    const realized = result.economySignals!.realizedProductionBySystem;
+    expect(realized.get("sys-1")).toBeDefined();
+    expect(realized.get("sys-1")!.get("food")).toBeGreaterThan(0);
+  });
+
+  it("records no realized entry for a pure consumer (produces nothing)", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("c", 0)],
+      markets: [makeMarket("c", "food", 100)],
+      modifiers: [],
+    });
+    const r = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(r.economySignals!.realizedProductionBySystem.get("c")).toBeUndefined();
+  });
+});
+
 describe("economy processor: outputUptake signal", () => {
   it("emits low uptake for a producer pinned at the ceiling, high near the floor", async () => {
     const goodId = "food";

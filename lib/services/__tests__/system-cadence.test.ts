@@ -39,6 +39,7 @@ function buildWorld(systems: WorldSystem[]): World {
     factions: [],
     relations: [],
     alliancePacts: [],
+    treasuries: [],
     events: [],
     modifiers: [],
     ships: [],

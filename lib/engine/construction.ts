@@ -77,6 +77,8 @@ export interface FundQueueResult {
    * open and landed by work alone, never interpreting the kind.
    */
   landed: WorldConstructionProject[];
+  /** Total construction points actually consumed this pulse (Σ per-project take). */
+  absorbed: number;
 }
 
 /**
@@ -102,11 +104,13 @@ export function fundQueue(
   let poolLeft = Number.isFinite(pool) ? Math.max(0, pool) : 0;
   const open: WorldConstructionProject[] = [];
   const landed: WorldConstructionProject[] = [];
+  let absorbedTotal = 0;
 
   for (const p of projects) {
     const remaining = Math.max(0, p.workTotal - p.workDone);
     const absorbed = Math.min(safeCap, remaining, poolLeft);
     poolLeft -= absorbed;
+    absorbedTotal += absorbed;
     const workDone = p.workDone + absorbed;
 
     if (workDone >= p.workTotal) {
@@ -116,7 +120,7 @@ export function fundQueue(
     }
   }
 
-  return { projects: open, landed };
+  return { projects: open, landed, absorbed: absorbedTotal };
 }
 
 /**
@@ -159,6 +163,7 @@ export function fundQueueWithFloor(
   // Pass A: eligible builds absorb the reserved slice, front-first.
   const absorbed = new Map<string, number>();
   let reserveLeft = cappedReserve;
+  let absorbedTotal = 0;
   for (const p of ordered) {
     if (reserveLeft <= 0) break;
     if (!isFloorEligible(p)) continue;
@@ -167,6 +172,7 @@ export function fundQueueWithFloor(
     if (take > 0) {
       absorbed.set(p.id, take);
       reserveLeft -= take;
+      absorbedTotal += take;
     }
   }
 
@@ -180,11 +186,12 @@ export function fundQueueWithFloor(
     const remaining = Math.max(0, p.workTotal - p.workDone - already);
     const take = Math.min(Math.max(0, safeCap - already), remaining, generalLeft);
     generalLeft -= take;
+    absorbedTotal += take;
     const workDone = p.workDone + already + take;
     if (workDone >= p.workTotal) landed.push({ ...p, workDone });
     else open.push({ ...p, workDone });
   }
-  return { projects: open, landed };
+  return { projects: open, landed, absorbed: absorbedTotal };
 }
 
 /**

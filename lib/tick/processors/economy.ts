@@ -149,6 +149,7 @@ export async function runEconomyProcessor(
   // per-produced-good output uptake (produce side) from post-tick stock.
   const goodsBySystem = new Map<string, GoodSatisfaction[]>();
   const uptakeBySystem = new Map<string, Map<string, number>>();
+  const realizedProductionBySystem = new Map<string, Map<string, number>>();
   markets.forEach((m, i) => {
     const consumptionRate = tickEntries[i].consumptionRate;
     if (consumptionRate != null && consumptionRate > 0) {
@@ -170,12 +171,22 @@ export async function runEconomyProcessor(
       map.set(m.goodId, uptake);
       uptakeBySystem.set(m.systemId, map);
     }
+    const realized = simulated[i].realized;
+    if (realized > 0) {
+      const bySystem = realizedProductionBySystem.get(m.systemId) ?? new Map<string, number>();
+      bySystem.set(m.goodId, (bySystem.get(m.goodId) ?? 0) + realized);
+      realizedProductionBySystem.set(m.systemId, bySystem);
+    }
   });
   const dissatisfactionBySystem = new Map<string, number>();
   for (const sysId of systemIds) {
     dissatisfactionBySystem.set(sysId, dissatisfaction(goodsBySystem.get(sysId) ?? []));
   }
-  const economySignals: EconomySignals = { dissatisfactionBySystem, outputUptakeBySystem: uptakeBySystem };
+  const economySignals: EconomySignals = {
+    dissatisfactionBySystem,
+    outputUptakeBySystem: uptakeBySystem,
+    realizedProductionBySystem,
+  };
 
   const modCount = rawModifiers.length;
   if (DEBUG) {

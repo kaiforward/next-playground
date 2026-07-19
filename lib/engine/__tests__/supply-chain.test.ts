@@ -167,6 +167,30 @@ describe("simulateSystemEconomyTick — operating ceiling", () => {
   });
 });
 
+describe("simulateSystemEconomyTick — realized output", () => {
+  it("reports realized output per entry — input-starved production realizes less than capacity", () => {
+    // ore: tier-0 (no recipe), stock pinned at its own floor so the operating-ceiling
+    // factor is 1 → realized should equal effectiveProduction exactly (gate is always
+    // 1 for a no-recipe good).
+    const tier0 = entry("ore", 5, 20);
+    // chemicals: recipe { gas: 0.5, minerals: 0.5 }; neither input is in this entry set,
+    // so stockOf/minStockOf both default to 0 for them ⇒ drawable 0 ⇒ gate 0 ⇒ realized 0.
+    const starved = entry("chemicals", 50, 20);
+    // water: pure consumer, no productionRate at all ⇒ never enters the production
+    // branch ⇒ realized reports 0, not undefined.
+    const consumerOnly = entry("water", 100, undefined, 8);
+
+    const simulated = simulateSystemEconomyTick([tier0, starved, consumerOnly], PARAMS);
+    const tier0Result = simulated.find((e) => e.goodId === "ore")!;
+    const starvedResult = simulated.find((e) => e.goodId === "chemicals")!;
+    const consumerResult = simulated.find((e) => e.goodId === "water")!;
+
+    expect(tier0Result.realized).toBeCloseTo(20, 6);
+    expect(starvedResult.realized).toBe(0);
+    expect(consumerResult.realized).toBe(0);
+  });
+});
+
 describe("simulateCoupledEconomyTick", () => {
   it("isolates systems — system A's ore does not feed system B's metals", () => {
     // A: ore-rich + metals. B: ore-starved + metals. Same flat array.

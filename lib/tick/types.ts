@@ -57,6 +57,9 @@ export interface EconomySignals {
    * by the infrastructure-decay processor. Empty inner map ⇒ system produces nothing.
    */
   outputUptakeBySystem: Map<string, Map<string, number>>;
+  /** Per-system, per-good physical output actually produced this pulse (post
+   *  input-gate and operating-ceiling) — the production-tax base. Absent system ⇒ produced nothing. */
+  realizedProductionBySystem: Map<string, Map<string, number>>;
 }
 
 /** Result returned by each processor. */
@@ -65,6 +68,10 @@ export interface TickProcessorResult {
   globalEvents?: Partial<GlobalEventMap>;
   /** Transient cross-processor signals (economy → population). Not broadcast. */
   economySignals?: EconomySignals;
+  /** Work actually performed this pulse per faction (directed-build: construction
+   *  points absorbed; directed-logistics: work-budget consumed). Transient input
+   *  to the treasury settlement — not broadcast, not persisted. */
+  workPerformedByFaction?: Map<string, number>;
 }
 
 /** The full payload one tick's run hands to the broadcast layer. */

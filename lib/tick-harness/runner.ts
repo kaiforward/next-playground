@@ -16,6 +16,8 @@ import {
   computeEventImpacts,
 } from "./event-analysis";
 import { summarizeLogistics } from "./logistics-analysis";
+import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
+import type { TreasurySnapshot } from "./treasury-analysis";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
 import type { WorldFlowEvent, WorldMarket } from "@/lib/world/types";
@@ -76,6 +78,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
 
   const marketSnapshots: { tick: number; markets: MarketSnapshot[] }[] = [];
   const populationSnapshots: Array<Map<string, number>> = [];
+  const treasurySnapshots: TreasurySnapshot[] = [];
   // Whole-run flow log. The world's own `flowEvents` is pruned to the retention
   // window every tick, so a run longer than that window can only be totalled by
   // taking each tick's transfers as they happen.
@@ -110,6 +113,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       const popSnap = new Map<string, number>();
       for (const s of world.systems) popSnap.set(s.id, s.population);
       populationSnapshots.push(popSnap);
+      treasurySnapshots.push(sampleTreasuries(world.meta.currentTick, world.treasuries));
     }
 
     completedEvents.push(
@@ -153,5 +157,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     initialPopulationTotal,
     initialBuildingTotal,
     populationSnapshots,
+    treasurySummary: summarizeTreasuries(world.treasuries, treasurySnapshots),
+    treasurySnapshots,
   };
 }

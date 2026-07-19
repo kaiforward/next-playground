@@ -19,8 +19,10 @@ import type {
   GovernmentType,
   ShipStatus,
   SunClass,
+  TaxLevel,
 } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
+import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
 
 // ── Meta ────────────────────────────────────────────────────────
 
@@ -269,6 +271,47 @@ export interface WorldAlliancePact {
   pendingDissolutionAtTick: number | null;
 }
 
+// ── Treasury ────────────────────────────────────────────────────
+
+/** One system's contribution to a settlement's income, itemised for the UI and harness. */
+export interface TreasuryIncomeBySystem {
+  systemId: string;
+  heads: number;
+  production: number;
+}
+
+/** World-facing name for the engine's maintenance line item — one shape, no drift. */
+export type TreasuryMaintenanceLine = MaintenanceBillLine;
+
+/** The last monthly settlement's itemised snapshot — persisted so UI reads never recompute transients. */
+export interface WorldTreasurySettlement {
+  tick: number;
+  headsIncome: number;
+  productionIncome: number;
+  incomeBySystem: TreasuryIncomeBySystem[];
+  maintenanceBill: number;
+  maintenanceByType: TreasuryMaintenanceLine[];
+  logisticsBill: number;
+  constructionBill: number;
+  paid: TreasuryBands;
+}
+
+/** One faction's treasury — the only persisted per-faction tick-mutable state. */
+export interface WorldFactionTreasury {
+  factionId: string;
+  /** ≥ 0 — no debt instrument. */
+  balance: number;
+  taxLevel: TaxLevel;
+  /** Funding sliders (0-1); maintenance is floored at 0.5 at every write boundary. */
+  bands: TreasuryBands;
+  /** Latched paid-fractions from the last settlement — the effective funding each band's consumers run at. */
+  funded: TreasuryBands;
+  /** Work performed since the last settlement (logistics S-normalised at accrual); billed then cleared. */
+  pendingWork: { logistics: number; construction: number };
+  lastSettlement: WorldTreasurySettlement | null;
+  updatedAtTick: number;
+}
+
 // ── Events ──────────────────────────────────────────────────────
 
 /** Participant pair carried by relations-spawned events (border_conflict, pact_under_negotiation, alliance_dissolved). */
@@ -368,6 +411,7 @@ export interface World {
   factions: WorldFaction[];
   relations: WorldFactionRelation[];
   alliancePacts: WorldAlliancePact[];
+  treasuries: WorldFactionTreasury[];
   events: WorldEvent[];
   modifiers: WorldEventModifier[];
   ships: WorldShip[];

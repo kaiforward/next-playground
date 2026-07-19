@@ -166,6 +166,15 @@ describe("fundQueue", () => {
     expect(Number.isFinite(r2.projects[0].workDone)).toBe(true);
     expect(r2.projects[0].workDone).toBeLessThanOrEqual(r2.projects[0].workTotal);
   });
+
+  it("reports total absorbed points", () => {
+    const projects = [
+      project("a", HOUSING_TYPE, 1, 0, 10),
+      project("b", HOUSING_TYPE, 1, 0, 10),
+    ];
+    const r = fundQueue(projects, 6, 4);
+    expect(r.absorbed).toBeCloseTo(6); // 4 to the first (cap), 2 to the second
+  });
 });
 
 /** Build an open project at an explicit system (the floor gates on which system a build targets). */
@@ -229,6 +238,20 @@ describe("fundQueueWithFloor", () => {
     const col = projectAt("c", "colony", "food", 1, 0, 1000);
     const r = fundQueueWithFloor([col], 100, cap, 10, () => true);
     expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(cap);
+  });
+
+  it("absorbed covers both passes and never exceeds the pool", () => {
+    const cap = 10;
+    const ordered = [
+      projectAt("h", "home", "food", 1, 0, 1000),
+      projectAt("c", "colony", "food", 1, 0, 1000),
+    ];
+    const r = fundQueueWithFloor(ordered, 10, cap, 4, (p) => p.systemId === "colony");
+    const workDelta =
+      [...r.projects, ...r.landed].reduce((acc, p) => acc + p.workDone, 0) -
+      ordered.reduce((acc, p) => acc + p.workDone, 0);
+    expect(r.absorbed).toBeCloseTo(workDelta);
+    expect(r.absorbed).toBeLessThanOrEqual(10);
   });
 });
 

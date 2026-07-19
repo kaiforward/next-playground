@@ -14,6 +14,7 @@ import type {
   ShipStatus,
   SunClass,
   BodyArchetypeId,
+  TaxLevel,
 } from "./game";
 import type { ShipTypeId, ShipSize, ShipRole } from "@/lib/constants/ships";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
@@ -36,6 +37,10 @@ const DOCTRINES: ReadonlySet<string> = new Set<Doctrine>([
 
 const FACTION_STATUSES: ReadonlySet<string> = new Set<FactionStatus>([
   "dominant", "major", "regional", "minor",
+]);
+
+const TAX_LEVELS: ReadonlySet<string> = new Set<TaxLevel>([
+  "very_low", "low", "normal", "high", "very_high",
 ]);
 
 const SHIP_STATUSES: ReadonlySet<string> = new Set<ShipStatus>([
@@ -78,6 +83,17 @@ export function toGovernmentType(value: string): GovernmentType {
 
 export function isGovernmentType(value: string): value is GovernmentType {
   return GOVERNMENT_TYPES.has(value);
+}
+
+export function toTaxLevel(value: string): TaxLevel {
+  if (!TAX_LEVELS.has(value)) {
+    throw new Error(`Invalid tax level: "${value}"`);
+  }
+  return value as TaxLevel;
+}
+
+export function isTaxLevel(value: string): value is TaxLevel {
+  return TAX_LEVELS.has(value);
 }
 
 export function toDoctrine(value: string): Doctrine {
@@ -162,6 +178,10 @@ export function toBodyArchetypeId(value: string): BodyArchetypeId {
 export const ALL_GOVERNMENT_TYPES: readonly GovernmentType[] = [
   "federation", "corporate", "authoritarian", "frontier",
   "cooperative", "technocratic", "militarist", "theocratic",
+];
+
+export const ALL_TAX_LEVELS: readonly TaxLevel[] = [
+  "very_low", "low", "normal", "high", "very_high",
 ];
 
 export const ALL_DOCTRINES: readonly Doctrine[] = [
