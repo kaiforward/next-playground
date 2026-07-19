@@ -42,19 +42,47 @@ Well-defined, can start now.
   gameplay-relevant), run 2500–3000+ ticks and check balance-to-income ratio over time settles rather
   than climbs; retune sink rates if it climbs. Treasury metrics persist in `experiments/*.json`
   (`treasurySummary`/`treasurySnapshots`), so this is one YAML config + a read.
-- **[M] Stock/needs legibility: gross market stock reads as contradicting the needs ledger** — a
-  high-pop system showed alloys "83% met, gap 81.4/cyc" while the Market tab showed 22K units in stock;
-  players read that as a UI bug. It isn't: the numbers reconcile exactly. The pricing band reserves
-  `minStock = targetStock / priceCeiling` (for tier-1: target/2.5 — in that save ≈10.8K of the 22K)
-  as an untouchable floor, the anchor is `TARGET_COVER`(=40 cycles) × total demand ≈26.9K, and
-  consumption throttles by `√((stock−min)/(target−min))` (`selfLimitingFactor`, consume side) → 83%.
-  So "22K in stock" is really "~11K drawable ≈ 17 cycles vs a 40-cycle anchor, still filling". Two
-  candidate fixes, decide at design time: (a) UI — surface the band on the Market tab (floor reserve /
-  drawable stock / anchor, or cycles-of-cover instead of raw units) so gross stock stops lying;
-  (b) design — revisit whether the √ ramp throttling civilian consumption ~17% while ~33 gross cycles
-  sit warehoused is the intended rationing aggressiveness (three-pillar realism question). Predates the
-  purse work; all three surfaces (needs want = civilian-only, logistics consumes = civilian+industrial,
-  industry out/cyc = production) are internally consistent.
+- **[L] Economy band reconciliation — equilibrium vs anchor, the floor's identity, and regime
+  legibility** (design pass: brainstorm + EU5/Vic3 research BEFORE spec — direction leaning but NOT
+  settled; ideally lands before Purse Slice 3 Plan 2 calibration, which tunes against current equilibria).
+  Trigger was a "UI bug" report that turned out to be structure (2026-07-19, investigated on a live
+  save; all UI surfaces verified internally consistent — needs want = civilian-only, logistics consumes
+  = civilian+industrial, industry out/cyc = production).
+  **Finding 1 — equilibrium sits structurally below the anchor.** Production throttles by
+  `√((holdCover·target−s)/…)` (HOLD_COVER 1.3) and consumption by `√((s−min)/(target−min))`; their
+  crossing IS the resting state, and with a healthy prod/cons ratio (~1.1) it lands ~80% of target.
+  Verified: predicted equilibrium 21,736 vs observed 22,013 on the trigger save → ~83% met and price
+  ~24% above base *permanently, at perfect health*. "Prices lean high galaxy-wide" is curve geometry,
+  not tuning (also puts the hedged maturity-flattens-spread memory in doubt). Open design fork: is
+  high-lean pricing wanted negative space (scarcity is the norm, trade is the answer) or should the
+  anchor sit near the achievable equilibrium? **How to handle TARGET_COVER is the core open question.**
+  **Finding 2 — civilian satisfaction is chained to the price anchor.** The √ ramp starts the moment
+  stock < target, so pops ration ~17% while ~33 gross cycles sit warehoused. Leaning: give satisfaction
+  a knee — full delivery above a comfort threshold well below the anchor, ration only below it. (True
+  industrial deficit already has its own channel: `inputGate` scales linearly over the last pulse of
+  drawable stock and halts at the floor.)
+  **Finding 3 — the floor is a pricing construct wearing a goods costume.** `minStock = target ÷
+  priceCeiling` exists to pin where the price curve saturates; the draw clamps (consumption, recipe
+  draws, logistics) adopted it as a physical wall, so pops riot beside 40–50%-of-anchor "actual food"
+  they may not touch (at floor, D=1 → strike threshold in ~11 months, collapse ~13). Leaning: make the
+  floor pricing-virtual now (draws may continue below it toward zero; price stays saturated), with a
+  designed later promotion to a *legible* reserve (hoarding/strategic-reserve/crisis-requisition —
+  pairs well with purse monetisation Stages 2–3). Third option (shrink to epsilon) noted, unloved.
+  **Presentation brainstorm (needed):** the three regimes — comfortable / squeezed (ramps + climbing
+  prices) / floored (hard stops) — already exist mechanically but are invisible behind gross stock
+  numbers. Market tab should speak cycles-of-cover / drawable-vs-reserve, not raw units; needs + industry
+  surfaces should show which regime a good is in. Wireframe pass per house UI rule.
+  **Research (before spec):** EU5 / Vic3 inspiration — how they present shortage vs stockpile vs price
+  (Vic3 is flow-based with shortage malus, no market stockpiles; EU5 has physical goods + control —
+  verify both, don't trust this parenthetical), and what "reserve" mechanics exist worth stealing.
+  **Blast radius (why this is a pass, not a patch):** satisfaction → dissatisfaction → unrest →
+  strikes/decay; outputUptake → decay; migration attractiveness; needs-ledger UI; treasury production
+  tax rides realized output; future price-linked state spending (purse Stage 2) inherits whatever price
+  level this settles. Recalibrate via the harness after.
+  **Housekeeping:** `lib/tick/processors/economy.ts` cites `docs/planned/economy-equilibrium-rework.md`
+  which no longer exists — recover the old design's reasoning via
+  `git log --diff-filter=D -- docs/planned/economy-equilibrium-rework.md` at pass start, and fix the
+  stale pointer.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
 - **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
