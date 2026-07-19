@@ -4,6 +4,12 @@
 > Supersedes the purse section of [player-seat-roadmap.md](./player-seat-roadmap.md). When the
 > slice ships this moves to `docs/active/gameplay/` and the
 > [Deferred by design](#deferred-by-design) section migrates to the roadmap doc.
+>
+> **Plan 1 (treasury core) is SHIPPED** (PR #192): the container, both income lines, the
+> settlement ladder, tax levels (rate multiplier only), save v8, and harness metrics. Funded
+> fractions latch monthly but are consumed by nothing yet. Plans 2–3 remain — their as-built
+> integration points are recorded in
+> [Remaining build wiring](#remaining-build-wiring-plans-2-3).
 
 ## Headline
 
@@ -234,6 +240,25 @@ calibration harness, across the full faction roster (majors + minors). Per-facti
   visible where builds are queued.
 - Per house rule, the treasury card gets its collaborative HTML design pass before implementation —
   this spec fixes *what* it shows, not how it looks.
+
+## Remaining build wiring (Plans 2–3)
+
+As-built integration points discovered during Plan 1 — the anchors the next build plans start
+from (recorded here because the Plan-1 build plan is deleted at merge, per doc conventions):
+
+- **Plan 2 — the effects:** thread `funded.construction` into the directed-build pool
+  (`directed-build.ts:178`), `funded.logistics` into logistics generation
+  (`directed-logistics.ts:35`), maintenance funding into idle-decay aggression
+  (`infrastructure-decay.ts:101` accrual / `idleBufferMonths`) plus the output malus (a sibling
+  multiplier to `productionSuppress` at `market-tick-builder`/`engine/tick.ts` — must NOT feed
+  `buildingUsed`), and `TAX_LEVEL_UNREST_PRESSURE` into the population processor's `d` term.
+  Extend the S-invariance and cadence-invariance world tests to cover treasury trajectories once
+  money has behavioural consequences. Keep calibration deliberately coarse — the economy
+  band-reconciliation design pass lands after the slice and triggers a treasury recalibration.
+- **Plan 3 — player surfaces:** faction services/API additions, Zod-validated mutations (tax
+  level, band sliders with the 0.5 maintenance floor), the construction-card funded readout, and
+  the treasury card — after its collaborative HTML design pass. The reserved `GhostVitalTile`
+  slot is at `app/(game)/@panel/factions/[factionId]/page.tsx:64-74`.
 
 ## Deferred by design
 
