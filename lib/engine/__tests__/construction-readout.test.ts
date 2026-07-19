@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { forecastEtaPulses } from "@/lib/engine/construction";
+import { forecastEtaPulses, forecastIndependentEtaPulses } from "@/lib/engine/construction";
 import type { WorldBuildProject } from "@/lib/world/types";
 import {
   computeFactionConstruction, buildingLabel, describeBuildProject, nextPulseGains,
@@ -35,6 +35,45 @@ describe("forecastEtaPulses", () => {
   it("returns null past the guard cap without spinning", () => {
     // Huge work, tiny pool that still funds → guard trims it to stalled at maxPulses.
     expect(forecastEtaPulses([build("a", 100000, 0)], 1, 4, 5)).toEqual([null]);
+  });
+});
+
+describe("forecastIndependentEtaPulses", () => {
+  it("matches forecastEtaPulses called once per hypothetical (no cross-hypothetical interference)", () => {
+    // Two committed rows drain most of the pool for several pulses; two hypotheticals of DIFFERENT
+    // sizes probe "what if I ordered just this one" — each should land exactly where a solo
+    // forecastEtaPulses([...committed, thatOneHypothetical]) call would land it, not queued behind
+    // the other hypothetical (they never actually compete for the same pool-share).
+    const committed = [build("c1", 20, 0), build("c2", 20, 0)];
+    const hypA = build("hA", 12, 0);
+    const hypB = build("hB", 4, 0);
+    const pool = 6;
+    const cap = 4;
+
+    const [etaA, etaB] = forecastIndependentEtaPulses(committed, [hypA, hypB], pool, cap);
+    const soloA = forecastEtaPulses([...committed, hypA], pool, cap);
+    const soloB = forecastEtaPulses([...committed, hypB], pool, cap);
+    expect(etaA).toBe(soloA[soloA.length - 1]);
+    expect(etaB).toBe(soloB[soloB.length - 1]);
+    // Sanity: with only cap 4 and pool 6, the committed pair alone doesn't exhaust the pool every
+    // pulse (leftover 2/pulse while both are open), so both hypotheticals actually get funded before
+    // either committed row lands — proving they aren't silently starved by being "hoisted".
+    expect(etaA).not.toBeNull();
+    expect(etaB).not.toBeNull();
+  });
+
+  it("returns null for every hypothetical when the pool is zero", () => {
+    expect(forecastIndependentEtaPulses([build("c1", 8, 0)], [build("h", 8, 0)], 0, 4)).toEqual([null]);
+  });
+
+  it("lands a zero-work hypothetical on pulse 1 regardless of the committed queue", () => {
+    const committed = [build("c1", 1000, 0)];
+    const zeroWork = build("h", 0, 0);
+    expect(forecastIndependentEtaPulses(committed, [zeroWork], 4, 4)).toEqual([1]);
+  });
+
+  it("returns an empty array for an empty hypothetical list", () => {
+    expect(forecastIndependentEtaPulses([build("c1", 8, 0)], [], 4, 4)).toEqual([]);
   });
 });
 

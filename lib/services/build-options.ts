@@ -8,7 +8,7 @@ import { getWorld, hasWorld } from "@/lib/world/store";
 import { ServiceError } from "@/lib/services/errors";
 import { computeBuildOptions } from "@/lib/engine/build-options";
 import {
-  factionConstructionPool, forecastEtaPulses, orderOpenProjects,
+  factionConstructionPool, forecastIndependentEtaPulses, orderOpenProjects,
 } from "@/lib/engine/construction";
 import { buildingLabel } from "@/lib/engine/construction-readout";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
@@ -84,7 +84,10 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
   );
 
   // Queue-aware ETA: a 1-level order placed NOW joins the queue behind everything committed (it is
-  // a fresh player row), so its landing pulse comes from one forecast over queue + hypothetical row.
+  // a fresh player row). Each open option's hypothetical is independent of the others (it answers
+  // "what if I ordered just this one"), but they all share the same committed prefix, so one
+  // `forecastIndependentEtaPulses` call simulates that prefix once instead of once per option —
+  // see the function's own doc comment for why the hypotheticals don't compete with each other.
   const pool = factionConstructionPool(
     world.systems
       .filter((s) => s.factionId === factionId)
@@ -93,18 +96,24 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
   ).total;
   const cap = CONSTRUCTION.PER_BUILD_ABSORPTION_CAP;
 
-  const decorated: BuildOptionData[] = options.map((o) => {
-    let etaPulses: number | null = null;
-    if (o.maxLevels > 0) {
-      const hypothetical: WorldConstructionProject = {
-        kind: "build", id: "eta-probe", factionId, systemId: system.id, origin: "player",
-        buildingType: o.buildingType, levels: 1, workTotal: o.workPerLevel, workDone: 0,
-      };
-      const queue = [...factionProjects, hypothetical];
-      etaPulses = forecastEtaPulses(queue, pool, cap)[queue.length - 1];
-    }
-    return { ...o, label: buildingLabel(o.buildingType), etaPulses };
+  const openIndices: number[] = [];
+  const hypotheticals: WorldConstructionProject[] = [];
+  options.forEach((o, i) => {
+    if (o.maxLevels <= 0) return;
+    openIndices.push(i);
+    hypotheticals.push({
+      kind: "build", id: `eta-probe-${i}`, factionId, systemId: system.id, origin: "player",
+      buildingType: o.buildingType, levels: 1, workTotal: o.workPerLevel, workDone: 0,
+    });
   });
+  const etas = hypotheticals.length > 0
+    ? forecastIndependentEtaPulses(factionProjects, hypotheticals, pool, cap)
+    : [];
+  const etaByOptionIndex = new Map(openIndices.map((optionIndex, k) => [optionIndex, etas[k]]));
+
+  const decorated: BuildOptionData[] = options.map((o, i) => ({
+    ...o, label: buildingLabel(o.buildingType), etaPulses: etaByOptionIndex.get(i) ?? null,
+  }));
 
   return { mode: "build", options: decorated };
 }

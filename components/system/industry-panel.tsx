@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useSystemConstruction } from "@/lib/hooks/use-system-construction";
@@ -743,11 +743,34 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const cancelOrder = useCancelOrder();
   const newIndustryDialog = useDialog();
 
+  // The construction surface: only the player's own systems get order verbs (quick-add, cancel, the
+  // New-industry dialog) — AI/rival systems render the same ghost rows read-only, no extra column.
+  // Pulled out ahead of the early-return guards below (with safe fallbacks) so the memos that derive
+  // from them can be called unconditionally on every render — hooks can't sit after a guard whose
+  // branch varies render to render.
+  const canOrder = buildSurface.mode === "build";
+  const buildOptions = useMemo(
+    () => (buildSurface.mode === "build" ? buildSurface.options : []),
+    [buildSurface],
+  );
+  const buildings = useMemo(() => (data.visibility === "visible" ? data.buildings : []), [data]);
+
+  const optionByType = useMemo(() => new Map(buildOptions.map((o) => [o.buildingType, o])), [buildOptions]);
+  const currentTypes = useMemo(() => new Set(buildings.map((b) => b.buildingType)), [buildings]);
+  const dialogOptions = useMemo(
+    () => buildOptions.filter((o) => !currentTypes.has(o.buildingType) && o.maxLevels > 0),
+    [buildOptions, currentTypes],
+  );
+  const ghostRows = useMemo(
+    () => classifyGhosts(construction.visibility === "visible" ? construction.projects : []),
+    [construction],
+  );
+
   if (data.visibility === "unknown") {
     return <EmptyState message="This system isn't developed yet — no industry to survey." />;
   }
 
-  const { space, deposits, labour, labourAllocation, labourFulfillment, buildings, supplyChain, unrest, skillBaskets } = data;
+  const { space, deposits, labour, labourAllocation, labourFulfillment, supplyChain, unrest, skillBaskets } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -795,14 +818,6 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const generalUsed = land.housing + land.factory;
   const generalFree = land.habitableFree + land.factoryFree;
 
-  // The construction surface: only the player's own systems get order verbs (quick-add, cancel, the
-  // New-industry dialog) — AI/rival systems render the same ghost rows read-only, no extra column.
-  const canOrder = buildSurface.mode === "build";
-  const buildOptions = buildSurface.mode === "build" ? buildSurface.options : [];
-  const optionByType = new Map(buildOptions.map((o) => [o.buildingType, o]));
-  const currentTypes = new Set(buildings.map((b) => b.buildingType));
-  const dialogOptions = buildOptions.filter((o) => !currentTypes.has(o.buildingType) && o.maxLevels > 0);
-  const ghostRows = classifyGhosts(construction.visibility === "visible" ? construction.projects : []);
   const onCancelOrder = (projectId: string) => cancelOrder.mutate({ projectId });
 
   return (
