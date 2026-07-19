@@ -42,7 +42,19 @@ Well-defined, can start now.
   gameplay-relevant), run 2500–3000+ ticks and check balance-to-income ratio over time settles rather
   than climbs; retune sink rates if it climbs. Treasury metrics persist in `experiments/*.json`
   (`treasurySummary`/`treasurySnapshots`), so this is one YAML config + a read.
-- **[S] Responsive navigation** — `GameNav` has no mobile breakpoints. Add hamburger menu or collapse below ~640px.
+- **[M] Stock/needs legibility: gross market stock reads as contradicting the needs ledger** — a
+  high-pop system showed alloys "83% met, gap 81.4/cyc" while the Market tab showed 22K units in stock;
+  players read that as a UI bug. It isn't: the numbers reconcile exactly. The pricing band reserves
+  `minStock = targetStock / priceCeiling` (for tier-1: target/2.5 — in that save ≈10.8K of the 22K)
+  as an untouchable floor, the anchor is `TARGET_COVER`(=40 cycles) × total demand ≈26.9K, and
+  consumption throttles by `√((stock−min)/(target−min))` (`selfLimitingFactor`, consume side) → 83%.
+  So "22K in stock" is really "~11K drawable ≈ 17 cycles vs a 40-cycle anchor, still filling". Two
+  candidate fixes, decide at design time: (a) UI — surface the band on the Market tab (floor reserve /
+  drawable stock / anchor, or cycles-of-cover instead of raw units) so gross stock stops lying;
+  (b) design — revisit whether the √ ramp throttling civilian consumption ~17% while ~33 gross cycles
+  sit warehoused is the intended rationing aggressiveness (three-pillar realism question). Predates the
+  purse work; all three surfaces (needs want = civilian-only, logistics consumes = civilian+industrial,
+  industry out/cyc = production) are internally consistent.
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
 - **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
