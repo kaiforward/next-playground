@@ -4,6 +4,8 @@ import {
   productionTaxIncome,
   maintenanceBill,
   settleLadder,
+  maintenanceOutputMalus,
+  maintenanceBufferScale,
   type TreasuryBands,
 } from "@/lib/engine/treasury";
 
@@ -99,5 +101,34 @@ describe("settleLadder", () => {
     expect(Number.isFinite(r.balance)).toBe(true);
     expect(r.balance).toBeGreaterThanOrEqual(0);
     expect(r.paid.maintenance).toBe(0);
+  });
+});
+
+describe("maintenanceOutputMalus", () => {
+  it("is 1 at full funding and ramps linearly with the shortfall", () => {
+    expect(maintenanceOutputMalus(1, 0.25)).toBe(1);
+    expect(maintenanceOutputMalus(0.9, 0.25)).toBeCloseTo(0.975, 9);
+    expect(maintenanceOutputMalus(0.5, 0.25)).toBeCloseTo(0.875, 9);
+    expect(maintenanceOutputMalus(0, 0.25)).toBeCloseTo(0.75, 9);
+  });
+  it("clamps funding into [0,1] and treats non-finite funding as fully funded", () => {
+    expect(maintenanceOutputMalus(1.7, 0.25)).toBe(1);
+    expect(maintenanceOutputMalus(-2, 0.25)).toBeCloseTo(0.75, 9);
+    expect(maintenanceOutputMalus(Number.NaN, 0.25)).toBe(1);
+    expect(maintenanceOutputMalus(Number.POSITIVE_INFINITY, 0.25)).toBe(1);
+  });
+});
+
+describe("maintenanceBufferScale", () => {
+  it("hits 1.0 at the slider-range midpoint (0.75) so today's constants are the mid-scale point", () => {
+    expect(maintenanceBufferScale(0.75, 0.25)).toBeCloseTo(1, 9);
+  });
+  it("is gentler than today at full funding and aggressive under insolvency", () => {
+    expect(maintenanceBufferScale(1, 0.25)).toBeCloseTo(1.25, 9);
+    expect(maintenanceBufferScale(0.5, 0.25)).toBeCloseTo(0.75, 9);
+    expect(maintenanceBufferScale(0, 0.25)).toBeCloseTo(0.25, 9);
+  });
+  it("treats non-finite funding as fully funded", () => {
+    expect(maintenanceBufferScale(Number.NaN, 0.25)).toBeCloseTo(1.25, 9);
   });
 });
