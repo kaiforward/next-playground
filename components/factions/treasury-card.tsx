@@ -1,8 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
-import { Disclosure } from "@/components/ui/disclosure";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FundingSlider } from "@/components/form/funding-slider";
 import { TaxLevelStepper } from "@/components/factions/tax-level-stepper";
@@ -46,6 +46,7 @@ export interface TreasuryCardProps {
 export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
   const data = useFactionTreasury(factionId);
   const update = useUpdateTreasuryPolicy(factionId);
+  const [showMaintenance, setShowMaintenance] = useState(false);
 
   const s = data.lastSettlement;
 
@@ -55,18 +56,14 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
 
   return (
     <Card variant="bordered" padding="md" className="mb-6">
-      <CardHeader
-        title="Treasury"
-        subtitle={
-          <>
-            <span className="font-mono text-text-primary">{money(data.balance)}</span> ·{" "}
-            <span className={`font-mono ${data.net < 0 ? "text-status-red-light" : "text-status-green-light"}`}>
-              net {signedMoney(data.net)} / month
-            </span>
-          </>
-        }
-      />
+      <CardHeader title="Treasury" />
       <CardContent>
+        <div className="mb-3 flex items-baseline justify-between">
+          <span className="font-mono text-[22px] leading-none text-text-primary">{money(data.balance)}</span>
+          <span className={`font-mono text-xs ${data.net < 0 ? "text-status-red-light" : "text-status-green-light"}`}>
+            net {signedMoney(data.net)} / month
+          </span>
+        </div>
         {!s ? (
           <EmptyState
             className="mb-4"
@@ -83,8 +80,17 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
             <SectionHeader as="h4" className="mt-3 mb-1">
               Expenses
             </SectionHeader>
-            <Disclosure summary={`Maintenance — ${signedMoney(-s.paid.maintenance)}`}>
-              {s.maintenanceByType.map((line) => (
+            <button
+              type="button"
+              className="flex w-full items-baseline justify-between py-0.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
+              aria-expanded={showMaintenance}
+              onClick={() => setShowMaintenance((v) => !v)}
+            >
+              <span>Maintenance {showMaintenance ? "▾" : "▸"}</span>
+              <span className="font-mono text-xs">{signedMoney(-s.paid.maintenance)}</span>
+            </button>
+            {showMaintenance &&
+              s.maintenanceByType.map((line) => (
                 <LedgerRow
                   key={line.buildingType}
                   label={buildingLabel(line.buildingType)}
@@ -92,7 +98,6 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
                   indent
                 />
               ))}
-            </Disclosure>
             <LedgerRow label="Logistics" amount={signedMoney(-s.paid.logistics)} />
             <LedgerRow label="Construction" amount={signedMoney(-s.paid.construction)} />
           </>
