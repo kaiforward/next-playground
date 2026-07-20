@@ -10,7 +10,7 @@ export interface FundingSliderProps {
   set: number;
   /** Latched effective fraction from the last settlement (0-1) — drawn as the fill. */
   runs: number;
-  /** Un-slidable lower bound (0-1) — hatched zone + the input's min (e.g. maintenance 0.5). */
+  /** Un-slidable lower bound (0-1) — hatched zone; drags below it pin here (e.g. maintenance 0.5). */
   floor?: number;
   /** Sliders render but don't respond on AI factions. */
   interactive: boolean;
@@ -36,6 +36,7 @@ export function FundingSlider({ label, set, runs, floor = 0, interactive, onComm
     lastSent.current = null;
   }, [set]);
 
+  const floorPct = fractionPct(floor);
   const thumb = draft ?? fractionPct(set);
   const shorted = fractionPct(runs) < fractionPct(set);
 
@@ -62,19 +63,24 @@ export function FundingSlider({ label, set, runs, floor = 0, interactive, onComm
           <span
             aria-hidden
             className="absolute inset-y-0 left-0 bg-[repeating-linear-gradient(45deg,var(--color-border),var(--color-border)_3px,transparent_3px,transparent_6px)]"
-            style={{ width: `${fractionPct(floor)}%` }}
+            style={{ width: `${floorPct}%` }}
           />
         )}
         <span aria-hidden className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${fractionPct(runs)}%` }} />
+        {/* The input stays on the full 0-100 scale so the thumb's position lines up
+            with the fill and hatch painted underneath (a floored `min` would compress
+            min..100 onto the whole track and skew the geometry); the floor is enforced
+            by clamping the draft instead — drags into the hatched zone pin at it. */}
         <input
           type="range"
-          min={fractionPct(floor)}
+          min={0}
           max={100}
           step={1}
           value={thumb}
           disabled={!interactive}
           aria-label={`${label} funding`}
-          onChange={(e) => setDraft(Number(e.target.value))}
+          aria-valuemin={floorPct}
+          onChange={(e) => setDraft(Math.max(floorPct, Number(e.target.value)))}
           onPointerUp={commit}
           onKeyUp={commit}
           onBlur={commit}
