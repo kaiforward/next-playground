@@ -66,4 +66,7 @@ export interface InfrastructureProcessorParams {
   decay: DecayParams;
   /** Pulse interval in ticks; decay counters accrue catchUpFactor(interval) per run. */
   interval: number;
+  /** Per-system idle-buffer multiplier from the owning faction's latched maintenance
+   *  funding (maintenanceBufferScale). Missing system or omitted map → 1 (today's buffer). */
+  bufferScaleBySystem?: ReadonlyMap<string, number>;
 }

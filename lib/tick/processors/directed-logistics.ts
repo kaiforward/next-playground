@@ -22,18 +22,21 @@ export interface DirectedLogisticsProcessorParams {
   interval: number;
   /** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
   routeCost: RouteCost;
+  /** Latched funded.logistics per faction (0–1) — scales the haul budget. Missing
+   *  faction or omitted map → 1 (ungated: engine tests, independents). */
+  fundingByFaction?: ReadonlyMap<string, number>;
 }
 
 /**
  * Build the engine's per-system state from raw rows: generation + per-good band + total demand.
- * Generation is per-pulse income and scales by the catch-up factor; the per-good gap-fills
+ * Generation is per-pulse income and scales by the catch-up factor and funding; the per-good gap-fills
  * deliberately do NOT (see the processor doc below).
  */
-function toLogisticsState(row: SystemLogisticsRow, catchUp: number): SystemLogisticsState {
+function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: number): SystemLogisticsState {
   return {
     systemId: row.systemId,
     factionId: row.factionId,
-    generation: systemLogisticsGeneration(row.population) * catchUp,
+    generation: systemLogisticsGeneration(row.population) * catchUp * funded,
     goods: toGoodMarketStates(row),
   };
 }
@@ -101,7 +104,8 @@ export async function runDirectedLogisticsProcessor(
   const workPerformedByFaction = new Map<string, number>();
   const allTransfers: PlannedTransfer[] = [];
   for (const [factionId, group] of byFaction) {
-    const transfers = matchFactionTransfers(group.map((r) => toLogisticsState(r, catchUp)), params.routeCost);
+    const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
+    const transfers = matchFactionTransfers(group.map((r) => toLogisticsState(r, catchUp, funded)), params.routeCost);
     allTransfers.push(...transfers);
     if (factionId === null) continue;
     let work = 0;

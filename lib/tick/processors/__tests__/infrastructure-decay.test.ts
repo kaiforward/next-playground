@@ -91,4 +91,28 @@ describe("infrastructure-decay processor", () => {
     expect(world.systems[0].buildings.ore).toBe(2); // second run crosses 1.0 → one level shed
     expect(world.systems[0].buildingCollapseDebt.ore).toBeCloseTo(0, 6);
   });
+
+  it("scales the idle buffer by per-system maintenance funding", async () => {
+    // Buffer 2 with one idle ore level. s-starved carries bufferScale 0.5 → effective
+    // buffer 1 → sheds on the first run; s-funded has no map entry → buffer 2 → survives it.
+    const population = 4 * ORE_LABOUR;
+    const world = new InMemoryInfrastructureWorld({
+      systems: [
+        sys("s-starved", { population, buildings: { ore: 10 } }),
+        sys("s-funded", { population, buildings: { ore: 10 } }),
+      ],
+    });
+    const signals: EconomySignals = {
+      dissatisfactionBySystem: new Map([["s-starved", 0], ["s-funded", 0]]),
+      outputUptakeBySystem: new Map(),
+      realizedProductionBySystem: new Map(),
+    };
+    await runInfrastructureDecayProcessor(world, ctxWith(signals), {
+      decay: { idleBufferMonths: 2, unrestThreshold: 0.75 },
+      interval: 24,
+      bufferScaleBySystem: new Map([["s-starved", 0.5]]),
+    });
+    expect(world.systems.find((x) => x.id === "s-starved")!.buildings.ore).toBe(9);
+    expect(world.systems.find((x) => x.id === "s-funded")!.buildings.ore).toBe(10);
+  });
 });

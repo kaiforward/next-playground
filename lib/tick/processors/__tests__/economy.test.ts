@@ -482,3 +482,27 @@ describe("economy processor: outputUptake signal", () => {
     expect(r.economySignals!.outputUptakeBySystem.get("c")).toBeUndefined();
   });
 });
+
+// ── Maintenance output malus ──────────────────────────────────────
+
+describe("maintenance output malus", () => {
+  it("suppresses production like a sibling of the strike multiplier, per system", async () => {
+    // Two identical calm producers; only p2 carries a malus. Same start stock →
+    // p2 must end the tick with strictly less stock and less realized output.
+    const startStock = FIXTURE_BAND.minStock + 5;
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("p1", 0), makeProducerSystem("p2", 0)],
+      markets: [makeMarket("p1", "food", startStock), makeMarket("p2", "food", startStock)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), {
+      ...ECON_PARAMS,
+      maintenanceMalusBySystem: new Map([["p2", 0.5]]),
+    });
+    const stock = (systemId: string) =>
+      world.markets.find((m) => m.systemId === systemId && m.goodId === "food")!.stock;
+    expect(stock("p2")).toBeLessThan(stock("p1"));
+    const realized = result.economySignals?.realizedProductionBySystem;
+    expect(realized?.get("p2")?.get("food") ?? 0).toBeLessThan(realized?.get("p1")?.get("food") ?? 0);
+  });
+});

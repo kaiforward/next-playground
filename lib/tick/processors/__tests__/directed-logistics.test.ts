@@ -221,4 +221,32 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(await gapFill(24)).toBeCloseTo(30, 6);
     expect(await gapFill(12)).toBeCloseTo(30, 6); // identical at half the interval — gap-fills don't scale
   });
+
+  it("scales the haul budget by the faction's funded fraction (0 → no transfers)", async () => {
+    const mk = () => [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    // funded 0 → generation × 0 = no work budget → nothing moves.
+    const gated = new MemoryDirectedLogisticsWorld(mk());
+    await runDirectedLogisticsProcessor(gated, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL, routeCost: () => 1,
+      fundingByFaction: new Map([["f1", 0]]),
+    });
+    expect(gated.flows).toHaveLength(0);
+
+    // A faction missing from the map is ungated — identical to no map at all.
+    const ungated = new MemoryDirectedLogisticsWorld(mk());
+    await runDirectedLogisticsProcessor(ungated, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL, routeCost: () => 1,
+      fundingByFaction: new Map([["other", 0]]),
+    });
+    expect(ungated.flows).toHaveLength(1);
+  });
 });

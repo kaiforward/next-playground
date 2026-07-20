@@ -33,60 +33,14 @@ Well-defined, can start now.
   `lib/types/guards.ts` narrowing `string` → `GoodId` with a decided failure mode (reject the save vs
   drop the row). Don't start it without settling that.
 - **[S] Purge the Postgres fossils outside `lib/tick/`** — Prisma was deleted in the Phase-2 pivot, but comments across `lib/types/game.ts:1`, `lib/types/guards.ts:2-4` ("Runtime type guards for Prisma boundary values" — the boundaries are now save-file `deserialize` + API `JSON.parse`), `lib/utils/format.ts:67`, `lib/utils/__tests__/format.test.ts:44`, `lib/world/types.ts:3`, `lib/world/gen.ts:3,49` (points at `prisma/seed.ts`, deleted), `lib/engine/relations.ts:3`, and `lib/engine/system-trade-flow.ts:4,7` still describe it as live. Mostly "no Prisma dependency" negative-space claims that are now vacuous, plus two that point a reader at deleted files. The tick's own two-backend claims were swept with the harness rename; this is the same rot in the layers that PR's scope didn't reach. Comment-only, zero risk. Find them with: `grep -rni "prisma" --include="*.ts" lib/`.
-- **[S] Re-validate treasury hoard-boundedness at a long horizon (with Purse Slice 3 Plan 2)** — the
-  treasury-core calibration (rates in `lib/constants/treasury.ts`) proved early-game solvency and real
-  scarcity windows on 500/1500-tick runs, but the 1500-tick balance trajectory ends in its
-  fastest-growing sampled window (mean +12.65/tick over t=1250–1500) with bills consuming only ~34% of
-  income at the final pulse — "no runaway hoard" is not yet demonstrated, only "not monotone". Before or
-  alongside Plan 2 (when funded fractions start gating construction/logistics and a hoard becomes
-  gameplay-relevant), run 2500–3000+ ticks and check balance-to-income ratio over time settles rather
-  than climbs; retune sink rates if it climbs. Treasury metrics persist in `experiments/*.json`
-  (`treasurySummary`/`treasurySnapshots`), so this is one YAML config + a read.
-- **[L] Economy band reconciliation — equilibrium vs anchor, the floor's identity, and regime
-  legibility** (design pass: brainstorm + EU5/Vic3 research BEFORE spec — direction leaning but NOT
-  settled. **Sequenced AFTER the purse slice ships** (decided 2026-07-19): Plan 2's mechanics are
-  structurally independent of where equilibrium sits, so interleaving isn't worth parking the slice —
-  but Plan 2's calibration must stay deliberately coarse/range-y, and this pass triggers a
-  Task-10-style treasury recalibration when it lands (realized output moves → tax income moves).
-  The EU5/Vic3 research is cheap and may front-run between sessions.)
-  Trigger was a "UI bug" report that turned out to be structure (2026-07-19, investigated on a live
-  save; all UI surfaces verified internally consistent — needs want = civilian-only, logistics consumes
-  = civilian+industrial, industry out/cyc = production).
-  **Finding 1 — equilibrium sits structurally below the anchor.** Production throttles by
-  `√((holdCover·target−s)/…)` (HOLD_COVER 1.3) and consumption by `√((s−min)/(target−min))`; their
-  crossing IS the resting state, and with a healthy prod/cons ratio (~1.1) it lands ~80% of target.
-  Verified: predicted equilibrium 21,736 vs observed 22,013 on the trigger save → ~83% met and price
-  ~24% above base *permanently, at perfect health*. "Prices lean high galaxy-wide" is curve geometry,
-  not tuning (also puts the hedged maturity-flattens-spread memory in doubt). Open design fork: is
-  high-lean pricing wanted negative space (scarcity is the norm, trade is the answer) or should the
-  anchor sit near the achievable equilibrium? **How to handle TARGET_COVER is the core open question.**
-  **Finding 2 — civilian satisfaction is chained to the price anchor.** The √ ramp starts the moment
-  stock < target, so pops ration ~17% while ~33 gross cycles sit warehoused. Leaning: give satisfaction
-  a knee — full delivery above a comfort threshold well below the anchor, ration only below it. (True
-  industrial deficit already has its own channel: `inputGate` scales linearly over the last pulse of
-  drawable stock and halts at the floor.)
-  **Finding 3 — the floor is a pricing construct wearing a goods costume.** `minStock = target ÷
-  priceCeiling` exists to pin where the price curve saturates; the draw clamps (consumption, recipe
-  draws, logistics) adopted it as a physical wall, so pops riot beside 40–50%-of-anchor "actual food"
-  they may not touch (at floor, D=1 → strike threshold in ~11 months, collapse ~13). Leaning: make the
-  floor pricing-virtual now (draws may continue below it toward zero; price stays saturated), with a
-  designed later promotion to a *legible* reserve (hoarding/strategic-reserve/crisis-requisition —
-  pairs well with purse monetisation Stages 2–3). Third option (shrink to epsilon) noted, unloved.
-  **Presentation brainstorm (needed):** the three regimes — comfortable / squeezed (ramps + climbing
-  prices) / floored (hard stops) — already exist mechanically but are invisible behind gross stock
-  numbers. Market tab should speak cycles-of-cover / drawable-vs-reserve, not raw units; needs + industry
-  surfaces should show which regime a good is in. Wireframe pass per house UI rule.
-  **Research (before spec):** EU5 / Vic3 inspiration — how they present shortage vs stockpile vs price
-  (Vic3 is flow-based with shortage malus, no market stockpiles; EU5 has physical goods + control —
-  verify both, don't trust this parenthetical), and what "reserve" mechanics exist worth stealing.
-  **Blast radius (why this is a pass, not a patch):** satisfaction → dissatisfaction → unrest →
-  strikes/decay; outputUptake → decay; migration attractiveness; needs-ledger UI; treasury production
-  tax rides realized output; future price-linked state spending (purse Stage 2) inherits whatever price
-  level this settles. Recalibrate via the harness after.
-  **Housekeeping:** `lib/tick/processors/economy.ts` cites `docs/planned/economy-equilibrium-rework.md`
-  which no longer exists — recover the old design's reasoning via
-  `git log --diff-filter=D -- docs/planned/economy-equilibrium-rework.md` at pass start, and fix the
-  stale pointer.
+- **[L] Economy band reconciliation** — design pass DONE (2026-07-20: brainstorm + EU5/Vic3
+  research + adversarially-reviewed spec): see
+  [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md) for the full design
+  (knee'd curves, flow-based decay signal, realized-aware planner, pressure-driven population,
+  pricing-virtual floor, regime UI contract) including the recalibration/validation appendix and
+  folded-in housekeeping. **Sequenced AFTER the purse slice (PR #193) ships**; landing it triggers
+  the unrest/tax + treasury recalibrations recorded in the spec's §8. Next step: implementation
+  plan (multi-PR, shared feature branch; curves/signals first).
 - **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
 - **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.

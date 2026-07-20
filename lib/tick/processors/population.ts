@@ -36,7 +36,10 @@ export async function runPopulationProcessor(
   const demandPops: Array<{ systemId: string; population: number }> = [];
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
-    const unrest = accumulateUnrest(s.unrest, d, scaledUnrest);
+    // Tax pressure raises unrest, not hunger: it feeds the integrator's d term
+    // (clamped inside accumulateUnrest) while the growth/decline delta keeps raw d.
+    const taxPressure = params.taxPressureBySystem?.get(s.systemId) ?? 0;
+    const unrest = accumulateUnrest(s.unrest, d + taxPressure, scaledUnrest);
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
     popUpdates.push({ systemId: s.systemId, population, unrest });
     demandPops.push({ systemId: s.systemId, population });

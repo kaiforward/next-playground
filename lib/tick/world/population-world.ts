@@ -34,4 +34,8 @@ export interface PopulationProcessorParams {
   population: PopulationParams;
   /** Pulse interval in ticks; rates are reference-denominated and scaled by catchUpFactor. */
   interval: number;
+  /** Per-system additive unrest pressure from the owning faction's tax level
+   *  (TAX_LEVEL_UNREST_PRESSURE). Enters the unrest integrator's d term only;
+   *  missing system or omitted map → 0. */
+  taxPressureBySystem?: ReadonlyMap<string, number>;
 }

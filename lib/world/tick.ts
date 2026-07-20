@@ -58,7 +58,8 @@ import { COLONISATION } from "@/lib/constants/colonisation";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
-import { TREASURY, REFERENCE_VALUE } from "@/lib/constants/treasury";
+import { TREASURY, REFERENCE_VALUE, TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
+import { maintenanceOutputMalus, maintenanceBufferScale } from "@/lib/engine/treasury";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
@@ -540,6 +541,47 @@ export async function runWorldTick(
 
   const newTickCtx = (): TickContext => ({ tick, results: new Map() });
 
+  // ── latched treasury funding (read at tick START = last settlement's latch;
+  // the treasury stage settles LAST, so every consumer below runs one month
+  // behind — the accepted funding lag, same shape as construction's). Built
+  // only when a consuming stage resolves this tick (the same gating convention
+  // as the pulse setup below); absent it reads as fully funded downstream. ──
+  const fundedByFaction =
+    treasuries.length > 0 &&
+    (isPulseTick(tick, cadence.month) ||
+      isPulseTick(tick, cadence.logistics) ||
+      isPulseTick(tick, cadence.construction))
+      ? new Map(treasuries.map((t) => [t.factionId, t.funded]))
+      : undefined;
+
+  // Per-system effect maps for the monthly-pulse stages (economy malus, decay
+  // buffer, unrest tax pressure). Only built when those stages resolve.
+  let maintenanceMalusBySystem: Map<string, number> | undefined;
+  let maintenanceBufferScaleBySystem: Map<string, number> | undefined;
+  let taxPressureBySystem: Map<string, number> | undefined;
+  if (isPulseTick(tick, cadence.month) && treasuries.length > 0) {
+    const taxPressureByFaction = new Map(
+      treasuries.map((t) => [t.factionId, TAX_LEVEL_UNREST_PRESSURE[t.taxLevel]]),
+    );
+    maintenanceMalusBySystem = new Map();
+    maintenanceBufferScaleBySystem = new Map();
+    taxPressureBySystem = new Map();
+    for (const s of systems) {
+      if (s.factionId === null) continue;
+      const funded = fundedByFaction?.get(s.factionId);
+      if (funded !== undefined) {
+        maintenanceMalusBySystem.set(
+          s.id, maintenanceOutputMalus(funded.maintenance, TREASURY.MAINTENANCE_OUTPUT_MALUS_SLOPE),
+        );
+        maintenanceBufferScaleBySystem.set(
+          s.id, maintenanceBufferScale(funded.maintenance, TREASURY.MAINTENANCE_BUFFER_SCALE_BASE),
+        );
+      }
+      const pressure = taxPressureByFaction.get(s.factionId);
+      if (pressure !== undefined && pressure > 0) taxPressureBySystem.set(s.id, pressure);
+    }
+  }
+
   // ── ship-arrivals ──
   {
     const shipsWorld = new InMemoryShipArrivalsWorld({ ships }, systems);
@@ -602,6 +644,7 @@ export async function runWorldTick(
       simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
+      maintenanceMalusBySystem,
     });
     systems = economyWorld.systems;
     markets = economyWorld.markets;
@@ -620,7 +663,7 @@ export async function runWorldTick(
     await runInfrastructureDecayProcessor(
       decayWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { decay: INFRASTRUCTURE_DECAY_PARAMS, interval: cadence.month },
+      { decay: INFRASTRUCTURE_DECAY_PARAMS, interval: cadence.month, bufferScaleBySystem: maintenanceBufferScaleBySystem },
     );
     systems = decayWorld.systems;
     processorsRun.push("infrastructure-decay");
@@ -632,7 +675,7 @@ export async function runWorldTick(
     await runPopulationProcessor(
       popWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.month },
+      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.month, taxPressureBySystem },
     );
     systems = popWorld.systems;
     markets = popWorld.markets;
@@ -731,6 +774,8 @@ export async function runWorldTick(
       const dlResult = await runDirectedLogisticsProcessor(dlWorld, { tick }, {
         interval: cadence.logistics,
         routeCost,
+        fundingByFaction:
+          fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
       });
       markets = applyStockUpdates(markets, dlWorld.stockUpdates);
       dlStockUpdates = dlWorld.stockUpdates;
@@ -848,6 +893,8 @@ export async function runWorldTick(
         player: world.player
           ? { factionId: world.player.controlledFactionId, automation: world.player.automation }
           : undefined,
+        fundingByFaction:
+          fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.construction])),
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
       systems = applyClaims(systems, dbWorld.claims);

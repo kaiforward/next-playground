@@ -28,13 +28,18 @@ import { describe, it, expect, vi, afterEach } from "vitest";
  * ECONOMY_SCALE is resolved once at module import, so each scale runs against a
  * freshly-imported constants + tick graph (resetModules + stubEnv), mirroring the
  * static economy-scale-invariance test.
+ *
+ * Treasury balances ride the same bridge: money is fuel, not goods, so it is S-invariant
+ * BY DESIGN rather than scale-normalised — a faction's balance at S=1 and S=100 must be
+ * EQUAL (not one 100× the other) at every tick, since the treasury's income taxes are
+ * computed off S-normalised heads/production values before they ever touch the goods side.
  */
 async function runAtScale(
   scale: string,
   seed: number,
   systemCount: number,
   ticks: number,
-): Promise<Array<Record<string, number>>> {
+): Promise<{ stocks: Array<Record<string, number>>; treasuries: Array<Record<string, number>> }> {
   vi.resetModules();
   vi.stubEnv("ECONOMY_SCALE", scale);
   const { generateWorld } = await import("@/lib/world/gen");
@@ -42,14 +47,18 @@ async function runAtScale(
 
   let world = generateWorld({ systemCount, seed });
   const perTickStock: Array<Record<string, number>> = [];
+  const perTickTreasury: Array<Record<string, number>> = [];
   for (let t = 0; t < ticks; t++) {
     const result = await runWorldTick(world);
     world = result.world;
     const snap: Record<string, number> = {};
     for (const m of result.markets) snap[`${m.systemId}|${m.goodId}`] = m.stock;
     perTickStock.push(snap);
+    const tSnap: Record<string, number> = {};
+    for (const treasury of world.treasuries) tSnap[treasury.factionId] = treasury.balance;
+    perTickTreasury.push(tSnap);
   }
-  return perTickStock;
+  return { stocks: perTickStock, treasuries: perTickTreasury };
 }
 
 afterEach(() => {
@@ -72,9 +81,9 @@ describe("ECONOMY_SCALE dynamic invariance", () => {
       let worstKey = "";
       let worstA = 0;
       let worstB = 0;
-      for (const key of Object.keys(s1[t])) {
-        const a = s1[t][key]; // S=1
-        const b = s100[t][key] / 100; // S=100, scale-normalised
+      for (const key of Object.keys(s1.stocks[t])) {
+        const a = s1.stocks[t][key]; // S=1
+        const b = s100.stocks[t][key] / 100; // S=100, scale-normalised
         const rel = Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b), 1e-9);
         if (rel > worstRel) {
           worstRel = rel;
@@ -87,6 +96,16 @@ describe("ECONOMY_SCALE dynamic invariance", () => {
         worstRel,
         `tick ${t}: ${worstKey} diverges — S=1 ${worstA} vs S=100/100 ${worstB} (rel ${worstRel.toExponential(2)})`,
       ).toBeLessThan(TOL);
+    }
+
+    // Money never rides S: balances must be EQUAL (not scale-normalised) at every tick.
+    for (let t = 0; t < TICKS; t++) {
+      for (const key of Object.keys(s1.treasuries[t])) {
+        const a = s1.treasuries[t][key];
+        const b = s100.treasuries[t][key];
+        const rel = Math.abs(a - b) / Math.max(Math.abs(a), Math.abs(b), 1e-9);
+        expect(rel, `tick ${t}: treasury ${key} diverges — S=1 ${a} vs S=100 ${b}`).toBeLessThan(TOL);
+      }
     }
   });
 });

@@ -28,6 +28,10 @@ export const TREASURY = {
   LOGISTICS_RATE_PER_WORK: 0.4,
   /** The maintenance slider's floor — the 50-100% range charges only flow (recoverable). */
   MAINTENANCE_SLIDER_FLOOR: 0.5,
+  /** Output-malus slope: production multiplier = 1 − slope × (1 − maintenance funding). Flow-only. */
+  MAINTENANCE_OUTPUT_MALUS_SLOPE: 0.25,
+  /** Idle-buffer scale = base + funding: 1.0 at 75% funding (today's buffer), 1.25 at full, 0.25 at zero. */
+  MAINTENANCE_BUFFER_SCALE_BASE: 0.25,
 } as const;
 
 /** Rate multiplier applied to BOTH income lines by the faction's tax stance. */

@@ -120,3 +120,26 @@ export function settleLadder(
   }
   return { balance: available, paid, funded };
 }
+
+/** Effective funding for the curves below: non-finite → 1 (fully funded — the
+ *  no-effect default), else clamped to [0,1]. */
+const safeFunding = (f: number): number => (Number.isFinite(f) ? clamp(f, 0, 1) : 1);
+
+/**
+ * Flow-only maintenance output malus: a production multiplier scaling linearly
+ * with the funding shortfall (1 at full funding, 1 − slope at zero). Rides
+ * productionSuppress in the market-tick builder — it must never feed the
+ * buildingUsed utilization signal, or the flow-only promise silently breaks.
+ */
+export function maintenanceOutputMalus(funding: number, slope: number): number {
+  return 1 - clamp(slope, 0, 1) * (1 - safeFunding(funding));
+}
+
+/**
+ * Idle-buffer length multiplier from maintenance funding. Linear `base + f`:
+ * 1.0 at f = 1 − base (the slider range's midpoint for base 0.25 — today's
+ * buffer), gentler above, and a short fast-death buffer under deep insolvency.
+ */
+export function maintenanceBufferScale(funding: number, base: number): number {
+  return Math.max(0, base) + safeFunding(funding);
+}
