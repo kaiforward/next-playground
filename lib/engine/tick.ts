@@ -36,11 +36,17 @@ export interface MarketTickEntry {
 
 export interface EconomySimParams {
   /**
-   * Operating-ceiling cover multiple on targetStock. The production self-limiting
-   * factor saturates at holdCover × targetStock, not at maxStock. Passed in (not
-   * imported) so this module stays constant-free.
+   * Operating-ceiling cover multiple on targetStock: the production ceiling
+   * ramps from full rate at the anchor to 0 at holdCover × targetStock.
+   * Passed in (not imported) so this module stays constant-free.
    */
   holdCover: number;
+  /**
+   * Comfort-knee cover fraction of targetStock: consumption and input draws
+   * deliver in full at/above comfortCover × targetStock and ration on the
+   * scarcity ramp below it. Passed in (not imported) — same rule as holdCover.
+   */
+  comfortCover: number;
 }
 
 /**
@@ -61,6 +67,36 @@ export function selfLimitingFactor(
       ? (max - value) / range // production slows as stock approaches the ceiling
       : (value - min) / range; // consumption slows as stock approaches the floor
   return Math.sqrt(Math.max(0, Math.min(1, ratio)));
+}
+
+/**
+ * Consumption/delivery factor ∈ [0,1] with a comfort knee. Full delivery (1)
+ * while stock ≥ comfortStock; below the knee it ramps as √(stock / comfortStock)
+ * — gentle just under the knee, brutal near empty — reaching 0 at stock = 0.
+ * The same ramp rations civilian consumption and industrial input draws (the
+ * shared scarcity ramp), so every drawer of a scarce good slows at one rate.
+ * A non-positive comfortStock means the good has no meaningful comfort band:
+ * any stock delivers freely, empty delivers nothing.
+ */
+export function consumptionFactor(stock: number, comfortStock: number): number {
+  if (comfortStock <= 0) return stock > 0 ? 1 : 0;
+  if (stock >= comfortStock) return 1;
+  return Math.sqrt(Math.max(0, stock) / comfortStock);
+}
+
+/**
+ * Production ceiling factor ∈ [0,1] with a knee at the anchor. Full rate (1)
+ * while stock ≤ targetStock; ramps linearly to 0 across
+ * [targetStock, holdCover × targetStock] — the deceleration zone that absorbs
+ * shocks. A self-supplier with margin capacity rests just above the anchor, so
+ * a healthy price sits near base.
+ */
+export function productionCeiling(stock: number, targetStock: number, holdCover: number): number {
+  if (targetStock <= 0) return 0;
+  const ceiling = targetStock * holdCover;
+  if (stock <= targetStock) return 1;
+  if (stock >= ceiling) return 0;
+  return (ceiling - stock) / (ceiling - targetStock);
 }
 
 /**

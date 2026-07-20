@@ -5,12 +5,15 @@ import {
   processShipArrivals,
   selfLimitingFactor,
   outputUptake,
+  consumptionFactor,
+  productionCeiling,
   type MarketTickEntry,
   type EconomySimParams,
 } from "../tick";
 
 const PARAMS: EconomySimParams = {
   holdCover: 1.3,
+  comfortCover: 0.75,
 };
 
 function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
@@ -295,5 +298,39 @@ describe("outputUptake — stays storage-relative (decay signal)", () => {
 
     const glut = outputUptake(199, 5, 200); // pinned at the storage ceiling
     expect(glut).toBeLessThan(0.1); // genuinely stuck → decay is correct here
+  });
+});
+
+describe("consumptionFactor — comfort knee", () => {
+  it("delivers in full at and above the comfort stock", () => {
+    expect(consumptionFactor(75, 75)).toBe(1);
+    expect(consumptionFactor(200, 75)).toBe(1);
+  });
+  it("ramps as sqrt below the knee — gentle just under it, brutal near empty", () => {
+    expect(consumptionFactor(75 * 0.81, 75)).toBeCloseTo(0.9); // sqrt(0.81)
+    expect(consumptionFactor(75 * 0.04, 75)).toBeCloseTo(0.2); // sqrt(0.04)
+  });
+  it("reaches 0 at empty and never goes negative", () => {
+    expect(consumptionFactor(0, 75)).toBe(0);
+    expect(consumptionFactor(-5, 75)).toBe(0);
+  });
+  it("treats a non-positive comfort stock as unconstrained when stock exists", () => {
+    expect(consumptionFactor(10, 0)).toBe(1);
+    expect(consumptionFactor(0, 0)).toBe(0);
+  });
+});
+
+describe("productionCeiling — knee at the anchor", () => {
+  it("runs at full rate at and below the anchor", () => {
+    expect(productionCeiling(0, 100, 1.3)).toBe(1);
+    expect(productionCeiling(100, 100, 1.3)).toBe(1);
+  });
+  it("ramps linearly to 0 across [T, holdCover×T]", () => {
+    expect(productionCeiling(115, 100, 1.3)).toBeCloseTo(0.5);
+    expect(productionCeiling(130, 100, 1.3)).toBe(0);
+    expect(productionCeiling(200, 100, 1.3)).toBe(0);
+  });
+  it("returns 0 for a non-positive anchor (no band to produce into)", () => {
+    expect(productionCeiling(10, 0, 1.3)).toBe(0);
   });
 });

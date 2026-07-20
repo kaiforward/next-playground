@@ -11,4 +11,12 @@ export const ECONOMY_CONSTANTS = {
    * pinning, with population growth and unrest sane. See experiments/examples/equilibrium-calibration.yaml.
    */
   HOLD_COVER: 1.3,
+  /**
+   * Comfort knee as a fraction of the days-of-supply anchor: full civilian
+   * delivery and full industrial input draws at/above COMFORT_COVER ×
+   * targetStock; the shared scarcity ramp runs below it. One constant shared
+   * by the sim, the seed clamp, the planners, and the regime classification so
+   * mechanics and UI cannot disagree about where "comfortable" ends.
+   */
+  COMFORT_COVER: 0.75,
 } as const;

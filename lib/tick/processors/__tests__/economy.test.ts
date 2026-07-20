@@ -38,6 +38,7 @@ const ECON_PARAMS = {
   interval: 1,
   simParams: {
     holdCover: 1.3,
+    comfortCover: 0.75,
   },
   modifierCaps: MODIFIER_CAPS,
   strikeParams: STRIKE_PARAMS,

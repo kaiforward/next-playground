@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { inputGate, simulateSystemEconomyTick, simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import type { MarketTickEntry, EconomySimParams } from "@/lib/engine/tick";
 
-const PARAMS: EconomySimParams = { holdCover: 1.3 };
+const PARAMS: EconomySimParams = { holdCover: 1.3, comfortCover: 0.75 };
 
 // Convenience: build a full MarketTickEntry with per-entry band defaults.
 function entry(
