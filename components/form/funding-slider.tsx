@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formSlots } from "./form-slots";
 
 export interface FundingSliderProps {
@@ -28,13 +28,23 @@ const pct = (fraction: number) => Math.round(fraction * 100);
 export function FundingSlider({ label, set, runs, floor = 0, interactive, onCommit }: FundingSliderProps) {
   // Draft holds the thumb during a drag; the server value re-adopts on refresh.
   const [draft, setDraft] = useState<number | null>(null);
-  useEffect(() => setDraft(null), [set]);
+  // Dedupes the release events (pointerup/keyup/blur can all fire for one gesture)
+  // without clearing `draft` early — clearing on commit would snap the thumb back
+  // to the stale server value until the next tick's `set` round-trips.
+  const lastSent = useRef<number | null>(null);
+  useEffect(() => {
+    setDraft(null);
+    lastSent.current = null;
+  }, [set]);
 
   const thumb = draft ?? pct(set);
   const shorted = pct(runs) < pct(set);
 
   const commit = () => {
-    if (draft !== null && draft !== pct(set)) onCommit(draft / 100);
+    if (draft !== null && draft !== pct(set) && draft !== lastSent.current) {
+      lastSent.current = draft;
+      onCommit(draft / 100);
+    }
   };
 
   return (
