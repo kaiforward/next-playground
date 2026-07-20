@@ -364,4 +364,43 @@ describe("InMemoryEventsWorld.applyShocks", () => {
     expect(touched).toBe(0);
     expect(world.markets[0].stock).toBe(100);
   });
+
+  it("lets a supply-destruction shock push stock below the price-saturation point", async () => {
+    // makeMarket fixture: demandRate=1 → targetStock T=40, minStock=20 (the old floor).
+    // Market starts at 0.6×T=24; a −90% supply shock drives it to 24×0.1=2.4 ≈ 0.06×T —
+    // well below the old minStock, but still a valid stock (the crisis zone working).
+    const world = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 24)],
+    });
+    const touched = await world.applyShocks([
+      shock({ parameter: "supply", mode: "percentage", value: -0.9 }),
+    ]);
+    expect(touched).toBe(1);
+    expect(world.markets[0].stock).toBeCloseTo(2.4, 6);
+    expect(world.markets[0].stock).toBeLessThan(20); // below the retired minStock floor
+    expect(world.markets[0].stock).toBeGreaterThanOrEqual(0);
+  });
+
+  it("still clamps shocked stock to [0, maxStock]", async () => {
+    const belowZero = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    await belowZero.applyShocks([
+      shock({ parameter: "demand", mode: "absolute", value: 10_000 }),
+    ]);
+    expect(belowZero.markets[0].stock).toBe(0);
+
+    const aboveMax = makeWorld({
+      systems: [makeSystem("s1", "r1")],
+      markets: [makeMarket("s1", "food", 100)],
+    });
+    await aboveMax.applyShocks([
+      shock({ parameter: "supply", mode: "absolute", value: 10_000 }),
+    ]);
+    // makeMarket fixture: demandRate=1, GOODS.food priceFloor=0.5, storageCapacity=120
+    // → maxStock = TARGET_COVER/priceFloor + 120 = 40/0.5 + 120 = 200
+    expect(aboveMax.markets[0].stock).toBe(200);
+  });
 });

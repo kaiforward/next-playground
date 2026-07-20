@@ -4,6 +4,7 @@
  */
 
 import { scaleValue } from "@/lib/constants/economy-scale";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import {
   buildingProduction,
   computeLabourState,
@@ -45,6 +46,9 @@ export const MIN_DEMAND = scaleValue(0.05);
  * Seed-cover multipliers on the per-system reference: a pure consumer seeds at
  * SEED_COVER_MIN (shallow cover → dear), a pure producer at SEED_COVER_MAX (deep
  * cover → cheap), blended by producer share. First-draft values; tuned via `npm run simulate`.
+ * SEED_COVER_MIN (0.5) sits below COMFORT_COVER (0.75) — a pure consumer's blend is
+ * floored up to the comfort knee at seed (see getInitialStock), so no market opens
+ * already rationing on the scarcity ramp.
  */
 export const SEED_COVER_MIN = 0.5;
 export const SEED_COVER_MAX = 1.5;
@@ -89,8 +93,9 @@ export function totalDemandRateForGood(
  * (targetStock = TARGET_COVER × demandRate, the price anchor) and
  * infrastructure-stocked (maxStock adds facilityStorageForGood on top of the
  * demand headroom). A net producer seeds with deeper cover (reads cheap), a net
- * consumer with shallower cover (reads dear). Clamped to [band.minStock,
- * band.maxStock].
+ * consumer with shallower cover (reads dear) — but never dearer than comfortable:
+ * seeds clamp to [COMFORT_COVER × targetStock, maxStock], so every market —
+ * pure consumers included — opens Comfortable rather than already rationing.
  *
  * Uses the same building-block formula `capacityGoodRates` does, but for a
  * single good (avoids an O(goods²) seed when called per good).
@@ -122,5 +127,12 @@ export function getInitialStock(
   // Stock is a continuous float balance — do NOT round to whole units. Rounding the seed
   // quantizes it (~0.3% error at ECONOMY_SCALE=1, negligible at 100), which breaks the
   // goods-side scale-invariance from tick 0 and compounds through every economy pulse.
-  return Math.max(band.minStock, Math.min(band.maxStock, band.targetStock * coverMult));
+  //
+  // The floor is COMFORT_COVER × targetStock (band-relative, so it stays ECONOMY_SCALE-invariant),
+  // not band.minStock (the price-saturation point) — a fresh market opens Comfortable, never
+  // already rationing on the scarcity ramp.
+  return Math.max(
+    ECONOMY_CONSTANTS.COMFORT_COVER * band.targetStock,
+    Math.min(band.maxStock, band.targetStock * coverMult),
+  );
 }

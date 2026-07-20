@@ -5,14 +5,23 @@ import {
   civilianDemandRateForGood,
   totalDemandRateForGood,
   MIN_DEMAND,
+  SEED_COVER_MIN,
+  SEED_COVER_MAX,
 } from "../market-economy";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
-import { inputDemandForGood, facilityStorageForGood } from "@/lib/engine/industry";
+import {
+  inputDemandForGood,
+  facilityStorageForGood,
+  computeSystemLabourSnapshot,
+  buildingProduction,
+} from "@/lib/engine/industry";
 import type { LabourState } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 
 /** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
 const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
@@ -158,5 +167,51 @@ describe("getInitialStock", () => {
     expect(seedProducer).toBeGreaterThanOrEqual(Math.floor(band.minStock));
     expect(seedProducer).toBeLessThanOrEqual(Math.ceil(band.maxStock));
     expect(seedProducer).toBeGreaterThan(seedConsumer); // producer is deeper-stocked (cheaper)
+  });
+
+  it("seeds a pure consumer at the comfort knee, not the price-saturation point", () => {
+    // Pure consumer (no buildings) → producerShare=0 → raw coverMult=SEED_COVER_MIN (0.5).
+    // 0.5 < COMFORT_COVER (0.75), so the comfort floor binds: seed === COMFORT_COVER × targetStock,
+    // not the old minStock (the price-saturation point, targetStock/priceCeiling = 0.5×targetStock too,
+    // but for a different reason — this asserts the comfort knee is what actually binds now).
+    const pop = 1000, good = "water";
+    const g = GOODS[good];
+    const band = marketBand({
+      demandRate: civilianDemandRateForGood(good, popOnly(pop)),
+      storageCapacity: facilityStorageForGood({}, good),
+      priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
+    });
+    const seed = getInitialStock({}, unitResourceVector(), pop, good);
+    expect(seed).toBeCloseTo(ECONOMY_CONSTANTS.COMFORT_COVER * band.targetStock, 6);
+  });
+
+  it("still seeds a pure producer at deep cover (coverMult unchanged, comfort floor doesn't bind)", () => {
+    // A strong net water producer (20 extractors, modest population): production dwarfs
+    // consumption, so producerShare is high and the raw coverMult sits well above the
+    // COMFORT_COVER floor (0.75) — the comfort clamp only ever lifts a shallow consumer seed,
+    // never touches a producer's already-deep one.
+    const buildings = { water: 20 };
+    const yields = unitResourceVector();
+    const pop = 100;
+    const good = "water";
+    const g = GOODS[good];
+
+    const snap = computeSystemLabourSnapshot(buildings, pop);
+    const production = buildingProduction(buildings, good, snap.state, yields);
+    const consumption = consumptionRate(good, snap.basis);
+    const total = production + consumption;
+    const producerShare = total > 0 ? production / total : 0.5;
+    const coverMult = SEED_COVER_MIN + producerShare * (SEED_COVER_MAX - SEED_COVER_MIN);
+
+    const band = marketBand({
+      demandRate: civilianDemandRateForGood(good, popOnly(pop)),
+      storageCapacity: facilityStorageForGood(buildings, good),
+      priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
+    });
+    const expectedSeed = Math.min(band.maxStock, band.targetStock * coverMult);
+
+    const seed = getInitialStock(buildings, yields, pop, good);
+    expect(coverMult).toBeGreaterThan(ECONOMY_CONSTANTS.COMFORT_COVER); // comfort floor doesn't bind here
+    expect(seed).toBeCloseTo(expectedSeed, 6);
   });
 });

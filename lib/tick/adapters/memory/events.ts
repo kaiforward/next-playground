@@ -199,8 +199,11 @@ export class InMemoryEventsWorld implements EventsWorld {
       touched.add(market);
     }
     for (const market of touched) {
+      // Shocks clamp to the physical [0, maxStock] range — a supply-destruction event
+      // may push a market below the price-saturation point; that is the crisis zone
+      // working, not a floor breach.
       const band = marketBandForRow(market, GOODS[market.goodId]);
-      market.stock = Math.max(band.minStock, Math.min(band.maxStock, market.stock));
+      market.stock = Math.max(0, Math.min(band.maxStock, market.stock));
     }
     return Promise.resolve(touched.size);
   }
