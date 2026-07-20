@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { FactionCard } from "@/components/factions/faction-card";
 import { FactionConstructionCard } from "@/components/construction/faction-construction-card";
+import { TreasuryCard } from "@/components/factions/treasury-card";
 import {
   VitalTile,
   VitalGrid,
@@ -13,12 +14,14 @@ import {
 } from "@/components/ui/vital-tile";
 import { useFaction } from "@/lib/hooks/use-faction";
 import { useFactionVitals } from "@/lib/hooks/use-faction-vitals";
+import { useFactionTreasury } from "@/lib/hooks/use-faction-treasury";
 import { formatPeople, formatUnitsShort, splitMagnitude } from "@/lib/utils/format";
 import { GRADE } from "@/lib/constants/ui";
 
 function FactionOverviewContent({ factionId }: { factionId: string }) {
   const { faction } = useFaction(factionId);
   const vitals = useFactionVitals(factionId);
+  const treasury = useFactionTreasury(factionId);
 
   const pop = splitMagnitude(formatPeople(vitals.population));
   const developedFraction =
@@ -61,16 +64,16 @@ function FactionOverviewContent({ factionId }: { factionId: string }) {
           meter={{ pct: vitals.developmentPct, color: "var(--color-accent)" }}
           hint={`${Math.round(vitals.developmentPct)}% of potential`}
         />
+        <VitalTile
+          label="Treasury"
+          dotColor="var(--color-accent)"
+          value={formatUnitsShort(treasury.balance)}
+          hint={`net ${treasury.net < 0 ? "−" : "+"}${formatUnitsShort(Math.abs(treasury.net))} / month`}
+        />
         <GhostVitalTile
           label="Future vitals"
-          colSpan={4}
-          future={
-            <>
-              treasury · control
-              <br />
-              tax base
-            </>
-          }
+          colSpan={3}
+          future={<>control · tax base</>}
         />
       </VitalGrid>
 
@@ -94,6 +97,8 @@ function FactionOverviewContent({ factionId }: { factionId: string }) {
           {faction.doctrineDescription}
         </p>
       </Card>
+
+      <TreasuryCard factionId={faction.id} interactive={faction.isPlayer} />
 
       <FactionConstructionCard factionId={faction.id} />
     </>
