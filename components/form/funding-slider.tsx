@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formSlots } from "./form-slots";
+import { fractionPct } from "@/lib/utils/format";
 
 export interface FundingSliderProps {
   label: string;
@@ -16,8 +17,6 @@ export interface FundingSliderProps {
   /** Fired once on release (pointer up / key up) with the new fraction. */
   onCommit: (value: number) => void;
 }
-
-const pct = (fraction: number) => Math.round(fraction * 100);
 
 /**
  * One budget band's funding bar: copper fill = what actually runs (last
@@ -37,11 +36,11 @@ export function FundingSlider({ label, set, runs, floor = 0, interactive, onComm
     lastSent.current = null;
   }, [set]);
 
-  const thumb = draft ?? pct(set);
-  const shorted = pct(runs) < pct(set);
+  const thumb = draft ?? fractionPct(set);
+  const shorted = fractionPct(runs) < fractionPct(set);
 
   const commit = () => {
-    if (draft !== null && draft !== pct(set) && draft !== lastSent.current) {
+    if (draft !== null && draft !== fractionPct(set) && draft !== lastSent.current) {
       lastSent.current = draft;
       onCommit(draft / 100);
     }
@@ -54,7 +53,7 @@ export function FundingSlider({ label, set, runs, floor = 0, interactive, onComm
         <span className="font-mono text-xs text-text-secondary">
           set {thumb}% ·{" "}
           <span className={shorted ? "text-status-amber-light" : "text-text-primary"}>
-            runs {pct(runs)}%{shorted && " — shorted"}
+            runs {fractionPct(runs)}%{shorted && " — shorted"}
           </span>
         </span>
       </div>
@@ -63,13 +62,13 @@ export function FundingSlider({ label, set, runs, floor = 0, interactive, onComm
           <span
             aria-hidden
             className="absolute inset-y-0 left-0 bg-[repeating-linear-gradient(45deg,var(--color-border),var(--color-border)_3px,transparent_3px,transparent_6px)]"
-            style={{ width: `${pct(floor)}%` }}
+            style={{ width: `${fractionPct(floor)}%` }}
           />
         )}
-        <span aria-hidden className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${pct(runs)}%` }} />
+        <span aria-hidden className="absolute inset-y-0 left-0 bg-accent" style={{ width: `${fractionPct(runs)}%` }} />
         <input
           type="range"
-          min={pct(floor)}
+          min={fractionPct(floor)}
           max={100}
           step={1}
           value={thumb}

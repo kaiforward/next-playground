@@ -8,7 +8,7 @@ import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeader } from "@/components/ui/section-header";
 import { CheckboxInput } from "@/components/form/checkbox-input";
-import { formatMagnitude } from "@/lib/utils/format";
+import { formatMagnitude, fractionPct } from "@/lib/utils/format";
 
 /**
  * The faction's construction command summary: the automation switch pair (player faction only),
@@ -19,8 +19,8 @@ import { formatMagnitude } from "@/lib/utils/format";
 export function FactionConstructionCard({ factionId }: { factionId: string }) {
   const data = useFactionConstruction(factionId);
   const treasury = useFactionTreasury(factionId);
-  const runsPct = Math.round(treasury.funded.construction * 100);
-  const shorted = runsPct < Math.round(treasury.bands.construction * 100);
+  const runsPct = fractionPct(treasury.funded.construction);
+  const shorted = runsPct < fractionPct(treasury.bands.construction);
   const setAutomation = useSetAutomation();
   const empty = data.buildSystems.length === 0 && data.colonies.length === 0;
 
@@ -37,7 +37,7 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
             <span className={`font-mono ${shorted ? "text-status-amber-light" : "text-text-secondary"}`}>
               {runsPct}%
             </span>
-            {shorted && <span className="text-status-amber-light"> (shorted)</span>}
+            {shorted && <span className="text-status-amber-light"> — shorted</span>}
             {data.orderedCount > 0 && <> · {data.orderedCount} ordered</>}
           </>
         }
