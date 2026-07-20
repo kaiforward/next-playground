@@ -204,11 +204,12 @@ describe("runEventsProcessor", () => {
 
     // Whether shocks fired depends on the canonical event def's shock list.
     // What we're asserting here is that the processor completes without
-    // crashing on percentage-mode shocks. Market values must be within
-    // their per-market band.
+    // crashing on percentage-mode shocks. Market stock stays within its
+    // valid range [0, maxStock] — 0 is the post-tick floor; minStock is a
+    // price-saturation point, not a clamp, so it is not a lower bound.
     for (const m of world.markets) {
       const band = marketBandForRow(m, GOODS[m.goodId]);
-      expect(m.stock).toBeGreaterThanOrEqual(band.minStock);
+      expect(m.stock).toBeGreaterThanOrEqual(0);
       expect(m.stock).toBeLessThanOrEqual(band.maxStock);
     }
   });

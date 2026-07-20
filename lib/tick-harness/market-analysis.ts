@@ -19,16 +19,21 @@ import type { WorldMarket } from "@/lib/world/types";
 export const SNAPSHOT_INTERVAL = 50;
 
 /**
- * Relative tolerance for "effectively pinned to a band boundary" in the pinning
- * health metric — a small fraction of the band width, so a market resting within
- * this buffer of a boundary counts as boundary-pinned rather than mid-band.
+ * Relative tolerance for "effectively pinned" in the pinning health metric — a
+ * small fraction that sets the proximity buffer for a boundary pin. The floor
+ * test measures it against `maxStock` (proximity to an empty market); the ceiling
+ * test against the band width (proximity to the storage ceiling).
  */
 const BAND_PROXIMITY_FRAC = 0.02;
 
-/** True when a market's stock sits within `BAND_PROXIMITY_FRAC` of the band floor. */
+/**
+ * True when a market's stock sits at the true floor — stock ≈ 0, the Shortage
+ * regime's resting point. The price-saturation point (minStock) is a pricing
+ * construct, not a clamp; nothing pins there, and deep draws below it are the
+ * crisis zone working as designed.
+ */
 function nearBandFloor(m: WorldMarket, band: { minStock: number; maxStock: number }): boolean {
-  const step = BAND_PROXIMITY_FRAC * (band.maxStock - band.minStock);
-  return m.stock <= band.minStock + step;
+  return m.stock <= BAND_PROXIMITY_FRAC * band.maxStock;
 }
 
 function nearBandCeiling(m: WorldMarket, band: { minStock: number; maxStock: number }): boolean {
@@ -131,8 +136,9 @@ function computeStockDrift(
  * ceiling. A good floor-pinned galaxy-wide is starved — its own production, or
  * for a recipe good its local inputs, cannot meet demand; ceiling-pinned means
  * it floods. Distinct from stock drift, which can read deeply negative purely
- * because a high demand rate lifts the reference: a pin is the literal clamp,
- * the unambiguous supply pathology. Sorted by total pinned fraction descending.
+ * because a high demand rate lifts the reference: a pin is a literally empty
+ * market, the unambiguous supply pathology. Sorted by total pinned fraction
+ * descending.
  */
 function computeStockPins(
   markets: WorldMarket[],
