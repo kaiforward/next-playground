@@ -113,11 +113,11 @@ export function outputUptake(stock: number, minStock: number, maxStock: number):
 }
 
 /**
- * Simulate one economy tick across all market entries.
- *
- * For each entry: applies production when `productionRate > 0`, consumption
- * when `consumptionRate > 0`, then noise, then clamp to each entry's own [minStock, maxStock] band.
- * Accepts an optional RNG for deterministic testing. Returns a new array.
+ * Simulate one economy tick across all market entries. For each entry: producers
+ * add stock at full rate to the anchor and decelerate linearly to zero at the
+ * operating ceiling; consumers deliver in full at/above the comfort knee and ration
+ * on the scarcity ramp below it, capped by available stock; stock clamps to [0, maxStock].
+ * Returns a new array without mutating input.
  */
 export function simulateEconomyTick(
   markets: MarketTickEntry[],
