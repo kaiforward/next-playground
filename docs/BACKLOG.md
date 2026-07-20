@@ -41,7 +41,18 @@ Well-defined, can start now.
   folded-in housekeeping. **Sequenced AFTER the purse slice (PR #193) ships**; landing it triggers
   the unrest/tax + treasury recalibrations recorded in the spec's §8. Next step: implementation
   plan (multi-PR, shared feature branch; curves/signals first).
-- **[S] Curated universe names** — Current procedural names are generic ("Forge-7"). Add curated name pools or hybrid naming for more flavour.
+- **[S] Funding sliders: EU5-style immediate number + shorted-only exception display** — decided
+  2026-07-20 at purse Plan 3 merge. Today each band row shows "set X% · runs Y% — shorted", where
+  `runs` is last settlement's latched paid fraction. Two problems: the steady state duplicates the
+  same number twice, and the display **conflates the one-month latch lag with genuine insolvency** —
+  raising a slider mid-month shows "— shorted" for the rest of the month even though nothing was
+  shorted (last settlement simply ran the old setting). Change to the Paradox convention: show the
+  set value only, updating immediately (next-cycle effect implicit), and surface the amber
+  "— shorted" **only when the last settlement genuinely could not pay what was asked**. Detecting
+  that properly needs the settlement snapshot to persist the slider values used at settlement
+  (compare `funded` against them) — a `WorldTreasurySettlement` field, i.e. a save-format bump, which
+  is why this didn't fold into the merge. Touches `FundingSlider` (drop the dual label), the
+  treasury processor (snapshot the sliders), and the construction-card readout (same shorted rule).
 - **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
 - **[S] Colony seed-source tie-break differs between the player verb and the planner on an exact hop
