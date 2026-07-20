@@ -41,6 +41,8 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.systemBuildOptionsAll });
         // Faction Overview vitals (pop/stability/development roll-up + territory) advance every tick.
         queryClient.invalidateQueries({ queryKey: queryKeys.factionVitalsAll });
+        // Treasury settles on the month pulse; funded fractions + snapshot move then.
+        queryClient.invalidateQueries({ queryKey: queryKeys.factionTreasuryAll });
       }),
       // Event notifications → refresh the events feed (detail panel).
       subscribeToEvent("eventNotifications", () => {

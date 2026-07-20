@@ -1,5 +1,5 @@
 import type { EVENT_DEFINITIONS } from "./events";
-import type { SunClass, QualityBandId } from "@/lib/types/game";
+import type { SunClass, QualityBandId, TaxLevel } from "@/lib/types/game";
 
 // ── Deposit quality bands ────────────────────────────────────
 // A dull→warm value ramp for deposit grades. Copper (text-accent) marks the
@@ -207,4 +207,15 @@ export function getGoodColor(goodName: string): string {
   const slug = GOOD_NAME_TO_SLUG[goodName];
   return slug ? (GOOD_COLORS[slug] ?? "#6b7280") : "#6b7280";
 }
+
+// ── Faction tax stance ───────────────────────────────────────
+
+/** Display names for the five-step faction tax stance. */
+export const TAX_LEVEL_LABELS: Record<TaxLevel, string> = {
+  very_low: "Very low",
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  very_high: "Very high",
+};
 

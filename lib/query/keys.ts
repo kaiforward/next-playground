@@ -55,4 +55,7 @@ export const queryKeys = {
   // Per-faction overview vitals roll-up (territory/pop/stability/development) — tick-invalidated.
   factionVitalsAll: ["factionVitals"] as const,
   factionVitals: (factionId: string) => ["factionVitals", factionId] as const,
+  // Per-faction treasury (balance/policy/settlement snapshot) — tick-invalidated.
+  factionTreasuryAll: ["factionTreasury"] as const,
+  factionTreasury: (factionId: string) => ["factionTreasury", factionId] as const,
 };

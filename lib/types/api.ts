@@ -381,3 +381,35 @@ export interface FactionVitalsData {
 }
 export type FactionVitalsResponse = ApiResponse<FactionVitalsData>;
 
+// ── Faction treasury (the purse — player surfaces) ───────────────
+import type { TreasuryBands } from "@/lib/engine/treasury";
+import type { WorldTreasurySettlement } from "@/lib/world/types";
+import type { TaxLevel } from "@/lib/types/game";
+
+/**
+ * One faction's treasury surface — read straight off the persisted
+ * `WorldFactionTreasury` (no recomputation; the settlement snapshot exists so
+ * UI reads never touch transients). Not player-gated: the faction screen is a
+ * god-view; only writes are seat-gated.
+ */
+export interface FactionTreasuryData {
+  factionId: string;
+  /** ≥ 0 — no debt instrument. */
+  balance: number;
+  taxLevel: TaxLevel;
+  /** Funding sliders (0-1); maintenance ≥ 0.5 at every write boundary. */
+  bands: TreasuryBands;
+  /** Latched paid-fractions from the last settlement — what each band's consumers run at ("runs"). */
+  funded: TreasuryBands;
+  /** Last settlement's income − money paid; 0 before the first settlement. */
+  net: number;
+  lastSettlement: WorldTreasurySettlement | null;
+}
+export type FactionTreasuryResponse = ApiResponse<FactionTreasuryData>;
+
+/** The mutable policy pair the PATCH route returns after a successful write. */
+export interface TreasuryPolicyData {
+  taxLevel: TaxLevel;
+  bands: TreasuryBands;
+}
+export type UpdateTreasuryPolicyResponse = ApiResponse<TreasuryPolicyData>;

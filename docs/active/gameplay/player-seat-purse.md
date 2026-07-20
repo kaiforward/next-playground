@@ -1,17 +1,9 @@
-# The Purse — Faction Treasury (Player-Seat Slice 3)
+# The Purse — Faction Treasury
 
-> **Planned spec — design settled 2026-07-19, hardened by adversarial spec review same day.**
-> Supersedes the purse section of [player-seat-roadmap.md](./player-seat-roadmap.md). When the
-> slice ships this moves to `docs/active/gameplay/` and the
-> [Deferred by design](#deferred-by-design) section migrates to the roadmap doc.
->
-> **Plans 1–2 SHIPPED.** Plan 1 (PR #192): the treasury container, both income lines, the
-> settlement ladder, tax levels, save v8, and harness metrics. Plan 2: the latched funded
-> fractions now gate the construction pool and logistics work-budget, maintenance funding
-> modulates idle-decay aggression and applies a flow-only output malus, and tax level feeds
-> per-system unrest pressure. Plan 3 (player surfaces) remains — its as-built integration
-> points are recorded in
-> [Remaining build wiring](#remaining-build-wiring-plan-3).
+> **Active.** Every faction runs the treasury described here; the player surfaces (treasury card,
+> policy controls, funded readouts) are live on the faction panel. Deferred follow-ons
+> (monetisation staging, control, claim pricing, neglect wear, per-group maintenance sliders) live
+> in [player-seat-roadmap.md](../../planned/player-seat-roadmap.md) with their resume-context.
 
 ## Headline
 
@@ -31,14 +23,14 @@ stock rots, and there is no debt.
 Interactions: tax level feeds the per-system `unrest` integrator (with the shipped strike channel
 already damping over-taxation before collapse); the maintenance band modulates the existing
 idle-decay machinery; band funding gates the existing construction pool and logistics work-budget.
-One real engine change is required — exporting realized production from the economy sim (see
-Income Line 2) — everything else activates or starves mechanics that exist.
+The one real engine touch is the economy sim exporting realized production (see Income Line 2) —
+everything else activates or starves mechanics that already existed.
 
 ## The treasury container
 
-- One treasury per faction: a single balance ≥ 0 (no debt instrument in v1), stored in new
-  per-faction `World` rows (factions become tick-mutable state; today they are immutable through
-  the tick). JSON-serializable throughout — guard the funded-fraction math against 0-bills (see
+- One treasury per faction: a single balance ≥ 0 (no debt instrument in v1), stored in
+  per-faction `World` rows (`treasuries` — the only tick-mutable per-faction state).
+  JSON-serializable throughout — the funded-fraction math guards against 0-bills (see
   Settlement).
 - Income and expenses are **itemised line items** from day one (income: heads tax, production tax;
   expenses: maintenance by building type, logistics, construction), with the last settlement's
@@ -68,12 +60,11 @@ the assessor values a tonne of alloys at its standing worth, not today's local s
 Responsive and industrial: an input-starved factory produces less and taxes less, so this line
 tracks what the economy actually *does* — richer than heads alone.
 
-- **Required engine change (the slice's one real economy touch):** realized per-(system, good)
-  output is currently a transient inside the economy sim and is never exported — the only exported
-  production number is *capacity* (no input gate), which would not sag under starvation and would
-  re-create the famine-windfall perversity this design exists to avoid. The economy sim must
-  export realized output per (system, good) per pulse, and the treasury persists the last
-  settlement's snapshot (the itemised UI line needs it between pulses anyway).
+- **The slice's one real economy touch:** the economy sim exports realized output per
+  (system, good) per pulse, and the treasury persists the last settlement's snapshot (the
+  itemised UI line needs it between pulses anyway). Realized — not *capacity* (no input gate) —
+  because capacity would not sag under starvation and would re-create the famine-windfall
+  perversity this design exists to avoid.
 - **Reference-value calibration must be value-added-aware**: taxing every good at full reference
   value at every chain stage is a turnover tax (ore taxed as ore, again inside alloys, again in
   machinery) that would over-reward deep local chains. Calibrate downstream reference values as
@@ -235,75 +226,24 @@ calibration harness, across the full faction roster (majors + minors). Per-facti
 
 ## UI surfaces
 
-- **Faction panel — treasury card**: balance, itemised income (heads line, production line),
-  itemised expenses (maintenance bill by building type, logistics, construction), the three band
-  sliders, the tax-level control.
-- **Construction command card**: a funded-fraction readout, so the pool's activation state is
-  visible where builds are queued.
-- Per house rule, the treasury card gets its collaborative HTML design pass before implementation —
-  this spec fixes *what* it shows, not how it looks.
-
-## Remaining build wiring (Plan 3)
-
-As-built integration points discovered during Plans 1–2 — the anchor the next build plan starts
-from (recorded here because the Plan-2 build plan is deleted at merge, per doc conventions):
-
-- **Plan 3 — player surfaces:** faction services/API additions, Zod-validated mutations (tax
-  level, band sliders with the 0.5 maintenance floor), the construction-card funded readout, and
-  the treasury card — after its collaborative HTML design pass. The reserved `GhostVitalTile`
-  slot is at `app/(game)/@panel/factions/[factionId]/page.tsx:64-74`.
-
-## Deferred by design
-
-> On promotion of this spec to `docs/active/`, this section migrates to
-> [player-seat-roadmap.md](./player-seat-roadmap.md). Each item carries its resume-context — do not
-> reduce to one-liners.
-
-### Monetisation staging (the arc this slice starts)
-
-Each stage replaces a proxy with the real flow it stood in for; the itemised treasury structure
-never changes.
-
-- **Stage 2 — state spending becomes goods demand.** Construction consumes real materials bought
-  at market prices (EU5 shape: goods drawn during construction, shortages pause builds). This is
-  the damper that makes price-linked income safe. *Only then* add a spot-price-linked income line,
-  kept a minority share next to the stable core (a minority share can't fund famine-states or make
-  scarcity-engineering worthwhile, and the stable core damps the oscillator). Open design question
-  from risk 4: value output at something less local than home-system spot price.
-- **Stage 3 — pop monetisation.** Buildings pay wages; pops buy consumption at market prices. The
-  heads tax retires into an income tax on real wages; the production-at-reference tax into a
-  profits/dividends tax; and a **consumption tax** (VAT on real transactions — bites poorest pops
-  hardest, the sharpest revenue↔unrest instrument) becomes available as a genuinely distinct third
-  line. "Which systems are rich" becomes fully emergent rather than assessed.
-
-### Control (future system, not just a tax modifier)
-
-Control is *the* space-native version of EU5's multiplier: real distances make control expensive in
-a way map adjacency never is. First fiscal form: **unrest-attenuated collection** (high taxes →
-unrest → lower collection — a self-damping stabiliser using existing machinery). Later:
-capital/distance-based control, development as an input.
-
-### Claim pricing (designed alongside control)
-
-Claims (the cheap `unclaimed → controlled` border-staking step; develop already carries the
-physical colonisation costs) should cost money — but the interesting price is control-shaped
-(further from the core → dearer to claim and to keep), so it waits for the control design rather
-than shipping as a flat fee. The per-pulse claim cap + reach bound prevent degenerate free grabbing
-in the meantime.
-
-### Neglect wear on staffed buildings
-
-At 0% effective maintenance, v1 leaves fully-utilised buildings intact (the idle channel can't
-touch them, and adding a third decay channel isn't worth its engine cost yet). If total neglect
-should eventually crumble even working machines, that's a new, explicitly-owned decay channel —
-design it then, don't imply it.
-
-### Per-building-group maintenance sliders
-
-If playtesting shows genuine want for triage ("protect industry upkeep, let housing slip"), split
-the one maintenance band into a few grouped bands — purely additive on the itemised bill. Costs
-are UI surface, AI policy per slider, and calibration axes — pay them only once the choice is
-proven fun.
+- **Faction panel — treasury card** (`components/factions/treasury-card.tsx`): single-column
+  ledger — balance + net/month at top, itemised income (heads line, production line), itemised
+  expenses with a **collapsible maintenance by-type breakdown (default collapsed)**, then the
+  three band-funding rows and the 5-segment tax-level stepper. Ledger expense amounts are money
+  actually **paid** last settlement; the maintenance breakdown itemises the **bill's** composition
+  by building type. Each band row shows **set vs runs**: the slider thumb is the player's set
+  fraction; the copper fill is last settlement's latched paid fraction ("runs"), with an explicit
+  "— shorted" tag when the ladder diverges them and a hatched zone marking maintenance's
+  un-slidable 50% floor (drags into it pin at the floor). The card renders on **every** faction's
+  panel; controls are interactive only when `isPlayer` — AI factions show the same values static.
+  Policy writes go through `PATCH /api/game/factions/[factionId]/treasury`, Zod-validated and
+  server-gated to the player's controlled faction; the floor is enforced at every write boundary
+  (schema, service clamp, slider).
+- **Faction vitals**: a Treasury tile (balance + net hint); the remaining ghost slot reads
+  "control · tax base".
+- **Construction command card**: a funded-fraction readout line ("funded N%", amber "— shorted"
+  when the ladder shorted the band), so the pool's activation state is visible where builds are
+  queued.
 
 ## Research appendix (Vic3 / EU5, 2026-07-19)
 

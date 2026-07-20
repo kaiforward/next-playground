@@ -56,6 +56,11 @@ export function formatUnitsShort(value: number): string {
   return `${m >= 10 ? Math.round(m) : Math.round(m * 10) / 10}M`;
 }
 
+/** A 0-1 fraction as a rounded whole percentage. */
+export function fractionPct(fraction: number): number {
+  return Math.round(fraction * 100);
+}
+
 /** People represented by one abstract population unit. */
 export const PEOPLE_PER_UNIT = 1_000_000;
 
