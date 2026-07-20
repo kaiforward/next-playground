@@ -26,7 +26,15 @@ export function useUpdateTreasuryPolicy(factionId: string) {
   return useMutation({
     mutationFn: (input: TreasuryPolicyInput) =>
       apiPatch<TreasuryPolicyData>(`/api/game/factions/${factionId}/treasury`, input),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Write the committed policy into the cache immediately: the card builds
+      // each band commit from cached bands (the schema wants the full triple),
+      // so waiting for the refetch would let a quick second slider release
+      // spread the pre-commit value and silently revert the first change.
+      queryClient.setQueryData<FactionTreasuryData>(
+        queryKeys.factionTreasury(factionId),
+        (old) => (old ? { ...old, taxLevel: data.taxLevel, bands: data.bands } : old),
+      );
       void queryClient.invalidateQueries({ queryKey: queryKeys.factionTreasuryAll });
     },
   });
