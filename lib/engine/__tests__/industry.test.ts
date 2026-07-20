@@ -58,6 +58,7 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import type { MarketBand } from "@/lib/engine/market-pricing";
 import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
@@ -252,23 +253,25 @@ describe("generalSpaceUsed", () => {
 });
 
 describe("buildIndustryReadout", () => {
-  const MIN = 5;
   // 3 metals buildings (recipe: { ore: 1 }), 5 housing, 1 vocational_school (licenses the
   // metals buildings' skill1 demand: 3×7=21 ≪ 150) so metals' tier-1 supply-chain isn't
   // skill-gated to zero — these tests are about input-gate throttling, not skill-gating.
   const buildings = { metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 };
   // Population exactly staffs the metals buildings (+ the school).
   const pop = labourDemand(buildings);
+  // A comfort knee (0.75 × 100 = 75) well above the low input stocks these tests use, so a
+  // scarce input lands on the scarcity ramp rather than at a reserve floor.
+  const bandOf = (): MarketBand => ({ targetStock: 100, minStock: 0, maxStock: 1000 });
 
   it("labourFulfillment matches the helper formula", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, bandOf, unitResourceVector());
     const demand = labourDemand(buildings);
     const expected = labourFulfillment(pop, demand);
     expect(readout.labourFulfillment).toBeCloseTo(expected, 6);
   });
 
   it("housing appears with tier -1 and no outputGood", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, bandOf, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing).toBeDefined();
     expect(housing.tier).toBe(-1);
@@ -277,7 +280,7 @@ describe("buildIndustryReadout", () => {
   });
 
   it("production buildings have outputGood and correct tier", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals).toBeDefined();
     expect(metals.outputGood).toBe("metals");
@@ -285,46 +288,79 @@ describe("buildIndustryReadout", () => {
     expect(metals.count).toBe(3);
   });
 
-  it("supplyChain entry is throttled (inputGate < 1) when ore stock is at floor", () => {
-    // ore stock = MIN (nothing drawable above floor)
-    const marketStock = { ore: MIN };
-    const readout = buildIndustryReadout(buildings, pop, marketStock, () => MIN, unitResourceVector());
+  it("supplyChain entry is throttled (inputGate < 1) when input stock is below comfort", () => {
+    // ore stock well below its comfort knee (75) → the scarcity ramp bites.
+    const marketStock = { ore: 5 };
+    const readout = buildIndustryReadout(buildings, pop, marketStock, bandOf, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeLessThan(1);
     expect(entry.throttledBy).toContain("ore");
   });
 
-  it("supplyChain entry is unthrottled (inputGate === 1) when ore stock is ample", () => {
-    // ore stock far above what 3 metals buildings can draw in one tick
+  it("supplyChain entry is unthrottled (inputGate === 1) when input stock is ample", () => {
+    // ore stock above both the comfort knee and one tick's draw → the ramp does not bind.
     const fullyStaffedProduction = buildingProduction(buildings, "metals", FULL, unitResourceVector());
     const oreNeeded = fullyStaffedProduction * GOOD_RECIPES["metals"]["ore"];
-    const marketStock = { ore: MIN + oreNeeded * 10 };
-    const readout = buildIndustryReadout(buildings, pop, marketStock, () => MIN, unitResourceVector());
+    const marketStock = { ore: oreNeeded * 10 };
+    // comfort = 0.75 × oreNeeded sits below the ample stock and the draw itself.
+    const ampleBand = (): MarketBand => ({ targetStock: oreNeeded, minStock: 0, maxStock: oreNeeded * 100 });
+    const readout = buildIndustryReadout(buildings, pop, marketStock, ampleBand, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeCloseTo(1, 6);
     expect(entry.throttledBy).toHaveLength(0);
   });
 
+  it("gates a producer's displayed output on the scarcity ramp, not a reserve floor", () => {
+    // ore stock = 2: below the legacy reserve floor (which gated output to zero) but > 0. On the
+    // shared ramp a starved producer still draws toward empty, so its displayed output stays > 0.
+    const producer = { metals: 3, vocational_school: 1 };
+    const producerPop = labourDemand(producer);
+    const readout = buildIndustryReadout(producer, producerPop, { ore: 2 }, bandOf, unitResourceVector());
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    const gross = buildingProduction(producer, "metals", computeLabourState(producer, producerPop), unitResourceVector());
+    expect(metals.output!).toBeGreaterThan(0); // not floored to zero
+    expect(metals.output!).toBeLessThan(gross); // but the ramp still throttles
+  });
+
+  it("marks throttledBy only when the scarcity ramp binds, not at a fixed floor", () => {
+    const producer = { metals: 3, vocational_school: 1 };
+    const producerPop = labourDemand(producer);
+    const gross = buildingProduction(producer, "metals", FULL, unitResourceVector());
+    const oreDraw = gross * GOOD_RECIPES["metals"]["ore"];
+    // Comfort knee = 0.75 × oreDraw. Input at/above comfort with the draw covered ⇒ no throttle.
+    const rampBand = (): MarketBand => ({ targetStock: oreDraw, minStock: 0, maxStock: oreDraw * 100 });
+    const ample = buildIndustryReadout(producer, producerPop, { ore: oreDraw * 2 }, rampBand, unitResourceVector());
+    expect(ample.supplyChain.find((e) => e.goodId === "metals")!.throttledBy).toHaveLength(0);
+    // Input below comfort ⇒ the ramp binds even though stock > 0.
+    const scarce = buildIndustryReadout(producer, producerPop, { ore: oreDraw * 0.3 }, rampBand, unitResourceVector());
+    expect(scarce.supplyChain.find((e) => e.goodId === "metals")!.throttledBy).toContain("ore");
+  });
+
   it("tier-0 goods (no recipe) are absent from supplyChain", () => {
-    const readout = buildIndustryReadout({ ore: 5 }, 1000, {}, () => MIN, unitResourceVector());
+    const readout = buildIndustryReadout({ ore: 5 }, 1000, {}, bandOf, unitResourceVector());
     expect(readout.supplyChain.find((e) => e.goodId === "ore")).toBeUndefined();
   });
 
   it("supplyChain is sorted by inputGate ascending (most-throttled first)", () => {
-    // Two producers: metals (ore recipe, stock at floor) and fuel (gas recipe, ample gas).
+    // Two producers: metals (ore below comfort → throttled) and fuel (gas ample → unthrottled).
     // Both are tier-1 (skill1-gated); 1 vocational_school covers metals+fuel's combined
     // skill1 demand (3×7 + 2×7 = 35 ≪ 150) so neither is skill-gated to zero.
     const gasFuelProduction = buildingProduction({ fuel: 2 }, "fuel", FULL, unitResourceVector());
     const gasNeeded = gasFuelProduction * GOOD_RECIPES["fuel"]["gas"];
-    const stock = { ore: MIN, gas: MIN + gasNeeded * 10 };
+    const stock = { ore: 5, gas: gasNeeded * 10 };
+    // gas comfort sits below its ample stock; ore comfort (75) sits far above its stock (5).
+    const sortBand = (g: string): MarketBand =>
+      g === "gas"
+        ? { targetStock: gasNeeded, minStock: 0, maxStock: gasNeeded * 100 }
+        : { targetStock: 100, minStock: 0, maxStock: 1000 };
     const sortBuildings = { metals: 3, fuel: 2, [HOUSING_TYPE]: 1, vocational_school: 1 };
     const readout = buildIndustryReadout(
       sortBuildings,
       pop + 2 * labourTotal(BUILDING_TYPES.fuel!.labour!) + labourTotal(BUILDING_TYPES.vocational_school!.labour!),
       stock,
-      () => MIN,
+      sortBand,
       unitResourceVector(),
     );
     const gates = readout.supplyChain.map((e) => e.inputGate);
@@ -338,10 +374,11 @@ describe("buildIndustryReadout", () => {
 describe("buildIndustryReadout — per-building used + idleReason", () => {
   const MIN = 5;
   const MAX = 100;
-  const MAXBAND = () => MAX;
+  // Uptake band over [MIN, MAX]; comfort knee (targetStock) is irrelevant to used/idleReason.
+  const bandOf = (): MarketBand => ({ targetStock: MAX, minStock: MIN, maxStock: MAX });
 
   it("housing used = occupancy (population / POP_CENTRE_DENSITY); 'occupancy' when under-filled", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, bandOf, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing.used).toBeCloseTo(6, 6);
     expect(housing.idleReason).toBe("occupancy");
@@ -353,8 +390,8 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const demand = labourDemand(buildings);
     const pop = demand * 0.5; // labour fulfillment 0.5
-    // stock at the floor → output sells freely (uptake ≈ 1), so labour is the binding constraint.
-    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    // stock at the uptake floor → output sells freely (uptake ≈ 1), so labour is the binding constraint.
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeCloseTo(4 * 0.5, 6);
     expect(metals.idleReason).toBe("labour");
@@ -363,10 +400,10 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   it("'skill1' when a tier-2 building is fully staffed but no academy licenses its skilled work", () => {
     // electronics (tier-2) demands skill1 + skill2; no vocational_school/research_institute
     // built → both skill ceilings are 0, dragging effectiveFulfilment below labourFulfil even
-    // though headcount is fully staffed. Stock at the floor keeps selling from confounding it.
+    // though headcount is fully staffed. Stock at the uptake floor keeps selling from confounding it.
     const buildings = { electronics: 4 };
     const pop = labourDemand(buildings); // headcount fully staffed
-    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, bandOf, unitResourceVector());
     const electronics = readout.buildings.find((b) => b.buildingType === "electronics")!;
     expect(electronics.used).toBeLessThan(4);
     expect(electronics.idleReason).toBe("skill1"); // neither academy → lower grade wins the tie
@@ -375,8 +412,8 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   it("'selling' when output uptake binds (stock pinned at the ceiling)", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings); // fully staffed
-    // stock at the ceiling → output piling up (uptake ≈ 0), so selling is the binding constraint.
-    const readout = buildIndustryReadout(buildings, pop, { metals: MAX }, () => MIN, unitResourceVector(), MAXBAND);
+    // stock at the uptake ceiling → output piling up (uptake ≈ 0), so selling is the binding constraint.
+    const readout = buildIndustryReadout(buildings, pop, { metals: MAX }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeLessThan(4 * 0.2);
     expect(metals.idleReason).toBe("selling");
@@ -385,16 +422,16 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   it("no idleReason when fully staffed and selling", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeCloseTo(4, 6);
     expect(metals.idleReason).toBeUndefined();
   });
 
-  it("defaults output uptake to 1 when no maxStock band is supplied (sells freely)", () => {
+  it("defaults output uptake to 1 when the good has no market band (sells freely)", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => undefined, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeCloseTo(4, 6); // uptake 1, headcount + skill1 both fulfilled
   });
@@ -402,12 +439,13 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
 
 describe("buildIndustryReadout — skill idle reason split", () => {
   const MIN = 5;
-  const MAXBAND = () => 100;
+  // Uptake band [MIN, 100] keeps stock-at-floor goods selling freely, isolating the skill gate.
+  const bandOf = (): MarketBand => ({ targetStock: 100, minStock: MIN, maxStock: 100 });
 
   it("'skill1' when a tier-1 good is fully staffed but no school licenses it", () => {
     const buildings = { metals: 4 }; // tier-1 needs skill1; no vocational_school
     const pop = labourDemand(buildings); // headcount fully staffed
-    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, bandOf, unitResourceVector());
     expect(readout.buildings.find((b) => b.buildingType === "metals")!.idleReason).toBe("skill1");
   });
 
@@ -415,14 +453,14 @@ describe("buildIndustryReadout — skill idle reason split", () => {
     // enough schools to cover skill1 demand, zero institutes → skill2 is the binding pool.
     const buildings = { electronics: 1, vocational_school: 5 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, bandOf, unitResourceVector());
     expect(readout.buildings.find((b) => b.buildingType === "electronics")!.idleReason).toBe("skill2");
   });
 
   it("'skill1' on a tier-2 good with neither academy (lower grade wins the tie)", () => {
     const buildings = { electronics: 4 }; // skill1Fulfil === skill2Fulfil === 0
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, bandOf, unitResourceVector());
     expect(readout.buildings.find((b) => b.buildingType === "electronics")!.idleReason).toBe("skill1");
   });
 });
@@ -618,12 +656,11 @@ describe("skill gates", () => {
 });
 
 describe("buildIndustryReadout — labour block", () => {
-  const MIN = 5;
   it("reports workforce/skill1/skill2 supply, demand and fulfil", () => {
     // 3 electronics (tier-2: unskilled 30, skill1 20, skill2 10) + 1 school + 1 institute.
     const buildings = { electronics: 3, vocational_school: 1, research_institute: 1 };
     const pop = 100;
-    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => undefined, unitResourceVector());
 
     const demand = labourDemand(buildings);
     expect(readout.labour.workforce.have).toBeCloseTo(pop, 6);
@@ -641,7 +678,7 @@ describe("buildIndustryReadout — labour block", () => {
 
   it("a demand-with-zero-cap skill pool reads fulfil 0 (no academy)", () => {
     const buildings = { metals: 2 }; // tier-1 needs skill1; no school built
-    const readout = buildIndustryReadout(buildings, 1000, {}, () => MIN, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, 1000, {}, () => undefined, unitResourceVector());
     expect(readout.labour.skill1.need).toBeGreaterThan(0);
     expect(readout.labour.skill1.have).toBe(0);
     expect(readout.labour.skill1.fulfil).toBe(0);
@@ -650,20 +687,21 @@ describe("buildIndustryReadout — labour block", () => {
 
 describe("buildIndustryReadout — staffedFraction + output", () => {
   const MIN = 5;
-  const MAXBAND = () => 100;
+  // Uptake band [MIN, 100]; comfort knee (75) sits above the low input stocks these tests use.
+  const bandOf = (): MarketBand => ({ targetStock: 100, minStock: MIN, maxStock: 100 });
 
   it("producer staffedFraction = effectiveFulfilment(tier), independent of selling", () => {
     // fully staffed + licensed, but stock pinned at the ceiling (not selling).
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { metals: 100 }, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout(buildings, pop, { metals: 100 }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.staffedFraction).toBeCloseTo(1, 6); // pure staffing full even though used (selling) is ~0
     expect(metals.used).toBeLessThan(4 * 0.2);         // used still folds uptake (unchanged)
   });
 
   it("housing staffedFraction = occupancy (used / count)", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, bandOf, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing.staffedFraction).toBeCloseTo(0.6, 6);
   });
@@ -671,8 +709,8 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
   it("output = buildingProduction × inputGate (input-throttled reads low even when fully staffed)", () => {
     const buildings = { metals: 3, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    // ore at floor → inputGate < 1; metals fully staffed.
-    const readout = buildIndustryReadout(buildings, pop, { ore: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    // ore below comfort → inputGate < 1; metals fully staffed.
+    const readout = buildIndustryReadout(buildings, pop, { ore: MIN }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     const gate = readout.supplyChain.find((e) => e.goodId === "metals")!.inputGate;
     const gross = buildingProduction(buildings, "metals", computeLabourState(buildings, pop), unitResourceVector());
@@ -682,12 +720,12 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
 
   it("output is 0 for a tier-1 good with no academy (skill-gated to zero)", () => {
     const buildings = { metals: 4 }; // no school → skill1Fulfil 0 → production 0
-    const readout = buildIndustryReadout(buildings, labourDemand(buildings), { metals: MIN }, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout(buildings, labourDemand(buildings), { metals: MIN }, bandOf, unitResourceVector());
     expect(readout.buildings.find((b) => b.buildingType === "metals")!.output).toBe(0);
   });
 
   it("housing and academies carry no output", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 3, vocational_school: 1 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 3, vocational_school: 1 }, 100, {}, bandOf, unitResourceVector());
     expect(readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!.output).toBeUndefined();
     expect(readout.buildings.find((b) => b.buildingType === "vocational_school")!.output).toBeUndefined();
   });
@@ -697,7 +735,7 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     // its licensing sits idle — the readout must match decay (licence-draw), not the old staffing proxy.
     const buildings = { metals: 1, vocational_school: 1 };
     const pop = labourDemand(buildings) * 10; // plentiful → fully staffed on headcount
-    const readout = buildIndustryReadout(buildings, pop, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout(buildings, pop, {}, bandOf, unitResourceVector());
     const school = readout.buildings.find((b) => b.buildingType === "vocational_school")!;
     const s1 = BUILDING_TYPES.metals!.labour!.skill1;
     // used = 1 × min(1, skill1Demand / skill1Cap): mostly idle, well below the built count of 1.
@@ -781,11 +819,8 @@ describe("skillLicensing", () => {
 });
 
 describe("buildIndustryReadout labourAllocation", () => {
-  const MIN = 5;
-  const MAXBAND = () => 100;
-
   it("surfaces the population decomposition alongside the labour pools", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => undefined, unitResourceVector());
     // Housing-only system: no jobs, so everyone is unemployed and the buckets are empty.
     expect(readout.labourAllocation).toEqual({
       population: 100, unskilled: 0, technicians: 0, engineers: 0, unemployed: 100,
@@ -794,11 +829,8 @@ describe("buildIndustryReadout labourAllocation", () => {
 });
 
 describe("buildIndustryReadout skillBaskets", () => {
-  const MIN = 5;
-  const MAXBAND = () => 100;
-
   it("technicians and engineers baskets are non-empty, sorted descending by perHead, and drawn from the matching constant", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => undefined, unitResourceVector());
     const { technicians, engineers } = readout.skillBaskets;
 
     expect(technicians.length).toBeGreaterThan(0);
@@ -815,8 +847,8 @@ describe("buildIndustryReadout skillBaskets", () => {
   });
 
   it("skillBaskets are the same for every readout (static per-grade catalogue, not system-dependent)", () => {
-    const a = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => MIN, unitResourceVector(), MAXBAND);
-    const b = buildIndustryReadout({ metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 }, 1000, {}, () => MIN, unitResourceVector(), MAXBAND);
+    const a = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, () => undefined, unitResourceVector());
+    const b = buildIndustryReadout({ metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 }, 1000, {}, () => undefined, unitResourceVector());
     expect(a.skillBaskets).toEqual(b.skillBaskets);
   });
 });
@@ -886,7 +918,7 @@ describe("computeSystemLabourSnapshot", () => {
 describe("buildIndustryReadout — complex row", () => {
   it("emits a complex entry with family-utilisation used (not labour-based)", () => {
     const buildings = { [HEAVY_INDUSTRY_COMPLEX]: 1 }; // orphaned: no metals factories
-    const r = buildIndustryReadout(buildings, 1e9, {}, () => 0, unitResourceVector());
+    const r = buildIndustryReadout(buildings, 1e9, {}, () => undefined, unitResourceVector());
     const row = r.buildings.find((b) => b.buildingType === HEAVY_INDUSTRY_COMPLEX)!;
     expect(row.used).toBe(0);            // orphaned → 0, despite population being huge
     expect(row.output).toBeUndefined();  // produces no good
@@ -897,7 +929,7 @@ describe("buildIndustryReadout — support row (kind 'none')", () => {
   it("emits a fully-staffed centre entry shaped like an academy: tier 0, no output, used = count × labourFulfil", () => {
     const buildings = { [CONSTRUCTION_CENTRE_TYPE]: 2 };
     const pop = labourDemand(buildings); // exactly enough heads to fully staff it
-    const readout = buildIndustryReadout(buildings, pop, {}, () => 0, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => undefined, unitResourceVector());
     const centre = readout.buildings.find((b) => b.buildingType === CONSTRUCTION_CENTRE_TYPE)!;
     expect(centre.tier).toBe(0);
     expect(centre.outputGood).toBeUndefined();
@@ -909,7 +941,7 @@ describe("buildIndustryReadout — support row (kind 'none')", () => {
   it("staffedFraction tracks labour fulfilment, not a producer's effectiveFulfilment, when understaffed", () => {
     const buildings = { [CONSTRUCTION_CENTRE_TYPE]: 4 };
     const pop = labourDemand(buildings) / 2; // half the required heads
-    const readout = buildIndustryReadout(buildings, pop, {}, () => 0, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, {}, () => undefined, unitResourceVector());
     const centre = readout.buildings.find((b) => b.buildingType === CONSTRUCTION_CENTRE_TYPE)!;
     expect(centre.used).toBeCloseTo(2, 6); // count × labourFulfil = 4 × 0.5
     expect(centre.staffedFraction).toBeCloseTo(0.5, 6);

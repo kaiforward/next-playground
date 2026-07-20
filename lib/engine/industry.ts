@@ -40,8 +40,12 @@ import {
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
-import { inputGate } from "@/lib/engine/supply-chain";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { inputGate, inputDrawRatio } from "@/lib/engine/supply-chain";
 import { outputUptake } from "@/lib/engine/tick";
+// Type-only: market-pricing imports constants/market-economy, which imports this module —
+// a value import would cycle, but the type erases at compile time.
+import type { MarketBand } from "@/lib/engine/market-pricing";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
@@ -655,12 +659,15 @@ const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTIO
  * - buildings: one entry per building type with count > 0 (housing gets tier -1).
  * - supplyChain: tier-1+ produced goods whose recipe inputs may be short.
  *   inputGate < 1 means the good is throttled by at least one short input.
- *   throttledBy lists the inputs where drawable stock < desired draw.
+ *   throttledBy lists the inputs whose draw rations on the scarcity ramp.
  *
- * `marketStock` and `minStockOf` are keyed by good KEY (not the DB good id);
- * the caller maps the market rows through GOOD_NAME_TO_KEY. `minStockOf` returns
- * each good's per-market reserve floor — only stock above it is drawable, so the
- * throttle reflects the real per-market band (not a flat global floor).
+ * `marketStock` and `bandOf` are keyed by good KEY (world market rows use good
+ * keys as goodId). `bandOf` returns each good's per-market band, or undefined for
+ * a good with no market row. Input draws ration on the shared scarcity ramp below
+ * each input's comfort stock (COMFORT_COVER × targetStock) — there is no reserve
+ * floor, so a starved input draws toward empty rather than gating hard at a floor.
+ * Seller-side uptake reads the band's [minStock, maxStock]; a good with no band
+ * sells freely (uptake 1).
  *
  * `yields` threads through to `buildingProduction` but is inert for this readout:
  * supplyChain covers only tier-1+ goods, whose production is yield-independent.
@@ -669,9 +676,8 @@ export function buildIndustryReadout(
   buildings: Record<string, number>,
   population: number,
   marketStock: Record<string, number>,
-  minStockOf: (goodId: string) => number,
+  bandOf: (goodId: string) => MarketBand | undefined,
   yields: ResourceVector,
-  maxStockOf?: (goodId: string) => number | undefined,
 ): SystemIndustryReadout {
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
@@ -681,13 +687,17 @@ export function buildIndustryReadout(
     skill1: { have: parts.skill1Cap, need: parts.skill1Demand, fulfil: state.skill1Fulfil },
     skill2: { have: parts.skill2Cap, need: parts.skill2Demand, fulfil: state.skill2Fulfil },
   };
-  const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
-  // Seller-side uptake for a produced good ∈ [0,1]; a good with no market band (no row, or a legacy
-  // caller without maxStockOf) sells freely (1). Shared by buildingUsed and the producer idleReason.
+  const stockOf = (g: string): number => marketStock[g] ?? 0;
+  // Comfort stock (the scarcity-ramp knee) for a good ∈ input draws; 0 for a good with no band.
+  const comfortOf = (g: string): number => {
+    const band = bandOf(g);
+    return band !== undefined ? ECONOMY_CONSTANTS.COMFORT_COVER * band.targetStock : 0;
+  };
+  // Seller-side uptake for a produced good ∈ [0,1]; a good with no market band sells freely (1).
+  // Shared by buildingUsed and the producer idleReason.
   const uptakeOf = (g: string): number => {
-    if (maxStockOf === undefined) return 1;
-    const maxStock = maxStockOf(g);
-    return maxStock !== undefined ? outputUptake(stockOf(g), minStockOf(g), maxStock) : 1;
+    const band = bandOf(g);
+    return band !== undefined ? outputUptake(stockOf(g), band.minStock, band.maxStock) : 1;
   };
   const ctx: UtilizationContext = { buildings, population, parts, state, outputUptake: uptakeOf };
 
@@ -742,7 +752,7 @@ export function buildIndustryReadout(
     let output: number | undefined;
     if (outputGood !== undefined) {
       const production = buildingProduction(buildings, outputGood, state, yields);
-      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, minStockOf) : 1;
+      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, comfortOf) : 1;
       output = production * gate;
     }
     let idleReason: IdleReason | undefined;
@@ -773,14 +783,13 @@ export function buildIndustryReadout(
     if (!recipe) continue; // tier-0 — always gated at 1, no signal
 
     const effectiveProduction = buildingProduction(buildings, goodId, state, yields);
-    const gate = inputGate(goodId, effectiveProduction, stockOf, minStockOf);
+    const gate = inputGate(goodId, effectiveProduction, stockOf, comfortOf);
 
     const throttledBy: string[] = [];
     for (const [input, perOutput] of Object.entries(recipe)) {
       const desired = effectiveProduction * perOutput;
       if (desired <= 0) continue;
-      const drawable = Math.max(0, stockOf(input) - minStockOf(input));
-      if (drawable < desired) throttledBy.push(input);
+      if (inputDrawRatio(stockOf(input), comfortOf(input), desired) < 1) throttledBy.push(input);
     }
 
     supplyChainEntries.push({ goodId, inputGate: gate, throttledBy });

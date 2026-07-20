@@ -13,7 +13,7 @@ import {
   summariseDeposits,
 } from "@/lib/engine/industry";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
-import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { marketBandForRow, type MarketBand } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { deriveRegionDominantFaction } from "@/lib/utils/region";
@@ -183,13 +183,10 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   // marketStock + per-good stock band keyed by good KEY (world market rows
   // already use good keys as goodId).
   const marketStock: Record<string, number> = {};
-  const minStockByGood: Record<string, number> = {};
-  const maxStockByGood: Record<string, number> = {};
+  const bandByGood: Record<string, MarketBand> = {};
   for (const row of marketsBySystem().get(systemId) ?? []) {
-    const band = marketBandForRow(row, GOODS[row.goodId]);
+    bandByGood[row.goodId] = marketBandForRow(row, GOODS[row.goodId]);
     marketStock[row.goodId] = row.stock;
-    minStockByGood[row.goodId] = band.minStock;
-    maxStockByGood[row.goodId] = band.maxStock;
   }
 
   const slotCap = resourceVectorFromColumns(
@@ -216,9 +213,8 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     buildings,
     system.population,
     marketStock,
-    (goodKey) => minStockByGood[goodKey] ?? 0,
+    (goodKey) => bandByGood[goodKey],
     yields,
-    (goodKey) => maxStockByGood[goodKey],
   );
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.
