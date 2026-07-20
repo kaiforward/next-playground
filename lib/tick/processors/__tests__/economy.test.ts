@@ -413,12 +413,14 @@ describe("economy processor: supply-chain input-gating", () => {
     const metalsA = worldA.markets.find((m) => m.goodId === "metals")!.stock;
     const metalsB = worldB.markets.find((m) => m.goodId === "metals")!.stock;
 
-    // Ore-rich A: ore at 4× targetStock (160), gate ≈ 1 → metals production raises stock above its start.
-    // Ore-starved B: ore at floor (minStock=20, drawable=0), gate = 0 → no metals output,
-    // so stock cannot rise (noise is off; it only holds flat or drains via consumption).
+    // Ore-rich A: ore at 4× targetStock (160) sits above its comfort knee, gate ≈ 1 →
+    // metals production raises stock well above its start.
+    // Ore-starved B: ore at its old minStock (20) sits below the comfort knee, so the
+    // shared scarcity ramp throttles the draw — metals still produces a little (no hard
+    // floor zeroing it) but far less than A, so A ends higher than B.
     expect(metalsA).toBeGreaterThan(MID_METALS);
-    expect(metalsB).toBeLessThanOrEqual(MID_METALS);
-    expect(metalsA).toBeGreaterThan(metalsB);
+    expect(metalsB).toBeGreaterThan(MID_METALS); // scarce ore still produces on the ramp
+    expect(metalsA).toBeGreaterThan(metalsB); // but scarce ore throttles output below abundant
   });
 });
 
