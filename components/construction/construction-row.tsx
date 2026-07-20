@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatMagnitude } from "@/lib/utils/format";
 import { formatEta } from "@/lib/utils/construction-format";
 
@@ -75,14 +76,16 @@ export function ConstructionRow({
             )}
           </span>
           {row.origin === "player" && onCancel && (
-            <button
+            <Button
               type="button"
+              variant="dismiss"
+              size="compact"
               aria-label="Cancel order"
               onClick={() => onCancel(row.id)}
-              className="ml-auto px-1.5 text-[11px] text-status-red-light transition-colors hover:text-status-red"
+              className="ml-auto border-transparent px-1.5 transition-colors hover:border-transparent hover:bg-transparent hover:text-status-red"
             >
               ✕ Cancel
-            </button>
+            </Button>
           )}
         </span>
       </p>

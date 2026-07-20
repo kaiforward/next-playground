@@ -10,42 +10,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { PopulationSummary } from "@/components/system/population-summary";
-import { needSeverity, splitNeedsLedger, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
+import { splitNeedsLedger } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
-
-// Tier swatch colours match the dataviz-validated categorical set (base copper /
-// technician deep-cyan / engineer purple) used elsewhere for consumer tiers.
-const TIER_META = [
-  { key: "base", label: "Base population", color: "#d06a42" },
-  { key: "technicians", label: "Technicians", color: "#0891b2" },
-  { key: "engineers", label: "Engineers", color: "#a855f7" },
-] as const;
-
-function NeedTooltip({ n }: { n: PopNeedData }) {
-  const sev = needSeverity(n.satisfaction);
-  return (
-    <div className="space-y-1 text-xs">
-      <div className="flex items-baseline justify-between gap-3 border-b border-border/60 pb-1">
-        <span className="font-display text-text-primary">{n.goodName}</span>
-        <span className={`font-mono ${SEVERITY_TEXT[sev]}`}>{SEVERITY_GLYPH[sev]} {Math.round(n.satisfaction * 100)}% met</span>
-      </div>
-      <p className="font-mono text-text-secondary">
-        want {n.want.toFixed(2)}/cyc · delivered {n.delivered.toFixed(2)}/cyc · pressure {n.pressure.toFixed(2)}
-      </p>
-      <div className="space-y-0.5 border-t border-border/60 pt-1">
-        {TIER_META.map((t) => (
-          <div key={t.key} className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-1.5 text-text-secondary">
-              <span aria-hidden className="inline-block h-2 w-2" style={{ backgroundColor: t.color }} /> {t.label}
-            </span>
-            <span className="font-mono text-text-primary">{n.breakdown[t.key].toFixed(2)}/cyc</span>
-          </div>
-        ))}
-      </div>
-      <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
-    </div>
-  );
-}
+import { NeedTooltipContent } from "@/components/system/need-tooltip-content";
 
 function NeedRow({ n }: { n: PopNeedData }) {
   return (
@@ -55,7 +22,7 @@ function NeedRow({ n }: { n: PopNeedData }) {
           <NeedCells n={n} density="panel" />
         </tr>
       </TooltipTrigger>
-      <TooltipContent className="w-64"><NeedTooltip n={n} /></TooltipContent>
+      <TooltipContent className="w-64"><NeedTooltipContent need={n} /></TooltipContent>
     </Tooltip>
   );
 }
