@@ -2,6 +2,7 @@
 
 import { useOrderBuild } from "@/lib/hooks/use-construction-orders";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { formatEta } from "@/lib/utils/construction-format";
 import type { BuildOptionData } from "@/lib/types/api";
 
@@ -22,15 +23,17 @@ export function QuickAddButton({ systemId, option }: { systemId: string; option:
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="outline"
+          size="iconXs"
           aria-label={`Queue +1 ${option.label} level`}
           disabled={blocked || order.isPending}
           onClick={() => order.mutate({ buildingType: option.buildingType, levels: 1 })}
-          className="inline-flex h-5 w-5 items-center justify-center border border-accent/40 bg-accent/10 font-mono text-[13px] leading-none text-accent transition-colors hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-35 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          className="border-accent/40 bg-accent/10 font-mono text-accent transition-colors hover:bg-accent/20 disabled:opacity-35"
         >
           +
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent side="left">
         {blocked && option.blocked ? (
