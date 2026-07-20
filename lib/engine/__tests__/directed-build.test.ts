@@ -483,7 +483,8 @@ describe("planFactionBuilds — proactive housing", () => {
     const starved: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100 }],
+      // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, satisfaction: 0 }],
     };
     expect(countFor(planFactionBuilds([starved], () => 1, DEV_REFS), "A", "housing")).toBe(0);
   });
@@ -617,8 +618,9 @@ describe("supplyDissatisfaction", () => {
   });
 
   it("is high when a heavily-demanded good is far below target", () => {
+    // satisfaction 0 models the unfed flow the fed-proxy now reads (low stock alone no longer counts).
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 1, targetStock: 20, demand: 100 },
+      { goodId: "food", stock: 1, targetStock: 20, demand: 100, satisfaction: 0 },
       { goodId: "luxuries", stock: 10, targetStock: 10, demand: 1 },
     ]);
     expect(d).toBeGreaterThan(0.5);
@@ -627,6 +629,38 @@ describe("supplyDissatisfaction", () => {
   it("returns 0 when nothing is demanded", () => {
     expect(supplyDissatisfaction([])).toBe(0);
     expect(supplyDissatisfaction([{ goodId: "ore", stock: 0, targetStock: 0, demand: 0 }])).toBe(0);
+  });
+});
+
+describe("supplyDissatisfaction — delivered flow", () => {
+  it("reads a fully-delivering exporter parked at comfort as satisfied (D = 0)", () => {
+    // Stock sits at 75% of its days-of-supply anchor — the old stock/target proxy read this as
+    // 25% unsatisfied — but the persisted flow says every unit demanded was actually delivered.
+    const d = supplyDissatisfaction([
+      { goodId: "food", stock: 15, targetStock: 20, demand: 10, satisfaction: 1 },
+    ]);
+    expect(d).toBe(0);
+  });
+
+  it("uses the persisted flow when present and 1 when missing", () => {
+    const starved = supplyDissatisfaction([
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10, satisfaction: 0 },
+    ]);
+    const missing = supplyDissatisfaction([
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10 },
+    ]);
+    expect(starved).toBeCloseTo(1, 5);
+    expect(missing).toBe(0);
+  });
+
+  it("still folds convexly by demand share", () => {
+    // food demand 30 (share 0.75, fully satisfied) vs water demand 10 (share 0.25, half-satisfied)
+    // → D = 0.25 × (1 − 0.5)^2 = 0.0625.
+    const d = supplyDissatisfaction([
+      { goodId: "food", stock: 20, targetStock: 20, demand: 30, satisfaction: 1 },
+      { goodId: "water", stock: 20, targetStock: 20, demand: 10, satisfaction: 0.5 },
+    ]);
+    expect(d).toBeCloseTo(0.25 * 0.25, 5);
   });
 });
 
@@ -642,7 +676,8 @@ describe("fedAndCalm", () => {
   });
 
   it("is false when the system is starved (high supply dissatisfaction)", () => {
-    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100 }];
+    // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
+    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, satisfaction: 0 }];
     expect(fedAndCalm(sysWith({ goods: starved, unrest: 0 }))).toBe(false);
   });
 });

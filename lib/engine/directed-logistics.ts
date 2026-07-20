@@ -69,6 +69,8 @@ export interface GoodMarketState {
   demand: number;
   /** Local production rate of this good. A system that self-supplies (production ≥ demand) is never a deficit sink — its low standing stock is throughput, not need, and importing more just piles it against the ceiling and decays its own producers. */
   production: number;
+  /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1) — the build planner's fed-proxy input; the matcher itself does not read it. */
+  satisfaction?: number;
 }
 
 export interface SystemLogisticsState {

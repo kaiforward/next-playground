@@ -18,6 +18,8 @@ export interface MarketRowForLogistics {
   anchorMult: number;
   demandRate: number;
   storageCapacity: number;
+  /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1). */
+  satisfaction?: number;
 }
 
 /** One system's logistics-relevant state. */

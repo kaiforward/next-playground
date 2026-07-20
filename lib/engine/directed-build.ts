@@ -46,6 +46,12 @@ export interface BuildGoodState {
    * supplies it via toGoodMarketStates (a GoodMarketState, which carries production).
    */
   production?: number;
+  /**
+   * Persisted consumption satisfaction from the last economy pulse (delivered ÷ demanded, ∈
+   * [0,1]; missing ⇒ 1) — supplyDissatisfaction's only input. stock/targetStock stay on this
+   * type for the deficit finder and severity weights; they no longer feed the fed-proxy.
+   */
+  satisfaction?: number;
 }
 
 /** A system's buildable state — markets + the body-derived capacity it can build into. */
@@ -96,16 +102,17 @@ export function hopRouteCost(
 }
 
 /**
- * Stock-coverage dissatisfaction D in [0,1] for one system — the "fed" half of the
- * settle gate. Reuses the population engine's demand-weighted convex fold, with a
- * stock-based satisfaction proxy (stock ÷ targetStock, clamped): the build planner
- * sees standing market state, not the economy's per-tick delivered/demanded flow, so
- * a good sitting at or above its days-of-supply anchor reads as satisfied.
+ * Delivered-flow dissatisfaction D in [0,1] for one system — the "fed" half of
+ * the settle gate. Reuses the population engine's demand-weighted convex fold
+ * over the economy pulse's persisted per-good satisfaction (delivered ÷
+ * demanded — the same measure the needs display reads), so a
+ * deliberately-at-comfort exporter with full delivery reads as satisfied.
+ * Missing satisfaction (engine-test fixtures, pre-change saves) ⇒ 1.
  */
 export function supplyDissatisfaction(goods: BuildGoodState[]): number {
   return dissatisfaction(
     goods.map((g) => ({
-      satisfaction: g.targetStock > 0 ? clamp(g.stock / g.targetStock, 0, 1) : 1,
+      satisfaction: clamp(g.satisfaction ?? 1, 0, 1),
       demanded: Math.max(0, g.demand),
     })),
   );
