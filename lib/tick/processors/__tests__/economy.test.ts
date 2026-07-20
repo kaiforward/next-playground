@@ -586,9 +586,9 @@ describe("satisfaction — measured flow, persisted", () => {
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    const persisted = satOf(world, "sys-fold")!;
-    const d = result.economySignals!.dissatisfactionBySystem.get("sys-fold")!;
-    expect(d).toBeCloseTo(0.25, 6);
-    expect(d).toBeCloseTo((1 - persisted) ** 2, 10); // exactly (1 − persisted)², same value
+    const persisted = satOf(world, "sys-fold");
+    const d = result.economySignals?.dissatisfactionBySystem.get("sys-fold");
+    expect(persisted).toBeCloseTo(0.5, 6); // the persisted flow measure
+    expect(d).toBeCloseTo(0.25, 6); // = (1 − 0.5)², folded from that same persisted value
   });
 });
