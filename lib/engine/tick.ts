@@ -1,11 +1,13 @@
 /**
  * Economy simulation tick engine — single-stock model.
  *
- * Each market holds one `stock` value. Producers add stock (self-limiting near
- * the ceiling), consumers drain it (self-limiting near the floor), then the value
- * is clamped to each market's own [minStock, maxStock] band. There is no
- * mean-reversion and no `demand` axis — equilibrium emerges spatially via the
- * trade-flow processor. See docs/active/gameplay/economy.md (Per-Tick Simulation).
+ * Each market holds one `stock` value. Producers add stock at the full rate at and
+ * below the anchor (targetStock), then decelerate linearly to zero at the operating
+ * ceiling (holdCover × targetStock). Consumers deliver in full at and above the
+ * comfort knee (comfortCover × targetStock), then ration on the scarcity ramp below
+ * it. Stock is clamped to [0, maxStock]. There is no mean-reversion and no `demand`
+ * axis — equilibrium emerges spatially via the trade-flow processor.
+ * See docs/active/gameplay/economy.md (Per-Tick Simulation).
  *
  * All functions are pure — no DB or constant imports.
  */
@@ -15,7 +17,7 @@ import { clamp } from "@/lib/utils/math";
 export interface MarketTickEntry {
   goodId: string;
   stock: number;
-  /** Stock floor for this market entry — scarcity reserve and buy-price floor. */
+  /** Price-saturation point (price hits its ceiling here). Not a draw floor — retained for the decay-uptake band read. */
   minStock: number;
   /**
    * Days-of-supply anchor (price === basePrice). The produce throttle saturates at
@@ -121,24 +123,24 @@ export function simulateEconomyTick(
   markets: MarketTickEntry[],
   params: EconomySimParams,
 ): MarketTickEntry[] {
-  const { holdCover } = params;
+  const { holdCover, comfortCover } = params;
 
   return markets.map((entry) => {
     let stock = entry.stock;
-    const { minStock, maxStock } = entry;
+    const { maxStock, targetStock } = entry;
 
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
     if (effectiveProduction > 0) {
-      const operatingCeiling = entry.targetStock * holdCover;
-      stock += effectiveProduction * selfLimitingFactor(stock, minStock, operatingCeiling, "produce");
+      stock += effectiveProduction * productionCeiling(stock, targetStock, holdCover);
     }
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
     if (effectiveConsumption > 0) {
-      stock -= effectiveConsumption * selfLimitingFactor(stock, minStock, entry.targetStock, "consume");
+      const factor = consumptionFactor(stock, comfortCover * targetStock);
+      stock -= Math.min(effectiveConsumption * factor, Math.max(0, stock));
     }
 
-    stock = clamp(stock, minStock, maxStock);
+    stock = clamp(stock, 0, maxStock);
 
     return { ...entry, stock };
   });

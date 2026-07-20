@@ -28,12 +28,18 @@ function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
 }
 
 describe("simulateEconomyTick — production", () => {
-  it("raises stock for a producer, self-limiting near the ceiling", () => {
-    const mid = simulateEconomyTick([entry({ productionRate: 10, stock: 100 })], PARAMS);
-    expect(mid[0].stock).toBeGreaterThan(100);
-    const high = simulateEconomyTick([entry({ productionRate: 10, stock: 199 })], PARAMS);
-    expect(high[0].stock - 199).toBeLessThan(mid[0].stock - 100); // slows near MAX
-    expect(high[0].stock).toBeLessThanOrEqual(200); // clamped
+  it("produces at the FULL rate at and below the anchor", () => {
+    const atAnchor = simulateEconomyTick([entry({ productionRate: 10, stock: 100 })], PARAMS);
+    expect(atAnchor[0].stock).toBeCloseTo(110); // no throttle at the anchor
+    const low = simulateEconomyTick([entry({ productionRate: 10, stock: 20 })], PARAMS);
+    expect(low[0].stock).toBeCloseTo(30);
+  });
+
+  it("ramps linearly to zero across the deceleration zone [T, 1.3T]", () => {
+    const mid = simulateEconomyTick([entry({ productionRate: 10, stock: 115 })], PARAMS);
+    expect(mid[0].stock).toBeCloseTo(115 + 10 * 0.5);
+    const atCeiling = simulateEconomyTick([entry({ productionRate: 10, stock: 130 })], PARAMS);
+    expect(atCeiling[0].stock).toBeCloseTo(130);
   });
 
   it("does nothing when the production rate is zero or undefined", () => {
@@ -60,25 +66,28 @@ describe("simulateEconomyTick — operating ceiling", () => {
   });
 });
 
-describe("simulateEconomyTick — anchor-relative consumption", () => {
-  it("consumes at the full nominal rate once stock is at/above the anchor", () => {
-    // targetStock 100: consume factor = 1 at the anchor and above (clamped).
-    const atAnchor = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
-    expect(100 - atAnchor[0].stock).toBeCloseTo(10, 5);
+describe("simulateEconomyTick — consumption", () => {
+  it("delivers in full at and above the comfort knee", () => {
+    const atComfort = simulateEconomyTick([entry({ consumptionRate: 10, stock: 75 })], PARAMS);
+    expect(atComfort[0].stock).toBeCloseTo(65); // full draw, no ration
+    const deep = simulateEconomyTick([entry({ consumptionRate: 10, stock: 150 })], PARAMS);
+    expect(deep[0].stock).toBeCloseTo(140);
+  });
 
-    const above = simulateEconomyTick([entry({ consumptionRate: 10, stock: 150 })], PARAMS);
-    expect(150 - above[0].stock).toBeCloseTo(10, 5);
+  it("rations on the scarcity ramp below comfort and can draw below the old minStock", () => {
+    const scarce = simulateEconomyTick([entry({ consumptionRate: 10, stock: 30 })], PARAMS);
+    // factor = sqrt(30/75) ≈ 0.632 → draw ≈ 6.32; ends ≈ 23.7, below the old 50 floor
+    expect(scarce[0].stock).toBeCloseTo(30 - 10 * Math.sqrt(30 / 75), 1);
+    expect(scarce[0].stock).toBeLessThan(50);
+  });
+
+  it("never draws more than the stock that exists (stock floors at 0, not minStock)", () => {
+    const nearEmpty = simulateEconomyTick([entry({ consumptionRate: 1000, stock: 5 })], PARAMS);
+    expect(nearEmpty[0].stock).toBeGreaterThanOrEqual(0);
   });
 });
 
-describe("simulateEconomyTick — consumption", () => {
-  it("lowers stock for a consumer, self-limiting near the floor", () => {
-    const mid = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
-    expect(mid[0].stock).toBeLessThan(100);
-    const low = simulateEconomyTick([entry({ consumptionRate: 10, stock: 6 })], PARAMS);
-    expect(low[0].stock).toBeGreaterThanOrEqual(5); // clamped at MIN
-  });
-
+describe("simulateEconomyTick — consumption multipliers", () => {
   it("applies event consumption multipliers", () => {
     const base = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
     const boosted = simulateEconomyTick([entry({ consumptionRate: 10, consumptionMult: 2, stock: 100 })], PARAMS);
@@ -214,21 +223,21 @@ describe("selfLimitingFactor", () => {
 // ── Per-entry band: clamp + per-entry self-limiting ────
 
 describe("simulateEconomyTick — per-entry band", () => {
-  it("self-limiting uses the entry's own min/max", () => {
-    expect(selfLimitingFactor(10, 10, 90, "consume")).toBe(0); // at floor → no consumption
-    expect(selfLimitingFactor(90, 10, 90, "produce")).toBe(0); // at ceiling → no production
+  it("clamps stock to [0, maxStock]", () => {
+    const low = { goodId: "ore", stock: -5, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const outLow = simulateEconomyTick([low], PARAMS)[0];
+    expect(outLow.stock).toBe(0);
+
+    const high = { goodId: "ore", stock: 100, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const outHigh = simulateEconomyTick([high], PARAMS)[0];
+    expect(outHigh.stock).toBe(90);
   });
 
-  it("clamps stock up to the entry's own minStock", () => {
-    const e = { goodId: "ore", stock: 5, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
-    const out = simulateEconomyTick([e], PARAMS)[0];
-    expect(out.stock).toBe(10);
-  });
-
-  it("clamps stock down to the entry's own maxStock", () => {
-    const e = { goodId: "ore", stock: 100, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
-    const out = simulateEconomyTick([e], PARAMS)[0];
-    expect(out.stock).toBe(90);
+  it("does not use minStock as a floor (price-saturation point only)", () => {
+    const belowMin = { goodId: "ore", stock: 3, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 10 };
+    const out = simulateEconomyTick([belowMin], PARAMS)[0];
+    expect(out.stock).toBeLessThan(10); // can go below minStock via consumption
+    expect(out.stock).toBeGreaterThanOrEqual(0); // but not below 0
   });
 });
 
