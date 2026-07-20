@@ -320,8 +320,10 @@ describe("buildIndustryReadout", () => {
     const readout = buildIndustryReadout(producer, producerPop, { ore: 2 }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     const gross = buildingProduction(producer, "metals", computeLabourState(producer, producerPop), unitResourceVector());
-    expect(metals.output!).toBeGreaterThan(0); // not floored to zero
-    expect(metals.output!).toBeLessThan(gross); // but the ramp still throttles
+    const out = metals.output;
+    expect(out).toBeDefined();
+    expect(out).toBeGreaterThan(0); // not floored to zero
+    expect(out).toBeLessThan(gross); // but the ramp still throttles
   });
 
   it("marks throttledBy only when the scarcity ramp binds, not at a fixed floor", () => {
