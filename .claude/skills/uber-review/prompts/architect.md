@@ -34,6 +34,7 @@ Does the code actually deliver what the change set out to do? This lens checks t
 - A **material requirement** the spec states that the code does not implement — or implements only partially, or differently — with no explanation.
 - Edge cases, states, or interactions the spec explicitly calls out that the code silently drops.
 - When the spec was folded into `docs/active/` in this same diff: whether that folded doc **faithfully reflects both the spec's intent and the code's actual as-built behaviour**. A fold that overstates, understates, or misdescribes what shipped is itself a finding.
+- When the orchestrator has marked this review as the **final pre-merge review**: the doc fold must be present in the diff. A final-review diff with **no** fold (no spec promoted into `docs/active/`, build plan not deleted) means the doc lifecycle was forgotten — emit a `major` finding, category `missing-doc-fold`. (Without that marking, absence of a doc means Lens 2 simply doesn't apply — phase PRs legitimately ship without the fold.)
 
 **What not to do:**
 - Do **not** critique whether the spec's design is *sound*, sensible, or complete — that is an upstream decision. Assume the intent is correct and check only whether the code meets it.
@@ -96,7 +97,7 @@ Schema:
 - If you have no findings, return `{ "severity": "clean", "findings": [] }`.
 - `findings` may include `blocker`/`major`/`minor`/`info` items even when top-level severity is `clean` (your overall verdict may be benign even with notes).
 - The top-level `severity` should equal the **highest** severity present in `findings` (or `clean` if empty).
-- Category naming: for Lens 1 use approach slugs (`pattern-drift`, `library-misuse`, `module-boundary-violation`, `type-safety-bypass`, `missing-abstraction`); for Lens 2 use `missing-spec-requirement`, `partial-spec-requirement`, or `fold-vs-spec-mismatch`.
+- Category naming: for Lens 1 use approach slugs (`pattern-drift`, `library-misuse`, `module-boundary-violation`, `type-safety-bypass`, `missing-abstraction`); for Lens 2 use `missing-spec-requirement`, `partial-spec-requirement`, `fold-vs-spec-mismatch`, or `missing-doc-fold` (final reviews only).
 
 ## Context you receive
 

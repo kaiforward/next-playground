@@ -18,6 +18,8 @@ You look for:
 
 - **Non-atomic world mutation** — a mutation path that commits partial world state before a tick fully succeeds, or a service writing directly to the store outside the single-owner discipline. Atomicity comes from the store accepting only a fully-successful tick (no `setWorld` on a failed tick). — category: `non-atomic-world-write`
 
+- **World shape change without a save-format bump** — a `World` row or `meta` field added, renamed, or removed (in `lib/world/types.ts` or the shapes it composes) with no `SAVE_FORMAT_VERSION` bump in `lib/world/save.ts`. Old save files then deserialize into a shape the code no longer expects — silent corruption on load. The bump is what makes old saves fail loudly instead. — category: `save-version-not-bumped`
+
 ## Severity
 
 - `world-not-serializable` / `unguarded-tick-math` that can reach `World` state → `major` (silent save corruption is high-impact); `blocker` only if the fix restructures a whole processor's data flow.
@@ -25,6 +27,7 @@ You look for:
 - `static-node-edge-in-pure-path` → `major` (breaks worker portability).
 - `processor-bypasses-world-interface` → `major`; `blocker` if it's a pervasive new pattern.
 - `non-atomic-world-write` → `major`.
+- `save-version-not-bumped` → `major` (old saves silently corrupt on load).
 
 ## What to read
 

@@ -57,9 +57,12 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   Below it, satisfaction ramps convexly (√-shaped: gentle just under the knee, brutal near empty)
   to 0 at **stock = 0** — not at the floor (§4). Healthy systems have satisfaction exactly 1 and
   contribute zero structural dissatisfaction.
-- **Satisfaction is a flow, measured once**: satisfaction := the consumption factor actually
-  applied this pulse (delivered ÷ demanded), not a re-derived stock position. The tick computes it;
-  dissatisfaction, the needs UI, and the regime chips all read that one value. This kills the
+- **Satisfaction is a flow, measured once — and persisted so its readers exist**: satisfaction :=
+  the consumption factor actually applied this pulse (delivered ÷ demanded), not a re-derived
+  stock position. The economy pulse persists it per (system, good) to `World`
+  (JSON-serializable; missing ⇒ 1); dissatisfaction, the needs UI, the regime chips, and the §2
+  squeeze counters all read that stored value — never a stock recompute (the read services and
+  planners have no other path to the flow; see §2's plumbing note). This kills the
   boundary bias of post-tick stock reads (a month that starts at 0.76T delivers in full but ends
   ~0.735T) and retires the two secondary computation sites that would otherwise contradict the sim:
   the pop-needs display projection (`lib/engine/pop-needs.ts`) and the build planner's linear
@@ -77,24 +80,39 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   on the provisioning margin's timescale (~0.25%-of-T/month at margin 0.1) with price elevated
   meanwhile — accepted: price doubles as a shock-age gauge; the margin is sized against recovery
   time in calibration and the harness watches shock-recovery tails (§8).
-- **Selling/decay signal is a FLOW, not a stock position**: producers'
-  `used = staffed × min(1, realizedFraction + USED_SLACK)` where `realizedFraction = realized
-  output ÷ (capacity × catchUp)`, from the already-emitted `realizedProductionBySystem`. A
-  stock-position read is structurally broken for exporters: the band is scaled by *local* demand
-  (`demandRate` floors at `MIN_DEMAND`), while an exporter's capacity serves *remote* demand — a
-  pure-extractor colony's single level can out-produce its entire deceleration zone in one pulse,
-  so a stock-sampled signal either reads every structural exporter permanently idle (galaxy-wide
-  teardown — the exact hazard the current code's storage-band read exists to avoid) or flaps 0/1
-  with the monthly ship-out cycle. The flow read is immune: an exporter that ships its output
-  realized full production, wherever the demand lives. Healthy producers read fully used;
-  genuinely glutted or demand-dead producers (realized → 0) read idle and prune to fit. A single
+- **Selling/decay signal is the ISOLATED ceiling term — not realized output, and not the old
+  storage-band position**: producers' `used = count × min(effectiveFulfilment, sellingFactor +
+  USED_SLACK)`, where `sellingFactor` is the produce-direction ceiling throttle alone (the §1
+  knee curve at the pulse's stock — the "warehouse full, output unwanted" brake the sim already
+  computes as its own term). Staffing stays its own separate min, counted once, exactly as the
+  shipped `buildingUsed` composes it. **The signal must never read realized / suppressed /
+  input-gated output** — realized output folds in labour fulfilment, the input gate, strike
+  suppression, the maintenance output malus, and event production multipliers, and each would
+  leak non-glut suppression into demolition: an insolvent faction's fully-staffed producers would
+  shed levels (violating the purse's load-bearing flow-only guarantee — the malus scales output,
+  never the idle signal), a multi-month strike or event episode would convert into permanent
+  capacity loss, and an input-starved factory would read as glut while its stock visibly drains
+  (turning the supply-chain cascade from throttle into teardown). Asserted in tests (§7). Why not
+  the old storage-band read: it is structurally broken for exporters — the band is scaled by
+  *local* demand (`demandRate` floors at `MIN_DEMAND`) while an exporter's capacity serves
+  *remote* demand, so a pure-extractor colony's single level can out-produce its deceleration
+  zone in one pulse. The isolated ceiling term is immune where it matters: §2 draws structural
+  exporters to comfort each logistics pulse, so their start-of-pulse stock sits at or below the
+  anchor where the throttle is flat (reads fully selling); genuinely glutted or demand-dead
+  producers pile into `[T, 1.3×T]`, throttle toward 0, and prune to fit. **Funding-bound
+  exclusion (mirrors §2's build-side exclusion)**: a producer whose good has reachable structural
+  deficits but whose shipment was funding-limited (the matcher ran out of funded haul budget)
+  reads as used, not glut — wanted-but-unshipped is a treasury/logistics-funding problem, and
+  pruning demand-backed export capacity during a funding dip would ratchet capacity down one-way
+  (decay prunes the exporter while the backstop refuses to build at the importer). A single
   deliberately-overshot level on a small colony stays decay-safe via the existing whole-level
   floor.
 - **Regimes fall out of the same constants, with hysteresis**: Comfortable (satisfaction = 1),
   Squeezed (rationing active), Shortage (satisfaction < 0.5 — the existing critical severity
-  threshold, reused), plus Glut as the producer-side exception, defined on the **selling term
-  alone** (`realizedFraction + slack < 1` — understaffed and input-short are their own §6 states,
-  not Glut). Regime transitions carry an enter/exit band (`COMFORT_EXIT_EPS` ≈ 0.05 of the
+  threshold, reused), plus Glut as the producer-side exception, defined on the **isolated selling term alone**
+  (`sellingFactor + slack < 1`), with **precedence**: understaffed and input-short classify first
+  (their own §6 states) — only a fully-staffed, input-satisfied producer can read Glut, and the
+  selling factor contains no labour or input term to conflate them. Regime transitions carry an enter/exit band (`COMFORT_EXIT_EPS` ≈ 0.05 of the
   satisfaction/stock boundary) so systems parked at a boundary — §2 deliberately parks exporters
   at comfort — don't flap chips or spam the future alert feed. §6 makes the UI speak them.
 
@@ -131,14 +149,27 @@ recalibration.
   it is proposable, and each pulse proposes at most `BUILD_RATE_CAP` (~⅓–½, calibrated) of a good's
   outstanding gap — the correction ramps over 2–3 months. Distance-weighting the spare pool is a
   noted possible refinement, deliberately not in this pass.
-- **New stored state**: the squeeze-persistence and proposal-persistence counters are
-  per-(system, good) `World` state — JSON-serializable, save-compatible (missing ⇒ 0), mirroring
-  §5's idle-counter story.
+- **New stored state + plumbing (the new signals need carriers — none exists today)**: the
+  squeeze-persistence and proposal-persistence counters AND §1's per-pulse satisfaction are
+  per-(system, good) `World` state — JSON-serializable, save-compatible (missing ⇒ 0 for
+  counters, 1 for satisfaction), mirroring §5's idle-counter story. The realized-aware
+  classification additionally needs realized/suppressed production threaded to the planners:
+  today `runWorldTick` hands directed-logistics and directed-build a bare `{ tick }` ctx (no
+  `economySignals`), and their row types carry no unrest or maintenance malus to re-derive
+  suppression locally — extend the planner rows (or ctx.results) explicitly. Off-month-pulse
+  fallback: when the logistics/construction pulse lands where `economySignals` is undefined, the
+  planners read the last persisted month-pulse values.
 - **The government consumption boost folds into `demandRate`**: today it is added to the drain
   *after* the band is built, so on low-civilian-demand goods (weapons/fuel at militarist systems)
   the anchor understates true demand up to ~2×, the §6 cover chip would lie, and the boost can
   exceed the provisioning margin entirely — parking those goods permanently in the backstop path.
-  Folding it in makes the band, the margin, and the cover chip all see the real drain.
+  Folding it in makes the band, the margin, and the cover chip all see the real drain. **Fold at
+  the shared civilian-demand chokepoint** (`consumptionRate` / `capacityGoodRates`, threading the
+  system's government type) — not the stored `demandRate` column alone: the planner/logistics
+  demand is recomputed fresh in `toGoodMarketStates` from that chokepoint and would otherwise
+  stay gov-blind, leaving the self-supply gate and deficit sizing under-provisioned on exactly
+  these goods. Test: a militarist system's planner-side weapons/fuel demand equals civilian +
+  industrial + boost.
 - **Logistics under the new geometry**: the matcher already converges receivers on the anchor,
   above the comfort knee — imports arrive before rationing starts. New constant dependency asserted
   in tests: `DEFICIT_FRACTION > COMFORT_COVER`. **Decision**: structural exporters
@@ -159,9 +190,11 @@ recalibration.
   people — **land exhaustion drives colonisation**. Migration *destinations* stay capped at popCap
   (people move to where housing exists — coherent), and to keep the galaxy's absorption capacity
   real now that the 25% pre-provision is retired, **colony establishment bundles one housing level
-  beyond the seed's need** so new worlds open with genuine headroom; the harness gains a
-  migration-throughput metric (§8) and the relief target (0.92) is the calibration lever if
-  galaxy-wide migration turns construction-latency-bound.
+  beyond the seed's need — where habitable land permits** — so new worlds open with genuine
+  headroom (the sizing helper clamps housing to habitable capacity, so a land-tight seed opens at
+  r ≈ 1.0 and relies on the crowd brake + migration push instead); the harness gains a
+  migration-throughput metric (§8, read on land-tight seeds specifically) and the relief target
+  (0.92) is the calibration lever if galaxy-wide migration turns construction-latency-bound.
 - **The overshoot-death channel is rescoped to the collapse regime**: it fires only while
   `unrest > the strike threshold`. Today "pop > popCap" is *synonymous* with housing rot (growth
   and migration both hard-cap at popCap), so the death term's trigger doubled as rot detection;
@@ -192,17 +225,32 @@ recalibration.
 
 ## 4. The floor — pricing construct, not a goods wall
 
-- `minStock` keeps one job: where the price curve saturates at the ceiling. **Both** stock clamps
-  become `[0, maxStock]` — the tick's, and the event-shock adapter's (`applyShocks` clamps at
-  `minStock` today, which would leave supply-destruction events unable to push a market below
-  0.5×T: the one mechanic that should create the spec's real crises would be floored above the
-  zone where crises exist). Consumption and recipe draws run toward empty. The UI never draws the
-  saturation point as an untouchable reserve; vocabulary: **price saturation point**.
+- `minStock` keeps one job: where the price curve saturates at the ceiling. **Every**
+  `minStock`-floor site moves off it — the enumeration is exhaustive, not two clamps: the tick's
+  stock clamp and the event-shock adapter's (`applyShocks` clamps at `minStock` today, which
+  would leave supply-destruction events unable to push a market below 0.5×T: the one mechanic
+  that should create the spec's real crises would be floored above the zone where crises exist)
+  both become `[0, maxStock]`; the input gate's drawable (`max(0, stock − minStock)`, in the sim
+  and the read-path recomputes) becomes `max(0, stock)`; and the recipe draw floor
+  (`max(minStock, stock − draw)`) becomes `max(0, stock − draw)`. The directed-logistics
+  transfer's source floor is governed by `surplusDrawable`'s comfort/anchor floor, not
+  `minStock` — its lingering `minStock` reference is cleaned up with the pass. Consumption and
+  recipe draws run toward empty. The UI never draws the saturation point as an untouchable
+  reserve; vocabulary: **price saturation point**.
+- **Seed stocks stop inheriting the retired floor**: world-gen's initial stock currently clamps
+  to `[minStock, maxStock]`, seeding pure consumers at exactly 0.5×T — below the comfort knee,
+  so new colonies would open Squeezed. Seeds clamp to `[COMFORT_COVER × T, maxStock]` instead
+  (colonies open Comfortable; coarse first-cut, calibratable), and `getInitialStock`'s doc drops
+  the floor vocabulary.
 - **Decision — shared scarcity ramp**: below comfort, civilian consumption and industrial input
   draws ration on the same curve proportional to demand share. No ordering rule; civilian pain
   already dominates unrest via the convex dissatisfaction fold; industry pain cascades legibly
   through input-gated output. (Rejected: civilian-priority draws — extra machinery, and
-  self-defeating when pops eat a food plant's biomass input.)
+  self-defeating when pops eat a food plant's biomass input.) Written out for a co-consumed
+  good: total drawable this pulse = `convexRamp(stock) × totalDemand`, split civilian :
+  industrial by demand share; **civilian satisfaction = civilian-delivered ÷ civilian-demanded**
+  (the flow §1 stores), so a co-consumed good's regime chip rides the civilian delivered
+  fraction, not raw stock position.
 - **Crisis becomes real and only real**: true empty (satisfaction 0, unrest climbing into
   strike/collapse) is reachable only in genuine catastrophe, never as a market's resting state.
 - **Designed later promotion** (not built now): with purse Stage 2–3 monetisation, a *legible*
@@ -218,7 +266,11 @@ recalibration.
   reads, and single-level overshoot protection all stay exactly as built.
 - **Couplings recorded**: maintenance funding's `bufferScale` (purse Plan 2) now governs
   glut-pruning speed and dead-colony persistence rather than a background treadmill — re-checked in
-  §8. Stored idle-month counters survive saves harmlessly (healthy systems zero them on the first
+  §8. The decay-signal invariant lives here too: **the producer decay/Glut signal must never read
+  realized, suppressed, or input-gated output** — the purse's flow-only guarantee (the malus
+  scales output *after* utilisation is measured) extends to strike and event suppression, and the
+  §1 funding-bound exclusion keeps a treasury dip from pruning demand-backed exporters. Stored
+  idle-month counters survive saves harmlessly (healthy systems zero them on the first
   post-change run).
 
 ## 6. Presentation contract — the panels speak regimes
@@ -226,14 +278,26 @@ recalibration.
 Content contract only; concrete layout gets the house collaborative wireframe pass at build time.
 
 - **Per-good regime chip** (Comfortable / Squeezed / Shortage / Glut) everywhere a good appears,
-  driven by the §1 constants — the UI cannot contradict the simulation.
+  driven by the §1 constants — the UI cannot contradict the simulation. **Precedence** for a good
+  both produced and consumed locally: the consume regime wins, except Comfortable + producer-side
+  Glut shows **Glut** (the actionable state); Squeezed/Shortage exclude Glut by construction (low
+  stock ⇒ full-rate production).
 - **Days of cover is the primary unit** (stock ÷ demand rate, against anchor 40 / comfort 30); raw
   units demote to tooltips.
 - **The Industry roster's "Worked" column splits**: a *Staffed* figure (pure labour, per grade) and
   a *state chip* naming the condition (producing / glut-idling / input-short on *which* input /
   understaffed on *which* grade). The single number that blended staffing with selling is retired.
+  **Read-side derivation specified**: because §1's selling factor is the isolated ceiling
+  throttle (stock + band only — no unrest/malus needed), the read service recomputes it exactly;
+  `UtilizationContext.outputUptake` becomes the selling-factor accessor at both call sites (the
+  decay engine and `buildIndustryReadout`), so the tick and the panel read one definition and
+  cannot diverge. Staffing/input chips come from the labour state and input gates the readout
+  already derives.
 - **Needs panel**: "pops short X%" appears only below comfort — after §1 that is always a real
-  problem, never ambient noise. Severity thresholds ride the regime constants.
+  problem, never ambient noise. Severity thresholds ride the regime constants — concretely, the
+  read-side severity bands adopt them: met = Comfortable (satisfaction ≈ 1 within
+  `COMFORT_EXIT_EPS`), short = Squeezed, critical = Shortage (< 0.5); the legacy 0.95 "met" band
+  is retired.
 - **Population panel shows the crowding state**: occupancy routinely exceeds 100% under §3, so the
   occupancy bar gains an overshoot treatment plus a crowding chip (comfortable / crowding /
   braked) — in this pass, not deferred; today's bar simply cannot represent the designed-normal
@@ -261,7 +325,9 @@ Content contract only; concrete layout gets the house collaborative wireframe pa
 | overshoot-death gate | strike threshold (0.65) | Unrest above which the overshoot-death term fires (collapse regime only) |
 | colony housing margin | +1 level | Housing bundled beyond seed need — new worlds open with real headroom |
 
-Constant dependency asserted in tests: `DEFICIT_FRACTION > COMFORT_COVER`.
+Constant dependencies asserted in tests: `DEFICIT_FRACTION > COMFORT_COVER`; and the decay/Glut
+selling factor contains no labour, input-gate, strike, maintenance, or event term (the purse
+flow-only invariant, §1/§5).
 
 ## 8. Interactions, recalibration, validation
 
@@ -283,7 +349,12 @@ Constant dependency asserted in tests: `DEFICIT_FRACTION > COMFORT_COVER`.
   becomes the healthy resting state, not a pathology — the new pathology is r pinned at the crowd
   brake with relief blocked); add a migration-throughput metric (verifies absorption pacing after
   the pre-provision retires, §3) and a shock-recovery-tail read (price recovery time through the
-  §1 dead zone).
+  §1 dead zone). Two existing instruments re-base to the new geometry: `computeCoverLevels`
+  excludes structural exporters (production ≥ demand) from deficit classification — §2 parks them
+  at comfort deliberately, the live matcher's self-supply gate already excludes them, and the
+  unpatched metric would report false deficits exactly where the design is healthiest; and the
+  stock-pin metric re-bases from the retired `minStock` clamp to true floor pins (stock ≈ 0, the
+  Shortage regime), updating its "literal clamp" doc language.
 
 ## Out of scope
 

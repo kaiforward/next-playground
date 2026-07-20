@@ -23,6 +23,7 @@ You look for:
 - A test that's just `expect(fn()).toBeDefined()` — meaningless
 - A test that stubs the world store instead of seeding a real generated world (`generateWorld` + `setWorld`) or the in-memory tick adapters
 - A test that doesn't actually exercise the changed path
+- A **new gameplay mechanic with no sim-harness evidence** — a new tick processor or economy behaviour shipping with only isolated engine fixtures and no simulator run/metric demonstrating the actual outcome. Isolated fixtures pass while the galaxy is broken; the project practice is to prove mechanics via `npm run simulate` (the real tick) measuring the outcome, adding a sim metric when the symptom hides in aggregate health.
 
 ## Suggested category slugs
 
@@ -35,6 +36,7 @@ You look for:
 - `weak-assertion`
 - `world-store-stubbed`
 - `test-misses-changed-path`
+- `no-sim-evidence`
 
 ## Severity
 
@@ -44,6 +46,7 @@ You look for:
 - Missing service test → `major` for non-trivial methods, `minor` for thin wrappers
 - Weak assertion → `minor`
 - Stubbing the world store instead of seeding a real world → `major` (convention: use `generateWorld` / the in-memory adapters)
+- `no-sim-evidence` → `major` for a new processor/mechanic; `info` when the change tweaks an existing, already-measured mechanic
 
 ## Output
 

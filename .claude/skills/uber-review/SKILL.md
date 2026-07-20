@@ -56,6 +56,16 @@ So before dispatching any agent, check out the PR head so the tree matches the d
 
 No need to restore the original branch afterward — fixes land on this branch anyway. (If the tree is dirty and checkout would fail, skip it and instead tell every agent to rely only on the provided chunk diff and not Read source.)
 
+### 1.2. Determine the review stage
+
+Every review is either a **phase** review or the **final** pre-merge review, and you can always tell which from signals you already have:
+
+- Diff base is a **shared feature branch** → **phase** review. No doc fold expected.
+- Diff base is **main** and this is the pre-merge whole-branch review (known from session context — the user asks for it deliberately before merging) → **final** review. The feature's doc lifecycle (spec promoted to `docs/active/`, umbrella + `docs/SPEC.md` updated, build plan deleted) must already be on the branch at this point.
+- Genuinely ambiguous (e.g. a single-PR feature reviewed mid-work against main) → ask the user which it is; one question beats a wrong assumption.
+
+State the determination in the report header (`Stage: final` / `Stage: phase`). On a **final** review, append to the architect's prompt (step 2): "This is the final pre-merge review — the feature's doc fold must be present in this diff. If the diff contains no doc fold (no spec promoted into docs/active/, build plan not deleted), emit a `major` finding with category `missing-doc-fold`." Phase reviews keep Lens 2's default behaviour (no doc in diff → silently skip).
+
 ### 1.5. Classify each changed file
 
 For each file in the diff, assign one classification:
@@ -227,70 +237,26 @@ For each group with >1 finding:
 - Record `agents` as the array of co-flaggers (e.g., `["boundary-safety", "data-contract"]`)
 - Pick first `suggested_fix` that's non-empty
 
-**Pass 2 — semantic merge (Haiku, on-demand).**
+**Pass 2 — semantic merge** is handled by the validator batches in step 5: the validator sees same-file findings side by side and flags same-issue duplicates in its output. No dedicated dedup agents.
 
-After Pass 1, scan for findings at the same `(file, overlapping line range)` but with **different** categories.
+### 5. Validate findings (batched by file)
 
-Define "overlapping line range": if finding A is `42-45` and finding B is `44-50`, they overlap. If finding A is `42` and finding B is `60`, they don't.
+Validation runs as **file-grouped batches**, not one agent per finding — same-file findings share code context, and the per-agent fixed overhead is paid once per batch instead of once per finding.
 
-For each such pair (at most 5-15 per typical PR):
+- `info` findings pass through with `confidence: 100, reason: "info, not validated"` and join no batch.
+- Group the remaining pool by `file`. Pack groups into batches capped at **10 findings**: a file group larger than 10 splits; small groups pack together up to the cap, keeping same-file findings in the same batch.
+- Batch model = highest severity present in the batch: `opus` if any `blocker`, `sonnet` if any `major`, `haiku` if all-`minor`.
 
-Dispatch one Haiku Agent call:
+Validator dispatch (one Agent call per **batch**; send all batches in one parallel message):
 
-- `description`: "Dedup semantic merge"
+- `description`: "Validate findings (batch)"
 - `subagent_type`: `general-purpose`
-- `model`: `haiku`
-- `prompt`:
+- `model`: per the batch tier above
+- `prompt`: contents of `prompts/validator.md` + the batch's findings as a JSON array (each carrying its pool `index`) + ~20 lines of code around each cited line (read via `Read`, deduplicated per file region) + relevant rule context: the matching rules from `CLAUDE.md`'s `## Conventions` / `## Gotchas / Known Pitfalls` (canonical), plus those slugs' rows and any flagging nuance from `rules/code-standards.md`
 
-```
-You are deciding whether two code review findings describe the same underlying issue.
+Parse each batch's JSON output (same fenced-block extraction + retry-once). A finding whose entry is missing or malformed defaults to `{ confidence: 0, reason: "validator output malformed" }` — this filters it out.
 
-Finding A:
-  file: <fileA>
-  line: <lineA>
-  category: <categoryA>
-  message: <messageA>
-  evidence: <evidenceA>
-
-Finding B:
-  file: <fileB>
-  line: <lineB>
-  category: <categoryB>
-  message: <messageB>
-  evidence: <evidenceB>
-
-Are these the same underlying issue (different lens, same problem)?
-
-Return ONLY a JSON object in a ```json fenced block:
-
-{
-  "merge": true | false,
-  "rationale": "one-sentence reason"
-}
-
-When uncertain, prefer "merge: false". Keeping both findings separately is safer than wrongly collapsing distinct issues.
-```
-
-Parse output. If `merge: true`, combine the pair into one finding (highest severity, both messages joined, both agents recorded). If parse fails or `merge: false`, leave both as separate findings.
-
-### 5. Validate findings (tiered)
-
-For each finding in the pool:
-
-- If `severity ∈ {blocker, major}` → dispatch a validator on **opus**
-- If `severity == minor` → dispatch a validator on **haiku**
-- If `severity == info` → pass through with `confidence: 100, reason: "info, not validated"`
-
-Validator dispatch (one Agent call per finding):
-
-- `description`: "Validate finding"
-- `subagent_type`: `general-purpose`
-- `model`: per the tier above
-- `prompt`: contents of `prompts/validator.md` + the finding (JSON) + ~20 lines of code from the cited file (read via `Read` tool around the cited line) + any relevant rule context: the matching rule from `CLAUDE.md`'s `## Conventions` / `## Gotchas / Known Pitfalls` (canonical), plus that slug's row and any flagging nuance from `rules/code-standards.md`
-
-Parallel dispatch is fine — send all validator calls in one Agent batch.
-
-Parse each validator's JSON output (same fenced-block extraction). On parse failure, default to `{ confidence: 0, reason: "validator output malformed" }` — this filters the finding out.
+**Duplicate merge**: the validator returns a `duplicates` array of index pairs it judged to be the same underlying issue. Merge each flagged pair (highest severity, messages joined ` | `, `agents` concatenated) before the filter step.
 
 ### 6. Filter
 
@@ -335,6 +301,7 @@ Save to `.claude/reviews/<branch-or-PR>-<YYYY-MM-DD-HHmmss>.md`. (Create `.claud
 - **Effort**: <effort>
 - **Threshold**: <N>
 - **Mode**: local | PR #<N>
+- **Stage**: phase | final
 - **Files changed**: <N>
 
 ## Architect
@@ -386,7 +353,7 @@ Reviewer status:
 
 Findings collected: <total before dedup>
 Findings after dedup (Pass 1): <count>
-Findings after dedup (Pass 2): <count>
+Findings after validator duplicate-merge: <count>
 Findings after validation filter: <count>
 ```
 
@@ -455,7 +422,7 @@ Optional, human-gated, and **only** in PR mode. The review pipeline itself never
 
 2. **Re-verify.** Run the project's checks and confirm they pass before claiming done: `tsc` clean, the relevant Vitest suites green (`npx vitest run`), and — for a change with a build surface — the webpack build gate (`npx next build --webpack`). Quote the actual output — never assert "tests pass" without running them.
 
-3. **Complete the feature's doc lifecycle on the branch** (when the PR ships a feature). Promote its spec `docs/planned/` → `docs/active/` with an as-built status header, tick the umbrella/roadmap doc, update `docs/SPEC.md`, and DELETE the `docs/build-plans/` entry — as commit(s) on this same branch, so one squash-merge lands code + docs atomically. Never leave the doc shuffle for a post-merge docs-only PR.
+3. **Doc lifecycle is NOT done here** — it predates the final review (see step 1.2), so the fold was part of the reviewed diff and Lens 2 checked it. If it is somehow missing at this point, complete it now (promote spec → `docs/active/`, umbrella + `docs/SPEC.md`, delete the build plan) and note in the report that the fold went unreviewed.
 
 4. **Pause for a human sanity-check — REQUIRED.** Stop and ask the user to confirm before merging. Explicitly call out anything the review and its agents **cannot** validate — UI/visual changes, interaction or animation behaviour, anything that needs a running app or a human eye — and request an explicit go-ahead. Do not merge on implied approval.
 
