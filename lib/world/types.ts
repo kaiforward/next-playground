@@ -228,6 +228,14 @@ export interface WorldMarket {
   demandRate: number;
   /** Infrastructure storage capacity for this good from the system's built buildings. */
   storageCapacity: number;
+  /**
+   * Consumption satisfaction the last economy pulse actually applied for this
+   * good (civilian delivered ÷ demanded, ∈ [0,1]; 1 = fully served). The
+   * measured-once flow the needs display, the planner fed-proxy, and the regime
+   * classification all read — never recomputed from stock. Optional:
+   * missing (pre-change save) reads as 1.
+   */
+  satisfaction?: number;
 }
 
 // ── Factions ────────────────────────────────────────────────────

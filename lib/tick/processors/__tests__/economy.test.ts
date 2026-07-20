@@ -401,7 +401,7 @@ describe("economy processor: supply-chain input-gating", () => {
     const worldB = new InMemoryEconomyWorld({
       systems: [sysB],
       markets: [
-        makeMarket("sys-b", "ore", Math.floor(FIXTURE_BAND.minStock)), // ore at floor (drawable=0): gate = 0
+        makeMarket("sys-b", "ore", Math.floor(FIXTURE_BAND.minStock)), // ore below comfort knee → gate ≈ 0.82, still produces on the ramp
         makeMarket("sys-b", "metals", MID_METALS),
       ],
       modifiers: [],
@@ -507,5 +507,88 @@ describe("maintenance output malus", () => {
     expect(stock("p2")).toBeLessThan(stock("p1"));
     const realized = result.economySignals?.realizedProductionBySystem;
     expect(realized?.get("p2")?.get("food") ?? 0).toBeLessThan(realized?.get("p1")?.get("food") ?? 0);
+  });
+});
+
+// ── Satisfaction: measured flow, persisted ────────────────────────
+
+describe("satisfaction — measured flow, persisted", () => {
+  // The comfort knee is comfortCover × targetStock (0.75 × 40 = 30); the
+  // consume factor delivers in full at/above it and rations on √(stock/comfort)
+  // below it. All values below are derived from this, not hard-coded.
+  const comfort = ECON_PARAMS.simParams.comfortCover * FIXTURE_BAND.targetStock;
+  const satOf = (world: InMemoryEconomyWorld, systemId: string, goodId = "food") =>
+    world.markets.find((m) => m.systemId === systemId && m.goodId === goodId)!.satisfaction;
+
+  it("persists satisfaction 1 for a consumer fully served above the comfort knee", async () => {
+    // Stock deep above comfort (near the ceiling) → factor 1 → full delivery →
+    // delivered ÷ demanded === 1.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-served", 0)],
+      markets: [makeMarket("sys-served", "food", FIXTURE_BAND.maxStock - 1)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(satOf(world, "sys-served")).toBe(1);
+  });
+
+  it("persists the rationed delivered fraction below the knee", async () => {
+    // Stock at 0.25 × comfort (7.5) → factor = √(7.5/30) = √0.25 = 0.5. The month's
+    // demand (~1.25) is far below stock, so the ramp — not availability — binds:
+    // satisfaction = delivered ÷ demanded = 0.5.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-rationed", 0)],
+      markets: [makeMarket("sys-rationed", "food", 0.25 * comfort)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(satOf(world, "sys-rationed")).toBeCloseTo(0.5, 6);
+  });
+
+  it("is flow-measured, not a post-tick stock read (boundary bias)", async () => {
+    // Stock starts just above comfort (comfort + 1 = 31) → factor 1 → full delivery.
+    // A high-population consumer's month drains it clean below the knee, but the
+    // delivery WAS full, so satisfaction is 1 — a post-tick stock read would have
+    // reported < 1 from the below-knee ending stock.
+    const bigConsumer = { ...makeConsumerSystem("sys-boundary", 0), population: 60000 };
+    const world = new InMemoryEconomyWorld({
+      systems: [bigConsumer],
+      markets: [makeMarket("sys-boundary", "food", comfort + 1)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    const endStock = world.markets.find((m) => m.systemId === "sys-boundary")!.stock;
+    expect(satOf(world, "sys-boundary")).toBe(1); // full delivery happened
+    expect(endStock).toBeLessThan(comfort); // yet ended below the knee (stock read would be < 1)
+  });
+
+  it("persists 1 for pure producers", async () => {
+    // A market with no local civilian consumption (population 0 here) is a
+    // non-consumer — nothing is demanded, so satisfaction persists 1 regardless
+    // of stock, even pinned low well below the comfort knee.
+    const pureProducer = { ...makeProducerSystem("sys-pureprod", 0), population: 0 };
+    const world = new InMemoryEconomyWorld({
+      systems: [pureProducer],
+      markets: [makeMarket("sys-pureprod", "food", FIXTURE_BAND.minStock + 1)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(satOf(world, "sys-pureprod")).toBe(1);
+  });
+
+  it("feeds the same value into dissatisfactionBySystem", async () => {
+    // Single-good rationed consumer (stock 0.25 × comfort → satisfaction 0.5).
+    // With one good, demand-share = 1, so D = (1 − satisfaction)² = 0.25 — computed
+    // from the SAME persisted satisfaction, not a recomputed stock read.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-fold", 0)],
+      markets: [makeMarket("sys-fold", "food", 0.25 * comfort)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    const persisted = satOf(world, "sys-fold")!;
+    const d = result.economySignals!.dissatisfactionBySystem.get("sys-fold")!;
+    expect(d).toBeCloseTo(0.25, 6);
+    expect(d).toBeCloseTo((1 - persisted) ** 2, 10); // exactly (1 − persisted)², same value
   });
 });

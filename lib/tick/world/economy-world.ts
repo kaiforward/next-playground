@@ -47,6 +47,8 @@ export interface MarketUpdate {
   stock: number;
   /** Active pricing-anchor multiplier from event modifiers (1 = none). */
   anchorMult: number;
+  /** Consumption satisfaction actually applied this pulse (delivered ÷ demanded; 1 for non-consumers). */
+  satisfaction: number;
 }
 
 export interface EconomyWorld {
