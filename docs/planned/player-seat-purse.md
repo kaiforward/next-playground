@@ -235,13 +235,20 @@ calibration harness, across the full faction roster (majors + minors). Per-facti
 
 ## UI surfaces
 
-- **Faction panel — treasury card**: balance, itemised income (heads line, production line),
-  itemised expenses (maintenance bill by building type, logistics, construction), the three band
-  sliders, the tax-level control.
-- **Construction command card**: a funded-fraction readout, so the pool's activation state is
-  visible where builds are queued.
-- Per house rule, the treasury card gets its collaborative HTML design pass before implementation —
-  this spec fixes *what* it shows, not how it looks.
+Design pass done 2026-07-20 (collaborative HTML wireframes; ledger-stack layout chosen).
+
+- **Faction panel — treasury card** (`components/factions/treasury-card.tsx`): single-column
+  ledger — balance + net/month at top, itemised income (heads line, production line), itemised
+  expenses with a **collapsible maintenance by-type breakdown (default collapsed)**, then the
+  three band-funding rows and the 5-segment tax-level stepper. Each band row shows **set vs runs**:
+  the slider thumb is the player's set fraction; the copper fill is last settlement's latched paid
+  fraction ("runs"), with an explicit "shorted" tag when the ladder diverges them and a hatched
+  zone marking maintenance's un-slidable 50% floor. The card renders on **every** faction's panel;
+  controls are interactive only when `isPlayer` — AI factions show the same values static.
+- **Faction vitals**: a real Treasury tile (balance + net hint) replaces the treasury half of the
+  ghost slot; the ghost shrinks to "control · tax base".
+- **Construction command card**: a funded-fraction readout line ("runs at N%"), so the pool's
+  activation state is visible where builds are queued.
 
 ## Remaining build wiring (Plan 3)
 
