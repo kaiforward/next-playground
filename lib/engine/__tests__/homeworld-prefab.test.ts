@@ -61,7 +61,7 @@ describe("HOME_SYSTEM_PREFAB", () => {
     for (const g of Object.keys(OUTPUT_PER_UNIT)) {
       if (!isCovered(g)) continue; // uncovered (military tier-2) is imported, not made here — from source
       const production = buildingProduction(b, g, fullStaff, yields);
-      const consumption = consumptionRate(g, basis) + (recipeDraw[g] ?? 0);
+      const consumption = consumptionRate(g, basis, "frontier") + (recipeDraw[g] ?? 0);
       expect(production, g).toBeGreaterThanOrEqual(consumption - 1e-6);
     }
   });

@@ -35,42 +35,58 @@ const popOnly = (population: number): CivilianDemandBasis => ({
 
 describe("civilianDemandRateForGood", () => {
   it("returns per-capita-need × population for a populated system", () => {
-    const rate = civilianDemandRateForGood("water", popOnly(1000));
+    const rate = civilianDemandRateForGood("water", popOnly(1000), "frontier");
     expect(rate).toBeCloseTo(GOOD_CONSUMPTION.water * 1000);
   });
 
   it("scales linearly with population", () => {
-    const low = civilianDemandRateForGood("food", popOnly(500));
-    const high = civilianDemandRateForGood("food", popOnly(1000));
+    const low = civilianDemandRateForGood("food", popOnly(500), "frontier");
+    const high = civilianDemandRateForGood("food", popOnly(1000), "frontier");
     expect(high).toBeCloseTo(low * 2);
   });
 
   it("floors at MIN_DEMAND for a zero-population system", () => {
-    expect(civilianDemandRateForGood("luxuries", popOnly(0))).toBe(MIN_DEMAND);
+    expect(civilianDemandRateForGood("luxuries", popOnly(0), "frontier")).toBe(MIN_DEMAND);
   });
 
   it("floors at MIN_DEMAND for an unknown good", () => {
-    expect(civilianDemandRateForGood("not_a_good", popOnly(1000))).toBe(MIN_DEMAND);
+    expect(civilianDemandRateForGood("not_a_good", popOnly(1000), "frontier")).toBe(MIN_DEMAND);
   });
 });
 
 describe("civilianDemandRateForGood with skilled work", () => {
   it("skilled heads raise basket-good demand above the population-only rate", () => {
-    const flat = civilianDemandRateForGood("luxuries", popOnly(1000));
-    const skilled = civilianDemandRateForGood("luxuries", { population: 1000, technicians: 150, engineers: 40 });
+    const flat = civilianDemandRateForGood("luxuries", popOnly(1000), "frontier");
+    const skilled = civilianDemandRateForGood("luxuries", { population: 1000, technicians: 150, engineers: 40 }, "frontier");
     expect(skilled).toBeGreaterThan(flat);
   });
 
   it("non-basket goods are unchanged by skilled work", () => {
-    const flat = civilianDemandRateForGood("food", popOnly(1000));
-    const skilled = civilianDemandRateForGood("food", { population: 1000, technicians: 150, engineers: 40 });
+    const flat = civilianDemandRateForGood("food", popOnly(1000), "frontier");
+    const skilled = civilianDemandRateForGood("food", { population: 1000, technicians: 150, engineers: 40 }, "frontier");
     expect(skilled).toBeCloseTo(flat, 10);
+  });
+});
+
+describe("government-adjusted demand", () => {
+  it("carries a militarist boost once through civilian, total, and seed demand", () => {
+    const basis = popOnly(100);
+    const frontier = civilianDemandRateForGood("weapons", basis, "frontier");
+    const militarist = civilianDemandRateForGood("weapons", basis, "militarist");
+    expect(militarist).toBeCloseTo(consumptionRate("weapons", basis, "militarist"), 10);
+    expect(militarist).toBeGreaterThan(frontier);
+
+    const total = totalDemandRateForGood("weapons", basis, {}, unitResourceVector(), "militarist");
+    expect(total).toBeCloseTo(militarist, 10);
+    expect(getInitialStock({}, unitResourceVector(), 100, "weapons", "militarist")).not.toBe(
+      getInitialStock({}, unitResourceVector(), 100, "weapons", "frontier"),
+    );
   });
 });
 
 describe("totalDemandRateForGood", () => {
   it("equals civilian demand when no buildings consume the good", () => {
-    expect(totalDemandRateForGood("ore", popOnly(1000), {}, unitResourceVector())).toBeCloseTo(civilianDemandRateForGood("ore", popOnly(1000)), 6);
+    expect(totalDemandRateForGood("ore", popOnly(1000), {}, unitResourceVector(), "frontier")).toBeCloseTo(civilianDemandRateForGood("ore", popOnly(1000), "frontier"), 6);
   });
 
   it("adds the production-input draw on top of civilian demand", () => {
@@ -82,13 +98,13 @@ describe("totalDemandRateForGood", () => {
     const buildings = { metals: 10, vocational_school: 1 };
     const industrial = inputDemandForGood(buildings, "ore", FULL, unitResourceVector());
     expect(industrial).toBeGreaterThan(0);
-    const total = totalDemandRateForGood("ore", popOnly(1000), buildings, unitResourceVector());
-    expect(total).toBeCloseTo(civilianDemandRateForGood("ore", popOnly(1000)) + industrial, 6);
-    expect(total).toBeGreaterThan(civilianDemandRateForGood("ore", popOnly(1000)));
+    const total = totalDemandRateForGood("ore", popOnly(1000), buildings, unitResourceVector(), "frontier");
+    expect(total).toBeCloseTo(civilianDemandRateForGood("ore", popOnly(1000), "frontier") + industrial, 6);
+    expect(total).toBeGreaterThan(civilianDemandRateForGood("ore", popOnly(1000), "frontier"));
   });
 
   it("floors at MIN_DEMAND when both civilian and industrial demand are zero", () => {
-    expect(totalDemandRateForGood("not_a_good", popOnly(0), {}, unitResourceVector())).toBe(MIN_DEMAND);
+    expect(totalDemandRateForGood("not_a_good", popOnly(0), {}, unitResourceVector(), "frontier")).toBe(MIN_DEMAND);
   });
 });
 
@@ -98,8 +114,8 @@ describe("getInitialStock", () => {
     // small population consumes: a strong net water producer.
     const buildings = { water: 20 };
     const yields = unitResourceVector();
-    const reference = TARGET_COVER * civilianDemandRateForGood("water", popOnly(100));
-    const seed = getInitialStock(buildings, yields, 100, "water");
+    const reference = TARGET_COVER * civilianDemandRateForGood("water", popOnly(100), "frontier");
+    const seed = getInitialStock(buildings, yields, 100, "water", "frontier");
     expect(seed).toBeGreaterThan(reference);
   });
 
@@ -107,8 +123,8 @@ describe("getInitialStock", () => {
     // No water extractors + high population → pure consumer.
     const buildings = {};
     const yields = unitResourceVector();
-    const reference = TARGET_COVER * civilianDemandRateForGood("water", popOnly(2000));
-    const seed = getInitialStock(buildings, yields, 2000, "water");
+    const reference = TARGET_COVER * civilianDemandRateForGood("water", popOnly(2000), "frontier");
+    const seed = getInitialStock(buildings, yields, 2000, "water", "frontier");
     expect(seed).toBeLessThan(reference);
   });
 
@@ -116,16 +132,16 @@ describe("getInitialStock", () => {
     // Same population → same reference, so the seeds compare directly: the
     // producer's deeper cover shows up as a strictly higher stock.
     const yields = unitResourceVector();
-    const producer = getInitialStock({ water: 20 }, yields, 500, "water");
-    const consumer = getInitialStock({}, yields, 500, "water");
+    const producer = getInitialStock({ water: 20 }, yields, 500, "water", "frontier");
+    const consumer = getInitialStock({}, yields, 500, "water", "frontier");
     expect(producer).toBeGreaterThan(consumer);
   });
 
   it("higher yields lift a producer's stock (more production → deeper cover)", () => {
     // Same extractor count, richer deposit (higher yieldMult) → more production.
     const buildings = { water: 8 };
-    const lean = getInitialStock(buildings, { ...unitResourceVector(), water: 1 }, 800, "water");
-    const rich = getInitialStock(buildings, { ...unitResourceVector(), water: 4 }, 800, "water");
+    const lean = getInitialStock(buildings, { ...unitResourceVector(), water: 1 }, 800, "water", "frontier");
+    const rich = getInitialStock(buildings, { ...unitResourceVector(), water: 4 }, 800, "water", "frontier");
     expect(rich).toBeGreaterThanOrEqual(lean);
   });
 
@@ -135,11 +151,11 @@ describe("getInitialStock", () => {
     const pop = 100000, good = "water";
     const g = GOODS[good];
     const band = marketBand({
-      demandRate: civilianDemandRateForGood(good, popOnly(pop)),
+      demandRate: civilianDemandRateForGood(good, popOnly(pop), "frontier"),
       storageCapacity: facilityStorageForGood({}, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
-    const seed = getInitialStock({}, unitResourceVector(), pop, good);
+    const seed = getInitialStock({}, unitResourceVector(), pop, good, "frontier");
     expect(seed).toBeGreaterThanOrEqual(Math.floor(band.minStock));
     expect(seed).toBeLessThanOrEqual(Math.ceil(band.maxStock));
   });
@@ -149,7 +165,7 @@ describe("getInitialStock", () => {
     // demandRate = MIN_DEMAND=0.05. Fallback band: priceFloor=0.5, priceCeiling=2.0,
     // storageCapacity=0 → targetStock=2, minStock=1, maxStock=4.
     // coverMult = 0.5+0.5*(1.5-0.5)=1.0 → seed = max(1,min(4,2*1)) = 2.
-    const seed = getInitialStock({}, unitResourceVector(), 1000, "not_a_good");
+    const seed = getInitialStock({}, unitResourceVector(), 1000, "not_a_good", "frontier");
     expect(seed).toBeGreaterThanOrEqual(1);
     expect(seed).toBeLessThanOrEqual(4);
   });
@@ -158,12 +174,12 @@ describe("getInitialStock", () => {
     const pop = 800, good = "ore", producer = { ore: 6 }, consumer = {};
     const g = GOODS[good];
     const band = marketBand({
-      demandRate: civilianDemandRateForGood(good, popOnly(pop)),
+      demandRate: civilianDemandRateForGood(good, popOnly(pop), "frontier"),
       storageCapacity: facilityStorageForGood(producer, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
-    const seedProducer = getInitialStock(producer, unitResourceVector(), pop, good);
-    const seedConsumer = getInitialStock(consumer, unitResourceVector(), pop, good);
+    const seedProducer = getInitialStock(producer, unitResourceVector(), pop, good, "frontier");
+    const seedConsumer = getInitialStock(consumer, unitResourceVector(), pop, good, "frontier");
     expect(seedProducer).toBeGreaterThanOrEqual(Math.floor(band.minStock));
     expect(seedProducer).toBeLessThanOrEqual(Math.ceil(band.maxStock));
     expect(seedProducer).toBeGreaterThan(seedConsumer); // producer is deeper-stocked (cheaper)
@@ -177,11 +193,11 @@ describe("getInitialStock", () => {
     const pop = 1000, good = "water";
     const g = GOODS[good];
     const band = marketBand({
-      demandRate: civilianDemandRateForGood(good, popOnly(pop)),
+      demandRate: civilianDemandRateForGood(good, popOnly(pop), "frontier"),
       storageCapacity: facilityStorageForGood({}, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
-    const seed = getInitialStock({}, unitResourceVector(), pop, good);
+    const seed = getInitialStock({}, unitResourceVector(), pop, good, "frontier");
     expect(seed).toBeCloseTo(INITIAL_RESERVE_ANCHOR_FRAC * band.targetStock, 6);
   });
 
@@ -198,19 +214,19 @@ describe("getInitialStock", () => {
 
     const snap = computeSystemLabourSnapshot(buildings, pop);
     const production = buildingProduction(buildings, good, snap.state, yields);
-    const consumption = consumptionRate(good, snap.basis);
+    const consumption = consumptionRate(good, snap.basis, "frontier");
     const total = production + consumption;
     const producerShare = total > 0 ? production / total : 0.5;
     const coverMult = SEED_COVER_MIN + producerShare * (SEED_COVER_MAX - SEED_COVER_MIN);
 
     const band = marketBand({
-      demandRate: civilianDemandRateForGood(good, popOnly(pop)),
+      demandRate: civilianDemandRateForGood(good, popOnly(pop), "frontier"),
       storageCapacity: facilityStorageForGood(buildings, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
     const expectedSeed = Math.min(band.maxStock, band.targetStock * coverMult);
 
-    const seed = getInitialStock(buildings, yields, pop, good);
+    const seed = getInitialStock(buildings, yields, pop, good, "frontier");
     expect(coverMult).toBeGreaterThan(INITIAL_RESERVE_ANCHOR_FRAC);
     expect(seed).toBeCloseTo(expectedSeed, 6);
   });

@@ -3,6 +3,7 @@ import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector } from "@/lib/engine/resources";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
 function foodMarket(stock: number, demandRate: number): MarketRowForLogistics {
@@ -16,7 +17,7 @@ describe("toGoodMarketStates", () => {
   it("passes stock + goodId through and uses the band's targetStock", () => {
     const m = foodMarket(7, 40);
     const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
+      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(), markets: [m],
     });
     expect(out).toHaveLength(1);
     expect(out[0].goodId).toBe("food");
@@ -28,7 +29,7 @@ describe("toGoodMarketStates", () => {
 
   it("returns one entry per market row", () => {
     const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(),
+      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(),
       markets: [foodMarket(5, 20), { ...foodMarket(5, 20), id: "A|water", goodId: "water" }],
     });
     expect(out.map((g) => g.goodId)).toEqual(["food", "water"]);
@@ -37,7 +38,7 @@ describe("toGoodMarketStates", () => {
   it("surfaces local production per good (powers the matcher's self-supply gate)", () => {
     // A system with gas extractors produces gas → production must be reported > 0.
     const out = toGoodMarketStates({
-      buildings: { gas: 3 }, population: 100, yields: unitResourceVector(),
+      buildings: { gas: 3 }, population: 100, governmentType: "federation", yields: unitResourceVector(),
       markets: [{ ...foodMarket(100, 5), id: "A|gas", goodId: "gas" }],
     });
     const gas = out.find((g) => g.goodId === "gas")!;
@@ -46,20 +47,30 @@ describe("toGoodMarketStates", () => {
 
   it("reports zero production for a good the system does not make", () => {
     const out = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(50, 20)],
+      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(), markets: [foodMarket(50, 20)],
     });
     expect(out[0].production).toBe(0);
+  });
+
+  it("passes the government boost once into planner and logistics demand", () => {
+    const market = { ...foodMarket(20, 40), id: "A|weapons", goodId: "weapons" };
+    const base = { buildings: {}, population: 100, yields: unitResourceVector(), markets: [market] };
+    const [frontier] = toGoodMarketStates({ ...base, governmentType: "frontier" });
+    const [militarist] = toGoodMarketStates({ ...base, governmentType: "militarist" });
+    const expectedBoost = consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 }, "militarist")
+      - consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 }, "frontier");
+    expect(militarist.demand - frontier.demand).toBeCloseTo(expectedBoost, 10);
   });
 
   it("threads the persisted satisfaction through to GoodMarketState", () => {
     const withSatisfaction = { ...foodMarket(20, 40), satisfaction: 0.7 };
     const [withValue] = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [withSatisfaction],
+      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(), markets: [withSatisfaction],
     });
     expect(withValue.satisfaction).toBe(0.7);
 
     const [withoutValue] = toGoodMarketStates({
-      buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(20, 40)],
+      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(), markets: [foodMarket(20, 40)],
     });
     expect(withoutValue.satisfaction).toBeUndefined();
   });

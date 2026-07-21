@@ -17,12 +17,12 @@ export interface MarketStateSource {
   buildings: Record<string, number>;
   population: number;
   yields: ResourceVector;
-  governmentType?: GovernmentType;
+  governmentType: GovernmentType;
   markets: MarketRowForLogistics[];
 }
 
 export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
-  const rates = capacityGoodRates(row.buildings, row.population, row.yields, row.governmentType ?? "frontier");
+  const rates = capacityGoodRates(row.buildings, row.population, row.yields, row.governmentType);
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
   const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
 

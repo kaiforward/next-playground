@@ -16,7 +16,7 @@ export interface SystemBuildRow {
   /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
   control: SystemControl;
   population: number;
-  governmentType?: GovernmentType;
+  governmentType: GovernmentType;
   /** Stored unrest integral 0…1 — the "calm" half of the settle gate. */
   unrest: number;
   buildings: Record<string, number>;

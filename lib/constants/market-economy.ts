@@ -57,7 +57,7 @@ export const INITIAL_RESERVE_ANCHOR_FRAC = 0.75;
  * consumptionRate); the population processor recomputes it as population and
  * the labour allocation move.
  */
-export function civilianDemandRateForGood(goodId: string, basis: CivilianDemandBasis, governmentType: GovernmentType = "frontier"): number {
+export function civilianDemandRateForGood(goodId: string, basis: CivilianDemandBasis, governmentType: GovernmentType): number {
   return Math.max(consumptionRate(goodId, basis, governmentType), MIN_DEMAND);
 }
 
@@ -77,7 +77,7 @@ export function totalDemandRateForGood(
   basis: CivilianDemandBasis,
   buildings: Record<string, number>,
   yields: ResourceVector,
-  governmentType: GovernmentType = "frontier",
+  governmentType: GovernmentType,
   labourState?: LabourState,
 ): number {
   const civilian = consumptionRate(goodId, basis, governmentType);
@@ -103,7 +103,7 @@ export function getInitialStock(
   yields: ResourceVector,
   population: number,
   goodId: string,
-  governmentType: GovernmentType = "frontier",
+  governmentType: GovernmentType,
 ): number {
   const snap = computeSystemLabourSnapshot(buildings, population);
   const production = buildingProduction(buildings, goodId, snap.state, yields);

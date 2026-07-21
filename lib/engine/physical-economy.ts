@@ -42,7 +42,7 @@ export interface ConsumptionBreakdown {
 export function consumptionBreakdown(
   goodId: string,
   basis: CivilianDemandBasis,
-  governmentType: GovernmentType = "frontier",
+  governmentType: GovernmentType,
 ): ConsumptionBreakdown {
   return {
     base: (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.population),
@@ -58,7 +58,7 @@ export function consumptionBreakdown(
  * runs per (good, system) on the tick hot path; the breakdown object is for
  * the display read path only.
  */
-export function consumptionRate(goodId: string, basis: CivilianDemandBasis, governmentType: GovernmentType = "frontier"): number {
+export function consumptionRate(goodId: string, basis: CivilianDemandBasis, governmentType: GovernmentType): number {
   return (
     (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.population) +
     (SKILL1_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.technicians) +

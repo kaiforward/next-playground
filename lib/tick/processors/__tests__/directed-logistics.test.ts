@@ -9,8 +9,8 @@ import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 describe("MemoryDirectedLogisticsWorld", () => {
   it("groups systems by faction key (null = independents)", async () => {
     const world = new MemoryDirectedLogisticsWorld([
-      { systemId: "A", factionId: "f1", population: 10, buildings: {}, yields: emptyResourceVector(), markets: [] },
-      { systemId: "B", factionId: null, population: 5, buildings: {}, yields: emptyResourceVector(), markets: [] },
+      { systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 10, buildings: {}, yields: emptyResourceVector(), markets: [] },
+      { systemId: "B", factionId: null, governmentType: "frontier" as const, population: 5, buildings: {}, yields: emptyResourceVector(), markets: [] },
     ]);
     const keys = await world.getFactionShardKeys();
     expect(new Set(keys)).toEqual(new Set(["f1", null]));
@@ -54,11 +54,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
   it("moves staple surplus to a deficit system and records a logistics flow", async () => {
     const systems = [
       {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
@@ -79,11 +79,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
   it("reports work performed by the faction, equal to the planned transfer cost", async () => {
     const systems = [
       {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
@@ -103,11 +103,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // mB: stock 10, anchor 40 → must land at the anchor (40), not be doubled into surplus (≥56).
     const systems = [
       {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
@@ -136,11 +136,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // both exceed the shortfall, so the shortfall is the binding, fractional quantity.
     const systems = [
       {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mB", "food", 10.3, 20)],
       },
     ];
@@ -173,11 +173,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // empty-world early return.
     const systems = [
       {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
@@ -203,8 +203,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // binds — moved = budget ÷ route cost. Halving the interval halves the budget, so it moves half
     // as much per pulse (same wall-clock haul capacity when run twice as often).
     const budgetBound = () => [
-      { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [bigMarket("mA", "food", 100000, 1000)] },
-      { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [bigMarket("mB", "food", 10, 1000)] },
+      { systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {}, yields: emptyResourceVector(), markets: [bigMarket("mA", "food", 100000, 1000)] },
+      { systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {}, yields: emptyResourceVector(), markets: [bigMarket("mB", "food", 10, 1000)] },
     ];
     const movedAt = async (interval: number): Promise<number> => {
       const world = new MemoryDirectedLogisticsWorld(budgetBound());
@@ -224,8 +224,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // level-fill toward the anchor, interval-invariant, NOT a scaled multiple.
     const gapFill = async (interval: number): Promise<number> => {
       const systems = [
-        { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
-        { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+        { systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
+        { systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
       ];
       const world = new MemoryDirectedLogisticsWorld(systems);
       await runDirectedLogisticsProcessor(world, { tick: 0 }, {
@@ -242,11 +242,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
   it("scales the haul budget by the faction's funded fraction (0 → no transfers)", async () => {
     const mk = () => [
       {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
@@ -276,14 +276,14 @@ describe("runDirectedLogisticsProcessor (body)", () => {
   it("writes only changed assessments and clears a recovered funding-bound marker", async () => {
     const systems = [
       {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [
           market("mA", "food", 95, 20),
           market("mOther", "ore", 40, 20),
         ],
       },
       {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
@@ -301,14 +301,14 @@ describe("runDirectedLogisticsProcessor (body)", () => {
 
     const recoveredWorld = new MemoryDirectedLogisticsWorld([
       {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [
           market("mA", "food", 95, 20, true),
           market("mOther", "ore", 40, 20),
         ],
       },
       {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 200, buildings: {},
         yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20, true)],
       },
     ]);
@@ -325,8 +325,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
 
   it("keeps unreachable pairs unmarked", async () => {
     const systems = [
-      { systemId: "A", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
-      { systemId: "B", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+      { systemId: "A", factionId: "f1", governmentType: "federation" as const, population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
+      { systemId: "B", factionId: "f1", governmentType: "federation" as const, population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
     await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {

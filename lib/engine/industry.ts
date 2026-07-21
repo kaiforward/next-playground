@@ -495,7 +495,7 @@ export function capacityGoodRates(
   buildings: Record<string, number>,
   population: number,
   yields: ResourceVector,
-  governmentType: GovernmentType = "frontier",
+  governmentType: GovernmentType,
 ): SubstrateGoodRate[] {
   const snap = computeSystemLabourSnapshot(buildings, population);
   return GOOD_NAMES.map((goodId) => ({

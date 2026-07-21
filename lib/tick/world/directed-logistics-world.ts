@@ -28,7 +28,7 @@ export interface SystemLogisticsRow {
   systemId: string;
   factionId: string | null;
   population: number;
-  governmentType?: GovernmentType;
+  governmentType: GovernmentType;
   buildings: Record<string, number>;
   /** Per-resource effective yields, for inputDemandForGood / capacityGoodRates. */
   yields: ResourceVector;
