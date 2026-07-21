@@ -6,6 +6,14 @@
 (§4), and make satisfaction a measured-once, persisted flow that the needs display and the
 planner's fed-proxy both read.
 
+> **Rationing amendment (2026-07-21):** The original task text below called the consumption
+> threshold `COMFORT_COVER × targetStock`. The accepted functional amendment is
+> `docs/planned/economy-rationing-amendment.md`: current access remains full until
+> `RATION_COVER × demandRate` (initially 2 cycles), independent of the 40-cycle pricing anchor.
+> Initial seed reserve and PR3's exporter reserve remain separate strategic policies at the prior
+> 0.75 × T level. Where the historical steps below say comfort/`COMFORT_COVER`, execute and review
+> them against this amendment instead.
+
 **Architecture:** Two new pure curve primitives in `lib/engine/tick.ts` replace every
 `selfLimitingFactor` call except the decay-side `outputUptake` (which PR2 rewires). The
 supply-chain sim tracks civilian `delivered` per entry; the economy processor turns that into

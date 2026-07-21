@@ -13,7 +13,7 @@ import {
 
 const PARAMS: EconomySimParams = {
   holdCover: 1.3,
-  comfortCover: 0.75,
+  rationCover: 2,
 };
 
 function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
@@ -22,6 +22,7 @@ function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
     stock: 100,
     minStock: 5,
     targetStock: 100,
+    demandRate: 1,
     maxStock: 200,
     ...over,
   };
@@ -67,18 +68,29 @@ describe("simulateEconomyTick — operating ceiling", () => {
 });
 
 describe("simulateEconomyTick — consumption", () => {
-  it("delivers in full at and above the comfort knee", () => {
-    const atComfort = simulateEconomyTick([entry({ consumptionRate: 10, stock: 75 })], PARAMS);
-    expect(atComfort[0].stock).toBeCloseTo(65); // full draw, no ration
-    const deep = simulateEconomyTick([entry({ consumptionRate: 10, stock: 150 })], PARAMS);
-    expect(deep[0].stock).toBeCloseTo(140);
+  it("delivers in full throughout a depleted strategic reserve", () => {
+    for (const stock of [40, 10, 2]) {
+      const result = simulateEconomyTick([entry({ consumptionRate: 1, stock })], PARAMS);
+      expect(result[0].stock).toBeCloseTo(stock - 1);
+    }
   });
 
-  it("rations on the scarcity ramp below comfort and can draw below the old minStock", () => {
-    const scarce = simulateEconomyTick([entry({ consumptionRate: 10, stock: 30 })], PARAMS);
-    // factor = sqrt(30/75) ≈ 0.632 → draw ≈ 6.32; ends ≈ 23.7, below the old 50 floor
-    expect(scarce[0].stock).toBeCloseTo(30 - 10 * Math.sqrt(30 / 75), 1);
+  it("rations only below the emergency threshold and can draw below old minStock", () => {
+    const scarce = simulateEconomyTick([entry({ consumptionRate: 1, stock: 0.5 })], PARAMS);
+    expect(scarce[0].stock).toBeCloseTo(0.5 - 0.5, 6);
     expect(scarce[0].stock).toBeLessThan(50);
+  });
+
+  it("keeps access independent of pricing-anchor shifts", () => {
+    const lowAnchor = simulateEconomyTick(
+      [entry({ targetStock: 20, demandRate: 1, consumptionRate: 1, stock: 1 })],
+      PARAMS,
+    );
+    const highAnchor = simulateEconomyTick(
+      [entry({ targetStock: 160, demandRate: 1, consumptionRate: 1, stock: 1 })],
+      PARAMS,
+    );
+    expect(lowAnchor[0].stock).toBeCloseTo(highAnchor[0].stock, 8);
   });
 
   it("never draws more than the stock that exists (stock floors at 0, not minStock)", () => {
@@ -105,7 +117,7 @@ describe("simulateEconomyTick — immutability", () => {
 });
 
 describe("buildMarketTickEntry", () => {
-  const BASE_BAND = { minStock: 5, targetStock: 100, maxStock: 200 };
+  const BASE_BAND = { minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200 };
 
   it("passes through the base production rate unmodified", () => {
     const e = buildMarketTickEntry({
@@ -224,17 +236,17 @@ describe("selfLimitingFactor", () => {
 
 describe("simulateEconomyTick — per-entry band", () => {
   it("clamps stock to [0, maxStock]", () => {
-    const low = { goodId: "ore", stock: -5, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const low = { goodId: "ore", stock: -5, minStock: 10, targetStock: 50, demandRate: 1, maxStock: 90, productionRate: 0, consumptionRate: 0 };
     const outLow = simulateEconomyTick([low], PARAMS)[0];
     expect(outLow.stock).toBe(0);
 
-    const high = { goodId: "ore", stock: 100, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const high = { goodId: "ore", stock: 100, minStock: 10, targetStock: 50, demandRate: 1, maxStock: 90, productionRate: 0, consumptionRate: 0 };
     const outHigh = simulateEconomyTick([high], PARAMS)[0];
     expect(outHigh.stock).toBe(90);
   });
 
   it("does not use minStock as a floor (price-saturation point only)", () => {
-    const belowMin = { goodId: "ore", stock: 3, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 10 };
+    const belowMin = { goodId: "ore", stock: 3, minStock: 10, targetStock: 50, demandRate: 1, maxStock: 90, productionRate: 0, consumptionRate: 10 };
     const out = simulateEconomyTick([belowMin], PARAMS)[0];
     expect(out.stock).toBeLessThan(10); // can go below minStock via consumption
     expect(out.stock).toBeGreaterThanOrEqual(0); // but not below 0
@@ -310,7 +322,7 @@ describe("outputUptake — stays storage-relative (decay signal)", () => {
   });
 });
 
-describe("consumptionFactor — comfort knee", () => {
+describe("consumptionFactor — emergency ration threshold", () => {
   it("delivers in full at and above the comfort stock", () => {
     expect(consumptionFactor(75, 75)).toBe(1);
     expect(consumptionFactor(200, 75)).toBe(1);

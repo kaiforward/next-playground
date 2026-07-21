@@ -4,7 +4,7 @@
  */
 
 import { scaleValue } from "@/lib/constants/economy-scale";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+export { TARGET_COVER } from "@/lib/constants/economy";
 import {
   buildingProduction,
   computeLabourState,
@@ -34,8 +34,6 @@ export const DEFAULT_ELASTICITY = 1;
  * Per-good imbalances are tuned via each good's production coeff / per-capita need
  * (see physical-economy.ts); this stays the whole-roster knob.
  */
-export const TARGET_COVER = 40;
-
 /**
  * Floor on the days-of-supply denominator so a near-empty system yields a finite
  * cover instead of a divide-by-zero / zero reference. First-draft value; tuned via `npm run simulate`.
@@ -46,12 +44,12 @@ export const MIN_DEMAND = scaleValue(0.05);
  * Seed-cover multipliers on the per-system reference: a pure consumer seeds at
  * SEED_COVER_MIN (shallow cover → dear), a pure producer at SEED_COVER_MAX (deep
  * cover → cheap), blended by producer share. First-draft values; tuned via `npm run simulate`.
- * SEED_COVER_MIN (0.5) sits below COMFORT_COVER (0.75) — a pure consumer's blend is
- * floored up to the comfort knee at seed (see getInitialStock), so no market opens
- * already rationing on the scarcity ramp.
+ * A separate initial-reserve floor keeps new markets well above emergency
+ * rationing. Seed policy is strategic reserve policy, not the access threshold.
  */
 export const SEED_COVER_MIN = 0.5;
 export const SEED_COVER_MAX = 1.5;
+export const INITIAL_RESERVE_ANCHOR_FRAC = 0.75;
 
 /**
  * Days-of-supply demand denominator for one good: max(civilian consumption,
@@ -93,9 +91,8 @@ export function totalDemandRateForGood(
  * (targetStock = TARGET_COVER × demandRate, the price anchor) and
  * infrastructure-stocked (maxStock adds facilityStorageForGood on top of the
  * demand headroom). A net producer seeds with deeper cover (reads cheap), a net
- * consumer with shallower cover (reads dear) — but never dearer than comfortable:
- * seeds clamp to [COMFORT_COVER × targetStock, maxStock], so every market —
- * pure consumers included — opens Comfortable rather than already rationing.
+ * consumer with shallower cover (reads dear). Seeds retain a separate strategic
+ * reserve floor; changing emergency rationing must not seed nearly empty markets.
  *
  * Uses the same building-block formula `capacityGoodRates` does, but for a
  * single good (avoids an O(goods²) seed when called per good).
@@ -128,11 +125,9 @@ export function getInitialStock(
   // quantizes it (~0.3% error at ECONOMY_SCALE=1, negligible at 100), which breaks the
   // goods-side scale-invariance from tick 0 and compounds through every economy pulse.
   //
-  // The floor is COMFORT_COVER × targetStock (band-relative, so it stays ECONOMY_SCALE-invariant),
-  // not band.minStock (the price-saturation point) — a fresh market opens Comfortable, never
-  // already rationing on the scarcity ramp.
+  // Initial reserve policy is independent of the emergency ration threshold.
   return Math.max(
-    ECONOMY_CONSTANTS.COMFORT_COVER * band.targetStock,
+    INITIAL_RESERVE_ANCHOR_FRAC * band.targetStock,
     Math.min(band.maxStock, band.targetStock * coverMult),
   );
 }

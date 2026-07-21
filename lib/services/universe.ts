@@ -184,9 +184,11 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   // already use good keys as goodId).
   const marketStock: Record<string, number> = {};
   const bandByGood: Record<string, MarketBand> = {};
+  const demandRateByGood: Record<string, number> = {};
   for (const row of marketsBySystem().get(systemId) ?? []) {
     bandByGood[row.goodId] = marketBandForRow(row, GOODS[row.goodId]);
     marketStock[row.goodId] = row.stock;
+    demandRateByGood[row.goodId] = row.demandRate;
   }
 
   const slotCap = resourceVectorFromColumns(
@@ -215,6 +217,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     marketStock,
     (goodKey) => bandByGood[goodKey],
     yields,
+    (goodKey) => demandRateByGood[goodKey] ?? 0,
   );
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.

@@ -20,11 +20,12 @@ sees an interim state — the interim incoherences listed per PR are shared-bran
 
 ### PR1 — Curve geometry, floor retirement, satisfaction as persisted flow (§1 consume/produce knees, §4)
 
-The sim core. Consumption gains the comfort knee (full delivery ≥ `COMFORT_COVER × T`, √ ramp to 0
+The sim core. Consumption gains an emergency ration threshold (full delivery above
+`RATION_COVER × demandRate`, initially 2 cycles; √ ramp to 0
 at empty); production runs full to the anchor then ramps linearly to 0 at `HOLD_COVER × T`;
 `minStock` stops clamping anywhere (stock clamps to `[0, maxStock]`; input/recipe draws and event
-shocks run toward empty on the shared scarcity ramp); seeds clamp to `[COMFORT_COVER × T,
-maxStock]`. Satisfaction becomes the flow actually applied (delivered ÷ demanded), persisted per
+shocks run toward empty on the shared scarcity ramp); seeds retain a separately named
+0.75 × T initial reserve. Satisfaction becomes the flow actually applied (delivered ÷ demanded), persisted per
 (system, good) as `WorldMarket.satisfaction?` (missing ⇒ 1), and both secondary computation sites
 re-base onto it: the pop-needs display and the planner's `supplyDissatisfaction` fed-proxy.
 Harness: stock-pin metric re-bases to true floor pins (stock ≈ 0).
@@ -50,7 +51,7 @@ decay gains `VACANCY_SLACK` (0.10): `used = min(count, occupancy × 1.10)`. `idl
 Invariant asserted in tests: the selling factor contains no labour/input/strike/maintenance/event
 term (the purse flow-only guarantee, `treasury.ts:128-136`).
 
-- Consumes from PR1: `productionCeiling(stock, targetStock, holdCover)`, `COMFORT_COVER`.
+- Consumes from PR1: `productionCeiling(stock, targetStock, holdCover)`, `RATION_COVER`.
 - **Interim incoherence (until PR3/PR4):** planner still capacity-blind; housing treadmill only
   half-fixed (vacancy slack lands, but growth/relief flip is PR4).
 
@@ -62,15 +63,21 @@ last-pulse persistence for off-month pulses — into the planner rows/ctx, which
 `{ tick }` at `lib/world/tick.ts:774/860`). Gov consumption boost folds at the shared
 civilian-demand chokepoint (`consumptionRate`/`capacityGoodRates`, threading government type) so
 band, planner demand, and cover chip all see it. `PROVISION_MARGIN` (0.10–0.15) on capacity
-targets; feedback backstop (squeezed ≥ 2 pulses ⇒ structural, with funding-bound and suppression
+targets; feedback backstop (rationing ≥ 2 pulses ⇒ structural, with funding-bound and suppression
 exclusions); response pacing (2-pulse proposal persistence + `BUILD_RATE_CAP` ≈ 0.4); structural
-exporters drawable to comfort (non-producers keep the anchor floor). New per-(system, good)
+exporters drawable to a separate strategic export-reserve floor (non-producers keep the anchor floor). New per-(system, good)
 squeeze/proposal counters persist on `WorldMarket` (missing ⇒ 0), mirroring PR1's satisfaction
 field. Harness: burst-build metric (max levels committed per good per pulse — runner-loop
 instrumentation, not final-world).
 
+Timing contract: directed logistics remains after economy/population in the tick. Imports arriving
+on a logistics pulse change stock immediately but affect satisfaction/unrest at the next economy
+assessment, never retroactively. Add an end-to-end ordering test; PR5 labels Needs as the latest
+assessment so this deliberate one-pulse lag is visible rather than looking stale.
+
 - Consumes from PR1: persisted `satisfaction` (squeeze = satisfaction < 1 for the pulse),
-  `COMFORT_COVER`; from PR2: the funding-bound signal (shared exclusion logic).
+  `RATION_COVER`; from PR2: the funding-bound signal (shared exclusion logic). Structural
+  exporters retain a separate strategic export-reserve floor; they are never drawn to two cycles.
 
 ### PR4 — Population, housing, colony headroom (§3)
 
@@ -83,12 +90,18 @@ establish bundles +1 housing level where habitable land permits. Guard: `crowd(r
 reads fully crowded (no Infinity/NaN). Harness: population saturation watch inverts (pop ≈ popCap
 healthy; pathology = r pinned at brake with relief blocked); migration-throughput metric.
 
+Unrest integration becomes regime-sensitive while keeping goods and tax pressure separate:
+Supplied systems recover faster toward their tax-supported equilibrium, Rationing accumulates
+gradually, and Shortage accumulates faster. Preserve monotonicity, the tax equilibrium, and the
+one-bad-pulse-is-recoverable rule. Add an end-to-end recovery test where Needs becomes Supplied
+immediately but stored unrest then declines at the calibrated recovery rate.
+
 - Consumes from PR2: `VACANCY_SLACK` (relief target 0.92 sits inside it — asserted in a test).
 
 ### PR5 — Regime presentation + recalibration + docs fold (§6, §7 UI, §8)
 
-Regime classifier (Comfortable/Squeezed/Shortage/Glut) as a pure engine helper on the shared
-constants with `COMFORT_EXIT_EPS` hysteresis and the §6 precedence rules; regime chips everywhere a
+Regime classifier (Supplied/Low reserve/Rationing/Shortage/Glut) as a pure engine helper on the shared
+constants with `RATION_EXIT_EPS` hysteresis and the §6 precedence rules; regime chips everywhere a
 good appears (the `HEALTH` record in `industry-panel.tsx:53-57` is the structural template); Worked
 column splits into Staffed + state chip; needs severity re-bases (`needSeverity`'s 0.95/0.5 bands →
 regime constants); population occupancy bar gains overshoot treatment + crowding chip; days-of-cover
@@ -102,12 +115,20 @@ loosened magnitude tests stay range-y. Docs fold ON THE BRANCH before the final 
 fixed, `[L]` BACKLOG item deleted, these build files deleted, maturity-spread memory note
 re-audited.
 
+The Population stability surface also explains the stored integral: current goods pressure,
+current tax pressure, and rising/stable/recovering direction, with a coarse recovery indication
+rather than a precise forecast. Keep diagnostics visible when `popCap <= 0` but population or
+unrest remains; align the Strike label with the real 0.65 production-suppression threshold; and
+label Needs as the latest economy assessment. The regime re-base retires the legacy 95% “met”
+cutoff, so any active rationing is named consistently.
+
 ## Cross-PR interfaces (locked here so plans don't drift)
 
 | Interface | Producer | Consumers | Shape |
 | --- | --- | --- | --- |
-| `COMFORT_COVER` | PR1, `lib/constants/economy.ts` (`ECONOMY_CONSTANTS.COMFORT_COVER = 0.75`) | PR1 curves/seeds, PR3 comfort draws, PR5 regimes | `number` |
-| `consumptionFactor(stock, comfortStock)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, PR5 classifier | pure fn → [0,1] |
+| `RATION_COVER` | PR1, `lib/constants/economy.ts` (`ECONOMY_CONSTANTS.RATION_COVER = 2`) | PR1 civilian/input draws, PR3 backstop, PR5 regimes | demand cycles |
+| `consumptionFactor(stock, rationStock)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, PR5 classifier | pure fn → [0,1] |
+| initial/export reserve policy | PR1 seed / PR3 logistics | world-gen and structural exporters | separate from rationing; initially 0.75 × T |
 | `productionCeiling(stock, targetStock, holdCover)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, **PR2 selling factor**, PR5 Glut | pure fn → [0,1] |
 | `WorldMarket.satisfaction?: number` | PR1 economy pulse (missing ⇒ 1) | pop-needs read, fed-proxy, PR3 squeeze counters, PR5 chips | optional field, no save-version bump |
 | `SimulatedMarketEntry.delivered` | PR1 supply-chain | economy processor satisfaction measure | `number` per entry |

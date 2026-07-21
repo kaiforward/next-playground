@@ -40,7 +40,7 @@ import {
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
 import { inputGate, inputDrawRatio } from "@/lib/engine/supply-chain";
 import { outputUptake } from "@/lib/engine/tick";
 // Type-only: market-pricing imports constants/market-economy, which imports this module —
@@ -664,7 +664,7 @@ const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTIO
  * `marketStock` and `bandOf` are keyed by good KEY (world market rows use good
  * keys as goodId). `bandOf` returns each good's per-market band, or undefined for
  * a good with no market row. Input draws ration on the shared scarcity ramp below
- * each input's comfort stock (COMFORT_COVER × targetStock) — there is no reserve
+ * each input's emergency stock (RATION_COVER × demandRate) — there is no reserve
  * floor, so a starved input draws toward empty rather than gating hard at a floor.
  * Seller-side uptake reads the band's [minStock, maxStock]; a good with no band
  * sells freely (uptake 1).
@@ -678,6 +678,7 @@ export function buildIndustryReadout(
   marketStock: Record<string, number>,
   bandOf: (goodId: string) => MarketBand | undefined,
   yields: ResourceVector,
+  demandRateOf?: (goodId: string) => number,
 ): SystemIndustryReadout {
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
@@ -688,10 +689,11 @@ export function buildIndustryReadout(
     skill2: { have: parts.skill2Cap, need: parts.skill2Demand, fulfil: state.skill2Fulfil },
   };
   const stockOf = (g: string): number => marketStock[g] ?? 0;
-  // Comfort stock (the scarcity-ramp knee) for a good ∈ input draws; 0 for a good with no band.
-  const comfortOf = (g: string): number => {
-    const band = bandOf(g);
-    return band !== undefined ? ECONOMY_CONSTANTS.COMFORT_COVER * band.targetStock : 0;
+  // Runtime callers provide the authoritative aggregate draw rate. The fallback
+  // keeps pure fixtures concise; their unshifted bands encode TARGET_COVER cycles.
+  const rationStockOf = (g: string): number => {
+    const demandRate = demandRateOf?.(g) ?? (bandOf(g)?.targetStock ?? 0) / TARGET_COVER;
+    return ECONOMY_CONSTANTS.RATION_COVER * demandRate;
   };
   // Seller-side uptake for a produced good ∈ [0,1]; a good with no market band sells freely (1).
   // Shared by buildingUsed and the producer idleReason.
@@ -752,7 +754,7 @@ export function buildIndustryReadout(
     let output: number | undefined;
     if (outputGood !== undefined) {
       const production = buildingProduction(buildings, outputGood, state, yields);
-      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, comfortOf) : 1;
+      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, rationStockOf) : 1;
       output = production * gate;
     }
     let idleReason: IdleReason | undefined;
@@ -783,13 +785,13 @@ export function buildIndustryReadout(
     if (!recipe) continue; // tier-0 — always gated at 1, no signal
 
     const effectiveProduction = buildingProduction(buildings, goodId, state, yields);
-    const gate = inputGate(goodId, effectiveProduction, stockOf, comfortOf);
+    const gate = inputGate(goodId, effectiveProduction, stockOf, rationStockOf);
 
     const throttledBy: string[] = [];
     for (const [input, perOutput] of Object.entries(recipe)) {
       const desired = effectiveProduction * perOutput;
       if (desired <= 0) continue;
-      if (inputDrawRatio(stockOf(input), comfortOf(input), desired) < 1) throttledBy.push(input);
+      if (inputDrawRatio(stockOf(input), rationStockOf(input), desired) < 1) throttledBy.push(input);
     }
 
     supplyChainEntries.push({ goodId, inputGate: gate, throttledBy });

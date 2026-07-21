@@ -1,16 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
 describe("band constant dependencies", () => {
-  it("keeps the logistics deficit trigger above the comfort knee", () => {
+  it("starts logistics replenishment well before emergency rationing", () => {
     // Imports must arrive before rationing starts: receivers classify as
-    // deficits (cover < DEFICIT_FRACTION) while still above the comfort knee
-    // (cover ≥ COMFORT_COVER), so the matcher refills them before pops feel it.
-    expect(DIRECTED_LOGISTICS.DEFICIT_FRACTION).toBeGreaterThan(ECONOMY_CONSTANTS.COMFORT_COVER);
+    // The deficit threshold is an anchor fraction; convert it to demand cycles
+    // before comparing it with the independently-defined ration threshold.
+    expect(DIRECTED_LOGISTICS.DEFICIT_FRACTION * TARGET_COVER).toBeGreaterThan(
+      ECONOMY_CONSTANTS.RATION_COVER,
+    );
   });
-  it("keeps the comfort knee below the anchor and the anchor below the hold ceiling", () => {
-    expect(ECONOMY_CONSTANTS.COMFORT_COVER).toBeLessThan(1);
+  it("keeps rationing close to empty and the hold ceiling above the anchor", () => {
+    expect(ECONOMY_CONSTANTS.RATION_COVER).toBeLessThan(TARGET_COVER);
     expect(ECONOMY_CONSTANTS.HOLD_COVER).toBeGreaterThan(1);
   });
 });

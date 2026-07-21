@@ -7,6 +7,7 @@ import {
   MIN_DEMAND,
   SEED_COVER_MIN,
   SEED_COVER_MAX,
+  INITIAL_RESERVE_ANCHOR_FRAC,
 } from "../market-economy";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import {
@@ -21,7 +22,6 @@ import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { marketBand } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 
 /** A fully-staffed labour state — headcount and both skill ceilings unconstrained. */
 const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
@@ -169,11 +169,11 @@ describe("getInitialStock", () => {
     expect(seedProducer).toBeGreaterThan(seedConsumer); // producer is deeper-stocked (cheaper)
   });
 
-  it("seeds a pure consumer at the comfort knee, not the price-saturation point", () => {
+  it("seeds a pure consumer at the separate initial-reserve floor", () => {
     // Pure consumer (no buildings) → producerShare=0 → raw coverMult=SEED_COVER_MIN (0.5).
-    // 0.5 < COMFORT_COVER (0.75), so the comfort floor binds: seed === COMFORT_COVER × targetStock,
+    // The separate 0.75 × targetStock initial-reserve policy binds,
     // not the old minStock (the price-saturation point, targetStock/priceCeiling = 0.5×targetStock too,
-    // but for a different reason — this asserts the comfort knee is what actually binds now).
+    // but for a different reason — this asserts the initial reserve is what actually binds now).
     const pop = 1000, good = "water";
     const g = GOODS[good];
     const band = marketBand({
@@ -182,13 +182,13 @@ describe("getInitialStock", () => {
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
     const seed = getInitialStock({}, unitResourceVector(), pop, good);
-    expect(seed).toBeCloseTo(ECONOMY_CONSTANTS.COMFORT_COVER * band.targetStock, 6);
+    expect(seed).toBeCloseTo(INITIAL_RESERVE_ANCHOR_FRAC * band.targetStock, 6);
   });
 
   it("still seeds a pure producer at deep cover (coverMult unchanged, comfort floor doesn't bind)", () => {
     // A strong net water producer (20 extractors, modest population): production dwarfs
     // consumption, so producerShare is high and the raw coverMult sits well above the
-    // COMFORT_COVER floor (0.75) — the comfort clamp only ever lifts a shallow consumer seed,
+    // The initial-reserve floor (0.75) only lifts a shallow consumer seed,
     // never touches a producer's already-deep one.
     const buildings = { water: 20 };
     const yields = unitResourceVector();
@@ -211,7 +211,7 @@ describe("getInitialStock", () => {
     const expectedSeed = Math.min(band.maxStock, band.targetStock * coverMult);
 
     const seed = getInitialStock(buildings, yields, pop, good);
-    expect(coverMult).toBeGreaterThan(ECONOMY_CONSTANTS.COMFORT_COVER); // comfort floor doesn't bind here
+    expect(coverMult).toBeGreaterThan(INITIAL_RESERVE_ANCHOR_FRAC);
     expect(seed).toBeCloseTo(expectedSeed, 6);
   });
 });

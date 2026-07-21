@@ -5,7 +5,7 @@
  * drain proportional to actual output. Goods are processed in recipe-topological
  * order so a freshly-produced input feeds its consumer the same tick.
  *
- * Draws run toward empty on the shared scarcity ramp (the comfort knee) — there
+ * Draws run toward empty on the shared emergency-ration ramp — there
  * is no reserve floor: production decelerates from the anchor to the hold ceiling
  * and stock clamps to [0, maxStock]. Civilian and industrial draws of one good
  * share the ramp at their moment of draw (civilian in the good's own entry pass,
@@ -38,12 +38,12 @@ export interface SimulatedMarketEntry extends MarketTickEntry {
  * Per-input draw ratio ∈ [0,1]: the shared scarcity ramp below the input's
  * comfort stock, capped by the stock that physically exists. Above comfort the
  * draw is unconstrained (1); below it every drawer — civilian or industrial —
- * slows at the same consumptionFactor rate, so scarcity is shared pro-rata by
- * demand instead of gated behind a reserve floor.
+ * slows at the same consumptionFactor rate at its deterministic point in the
+ * recipe-topological draw order instead of being gated behind a reserve floor.
  */
-export function inputDrawRatio(stock: number, comfortStock: number, desired: number): number {
+export function inputDrawRatio(stock: number, rationStock: number, desired: number): number {
   if (desired <= 0) return 1;
-  const allowed = Math.min(consumptionFactor(stock, comfortStock) * desired, Math.max(0, stock));
+  const allowed = Math.min(consumptionFactor(stock, rationStock) * desired, Math.max(0, stock));
   return Math.max(0, Math.min(1, allowed / desired));
 }
 
@@ -57,7 +57,7 @@ export function inputGate(
   goodId: string,
   effectiveProduction: number,
   stockOf: (g: string) => number,
-  comfortOf: (g: string) => number,
+  rationStockOf: (g: string) => number,
 ): number {
   const recipe = GOOD_RECIPES[goodId];
   if (!recipe || effectiveProduction <= 0) return 1;
@@ -65,7 +65,7 @@ export function inputGate(
   for (const [input, perOutput] of Object.entries(recipe)) {
     const desired = effectiveProduction * perOutput;
     if (desired <= 0) continue;
-    const ratio = inputDrawRatio(stockOf(input), comfortOf(input), desired);
+    const ratio = inputDrawRatio(stockOf(input), rationStockOf(input), desired);
     if (ratio < gate) gate = ratio;
   }
   return Math.max(0, gate);
@@ -81,7 +81,7 @@ export function simulateSystemEconomyTick(
   entries: MarketTickEntry[],
   params: EconomySimParams,
 ): SimulatedMarketEntry[] {
-  const { holdCover, comfortCover } = params;
+  const { holdCover, rationCover } = params;
 
   // Realized (actually produced, post input-gate and operating-ceiling) output
   // per good this run — the production-tax base. Absent good ⇒ produced nothing.
@@ -91,12 +91,12 @@ export function simulateSystemEconomyTick(
   // numerator downstream. Absent good ⇒ delivered nothing.
   const deliveredByGood = new Map<string, number>();
 
-  // Per-good comfort stock (the scarcity-ramp knee) from entry data.
-  const comfortMap = new Map<string, number>();
+  // Per-good emergency ration stock from the authoritative aggregate draw rate.
+  const rationMap = new Map<string, number>();
   for (const e of entries) {
-    comfortMap.set(e.goodId, comfortCover * e.targetStock);
+    rationMap.set(e.goodId, rationCover * e.demandRate);
   }
-  const comfortOf = (g: string): number => comfortMap.get(g) ?? 0;
+  const rationStockOf = (g: string): number => rationMap.get(g) ?? 0;
 
   // Live mutable stock per good for this system.
   const stock = new Map<string, number>();
@@ -118,7 +118,7 @@ export function simulateSystemEconomyTick(
 
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
     if (effectiveProduction > 0) {
-      const gate = inputGate(entry.goodId, effectiveProduction, stockOf, comfortOf);
+      const gate = inputGate(entry.goodId, effectiveProduction, stockOf, rationStockOf);
       const ceiling = productionCeiling(s, entry.targetStock, holdCover);
       const actualOutput = effectiveProduction * gate * ceiling;
       realizedByGood.set(entry.goodId, (realizedByGood.get(entry.goodId) ?? 0) + actualOutput);
@@ -139,7 +139,7 @@ export function simulateSystemEconomyTick(
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
     if (effectiveConsumption > 0) {
-      const factor = consumptionFactor(s, comfortCover * entry.targetStock);
+      const factor = consumptionFactor(s, rationCover * entry.demandRate);
       const delivered = Math.min(effectiveConsumption * factor, Math.max(0, s));
       s -= delivered;
       deliveredByGood.set(entry.goodId, delivered);

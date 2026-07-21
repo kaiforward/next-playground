@@ -1,3 +1,6 @@
+/** Days of total local demand held at the price/base reserve anchor. */
+export const TARGET_COVER = 40;
+
 /** Economy simulation constants — used by the economy tick. */
 export const ECONOMY_CONSTANTS = {
   /**
@@ -13,11 +16,11 @@ export const ECONOMY_CONSTANTS = {
    */
   HOLD_COVER: 1.3,
   /**
-   * Comfort knee as a fraction of the days-of-supply anchor: full civilian
-   * delivery and full industrial input draws at/above COMFORT_COVER ×
-   * targetStock; the shared scarcity ramp runs below it. One constant shared
-   * by the sim, the seed clamp, the planners, and the regime classification so
-   * mechanics and UI cannot disagree about where "comfortable" ends.
+   * Emergency stock cover in demand cycles. Civilian delivery and industrial
+   * input draws remain full while stock covers at least this many cycles of
+   * total local demand; below it, explicit rationing ramps toward zero at empty.
+   * Deliberately independent of the 40-cycle pricing/reserve anchor: an
+   * underfilled strategic reserve is not itself an unmet current need.
    */
-  COMFORT_COVER: 0.75,
+  RATION_COVER: 2,
 } as const;

@@ -259,7 +259,7 @@ describe("buildIndustryReadout", () => {
   const buildings = { metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 };
   // Population exactly staffs the metals buildings (+ the school).
   const pop = labourDemand(buildings);
-  // A comfort knee (0.75 × 100 = 75) well above the low input stocks these tests use, so a
+  // The emergency ration threshold sits above the low input stocks these tests use, so a
   // scarce input lands on the scarcity ramp rather than at a reserve floor.
   const bandOf = (): MarketBand => ({ targetStock: 100, minStock: 0, maxStock: 1000 });
 
@@ -288,8 +288,8 @@ describe("buildIndustryReadout", () => {
     expect(metals.count).toBe(3);
   });
 
-  it("supplyChain entry is throttled (inputGate < 1) when input stock is below comfort", () => {
-    // ore stock well below its comfort knee (75) → the scarcity ramp bites.
+  it("supplyChain entry is throttled (inputGate < 1) inside the ration zone", () => {
+    // Ore stock inside its emergency ration zone makes the scarcity ramp bite.
     const marketStock = { ore: 5 };
     const readout = buildIndustryReadout(buildings, pop, marketStock, bandOf, unitResourceVector());
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
@@ -299,7 +299,7 @@ describe("buildIndustryReadout", () => {
   });
 
   it("supplyChain entry is unthrottled (inputGate === 1) when input stock is ample", () => {
-    // ore stock above both the comfort knee and one tick's draw → the ramp does not bind.
+    // Ore stock above both the ration threshold and one tick's draw → the ramp does not bind.
     const fullyStaffedProduction = buildingProduction(buildings, "metals", FULL, unitResourceVector());
     const oreNeeded = fullyStaffedProduction * GOOD_RECIPES["metals"]["ore"];
     const marketStock = { ore: oreNeeded * 10 };
@@ -376,7 +376,7 @@ describe("buildIndustryReadout", () => {
 describe("buildIndustryReadout — per-building used + idleReason", () => {
   const MIN = 5;
   const MAX = 100;
-  // Uptake band over [MIN, MAX]; comfort knee (targetStock) is irrelevant to used/idleReason.
+  // Uptake band over [MIN, MAX]; the ration threshold is irrelevant to used/idleReason.
   const bandOf = (): MarketBand => ({ targetStock: MAX, minStock: MIN, maxStock: MAX });
 
   it("housing used = occupancy (population / POP_CENTRE_DENSITY); 'occupancy' when under-filled", () => {
@@ -689,7 +689,7 @@ describe("buildIndustryReadout — labour block", () => {
 
 describe("buildIndustryReadout — staffedFraction + output", () => {
   const MIN = 5;
-  // Uptake band [MIN, 100]; comfort knee (75) sits above the low input stocks these tests use.
+  // Uptake band [MIN, 100]; the ration threshold sits above the low input stocks these tests use.
   const bandOf = (): MarketBand => ({ targetStock: 100, minStock: MIN, maxStock: 100 });
 
   it("producer staffedFraction = effectiveFulfilment(tier), independent of selling", () => {
