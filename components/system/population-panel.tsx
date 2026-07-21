@@ -19,6 +19,7 @@ const TIER_META = [
   { key: "base", label: "Base population", color: "#d06a42" },
   { key: "technicians", label: "Technicians", color: "#0891b2" },
   { key: "engineers", label: "Engineers", color: "#a855f7" },
+  { key: "government", label: "Government", color: "#64748b" },
 ] as const;
 
 function NeedTooltip({ n }: { n: PopNeedData }) {

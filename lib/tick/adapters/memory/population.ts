@@ -49,9 +49,11 @@ export class InMemoryPopulationWorld implements PopulationWorld {
     const popBySystem = new Map(pops.map((p) => [p.systemId, p.population]));
     const buildingsBySystemId = new Map<string, Record<string, number>>();
     const yieldsBySystemId = new Map<string, ResourceVector>();
+    const governmentBySystemId = new Map<string, TickSystem["governmentType"]>();
     for (const s of this.systems) {
       buildingsBySystemId.set(s.id, s.buildings);
       yieldsBySystemId.set(s.id, s.yields);
+      governmentBySystemId.set(s.id, s.governmentType);
     }
     // Cache the labour snapshot per system — shared across all of a system's markets
     // computeSystemLabourSnapshot scans the whole building set.
@@ -66,7 +68,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
         snap = computeSystemLabourSnapshot(buildings, population);
         labourBySystem.set(m.systemId, snap);
       }
-      return { ...m, demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state) };
+      return { ...m, demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, governmentBySystemId.get(m.systemId) ?? "frontier", snap.state) };
     });
     return Promise.resolve();
   }

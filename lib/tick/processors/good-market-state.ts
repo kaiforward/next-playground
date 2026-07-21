@@ -5,7 +5,7 @@
  * days-of-supply price anchor (targetStock), and total demand (civilian consumption +
  * industrial input draw). One definition so both processors read markets identically.
  */
-import type { ResourceVector } from "@/lib/types/game";
+import type { GovernmentType, ResourceVector } from "@/lib/types/game";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/industry";
@@ -17,11 +17,12 @@ export interface MarketStateSource {
   buildings: Record<string, number>;
   population: number;
   yields: ResourceVector;
+  governmentType?: GovernmentType;
   markets: MarketRowForLogistics[];
 }
 
 export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
-  const rates = capacityGoodRates(row.buildings, row.population, row.yields);
+  const rates = capacityGoodRates(row.buildings, row.population, row.yields, row.governmentType ?? "frontier");
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
   const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
 

@@ -4,7 +4,7 @@
  * Sharding is PER-FACTION (matching needs all of a faction's systems at once), so the
  * adapter returns whole-faction system groups for the faction shard due this tick.
  */
-import type { ResourceVector } from "@/lib/types/game";
+import type { GovernmentType, ResourceVector } from "@/lib/types/game";
 
 /**
  * One market's raw band inputs (mirrors the fields marketBandForRow consumes).
@@ -28,6 +28,7 @@ export interface SystemLogisticsRow {
   systemId: string;
   factionId: string | null;
   population: number;
+  governmentType?: GovernmentType;
   buildings: Record<string, number>;
   /** Per-resource effective yields, for inputDemandForGood / capacityGoodRates. */
   yields: ResourceVector;

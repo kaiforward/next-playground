@@ -10,7 +10,6 @@ import {
 } from "@/lib/engine/tick";
 import { simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import type { ModifierRow } from "@/lib/engine/events";
-import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
 import type {
   EconomyProcessorParams,
@@ -123,7 +122,6 @@ export async function runEconomyProcessor(
       storageCapacity: m.storageCapacity,
       baseProductionRate: m.baseProductionRate != null ? m.baseProductionRate * catchUp : undefined,
       baseConsumptionRate: m.baseConsumptionRate != null ? m.baseConsumptionRate * catchUp : undefined,
-      govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
       productionSuppress:
         strikeMultiplier(unrestBySystem.get(m.systemId) ?? 0, strikeParams) *
         (maintenanceMalusBySystem?.get(m.systemId) ?? 1),

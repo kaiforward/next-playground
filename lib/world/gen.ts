@@ -183,11 +183,13 @@ export function generateWorld(options: GenerateWorldOptions): World {
 
   // ── Markets (every system × every good) ──
   const goodIds = Object.keys(GOODS);
+  const governmentByFactionId = new Map(factions.map((f) => [f.id, f.governmentType]));
   const markets: WorldMarket[] = universe.systems.flatMap((s, i) => {
     const demandBasis = computeSystemLabourSnapshot(s.buildings, s.population).basis;
+    const governmentType = systems[i].factionId ? governmentByFactionId.get(systems[i].factionId) ?? "frontier" : "frontier";
     return goodIds.map((goodId) => {
       const storageCapacity = facilityStorageForGood(s.buildings, goodId);
-      const stock = getInitialStock(s.buildings, s.yieldMult, s.population, goodId);
+      const stock = getInitialStock(s.buildings, s.yieldMult, s.population, goodId, governmentType);
       // Guard: JSON.stringify silently turns NaN/Infinity into null, which would
       // break the save/load round-trip — clamp defensively (mirrors seed.ts's
       // Postgres NaN/Infinity guard, which exists for the same underlying reason).
@@ -196,7 +198,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
         goodId,
         stock: Number.isFinite(stock) ? stock : 0,
         anchorMult: 1,
-        demandRate: civilianDemandRateForGood(goodId, demandBasis),
+        demandRate: civilianDemandRateForGood(goodId, demandBasis, governmentType),
         storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
         satisfaction: 1,
       };

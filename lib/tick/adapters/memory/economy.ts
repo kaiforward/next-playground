@@ -76,14 +76,13 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         producedGoodsBySystem.set(sys.id, producedGoods);
       }
       const production = buildingProduction(sys.buildings, m.goodId, snap.state, sys.yields);
-      const consumption = consumptionRate(m.goodId, snap.basis);
+      const consumption = consumptionRate(m.goodId, snap.basis, sys.governmentType);
       views.push({
         id: `${m.systemId}|${m.goodId}`,
         systemId: m.systemId,
         regionId: sys.regionId,
         goodId: m.goodId,
         stock: m.stock,
-        governmentType: sys.governmentType,
         baseProductionRate: producedGoods.has(m.goodId) ? production : undefined,
         baseConsumptionRate: consumption > 0 ? consumption : undefined,
         demandRate: m.demandRate,

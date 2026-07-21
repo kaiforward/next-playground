@@ -117,8 +117,8 @@ describe("population processor", () => {
       civilianDemandRateForGood("consumer_goods", popOnly(afterPop)),
     );
     // …and the market row carries the real-basis total, not the population-only one.
-    const realBasisTotal = totalDemandRateForGood("consumer_goods", snap.basis, buildings, unitResourceVector(), snap.state);
-    const popOnlyTotal = totalDemandRateForGood("consumer_goods", popOnly(afterPop), buildings, unitResourceVector(), snap.state);
+    const realBasisTotal = totalDemandRateForGood("consumer_goods", snap.basis, buildings, unitResourceVector(), "frontier", snap.state);
+    const popOnlyTotal = totalDemandRateForGood("consumer_goods", popOnly(afterPop), buildings, unitResourceVector(), "frontier", snap.state);
     expect(m.demandRate).toBeCloseTo(realBasisTotal, 6);
     expect(m.demandRate).not.toBeCloseTo(popOnlyTotal, 6);
   });

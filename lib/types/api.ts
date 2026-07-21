@@ -160,7 +160,7 @@ export interface PopNeedData {
   satisfaction: number;
   /** demandShare × (1 − satisfaction)² — this good's contribution to the system's dissatisfaction/unrest. */
   pressure: number;
-  /** want's composition — base + technicians + engineers. */
+  /** want's composition — base + technicians + engineers + government. */
   breakdown: ConsumptionBreakdown;
 }
 

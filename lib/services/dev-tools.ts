@@ -7,6 +7,7 @@ import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
 import { runWorldTick } from "@/lib/world/tick";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
+import { governmentByFactionId } from "@/lib/services/world-index";
 import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
@@ -190,7 +191,7 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
     const buildings = buildingsBySystem.get(sys.id) ?? {};
     return {
       ...m,
-      stock: getInitialStock(buildings, yields, sys.population, m.goodId),
+      stock: getInitialStock(buildings, yields, sys.population, m.goodId, sys.factionId ? governmentByFactionId().get(sys.factionId) ?? "frontier" : "frontier"),
       anchorMult: 1,
     };
   });

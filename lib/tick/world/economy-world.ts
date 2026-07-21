@@ -10,7 +10,6 @@
  */
 
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
-import type { GovernmentType } from "@/lib/types/game";
 import type { EconomySimParams } from "@/lib/engine/tick";
 import type { StrikeParams } from "@/lib/engine/population";
 
@@ -28,8 +27,6 @@ export interface MarketView {
   regionId: string;
   goodId: string;
   stock: number;
-  /** Government of the system's owning faction — read per-market. */
-  governmentType: GovernmentType;
   /** Base production rate for this good. `undefined` means no built producer;
    *  `0` means built capacity is currently unable to produce due to staffing/skills. */
   baseProductionRate?: number;

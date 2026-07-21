@@ -21,6 +21,14 @@ describe("consumptionRate", () => {
     expect(triple).toBeCloseTo(single * 3, 10);
   });
 
+  it("adds the scaled militarist government demand to strategic goods", () => {
+    const basis = popOnly(100);
+    const weapons = consumptionBreakdown("weapons", basis, "militarist");
+    expect(weapons.government).toBeGreaterThan(0);
+    expect(consumptionRate("weapons", basis, "militarist")).toBeCloseTo(weapons.base + weapons.technicians + weapons.engineers + weapons.government, 10);
+    expect(consumptionRate("fuel", basis, "militarist")).toBeGreaterThan(consumptionRate("fuel", basis, "frontier"));
+  });
+
   it("clamps negative population and skilled counts to zero", () => {
     expect(consumptionRate("food", popOnly(0))).toBe(0);
     expect(consumptionRate("food", popOnly(-100))).toBe(0);
@@ -98,6 +106,6 @@ describe("consumptionBreakdown", () => {
 
   it("returns all-zero terms for unknown goods", () => {
     const breakdown = consumptionBreakdown("not_a_good", { population: 1000, technicians: 100, engineers: 50 });
-    expect(breakdown).toEqual({ base: 0, technicians: 0, engineers: 0 });
+    expect(breakdown).toEqual({ base: 0, technicians: 0, engineers: 0, government: 0 });
   });
 });
