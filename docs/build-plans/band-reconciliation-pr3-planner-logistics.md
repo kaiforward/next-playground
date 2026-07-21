@@ -28,6 +28,25 @@ PR3 does **not** change population/unrest/housing/colony mechanics, regime UI, n
 - Base the PR on the shared branch, open it before `/uber-review`, and review the checked-out PR head.
 - Use the task/commit boundaries below. PR5 owns active-doc promotion and build-plan deletion.
 
+## Execution protocol
+
+- The coordinating agent reads the full plan once and carries the Locked Interface Decisions and
+  Global Constraints through every task.
+- Execute Tasks 1-7 sequentially. Do not parallelize implementation tasks: later tasks consume
+  interfaces and persisted state introduced by earlier tasks.
+- Use one fresh implementation agent per task, sized to the task's integration and reasoning needs.
+  Give it that task, the relevant locked decisions and global constraints, and only the interfaces
+  produced by completed tasks that it needs.
+- After each task commit, use an independent review agent to assess both acceptance/spec compliance
+  and code quality/repository conventions. Fix Important/Critical findings and re-review before
+  starting the next task.
+- The coordinating agent owns the pre-flight conflict scan, progress tracking, Tasks 8-9, cross-task
+  integration, simulator interpretation, PR creation, and the final `/uber-review`.
+- Continue between tasks without requesting confirmation. Stop only for a genuine plan
+  contradiction, an unresolved blocker, or an action requiring new user authority.
+- Keep task briefs and reviews scoped to their task. The final `/uber-review` remains the broad
+  whole-PR review and does not replace the per-task gates.
+
 ## Locked interface decisions
 
 ### 1. Government demand enters at `consumptionRate`, exactly once
