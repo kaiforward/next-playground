@@ -87,7 +87,7 @@ export async function runDirectedLogisticsProcessor(
   }
 
   // Market lookup by (systemId|goodId) so we can clamp stock per transfer.
-  type MarketEntry = MarketRowForLogistics & { systemId: string; min: number; max: number };
+  type MarketEntry = MarketRowForLogistics & { systemId: string; max: number };
   const marketByKey = new Map<string, MarketEntry>();
   for (const r of rows) {
     for (const m of r.markets) {
@@ -95,7 +95,6 @@ export async function runDirectedLogisticsProcessor(
       marketByKey.set(`${r.systemId}|${m.goodId}`, {
         ...m,
         systemId: r.systemId,
-        min: band.minStock,
         max: band.maxStock,
       });
     }
@@ -130,9 +129,12 @@ export async function runDirectedLogisticsProcessor(
 
     const fromCur = updates.get(from.id) ?? from.stock;
     const toCur = updates.get(to.id) ?? to.stock;
+    // The matcher's surplusDrawable (lib/engine/directed-logistics.ts) never plans a draw
+    // below the donor's anchor — this clamp is only the physical belt-and-braces against
+    // same-pulse concurrent writes, so its floor is 0, not the retired reserve.
     const moved = Math.min(
       qty,
-      Math.max(0, fromCur - from.min),
+      Math.max(0, fromCur),
       Math.max(0, to.max - toCur),
     );
     if (moved <= 0) continue;

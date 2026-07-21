@@ -122,6 +122,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         ...m,
         stock: isFinite(u.stock) ? u.stock : 0,
         anchorMult: isFinite(u.anchorMult) ? u.anchorMult : 1,
+        satisfaction: isFinite(u.satisfaction) ? Math.max(0, Math.min(1, u.satisfaction)) : 1,
       };
     });
     return Promise.resolve();

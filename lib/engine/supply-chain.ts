@@ -5,15 +5,19 @@
  * drain proportional to actual output. Goods are processed in recipe-topological
  * order so a freshly-produced input feeds its consumer the same tick.
  *
- * Each entry carries its own [minStock, maxStock] pricing band (set by the
- * demand-pricing step upstream). Only stock ABOVE the per-good floor is
- * drawable, so input draws never breach any entry's band. Civilian consumption
- * and the band clamp are identical to the flat tick (lib/engine/tick.ts), whose
- * selfLimitingFactor this engine reuses.
+ * Draws run toward empty on the shared emergency-ration ramp — there
+ * is no reserve floor: production decelerates from the anchor to the hold ceiling
+ * and stock clamps to [0, maxStock]. Civilian and industrial draws of one good
+ * share the ramp at their moment of draw (civilian in the good's own entry pass,
+ * industrial when downstream producers process). Because processing is
+ * topological, a scarce good rations every drawer at the same consumptionFactor
+ * curve. Curve geometry is identical to the flat tick (lib/engine/tick.ts), whose
+ * consumptionFactor/productionCeiling this engine reuses.
  */
 import { clamp } from "@/lib/utils/math";
 import {
-  selfLimitingFactor,
+  consumptionFactor,
+  productionCeiling,
   type EconomySimParams,
   type MarketTickEntry,
 } from "@/lib/engine/tick";
@@ -22,23 +26,38 @@ import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER } from "@/lib/constants/recipes";
 /** Good → processing rank, derived once from the static recipe-topological order. */
 const PRODUCTION_ORDER_INDEX = new Map(PRODUCTION_GOOD_ORDER.map((g, i) => [g, i]));
 
-/** A market entry after simulation: post-tick stock plus the physical output actually produced. */
+/** A market entry after simulation: post-tick stock plus the flows realized this run. */
 export interface SimulatedMarketEntry extends MarketTickEntry {
   /** Output actually produced this run — post input-gate and operating-ceiling. 0 for non-producers. */
   realized: number;
+  /** Civilian consumption actually delivered this run (≤ demanded). 0 for non-consumers. */
+  delivered: number;
+}
+
+/**
+ * Per-input draw ratio ∈ [0,1]: the shared scarcity ramp below the input's
+ * comfort stock, capped by the stock that physically exists. Above comfort the
+ * draw is unconstrained (1); below it every drawer — civilian or industrial —
+ * slows at the same consumptionFactor rate at its deterministic point in the
+ * recipe-topological draw order instead of being gated behind a reserve floor.
+ */
+export function inputDrawRatio(stock: number, rationStock: number, desired: number): number {
+  if (desired <= 0) return 1;
+  const allowed = Math.min(consumptionFactor(stock, rationStock) * desired, Math.max(0, stock));
+  return Math.max(0, Math.min(1, allowed / desired));
 }
 
 /**
  * Input-availability throttle in [0, 1] for one producing good. Returns 1 for
- * tier-0 / no-recipe goods and for zero production. Computed against drawable
- * stock (stock − minStock for that input), so the eventual draw cannot breach
- * the input's own per-entry floor.
+ * tier-0 / no-recipe goods and for zero production. The binding input's
+ * inputDrawRatio gates output; draws run toward empty on the scarcity ramp —
+ * there is no reserve floor.
  */
 export function inputGate(
   goodId: string,
   effectiveProduction: number,
   stockOf: (g: string) => number,
-  minStockOf: (g: string) => number,
+  rationStockOf: (g: string) => number,
 ): number {
   const recipe = GOOD_RECIPES[goodId];
   if (!recipe || effectiveProduction <= 0) return 1;
@@ -46,8 +65,7 @@ export function inputGate(
   for (const [input, perOutput] of Object.entries(recipe)) {
     const desired = effectiveProduction * perOutput;
     if (desired <= 0) continue;
-    const drawable = Math.max(0, stockOf(input) - minStockOf(input));
-    const ratio = Math.min(1, drawable / desired);
+    const ratio = inputDrawRatio(stockOf(input), rationStockOf(input), desired);
     if (ratio < gate) gate = ratio;
   }
   return Math.max(0, gate);
@@ -63,25 +81,30 @@ export function simulateSystemEconomyTick(
   entries: MarketTickEntry[],
   params: EconomySimParams,
 ): SimulatedMarketEntry[] {
-  const { holdCover } = params;
+  const { holdCover, rationCover } = params;
 
   // Realized (actually produced, post input-gate and operating-ceiling) output
   // per good this run — the production-tax base. Absent good ⇒ produced nothing.
   const realizedByGood = new Map<string, number>();
 
-  // Build per-good band lookups from entry data.
-  const minStockMap = new Map<string, number>();
+  // Civilian consumption delivered per good this run — the satisfaction
+  // numerator downstream. Absent good ⇒ delivered nothing.
+  const deliveredByGood = new Map<string, number>();
+
+  // Per-good emergency ration stock from the authoritative aggregate draw rate.
+  const rationMap = new Map<string, number>();
   for (const e of entries) {
-    minStockMap.set(e.goodId, e.minStock);
+    rationMap.set(e.goodId, rationCover * e.demandRate);
   }
-  const minStockOf = (g: string): number => minStockMap.get(g) ?? 0;
+  const rationStockOf = (g: string): number => rationMap.get(g) ?? 0;
 
   // Live mutable stock per good for this system.
   const stock = new Map<string, number>();
   for (const e of entries) {
     stock.set(e.goodId, e.stock);
   }
-  const stockOf = (g: string): number => stock.get(g) ?? minStockOf(g);
+  // A good with no entry in this system has nothing to draw.
+  const stockOf = (g: string): number => stock.get(g) ?? 0;
 
   const processOrder = [...entries].sort(
     (a, b) =>
@@ -91,36 +114,38 @@ export function simulateSystemEconomyTick(
 
   for (const entry of processOrder) {
     let s = stockOf(entry.goodId);
-    const { minStock, maxStock } = entry;
+    const { maxStock } = entry;
 
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
     if (effectiveProduction > 0) {
-      const gate = inputGate(entry.goodId, effectiveProduction, stockOf, minStockOf);
-      const operatingCeiling = entry.targetStock * holdCover;
-      const ceiling = selfLimitingFactor(s, minStock, operatingCeiling, "produce");
+      const gate = inputGate(entry.goodId, effectiveProduction, stockOf, rationStockOf);
+      const ceiling = productionCeiling(s, entry.targetStock, holdCover);
       const actualOutput = effectiveProduction * gate * ceiling;
       realizedByGood.set(entry.goodId, (realizedByGood.get(entry.goodId) ?? 0) + actualOutput);
       s += actualOutput;
-      // Drain inputs proportional to actual output. Because gate ≤ ratio_i =
-      // drawable_i / desiredDraw_i, the actual draw ≤ drawable_i, keeping
-      // every input above its own per-entry floor. The Math.max guard handles
+      // Drain inputs proportional to actual output. Because gate ≤ each input's
+      // inputDrawRatio (ramp- and availability-capped), the actual draw never
+      // exceeds the stock that exists. The Math.max(0, …) guard covers
       // floating-point rounding and the same-tick multi-consumer case where a
       // shared input is already drawn down by an earlier consumer.
       const recipe = GOOD_RECIPES[entry.goodId];
       if (recipe) {
         for (const [input, perOutput] of Object.entries(recipe)) {
           const draw = perOutput * actualOutput;
-          stock.set(input, Math.max(minStockOf(input), stockOf(input) - draw));
+          stock.set(input, Math.max(0, stockOf(input) - draw));
         }
       }
     }
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
     if (effectiveConsumption > 0) {
-      s -= effectiveConsumption * selfLimitingFactor(s, minStock, entry.targetStock, "consume");
+      const factor = consumptionFactor(s, rationCover * entry.demandRate);
+      const delivered = Math.min(effectiveConsumption * factor, Math.max(0, s));
+      s -= delivered;
+      deliveredByGood.set(entry.goodId, delivered);
     }
 
-    s = clamp(s, minStock, maxStock);
+    s = clamp(s, 0, maxStock);
     stock.set(entry.goodId, s);
   }
 
@@ -128,6 +153,7 @@ export function simulateSystemEconomyTick(
     ...e,
     stock: stockOf(e.goodId),
     realized: realizedByGood.get(e.goodId) ?? 0,
+    delivered: deliveredByGood.get(e.goodId) ?? 0,
   }));
 }
 

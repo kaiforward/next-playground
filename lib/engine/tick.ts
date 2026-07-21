@@ -1,11 +1,13 @@
 /**
  * Economy simulation tick engine — single-stock model.
  *
- * Each market holds one `stock` value. Producers add stock (self-limiting near
- * the ceiling), consumers drain it (self-limiting near the floor), then the value
- * is clamped to each market's own [minStock, maxStock] band. There is no
- * mean-reversion and no `demand` axis — equilibrium emerges spatially via the
- * trade-flow processor. See docs/active/gameplay/economy.md (Per-Tick Simulation).
+ * Each market holds one `stock` value. Producers add stock at the full rate at and
+ * below the anchor (targetStock), then decelerate linearly to zero at the operating
+ * ceiling (holdCover × targetStock). Consumers deliver in full at and above the
+ * emergency ration threshold (rationCover × demandRate), then ration below
+ * it. Stock is clamped to [0, maxStock]. There is no mean-reversion and no `demand`
+ * axis — equilibrium emerges spatially via the trade-flow processor.
+ * See docs/active/gameplay/economy.md (Per-Tick Simulation).
  *
  * All functions are pure — no DB or constant imports.
  */
@@ -15,13 +17,18 @@ import { clamp } from "@/lib/utils/math";
 export interface MarketTickEntry {
   goodId: string;
   stock: number;
-  /** Stock floor for this market entry — scarcity reserve and buy-price floor. */
+  /** Price-saturation point (price hits its ceiling here). Not a draw floor — retained for the decay-uptake band read. */
   minStock: number;
   /**
    * Days-of-supply anchor (price === basePrice). The produce throttle saturates at
-   * holdCover × targetStock; the consume/satisfaction factor saturates at targetStock.
+   * holdCover × targetStock; current access is independently demand-rate based.
    */
   targetStock: number;
+  /**
+   * Total local draw-rate denominator used to express emergency stock in
+   * demand cycles. Independent of pricing anchor shifts.
+   */
+  demandRate: number;
   /** Stock ceiling — storage clamp and the decay-uptake band. */
   maxStock: number;
   /** Per-good base production rate (undefined/0 = not a producer of this good). */
@@ -36,11 +43,13 @@ export interface MarketTickEntry {
 
 export interface EconomySimParams {
   /**
-   * Operating-ceiling cover multiple on targetStock. The production self-limiting
-   * factor saturates at holdCover × targetStock, not at maxStock. Passed in (not
-   * imported) so this module stays constant-free.
+   * Operating-ceiling cover multiple on targetStock: the production ceiling
+   * ramps from full rate at the anchor to 0 at holdCover × targetStock.
+   * Passed in (not imported) so this module stays constant-free.
    */
   holdCover: number;
+  /** Emergency-access cover in demand cycles. */
+  rationCover: number;
 }
 
 /**
@@ -64,6 +73,36 @@ export function selfLimitingFactor(
 }
 
 /**
+ * Consumption/delivery factor ∈ [0,1] with an emergency ration threshold.
+ * Full delivery while stock ≥ rationStock; below it ramps as √(stock / rationStock)
+ * — gentle just under the knee, brutal near empty — reaching 0 at stock = 0.
+ * The same ramp rations civilian consumption and industrial input draws (the
+ * shared scarcity ramp), so every drawer of a scarce good slows at one rate.
+ * A non-positive rationStock means the good has no meaningful ration threshold:
+ * any stock delivers freely, empty delivers nothing.
+ */
+export function consumptionFactor(stock: number, rationStock: number): number {
+  if (rationStock <= 0) return stock > 0 ? 1 : 0;
+  if (stock >= rationStock) return 1;
+  return Math.sqrt(Math.max(0, stock) / rationStock);
+}
+
+/**
+ * Production ceiling factor ∈ [0,1] with a knee at the anchor. Full rate (1)
+ * while stock ≤ targetStock; ramps linearly to 0 across
+ * [targetStock, holdCover × targetStock] — the deceleration zone that absorbs
+ * shocks. A self-supplier with margin capacity rests just above the anchor, so
+ * a healthy price sits near base.
+ */
+export function productionCeiling(stock: number, targetStock: number, holdCover: number): number {
+  if (targetStock <= 0) return 0;
+  const ceiling = targetStock * holdCover;
+  if (stock <= targetStock) return 1;
+  if (stock >= ceiling) return 0;
+  return (ceiling - stock) / (ceiling - targetStock);
+}
+
+/**
  * Seller-side output uptake ∈ [0,1] — the produce-direction self-limiting factor.
  * 1 when stock sits at the floor (output sells freely), → 0 as stock pins against
  * the storage ceiling (overproduction, piling up). The mirror of the consume-side
@@ -75,34 +114,34 @@ export function outputUptake(stock: number, minStock: number, maxStock: number):
 }
 
 /**
- * Simulate one economy tick across all market entries.
- *
- * For each entry: applies production when `productionRate > 0`, consumption
- * when `consumptionRate > 0`, then noise, then clamp to each entry's own [minStock, maxStock] band.
- * Accepts an optional RNG for deterministic testing. Returns a new array.
+ * Simulate one economy tick across all market entries. For each entry: producers
+ * add stock at full rate to the anchor and decelerate linearly to zero at the
+ * operating ceiling; consumers deliver in full above the ration threshold and ration
+ * on the scarcity ramp below it, capped by available stock; stock clamps to [0, maxStock].
+ * Returns a new array without mutating input.
  */
 export function simulateEconomyTick(
   markets: MarketTickEntry[],
   params: EconomySimParams,
 ): MarketTickEntry[] {
-  const { holdCover } = params;
+  const { holdCover, rationCover } = params;
 
   return markets.map((entry) => {
     let stock = entry.stock;
-    const { minStock, maxStock } = entry;
+    const { maxStock, targetStock } = entry;
 
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
     if (effectiveProduction > 0) {
-      const operatingCeiling = entry.targetStock * holdCover;
-      stock += effectiveProduction * selfLimitingFactor(stock, minStock, operatingCeiling, "produce");
+      stock += effectiveProduction * productionCeiling(stock, targetStock, holdCover);
     }
 
     const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
     if (effectiveConsumption > 0) {
-      stock -= effectiveConsumption * selfLimitingFactor(stock, minStock, entry.targetStock, "consume");
+      const factor = consumptionFactor(stock, rationCover * entry.demandRate);
+      stock -= Math.min(effectiveConsumption * factor, Math.max(0, stock));
     }
 
-    stock = clamp(stock, minStock, maxStock);
+    stock = clamp(stock, 0, maxStock);
 
     return { ...entry, stock };
   });
@@ -125,6 +164,8 @@ export interface TickEntryInput {
    * The production throttle saturates at holdCover × targetStock (operating ceiling).
    */
   targetStock: number;
+  /** Total local demand rate used to derive the ration threshold. */
+  demandRate: number;
   /** Stock ceiling for this market entry — resolved upstream from the pricing-band. */
   maxStock: number;
   /** Base production rate from the substrate driver (undefined = not a producer). */
@@ -158,6 +199,7 @@ export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
     stock: input.stock,
     minStock: input.minStock,
     targetStock: input.targetStock,
+    demandRate: input.demandRate,
     maxStock: input.maxStock,
     productionRate,
     consumptionRate,

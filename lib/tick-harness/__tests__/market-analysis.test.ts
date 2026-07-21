@@ -70,17 +70,47 @@ describe("computeMarketHealth — stock drift", () => {
 });
 
 describe("computeMarketHealth — stock pins", () => {
-  it("reports the per-good fraction of markets clamped at the floor or ceiling", () => {
+  it("counts a market at (or within 2% of max of) zero stock as floor-pinned", () => {
+    // The true floor is stock ≈ 0 — the Shortage regime's resting point. A market
+    // that is empty, or within BAND_PROXIMITY_FRAC (2%) of maxStock of empty, is
+    // floor-pinned; one just past that buffer is not.
+    const oreBand = marketBandForRow(market("sys-1", "ore", 0), GOODS.ore);
+    const buffer = 0.02 * oreBand.maxStock; // BAND_PROXIMITY_FRAC × maxStock
+    const { stockPins } = computeMarketHealth([
+      market("sys-1", "ore", 0), // empty → pinned
+      market("sys-2", "ore", buffer), // exactly at the buffer → pinned (≤)
+      market("sys-3", "ore", buffer * 2), // past the buffer → not pinned
+    ]);
+
+    const ore = stockPins.find((p) => p.goodId === "ore");
+    expect(ore?.floorFrac).toBeCloseTo(2 / 3, 5);
+    expect(ore?.ceilingFrac).toBe(0);
+  });
+
+  it("does NOT count the price-saturation point as pinned — deep draws are normal", () => {
+    // minStock is the price-saturation point (mid price hits the ceiling), a
+    // pricing construct — not a clamp. A market resting there is deep in the
+    // normal draw zone, not empty, so floorFrac must read 0.
+    const oreBand = marketBandForRow(market("sys-1", "ore", 0), GOODS.ore);
+    const { stockPins } = computeMarketHealth([
+      market("sys-1", "ore", oreBand.minStock), // stock = band.minStock → floorFrac 0
+    ]);
+
+    const ore = stockPins.find((p) => p.goodId === "ore");
+    expect(ore?.floorFrac).toBe(0);
+    expect(ore?.ceilingFrac).toBe(0);
+  });
+
+  it("reports the per-good fraction of markets at the floor or ceiling", () => {
     // Each stock is placed against its OWN good's band (ore and luxuries have
     // different price ceilings), so the fixture can't drift outside the band it
     // means to probe.
-    // ore: both markets at/below minStock → fully floor-pinned.
+    // ore: both markets empty (stock ≈ 0) → fully floor-pinned.
     // luxuries: one at maxStock, one mid-band → half ceiling-pinned, none at floor.
-    const oreBand = marketBandForRow(market("sys-1", "ore", 0), GOODS.ore);
     const luxBand = marketBandForRow(market("sys-1", "luxuries", 0), GOODS.luxuries);
     const { stockPins } = computeMarketHealth([
-      market("sys-1", "ore", oreBand.minStock),
-      market("sys-2", "ore", oreBand.minStock - 1),
+      market("sys-1", "ore", 0),
+      market("sys-2", "ore", 0),
       market("sys-1", "luxuries", luxBand.maxStock),
       market("sys-2", "luxuries", (luxBand.minStock + luxBand.maxStock) / 2),
     ]);
@@ -101,13 +131,12 @@ describe("computeMarketHealth — stock pins", () => {
     // for the ordering to mean anything: on a tie the comparator returns 0 and
     // a stable sort keeps insertion order, so the assertion would pass whichever
     // way the sort pointed.
-    // ore: single market at the floor → total pinned 1.0.
-    // metals: one at the floor, one mid-band → total pinned 0.5.
-    const oreBand = marketBandForRow(market("sys-1", "ore", 0), GOODS.ore);
+    // ore: single empty market → total pinned 1.0.
+    // metals: one empty, one mid-band → total pinned 0.5.
     const metalsBand = marketBandForRow(market("sys-1", "metals", 0), GOODS.metals);
     const { stockPins } = computeMarketHealth([
-      market("sys-1", "ore", oreBand.minStock),
-      market("sys-1", "metals", metalsBand.minStock),
+      market("sys-1", "ore", 0),
+      market("sys-1", "metals", 0),
       market("sys-2", "metals", (metalsBand.minStock + metalsBand.maxStock) / 2),
     ]);
 

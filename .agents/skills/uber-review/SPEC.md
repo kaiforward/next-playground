@@ -26,9 +26,9 @@ The goal: catch more issues than a single general-purpose reviewer, with cost co
 
 | Effort | Architect | Reasoning reviewers | Mechanical reviewers |
 |--------|-----------|---------------------|----------------------|
-| `quick` | Sonnet | Haiku | Haiku |
-| `standard` (default) | Opus | Sonnet | Haiku |
-| `deep` | Opus | Sonnet (+ Opus for data-contract & boundary-safety) | Haiku |
+| `quick` | `strong` | `fast` | `fast` |
+| `standard` (default) | `frontier` | `strong` | `fast` |
+| `deep` | `frontier` | `strong` (+ `frontier` for data-contract & boundary-safety) | `fast` |
 
 `quick` is a smoke-test pass; `standard` is the everyday setting; `deep` is for pre-merge review of large or sensitive changes.
 
@@ -39,7 +39,7 @@ The goal: catch more issues than a single general-purpose reviewer, with cost co
    • Local mode: `git diff main...HEAD` (or compute against the project's main branch)
    • PR mode:    `gh pr diff <#>`
 
-2. ARCHITECT (Opus on standard/deep, Sonnet on quick) — runs on FULL PR diff
+2. ARCHITECT (`frontier` on standard/deep, `strong` on quick) — runs on FULL PR diff
    Output: severity { blocker | major | minor | clean } + findings
        ├─ if severity == blocker → STOP. Validate architect findings, render report, exit.
        └─ otherwise → architect findings join the downstream pool; pipeline continues
@@ -55,12 +55,12 @@ The goal: catch more issues than a single general-purpose reviewer, with cost co
    Pass 1: collapse findings sharing (file, normalized-line, category). Keep highest
            severity; concatenate messages; record co-flagging agents.
    Pass 2 (only when triggered): same (file, line-overlap) with different categories
-           from different agents → fire one Haiku call: "are these the same underlying
+           from different agents → fire one `fast` call: "are these the same underlying
            issue?". If yes, merge. If no, keep both.
 
 6. VALIDATE (tiered)
-   • blocker + major → Opus validator (per-finding)
-   • minor           → Haiku validator (per-finding)
+   • blocker + major → `frontier` validator (per-finding)
+   • minor           → `fast` validator (per-finding)
    • info            → pass through unvalidated
    Validator sees: the finding + ~20 lines of code around file:line + the relevant rule
    context. Returns { confidence: 0-100, reason: short string }.
@@ -71,7 +71,7 @@ The goal: catch more issues than a single general-purpose reviewer, with cost co
 
 8. RENDER
    • Terminal: severity-grouped summary
-   • Markdown: full report saved to .claude/reviews/<branch>-<timestamp>.md
+   • Markdown: full report saved to .agent-reviews/<branch>-<timestamp>.md
    • PR mode (additionally): single comment posted via `gh pr comment` with file:line
      links using the established `https://github.com/<repo>/blob/<sha>/<file>#L<a>-L<b>`
      format
@@ -88,15 +88,15 @@ agents'.
 
 | # | Agent | Lens | Default model |
 |---|-------|------|---------------|
-| 0 | **Architect** | Approach-level / pattern drift / library misuse / module-boundary violations, **plus spec conformance** — does the code deliver the design/spec doc riding in the diff, and was any doc-fold faithful. Gates pipeline. | Opus |
-| 1 | **Conventions** | Project guardrails: no `as` casts, no `unknown`, no non-null `!`, generics stay generic, form components used instead of raw `<input>`, `"use client"` only where needed | Haiku |
-| 2 | **World integrity** | In-memory world & tick integrity: JSON-serialization safety (no `Map`/`Set`/`Date`/`Infinity`/`NaN` in `World`), deterministic seeded tick math, atomic tick, the `save-files.ts` dynamic-import guardrail, processors going through the `World` interface + adapter | Sonnet |
-| 3 | **Data contract** | Types flowing store/adapter → service → API → hook → component. Guards used only at the boundary. Service-returned types not re-validated downstream. | Sonnet |
-| 4 | **Boundary safety** | Zod validation at API/form boundaries, never trusting client state for writes, save-name path safety, no `immutable` cache on APIs, server-only env not leaking to the client bundle | Sonnet |
-| 5 | **Silent failures** | Swallowed errors, missing `await`, async callbacks typed as `() => void`, `.sort()` on render, throttle-vs-debounce traps, SSE-driven state without REST seed | Haiku |
-| 6 | **User journey (UI/UX)** | Hydration safety, `QueryBoundary` usage, accessibility on actionable elements, loading/error boundaries, navigation flow | Sonnet |
-| 7 | **Tests** | Engine/service/processor changes have appropriate Vitest coverage and meaningful assertions. Flags missing coverage. | Sonnet |
-| 8 | **Performance** | Expensive per-tick work / peak-latency concentration, missing memoization, expensive renders, viewport-keyed queries causing flicker, Pixi callbacks debounced where throttle is needed | Sonnet |
+| 0 | **Architect** | Approach-level / pattern drift / library misuse / module-boundary violations, **plus spec conformance** — does the code deliver the design/spec doc riding in the diff, and was any doc-fold faithful. Gates pipeline. | `frontier` |
+| 1 | **Conventions** | Project guardrails: no `as` casts, no `unknown`, no non-null `!`, generics stay generic, form components used instead of raw `<input>`, `"use client"` only where needed | `fast` |
+| 2 | **World integrity** | In-memory world & tick integrity: JSON-serialization safety (no `Map`/`Set`/`Date`/`Infinity`/`NaN` in `World`), deterministic seeded tick math, atomic tick, the `save-files.ts` dynamic-import guardrail, processors going through the `World` interface + adapter | `strong` |
+| 3 | **Data contract** | Types flowing store/adapter → service → API → hook → component. Guards used only at the boundary. Service-returned types not re-validated downstream. | `strong` |
+| 4 | **Boundary safety** | Zod validation at API/form boundaries, never trusting client state for writes, save-name path safety, no `immutable` cache on APIs, server-only env not leaking to the client bundle | `strong` |
+| 5 | **Silent failures** | Swallowed errors, missing `await`, async callbacks typed as `() => void`, `.sort()` on render, throttle-vs-debounce traps, SSE-driven state without REST seed | `fast` |
+| 6 | **User journey (UI/UX)** | Hydration safety, `QueryBoundary` usage, accessibility on actionable elements, loading/error boundaries, navigation flow | `strong` |
+| 7 | **Tests** | Engine/service/processor changes have appropriate Vitest coverage and meaningful assertions. Flags missing coverage. | `strong` |
+| 8 | **Performance** | Expensive per-tick work / peak-latency concentration, missing memoization, expensive renders, viewport-keyed queries causing flicker, Pixi callbacks debounced where throttle is needed | `strong` |
 
 ## Architect severity rubric
 
@@ -195,7 +195,7 @@ Every reviewer emits a JSON array of findings:
 - `agent` — kept on findings even after dedup; if multiple agents flagged the same issue, the merged finding lists all co-flaggers.
 - `file` + `line` — navigation + dedup key. Line can be a range; for dedup the start line is used.
 - `category` — free-form, drives Pass 1 dedup. Conventions agent draws categories from `code-standards.md` for consistency; other agents emit their own.
-- `severity` — routes to the right validator (Opus for blocker/major, Haiku for minor) and sorts the final report. The architect uses the rubric above; other agents follow `rules/severity-rubric.md`.
+- `severity` — routes to the right validator (`frontier` for blocker/major, `fast` for minor) and sorts the final report. The architect uses the rubric above; other agents follow `rules/severity-rubric.md`.
 - `message` — what the human reads. 1-2 sentences.
 - `evidence` — what the **validator** reads to verify. The single most important field for cutting false positives.
 - `suggested_fix` — optional. Present when there's an obvious fix.
@@ -246,7 +246,7 @@ The orchestrator logs which reviewers skipped each chunk and why, so the user ca
 
 **Terminal**: severity-grouped summary (blocker → major → minor → info), color-coded if the terminal supports it. Each finding shows file:line, agent(s), category, message in one line. Footer notes the number of validated, filtered, and skipped findings.
 
-**Markdown report**: saved to `.claude/reviews/<branch-or-pr>-<YYYY-MM-DD-HHmmss>.md`. Contains:
+**Markdown report**: saved to `.agent-reviews/<branch-or-pr>-<YYYY-MM-DD-HHmmss>.md`. Contains:
 1. Header — PR/branch identifier, timestamp, effort level, threshold
 2. Architect summary — severity + findings
 3. Per-chunk dispatch log — which reviewers ran/skipped, with reasons
@@ -254,7 +254,7 @@ The orchestrator logs which reviewers skipped each chunk and why, so the user ca
 5. Filtered findings — those below confidence threshold, for audit
 6. Stats — total tokens (if measurable), wall time, model usage
 
-The `.claude/reviews/` directory is gitignored.
+The `.agent-reviews/` directory is gitignored.
 
 **PR mode** (additionally): a single `gh pr comment` posted to the PR. Format:
 
@@ -274,7 +274,7 @@ No inline per-line comments — too noisy, too slow.
 ## Skill file layout
 
 ```
-.claude/skills/uber-review/
+.agents/skills/uber-review/
 ├── SKILL.md                    # entry point; orchestration playbook
 ├── SPEC.md                     # this file
 ├── prompts/
@@ -289,24 +289,24 @@ No inline per-line comments — too noisy, too slow.
 │   ├── performance.md
 │   └── validator.md           # shared validator prompt (parameterized by severity tier)
 └── rules/
-    ├── code-standards.md       # dedup-slug catalog + flagging nuance (review projection of CLAUDE.md)
+    ├── code-standards.md       # dedup-slug catalog + flagging nuance (review projection of AGENTS.md)
     └── severity-rubric.md      # shared severity scale (other agents reference this)
 ```
 
 **Why ship the skill in-repo (committed):**
-- Standards evolve with the codebase. When a new convention or gotcha is discovered (e.g., `Cache-Control: immutable` on APIs is bad), it lands in `CLAUDE.md` (the canonical source the orchestrator injects), and its dedup slug lands in `code-standards.md` — both alongside the fix.
+- Standards evolve with the codebase. When a new convention or gotcha is discovered (e.g., `Cache-Control: immutable` on APIs is bad), it lands in `AGENTS.md` (the canonical source the orchestrator injects), and its dedup slug lands in `code-standards.md` — both alongside the fix.
 - Other contributors get the skill automatically when they pull.
 - The skill's prompts reference concrete patterns from this codebase; they belong with the codebase.
 
-`.claude/skills/uber-review/` is tracked by git as-is (current `.gitignore` only excludes `.claude/settings.local.json` and `.claude/worktrees/`). `.claude/reviews/` will be added to `.gitignore` during implementation so review output stays local while the skill itself is committed.
+`.agents/skills/uber-review/` is tracked by git as-is (current `.gitignore` only excludes `.claude/settings.local.json` and `.claude/worktrees/`). `.agent-reviews/` will be added to `.gitignore` during implementation so review output stays local while the skill itself is committed.
 
 ## Error handling and edge cases
 
 - **No diff** (branch is at main): exit early with "nothing to review".
 - **PR doesn't exist / closed / draft**: exit early with a clear message. `gh pr view <#>` is the eligibility check.
-- **Agent returns malformed JSON**: one retry with schema spelled out; on second failure, skip that agent for the chunk with a logged warning.
-- **Agent times out**: skip with logged warning. Pipeline continues.
+- **Subagent returns malformed JSON**: one retry with schema spelled out; on second failure, skip that agent for the chunk with a logged warning.
+- **Subagent times out**: skip with logged warning. Pipeline continues.
 - **Architect returns malformed severity**: treat as `clean` (don't halt on garbage); log the failure.
 - **All reviewers skip a chunk** (e.g., chunk is pure docs): chunk is logged as "no applicable reviewers" and the pipeline continues.
-- **Dedup Pass 2 ambiguity**: if Haiku returns malformed merge-decision, default to "no merge" (keep both findings). Safe default.
+- **Dedup Pass 2 ambiguity**: if `fast` returns malformed merge-decision, default to "no merge" (keep both findings). Safe default.
 

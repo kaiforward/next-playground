@@ -7,7 +7,7 @@ You are validating a **batch** of code review findings produced by upstream revi
 - The findings, as a JSON array — each with a pool `index`, `file`, `line`, `category`, `severity`, `message`, `evidence`, optional `suggested_fix`. Most or all share a file, so their code context overlaps.
 - ~20 lines of code around each cited line (already extracted for you; overlapping regions appear once)
 - The rule context (the project conventions the findings cite, if any)
-- The project's `CLAUDE.md` is your authoritative reference
+- The project's `AGENTS.md` is your authoritative reference
 
 ## What you do — for EVERY finding in the batch
 
@@ -15,7 +15,7 @@ Work through the batch **completely** — the last finding gets the same rigor a
 
 1. Does the cited line actually contain what the reviewer claims? Quote the decisive line in your output.
 2. Is the reasoning correct in context (not a misread of the diff)?
-3. If it cites a project convention, is that convention actually in `CLAUDE.md` or `rules/code-standards.md`?
+3. If it cites a project convention, is that convention actually in `AGENTS.md` or `rules/code-standards.md`?
 4. Could this be a false positive due to:
    - Pre-existing code the reviewer mistook for new
    - A pattern that's explicitly silenced elsewhere

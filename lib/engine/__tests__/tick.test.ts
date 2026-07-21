@@ -5,12 +5,15 @@ import {
   processShipArrivals,
   selfLimitingFactor,
   outputUptake,
+  consumptionFactor,
+  productionCeiling,
   type MarketTickEntry,
   type EconomySimParams,
 } from "../tick";
 
 const PARAMS: EconomySimParams = {
   holdCover: 1.3,
+  rationCover: 2,
 };
 
 function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
@@ -19,18 +22,25 @@ function entry(over: Partial<MarketTickEntry>): MarketTickEntry {
     stock: 100,
     minStock: 5,
     targetStock: 100,
+    demandRate: 1,
     maxStock: 200,
     ...over,
   };
 }
 
 describe("simulateEconomyTick — production", () => {
-  it("raises stock for a producer, self-limiting near the ceiling", () => {
-    const mid = simulateEconomyTick([entry({ productionRate: 10, stock: 100 })], PARAMS);
-    expect(mid[0].stock).toBeGreaterThan(100);
-    const high = simulateEconomyTick([entry({ productionRate: 10, stock: 199 })], PARAMS);
-    expect(high[0].stock - 199).toBeLessThan(mid[0].stock - 100); // slows near MAX
-    expect(high[0].stock).toBeLessThanOrEqual(200); // clamped
+  it("produces at the FULL rate at and below the anchor", () => {
+    const atAnchor = simulateEconomyTick([entry({ productionRate: 10, stock: 100 })], PARAMS);
+    expect(atAnchor[0].stock).toBeCloseTo(110); // no throttle at the anchor
+    const low = simulateEconomyTick([entry({ productionRate: 10, stock: 20 })], PARAMS);
+    expect(low[0].stock).toBeCloseTo(30);
+  });
+
+  it("ramps linearly to zero across the deceleration zone [T, 1.3T]", () => {
+    const mid = simulateEconomyTick([entry({ productionRate: 10, stock: 115 })], PARAMS);
+    expect(mid[0].stock).toBeCloseTo(115 + 10 * 0.5);
+    const atCeiling = simulateEconomyTick([entry({ productionRate: 10, stock: 130 })], PARAMS);
+    expect(atCeiling[0].stock).toBeCloseTo(130);
   });
 
   it("does nothing when the production rate is zero or undefined", () => {
@@ -57,25 +67,39 @@ describe("simulateEconomyTick — operating ceiling", () => {
   });
 });
 
-describe("simulateEconomyTick — anchor-relative consumption", () => {
-  it("consumes at the full nominal rate once stock is at/above the anchor", () => {
-    // targetStock 100: consume factor = 1 at the anchor and above (clamped).
-    const atAnchor = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
-    expect(100 - atAnchor[0].stock).toBeCloseTo(10, 5);
+describe("simulateEconomyTick — consumption", () => {
+  it("delivers in full throughout a depleted strategic reserve", () => {
+    for (const stock of [40, 10, 2]) {
+      const result = simulateEconomyTick([entry({ consumptionRate: 1, stock })], PARAMS);
+      expect(result[0].stock).toBeCloseTo(stock - 1);
+    }
+  });
 
-    const above = simulateEconomyTick([entry({ consumptionRate: 10, stock: 150 })], PARAMS);
-    expect(150 - above[0].stock).toBeCloseTo(10, 5);
+  it("rations only below the emergency threshold and can draw below old minStock", () => {
+    const scarce = simulateEconomyTick([entry({ consumptionRate: 1, stock: 0.5 })], PARAMS);
+    expect(scarce[0].stock).toBeCloseTo(0.5 - 0.5, 6);
+    expect(scarce[0].stock).toBeLessThan(50);
+  });
+
+  it("keeps access independent of pricing-anchor shifts", () => {
+    const lowAnchor = simulateEconomyTick(
+      [entry({ targetStock: 20, demandRate: 1, consumptionRate: 1, stock: 1 })],
+      PARAMS,
+    );
+    const highAnchor = simulateEconomyTick(
+      [entry({ targetStock: 160, demandRate: 1, consumptionRate: 1, stock: 1 })],
+      PARAMS,
+    );
+    expect(lowAnchor[0].stock).toBeCloseTo(highAnchor[0].stock, 8);
+  });
+
+  it("never draws more than the stock that exists (stock floors at 0, not minStock)", () => {
+    const nearEmpty = simulateEconomyTick([entry({ consumptionRate: 1000, stock: 5 })], PARAMS);
+    expect(nearEmpty[0].stock).toBeGreaterThanOrEqual(0);
   });
 });
 
-describe("simulateEconomyTick — consumption", () => {
-  it("lowers stock for a consumer, self-limiting near the floor", () => {
-    const mid = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
-    expect(mid[0].stock).toBeLessThan(100);
-    const low = simulateEconomyTick([entry({ consumptionRate: 10, stock: 6 })], PARAMS);
-    expect(low[0].stock).toBeGreaterThanOrEqual(5); // clamped at MIN
-  });
-
+describe("simulateEconomyTick — consumption multipliers", () => {
   it("applies event consumption multipliers", () => {
     const base = simulateEconomyTick([entry({ consumptionRate: 10, stock: 100 })], PARAMS);
     const boosted = simulateEconomyTick([entry({ consumptionRate: 10, consumptionMult: 2, stock: 100 })], PARAMS);
@@ -93,7 +117,7 @@ describe("simulateEconomyTick — immutability", () => {
 });
 
 describe("buildMarketTickEntry", () => {
-  const BASE_BAND = { minStock: 5, targetStock: 100, maxStock: 200 };
+  const BASE_BAND = { minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200 };
 
   it("passes through the base production rate unmodified", () => {
     const e = buildMarketTickEntry({
@@ -211,21 +235,21 @@ describe("selfLimitingFactor", () => {
 // ── Per-entry band: clamp + per-entry self-limiting ────
 
 describe("simulateEconomyTick — per-entry band", () => {
-  it("self-limiting uses the entry's own min/max", () => {
-    expect(selfLimitingFactor(10, 10, 90, "consume")).toBe(0); // at floor → no consumption
-    expect(selfLimitingFactor(90, 10, 90, "produce")).toBe(0); // at ceiling → no production
+  it("clamps stock to [0, maxStock]", () => {
+    const low = { goodId: "ore", stock: -5, minStock: 10, targetStock: 50, demandRate: 1, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const outLow = simulateEconomyTick([low], PARAMS)[0];
+    expect(outLow.stock).toBe(0);
+
+    const high = { goodId: "ore", stock: 100, minStock: 10, targetStock: 50, demandRate: 1, maxStock: 90, productionRate: 0, consumptionRate: 0 };
+    const outHigh = simulateEconomyTick([high], PARAMS)[0];
+    expect(outHigh.stock).toBe(90);
   });
 
-  it("clamps stock up to the entry's own minStock", () => {
-    const e = { goodId: "ore", stock: 5, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
-    const out = simulateEconomyTick([e], PARAMS)[0];
-    expect(out.stock).toBe(10);
-  });
-
-  it("clamps stock down to the entry's own maxStock", () => {
-    const e = { goodId: "ore", stock: 100, minStock: 10, targetStock: 50, maxStock: 90, productionRate: 0, consumptionRate: 0 };
-    const out = simulateEconomyTick([e], PARAMS)[0];
-    expect(out.stock).toBe(90);
+  it("does not use minStock as a floor (price-saturation point only)", () => {
+    const belowMin = { goodId: "ore", stock: 3, minStock: 10, targetStock: 50, demandRate: 1, maxStock: 90, productionRate: 0, consumptionRate: 10 };
+    const out = simulateEconomyTick([belowMin], PARAMS)[0];
+    expect(out.stock).toBeLessThan(10); // can go below minStock via consumption
+    expect(out.stock).toBeGreaterThanOrEqual(0); // but not below 0
   });
 });
 
@@ -295,5 +319,39 @@ describe("outputUptake — stays storage-relative (decay signal)", () => {
 
     const glut = outputUptake(199, 5, 200); // pinned at the storage ceiling
     expect(glut).toBeLessThan(0.1); // genuinely stuck → decay is correct here
+  });
+});
+
+describe("consumptionFactor — emergency ration threshold", () => {
+  it("delivers in full at and above the comfort stock", () => {
+    expect(consumptionFactor(75, 75)).toBe(1);
+    expect(consumptionFactor(200, 75)).toBe(1);
+  });
+  it("ramps as sqrt below the knee — gentle just under it, brutal near empty", () => {
+    expect(consumptionFactor(75 * 0.81, 75)).toBeCloseTo(0.9); // sqrt(0.81)
+    expect(consumptionFactor(75 * 0.04, 75)).toBeCloseTo(0.2); // sqrt(0.04)
+  });
+  it("reaches 0 at empty and never goes negative", () => {
+    expect(consumptionFactor(0, 75)).toBe(0);
+    expect(consumptionFactor(-5, 75)).toBe(0);
+  });
+  it("treats a non-positive comfort stock as unconstrained when stock exists", () => {
+    expect(consumptionFactor(10, 0)).toBe(1);
+    expect(consumptionFactor(0, 0)).toBe(0);
+  });
+});
+
+describe("productionCeiling — knee at the anchor", () => {
+  it("runs at full rate at and below the anchor", () => {
+    expect(productionCeiling(0, 100, 1.3)).toBe(1);
+    expect(productionCeiling(100, 100, 1.3)).toBe(1);
+  });
+  it("ramps linearly to 0 across [T, holdCover×T]", () => {
+    expect(productionCeiling(115, 100, 1.3)).toBeCloseTo(0.5);
+    expect(productionCeiling(130, 100, 1.3)).toBe(0);
+    expect(productionCeiling(200, 100, 1.3)).toBe(0);
+  });
+  it("returns 0 for a non-positive anchor (no band to produce into)", () => {
+    expect(productionCeiling(10, 0, 1.3)).toBe(0);
   });
 });

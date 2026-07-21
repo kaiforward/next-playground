@@ -104,6 +104,6 @@ Schema:
 You will be given:
 - The full PR diff (unified format) — this normally includes the change's design/spec doc (an added `docs/build-plans/` file, or a doc promoted into `docs/active/` / `docs/planned/`). That doc is your spec for Lens 2.
 - A brief summary of the change (branch name, file list)
-- The project's `CLAUDE.md` is your authoritative reference for layering, conventions, and established patterns
+- The project's `AGENTS.md` is your authoritative reference for layering, conventions, and established patterns
 
 For **source code**, you will NOT be given per-file content outside the diff — infer architecture from imports, file paths, and diff context alone. The one exception is the **design/spec doc**: you may `Read` it (and the folded `docs/active/` doc) in full so Lens 2 works against the complete intent rather than a single hunk. If no such doc is in the diff, Lens 2 simply does not apply.

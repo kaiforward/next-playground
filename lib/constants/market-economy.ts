@@ -4,6 +4,7 @@
  */
 
 import { scaleValue } from "@/lib/constants/economy-scale";
+export { TARGET_COVER } from "@/lib/constants/economy";
 import {
   buildingProduction,
   computeLabourState,
@@ -33,8 +34,6 @@ export const DEFAULT_ELASTICITY = 1;
  * Per-good imbalances are tuned via each good's production coeff / per-capita need
  * (see physical-economy.ts); this stays the whole-roster knob.
  */
-export const TARGET_COVER = 40;
-
 /**
  * Floor on the days-of-supply denominator so a near-empty system yields a finite
  * cover instead of a divide-by-zero / zero reference. First-draft value; tuned via `npm run simulate`.
@@ -45,9 +44,12 @@ export const MIN_DEMAND = scaleValue(0.05);
  * Seed-cover multipliers on the per-system reference: a pure consumer seeds at
  * SEED_COVER_MIN (shallow cover → dear), a pure producer at SEED_COVER_MAX (deep
  * cover → cheap), blended by producer share. First-draft values; tuned via `npm run simulate`.
+ * A separate initial-reserve floor keeps new markets well above emergency
+ * rationing. Seed policy is strategic reserve policy, not the access threshold.
  */
 export const SEED_COVER_MIN = 0.5;
 export const SEED_COVER_MAX = 1.5;
+export const INITIAL_RESERVE_ANCHOR_FRAC = 0.75;
 
 /**
  * Days-of-supply demand denominator for one good: max(civilian consumption,
@@ -89,8 +91,8 @@ export function totalDemandRateForGood(
  * (targetStock = TARGET_COVER × demandRate, the price anchor) and
  * infrastructure-stocked (maxStock adds facilityStorageForGood on top of the
  * demand headroom). A net producer seeds with deeper cover (reads cheap), a net
- * consumer with shallower cover (reads dear). Clamped to [band.minStock,
- * band.maxStock].
+ * consumer with shallower cover (reads dear). Seeds retain a separate strategic
+ * reserve floor; changing emergency rationing must not seed nearly empty markets.
  *
  * Uses the same building-block formula `capacityGoodRates` does, but for a
  * single good (avoids an O(goods²) seed when called per good).
@@ -122,5 +124,10 @@ export function getInitialStock(
   // Stock is a continuous float balance — do NOT round to whole units. Rounding the seed
   // quantizes it (~0.3% error at ECONOMY_SCALE=1, negligible at 100), which breaks the
   // goods-side scale-invariance from tick 0 and compounds through every economy pulse.
-  return Math.max(band.minStock, Math.min(band.maxStock, band.targetStock * coverMult));
+  //
+  // Initial reserve policy is independent of the emergency ration threshold.
+  return Math.max(
+    INITIAL_RESERVE_ANCHOR_FRAC * band.targetStock,
+    Math.min(band.maxStock, band.targetStock * coverMult),
+  );
 }

@@ -50,4 +50,17 @@ describe("toGoodMarketStates", () => {
     });
     expect(out[0].production).toBe(0);
   });
+
+  it("threads the persisted satisfaction through to GoodMarketState", () => {
+    const withSatisfaction = { ...foodMarket(20, 40), satisfaction: 0.7 };
+    const [withValue] = toGoodMarketStates({
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [withSatisfaction],
+    });
+    expect(withValue.satisfaction).toBe(0.7);
+
+    const [withoutValue] = toGoodMarketStates({
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(20, 40)],
+    });
+    expect(withoutValue.satisfaction).toBeUndefined();
+  });
 });

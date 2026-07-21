@@ -5,7 +5,6 @@ import type {
   GlobalEventMap,
 } from "../types";
 import {
-  selfLimitingFactor,
   outputUptake,
   type MarketTickEntry,
 } from "@/lib/engine/tick";
@@ -137,18 +136,30 @@ export async function runEconomyProcessor(
   const entrySystemIds = markets.map((m) => m.systemId);
   const simulated = simulateCoupledEconomyTick(tickEntries, entrySystemIds, simParams);
 
+  // Satisfaction is the FLOW actually applied this pulse (delivered ÷ demanded),
+  // never a post-tick stock recompute — a month that starts above the comfort
+  // knee delivers in full even when it ends just below it. Non-consumers read 1.
+  const satisfactionByIndex = markets.map((_, i) => {
+    const consumptionRate = tickEntries[i].consumptionRate;
+    if (consumptionRate == null || consumptionRate <= 0) return 1;
+    const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
+    return demanded > 0 ? Math.max(0, Math.min(1, simulated[i].delivered / demanded)) : 1;
+  });
+
   // anchorMult comes straight off the resolved tick — the builder already
   // aggregated the system's modifiers, so there's no second aggregation pass.
   const marketUpdates: MarketUpdate[] = markets.map((m, i) => ({
     id: m.id,
     stock: simulated[i].stock,
     anchorMult: resolved[i].anchorMult,
+    satisfaction: satisfactionByIndex[i],
   }));
 
   await world.applyMarketUpdates(marketUpdates);
 
-  // Measure per-system convex demand-weighted dissatisfaction D (consume side) and
-  // per-produced-good output uptake (produce side) from post-tick stock.
+  // Fold the same per-good satisfaction into per-system convex demand-weighted
+  // dissatisfaction D (consume side) and read per-produced-good output uptake
+  // (produce side) from post-tick stock.
   const goodsBySystem = new Map<string, GoodSatisfaction[]>();
   const uptakeBySystem = new Map<string, Map<string, number>>();
   const realizedProductionBySystem = new Map<string, Map<string, number>>();
@@ -156,9 +167,8 @@ export async function runEconomyProcessor(
     const consumptionRate = tickEntries[i].consumptionRate;
     if (consumptionRate != null && consumptionRate > 0) {
       const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
-      const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].targetStock, "consume");
       const arr = goodsBySystem.get(m.systemId) ?? [];
-      arr.push({ satisfaction, demanded });
+      arr.push({ satisfaction: satisfactionByIndex[i], demanded });
       goodsBySystem.set(m.systemId, arr);
     }
     // outputUptake stays on the FULL [minStock, maxStock] storage band — NOT the

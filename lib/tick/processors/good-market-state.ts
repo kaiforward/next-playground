@@ -36,6 +36,7 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
       targetStock: band.targetStock,
       demand: civ + industrial,
       production: prodByKey.get(m.goodId) ?? 0,
+      satisfaction: m.satisfaction,
     });
   }
   return goods;

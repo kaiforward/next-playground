@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computePopNeeds, type PopNeedsMarketRow } from "@/lib/engine/pop-needs";
-import { marketBandForRow } from "@/lib/engine/market-pricing";
-import { consumptionRate } from "@/lib/engine/physical-economy";
+import { computePopNeeds } from "@/lib/engine/pop-needs";
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 
@@ -14,46 +12,45 @@ const consumedIds = Object.keys(GOOD_CONSUMPTION)
 const bigGood = consumedIds[0];
 const smallGood = consumedIds[consumedIds.length - 1];
 
-function row(goodId: string, stockAt: "min" | "target" | "mid"): PopNeedsMarketRow {
-  const demandRate = consumptionRate(goodId, basis);
-  const base = { goodId, demandRate, storageCapacity: 0, anchorMult: 1 };
-  const band = marketBandForRow(base, GOODS[goodId]);
-  const stock =
-    stockAt === "min" ? band.minStock : stockAt === "target" ? band.targetStock : (band.minStock + band.targetStock) / 2;
-  return { ...base, stock };
-}
-
-describe("computePopNeeds", () => {
-  it("satisfaction is 1 at target stock, 0 at the band floor, delivered = want × satisfaction", () => {
-    const needs = computePopNeeds(basis, [row(bigGood, "target"), row(smallGood, "min")]);
+describe("computePopNeeds — stored satisfaction", () => {
+  it("reads the persisted flow, not a stock recompute", () => {
+    const needs = computePopNeeds(basis, [{ goodId: bigGood, satisfaction: 0.6 }]);
     const fed = needs.find((n) => n.goodId === bigGood)!;
-    const starved = needs.find((n) => n.goodId === smallGood)!;
-    expect(fed.satisfaction).toBeCloseTo(1, 5);
-    expect(fed.delivered).toBeCloseTo(fed.want, 5);
-    expect(starved.satisfaction).toBe(0);
-    expect(starved.delivered).toBe(0);
-    expect(fed.want).toBeCloseTo(consumptionRate(bigGood, basis), 5);
+    const totalWant = needs.reduce((s, n) => s + n.want, 0);
+    expect(fed.satisfaction).toBeCloseTo(0.6, 5);
+    expect(fed.delivered).toBeCloseTo(fed.want * 0.6, 5);
+    expect(fed.pressure).toBeCloseTo((fed.want / totalWant) * 0.4 * 0.4, 5);
   });
 
-  it("pressure weights by demand share: a big-demand moderate shortage outranks a small-demand deep one", () => {
-    const needs = computePopNeeds(basis, [row(bigGood, "mid"), row(smallGood, "min")]);
-    const big = needs.find((n) => n.goodId === bigGood)!;
-    const small = needs.find((n) => n.goodId === smallGood)!;
-    // big: huge share × moderate gap² ; small: tiny share × gap²=1 — the share term must dominate.
-    expect(big.pressure).toBeGreaterThan(small.pressure);
+  it("treats a missing satisfaction field as fully served (pre-change save)", () => {
+    const needs = computePopNeeds(basis, [{ goodId: bigGood }]);
+    const fed = needs.find((n) => n.goodId === bigGood)!;
+    expect(fed.satisfaction).toBe(1);
+    expect(fed.delivered).toBeCloseTo(fed.want, 5);
+  });
+
+  it("treats a wanted good with no market row as satisfaction 0", () => {
+    const needs = computePopNeeds(basis, []);
+    const anyNeed = needs.find((n) => n.goodId === bigGood)!;
+    expect(anyNeed.satisfaction).toBe(0);
+    expect(anyNeed.delivered).toBe(0);
+  });
+
+  it("clamps an out-of-range persisted satisfaction into [0,1]", () => {
+    const over = computePopNeeds(basis, [{ goodId: bigGood, satisfaction: 1.4 }]);
+    const under = computePopNeeds(basis, [{ goodId: smallGood, satisfaction: -0.2 }]);
+    expect(over.find((n) => n.goodId === bigGood)!.satisfaction).toBe(1);
+    expect(under.find((n) => n.goodId === smallGood)!.satisfaction).toBe(0);
   });
 
   it("pressures use demand shares (sum over goods of share = 1 when all fully starved)", () => {
-    const needs = computePopNeeds(basis, consumedIds.map((id) => row(id, "min")));
+    const needs = computePopNeeds(basis, consumedIds.map((id) => ({ goodId: id, satisfaction: 0 })));
     const total = needs.reduce((s, n) => s + n.pressure, 0);
     expect(total).toBeCloseTo(1, 5);
   });
 
-  it("excludes goods this basis does not want, and treats a missing market row as satisfaction 0", () => {
+  it("excludes goods this basis does not want", () => {
     const zeroBasis = { population: 0, technicians: 0, engineers: 0 };
-    expect(computePopNeeds(zeroBasis, [row(bigGood, "target")])).toEqual([]);
-    const needs = computePopNeeds(basis, []); // wanted goods, no market rows at all
-    const anyNeed = needs.find((n) => n.goodId === bigGood)!;
-    expect(anyNeed.satisfaction).toBe(0);
+    expect(computePopNeeds(zeroBasis, [{ goodId: bigGood, satisfaction: 1 }])).toEqual([]);
   });
 });

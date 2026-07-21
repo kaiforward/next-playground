@@ -272,6 +272,7 @@ function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLog
       anchorMult: m.anchorMult,
       demandRate: m.demandRate,
       storageCapacity: m.storageCapacity,
+      satisfaction: m.satisfaction,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -641,7 +642,7 @@ export async function runWorldTick(
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.month,
-      simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
+      simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER, rationCover: ECONOMY_CONSTANTS.RATION_COVER },
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
       maintenanceMalusBySystem,

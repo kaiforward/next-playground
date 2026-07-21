@@ -198,6 +198,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
         anchorMult: 1,
         demandRate: civilianDemandRateForGood(goodId, demandBasis),
         storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
+        satisfaction: 1,
       };
     });
   });

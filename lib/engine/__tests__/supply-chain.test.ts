@@ -1,10 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { inputGate, simulateSystemEconomyTick, simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
+import {
+  inputGate,
+  inputDrawRatio,
+  simulateSystemEconomyTick,
+  simulateCoupledEconomyTick,
+} from "@/lib/engine/supply-chain";
 import type { MarketTickEntry, EconomySimParams } from "@/lib/engine/tick";
 
-const PARAMS: EconomySimParams = { holdCover: 1.3 };
+const PARAMS: EconomySimParams = { holdCover: 1.3, rationCover: 2 };
 
 // Convenience: build a full MarketTickEntry with per-entry band defaults.
+// minStock is left on the entry (0.05×T here) but the engine no longer floors on
+// it — it is retained only for the decay-uptake band read.
 function entry(
   goodId: string,
   stock: number,
@@ -13,8 +20,9 @@ function entry(
   minStock = 5,
   maxStock = 200,
   targetStock = 100,
+  demandRate = 1,
 ): MarketTickEntry {
-  return { goodId, stock, minStock, targetStock, maxStock, productionRate: prod, consumptionRate: cons };
+  return { goodId, stock, minStock, targetStock, demandRate, maxStock, productionRate: prod, consumptionRate: cons };
 }
 
 describe("inputGate", () => {
@@ -22,53 +30,95 @@ describe("inputGate", () => {
     expect(inputGate("ore", 10, () => 100, () => 5)).toBe(1);
   });
 
-  it("is 1 when the input is abundant", () => {
+  it("is 1 when the input is abundant (above comfort and above desired)", () => {
     // metals recipe { ore: 1 }; effectiveProduction 10 wants 10 ore; 200 ore available.
     expect(inputGate("metals", 10, () => 200, () => 5)).toBe(1);
   });
+});
 
-  it("throttles proportionally when the input is scarce (above-floor drawable)", () => {
-    // want 10 ore; stock 8 ⇒ drawable 3 (8 - floor 5) ⇒ gate 0.3
-    expect(inputGate("metals", 10, () => 8, () => 5)).toBeCloseTo(0.3, 6);
+describe("inputDrawRatio", () => {
+  it("is 1 when nothing is desired", () => {
+    expect(inputDrawRatio(50, 100, 0)).toBe(1);
   });
 
-  it("binds on the scarcest of multiple inputs", () => {
-    // chemicals { gas: 0.5, minerals: 0.5 }; eff 10 ⇒ wants 5 gas, 5 minerals.
-    const stock = (g: string) => (g === "gas" ? 200 : 6); // minerals drawable 1 ⇒ ratio 0.2
-    expect(inputGate("chemicals", 10, stock, () => 5)).toBeCloseTo(0.2, 6);
+  it("is 1 at/above comfort when the desired draw fits in stock", () => {
+    // comfort 75, stock 100 (≥ comfort), desired 10 (≤ stock) ⇒ unconstrained.
+    expect(inputDrawRatio(100, 75, 10)).toBe(1);
   });
 
-  it("is 0 when the input sits exactly at the floor (nothing drawable)", () => {
-    // stock === minLevel ⇒ drawable 0 ⇒ gate 0; production fully starved.
-    expect(inputGate("metals", 10, () => 5, () => 5)).toBe(0);
+  it("rations on the sqrt ramp below comfort", () => {
+    // stock 25 = 0.25 × comfort 100 ⇒ ramp √0.25 = 0.5; desired 10 leaves 5 ≤ stock ⇒ ratio 0.5.
+    expect(inputDrawRatio(25, 100, 10)).toBeCloseTo(0.5, 6);
   });
 
-  it("respects a per-input floor higher than 5 when minStockOf returns it", () => {
-    // ore has floor 20; stock 25 ⇒ drawable 5; want 10 ⇒ gate 0.5
-    expect(inputGate("metals", 10, () => 25, () => 20)).toBeCloseTo(0.5, 6);
+  it("caps on the physical stock when the ramp would over-draw", () => {
+    // stock 2, comfort 4 ⇒ ramp √0.5 ≈ 0.707; ramp×desired = 7.07 > stock 2 ⇒ availability binds: 2/10 = 0.2.
+    expect(inputDrawRatio(2, 4, 10)).toBeCloseTo(0.2, 6);
+  });
+
+  it("never exceeds 1", () => {
+    // abundant stock, tiny desired ⇒ clamped to 1, not stock/desired.
+    expect(inputDrawRatio(1000, 10, 5)).toBe(1);
+  });
+
+  it("delivers freely with a non-positive comfort band when any stock exists, 0 at empty", () => {
+    expect(inputDrawRatio(50, 0, 10)).toBe(1);
+    expect(inputDrawRatio(0, 0, 10)).toBe(0);
+  });
+});
+
+describe("inputGate — scarcity ramp", () => {
+  it("gates at 1 when every input sits at/above its comfort stock", () => {
+    // metals { ore: 1 }; desired 10 fits in stock at comfort (75) and above (200).
+    expect(inputGate("metals", 10, () => 75, () => 75)).toBe(1);
+    expect(inputGate("metals", 10, () => 200, () => 75)).toBe(1);
+  });
+
+  it("rations an input below comfort at the shared consumptionFactor rate", () => {
+    // input stock 25 = 0.25 × comfort 100 ⇒ ramp √0.25 = 0.5; desired 10 ⇒ allowed 5 ≤ stock ⇒ gate 0.5.
+    expect(inputGate("metals", 10, () => 25, () => 100)).toBeCloseTo(0.5, 6);
+  });
+
+  it("binds on the scarcest input on the ramp", () => {
+    // chemicals { gas: 0.5, minerals: 0.5 }; eff 10 ⇒ 5 each. gas abundant (ratio 1),
+    // minerals 25 = 0.25 × comfort 100 ⇒ ramp 0.5 ⇒ gate 0.5.
+    const stock = (g: string) => (g === "gas" ? 200 : 25);
+    expect(inputGate("chemicals", 10, stock, () => 100)).toBeCloseTo(0.5, 6);
+  });
+
+  it("draws below the old minStock — a crisis drains toward empty, not to the floor", () => {
+    // ore starts at 3 (between 0 and the old minStock 5); a metals producer draws it.
+    const out = simulateSystemEconomyTick([entry("ore", 3), entry("metals", 50, 20)], PARAMS);
+    const ore = out.find((e) => e.goodId === "ore")!;
+    const metals = out.find((e) => e.goodId === "metals")!;
+    // Output realized despite scarcity, and the input drained toward empty past the old floor.
+    expect(metals.stock).toBeGreaterThan(50);
+    expect(ore.stock).toBeLessThan(3);
+    expect(ore.stock).toBeLessThan(5); // below the old minStock — no reserve floor
+    expect(ore.stock).toBeCloseTo(0, 6);
+  });
+
+  it("never draws an input negative", () => {
+    // Huge desired vs a tiny stock: the availability cap keeps the draw ≤ stock.
+    const out = simulateSystemEconomyTick([entry("ore", 2), entry("metals", 50, 1000)], PARAMS);
+    const ore = out.find((e) => e.goodId === "ore")!;
+    const metals = out.find((e) => e.goodId === "metals")!;
+    expect(ore.stock).toBeGreaterThanOrEqual(0);
+    expect(ore.stock).toBeCloseTo(0, 6);
+    expect(metals.stock).toBeGreaterThan(50);
   });
 });
 
 describe("simulateSystemEconomyTick", () => {
-  it("never breaches the floor when draining a scarce input", () => {
-    // ore near floor, a metals producer wanting more than is drawable.
-    const out = simulateSystemEconomyTick(
-      [entry("ore", 6), entry("metals", 50, 20)],
-      PARAMS,
-    );
-    const ore = out.find((e) => e.goodId === "ore")!;
-    expect(ore.stock).toBeGreaterThanOrEqual(5);
-  });
-
   it("propagates a fresh tier-0 output to its tier-1 consumer the same tick", () => {
-    // ore starts AT floor (5, nothing drawable yet) but produces this tick;
-    // metals should still get some ore because ore is processed first (topo order).
+    // ore starts low but produces this tick; metals should still get some ore because
+    // ore is processed first (topo order).
     const out = simulateSystemEconomyTick(
       [entry("metals", 50, 10), entry("ore", 5, 30)],
       PARAMS,
     );
     const metals = out.find((e) => e.goodId === "metals")!;
-    // ore produced 30 (self-limited) before metals draws ⇒ metals output > 0.
+    // ore produced 30 before metals draws ⇒ metals output > 0.
     expect(metals.stock).toBeGreaterThan(50);
   });
 
@@ -85,11 +135,11 @@ describe("simulateSystemEconomyTick", () => {
     expect(out.map((e) => e.goodId)).toEqual(["metals", "ore"]);
   });
 
-  it("keeps a shared scarce input above the floor across two same-tick consumers", () => {
+  it("keeps a shared scarce input non-negative across two same-tick consumers", () => {
     // chemicals { gas, minerals } and components { minerals, metals } both draw
-    // minerals in one tick. Minerals starts just above the floor, so the second
-    // consumer sees stock already drawn down by the first — the Math.max guard
-    // must still keep it at/above the floor.
+    // minerals in one tick. Minerals starts just above 0, so the second consumer
+    // sees stock already drawn down by the first — the Math.max(0, …) guard must
+    // still keep it non-negative (the old reserve floor is gone).
     const out = simulateSystemEconomyTick(
       [
         entry("minerals", 6, 0),
@@ -101,7 +151,8 @@ describe("simulateSystemEconomyTick", () => {
       PARAMS,
     );
     const minerals = out.find((e) => e.goodId === "minerals")!;
-    expect(minerals.stock).toBeGreaterThanOrEqual(5);
+    expect(minerals.stock).toBeGreaterThanOrEqual(0);
+    expect(minerals.stock).toBeLessThan(5); // drained below the old floor
   });
 
   it("cascade: cutting ore supply throttles metals output", () => {
@@ -114,13 +165,14 @@ describe("simulateSystemEconomyTick", () => {
 
   // ── Per-entry band tests ─────────────────────────────────────────
 
-  it("clamps to the PER-ENTRY band, not a global band", () => {
-    // ore has a tight band [10, 50]; stock seeded above its own ceiling must clamp to 50.
+  it("clamps to the PER-ENTRY maxStock, not a global band", () => {
+    // ore has a tight ceiling (50); stock seeded above its own ceiling must clamp to 50.
     const oreEntry: MarketTickEntry = {
       goodId: "ore",
       stock: 60, // above this entry's maxStock (50)
       minStock: 10,
       targetStock: 30,
+      demandRate: 1,
       maxStock: 50,
       productionRate: 0,
       consumptionRate: 0,
@@ -129,16 +181,16 @@ describe("simulateSystemEconomyTick", () => {
     expect(out[0].stock).toBe(50); // clamped down to the per-entry ceiling
   });
 
-  it("input draw respects the INPUT good's own per-entry floor (different minStocks)", () => {
-    // ore has minStock=20, metals has minStock=5.
-    // ore stock is 25 (only 5 drawable). metals wants 10 ore per unit output.
-    // effectiveProduction=10 ⇒ desired draw 10 ⇒ gate=5/10=0.5.
-    // ore must not drop below 20.
+  it("input draw ignores the INPUT good's old minStock — drains on the comfort ramp", () => {
+    // ore has minStock=20; the engine no longer treats it as a draw floor.
+    // ore stock 25, comfort 0.75×100 = 75 ⇒ ramp √(25/75) ≈ 0.577; metals wants 10 ore.
+    // The draw pulls ore below its old floor of 20 — never to it.
     const oreEntry: MarketTickEntry = {
       goodId: "ore",
       stock: 25,
       minStock: 20,
       targetStock: 100,
+      demandRate: 1,
       maxStock: 200,
       productionRate: 0,
     };
@@ -147,12 +199,14 @@ describe("simulateSystemEconomyTick", () => {
       stock: 50,
       minStock: 5,
       targetStock: 100,
+      demandRate: 1,
       maxStock: 200,
       productionRate: 10,
     };
     const out = simulateSystemEconomyTick([oreEntry, metalsEntry], PARAMS);
     const oreOut = out.find((e) => e.goodId === "ore")!;
-    expect(oreOut.stock).toBeGreaterThanOrEqual(20); // never breaches ore's own floor
+    expect(oreOut.stock).toBeLessThan(20); // below the old per-input floor
+    expect(oreOut.stock).toBeGreaterThanOrEqual(0);
   });
 });
 
@@ -160,7 +214,7 @@ describe("simulateSystemEconomyTick — operating ceiling", () => {
   it("idles production at the operating ceiling in the coupled tick", () => {
     // tier-0 good (no recipe) → input gate 1. holdCover 1.3 × targetStock 100 = 130.
     const out = simulateSystemEconomyTick(
-      [{ goodId: "ore", stock: 130, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 10 }],
+      [{ goodId: "ore", stock: 130, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 10 }],
       PARAMS,
     );
     expect(out[0].stock).toBeCloseTo(130, 5); // throttled to ~0 at the operating ceiling
@@ -169,12 +223,11 @@ describe("simulateSystemEconomyTick — operating ceiling", () => {
 
 describe("simulateSystemEconomyTick — realized output", () => {
   it("reports realized output per entry — input-starved production realizes less than capacity", () => {
-    // ore: tier-0 (no recipe), stock pinned at its own floor so the operating-ceiling
-    // factor is 1 → realized should equal effectiveProduction exactly (gate is always
-    // 1 for a no-recipe good).
+    // ore: tier-0 (no recipe), stock below the anchor so the production ceiling is 1 →
+    // realized equals effectiveProduction exactly (gate is always 1 for a no-recipe good).
     const tier0 = entry("ore", 5, 20);
     // chemicals: recipe { gas: 0.5, minerals: 0.5 }; neither input is in this entry set,
-    // so stockOf/minStockOf both default to 0 for them ⇒ drawable 0 ⇒ gate 0 ⇒ realized 0.
+    // so stockOf defaults to 0 and comfortOf defaults to 0 ⇒ ramp 0 ⇒ gate 0 ⇒ realized 0.
     const starved = entry("chemicals", 50, 20);
     // water: pure consumer, no productionRate at all ⇒ never enters the production
     // branch ⇒ realized reports 0, not undefined.
@@ -191,14 +244,48 @@ describe("simulateSystemEconomyTick — realized output", () => {
   });
 });
 
+describe("simulateSystemEconomyTick — delivered flow", () => {
+  it("reports delivered = full demand above the ration threshold", () => {
+    const out = simulateSystemEconomyTick([entry("water", 100, undefined, 8)], PARAMS);
+    const water = out.find((e) => e.goodId === "water")!;
+    expect(water.delivered).toBeCloseTo(8, 6);
+    expect(water.stock).toBeCloseTo(92, 6);
+  });
+
+  it("reports rationed delivered below the threshold and 0 at empty", () => {
+    // demandRate 8 → ration threshold 16; stock 4 gives factor 0.5 and delivers 4.
+    const below = simulateSystemEconomyTick([entry("water", 4, undefined, 8, 5, 200, 100, 8)], PARAMS);
+    expect(below.find((e) => e.goodId === "water")!.delivered).toBeCloseTo(4, 6);
+    // at empty: nothing to deliver.
+    const empty = simulateSystemEconomyTick([entry("water", 0, undefined, 8)], PARAMS);
+    expect(empty.find((e) => e.goodId === "water")!.delivered).toBe(0);
+  });
+
+  it("reports delivered = 0 for pure producers", () => {
+    const out = simulateSystemEconomyTick([entry("ore", 5, 20)], PARAMS);
+    expect(out.find((e) => e.goodId === "ore")!.delivered).toBe(0);
+  });
+
+  it("clamps post-tick stock to [0, maxStock] (no minStock floor)", () => {
+    // lower bound is 0, not minStock: a consumer drains water past its old floor (5).
+    const drained = simulateSystemEconomyTick([entry("water", 4, undefined, 8)], PARAMS);
+    const water = drained.find((e) => e.goodId === "water")!;
+    expect(water.stock).toBeLessThan(5); // below the old minStock floor
+    expect(water.stock).toBe(0);
+    // upper bound is maxStock: stock seeded above the ceiling clamps down.
+    const over = simulateSystemEconomyTick([entry("ore", 250)], PARAMS);
+    expect(over.find((e) => e.goodId === "ore")!.stock).toBe(200);
+  });
+});
+
 describe("simulateCoupledEconomyTick", () => {
   it("isolates systems — system A's ore does not feed system B's metals", () => {
     // A: ore-rich + metals. B: ore-starved + metals. Same flat array.
     const entries: MarketTickEntry[] = [
-      { goodId: "ore", stock: 150, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 0 },   // A
-      { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 20 }, // A
-      { goodId: "ore", stock: 6, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 0 },      // B
-      { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, maxStock: 200, productionRate: 20 }, // B
+      { goodId: "ore", stock: 150, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 0 },   // A
+      { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 20 }, // A
+      { goodId: "ore", stock: 6, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 0 },      // B
+      { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 20 }, // B
     ];
     const systemIds = ["A", "A", "B", "B"];
     const out = simulateCoupledEconomyTick(entries, systemIds, PARAMS);
