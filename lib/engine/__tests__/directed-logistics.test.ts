@@ -232,6 +232,27 @@ describe("matchFactionTransfers", () => {
     expect(result.transfers).toHaveLength(1);
     expect(result.fundingBound.map((match) => match.toSystemId)).toEqual(["B", "C"]);
   });
+
+  it("limits zero-budget classification to bounded route candidates", () => {
+    const donors = Array.from({ length: 100 }, (_value, index) =>
+      sys(`S${index}`, 0, { goodId: "food", stock: 100, targetStock: 50, demand: 5 }),
+    );
+    const receiver = sys("D", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    let routeLookups = 0;
+    const result = matchFactionTransfers(
+      [...donors, receiver],
+      () => {
+        routeLookups++;
+        return 1;
+      },
+      () => ["S0"],
+    );
+
+    expect(routeLookups).toBe(1);
+    expect(result.fundingBound).toEqual([
+      { goodId: "food", fromSystemId: "S0", toSystemId: "D" },
+    ]);
+  });
 });
 
 // Direct coverage of the donor test shared by the logistics matcher AND the build planner.

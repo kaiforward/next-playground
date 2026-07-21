@@ -5,7 +5,7 @@ truth for every mechanic here) is `docs/planned/economy-band-reconciliation.md` 
 2026-07-20, spec-review gate run and all 13 findings folded in (report:
 `.claude/reviews/spec-economy-band-reconciliation-2026-07-20-182256.md`). This doc locks the PR
 decomposition, the cross-PR interfaces, and the expected interim states. Per-PR task plans are
-authored as each PR starts (PR1 is shipped; PR2 planning is in progress); on final ship the
+authored as each PR starts (PR1 and PR2 are complete); on final ship the
 spec promotes to `docs/active/`, SPEC.md and `economy-equilibrium-rework.md` update, and every
 `band-reconciliation-*.md` build file here is deleted.
 
@@ -53,7 +53,7 @@ Invariant asserted in tests: the selling factor contains no labour/input/strike/
 term (the purse flow-only guarantee, `treasury.ts:128-136`).
 
 - Consumes from PR1: `productionCeiling(stock, targetStock, holdCover)`, `RATION_COVER`.
-- **Status: started** — task-level plan: `band-reconciliation-pr2-decay.md`.
+- **Status: complete** — PR #198; task-level plan: `band-reconciliation-pr2-decay.md`.
 - **Interim incoherence (until PR3/PR4):** planner still capacity-blind; housing treadmill only
   half-fixed (vacancy slack lands, but growth/relief flip is PR4).
 

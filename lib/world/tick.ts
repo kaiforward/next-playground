@@ -62,7 +62,7 @@ import { TREASURY, REFERENCE_VALUE, TAX_LEVEL_UNREST_PRESSURE } from "@/lib/cons
 import { maintenanceOutputMalus, maintenanceBufferScale } from "@/lib/engine/treasury";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
-import type { RouteCost } from "@/lib/engine/directed-logistics";
+import type { ReachableSystemIds, RouteCost } from "@/lib/engine/directed-logistics";
 import type { EventDefinition, EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import { buildModifiersForPhase } from "@/lib/engine/events";
 import type { GovernmentType } from "@/lib/types/game";
@@ -801,6 +801,8 @@ export async function runWorldTick(
         const h = hops.get(f)?.get(t);
         return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
       };
+      const reachableSystemIds: ReachableSystemIds = (systemId) =>
+        hops.get(systemId)?.keys() ?? [];
       // Directed-logistics moves goods only between developed systems.
       const rows = buildLogisticsRows(
         systems.filter((s) => developedSystemIds.has(s.id)),
@@ -810,6 +812,7 @@ export async function runWorldTick(
       const dlResult = await runDirectedLogisticsProcessor(dlWorld, { tick }, {
         interval: cadence.logistics,
         routeCost,
+        reachableSystemIds,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
       });

@@ -59,7 +59,7 @@ export interface DirectedLogisticsWorld {
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]>;
   /** Bulk absolute stock writes (already clamped). */
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
-  /** Refresh the latest wanted-but-unfunded assessment without rewriting stock. */
+  /** Apply changed wanted-but-unfunded assessments without rewriting stock. */
   applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;
   /** Append directed-logistics flow rows to the world flow log. */
   appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;

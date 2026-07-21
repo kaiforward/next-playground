@@ -239,8 +239,8 @@ export interface WorldMarket {
   /**
    * The latest logistics assessment found this row at one endpoint of a reachable
    * wanted-but-unfunded match. Source-side: demand-backed export capacity must not
-   * be pruned as glut. Destination-side: PR3 must not answer the squeeze by building
-   * local capacity. Missing => false.
+   * be pruned as glut. Destination-side: distinguishes constrained delivery from
+   * absent reachable supply. Missing => false.
    */
   logisticsFundingBound?: boolean;
 }

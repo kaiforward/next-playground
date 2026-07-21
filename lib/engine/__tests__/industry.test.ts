@@ -719,10 +719,11 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     expect(metals.used).toBeLessThan(4 * 0.2);         // used still folds the selling factor (unchanged)
   });
 
-  it("housing staffedFraction = occupancy (used / count)", () => {
+  it("housing staffedFraction stays literal while used includes vacancy protection", () => {
     const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, bandOf, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
-    expect(housing.staffedFraction).toBeCloseTo(0.66, 6);
+    expect(housing.used).toBeCloseTo(6.6, 6);
+    expect(housing.staffedFraction).toBeCloseTo(0.6, 6);
   });
 
   it("output = buildingProduction × inputGate (input-throttled reads low even when fully staffed)", () => {

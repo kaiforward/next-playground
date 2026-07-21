@@ -562,8 +562,9 @@ export interface SystemIndustryReadout {
   labourAllocation: LabourAllocation;
   /**
    * One entry per building type with count > 0, sorted by tier ascending then buildingType.
-   * `used` is the decay-relevant "in use" amount — occupancy for housing, staffed-and-selling
-   * for producers (always ≤ count). `idleReason` names the binding constraint.
+   * `used` is the decay-relevant "in use" amount — vacancy-protected occupancy for housing,
+   * staffed-and-selling capacity for producers (always ≤ count). `idleReason` names the binding
+   * constraint.
    */
   buildings: Array<{
     buildingType: string;
@@ -572,7 +573,7 @@ export interface SystemIndustryReadout {
     tier: GoodTier | -1;
     count: number;
     used: number;
-    /** Pure-staffing ratio the panel bar shows: effectiveFulfilment(tier) for producers, occupancy for housing. */
+    /** Panel ratio: effectiveFulfilment(tier) for producers, literal occupancy for housing. */
     staffedFraction: number;
     /** Real production rate this cycle (buildingProduction × inputGate). Producers/extractors only. */
     output?: number;
@@ -730,7 +731,10 @@ export function buildIndustryReadout(
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
       const used = buildingUsed(HOUSING_TYPE, count, ctx);
-      const staffedFraction = count > 0 ? used / count : 0;
+      // Housing deliberately carries two utilization readings. `used` includes the healthy-vacancy
+      // allowance because decay and the row's health must agree about protected capacity;
+      // `staffedFraction` remains literal occupancy so the player never sees empty homes as residents.
+      const staffedFraction = count > 0 ? housingUsed(population) / count : 0;
       buildingEntries.push({ buildingType, tier: -1, count, used, staffedFraction, idleReason: used < count ? "occupancy" : undefined });
       continue;
     }

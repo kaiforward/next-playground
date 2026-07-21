@@ -460,6 +460,10 @@ best source:
 - continue scanning after exhaustion to discover further funding-bound pairs, but never emit a zero
   or non-finite transfer.
 
+The live matcher enumerates each deficit's candidates from the existing bounded-hop cache and then
+filters that neighbourhood through the per-good surplus index. It must not scan every faction surplus
+after exhaustion; the fallback all-system enumerator exists only for small standalone engine callers.
+
 Deduplicate endpoint triples before returning if the existing iteration can reach the same triple
 more than once. Do not attach money/funding percentages or quantities; PR2/PR3 only require the
 explanatory boolean.
@@ -480,8 +484,9 @@ The directed-logistics processor should accumulate all match results, then:
 
 - keep `allTransfers` exactly as today for stock/flow application;
 - build a set of composite market IDs for **both** endpoints of every funding-bound triple;
-- call `applyFundingBoundUpdates` for every market row in the due `rows`, writing true when its ID is
-  in the set and false otherwise;
+- evaluate every market row in the due `rows`, then call `applyFundingBoundUpdates` only where the
+  next boolean differs from `market.logisticsFundingBound ?? false`; this includes stale true rows
+  that must be cleared without cloning every unchanged market;
 - perform this refresh even when there are zero transfers or the funded fraction is zero;
 - skip it on off-pulse / no-due-key paths, preserving the prior completed assessment.
 
