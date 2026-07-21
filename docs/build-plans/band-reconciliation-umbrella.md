@@ -59,6 +59,8 @@ term (the purse flow-only guarantee, `treasury.ts:128-136`).
 
 ### PR3 — Build planner + logistics (§2)
 
+Plan: `band-reconciliation-pr3-planner-logistics.md`.
+
 Realized-aware classification: `toGoodMarketStates`' `production` figure applies the suppression
 multipliers and input gates (the tick already emits `realizedProductionBySystem`; thread it — and
 last-pulse persistence for off-month pulses — into the planner rows/ctx, which today get a bare
