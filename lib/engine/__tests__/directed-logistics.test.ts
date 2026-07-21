@@ -61,7 +61,10 @@ describe("systemLogisticsGeneration", () => {
 function sys(
   systemId: string,
   generation: number,
-  good: { goodId: string; stock: number; targetStock: number; demand: number; production?: number; capacityProduction?: number },
+  good: {
+    goodId: string; stock: number; targetStock: number; demand: number; production?: number;
+    capacityProduction?: number; productionSuppressed?: boolean;
+  },
 ): SystemLogisticsState {
   const production = good.production ?? 0;
   return {
@@ -323,6 +326,23 @@ describe("strategic exporter reserve", () => {
 
   it("does not deep-draw a suppressed structural producer", () => {
     expect(surplusDrawable(110, 100, 5, 30, true)).toBe(0);
+  });
+
+  it("keeps suppressed and realized-zero former exporters on the ordinary excess path", () => {
+    const recipient = sys("B", 0, { goodId: "ore", stock: 0, targetStock: 100, demand: 5 });
+    const suppressed = sys("A", 100, {
+      goodId: "ore", stock: 150, targetStock: 100, demand: 5,
+      production: 30, capacityProduction: 30, productionSuppressed: true,
+    });
+    const realizedZero = sys("C", 100, {
+      goodId: "ore", stock: 150, targetStock: 100, demand: 5,
+      production: 0, capacityProduction: 30,
+    });
+
+    const suppressedTransfer = matchFactionTransfers([suppressed, recipient], oneHop).transfers[0];
+    const realizedZeroTransfer = matchFactionTransfers([realizedZero, recipient], oneHop).transfers[0];
+    expect(suppressedTransfer.quantity).toBe(50);
+    expect(realizedZeroTransfer.quantity).toBe(50);
   });
 
   it("keeps the strategic reserve safely above ration cover", () => {
