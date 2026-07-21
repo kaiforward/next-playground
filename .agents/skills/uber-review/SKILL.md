@@ -28,8 +28,16 @@ Parse the user's command for these flags:
 
 Resolve tiers through `.agents/model-tiers.md`. If the harness cannot choose a model per subagent, preserve reviewer independence and give architectural and high-severity validation work back to the frontier orchestrator.
 
-Reasoning reviewers: world-integrity, data-contract, boundary-safety, user-journey, tests, performance.
-Mechanical reviewers: conventions, silent-failures.
+When Codex custom agents are available, route through the project profiles in `.codex/agents/`:
+
+- `review-frontier` — `gpt-5.6-sol`, `xhigh`
+- `review-strong` — `gpt-5.6-terra`, `high`
+- `review-fast` — `gpt-5.6-luna`, `medium`
+
+Verify the selected profile in spawn metadata when `features.multi_agent_v2.hide_spawn_agent_metadata = false`. If a requested profile is unavailable, report the fallback in the dispatch preview rather than silently claiming the intended tier ran.
+
+Reasoning reviewers: world-integrity, data-contract, boundary-safety, silent-failures, user-journey, tests, performance.
+Mechanical reviewer: conventions.
 
 ## Pipeline
 
@@ -115,11 +123,19 @@ The `<feature>` is the first directory segment after the prefix, or the filename
 
 Group files by feature stem. For each group:
 
-- If size ≤ chunk-size: emit as one chunk
-- If size > chunk-size and ≤ 35: emit as one chunk, log a `large chunk` notice
+- If size ≤ chunk-size: keep it as a candidate cluster
+- If size > chunk-size and ≤ 35: keep it as one candidate cluster and log a `large chunk` notice
 - If size > 35: split by layer within the feature. Order: engine → services → tick (processors / world / adapters) → api → hooks → components → app pages. Each split ≤ 35.
 
-The `shared` group is capped at chunk-size; if larger, split alphabetically.
+Coalesce candidate clusters after feature extraction. Feature stems preserve cohesion; they are not a reason to emit many tiny chunks:
+
+- Target at most `ceil(file count / chunk-size)` chunks.
+- Merge related small clusters first, keeping cross-layer implementations of one mechanic together.
+- Then pack remaining small clusters together until chunks approach `chunk-size`.
+- Prefer chunks of at least 8 files when the diff is large enough, and never exceed 35 files.
+- Exceed the target chunk count only when required by the 35-file hard cap or when merging would split a clearly cohesive feature.
+
+Treat `shared` as another candidate cluster during coalescing. If it exceeds 35 files, split it alphabetically before coalescing.
 
 Each chunk has its own file classification (recompute from the chunk's files).
 
@@ -132,6 +148,25 @@ The architect is dispatched once on the **full** unified diff, not per chunk. Ch
 Step 4.5's parallel dispatch fires **per chunk**. For each chunk, compute its file classification, apply skip-gates, and dispatch matching reviewers in parallel.
 
 Findings from all chunks pool together for dedup (step 4.6) and validation (step 5).
+
+### 1.7. Preview dispatch cost — REQUIRED
+
+Before launching the architect, apply the reviewer skip-gate matrix from step 4.5 to the planned chunks and report:
+
+- Included file count and exclusions
+- Chunk count and files per chunk
+- Architect count
+- Downstream reviewer-pass count, including each lens's agent profile
+- Per-reviewer payload size (files and changed lines)
+- That validator count is findings-dependent and not yet known
+
+Use this format:
+
+```
+Planned dispatch: <N> architect + <M> reviewer passes across <C> chunks; validators depend on findings.
+```
+
+If the plan exceeds 20 downstream reviewer passes, pause and require explicit user confirmation before launching the architect. Suggest a larger `--chunk-size`, a narrower `--only` set, or better cluster coalescing. A user who already approved this exact dispatch count in the current conversation does not need to confirm it again.
 
 ### 2. Dispatch the architect
 
@@ -213,14 +248,27 @@ Apply `--only` filter on top of the matrix (if `--only=boundary-safety,world-int
 
 Apply the effort dial for capability-tier selection per reviewer (see "Effort dial" section above).
 
+#### Build minimal reviewer payloads
+
+Read `rules/context-routing.md` completely. For each reviewer, derive a reviewer-specific payload from the chunk before dispatch:
+
+- Never send documentation, assets, config, or unchanged files to downstream code reviewers. Documentation belongs to the architect's spec-conformance pass.
+- Include only the changed source/test files assigned to that reviewer by `rules/context-routing.md`.
+- Include unified diff hunks for those files, not the full chunk diff. Add a file manifest so the reviewer knows its complete assigned scope.
+- Let reviewers read narrowly required whole-file context or direct call sites from the PR-head tree. Do not preload those files speculatively.
+- If a reviewer-specific payload still exceeds 35 files, split that reviewer payload by cohesive mechanic using step 1.6; do not repeat unrelated files across splits.
+- Record the payload's file count and added/deleted line counts in the dispatch log.
+
+Project-rule context follows the same principle. Use `rules/context-routing.md` to extract only the exact bullets/subsections from `AGENTS.md` needed by that reviewer. Do not inject the complete `## Conventions` and `## Gotchas / Known Pitfalls` sections into every prompt.
+
 **Dispatch in parallel** — send all matching reviewer subagent tasks concurrently. Each task:
 
 - `description`: `<reviewer name> review`
 - agent type: `general-purpose` or the closest available equivalent
-- capability tier: per the effort dial
-- `prompt`: contents of `prompts/<reviewer>.md` + relevant rule injection (see below) + the chunk's diff
+- capability tier/profile: per the effort dial
+- `prompt`: contents of `prompts/<reviewer>.md` + its minimal rule context + `rules/severity-rubric.md` + its reviewer-specific diff payload
 
-**Rule injection**: `AGENTS.md` is the single source of the project's rules, and the orchestrator already holds it in context. Build a **project-rules block** once per run: the verbatim `## Conventions` and `## Gotchas / Known Pitfalls` sections of the repo-root `AGENTS.md` (re-read them at dispatch time so they're never stale). Inject that block **plus `rules/severity-rubric.md`** into *every* reviewer. Additionally, inject `rules/code-standards.md` — the dedup-slug catalog + review-only flagging nuance — into the **Conventions** reviewer. Concatenate at the end of each agent's prompt under clear separators (e.g. `## Project rules (from AGENTS.md)`, `## Severity rubric`, `## Category slugs`). Reviewers no longer carry their own copy of the rules — they read them from the injected AGENTS.md sections.
+Additionally inject only the matching rows and nuance from `rules/code-standards.md` into the Conventions reviewer. `AGENTS.md` remains canonical; context routing changes what is transmitted, never what rules apply.
 
 Collect each reviewer's JSON output. Parse each (same fenced-block regex + retry-once policy as architect). Findings from all reviewers go into the pool alongside architect's.
 
