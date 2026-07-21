@@ -144,9 +144,9 @@ export async function runDirectedLogisticsProcessor(
 
     const fromCur = updates.get(from.id) ?? from.stock;
     const toCur = updates.get(to.id) ?? to.stock;
-    // The matcher's surplusDrawable (lib/engine/directed-logistics.ts) never plans a draw
-    // below the donor's anchor — this clamp is only the physical belt-and-braces against
-    // same-pulse concurrent writes, so its floor is 0, not the retired reserve.
+    // The matcher already applies the donor's policy reserve (strategic exporters may
+    // draw below their anchor). This is only physical belt-and-braces against same-pulse
+    // concurrent writes, so its floor remains zero.
     const moved = Math.min(
       qty,
       Math.max(0, fromCur),

@@ -36,8 +36,15 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
       stock: m.stock,
       targetStock: band.targetStock,
       demand: civ + industrial,
-      production: prodByKey.get(m.goodId) ?? 0,
+      // An explicit zero is a completed assessment and must remain a sink. Capacity is
+      // only a legacy-save fallback while the persisted rate is genuinely absent.
+      production: m.realizedProductionRate ?? (prodByKey.get(m.goodId) ?? 0),
+      capacityProduction: prodByKey.get(m.goodId) ?? 0,
       satisfaction: m.satisfaction,
+      productionSuppressed: m.productionSuppressed,
+      squeezePulses: m.squeezePulses,
+      proposalPulses: m.proposalPulses,
+      logisticsFundingBound: m.logisticsFundingBound,
     });
   }
   return goods;

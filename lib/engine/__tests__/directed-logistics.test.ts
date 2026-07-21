@@ -8,6 +8,7 @@ import {
   type RouteCost,
 } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
 
 describe("classifyMarketState", () => {
   it("classifies below the deficit fraction as deficit with shortfall to target", () => {
@@ -60,9 +61,13 @@ describe("systemLogisticsGeneration", () => {
 function sys(
   systemId: string,
   generation: number,
-  good: { goodId: string; stock: number; targetStock: number; demand: number; production?: number },
+  good: { goodId: string; stock: number; targetStock: number; demand: number; production?: number; capacityProduction?: number },
 ): SystemLogisticsState {
-  return { systemId, factionId: "f1", generation, goods: [{ ...good, production: good.production ?? 0 }] };
+  const production = good.production ?? 0;
+  return {
+    systemId, factionId: "f1", generation,
+    goods: [{ ...good, production, capacityProduction: good.capacityProduction ?? production }],
+  };
 }
 
 // Unit cost = hops; 1 hop between any two systems, unreachable for "far".
@@ -211,7 +216,7 @@ describe("matchFactionTransfers", () => {
   });
 
   it("does not mark an ample-budget or drawable-bound transfer", () => {
-    const donor = sys("A", 100, { goodId: "food", stock: 54, targetStock: 50, demand: 5, production: 10 });
+    const donor = sys("A", 100, { goodId: "food", stock: 14, targetStock: 10, demand: 5, production: 0 });
     const receiver = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
     const result = matchFactionTransfers([donor, receiver], oneHop);
     expect(result.transfers[0].quantity).toBe(4);
@@ -267,9 +272,9 @@ describe("surplusDrawable", () => {
     expect(surplusDrawable(50, -10, 5, 30)).toBe(0);
   });
 
-  it("returns 0 at or below the anchor (never donates a system below its own days-of-supply)", () => {
-    expect(surplusDrawable(100, 100, 5, 30)).toBe(0); // exactly at anchor → aboveAnchor 0
-    expect(surplusDrawable(90, 100, 5, 30)).toBe(0); // below anchor, even a structural producer
+  it("keeps ordinary stock-holders at their anchor", () => {
+    expect(surplusDrawable(100, 100, 5, 0)).toBe(0);
+    expect(surplusDrawable(90, 100, 5, 0)).toBe(0);
   });
 
   it("path (a): any holder clearing the surplus margin donates stock above its anchor", () => {
@@ -278,8 +283,8 @@ describe("surplusDrawable", () => {
   });
 
   it("path (b): a structural producer above its anchor donates even below the 1.4× margin", () => {
-    // stock 110 = 1.1× anchor (below 140), production 30 > demand 5 → drawable 110 − 100 = 10.
-    expect(surplusDrawable(110, 100, 5, 30)).toBe(10);
+    // stock 110 = 1.1× anchor (below 140), production 30 > demand 5 → drawable 110 − 75 = 35.
+    expect(surplusDrawable(110, 100, 5, 30)).toBe(35);
   });
 
   it("excludes a non-producer sitting in the 1.0–1.4× band (no re-export churn)", () => {
@@ -291,6 +296,38 @@ describe("surplusDrawable", () => {
     // Pins the strict `production > demand`: equal production must NOT qualify as path (b).
     expect(surplusDrawable(110, 100, 5, 5)).toBe(0);
     // A hair above demand DOES qualify — confirms the boundary sits exactly at equality.
-    expect(surplusDrawable(110, 100, 5, 5.01)).toBe(10);
+    expect(surplusDrawable(110, 100, 5, 5.01)).toBe(35);
+  });
+});
+
+describe("strategic exporter reserve", () => {
+  it("draws a structural exporter at 0.90 targetStock down to the 0.75 reserve", () => {
+    const target = 100;
+    const drawable = surplusDrawable(target * 0.9, target, 5, 30);
+    expect(drawable).toBeCloseTo(target * (0.9 - DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC));
+    expect(target * 0.9 - drawable).toBeCloseTo(target * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC);
+  });
+
+  it("does not treat a non-producer at 0.90 targetStock as an exporter", () => {
+    expect(surplusDrawable(90, 100, 5, 0)).toBe(0);
+  });
+
+  it("does not deep-draw an input-starved former exporter despite its capacity", () => {
+    const donor = sys("A", 100, {
+      goodId: "ore", stock: 110, targetStock: 100, demand: 5,
+      production: 0, capacityProduction: 30,
+    });
+    const receiver = sys("B", 0, { goodId: "ore", stock: 0, targetStock: 10, demand: 5 });
+    expect(matchFactionTransfers([donor, receiver], oneHop).transfers).toEqual([]);
+  });
+
+  it("does not deep-draw a suppressed structural producer", () => {
+    expect(surplusDrawable(110, 100, 5, 30, true)).toBe(0);
+  });
+
+  it("keeps the strategic reserve safely above ration cover", () => {
+    expect(DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC * TARGET_COVER).toBeGreaterThan(
+      ECONOMY_CONSTANTS.RATION_COVER,
+    );
   });
 });

@@ -20,6 +20,14 @@ export interface MarketRowForLogistics {
   storageCapacity: number;
   /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1). */
   satisfaction?: number;
+  /** Reference-cycle realized output; missing falls back to current capacity for old saves only. */
+  realizedProductionRate?: number;
+  /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
+  productionSuppressed?: boolean;
+  /** Consecutive rationed economy assessments, saturated at 2. */
+  squeezePulses?: number;
+  /** Consecutive structural construction assessments, saturated at 2. */
+  proposalPulses?: number;
   logisticsFundingBound?: boolean;
 }
 

@@ -74,4 +74,34 @@ describe("toGoodMarketStates", () => {
     });
     expect(withoutValue.satisfaction).toBeUndefined();
   });
+
+  it("uses explicit realized production including zero, while missing values fall back to capacity", () => {
+    const base = {
+      buildings: { food: 3 }, population: 100, governmentType: "federation" as const,
+      yields: unitResourceVector(), markets: [{ ...foodMarket(20, 40), realizedProductionRate: 0 }],
+    };
+    const [assessed] = toGoodMarketStates(base);
+    expect(assessed.capacityProduction).toBeGreaterThan(0);
+    expect(assessed.production).toBe(0);
+
+    const [legacy] = toGoodMarketStates({
+      ...base,
+      markets: [{ ...foodMarket(20, 40), realizedProductionRate: undefined }],
+    });
+    expect(legacy.production).toBe(legacy.capacityProduction);
+  });
+
+  it("threads assessment policy fields through the one shared market derivation", () => {
+    const [state] = toGoodMarketStates({
+      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(),
+      markets: [{
+        ...foodMarket(20, 40), satisfaction: 0.5, productionSuppressed: true,
+        squeezePulses: 2, proposalPulses: 1, logisticsFundingBound: true,
+      }],
+    });
+    expect(state).toMatchObject({
+      satisfaction: 0.5, productionSuppressed: true, squeezePulses: 2,
+      proposalPulses: 1, logisticsFundingBound: true,
+    });
+  });
 });

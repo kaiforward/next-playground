@@ -33,7 +33,7 @@ function sysWith(partial: Partial<BuildSystemState>): BuildSystemState {
 
 function buildSys(
   systemId: string,
-  good: { goodId: string; stock: number; targetStock: number; demand: number; production?: number },
+  good: { goodId: string; stock: number; targetStock: number; demand: number; production?: number; capacityProduction: number},
 ): BuildSystemState {
   return {
     systemId, factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
@@ -47,7 +47,7 @@ const unreachable: RouteCost = () => null;
 describe("findStructuralDeficits", () => {
   it("flags a good with production below demand as a structural rate deficit", () => {
     // demand 4, production 0 → rateDeficit 4. Stock/targetStock are irrelevant to placement now.
-    const deficit = buildSys("A", { goodId: "electronics", stock: 1, targetStock: 10, demand: 4, production: 0 });
+    const deficit = buildSys("A", { goodId: "electronics", stock: 1, targetStock: 10, demand: 4, production: 0, capacityProduction: 0 });
     const out = findStructuralDeficits([deficit], reachable);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ systemId: "A", goodId: "electronics", rateDeficit: 4, demand: 4 });
@@ -56,7 +56,7 @@ describe("findStructuralDeficits", () => {
   it("flags a rate deficit even when the stock buffer is full (stock decoupled from placement)", () => {
     // Full stock (>= targetStock) but production 1 < demand 4 → still a structural rate deficit:
     // the buffer is draining. This is the core B behaviour — TARGET_COVER no longer gates builds.
-    const drainingButStocked = buildSys("A", { goodId: "food", stock: 500, targetStock: 100, demand: 4, production: 1 });
+    const drainingButStocked = buildSys("A", { goodId: "food", stock: 500, targetStock: 100, demand: 4, production: 1, capacityProduction: 1 });
     const out = findStructuralDeficits([drainingButStocked], reachable);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ goodId: "food", rateDeficit: 3 });
@@ -64,34 +64,34 @@ describe("findStructuralDeficits", () => {
 
   it("excludes a deficit when a reachable rate exporter (production > demand) of that good exists", () => {
     // B produces 30 > its own demand 4 → a sustainable exporter whose surplus flow logistics carries.
-    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0 });
-    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30 });
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0, capacityProduction: 0 });
+    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30, capacityProduction: 30 });
     expect(findStructuralDeficits([deficit, exporter], reachable)).toHaveLength(0);
   });
 
   it("does NOT exclude a deficit when the only nearby stock is a draining pile (production < demand)", () => {
     // B holds 100 stock but produces nothing (production 0 < demand 4) → it is itself draining, not a
     // sustainable source. A must still build its own capacity; logistics ships B's transient stock meanwhile.
-    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0 });
-    const drainingPile = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 0 });
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0, capacityProduction: 0 });
+    const drainingPile = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 0, capacityProduction: 0 });
     // Both A and B are rate deficits (neither produces its own demand); neither excludes the other.
     expect(findStructuralDeficits([deficit, drainingPile], reachable)).toHaveLength(2);
   });
 
   it("keeps a deficit structural when the only exporter is unreachable", () => {
-    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0 });
-    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30 });
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 4, production: 0, capacityProduction: 0 });
+    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30, capacityProduction: 30 });
     // Only A is a deficit (B is an exporter); it stays structural because the exporter can't reach it.
     expect(findStructuralDeficits([deficit, exporter], unreachable)).toHaveLength(1);
   });
 
   it("does not flag a self-supplier (production ≥ demand) as a deficit despite low standing stock", () => {
-    const selfSupplier = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 10 });
+    const selfSupplier = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 10, capacityProduction: 10 });
     expect(findStructuralDeficits([selfSupplier], reachable)).toHaveLength(0);
   });
 
   it("still flags a net importer (production < demand) as structural", () => {
-    const importer = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 2 });
+    const importer = buildSys("A", { goodId: "ore", stock: 1, targetStock: 20, demand: 5, production: 2, capacityProduction: 2 });
     const out = findStructuralDeficits([importer], reachable);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ rateDeficit: 3 });
@@ -102,8 +102,8 @@ describe("findStructuralDeficits — flow-aware coverage netting (§3.1)", () =>
   it("leaves a residual structural deficit when a reachable exporter only partly covers demand", () => {
     // A needs 10/tick, produces none. B exports a spare rate of only 3 (prod 7 − demand 4).
     // coveredFraction = min(1, 3/10) = 0.3 → residual = 10 × 0.7 = 7 is still structural (build locally).
-    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 });
-    const partialExporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 7 });
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0, capacityProduction: 0 });
+    const partialExporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 7, capacityProduction: 7 });
     const out = findStructuralDeficits([deficit, partialExporter], reachable);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ systemId: "A", goodId: "food" });
@@ -112,17 +112,17 @@ describe("findStructuralDeficits — flow-aware coverage netting (§3.1)", () =>
 
   it("cancels the deficit entirely when the exporter's spare rate fully covers it", () => {
     // B's spare rate 16 (prod 20 − demand 4) ≥ A's 10 deficit → coveredFraction 1 → no residual.
-    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 });
-    const ampleExporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 20 });
+    const deficit = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0, capacityProduction: 0 });
+    const ampleExporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 20, capacityProduction: 20 });
     expect(findStructuralDeficits([deficit, ampleExporter], reachable)).toHaveLength(0);
   });
 
   it("nets one exporter's spare across competing consumers (no double-coverage)", () => {
     // Two colonies each need 10; one exporter has spare rate 6. The 6 is shared across the 20 of total
     // reachable demand — coveredFraction = 6/20 = 0.3 — so each keeps a 7 residual (not each fully covered).
-    const a = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 });
-    const c = buildSys("C", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 });
-    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 10 });
+    const a = buildSys("A", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0, capacityProduction: 0 });
+    const c = buildSys("C", { goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0, capacityProduction: 0 });
+    const exporter = buildSys("B", { goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 10, capacityProduction: 10 });
     const out = findStructuralDeficits([a, c, exporter], reachable);
     expect(out).toHaveLength(2);
     for (const d of out) expect(d.rateDeficit).toBeCloseTo(7, 5);
@@ -137,7 +137,7 @@ describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2
       slotCap: makeResourceVector({ arable: 5 }),
       generalSpace: 20,
       habitableSpace: 50, // small habitable land → low development against the universe reference
-      goods: [{ goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0, capacityProduction: 0 }],
       ...partial,
     });
   }
@@ -170,7 +170,7 @@ describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2
     const site = foodColony({
       population: 100,
       slotCap: makeResourceVector({ ore: 5 }),
-      goods: [{ goodId: "metals", stock: 1, targetStock: 10, demand: 10, production: 0 }],
+      goods: [{ goodId: "metals", stock: 1, targetStock: 10, demand: 10, production: 0, capacityProduction: 0 }],
     });
     expect(speculativeFloorExtra(site, "metals", 0, DEV_REFS)).toBe(0);
   });
@@ -185,12 +185,12 @@ describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2
     const colony = sysWith({
       systemId: "A", control: "developed", population: 100,
       slotCap: makeResourceVector({ arable: 5 }), generalSpace: 50, habitableSpace: 50,
-      buildings: {}, goods: [{ goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0 }],
+      buildings: {}, goods: [{ goodId: "food", stock: 1, targetStock: 10, demand: 10, production: 0, capacityProduction: 0 }],
     });
     const exporter = sysWith({
       systemId: "B", control: "developed", population: 100,
       slotCap: emptyResourceVector(), buildings: { food: 10 },
-      goods: [{ goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30 }],
+      goods: [{ goodId: "food", stock: 100, targetStock: 50, demand: 4, production: 30, capacityProduction: 30 }],
     });
     // Flow-aware cancellation covers A's deficit (B's spare 26 ≥ 10), yet the nudge still stands up local food.
     const builds = planFactionBuilds([colony, exporter], reachable, DEV_REFS);
@@ -265,7 +265,7 @@ describe("planFactionBuilds", () => {
     const sys: BuildSystemState = {
       systemId: "A", factionId: "F", control: "developed", population: 100000, unrest: 0,
       buildings: {}, slotCap: makeResourceVector({ arable: 1000 }), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 0, targetStock: TARGET_COVER * 20, demand: 20, production: 0 }],
+      goods: [{ goodId: "food", stock: 0, targetStock: TARGET_COVER * 20, demand: 20, production: 0, capacityProduction: 0 }],
     };
     const foodUnits = countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "food");
     // Capacity meets the flow, within one whole level.
@@ -285,7 +285,7 @@ describe("planFactionBuilds", () => {
     const sys: BuildSystemState = {
       systemId: "A", factionId: "F", control: "developed", population: 100, unrest: 0,
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 0, targetStock: 1, demand: smallDemand, production: 0 }],
+      goods: [{ goodId: "food", stock: 0, targetStock: 1, demand: smallDemand, production: 0, capacityProduction: 0 }],
     };
     expect(countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "food")).toBe(1);
   });
@@ -299,7 +299,7 @@ describe("planFactionBuilds", () => {
     const sys: BuildSystemState = {
       systemId: "A", factionId: "F", control: "developed", population: 100, unrest: 0,
       buildings: {}, slotCap: makeResourceVector({ ore: 1000 }), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 100000, production: 0 }],
+      goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 100000, production: 0, capacityProduction: 0 }],
     };
     const oreUnits = countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "ore");
     expect(oreUnits).toBeGreaterThan(5);                          // a pop×0.05 budget would have capped this at 5
@@ -313,12 +313,12 @@ describe("planFactionBuilds", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 50,
-      goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
+      goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5, capacityProduction: 0}],
     };
     const builds = planFactionBuilds([deficit, builder], () => 1, DEV_REFS);
     expect(countFor(builds, "B", "food")).toBeGreaterThan(0);
@@ -332,13 +332,13 @@ describe("planFactionBuilds", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const surplus: BuildSystemState = {
       systemId: "S", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       // Rate exporter: produces 30 > its own demand 5 → a sustainable food source logistics can carry.
-      goods: [{ goodId: "food", stock: 100, targetStock: 20, demand: 5, production: 30 }],
+      goods: [{ goodId: "food", stock: 100, targetStock: 20, demand: 5, production: 30, capacityProduction: 30 }],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
@@ -353,7 +353,7 @@ describe("planFactionBuilds", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const builderNoInput: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
@@ -372,7 +372,7 @@ describe("planFactionBuilds", () => {
     const fed: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
-      goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5 }],
+      goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5, capacityProduction: 0}],
     };
     const builds = planFactionBuilds([fed], () => 1, DEV_REFS);
     expect(countFor(builds, "A", "housing")).toBeGreaterThan(0);
@@ -396,12 +396,12 @@ describe("planFactionBuilds", () => {
     const deficitFood: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const deficitWater: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "water", stock: 1, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "water", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const builder: BuildSystemState = {
       systemId: "C", factionId: "f1", population: 10000, unrest: 0, control: "developed", buildings: {},
@@ -432,7 +432,7 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
       deficit: {
         systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
         slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-        goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5 }],
+        goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
       },
       builder: {
         systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
@@ -441,7 +441,7 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
       oreSurplus: {
         systemId: "S", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
         slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-        goods: [{ goodId: "ore", stock: 100, targetStock: 20, demand: 5, production: 0 }],
+        goods: [{ goodId: "ore", stock: 100, targetStock: 20, demand: 5, production: 0, capacityProduction: 0 }],
       },
     };
   }
@@ -464,7 +464,7 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
     // exactly as the logistics matcher does, or the planner refuses a factory whose inputs the
     // production-throttled exporter can in fact supply (the regression this branch guards against).
     const { deficit, builder, oreSurplus } = scenario();
-    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 30 }];
+    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 30, capacityProduction: 30 }];
     expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
   });
 
@@ -473,7 +473,7 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
     // structural exporter. surplusDrawable returns 0, so ore is not a reachable input and no metals
     // factory is built — mirroring the matcher's re-export guard at the build-planner gate.
     const { deficit, builder, oreSurplus } = scenario();
-    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 0 }];
+    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 0, capacityProduction: 0 }];
     expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBe(0);
   });
 });
@@ -484,7 +484,7 @@ describe("planFactionBuilds — proactive housing", () => {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, satisfaction: 0 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 }],
     };
     expect(countFor(planFactionBuilds([starved], () => 1, DEV_REFS), "A", "housing")).toBe(0);
   });
@@ -493,7 +493,7 @@ describe("planFactionBuilds — proactive housing", () => {
     const unsettled: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0.9, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     expect(countFor(planFactionBuilds([unsettled], () => 1, DEV_REFS), "A", "housing")).toBe(0);
   });
@@ -502,7 +502,7 @@ describe("planFactionBuilds — proactive housing", () => {
     const sys: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100000, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 1000, habitableSpace: 5,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const housing = countFor(planFactionBuilds([sys], () => 1, DEV_REFS), "A", "housing");
     expect(housing).toBeGreaterThan(0);
@@ -518,7 +518,7 @@ describe("planFactionBuilds — proactive housing", () => {
     const sys: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 1600, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 100000, habitableSpace: 100000,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const pacedWant = Math.floor(plannedHousingUnits(sys));
     expect(pacedWant).toBeGreaterThan(1); // a genuine multi-level commit, not a trivial one
@@ -531,7 +531,7 @@ describe("planFactionBuilds — proactive housing", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
@@ -570,8 +570,8 @@ describe("planFactionBuilds performance", () => {
         habitableSpace: 50,
         // Two distinct structural deficits per system (no surplus anywhere → all structural).
         goods: [
-          { goodId: goods[i % goods.length], stock: 1, targetStock: 20, demand: 5 },
-          { goodId: goods[(i + 1) % goods.length], stock: 1, targetStock: 20, demand: 5 },
+          { goodId: goods[i % goods.length], stock: 1, targetStock: 20, demand: 5, capacityProduction: 0},
+          { goodId: goods[(i + 1) % goods.length], stock: 1, targetStock: 20, demand: 5, capacityProduction: 0},
         ],
       });
     }
@@ -596,7 +596,7 @@ describe("planFactionBuilds performance", () => {
     const sys: BuildSystemState = {
       systemId: "A", factionId: "F", control: "developed", population: 40 * oreLabour, unrest: 0,
       buildings: {}, slotCap: makeResourceVector({ ore: 100000 }), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 1_000_000, production: 0 }],
+      goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 1_000_000, production: 0, capacityProduction: 0 }],
     };
     const t0 = performance.now();
     const oreUnits = countFor(planFactionBuilds([sys], rc, DEV_REFS), "A", "ore");
@@ -611,8 +611,8 @@ describe("planFactionBuilds performance", () => {
 describe("supplyDissatisfaction", () => {
   it("is ~0 when every demanded good sits at or above target", () => {
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10 },
-      { goodId: "water", stock: 30, targetStock: 20, demand: 8 },
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0},
+      { goodId: "water", stock: 30, targetStock: 20, demand: 8, capacityProduction: 0},
     ]);
     expect(d).toBeCloseTo(0);
   });
@@ -620,15 +620,15 @@ describe("supplyDissatisfaction", () => {
   it("is high when a heavily-demanded good is far below target", () => {
     // satisfaction 0 models the unfed flow the fed-proxy now reads (low stock alone no longer counts).
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 1, targetStock: 20, demand: 100, satisfaction: 0 },
-      { goodId: "luxuries", stock: 10, targetStock: 10, demand: 1 },
+      { goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 },
+      { goodId: "luxuries", stock: 10, targetStock: 10, demand: 1, capacityProduction: 0},
     ]);
     expect(d).toBeGreaterThan(0.5);
   });
 
   it("returns 0 when nothing is demanded", () => {
     expect(supplyDissatisfaction([])).toBe(0);
-    expect(supplyDissatisfaction([{ goodId: "ore", stock: 0, targetStock: 0, demand: 0 }])).toBe(0);
+    expect(supplyDissatisfaction([{ goodId: "ore", stock: 0, targetStock: 0, demand: 0, capacityProduction: 0}])).toBe(0);
   });
 });
 
@@ -637,17 +637,17 @@ describe("supplyDissatisfaction — delivered flow", () => {
     // Stock sits at 75% of its days-of-supply anchor — the old stock/target proxy read this as
     // 25% unsatisfied — but the persisted flow says every unit demanded was actually delivered.
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 15, targetStock: 20, demand: 10, satisfaction: 1 },
+      { goodId: "food", stock: 15, targetStock: 20, demand: 10, capacityProduction: 0, satisfaction: 1 },
     ]);
     expect(d).toBe(0);
   });
 
   it("uses the persisted flow when present and 1 when missing", () => {
     const starved = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10, satisfaction: 0 },
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0, satisfaction: 0 },
     ]);
     const missing = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10 },
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0},
     ]);
     expect(starved).toBeCloseTo(1, 5);
     expect(missing).toBe(0);
@@ -657,15 +657,15 @@ describe("supplyDissatisfaction — delivered flow", () => {
     // food demand 30 (share 0.75, fully satisfied) vs water demand 10 (share 0.25, half-satisfied)
     // → D = 0.25 × (1 − 0.5)^2 = 0.0625.
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 30, satisfaction: 1 },
-      { goodId: "water", stock: 20, targetStock: 20, demand: 10, satisfaction: 0.5 },
+      { goodId: "food", stock: 20, targetStock: 20, demand: 30, capacityProduction: 0, satisfaction: 1 },
+      { goodId: "water", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0, satisfaction: 0.5 },
     ]);
     expect(d).toBeCloseTo(0.25 * 0.25, 5);
   });
 });
 
 describe("fedAndCalm", () => {
-  const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10 }];
+  const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0}];
 
   it("is true for a well-supplied, calm system", () => {
     expect(fedAndCalm(sysWith({ goods: fedGoods, unrest: 0 }))).toBe(true);
@@ -677,7 +677,7 @@ describe("fedAndCalm", () => {
 
   it("is false when the system is starved (high supply dissatisfaction)", () => {
     // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
-    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, satisfaction: 0 }];
+    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 }];
     expect(fedAndCalm(sysWith({ goods: starved, unrest: 0 }))).toBe(false);
   });
 });
@@ -703,7 +703,7 @@ describe("plannedHousingUnits", () => {
     // pop 100, no housing, ample habitable → target popCap = 100 × 1.25 = 125 → 6.25 → ceil 7 levels.
     const units = plannedHousingUnits(sysWith({
       population: 100, buildings: {}, generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     }));
     expect(units).toBe(Math.ceil(125 / 20)); // 7
   });
@@ -714,7 +714,7 @@ describe("plannedHousingUnits", () => {
     // It must now round UP to one whole level so popCap can ratchet above the seed.
     const units = plannedHousingUnits(sysWith({
       population: 20, buildings: { housing: 1 }, generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     }));
     expect(units).toBe(1);
   });
@@ -724,7 +724,7 @@ describe("plannedHousingUnits", () => {
     // and no premature build.
     const units = plannedHousingUnits(sysWith({
       population: 2, buildings: { housing: 5 }, generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     }));
     expect(units).toBe(0);
   });
@@ -732,14 +732,14 @@ describe("plannedHousingUnits", () => {
   it("returns 0 when the system is not fed and calm", () => {
     expect(plannedHousingUnits(sysWith({
       population: 100, generalSpace: 100, habitableSpace: 100, unrest: 0.9,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     }))).toBe(0);
   });
 
   it("returns 0 at the habitable cap (no headroom)", () => {
     expect(plannedHousingUnits(sysWith({
       population: 100, buildings: { housing: 50 }, generalSpace: 100, habitableSpace: 50,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     }))).toBe(0);
   });
 
@@ -747,7 +747,7 @@ describe("plannedHousingUnits", () => {
     // Huge pop, tiny habitable: housing is bounded by habitable (5 units), not population.
     const units = plannedHousingUnits(sysWith({
       population: 100000, buildings: {}, generalSpace: 1000, habitableSpace: 5,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     }));
     expect(units).toBeCloseTo(5);
   });
@@ -763,7 +763,7 @@ describe("planFactionBuilds — spare-labour gate", () => {
       {
         systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
         slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-        goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50 }],
+        goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50, capacityProduction: 0}],
       },
       {
         systemId: "B", factionId: "f1", population: builderPop, unrest: 0, control: "developed",
@@ -798,7 +798,7 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed",
       buildings: { housing: 5, ore: 4 },
       slotCap, generalSpace: 9, habitableSpace: 5,
-      goods: [{ goodId: "ore", stock: 50, targetStock: 50, demand: 20 }],
+      goods: [{ goodId: "ore", stock: 50, targetStock: 50, demand: 20, capacityProduction: 0}],
     };
     expect(planFactionBuilds([atPotential], () => 1, DEV_REFS)).toHaveLength(0);
   });
@@ -816,7 +816,7 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50 }],
+      goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50, capacityProduction: 0}],
     };
     expect(countFor(planFactionBuilds([barren, deficit], () => 1, DEV_REFS), "B", "ore")).toBe(0);
   });
@@ -832,7 +832,7 @@ function deficitOnly(goodId: string): BuildSystemState {
   return {
     systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId, stock: 1, targetStock: 20, demand: 5 }],
+    goods: [{ goodId, stock: 1, targetStock: 20, demand: 5, capacityProduction: 0 }],
   };
 }
 
@@ -939,7 +939,7 @@ function heavyDeficitScenario(): BuildSystemState[] {
   const deficit: BuildSystemState = {
     systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId: "metals", stock: 1, targetStock: 1000, demand: 500 }],
+    goods: [{ goodId: "metals", stock: 1, targetStock: 1000, demand: 500, capacityProduction: 0}],
   };
   const producer: BuildSystemState = {
     systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
@@ -957,7 +957,7 @@ function heavyDeficitScenario(): BuildSystemState[] {
 function tinyHeavyDeficitScenario(): BuildSystemState[] {
   const systems = heavyDeficitScenario();
   const deficit = systems.find((s) => s.systemId === "A")!;
-  deficit.goods = [{ goodId: "metals", stock: 0, targetStock: 7, demand: 5 }];
+  deficit.goods = [{ goodId: "metals", stock: 0, targetStock: 7, demand: 5, capacityProduction: 0}];
   return systems;
 }
 
@@ -972,12 +972,12 @@ function crossFamilyDeficitScenario(): BuildSystemState[] {
   const deficitMetals: BuildSystemState = {
     systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId: "metals", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0 }],
+    goods: [{ goodId: "metals", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0, capacityProduction: 0 }],
   };
   const deficitFuel: BuildSystemState = {
     systemId: "C", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId: "fuel", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0 }],
+    goods: [{ goodId: "fuel", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0, capacityProduction: 0 }],
   };
   const producer: BuildSystemState = {
     systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
@@ -1002,7 +1002,7 @@ function anchoredVsGreenfieldScenario(): BuildSystemState[] {
   const deficit: BuildSystemState = {
     systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId: "metals", stock: 0, targetStock: 1, demand: rateDeficit, production: 0 }],
+    goods: [{ goodId: "metals", stock: 0, targetStock: 1, demand: rateDeficit, production: 0, capacityProduction: 0 }],
   };
   const greenfield: BuildSystemState = {
     systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
@@ -1074,7 +1074,7 @@ describe("planFactionProposals", () => {
   it("emits a housing proposal (role 'housing', value 0, work = levels × housing cost) at a fed-and-calm developed system", () => {
     const site = sysWith({
       control: "developed", population: 100, generalSpace: 50, habitableSpace: 50,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     });
     const proposals = planFactionProposals([site], () => 1, [], DEV_REFS);
     const housing = proposals.find((p) => p.role === "housing");
@@ -1097,7 +1097,7 @@ describe("planFactionProposals", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
@@ -1130,7 +1130,7 @@ describe("planFactionProposals", () => {
   it("does not re-propose a level already in flight (subtracts open projects)", () => {
     const site = sysWith({
       control: "developed", population: 100, generalSpace: 50, habitableSpace: 50,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5 }],
+      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     });
     // Ten housing levels already under construction cover the whole pace-ahead target → no new housing.
     const open: WorldConstructionProject[] = [
@@ -1173,7 +1173,7 @@ describe("planFactionBuilds: develop gate", () => {
     const site: BuildSystemState = {
       systemId: "A", factionId: "F", control: "developed", population: 2, unrest: 0,
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
+      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0, capacityProduction: 0 }],
     };
     const builds = planFactionBuilds([site], rc, DEV_REFS);
     const food = builds.find((b) => b.systemId === "A" && b.buildingType === "food");
@@ -1189,7 +1189,7 @@ describe("planFactionBuilds: develop gate", () => {
     const site: BuildSystemState = {
       systemId: "A", factionId: "F", control: "developed", population: 0, unrest: 0,
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
+      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0, capacityProduction: 0 }],
     };
     const builds = planFactionBuilds([site], rc, DEV_REFS);
     expect(builds.find((b) => b.systemId === "A" && b.buildingType === "food")).toBeUndefined();
@@ -1217,7 +1217,7 @@ describe("hopRouteCost", () => {
     const sys: BuildSystemState = {
       systemId: "A", factionId: "F", control: "developed", population: 1000, unrest: 0,
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0 }],
+      goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0, capacityProduction: 0 }],
     };
     const builds = planFactionBuilds([sys], rc, DEV_REFS);
     expect(builds.some((b) => b.systemId === "A" && b.buildingType === "food")).toBe(true);
@@ -1270,10 +1270,10 @@ function candidate(opts: {
 describe("factionGoodDeficits", () => {
   it("sums each good's positive (demand − production) across developed systems", () => {
     const developed = [
-      homeState({ systemId: "a", goods: [{ goodId: "food", stock: 0, targetStock: 0, demand: 30, production: 10 }] }),
+      homeState({ systemId: "a", goods: [{ goodId: "food", stock: 0, targetStock: 0, demand: 30, production: 10, capacityProduction: 10 }] }),
       homeState({ systemId: "b", goods: [
-        { goodId: "food", stock: 0, targetStock: 0, demand: 20, production: 5 },
-        { goodId: "ore", stock: 0, targetStock: 0, demand: 5, production: 50 }, // surplus → no deficit
+        { goodId: "food", stock: 0, targetStock: 0, demand: 20, production: 5, capacityProduction: 5 },
+        { goodId: "ore", stock: 0, targetStock: 0, demand: 5, production: 50, capacityProduction: 50 }, // surplus → no deficit
       ] }),
     ];
     const deficits = factionGoodDeficits(developed);
@@ -1303,7 +1303,7 @@ describe("planFactionColonyProposals", () => {
     const home = homeState({
       housing: 1, habitableSpace: 1000, // σ ≈ 0 → land term nearly dormant
       slotCap: emptyResourceVector(),   // zero ore slots → ore is a missing resource
-      goods: [{ goodId: "metals", stock: 0, targetStock: 0, demand: 40, production: 0 }],
+      goods: [{ goodId: "metals", stock: 0, targetStock: 0, demand: 40, production: 0, capacityProduction: 0 }],
     });
     const keystone = candidate({ systemId: "ore-world", habitableSpace: 5, slotCap: oreVec });
     const barren = candidate({ systemId: "rock", habitableSpace: 5, slotCap: emptyResourceVector() });
@@ -1382,7 +1382,7 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
       population: oreLevels * oreLabour, unrest: 0,
       buildings: { ore: oreLevels },
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "ore", stock: 0, targetStock: 0, demand: 0, production: output }],
+      goods: [{ goodId: "ore", stock: 0, targetStock: 0, demand: 0, production: output, capacityProduction: output }],
     };
   }
 

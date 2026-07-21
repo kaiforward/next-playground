@@ -46,12 +46,22 @@ export interface BuildGoodState {
    * supplies it via toGoodMarketStates (a GoodMarketState, which carries production).
    */
   production?: number;
+  /** Current building capacity. The tick path always supplies this separately from realized production. */
+  capacityProduction: number;
   /**
    * Persisted consumption satisfaction from the last economy pulse (delivered ÷ demanded, ∈
    * [0,1]; missing ⇒ 1) — supplyDissatisfaction's only input. stock/targetStock stay on this
    * type for the deficit finder and severity weights; they no longer feed the fed-proxy.
    */
   satisfaction?: number;
+  /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
+  productionSuppressed?: boolean;
+  /** Consecutive rationed economy assessments, saturated at 2. */
+  squeezePulses?: number;
+  /** Consecutive structural construction assessments, saturated at 2. */
+  proposalPulses?: number;
+  /** A reachable logistics match was constrained by the faction's funded haul work. */
+  logisticsFundingBound?: boolean;
 }
 
 /** A system's buildable state — markets + the body-derived capacity it can build into. */
@@ -547,7 +557,7 @@ function planFactionBundles(
   const surplusSystemsByGood = new Map<string, string[]>();
   for (const s of systems) {
     for (const g of s.goods) {
-      if (surplusDrawable(g.stock, g.targetStock, g.demand, g.production ?? 0) > 0) {
+      if (surplusDrawable(g.stock, g.targetStock, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
         const list = surplusSystemsByGood.get(g.goodId) ?? [];
         list.push(s.systemId);
         surplusSystemsByGood.set(g.goodId, list);

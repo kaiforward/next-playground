@@ -5,6 +5,7 @@ import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-lo
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { allSystemIdsReachable } from "@/lib/engine/directed-logistics";
 import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
+import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
 
 describe("MemoryDirectedLogisticsWorld", () => {
   it("groups systems by faction key (null = independents)", async () => {
@@ -335,5 +336,24 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       reachableSystemIds: allSystemIdsReachable,
     });
     expect(world.fundingBoundUpdates.size).toBe(0);
+  });
+  it("treats an assessed zero-output producer as a logistics sink despite nonzero capacity", async () => {
+    const systems: SystemLogisticsRow[] = [
+      {
+        systemId: "A", factionId: "f1", governmentType: "federation", population: 200,
+        buildings: { food: 3 }, yields: emptyResourceVector(),
+        markets: [{ ...market("mA", "food", 10, 20), realizedProductionRate: 0 }],
+      },
+      {
+        systemId: "B", factionId: "f1", governmentType: "federation", population: 200,
+        buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 95, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable,
+    });
+    expect(world.flows).toHaveLength(1);
+    expect(world.flows[0]).toMatchObject({ fromSystemId: "B", toSystemId: "A", goodId: "food" });
   });
 });

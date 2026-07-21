@@ -37,22 +37,28 @@ export function classifyMarketState(stock: number, targetStock: number): MarketC
 }
 
 /**
- * Drawable directed-logistics surplus for one (system, good): the stock a donor can ship without
- * dropping below its own days-of-supply anchor. Zero unless one of two paths qualifies:
- *  (a) standing stock clears `SURPLUS_MARGIN` — any holder of excess inventory; or
- *  (b) a **structural producer** (`production > demand`) holding stock above its anchor — the mirror
- *      of the deficit-side self-supply gate. Path (b) is required because the economy's production
- *      throttle caps a producer at `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin, so a
- *      structural exporter never reaches path (a); without it directed logistics goes dead for every
- *      good its producers also consume (food, water, biomass).
- * One definition, shared by the logistics matcher and the build planner so both read "surplus" alike.
+ * Drawable directed-logistics surplus for one (system, good). A structural exporter
+ * (production > demand) may ship down to its strategic reserve; every other donor
+ * must clear SURPLUS_MARGIN and stops at its own anchor. Realized production keeps
+ * suppressed or input-starved former exporters on the ordinary-donor path.
+ * One definition, shared by the logistics matcher and the build planner so both read
+ * "surplus" alike.
  */
-export function surplusDrawable(stock: number, targetStock: number, demand: number, production: number): number {
+export function surplusDrawable(
+  stock: number,
+  targetStock: number,
+  demand: number,
+  production: number,
+  productionSuppressed = false,
+): number {
   if (targetStock <= 0) return 0;
+  const exporterReserve = targetStock * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC;
+  if (production > demand && !productionSuppressed) return Math.max(0, stock - exporterReserve);
+
   const aboveAnchor = stock - targetStock;
   if (aboveAnchor <= 0) return 0;
   const clearsMargin = stock >= targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN;
-  return clearsMargin || production > demand ? aboveAnchor : 0;
+  return clearsMargin ? aboveAnchor : 0;
 }
 
 /** This system's per-cycle logistics work-budget contribution (free, population-scaled in v1). */
@@ -67,10 +73,20 @@ export interface GoodMarketState {
   targetStock: number;
   /** Total local demand rate (civilian + industrial). Severity weight + the self-supply gate (vs production). */
   demand: number;
-  /** Local production rate of this good. A system that self-supplies (production ≥ demand) is never a deficit sink — its low standing stock is throughput, not need, and importing more just piles it against the ceiling and decays its own producers. */
+  /** Realized production rate from the last economy assessment. A system that self-supplies (production >= demand) is never a deficit sink. */
   production: number;
+  /** Current building capacity, retained separately for construction target sizing. */
+  capacityProduction: number;
   /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1) — the build planner's fed-proxy input; the matcher itself does not read it. */
   satisfaction?: number;
+  /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
+  productionSuppressed?: boolean;
+  /** Consecutive rationed economy assessments, saturated at 2. */
+  squeezePulses?: number;
+  /** Consecutive structural construction assessments, saturated at 2. */
+  proposalPulses?: number;
+  /** A reachable logistics match was constrained by the faction's funded haul work. */
+  logisticsFundingBound?: boolean;
 }
 
 export interface SystemLogisticsState {
@@ -151,7 +167,7 @@ export function matchFactionTransfers(
       }
       // Surplus source — standing excess inventory OR a structural producer above its anchor
       // (see surplusDrawable; the latter is what the production throttle would otherwise suppress).
-      const drawable = surplusDrawable(g.stock, g.targetStock, g.demand, g.production);
+      const drawable = surplusDrawable(g.stock, g.targetStock, g.demand, g.production, g.productionSuppressed);
       if (drawable > 0) {
         const bySystem = surplusesByGood.get(g.goodId) ?? new Map<string, Surplus>();
         bySystem.set(s.systemId, {

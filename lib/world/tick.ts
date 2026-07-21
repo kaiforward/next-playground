@@ -273,6 +273,10 @@ function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLog
       demandRate: m.demandRate,
       storageCapacity: m.storageCapacity,
       satisfaction: m.satisfaction,
+      realizedProductionRate: m.realizedProductionRate,
+      productionSuppressed: m.productionSuppressed,
+      squeezePulses: m.squeezePulses,
+      proposalPulses: m.proposalPulses,
       logisticsFundingBound: m.logisticsFundingBound,
     };
     const list = bySystem.get(m.systemId);
