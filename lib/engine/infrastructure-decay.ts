@@ -47,8 +47,9 @@ export interface SystemDecayInput {
   population: number;
   /** Stored unrest integral 0…1. */
   unrest: number;
-  /** Per produced-good output uptake ∈ [0,1] (seller-side signal); missing ⇒ 1. */
-  outputUptake: (goodId: string) => number;
+  /** Per produced-good isolated selling factor ∈ [0,1]; missing ⇒ 1. */
+  sellingFactor: (goodId: string) => number;
+  logisticsFundingBound?: (goodId: string) => boolean;
 }
 
 export interface SystemDecayResult {
@@ -73,7 +74,7 @@ export function idleLevels(count: number, used: number): number {
 
 /**
  * Decay one system's whole built base by whole levels. Labour state is computed once and reused across
- * every building (the headcount gate + two skill-ceiling gates); uptake is per produced good. Returns
+ * every building (the headcount gate + two skill-ceiling gates); selling is per produced good. Returns
  * the building types whose count fell and whose idle countdown changed, plus the recomputed popCap.
  */
 export function computeSystemDecay(
@@ -85,7 +86,14 @@ export function computeSystemDecay(
   const { buildings, buildingIdleMonths, population, unrest } = input;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
-  const ctx: UtilizationContext = { buildings, population, parts, state, outputUptake: input.outputUptake };
+  const ctx: UtilizationContext = {
+    buildings,
+    population,
+    parts,
+    state,
+    sellingFactor: input.sellingFactor,
+    logisticsFundingBound: input.logisticsFundingBound,
+  };
 
   const newCounts: Record<string, number> = {};
   const newIdleMonths: Record<string, number> = {};

@@ -91,6 +91,24 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.world).toStrictEqual(withConstruction);
   });
 
+  it("round-trips the optional logistics funding-bound marker", () => {
+    const marked: World = {
+      ...world,
+      markets: world.markets.map((market, index) =>
+        index === 0 ? { ...market, logisticsFundingBound: true } : market,
+      ),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.markets[0].logisticsFundingBound).toBe(true);
+  });
+
+  it("accepts generated rows without a logistics funding marker", () => {
+    expect(world.markets[0].logisticsFundingBound).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
   it("round-trips a colony-establish project unchanged (serializable, no lost fields)", () => {
     const withColony: World = {
       ...world,

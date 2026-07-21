@@ -3,6 +3,7 @@ import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directe
 import { emptyResourceVector } from "@/lib/engine/resources";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { allSystemIdsReachable } from "@/lib/engine/directed-logistics";
 import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 
 describe("MemoryDirectedLogisticsWorld", () => {
@@ -33,10 +34,17 @@ describe("MemoryDirectedLogisticsWorld", () => {
 // tick=0 (monthly pulse boundary): pulseShard(1, 0, 24) → start=0, end=1 (all factions redistribute).
 // engine quantity=min(shortfall 30, drawable 55, affordable 200)=30. A logistics delivery is a level-fill
 // toward the anchor, so the body moves exactly that (no catch-up): moved=min(30, 95−20, 100−10)=30 → mB lands at 40 (=anchor).
-function market(id: string, goodId: string, stock: number, storageCapacity: number) {
+function market(
+  id: string,
+  goodId: string,
+  stock: number,
+  storageCapacity: number,
+  logisticsFundingBound?: boolean,
+) {
   return {
     id, goodId, stock,
     anchorMult: 1, demandRate: 1, storageCapacity,
+    logisticsFundingBound,
   };
 }
 
@@ -58,7 +66,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
     );
     expect(world.flows).toHaveLength(1);
     expect(world.flows[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B", goodId: "food" });
@@ -83,7 +91,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const result = await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
     );
     // routeCost is a flat 1/unit, so the planned cost equals the moved quantity.
     expect(result.workPerformedByFaction?.get("f1")).toBeCloseTo(world.flows[0].quantity, 6);
@@ -107,7 +115,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
     );
     const targetStock = 40; // 40 × demandRate 1 × anchorMult 1
     const surplusThreshold = targetStock * DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 56
@@ -140,7 +148,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: DUE_TICK },
-      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
     );
     expect(world.flows[0].quantity).toBeCloseTo(29.7, 6); // the fraction survives — NOT 29
     expect(world.stockUpdates.get("mB")!).toBeCloseTo(40, 6); // filled exactly to the anchor
@@ -154,7 +162,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: 7 },
-      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
     );
     expect(world.flows).toHaveLength(0);
   });
@@ -177,10 +185,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     await runDirectedLogisticsProcessor(
       world,
       { tick: 1 },
-      { interval: LOGISTICS_INTERVAL, routeCost: () => 1 },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
     );
     expect(world.flows).toHaveLength(0);
     expect(world.stockUpdates.size).toBe(0);
+    expect(world.fundingBoundUpdates.size).toBe(0);
   });
 
   // A market with a big demandRate → big targetStock, so the deficit's shortfall and the donor's
@@ -199,7 +208,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     ];
     const movedAt = async (interval: number): Promise<number> => {
       const world = new MemoryDirectedLogisticsWorld(budgetBound());
-      await runDirectedLogisticsProcessor(world, { tick: 0 }, { interval, routeCost: () => 1 });
+      await runDirectedLogisticsProcessor(world, { tick: 0 }, {
+        interval,
+        routeCost: () => 1,
+        reachableSystemIds: allSystemIdsReachable,
+      });
       return world.flows[0].quantity;
     };
     const moved24 = await movedAt(24);
@@ -215,7 +228,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
         { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
       ];
       const world = new MemoryDirectedLogisticsWorld(systems);
-      await runDirectedLogisticsProcessor(world, { tick: 0 }, { interval, routeCost: () => 1 });
+      await runDirectedLogisticsProcessor(world, { tick: 0 }, {
+        interval,
+        routeCost: () => 1,
+        reachableSystemIds: allSystemIdsReachable,
+      });
       return world.flows[0].quantity;
     };
     expect(await gapFill(24)).toBeCloseTo(30, 6);
@@ -236,17 +253,87 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // funded 0 → generation × 0 = no work budget → nothing moves.
     const gated = new MemoryDirectedLogisticsWorld(mk());
     await runDirectedLogisticsProcessor(gated, { tick: DUE_TICK }, {
-      interval: LOGISTICS_INTERVAL, routeCost: () => 1,
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => 1,
+      reachableSystemIds: allSystemIdsReachable,
       fundingByFaction: new Map([["f1", 0]]),
     });
     expect(gated.flows).toHaveLength(0);
+    expect(gated.fundingBoundUpdates.get("mA")).toBe(true);
+    expect(gated.fundingBoundUpdates.get("mB")).toBe(true);
 
     // A faction missing from the map is ungated — identical to no map at all.
     const ungated = new MemoryDirectedLogisticsWorld(mk());
     await runDirectedLogisticsProcessor(ungated, { tick: DUE_TICK }, {
-      interval: LOGISTICS_INTERVAL, routeCost: () => 1,
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => 1,
+      reachableSystemIds: allSystemIdsReachable,
       fundingByFaction: new Map([["other", 0]]),
     });
     expect(ungated.flows).toHaveLength(1);
+  });
+
+  it("writes only changed assessments and clears a recovered funding-bound marker", async () => {
+    const systems = [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [
+          market("mA", "food", 95, 20),
+          market("mOther", "ore", 40, 20),
+        ],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => 1,
+      reachableSystemIds: allSystemIdsReachable,
+      fundingByFaction: new Map([["f1", 0]]),
+    });
+    expect(world.fundingBoundUpdates.get("mA")).toBe(true);
+    expect(world.fundingBoundUpdates.get("mB")).toBe(true);
+    expect(world.fundingBoundUpdates.has("mOther")).toBe(false);
+    expect(world.fundingBoundUpdates.size).toBe(2);
+
+    const recoveredWorld = new MemoryDirectedLogisticsWorld([
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [
+          market("mA", "food", 95, 20, true),
+          market("mOther", "ore", 40, 20),
+        ],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20, true)],
+      },
+    ]);
+    await runDirectedLogisticsProcessor(recoveredWorld, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => 1,
+      reachableSystemIds: allSystemIdsReachable,
+    });
+    expect(recoveredWorld.fundingBoundUpdates.get("mA")).toBe(false);
+    expect(recoveredWorld.fundingBoundUpdates.get("mB")).toBe(false);
+    expect(recoveredWorld.fundingBoundUpdates.has("mOther")).toBe(false);
+    expect(recoveredWorld.fundingBoundUpdates.size).toBe(2);
+  });
+
+  it("keeps unreachable pairs unmarked", async () => {
+    const systems = [
+      { systemId: "A", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
+      { systemId: "B", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => null,
+      reachableSystemIds: allSystemIdsReachable,
+    });
+    expect(world.fundingBoundUpdates.size).toBe(0);
   });
 });

@@ -11,7 +11,7 @@
  *    engineers). Skilled jobs only exist where an academy licenses them, so this rides along without a
  *    separate academy line or a double-count.
  *  - industryTerm: Σ over market-good producers of count × effectiveFulfilment(tier) × TIER_WEIGHT[tier]
- *    — built-and-STAFFED capacity only (pure staffing, not market uptake/selling), so an idle or
+ *    — built-and-STAFFED capacity only (pure staffing, not market selling), so an idle or
  *    unlicensed shell scores ~0.
  *  - complexTerm: one specialisation complex (cap 1/system) is worth a fixed bump — the industrial
  *    pinnacle. Housing and academies score nothing directly here (housing feeds the population term;

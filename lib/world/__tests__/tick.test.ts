@@ -4,7 +4,7 @@ import { runWorldTick, toTickSystems, applyBuildingIncreases } from "../tick";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { housingPopCap } from "@/lib/engine/industry";
-import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { BUILDING_TYPES, HOUSING_TYPE, labourTotal } from "@/lib/constants/industry";
 import type { WorldShip } from "../types";
 
 async function runTicks(world: ReturnType<typeof generateWorld>, count: number) {
@@ -323,6 +323,112 @@ describe("runWorldTick — per-stage wiring", () => {
     const after = await runTicks(world, 50);
 
     expect(after.flowEvents.length).toBeGreaterThan(0);
+  });
+
+  it("persists and clears funding-bound markers on both logistics endpoints", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const prepared = {
+      ...base,
+      systems: base.systems.map((system) =>
+        system.id === b ? { ...system, factionId } : system,
+      ),
+      buildings: base.buildings.filter(
+        (building) => !(building.systemId === b && building.buildingType === "water"),
+      ),
+      markets: base.markets.map((market) => {
+        if (market.systemId === a && market.goodId === "water") {
+          return { ...market, stock: 1_000_000 };
+        }
+        if (market.systemId === b && market.goodId === "water") {
+          return { ...market, stock: 0 };
+        }
+        return market;
+      }),
+      connections: [
+        ...base.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+      treasuries: base.treasuries.map((treasury) =>
+        treasury.factionId === factionId
+          ? { ...treasury, funded: { ...treasury.funded, logistics: 0 } }
+          : treasury,
+      ),
+    };
+    const cadence = { month: 1, logistics: 1, construction: 99 };
+    const fundingBound = (await runWorldTick(prepared, { cadence })).world;
+    expect(fundingBound.markets.find((market) => market.systemId === a && market.goodId === "water")?.logisticsFundingBound).toBe(true);
+    expect(fundingBound.markets.find((market) => market.systemId === b && market.goodId === "water")?.logisticsFundingBound).toBe(true);
+
+    const recovered = {
+      ...fundingBound,
+      markets: fundingBound.markets.map((market) =>
+        market.systemId === b && market.goodId === "water"
+          ? { ...market, stock: 1_000_000 }
+          : market,
+      ),
+      treasuries: fundingBound.treasuries.map((treasury) =>
+        treasury.factionId === factionId
+          ? { ...treasury, funded: { ...treasury.funded, logistics: 1 } }
+          : treasury,
+      ),
+    };
+    const cleared = (await runWorldTick(recovered, { cadence })).world;
+    expect(cleared.markets.find((market) => market.systemId === a && market.goodId === "water")?.logisticsFundingBound).toBe(false);
+    expect(cleared.markets.find((market) => market.systemId === b && market.goodId === "water")?.logisticsFundingBound).toBe(false);
+  });
+
+  it("decay consumes the prior funding assessment before logistics clears it", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const systemId = base.factions[0].homeworldId;
+    const producer = base.buildings.find((building) => {
+      const definition = BUILDING_TYPES[building.buildingType];
+      return building.systemId === systemId && definition?.resource !== undefined;
+    })!;
+    const definition = BUILDING_TYPES[producer.buildingType];
+    const labour = definition?.labour;
+    if (definition?.outputGood === undefined || labour === undefined) {
+      throw new Error("Expected the homeworld producer fixture to have output and labour");
+    }
+    const goodId = definition.outputGood;
+    const count = 10;
+    const prepared = {
+      ...base,
+      systems: base.systems.map((system) =>
+        system.id === systemId
+          ? { ...system, population: count * labourTotal(labour), popCap: 1_000_000, unrest: 0 }
+          : system,
+      ),
+      buildings: [
+        ...base.buildings.filter((building) => building.systemId !== systemId),
+        { ...producer, count, idleMonths: 11 },
+      ],
+      markets: base.markets.map((market) =>
+        market.systemId === systemId && market.goodId === goodId
+          ? { ...market, stock: 1_000_000, logisticsFundingBound: true }
+          : market,
+      ),
+    };
+    const cadence = { month: 1, logistics: 1, construction: 99 };
+    const protectedPulse = (await runWorldTick(prepared, { cadence })).world;
+    const protectedBuilding = protectedPulse.buildings.find(
+      (building) => building.systemId === systemId && building.buildingType === producer.buildingType,
+    )!;
+    expect(protectedBuilding.count).toBe(count);
+    expect(protectedBuilding.idleMonths).toBe(0);
+    expect(protectedPulse.markets.find(
+      (market) => market.systemId === systemId && market.goodId === goodId,
+    )?.logisticsFundingBound).toBe(false);
+
+    const ordinaryPulse = (await runWorldTick(protectedPulse, { cadence })).world;
+    const ordinaryBuilding = ordinaryPulse.buildings.find(
+      (building) => building.systemId === systemId && building.buildingType === producer.buildingType,
+    )!;
+    expect(ordinaryBuilding.count).toBe(count);
+    expect(ordinaryBuilding.idleMonths).toBeCloseTo(1 / 24);
   });
 
   it("directed-logistics: prunes flow events older than FLOW_HISTORY_TICKS from the log each tick", async () => {

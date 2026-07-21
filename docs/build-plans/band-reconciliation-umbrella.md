@@ -5,7 +5,7 @@ truth for every mechanic here) is `docs/planned/economy-band-reconciliation.md` 
 2026-07-20, spec-review gate run and all 13 findings folded in (report:
 `.claude/reviews/spec-economy-band-reconciliation-2026-07-20-182256.md`). This doc locks the PR
 decomposition, the cross-PR interfaces, and the expected interim states. Per-PR task plans are
-authored as each PR starts (`band-reconciliation-pr1-curves.md` is the first); on final ship the
+authored as each PR starts (PR1 and PR2 are complete); on final ship the
 spec promotes to `docs/active/`, SPEC.md and `economy-equilibrium-rework.md` update, and every
 `band-reconciliation-*.md` build file here is deleted.
 
@@ -30,7 +30,8 @@ shocks run toward empty on the shared scarcity ramp); seeds retain a separately 
 re-base onto it: the pop-needs display and the planner's `supplyDissatisfaction` fed-proxy.
 Harness: stock-pin metric re-bases to true floor pins (stock ≈ 0).
 
-- Plan: `band-reconciliation-pr1-curves.md` (task-level, this session).
+- **Status: shipped** to `feat/band-reconciliation` at `a0da9b5` (2026-07-21).
+- Plan: `band-reconciliation-pr1-curves.md`.
 - **Interim incoherence (expected, until PR2):** the decay signal still reads the old
   storage-band `outputUptake`; at the new resting point (stock just above `T`) producers read
   uptake ≈ 0.8, so producer stacks ≥ ~6 levels shed a level per buffer. Do not chase this in PR1 —
@@ -52,6 +53,7 @@ Invariant asserted in tests: the selling factor contains no labour/input/strike/
 term (the purse flow-only guarantee, `treasury.ts:128-136`).
 
 - Consumes from PR1: `productionCeiling(stock, targetStock, holdCover)`, `RATION_COVER`.
+- **Status: complete** — PR #198; task-level plan: `band-reconciliation-pr2-decay.md`.
 - **Interim incoherence (until PR3/PR4):** planner still capacity-blind; housing treadmill only
   half-fixed (vacancy slack lands, but growth/relief flip is PR4).
 

@@ -47,7 +47,7 @@ function ctxWithRealized(tick: number, realized: Map<string, Map<string, number>
       ["economy", {
         economySignals: {
           dissatisfactionBySystem: new Map(),
-          outputUptakeBySystem: new Map(),
+          sellingFactorBySystem: new Map(),
           realizedProductionBySystem: realized,
         },
       }],

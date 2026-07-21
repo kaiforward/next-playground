@@ -52,11 +52,11 @@ export interface EconomySignals {
   /** Per-system convex demand-weighted dissatisfaction D ∈ [0,1], for systems processed this tick. */
   dissatisfactionBySystem: Map<string, number>;
   /**
-   * Per-system, per-produced-good output uptake ∈ [0,1] (1 = selling freely, 0 =
-   * piling up at the storage ceiling). Seller-side mirror of satisfaction; consumed
-   * by the infrastructure-decay processor. Empty inner map ⇒ system produces nothing.
+   * Per-system, per-produced-good isolated selling factor ∈ [0,1] (1 = selling
+   * freely, 0 = stock at the production ceiling). Consumed by infrastructure
+   * decay; an empty inner map means the system produces nothing.
    */
-  outputUptakeBySystem: Map<string, Map<string, number>>;
+  sellingFactorBySystem: Map<string, Map<string, number>>;
   /** Per-system, per-good physical output actually produced this pulse (post
    *  input-gate and operating-ceiling) — the production-tax base. Absent system ⇒ produced nothing. */
   realizedProductionBySystem: Map<string, Map<string, number>>;

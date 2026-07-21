@@ -7,6 +7,7 @@ import {
   systemLogisticsGeneration,
   type SystemLogisticsState,
   type RouteCost,
+  type ReachableSystemIds,
   type PlannedTransfer,
 } from "@/lib/engine/directed-logistics";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
@@ -16,12 +17,15 @@ import type {
   MarketRowForLogistics,
   LogisticsMarketUpdate,
   LogisticsFlowInsert,
+  LogisticsFundingBoundUpdate,
 } from "@/lib/tick/world/directed-logistics-world";
 
 export interface DirectedLogisticsProcessorParams {
   interval: number;
   /** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
   routeCost: RouteCost;
+  /** Enumerates only the bounded route neighbourhood; avoids all-faction scans after exhaustion. */
+  reachableSystemIds: ReachableSystemIds;
   /** Latched funded.logistics per faction (0–1) — scales the haul budget. Missing
    *  faction or omitted map → 1 (ungated: engine tests, independents). */
   fundingByFaction?: ReadonlyMap<string, number>;
@@ -102,13 +106,24 @@ export async function runDirectedLogisticsProcessor(
 
   const workPerformedByFaction = new Map<string, number>();
   const allTransfers: PlannedTransfer[] = [];
+  const fundingBoundMarketIds = new Set<string>();
   for (const [factionId, group] of byFaction) {
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
-    const transfers = matchFactionTransfers(group.map((r) => toLogisticsState(r, catchUp, funded)), params.routeCost);
-    allTransfers.push(...transfers);
+    const match = matchFactionTransfers(
+      group.map((r) => toLogisticsState(r, catchUp, funded)),
+      params.routeCost,
+      params.reachableSystemIds,
+    );
+    allTransfers.push(...match.transfers);
+    for (const bound of match.fundingBound) {
+      const from = marketByKey.get(`${bound.fromSystemId}|${bound.goodId}`);
+      const to = marketByKey.get(`${bound.toSystemId}|${bound.goodId}`);
+      if (from) fundingBoundMarketIds.add(from.id);
+      if (to) fundingBoundMarketIds.add(to.id);
+    }
     if (factionId === null) continue;
     let work = 0;
-    for (const t of transfers) work += t.cost;
+    for (const t of match.transfers) work += t.cost;
     if (work > 0) workPerformedByFaction.set(factionId, work);
   }
 
@@ -158,6 +173,18 @@ export async function runDirectedLogisticsProcessor(
     );
     await world.applyMarketUpdates(marketUpdates);
   }
+  const fundingUpdates: LogisticsFundingBoundUpdate[] = [];
+  for (const row of rows) {
+    for (const market of row.markets) {
+      const logisticsFundingBound = fundingBoundMarketIds.has(market.id);
+      if ((market.logisticsFundingBound ?? false) === logisticsFundingBound) continue;
+      fundingUpdates.push({
+        id: market.id,
+        logisticsFundingBound,
+      });
+    }
+  }
+  if (fundingUpdates.length > 0) await world.applyFundingBoundUpdates(fundingUpdates);
   if (flows.length > 0) await world.appendLogisticsFlows(flows);
 
   return { workPerformedByFaction };

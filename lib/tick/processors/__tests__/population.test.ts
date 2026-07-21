@@ -38,7 +38,7 @@ function ctxWithD(d: Map<string, number>): TickContext {
   return {
     tick: 0,
     results: new Map([
-      ["economy", { economySignals: { dissatisfactionBySystem: d, outputUptakeBySystem: new Map(), realizedProductionBySystem: new Map() } }],
+      ["economy", { economySignals: { dissatisfactionBySystem: d, sellingFactorBySystem: new Map(), realizedProductionBySystem: new Map() } }],
     ]),
   };
 }

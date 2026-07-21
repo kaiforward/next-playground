@@ -5,7 +5,7 @@ import type {
   GlobalEventMap,
 } from "../types";
 import {
-  outputUptake,
+  productionCeiling,
   type MarketTickEntry,
 } from "@/lib/engine/tick";
 import { simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
@@ -157,11 +157,10 @@ export async function runEconomyProcessor(
 
   await world.applyMarketUpdates(marketUpdates);
 
-  // Fold the same per-good satisfaction into per-system convex demand-weighted
-  // dissatisfaction D (consume side) and read per-produced-good output uptake
-  // (produce side) from post-tick stock.
+  // The producer signal is the isolated start-stock ceiling term. It deliberately
+  // excludes labour, recipe gates, strikes, maintenance, events, and realized flow.
   const goodsBySystem = new Map<string, GoodSatisfaction[]>();
-  const uptakeBySystem = new Map<string, Map<string, number>>();
+  const sellingFactorBySystem = new Map<string, Map<string, number>>();
   const realizedProductionBySystem = new Map<string, Map<string, number>>();
   markets.forEach((m, i) => {
     const consumptionRate = tickEntries[i].consumptionRate;
@@ -171,17 +170,15 @@ export async function runEconomyProcessor(
       arr.push({ satisfaction: satisfactionByIndex[i], demanded });
       goodsBySystem.set(m.systemId, arr);
     }
-    // outputUptake stays on the FULL [minStock, maxStock] storage band — NOT the
-    // operating ceiling. It is decay's "is output stuck against the physical wall?"
-    // signal; a healthy exporter resting at the operating ceiling must read as selling,
-    // or infrastructure-decay would tear it down. The throttle and this signal are
-    // deliberately separate calls (see docs/planned/economy-equilibrium-rework.md).
-    const productionRate = tickEntries[i].productionRate;
-    if (productionRate != null && productionRate > 0) {
-      const uptake = outputUptake(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock);
-      const map = uptakeBySystem.get(m.systemId) ?? new Map<string, number>();
-      map.set(m.goodId, uptake);
-      uptakeBySystem.set(m.systemId, map);
+    if (m.baseProductionRate !== undefined) {
+      const factor = productionCeiling(
+        tickEntries[i].stock,
+        tickEntries[i].targetStock,
+        simParams.holdCover,
+      );
+      const map = sellingFactorBySystem.get(m.systemId) ?? new Map<string, number>();
+      map.set(m.goodId, factor);
+      sellingFactorBySystem.set(m.systemId, map);
     }
     const realized = simulated[i].realized;
     if (realized > 0) {
@@ -196,7 +193,7 @@ export async function runEconomyProcessor(
   }
   const economySignals: EconomySignals = {
     dissatisfactionBySystem,
-    outputUptakeBySystem: uptakeBySystem,
+    sellingFactorBySystem,
     realizedProductionBySystem,
   };
 

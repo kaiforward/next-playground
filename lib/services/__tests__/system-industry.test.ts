@@ -3,6 +3,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemIndustry } from "@/lib/services/universe";
 import { ServiceError } from "@/lib/services/errors";
+import { BUILDING_TYPES } from "@/lib/constants/industry";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 const VALID_BANDS = ["poor", "average", "good", "rich"];
@@ -74,6 +75,55 @@ describe("getSystemIndustry", () => {
     }
     const water = data.popNeeds.find((n) => n.goodId === "water");
     expect(water?.goodName).toBe("Water");
+  });
+
+  it("treats a funding-bound glutted producer as demand-backed", () => {
+    const producer = world.buildings.find((building) => {
+      const definition = BUILDING_TYPES[building.buildingType];
+      const owner = world.systems.find((candidate) => candidate.id === building.systemId);
+      return building.count > 0 && definition?.resource !== undefined && owner?.control === "developed";
+    })!;
+    const definition = BUILDING_TYPES[producer.buildingType];
+    if (definition?.outputGood === undefined) throw new Error("expected an extractor fixture");
+    const goodId = definition.outputGood;
+    const count = 10;
+    const prepared: World = {
+      ...world,
+      systems: world.systems.map((candidate) =>
+        candidate.id === producer.systemId ? { ...candidate, population: 1_000_000_000 } : candidate,
+      ),
+      buildings: [
+        ...world.buildings.filter((building) => building.systemId !== producer.systemId),
+        { ...producer, count },
+      ],
+      markets: world.markets.map((market) =>
+        market.systemId === producer.systemId && market.goodId === goodId
+          ? { ...market, stock: 1_000_000_000, logisticsFundingBound: false }
+          : market,
+      ),
+    };
+    setWorld(prepared);
+    const ordinary = getSystemIndustry(producer.systemId);
+    if (ordinary.visibility !== "visible") throw new Error("expected visible industry");
+    const ordinaryProducer = ordinary.buildings.find((building) => building.buildingType === producer.buildingType)!;
+    expect(ordinaryProducer.used).toBeCloseTo(count * 0.15);
+    expect(ordinaryProducer.idleReason).toBe("selling");
+
+    setWorld({
+      ...prepared,
+      markets: prepared.markets.map((market) =>
+        market.systemId === producer.systemId && market.goodId === goodId
+          ? { ...market, logisticsFundingBound: true }
+          : market,
+      ),
+    });
+    const protectedIndustry = getSystemIndustry(producer.systemId);
+    if (protectedIndustry.visibility !== "visible") throw new Error("expected visible industry");
+    const protectedProducer = protectedIndustry.buildings.find(
+      (building) => building.buildingType === producer.buildingType,
+    )!;
+    expect(protectedProducer.used).toBe(count);
+    expect(protectedProducer.idleReason).toBeUndefined();
   });
 
   it("throws ServiceError(404) for an unknown system", () => {

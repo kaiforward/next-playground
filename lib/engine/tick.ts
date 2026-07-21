@@ -17,7 +17,7 @@ import { clamp } from "@/lib/utils/math";
 export interface MarketTickEntry {
   goodId: string;
   stock: number;
-  /** Price-saturation point (price hits its ceiling here). Not a draw floor — retained for the decay-uptake band read. */
+  /** Price-saturation point (price hits its ceiling here). Not a draw floor. */
   minStock: number;
   /**
    * Days-of-supply anchor (price === basePrice). The produce throttle saturates at
@@ -29,7 +29,7 @@ export interface MarketTickEntry {
    * demand cycles. Independent of pricing anchor shifts.
    */
   demandRate: number;
-  /** Stock ceiling — storage clamp and the decay-uptake band. */
+  /** Stock ceiling used by the storage clamp. */
   maxStock: number;
   /** Per-good base production rate (undefined/0 = not a producer of this good). */
   productionRate?: number;
@@ -50,26 +50,6 @@ export interface EconomySimParams {
   holdCover: number;
   /** Emergency-access cover in demand cycles. */
   rationCover: number;
-}
-
-/**
- * Self-limiting scale factor (sqrt curve). Returns 0 at the boundary and 1 at
- * the opposite extreme; sqrt keeps rates active through mid-range and only drops
- * sharply near the extremes.
- */
-export function selfLimitingFactor(
-  value: number,
-  min: number,
-  max: number,
-  direction: "produce" | "consume",
-): number {
-  const range = max - min;
-  if (range <= 0) return 0;
-  const ratio =
-    direction === "produce"
-      ? (max - value) / range // production slows as stock approaches the ceiling
-      : (value - min) / range; // consumption slows as stock approaches the floor
-  return Math.sqrt(Math.max(0, Math.min(1, ratio)));
 }
 
 /**
@@ -100,17 +80,6 @@ export function productionCeiling(stock: number, targetStock: number, holdCover:
   if (stock <= targetStock) return 1;
   if (stock >= ceiling) return 0;
   return (ceiling - stock) / (ceiling - targetStock);
-}
-
-/**
- * Seller-side output uptake ∈ [0,1] — the produce-direction self-limiting factor.
- * 1 when stock sits at the floor (output sells freely), → 0 as stock pins against
- * the storage ceiling (overproduction, piling up). The mirror of the consume-side
- * satisfaction signal; the infrastructure-decay processor uses it to decide whether
- * a producer's built capacity is actually "used" (staffed AND selling).
- */
-export function outputUptake(stock: number, minStock: number, maxStock: number): number {
-  return selfLimitingFactor(stock, minStock, maxStock, "produce");
 }
 
 /**

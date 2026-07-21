@@ -88,30 +88,56 @@ export interface PlannedTransfer {
   cost: number;
 }
 
+export interface FundingBoundMatch {
+  goodId: string;
+  fromSystemId: string;
+  toSystemId: string;
+}
+
+export interface TransferMatchResult {
+  transfers: PlannedTransfer[];
+  fundingBound: FundingBoundMatch[];
+}
+
 /** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
 export type RouteCost = (fromSystemId: string, toSystemId: string) => number | null;
 
+/**
+ * Candidate source systems inside the route lookup's bounded neighbourhood. The second argument is
+ * the complete faction system list so small standalone callers can deliberately use the fallback
+ * without constructing a topology index.
+ */
+export type ReachableSystemIds = (
+  toSystemId: string,
+  allSystemIds: readonly string[],
+) => Iterable<string>;
+
+export const allSystemIdsReachable: ReachableSystemIds = (_toSystemId, allSystemIds) => allSystemIds;
+
 interface Deficit { systemId: string; goodId: string; shortfall: number; severity: number; }
-interface Surplus { systemId: string; goodId: string; drawable: number; }
+interface Surplus { systemId: string; goodId: string; drawable: number; order: number; }
 
 /**
  * Greedy surplus→deficit matching for ONE faction's systems (or all independents).
  * Budget = Σ system.generation, spent as quantity × routeCost. Worst-deficit-first;
- * nearest reachable surplus first. Stops when budget is exhausted → deliberate under-serve.
+ * nearest reachable surplus first. Transfers stop when budget is exhausted, while bounded-neighbour
+ * classification continues so wanted-but-unfunded endpoints remain observable.
  */
 export function matchFactionTransfers(
   systems: SystemLogisticsState[],
   routeCost: RouteCost,
-): PlannedTransfer[] {
+  reachableSystemIds: ReachableSystemIds = allSystemIdsReachable,
+): TransferMatchResult {
   let budget = 0;
   for (const s of systems) budget += s.generation;
-  if (budget <= 0) return [];
+  const allSystemIds = systems.map((system) => system.systemId);
 
   // Classify each (system, good) as deficit or surplus. Mutable drawable/stock-shortfall as we allocate.
   const deficits: Deficit[] = [];
-  const surplusesByGood = new Map<string, Surplus[]>();
+  const surplusesByGood = new Map<string, Map<string, Surplus>>();
 
-  for (const s of systems) {
+  for (let systemOrder = 0; systemOrder < systems.length; systemOrder++) {
+    const s = systems[systemOrder];
     for (const g of s.goods) {
       const c = classifyMarketState(g.stock, g.targetStock);
       // Self-supply gate: a system that produces at least its own demand is never a deficit
@@ -127,9 +153,14 @@ export function matchFactionTransfers(
       // (see surplusDrawable; the latter is what the production throttle would otherwise suppress).
       const drawable = surplusDrawable(g.stock, g.targetStock, g.demand, g.production);
       if (drawable > 0) {
-        const list = surplusesByGood.get(g.goodId) ?? [];
-        list.push({ systemId: s.systemId, goodId: g.goodId, drawable });
-        surplusesByGood.set(g.goodId, list);
+        const bySystem = surplusesByGood.get(g.goodId) ?? new Map<string, Surplus>();
+        bySystem.set(s.systemId, {
+          systemId: s.systemId,
+          goodId: g.goodId,
+          drawable,
+          order: systemOrder,
+        });
+        surplusesByGood.set(g.goodId, bySystem);
       }
     }
   }
@@ -137,27 +168,48 @@ export function matchFactionTransfers(
   deficits.sort((a, b) => b.severity - a.severity);
 
   const transfers: PlannedTransfer[] = [];
+  const fundingBound: FundingBoundMatch[] = [];
+  const fundingBoundKeys = new Set<string>();
   for (const d of deficits) {
-    if (budget <= 0) break;
     const sources = surplusesByGood.get(d.goodId);
     if (!sources) continue;
 
     // Nearest reachable source first.
     let best: { source: Surplus; perUnit: number } | null = null;
-    for (const source of sources) {
+    for (const sourceSystemId of reachableSystemIds(d.systemId, allSystemIds)) {
+      const source = sources.get(sourceSystemId);
+      if (source === undefined) continue;
       if (source.drawable <= 0) continue;
       const perUnit = routeCost(source.systemId, d.systemId);
       if (perUnit === null || perUnit <= 0) continue;
-      if (!best || perUnit < best.perUnit) best = { source, perUnit };
+      if (
+        best === null
+        || perUnit < best.perUnit
+        || (perUnit === best.perUnit && source.order < best.source.order)
+      ) {
+        best = { source, perUnit };
+      }
     }
     if (!best) continue;
 
     // Continuous goods — no quantization to whole units (rounding down loses up to one
     // unit per transfer, negligible at high ECONOMY_SCALE but a large fraction of a small
     // budget at low scale, breaking scale-invariance of budget-bound transfers).
-    const affordable = budget / best.perUnit;
-    const quantity = Math.min(d.shortfall, best.source.drawable, affordable);
-    if (quantity <= 0) continue;
+    const wanted = Math.min(d.shortfall, best.source.drawable);
+    const affordable = budget > 0 ? budget / best.perUnit : 0;
+    const quantity = Math.min(wanted, affordable);
+    if (affordable < wanted) {
+      const key = `${d.goodId}|${best.source.systemId}|${d.systemId}`;
+      if (!fundingBoundKeys.has(key)) {
+        fundingBoundKeys.add(key);
+        fundingBound.push({
+          goodId: d.goodId,
+          fromSystemId: best.source.systemId,
+          toSystemId: d.systemId,
+        });
+      }
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
 
     const cost = quantity * best.perUnit;
     transfers.push({
@@ -171,5 +223,5 @@ export function matchFactionTransfers(
     budget -= cost;
   }
 
-  return transfers;
+  return { transfers, fundingBound };
 }

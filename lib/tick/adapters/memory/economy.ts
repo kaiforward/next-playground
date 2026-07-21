@@ -11,6 +11,7 @@ import { economyShardOrder } from "@/lib/engine/shard-order";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
+import { BUILDING_TYPES } from "@/lib/constants/industry";
 
 /**
  * In-memory adapter for the economy processor.
@@ -53,6 +54,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     const sysById = new Map(this.systems.map((s) => [s.id, s]));
     const wanted = new Set(systemIds);
     const labourBySystem = new Map<string, SystemLabourSnapshot>();
+    const producedGoodsBySystem = new Map<string, Set<string>>();
     const views: MarketView[] = [];
     for (const m of this.markets) {
       if (!wanted.has(m.systemId)) continue;
@@ -63,6 +65,16 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         snap = computeSystemLabourSnapshot(sys.buildings, sys.population);
         labourBySystem.set(sys.id, snap);
       }
+      let producedGoods = producedGoodsBySystem.get(sys.id);
+      if (producedGoods === undefined) {
+        producedGoods = new Set<string>();
+        for (const [buildingType, count] of Object.entries(sys.buildings)) {
+          if (count <= 0) continue;
+          const goodId = BUILDING_TYPES[buildingType]?.outputGood;
+          if (goodId !== undefined) producedGoods.add(goodId);
+        }
+        producedGoodsBySystem.set(sys.id, producedGoods);
+      }
       const production = buildingProduction(sys.buildings, m.goodId, snap.state, sys.yields);
       const consumption = consumptionRate(m.goodId, snap.basis);
       views.push({
@@ -72,7 +84,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         goodId: m.goodId,
         stock: m.stock,
         governmentType: sys.governmentType,
-        baseProductionRate: production > 0 ? production : undefined,
+        baseProductionRate: producedGoods.has(m.goodId) ? production : undefined,
         baseConsumptionRate: consumption > 0 ? consumption : undefined,
         demandRate: m.demandRate,
         storageCapacity: m.storageCapacity,

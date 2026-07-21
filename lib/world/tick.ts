@@ -62,7 +62,7 @@ import { TREASURY, REFERENCE_VALUE, TAX_LEVEL_UNREST_PRESSURE } from "@/lib/cons
 import { maintenanceOutputMalus, maintenanceBufferScale } from "@/lib/engine/treasury";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
-import type { RouteCost } from "@/lib/engine/directed-logistics";
+import type { ReachableSystemIds, RouteCost } from "@/lib/engine/directed-logistics";
 import type { EventDefinition, EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import { buildModifiersForPhase } from "@/lib/engine/events";
 import type { GovernmentType } from "@/lib/types/game";
@@ -273,6 +273,7 @@ function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLog
       demandRate: m.demandRate,
       storageCapacity: m.storageCapacity,
       satisfaction: m.satisfaction,
+      logisticsFundingBound: m.logisticsFundingBound,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -314,11 +315,22 @@ function buildBuildRows(
   }));
 }
 
-function applyStockUpdates(markets: WorldMarket[], updates: Map<string, number>): WorldMarket[] {
-  if (updates.size === 0) return markets;
+function applyLogisticsMarketUpdates(
+  markets: WorldMarket[],
+  stockUpdates: Map<string, number>,
+  fundingBoundUpdates: Map<string, boolean>,
+): WorldMarket[] {
+  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0) return markets;
   return markets.map((m) => {
-    const newStock = updates.get(`${m.systemId}|${m.goodId}`);
-    return newStock !== undefined ? { ...m, stock: newStock } : m;
+    const id = `${m.systemId}|${m.goodId}`;
+    const newStock = stockUpdates.get(id);
+    const logisticsFundingBound = fundingBoundUpdates.get(id);
+    if (newStock === undefined && logisticsFundingBound === undefined) return m;
+    return {
+      ...m,
+      stock: newStock ?? m.stock,
+      logisticsFundingBound: logisticsFundingBound ?? m.logisticsFundingBound,
+    };
   });
 }
 
@@ -329,13 +341,17 @@ function applyStockUpdates(markets: WorldMarket[], updates: Map<string, number>)
  * row's `id`); only the handful of touched systems get a new row array —
  * every other system's array is reused by reference.
  */
-function patchMarketRowStocks(
+function patchLogisticsMarketRows(
   bySystem: Map<string, MarketRowForLogistics[]>,
-  updates: Map<string, number>,
+  stockUpdates: Map<string, number>,
+  fundingBoundUpdates: Map<string, boolean>,
 ): Map<string, MarketRowForLogistics[]> {
-  if (updates.size === 0) return bySystem;
+  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0) return bySystem;
   const touchedSystems = new Set<string>();
-  for (const key of updates.keys()) {
+  for (const key of stockUpdates.keys()) {
+    touchedSystems.add(key.slice(0, key.indexOf("|")));
+  }
+  for (const key of fundingBoundUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   const patched = new Map(bySystem);
@@ -345,8 +361,14 @@ function patchMarketRowStocks(
     patched.set(
       systemId,
       rows.map((r) => {
-        const newStock = updates.get(r.id);
-        return newStock !== undefined ? { ...r, stock: newStock } : r;
+        const newStock = stockUpdates.get(r.id);
+        const logisticsFundingBound = fundingBoundUpdates.get(r.id);
+        if (newStock === undefined && logisticsFundingBound === undefined) return r;
+        return {
+          ...r,
+          stock: newStock ?? r.stock,
+          logisticsFundingBound: logisticsFundingBound ?? r.logisticsFundingBound,
+        };
       }),
     );
   }
@@ -660,11 +682,23 @@ export async function runWorldTick(
 
   // ── infrastructure-decay ──
   if (economySignals) {
+    const logisticsFundingBoundBySystem = new Map<string, Set<string>>();
+    for (const market of markets) {
+      if (!market.logisticsFundingBound) continue;
+      const goods = logisticsFundingBoundBySystem.get(market.systemId) ?? new Set<string>();
+      goods.add(market.goodId);
+      logisticsFundingBoundBySystem.set(market.systemId, goods);
+    }
     const decayWorld = new InMemoryInfrastructureWorld({ systems });
     await runInfrastructureDecayProcessor(
       decayWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { decay: INFRASTRUCTURE_DECAY_PARAMS, interval: cadence.month, bufferScaleBySystem: maintenanceBufferScaleBySystem },
+      {
+        decay: INFRASTRUCTURE_DECAY_PARAMS,
+        interval: cadence.month,
+        bufferScaleBySystem: maintenanceBufferScaleBySystem,
+        logisticsFundingBoundBySystem,
+      },
     );
     systems = decayWorld.systems;
     processorsRun.push("infrastructure-decay");
@@ -759,6 +793,7 @@ export async function runWorldTick(
     // remapping every market row a second time (see patchMarketRowStocks).
     const logisticsMarketRows = marketRowsBySystem(markets);
     let dlStockUpdates: Map<string, number> = new Map();
+    let dlFundingBoundUpdates: Map<string, boolean> = new Map();
 
     // ── directed-logistics ──
     {
@@ -766,6 +801,8 @@ export async function runWorldTick(
         const h = hops.get(f)?.get(t);
         return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
       };
+      const reachableSystemIds: ReachableSystemIds = (systemId) =>
+        hops.get(systemId)?.keys() ?? [];
       // Directed-logistics moves goods only between developed systems.
       const rows = buildLogisticsRows(
         systems.filter((s) => developedSystemIds.has(s.id)),
@@ -775,11 +812,17 @@ export async function runWorldTick(
       const dlResult = await runDirectedLogisticsProcessor(dlWorld, { tick }, {
         interval: cadence.logistics,
         routeCost,
+        reachableSystemIds,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
       });
-      markets = applyStockUpdates(markets, dlWorld.stockUpdates);
+      markets = applyLogisticsMarketUpdates(
+        markets,
+        dlWorld.stockUpdates,
+        dlWorld.fundingBoundUpdates,
+      );
       dlStockUpdates = dlWorld.stockUpdates;
+      dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
       const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
       flowEvents = [...flowEvents, ...newLogisticsFlows];
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
@@ -856,7 +899,14 @@ export async function runWorldTick(
         return candidates;
       };
 
-      const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
+      const rows = buildBuildRows(
+        systems,
+        patchLogisticsMarketRows(
+          logisticsMarketRows,
+          dlStockUpdates,
+          dlFundingBoundUpdates,
+        ),
+      );
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
       const dbResult = await runDirectedBuildProcessor(dbWorld, { tick }, {
         interval: cadence.construction,
