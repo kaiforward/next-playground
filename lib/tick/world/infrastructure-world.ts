@@ -69,4 +69,5 @@ export interface InfrastructureProcessorParams {
   /** Per-system idle-buffer multiplier from the owning faction's latched maintenance
    *  funding (maintenanceBufferScale). Missing system or omitted map → 1 (today's buffer). */
   bufferScaleBySystem?: ReadonlyMap<string, number>;
+  logisticsFundingBoundBySystem?: ReadonlyMap<string, ReadonlySet<string>>;
 }

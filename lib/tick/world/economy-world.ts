@@ -30,7 +30,8 @@ export interface MarketView {
   stock: number;
   /** Government of the system's owning faction — read per-market. */
   governmentType: GovernmentType;
-  /** Base production rate for this good, if any. */
+  /** Base production rate for this good. `undefined` means no built producer;
+   *  `0` means built capacity is currently unable to produce due to staffing/skills. */
   baseProductionRate?: number;
   /** Base consumption rate for this good, if any. */
   baseConsumptionRate?: number;

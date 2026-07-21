@@ -236,6 +236,13 @@ export interface WorldMarket {
    * missing (pre-change save) reads as 1.
    */
   satisfaction?: number;
+  /**
+   * The latest logistics assessment found this row at one endpoint of a reachable
+   * wanted-but-unfunded match. Source-side: demand-backed export capacity must not
+   * be pruned as glut. Destination-side: PR3 must not answer the squeeze by building
+   * local capacity. Missing => false.
+   */
+  logisticsFundingBound?: boolean;
 }
 
 // ── Factions ────────────────────────────────────────────────────

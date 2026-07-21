@@ -14,7 +14,7 @@ import type {
 /**
  * Pure processor body. Runs right after the economy processor, on the SAME shard:
  * the system set is exactly the economy's `dissatisfactionBySystem` key set (its
- * processed shard), and uptake comes from the same in-memory signals. Reads the
+ * processed shard), and selling factors come from the same in-memory signals. Reads the
  * building roster + population + unrest, computes downward-only `count` deltas
  * (disuse + unrest decay) plus the recomputed popCap, and batch-writes both. Writes
  * are skipped where nothing decayed; popCap is written only where housing changed.
@@ -39,7 +39,8 @@ export async function runInfrastructureDecayProcessor(
   const debtUpdates: CollapseDebtUpdate[] = [];
   const popCapUpdates: PopCapUpdate[] = [];
   for (const s of states) {
-    const uptake = signals.outputUptakeBySystem.get(s.systemId);
+    const selling = signals.sellingFactorBySystem.get(s.systemId);
+    const fundingBound = params.logisticsFundingBoundBySystem?.get(s.systemId);
     // Maintenance funding stretches/shrinks the idle buffer only — the unrest
     // channel and the buffer machinery itself are untouched (no new decay channel).
     const bufferScale = params.bufferScaleBySystem?.get(s.systemId) ?? 1;
@@ -54,7 +55,8 @@ export async function runInfrastructureDecayProcessor(
         buildingCollapseDebt: s.buildingCollapseDebt,
         population: s.population,
         unrest: s.unrest,
-        outputUptake: (goodId) => uptake?.get(goodId) ?? 1,
+        sellingFactor: (goodId) => selling?.get(goodId) ?? 1,
+        logisticsFundingBound: (goodId) => fundingBound?.has(goodId) ?? false,
       },
       decayParams,
       catchUp,

@@ -16,6 +16,7 @@ import type {
   MarketRowForLogistics,
   LogisticsMarketUpdate,
   LogisticsFlowInsert,
+  LogisticsFundingBoundUpdate,
 } from "@/lib/tick/world/directed-logistics-world";
 
 export interface DirectedLogisticsProcessorParams {
@@ -102,13 +103,20 @@ export async function runDirectedLogisticsProcessor(
 
   const workPerformedByFaction = new Map<string, number>();
   const allTransfers: PlannedTransfer[] = [];
+  const fundingBoundMarketIds = new Set<string>();
   for (const [factionId, group] of byFaction) {
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
-    const transfers = matchFactionTransfers(group.map((r) => toLogisticsState(r, catchUp, funded)), params.routeCost);
-    allTransfers.push(...transfers);
+    const match = matchFactionTransfers(group.map((r) => toLogisticsState(r, catchUp, funded)), params.routeCost);
+    allTransfers.push(...match.transfers);
+    for (const bound of match.fundingBound) {
+      const from = marketByKey.get(`${bound.fromSystemId}|${bound.goodId}`);
+      const to = marketByKey.get(`${bound.toSystemId}|${bound.goodId}`);
+      if (from) fundingBoundMarketIds.add(from.id);
+      if (to) fundingBoundMarketIds.add(to.id);
+    }
     if (factionId === null) continue;
     let work = 0;
-    for (const t of transfers) work += t.cost;
+    for (const t of match.transfers) work += t.cost;
     if (work > 0) workPerformedByFaction.set(factionId, work);
   }
 
@@ -158,6 +166,16 @@ export async function runDirectedLogisticsProcessor(
     );
     await world.applyMarketUpdates(marketUpdates);
   }
+  const fundingUpdates: LogisticsFundingBoundUpdate[] = [];
+  for (const row of rows) {
+    for (const market of row.markets) {
+      fundingUpdates.push({
+        id: market.id,
+        logisticsFundingBound: fundingBoundMarketIds.has(market.id),
+      });
+    }
+  }
+  await world.applyFundingBoundUpdates(fundingUpdates);
   if (flows.length > 0) await world.appendLogisticsFlows(flows);
 
   return { workPerformedByFaction };

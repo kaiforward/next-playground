@@ -52,7 +52,7 @@ describe("computeSystemDecay — whole-level buffered contraction", () => {
         buildingCollapseDebt: {},
         population: 100, // fills 5 housing exactly; 2 ore fully staffed + selling
         unrest: 0,
-        outputUptake: noUptake,
+        sellingFactor: noUptake,
       },
       PARAMS,
     );
@@ -64,7 +64,7 @@ describe("computeSystemDecay — whole-level buffered contraction", () => {
   it("counts an idle building's buffer up without shedding below the threshold", () => {
     // 3 ore, population 0 → used 0 → all 3 levels idle. Countdown 1 → 2, no removal (buffer 3).
     const result = computeSystemDecay(
-      { buildings: { ore: 3 }, buildingIdleMonths: { ore: 1 }, buildingCollapseDebt: {}, population: 0, unrest: 0, outputUptake: noUptake },
+      { buildings: { ore: 3 }, buildingIdleMonths: { ore: 1 }, buildingCollapseDebt: {}, population: 0, unrest: 0, sellingFactor: noUptake },
       PARAMS,
     );
     expect(result.newCounts).toEqual({});
@@ -73,7 +73,7 @@ describe("computeSystemDecay — whole-level buffered contraction", () => {
 
   it("sheds exactly one whole level at the buffer and resets the countdown", () => {
     const result = computeSystemDecay(
-      { buildings: { ore: 3 }, buildingIdleMonths: { ore: 2 }, buildingCollapseDebt: {}, population: 0, unrest: 0, outputUptake: noUptake },
+      { buildings: { ore: 3 }, buildingIdleMonths: { ore: 2 }, buildingCollapseDebt: {}, population: 0, unrest: 0, sellingFactor: noUptake },
       PARAMS,
     );
     expect(result.newCounts.ore).toBe(2); // one level torn down; count stays integer
@@ -90,7 +90,7 @@ describe("computeSystemDecay — whole-level buffered contraction", () => {
         buildingCollapseDebt: {},
         population: 3 * ORE_LABOUR,
         unrest: 0,
-        outputUptake: noUptake,
+        sellingFactor: noUptake,
       },
       PARAMS,
     );
@@ -101,25 +101,69 @@ describe("computeSystemDecay — whole-level buffered contraction", () => {
   it("tears down a whole level immediately when unrest exceeds the threshold (discrete collapse)", () => {
     // 2 ore fully staffed + selling (not idle), but unrest 1 > 0.75 → one level torn down anyway.
     const result = computeSystemDecay(
-      { buildings: { ore: 2 }, buildingIdleMonths: {}, buildingCollapseDebt: {}, population: 2 * ORE_LABOUR, unrest: 1, outputUptake: noUptake },
+      { buildings: { ore: 2 }, buildingIdleMonths: {}, buildingCollapseDebt: {}, population: 2 * ORE_LABOUR, unrest: 1, sellingFactor: noUptake },
       PARAMS,
     );
     expect(result.newCounts.ore).toBe(1);
     expect(Number.isInteger(result.newCounts.ore)).toBe(true);
   });
 
+  it("funding-bound protection does not suppress catastrophic unrest teardown", () => {
+    const result = computeSystemDecay(
+      {
+        buildings: { ore: 2 },
+        buildingIdleMonths: {},
+        buildingCollapseDebt: {},
+        population: 2 * ORE_LABOUR,
+        unrest: 1,
+        sellingFactor: () => 0,
+        logisticsFundingBound: () => true,
+      },
+      PARAMS,
+    );
+    expect(result.newCounts.ore).toBe(1);
+  });
+
   it("recomputes popCap from the surviving housing when a housing level sheds", () => {
     const result = computeSystemDecay(
-      { buildings: { [HOUSING_TYPE]: 5 }, buildingIdleMonths: { [HOUSING_TYPE]: 2 }, buildingCollapseDebt: {}, population: 0, unrest: 0, outputUptake: noUptake },
+      { buildings: { [HOUSING_TYPE]: 5 }, buildingIdleMonths: { [HOUSING_TYPE]: 2 }, buildingCollapseDebt: {}, population: 0, unrest: 0, sellingFactor: noUptake },
       PARAMS,
     );
     expect(result.newCounts[HOUSING_TYPE]).toBe(4);
     expect(result.popCap).toBeCloseTo(4 * POP_CENTRE_DENSITY, 6);
   });
 
+  it("holds housing through healthy vacancy but accrues through material emptying", () => {
+    const healthy = computeSystemDecay(
+      {
+        buildings: { [HOUSING_TYPE]: 10 },
+        buildingIdleMonths: { [HOUSING_TYPE]: 2 },
+        buildingCollapseDebt: {},
+        population: 9.2 * POP_CENTRE_DENSITY,
+        unrest: 0,
+        sellingFactor: noUptake,
+      },
+      PARAMS,
+    );
+    expect(healthy.newIdleMonths[HOUSING_TYPE]).toBe(0);
+
+    const emptying = computeSystemDecay(
+      {
+        buildings: { [HOUSING_TYPE]: 10 },
+        buildingIdleMonths: {},
+        buildingCollapseDebt: {},
+        population: 8 * POP_CENTRE_DENSITY,
+        unrest: 0,
+        sellingFactor: noUptake,
+      },
+      PARAMS,
+    );
+    expect(emptying.newIdleMonths[HOUSING_TYPE]).toBe(1);
+  });
+
   it("is a no-op under a never-expiring buffer and sub-threshold unrest", () => {
     const result = computeSystemDecay(
-      { buildings: { [HOUSING_TYPE]: 3, ore: 1 }, buildingIdleMonths: {}, buildingCollapseDebt: {}, population: 0, unrest: 0.7, outputUptake: () => 0 },
+      { buildings: { [HOUSING_TYPE]: 3, ore: 1 }, buildingIdleMonths: {}, buildingCollapseDebt: {}, population: 0, unrest: 0.7, sellingFactor: () => 0 },
       NO_DECAY,
     );
     expect(result.newCounts).toEqual({});
@@ -140,7 +184,7 @@ describe("computeSystemDecay — interval awareness", () => {
     buildingCollapseDebt,
     population: count * ORE_LABOUR,
     unrest,
-    outputUptake: noUptake,
+    sellingFactor: noUptake,
   });
 
   it("idle countdown is tick-denominated: catchUp 0.5 needs twice the runs", () => {
@@ -149,7 +193,7 @@ describe("computeSystemDecay — interval awareness", () => {
     let idleMonths: Record<string, number> = {};
     for (let run = 1; run <= 3; run++) {
       const r = computeSystemDecay(
-        { buildings: { ore: 2 }, buildingIdleMonths: idleMonths, buildingCollapseDebt: {}, population: 0, unrest: 0, outputUptake: noUptake },
+        { buildings: { ore: 2 }, buildingIdleMonths: idleMonths, buildingCollapseDebt: {}, population: 0, unrest: 0, sellingFactor: noUptake },
         IV_PARAMS,
         0.5,
       );
@@ -158,7 +202,7 @@ describe("computeSystemDecay — interval awareness", () => {
       idleMonths = r.newIdleMonths;
     }
     const r4 = computeSystemDecay(
-      { buildings: { ore: 2 }, buildingIdleMonths: idleMonths, buildingCollapseDebt: {}, population: 0, unrest: 0, outputUptake: noUptake },
+      { buildings: { ore: 2 }, buildingIdleMonths: idleMonths, buildingCollapseDebt: {}, population: 0, unrest: 0, sellingFactor: noUptake },
       IV_PARAMS,
       0.5,
     );
@@ -199,7 +243,7 @@ describe("computeSystemDecay — interval awareness", () => {
 
     // …and the idle countdown advances by whole 1s.
     const idle = computeSystemDecay(
-      { buildings: { ore: 3 }, buildingIdleMonths: { ore: 1 }, buildingCollapseDebt: {}, population: 0, unrest: 0, outputUptake: noUptake },
+      { buildings: { ore: 3 }, buildingIdleMonths: { ore: 1 }, buildingCollapseDebt: {}, population: 0, unrest: 0, sellingFactor: noUptake },
       PARAMS, // buffer 3 from the top-level fixture
     );
     expect(idle.newIdleMonths.ore).toBe(2);
@@ -211,7 +255,7 @@ describe("computeSystemDecay — every output kind sheds whole levels uniformly"
     // 2 vocational schools license far more skill-1 than one metals fab demands → ≥1 idle level.
     const buildings = { metals: 1, [VOCATIONAL_SCHOOL_TYPE]: 2, [HOUSING_TYPE]: 100 };
     const result = computeSystemDecay(
-      { buildings, buildingIdleMonths: { [VOCATIONAL_SCHOOL_TYPE]: 2 }, buildingCollapseDebt: {}, population: 100000, unrest: 0, outputUptake: noUptake },
+      { buildings, buildingIdleMonths: { [VOCATIONAL_SCHOOL_TYPE]: 2 }, buildingCollapseDebt: {}, population: 100000, unrest: 0, sellingFactor: noUptake },
       PARAMS,
     );
     expect(result.newCounts[VOCATIONAL_SCHOOL_TYPE]).toBe(1);
@@ -220,7 +264,7 @@ describe("computeSystemDecay — every output kind sheds whole levels uniformly"
   it("sheds an orphaned specialisation complex at the buffer (modifier output)", () => {
     // No family factories → the complex buffs nothing → one whole idle level → sheds at the buffer.
     const result = computeSystemDecay(
-      { buildings: { [HEAVY_INDUSTRY_COMPLEX]: 1 }, buildingIdleMonths: { [HEAVY_INDUSTRY_COMPLEX]: 2 }, buildingCollapseDebt: {}, population: 1e9, unrest: 0, outputUptake: noUptake },
+      { buildings: { [HEAVY_INDUSTRY_COMPLEX]: 1 }, buildingIdleMonths: { [HEAVY_INDUSTRY_COMPLEX]: 2 }, buildingCollapseDebt: {}, population: 1e9, unrest: 0, sellingFactor: noUptake },
       PARAMS,
     );
     expect(result.newCounts[HEAVY_INDUSTRY_COMPLEX]).toBe(0);

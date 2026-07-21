@@ -39,7 +39,7 @@ describe("infrastructure-decay processor", () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { population })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -53,7 +53,7 @@ describe("infrastructure-decay processor", () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", {}), sys("s2", {})] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -64,7 +64,7 @@ describe("infrastructure-decay processor", () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { unrest: 1, population: 4 * ORE_LABOUR })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      outputUptakeBySystem: new Map(), // no uptake recorded for s1 → defaults to 1
+      sellingFactorBySystem: new Map(), // no uptake recorded for s1 → defaults to 1
       realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -80,7 +80,7 @@ describe("infrastructure-decay processor", () => {
     });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
@@ -104,7 +104,7 @@ describe("infrastructure-decay processor", () => {
     });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s-starved", 0], ["s-funded", 0]]),
-      outputUptakeBySystem: new Map(),
+      sellingFactorBySystem: new Map(),
       realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), {
@@ -114,5 +114,30 @@ describe("infrastructure-decay processor", () => {
     });
     expect(world.systems.find((x) => x.id === "s-starved")!.buildings.ore).toBe(9);
     expect(world.systems.find((x) => x.id === "s-funded")!.buildings.ore).toBe(10);
+  });
+
+  it("protects a glutted funding-bound producer but contracts it without the marker", async () => {
+    const population = 10 * ORE_LABOUR;
+    const world = new InMemoryInfrastructureWorld({
+      systems: [
+        sys("protected", { population, buildings: { ore: 10 } }),
+        sys("ordinary", { population, buildings: { ore: 10 } }),
+      ],
+    });
+    const signals: EconomySignals = {
+      dissatisfactionBySystem: new Map([["protected", 0], ["ordinary", 0]]),
+      sellingFactorBySystem: new Map([
+        ["protected", new Map([["ore", 0]])],
+        ["ordinary", new Map([["ore", 0]])],
+      ]),
+      realizedProductionBySystem: new Map(),
+    };
+    await runInfrastructureDecayProcessor(world, ctxWith(signals), {
+      decay: DECAY,
+      interval: 24,
+      logisticsFundingBoundBySystem: new Map([["protected", new Set(["ore"])]]),
+    });
+    expect(world.systems.find((system) => system.id === "protected")!.buildings.ore).toBe(10);
+    expect(world.systems.find((system) => system.id === "ordinary")!.buildings.ore).toBe(9);
   });
 });

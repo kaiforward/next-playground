@@ -181,6 +181,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     );
     expect(world.flows).toHaveLength(0);
     expect(world.stockUpdates.size).toBe(0);
+    expect(world.fundingBoundUpdates.size).toBe(0);
   });
 
   // A market with a big demandRate → big targetStock, so the deficit's shortfall and the donor's
@@ -240,6 +241,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       fundingByFaction: new Map([["f1", 0]]),
     });
     expect(gated.flows).toHaveLength(0);
+    expect(gated.fundingBoundUpdates.get("mA")).toBe(true);
+    expect(gated.fundingBoundUpdates.get("mB")).toBe(true);
 
     // A faction missing from the map is ungated — identical to no map at all.
     const ungated = new MemoryDirectedLogisticsWorld(mk());
@@ -248,5 +251,51 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       fundingByFaction: new Map([["other", 0]]),
     });
     expect(ungated.flows).toHaveLength(1);
+  });
+
+  it("refreshes every due row and clears a recovered funding-bound assessment", async () => {
+    const systems = [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [
+          market("mA", "food", 95, 20),
+          market("mOther", "ore", 40, 20),
+        ],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => 1,
+      fundingByFaction: new Map([["f1", 0]]),
+    });
+    expect(world.fundingBoundUpdates.get("mA")).toBe(true);
+    expect(world.fundingBoundUpdates.get("mB")).toBe(true);
+    expect(world.fundingBoundUpdates.get("mOther")).toBe(false);
+
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => 1,
+    });
+    expect(world.fundingBoundUpdates.get("mA")).toBe(false);
+    expect(world.fundingBoundUpdates.get("mB")).toBe(false);
+    expect(world.fundingBoundUpdates.get("mOther")).toBe(false);
+  });
+
+  it("keeps unreachable pairs unmarked", async () => {
+    const systems = [
+      { systemId: "A", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
+      { systemId: "B", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => null,
+    });
+    expect([...world.fundingBoundUpdates.values()]).toEqual([false, false]);
   });
 });

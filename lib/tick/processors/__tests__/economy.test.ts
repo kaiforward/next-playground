@@ -407,8 +407,8 @@ describe("economy processor: supply-chain input-gating", () => {
       modifiers: [],
     });
 
-    await runEconomyProcessor(worldA, makeCtx(0), { ...ECON_PARAMS });
-    await runEconomyProcessor(worldB, makeCtx(0), { ...ECON_PARAMS });
+    const resultA = await runEconomyProcessor(worldA, makeCtx(0), { ...ECON_PARAMS });
+    const resultB = await runEconomyProcessor(worldB, makeCtx(0), { ...ECON_PARAMS });
 
     const metalsA = worldA.markets.find((m) => m.goodId === "metals")!.stock;
     const metalsB = worldB.markets.find((m) => m.goodId === "metals")!.stock;
@@ -421,10 +421,13 @@ describe("economy processor: supply-chain input-gating", () => {
     expect(metalsA).toBeGreaterThan(MID_METALS);
     expect(metalsB).toBeGreaterThan(MID_METALS); // scarce ore still produces on the ramp
     expect(metalsA).toBeGreaterThan(metalsB); // but scarce ore throttles output below abundant
+    expect(resultA.economySignals!.sellingFactorBySystem.get("sys-a")!.get("metals")).toBeCloseTo(
+      resultB.economySignals!.sellingFactorBySystem.get("sys-b")!.get("metals")!,
+    );
   });
 });
 
-// ── outputUptake signal ───────────────────────────────────────────
+// ── selling factor signal ───────────────────────────────────────────
 
 describe("economy processor: realized production signal", () => {
   it("exports realized production per (system, good) in economySignals", async () => {
@@ -451,7 +454,64 @@ describe("economy processor: realized production signal", () => {
   });
 });
 
-describe("economy processor: outputUptake signal", () => {
+describe("economy processor: selling factor signal", () => {
+  it("emits the production-knee geometry from start stock", async () => {
+    const stocks = [40, 46, 52];
+    const expected = [1, 0.5, 0];
+    for (let index = 0; index < stocks.length; index++) {
+      const id = `p-${index}`;
+      const world = new InMemoryEconomyWorld({
+        systems: [makeProducerSystem(id, 0)],
+        markets: [makeMarket(id, "food", stocks[index])],
+        modifiers: [],
+      });
+      const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+      expect(result.economySignals!.sellingFactorBySystem.get(id)!.get("food")).toBeCloseTo(expected[index]);
+    }
+  });
+
+  it("uses start stock even when the pulse materially changes final stock", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("p", 0)],
+      markets: [makeMarket("p", "food", 40)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), {
+      ...ECON_PARAMS,
+      interval: 24,
+    });
+    expect(world.markets[0].stock).not.toBe(40);
+    expect(result.economySignals!.sellingFactorBySystem.get("p")!.get("food")).toBe(1);
+  });
+
+  it("is invariant to strike and maintenance flow suppression", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("calm", 0), makeProducerSystem("suppressed", 1)],
+      markets: [makeMarket("calm", "food", 46), makeMarket("suppressed", "food", 46)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), {
+      ...ECON_PARAMS,
+      maintenanceMalusBySystem: new Map([["suppressed", 0.25]]),
+    });
+    const factors = result.economySignals!.sellingFactorBySystem;
+    expect(factors.get("calm")!.get("food")).toBeCloseTo(0.5);
+    expect(factors.get("suppressed")!.get("food")).toBeCloseTo(0.5);
+  });
+
+  it("retains producer identity when current staffing makes flow zero", async () => {
+    const producer = makeProducerSystem("p-zero", 0);
+    producer.population = 0;
+    const world = new InMemoryEconomyWorld({
+      systems: [producer],
+      markets: [makeMarket("p-zero", "food", 40)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(result.economySignals!.sellingFactorBySystem.get("p-zero")!.get("food")).toBe(1);
+    expect(result.economySignals!.realizedProductionBySystem.get("p-zero")).toBeUndefined();
+  });
+
   it("emits low uptake for a producer pinned at the ceiling, high near the floor", async () => {
     const goodId = "food";
     const pinned = new InMemoryEconomyWorld({
@@ -460,7 +520,7 @@ describe("economy processor: outputUptake signal", () => {
       modifiers: [],
     });
     const r1 = await runEconomyProcessor(pinned, makeCtx(0), { ...ECON_PARAMS });
-    const uHigh = r1.economySignals!.outputUptakeBySystem.get("p-high")!.get(goodId)!;
+    const uHigh = r1.economySignals!.sellingFactorBySystem.get("p-high")!.get(goodId)!;
 
     const draining = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("p-low", 0)],
@@ -468,21 +528,21 @@ describe("economy processor: outputUptake signal", () => {
       modifiers: [],
     });
     const r2 = await runEconomyProcessor(draining, makeCtx(0), { ...ECON_PARAMS });
-    const uLow = r2.economySignals!.outputUptakeBySystem.get("p-low")!.get(goodId)!;
+    const uLow = r2.economySignals!.sellingFactorBySystem.get("p-low")!.get(goodId)!;
 
     expect(uHigh).toBeLessThan(0.2);
     expect(uLow).toBeGreaterThan(0.8);
     expect(uLow).toBeGreaterThan(uHigh);
   });
 
-  it("records no uptake entry for a pure consumer (produces nothing)", async () => {
+  it("records no selling-factor entry for a pure consumer (produces nothing)", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("c", 0)],
       markets: [makeMarket("c", "food", 100)],
       modifiers: [],
     });
     const r = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    expect(r.economySignals!.outputUptakeBySystem.get("c")).toBeUndefined();
+    expect(r.economySignals!.sellingFactorBySystem.get("c")).toBeUndefined();
   });
 });
 

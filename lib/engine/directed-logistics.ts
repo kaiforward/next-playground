@@ -88,6 +88,17 @@ export interface PlannedTransfer {
   cost: number;
 }
 
+export interface FundingBoundMatch {
+  goodId: string;
+  fromSystemId: string;
+  toSystemId: string;
+}
+
+export interface TransferMatchResult {
+  transfers: PlannedTransfer[];
+  fundingBound: FundingBoundMatch[];
+}
+
 /** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
 export type RouteCost = (fromSystemId: string, toSystemId: string) => number | null;
 
@@ -102,10 +113,9 @@ interface Surplus { systemId: string; goodId: string; drawable: number; }
 export function matchFactionTransfers(
   systems: SystemLogisticsState[],
   routeCost: RouteCost,
-): PlannedTransfer[] {
+): TransferMatchResult {
   let budget = 0;
   for (const s of systems) budget += s.generation;
-  if (budget <= 0) return [];
 
   // Classify each (system, good) as deficit or surplus. Mutable drawable/stock-shortfall as we allocate.
   const deficits: Deficit[] = [];
@@ -137,8 +147,9 @@ export function matchFactionTransfers(
   deficits.sort((a, b) => b.severity - a.severity);
 
   const transfers: PlannedTransfer[] = [];
+  const fundingBound: FundingBoundMatch[] = [];
+  const fundingBoundKeys = new Set<string>();
   for (const d of deficits) {
-    if (budget <= 0) break;
     const sources = surplusesByGood.get(d.goodId);
     if (!sources) continue;
 
@@ -155,9 +166,21 @@ export function matchFactionTransfers(
     // Continuous goods — no quantization to whole units (rounding down loses up to one
     // unit per transfer, negligible at high ECONOMY_SCALE but a large fraction of a small
     // budget at low scale, breaking scale-invariance of budget-bound transfers).
-    const affordable = budget / best.perUnit;
-    const quantity = Math.min(d.shortfall, best.source.drawable, affordable);
-    if (quantity <= 0) continue;
+    const wanted = Math.min(d.shortfall, best.source.drawable);
+    const affordable = budget > 0 ? budget / best.perUnit : 0;
+    const quantity = Math.min(wanted, affordable);
+    if (affordable < wanted) {
+      const key = `${d.goodId}|${best.source.systemId}|${d.systemId}`;
+      if (!fundingBoundKeys.has(key)) {
+        fundingBoundKeys.add(key);
+        fundingBound.push({
+          goodId: d.goodId,
+          fromSystemId: best.source.systemId,
+          toSystemId: d.systemId,
+        });
+      }
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0) continue;
 
     const cost = quantity * best.perUnit;
     transfers.push({
@@ -171,5 +194,5 @@ export function matchFactionTransfers(
     budget -= cost;
   }
 
-  return transfers;
+  return { transfers, fundingBound };
 }

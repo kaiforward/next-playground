@@ -75,7 +75,7 @@ describe("matchFactionTransfers", () => {
     // qty = min(8, 50, budget 100) = 8; cost = 8
     const surplus = sys("A", 100, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
     const deficit = sys("B", 0, { goodId: "food", stock: 2, targetStock: 10, demand: 5 });
-    const transfers = matchFactionTransfers([surplus, deficit], oneHop);
+    const { transfers } = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ goodId: "food", fromSystemId: "A", toSystemId: "B" });
     expect(transfers[0].quantity).toBe(8);
@@ -88,7 +88,7 @@ describe("matchFactionTransfers", () => {
     // qty = min(10, 4, budget 100) = 4 — donor draws down to its own target (8), not below it
     const surplus = sys("A", 100, { goodId: "food", stock: 12, targetStock: 8, demand: 5 });
     const deficit = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
-    const transfers = matchFactionTransfers([surplus, deficit], oneHop);
+    const { transfers } = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers[0].quantity).toBe(4); // drawable = 12 - 8 (target)
   });
 
@@ -97,7 +97,7 @@ describe("matchFactionTransfers", () => {
     const surplus = sys("A", 3, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
     const deficit = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
     // budget = 3 (only A generates), cost 1/unit → at most 3 moved despite a shortfall of 10
-    const transfers = matchFactionTransfers([surplus, deficit], oneHop);
+    const { transfers } = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers[0].quantity).toBe(3);
   });
 
@@ -107,14 +107,14 @@ describe("matchFactionTransfers", () => {
     const surplus = sys("A", 5, { goodId: "food", stock: 100, targetStock: 50, demand: 1 });
     const mild = sys("B", 0, { goodId: "food", stock: 5, targetStock: 10, demand: 1 });
     const severe = sys("C", 0, { goodId: "food", stock: 5, targetStock: 10, demand: 10 });
-    const transfers = matchFactionTransfers([surplus, mild, severe], oneHop);
+    const { transfers } = matchFactionTransfers([surplus, mild, severe], oneHop);
     expect(transfers[0].toSystemId).toBe("C");
   });
 
   it("skips unreachable deficits (route cost null)", () => {
     const surplus = sys("A", 100, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
     const deficit = sys("far", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
-    expect(matchFactionTransfers([surplus, deficit], oneHop)).toHaveLength(0);
+    expect(matchFactionTransfers([surplus, deficit], oneHop).transfers).toHaveLength(0);
   });
 
   it("ignores goods that are neither surplus nor deficit", () => {
@@ -122,7 +122,7 @@ describe("matchFactionTransfers", () => {
     // b: same → NOT surplus, NOT deficit
     const a = sys("A", 100, { goodId: "food", stock: 50, targetStock: 50, demand: 5 });
     const b = sys("B", 0, { goodId: "food", stock: 50, targetStock: 50, demand: 5 });
-    expect(matchFactionTransfers([a, b], oneHop)).toHaveLength(0);
+    expect(matchFactionTransfers([a, b], oneHop).transfers).toHaveLength(0);
   });
 
   it("draws one source across two deficits without exceeding its drawable", () => {
@@ -131,7 +131,7 @@ describe("matchFactionTransfers", () => {
     // C more severe (demand 10), B less severe (demand 1); each: stock 4 < 10 × 0.8 = 8 ✓ deficit, shortfall = 6.
     const severe = sys("C", 0, { goodId: "food", stock: 4, targetStock: 10, demand: 10 });
     const mild = sys("B", 0, { goodId: "food", stock: 4, targetStock: 10, demand: 1 });
-    const transfers = matchFactionTransfers([surplus, severe, mild], oneHop);
+    const { transfers } = matchFactionTransfers([surplus, severe, mild], oneHop);
     // C served first (severity 60 > 6): qty = min(shortfall 6, drawable 10, budget 100) = 6.
     // B served from A's residual drawable (10 - 6 = 4): qty = min(shortfall 6, drawable 4, budget 94) = 4.
     // Proves the source is not over-drawn below its own target across iterations.
@@ -146,7 +146,7 @@ describe("matchFactionTransfers", () => {
     // (simulator diagnosis 2026-06-26).
     const surplus = sys("A", 100, { goodId: "food", stock: 80, targetStock: 50, demand: 5 });
     const deficit = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
-    const transfers = matchFactionTransfers([surplus, deficit], oneHop);
+    const { transfers } = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
     // shortfall = 10, drawable = 80−50 = 30, budget = 100 → qty = 10
@@ -159,14 +159,14 @@ describe("matchFactionTransfers", () => {
     // stock toward the ceiling and decays its own extractors, so it must NOT be a sink.
     const surplus = sys("A", 100, { goodId: "ore", stock: 100, targetStock: 50, demand: 5, production: 0 });
     const producer = sys("B", 0, { goodId: "ore", stock: 2, targetStock: 10, demand: 5, production: 20 });
-    expect(matchFactionTransfers([surplus, producer], oneHop)).toHaveLength(0);
+    expect(matchFactionTransfers([surplus, producer], oneHop).transfers).toHaveLength(0);
   });
 
   it("still serves a deficit that produces some of the good but cannot self-supply (production < demand)", () => {
     // B produces 3/tick but demands 8 → a genuine net importer; logistics should still fill it.
     const surplus = sys("A", 100, { goodId: "ore", stock: 100, targetStock: 50, demand: 8, production: 0 });
     const importer = sys("B", 0, { goodId: "ore", stock: 0, targetStock: 10, demand: 8, production: 3 });
-    const transfers = matchFactionTransfers([surplus, importer], oneHop);
+    const { transfers } = matchFactionTransfers([surplus, importer], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
   });
@@ -178,7 +178,7 @@ describe("matchFactionTransfers", () => {
     // (drawable = 110 − 100 = 10), mirroring the deficit-side self-supply gate.
     const producer = sys("A", 100, { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 30 });
     const deficit = sys("B", 0, { goodId: "food", stock: 2, targetStock: 10, demand: 5, production: 0 });
-    const transfers = matchFactionTransfers([producer, deficit], oneHop);
+    const { transfers } = matchFactionTransfers([producer, deficit], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ goodId: "food", fromSystemId: "A", toSystemId: "B" });
     // shortfall = 10 − 2 = 8, drawable = 110 − 100 = 10, budget 100 → qty = 8
@@ -191,7 +191,46 @@ describe("matchFactionTransfers", () => {
     // keeps the protective margin so logistics doesn't immediately re-export what was shipped to it.
     const holder = sys("A", 100, { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 0 });
     const deficit = sys("B", 0, { goodId: "food", stock: 2, targetStock: 10, demand: 5, production: 0 });
-    expect(matchFactionTransfers([holder, deficit], oneHop)).toHaveLength(0);
+    expect(matchFactionTransfers([holder, deficit], oneHop).transfers).toHaveLength(0);
+  });
+
+  it("reports a partially funded reachable match", () => {
+    const donor = sys("A", 3, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
+    const receiver = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const result = matchFactionTransfers([donor, receiver], oneHop);
+    expect(result.transfers[0].quantity).toBe(3);
+    expect(result.fundingBound).toEqual([{ goodId: "food", fromSystemId: "A", toSystemId: "B" }]);
+  });
+
+  it("reports a zero-budget reachable match without emitting a transfer", () => {
+    const donor = sys("A", 0, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
+    const receiver = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const result = matchFactionTransfers([donor, receiver], oneHop);
+    expect(result.transfers).toEqual([]);
+    expect(result.fundingBound).toHaveLength(1);
+  });
+
+  it("does not mark an ample-budget or drawable-bound transfer", () => {
+    const donor = sys("A", 100, { goodId: "food", stock: 54, targetStock: 50, demand: 5, production: 10 });
+    const receiver = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const result = matchFactionTransfers([donor, receiver], oneHop);
+    expect(result.transfers[0].quantity).toBe(4);
+    expect(result.fundingBound).toEqual([]);
+  });
+
+  it("does not mark unreachable or source-less deficits", () => {
+    const donor = sys("A", 0, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
+    const receiver = sys("far", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    expect(matchFactionTransfers([donor, receiver], oneHop).fundingBound).toEqual([]);
+  });
+
+  it("continues classifying later deficits after the budget is exhausted", () => {
+    const donor = sys("A", 2, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
+    const severe = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 10 });
+    const later = sys("C", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 1 });
+    const result = matchFactionTransfers([donor, severe, later], oneHop);
+    expect(result.transfers).toHaveLength(1);
+    expect(result.fundingBound.map((match) => match.toSystemId)).toEqual(["B", "C"]);
   });
 });
 

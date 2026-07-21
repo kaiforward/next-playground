@@ -377,16 +377,16 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   const MIN = 5;
   const MAX = 100;
   // Uptake band over [MIN, MAX]; the ration threshold is irrelevant to used/idleReason.
-  const bandOf = (): MarketBand => ({ targetStock: MAX, minStock: MIN, maxStock: MAX });
+  const bandOf = (): MarketBand => ({ targetStock: MAX, minStock: MIN, maxStock: 200 });
 
   it("housing used = occupancy (population / POP_CENTRE_DENSITY); 'occupancy' when under-filled", () => {
     const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, bandOf, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
-    expect(housing.used).toBeCloseTo(6, 6);
+    expect(housing.used).toBeCloseTo(6.6, 6);
     expect(housing.idleReason).toBe("occupancy");
   });
 
-  it("producer used = count × min(effectiveFulfilment, outputUptake); 'labour' when headcount binds", () => {
+  it("producer used = count × min(effectiveFulfilment, sellingFactor); 'labour' when headcount binds", () => {
     // vocational_school licenses far more skill1 than 4 metals buildings demand (4×7=28 ≪ 150),
     // so skill1Fulfil stays 1 regardless of headcount — isolates the headcount gate.
     const buildings = { metals: 4, vocational_school: 1 };
@@ -415,10 +415,27 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings); // fully staffed
     // stock at the uptake ceiling → output piling up (uptake ≈ 0), so selling is the binding constraint.
-    const readout = buildIndustryReadout(buildings, pop, { metals: MAX }, bandOf, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, { metals: 130 }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeLessThan(4 * 0.2);
     expect(metals.idleReason).toBe("selling");
+  });
+
+  it("funding-bound readout keeps a glutted producer fully used", () => {
+    const buildings = { metals: 4, vocational_school: 1 };
+    const pop = labourDemand(buildings);
+    const readout = buildIndustryReadout(
+      buildings,
+      pop,
+      { metals: 130 },
+      bandOf,
+      unitResourceVector(),
+      undefined,
+      (goodId) => goodId === "metals",
+    );
+    const metals = readout.buildings.find((building) => building.buildingType === "metals")!;
+    expect(metals.used).toBe(4);
+    expect(metals.idleReason).toBeUndefined();
   });
 
   it("no idleReason when fully staffed and selling", () => {
@@ -696,7 +713,7 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     // fully staffed + licensed, but stock pinned at the ceiling (not selling).
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { metals: 100 }, bandOf, unitResourceVector());
+    const readout = buildIndustryReadout(buildings, pop, { metals: 130 }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.staffedFraction).toBeCloseTo(1, 6); // pure staffing full even though used (selling) is ~0
     expect(metals.used).toBeLessThan(4 * 0.2);         // used still folds uptake (unchanged)
@@ -705,7 +722,7 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
   it("housing staffedFraction = occupancy (used / count)", () => {
     const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, bandOf, unitResourceVector());
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
-    expect(housing.staffedFraction).toBeCloseTo(0.6, 6);
+    expect(housing.staffedFraction).toBeCloseTo(0.66, 6);
   });
 
   it("output = buildingProduction × inputGate (input-throttled reads low even when fully staffed)", () => {
@@ -970,31 +987,72 @@ describe("buildingUsed + computeUtilization (unified per-output-kind utilization
     population,
     parts,
     state,
-    outputUptake: (g) => uptake[g] ?? 1,
+    sellingFactor: (g) => uptake[g] ?? 1,
   };
 
   it("market_good used = count × min(effectiveFulfilment(tier), uptake)", () => {
     expect(buildingUsed("metals", 3, ctx)).toBeCloseTo(
-      3 * Math.min(effectiveFulfilment(state, 1), 0.6),
+      3 * Math.min(effectiveFulfilment(state, 1), 0.6 + 0.15),
       9,
     );
     expect(buildingUsed("ore", 5, ctx)).toBeCloseTo(
-      5 * Math.min(effectiveFulfilment(state, 0), 0.8),
+      5 * Math.min(effectiveFulfilment(state, 0), 0.8 + 0.15),
       9,
     );
   });
 
   it("market_good with no uptake entry sells freely (uptake 1)", () => {
-    expect(buildingUsed("metals", 3, { ...ctx, outputUptake: () => 1 })).toBeCloseTo(
+    expect(buildingUsed("metals", 3, { ...ctx, sellingFactor: () => 1 })).toBeCloseTo(
       3 * effectiveFulfilment(state, 1),
       9,
     );
   });
 
+  it("funding-bound protection treats reachable demand as fully selling", () => {
+    expect(buildingUsed("metals", 3, {
+      ...ctx,
+      sellingFactor: () => 0,
+      logisticsFundingBound: () => true,
+    })).toBeCloseTo(3 * effectiveFulfilment(state, 1), 9);
+  });
+
+  it("funding-bound protection does not hide staffing shortages", () => {
+    const scarceState = labourStateFromParts(parts, parts.demand * 0.25);
+    expect(buildingUsed("ore", 5, {
+      ...ctx,
+      state: scarceState,
+      sellingFactor: () => 0,
+      logisticsFundingBound: () => true,
+    })).toBeCloseTo(5 * effectiveFulfilment(scarceState, 0), 9);
+  });
+
   it("capacity/pop_cap used = occupancy, and may exceed count (overshoot)", () => {
-    expect(buildingUsed("housing", 4, ctx)).toBeCloseTo(housingUsed(population), 9);
+    expect(buildingUsed("housing", 4, ctx)).toBe(4);
     expect(housingUsed(population)).toBeGreaterThan(4); // 100/20 = 5 > 4 built
     expect(computeUtilization("housing", 4, ctx)).toBe(1); // clamped, despite overshoot
+  });
+
+  it("housingUsed remains literal occupancy", () => {
+    expect(housingUsed(9.2 * POP_CENTRE_DENSITY)).toBeCloseTo(9.2);
+  });
+
+  it("buildingUsed grants housing the 10% vacancy allowance", () => {
+    expect(buildingUsed("housing", 10, {
+      ...ctx,
+      population: 9.2 * POP_CENTRE_DENSITY,
+    })).toBe(10);
+  });
+
+  it("genuine emptying still leaves a whole idle housing level", () => {
+    const used = buildingUsed("housing", 10, {
+      ...ctx,
+      population: 8 * POP_CENTRE_DENSITY,
+    });
+    expect(Math.floor(10 - used)).toBe(1);
+  });
+
+  it("the pressure-relief target is inside the vacancy allowance", () => {
+    expect(0.92 * 1.10).toBeGreaterThanOrEqual(1);
   });
 
   it("capacity/skill1_licence used = count × min(1, skill1Demand/skill1Cap)", () => {

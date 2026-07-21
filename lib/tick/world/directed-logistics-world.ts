@@ -20,6 +20,7 @@ export interface MarketRowForLogistics {
   storageCapacity: number;
   /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1). */
   satisfaction?: number;
+  logisticsFundingBound?: boolean;
 }
 
 /** One system's logistics-relevant state. */
@@ -38,6 +39,11 @@ export interface LogisticsMarketUpdate {
   stock: number;
 }
 
+export interface LogisticsFundingBoundUpdate {
+  id: string;
+  logisticsFundingBound: boolean;
+}
+
 export interface LogisticsFlowInsert {
   tick: number;
   fromSystemId: string;
@@ -53,6 +59,8 @@ export interface DirectedLogisticsWorld {
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]>;
   /** Bulk absolute stock writes (already clamped). */
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
+  /** Refresh the latest wanted-but-unfunded assessment without rewriting stock. */
+  applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;
   /** Append directed-logistics flow rows to the world flow log. */
   appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;
 }
