@@ -11,7 +11,7 @@ const PARAMS: EconomySimParams = { holdCover: 1.3, rationCover: 2 };
 
 // Convenience: build a full MarketTickEntry with per-entry band defaults.
 // minStock is left on the entry (0.05×T here) but the engine no longer floors on
-// it — it is retained only for the decay-uptake band read.
+// it — it remains part of the market's price geometry.
 function entry(
   goodId: string,
   stock: number,

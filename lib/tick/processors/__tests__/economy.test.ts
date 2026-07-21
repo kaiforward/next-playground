@@ -499,6 +499,26 @@ describe("economy processor: selling factor signal", () => {
     expect(factors.get("suppressed")!.get("food")).toBeCloseTo(0.5);
   });
 
+  it("is invariant to a production-rate event multiplier", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("plain", 0), makeProducerSystem("event", 0)],
+      markets: [makeMarket("plain", "food", 46), makeMarket("event", "food", 46)],
+      modifiers: [{
+        domain: "economy",
+        type: "rate_multiplier",
+        targetType: "system",
+        targetId: "event",
+        goodId: "food",
+        parameter: "production_rate",
+        value: 0.25,
+      }],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    const factors = result.economySignals!.sellingFactorBySystem;
+    expect(factors.get("plain")!.get("food")).toBeCloseTo(0.5);
+    expect(factors.get("event")!.get("food")).toBeCloseTo(0.5);
+  });
+
   it("retains producer identity when current staffing makes flow zero", async () => {
     const producer = makeProducerSystem("p-zero", 0);
     producer.population = 0;
@@ -512,7 +532,7 @@ describe("economy processor: selling factor signal", () => {
     expect(result.economySignals!.realizedProductionBySystem.get("p-zero")).toBeUndefined();
   });
 
-  it("emits low uptake for a producer pinned at the ceiling, high near the floor", async () => {
+  it("emits a low selling factor at the ceiling and a high factor below the anchor", async () => {
     const goodId = "food";
     const pinned = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("p-high", 0)],

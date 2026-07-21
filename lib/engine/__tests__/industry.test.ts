@@ -376,7 +376,7 @@ describe("buildIndustryReadout", () => {
 describe("buildIndustryReadout — per-building used + idleReason", () => {
   const MIN = 5;
   const MAX = 100;
-  // Uptake band over [MIN, MAX]; the ration threshold is irrelevant to used/idleReason.
+  // Market band over [MIN, MAX]; the ration threshold is irrelevant to used/idleReason.
   const bandOf = (): MarketBand => ({ targetStock: MAX, minStock: MIN, maxStock: 200 });
 
   it("housing used = occupancy (population / POP_CENTRE_DENSITY); 'occupancy' when under-filled", () => {
@@ -392,7 +392,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const demand = labourDemand(buildings);
     const pop = demand * 0.5; // labour fulfillment 0.5
-    // stock at the uptake floor → output sells freely (uptake ≈ 1), so labour is the binding constraint.
+    // Stock below the anchor sells freely (factor 1), so labour is the binding constraint.
     const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeCloseTo(4 * 0.5, 6);
@@ -402,7 +402,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   it("'skill1' when a tier-2 building is fully staffed but no academy licenses its skilled work", () => {
     // electronics (tier-2) demands skill1 + skill2; no vocational_school/research_institute
     // built → both skill ceilings are 0, dragging effectiveFulfilment below labourFulfil even
-    // though headcount is fully staffed. Stock at the uptake floor keeps selling from confounding it.
+    // though headcount is fully staffed. Stock below the anchor keeps selling from confounding it.
     const buildings = { electronics: 4 };
     const pop = labourDemand(buildings); // headcount fully staffed
     const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, bandOf, unitResourceVector());
@@ -411,10 +411,10 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     expect(electronics.idleReason).toBe("skill1"); // neither academy → lower grade wins the tie
   });
 
-  it("'selling' when output uptake binds (stock pinned at the ceiling)", () => {
+  it("'selling' when selling factor binds (stock pinned at the ceiling)", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings); // fully staffed
-    // stock at the uptake ceiling → output piling up (uptake ≈ 0), so selling is the binding constraint.
+    // stock at the production ceiling → output piling up (factor ≈ 0), so selling is the binding constraint.
     const readout = buildIndustryReadout(buildings, pop, { metals: 130 }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeLessThan(4 * 0.2);
@@ -447,18 +447,18 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     expect(metals.idleReason).toBeUndefined();
   });
 
-  it("defaults output uptake to 1 when the good has no market band (sells freely)", () => {
+  it("defaults selling factor to 1 when the good has no market band (sells freely)", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
     const readout = buildIndustryReadout(buildings, pop, {}, () => undefined, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
-    expect(metals.used).toBeCloseTo(4, 6); // uptake 1, headcount + skill1 both fulfilled
+    expect(metals.used).toBeCloseTo(4, 6); // selling factor 1, headcount + skill1 both fulfilled
   });
 });
 
 describe("buildIndustryReadout — skill idle reason split", () => {
   const MIN = 5;
-  // Uptake band [MIN, 100] keeps stock-at-floor goods selling freely, isolating the skill gate.
+  // Market band [MIN, 100] keeps stock-at-floor goods selling freely, isolating the skill gate.
   const bandOf = (): MarketBand => ({ targetStock: 100, minStock: MIN, maxStock: 100 });
 
   it("'skill1' when a tier-1 good is fully staffed but no school licenses it", () => {
@@ -706,7 +706,7 @@ describe("buildIndustryReadout — labour block", () => {
 
 describe("buildIndustryReadout — staffedFraction + output", () => {
   const MIN = 5;
-  // Uptake band [MIN, 100]; the ration threshold sits above the low input stocks these tests use.
+  // Market band [MIN, 100]; the ration threshold sits above the low input stocks these tests use.
   const bandOf = (): MarketBand => ({ targetStock: 100, minStock: MIN, maxStock: 100 });
 
   it("producer staffedFraction = effectiveFulfilment(tier), independent of selling", () => {
@@ -716,7 +716,7 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     const readout = buildIndustryReadout(buildings, pop, { metals: 130 }, bandOf, unitResourceVector());
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.staffedFraction).toBeCloseTo(1, 6); // pure staffing full even though used (selling) is ~0
-    expect(metals.used).toBeLessThan(4 * 0.2);         // used still folds uptake (unchanged)
+    expect(metals.used).toBeLessThan(4 * 0.2);         // used still folds the selling factor (unchanged)
   });
 
   it("housing staffedFraction = occupancy (used / count)", () => {
@@ -981,16 +981,16 @@ describe("buildingUsed + computeUtilization (unified per-output-kind utilization
   const population = 100;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
-  const uptake: Record<string, number> = { ore: 0.8, metals: 0.6 };
+  const sellingFactors: Record<string, number> = { ore: 0.8, metals: 0.6 };
   const ctx: UtilizationContext = {
     buildings,
     population,
     parts,
     state,
-    sellingFactor: (g) => uptake[g] ?? 1,
+    sellingFactor: (g) => sellingFactors[g] ?? 1,
   };
 
-  it("market_good used = count × min(effectiveFulfilment(tier), uptake)", () => {
+  it("market_good used = count × min(effectiveFulfilment(tier), selling factor)", () => {
     expect(buildingUsed("metals", 3, ctx)).toBeCloseTo(
       3 * Math.min(effectiveFulfilment(state, 1), 0.6 + 0.15),
       9,
@@ -1001,7 +1001,7 @@ describe("buildingUsed + computeUtilization (unified per-output-kind utilization
     );
   });
 
-  it("market_good with no uptake entry sells freely (uptake 1)", () => {
+  it("market_good with no selling-factor entry sells freely (selling factor 1)", () => {
     expect(buildingUsed("metals", 3, { ...ctx, sellingFactor: () => 1 })).toBeCloseTo(
       3 * effectiveFulfilment(state, 1),
       9,

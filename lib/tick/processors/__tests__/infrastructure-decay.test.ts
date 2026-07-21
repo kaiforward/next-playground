@@ -60,11 +60,11 @@ describe("infrastructure-decay processor", () => {
     expect(world.systems.find((x) => x.id === "s2")!.buildings).toEqual({ [HOUSING_TYPE]: 10, ore: 10 });
   });
 
-  it("defaults missing uptake to 1 and stacks the idle + unrest teardowns (two levels shed)", async () => {
+  it("defaults a missing selling factor to 1 and stacks idle + unrest teardowns", async () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { unrest: 1, population: 4 * ORE_LABOUR })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      sellingFactorBySystem: new Map(), // no uptake recorded for s1 → defaults to 1
+      sellingFactorBySystem: new Map(), // no selling factor recorded for s1 → defaults to 1
       realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
