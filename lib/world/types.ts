@@ -236,6 +236,14 @@ export interface WorldMarket {
    * missing (pre-change save) reads as 1.
    */
   satisfaction?: number;
+  /** Reference-cycle realized output; missing uses capacity until first assessment. */
+  realizedProductionRate?: number;
+  /** Strike or maintenance reduced production; event modifiers are deliberately excluded. */
+  productionSuppressed?: boolean;
+  /** Consecutive rationed economy assessments, saturated at 2; missing reads as 0. */
+  squeezePulses?: number;
+  /** Consecutive structural construction assessments, saturated at 2; missing reads as 0. */
+  proposalPulses?: number;
   /**
    * The latest logistics assessment found this row at one endpoint of a reachable
    * wanted-but-unfunded match. Source-side: demand-backed export capacity must not

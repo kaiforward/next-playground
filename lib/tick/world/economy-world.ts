@@ -37,6 +37,8 @@ export interface MarketView {
   demandRate: number;
   /** Built infrastructure storage capacity from the station market row. */
   storageCapacity: number;
+  /** Previous economy-assessment streak; missing reads as 0. */
+  squeezePulses?: number;
 }
 
 /** Result of one market simulation step — written back via applyMarketUpdates. */
@@ -47,6 +49,12 @@ export interface MarketUpdate {
   anchorMult: number;
   /** Consumption satisfaction actually applied this pulse (delivered ÷ demanded; 1 for non-consumers). */
   satisfaction: number;
+  /** Realized output normalized to the reference economy interval. */
+  realizedProductionRate: number;
+  /** Whether strike or maintenance reduced production during this assessment. */
+  productionSuppressed: boolean;
+  /** Consecutive rationed economy assessments, saturated at 2. */
+  squeezePulses: number;
 }
 
 export interface EconomyWorld {

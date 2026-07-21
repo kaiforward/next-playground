@@ -201,6 +201,8 @@ export function generateWorld(options: GenerateWorldOptions): World {
         demandRate: civilianDemandRateForGood(goodId, demandBasis, governmentType),
         storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
         satisfaction: 1,
+        squeezePulses: 0,
+        proposalPulses: 0,
       };
     });
   });

@@ -220,8 +220,27 @@ describe("runWorldTick", () => {
       }
     }
   });
-});
 
+
+  it("persists economy assessment signals through the world tick", async () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const result = await runWorldTick(world, {
+      cadence: { month: 1, construction: 24, logistics: 24 },
+    });
+    const developedIds = new Set(result.world.systems
+      .filter((system) => system.control === "developed")
+      .map((system) => system.id));
+    const assessed = result.world.markets.filter((market) => developedIds.has(market.systemId));
+    expect(assessed.length).toBeGreaterThan(0);
+    for (const market of assessed) {
+      expect(Number.isFinite(market.realizedProductionRate)).toBe(true);
+      expect(typeof market.productionSuppressed).toBe("boolean");
+      expect(market.squeezePulses).toBeGreaterThanOrEqual(0);
+      expect(market.squeezePulses).toBeLessThanOrEqual(2);
+    }
+  });
+
+});
 // ── Per-stage wiring — each of these fails if `runWorldTick` ever drops the
 // named stage from the pipeline (dropping a stage silently no-ops it instead
 // of erroring, so only an effect assertion like these catches it). ─────────

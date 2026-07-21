@@ -132,8 +132,51 @@ describe("serializeWorld / deserializeWorld", () => {
     if (!result.ok) return;
     expect(result.world).toStrictEqual(withColony);
   });
-});
 
+
+  it("round-trips optional planner assessment fields without a save bump", () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const assessed: World = {
+      ...world,
+      markets: world.markets.map((market, index) =>
+        index === 0
+          ? {
+              ...market,
+              realizedProductionRate: 0,
+              productionSuppressed: true,
+              squeezePulses: 2,
+              proposalPulses: 1,
+            }
+          : market,
+      ),
+    };
+    const result = deserializeWorld(serializeWorld(assessed));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.markets[0]).toMatchObject({
+      realizedProductionRate: 0,
+      productionSuppressed: true,
+      squeezePulses: 2,
+      proposalPulses: 1,
+    });
+  });
+
+  it("keeps new optional assessment values omitted in an old-shaped v8 save", () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const oldShaped: World = {
+      ...world,
+      markets: world.markets.map(({ realizedProductionRate, productionSuppressed, squeezePulses, proposalPulses, ...market }) => market),
+    };
+    const result = deserializeWorld(serializeWorld(oldShaped));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.markets[0].realizedProductionRate).toBeUndefined();
+    expect(result.world.markets[0].productionSuppressed).toBeUndefined();
+    expect(result.world.markets[0].squeezePulses).toBeUndefined();
+    expect(result.world.markets[0].proposalPulses).toBeUndefined();
+  });
+
+});
 describe("save format — player seat", () => {
   it("round-trips world.player", () => {
     const world = generateWorld({
