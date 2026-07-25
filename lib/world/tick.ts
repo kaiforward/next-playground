@@ -381,6 +381,23 @@ function patchLogisticsMarketRows(
   return patched;
 }
 
+/**
+ * Fold directed-build's proposal-pressure counters back into the world market rows. Changes ONLY
+ * `proposalPulses` (spread preserves every field the same-tick economy and logistics stages already
+ * wrote — satisfaction, squeeze, realized rate, stock, funding-bound). `updates` keys are
+ * `${systemId}|${goodId}`, the same composite key the market row groups are built by. No-op writes
+ * (the value already equals what the row carries, treating a missing counter as 0) are skipped so an
+ * unchanged market keeps its identity and a construction pulse only touches the rows it moved.
+ */
+function applyBuildMarketUpdates(markets: WorldMarket[], proposalPulseUpdates: Map<string, number>): WorldMarket[] {
+  if (proposalPulseUpdates.size === 0) return markets;
+  return markets.map((m) => {
+    const next = proposalPulseUpdates.get(`${m.systemId}|${m.goodId}`);
+    if (next === undefined || next === (m.proposalPulses ?? 0)) return m;
+    return { ...m, proposalPulses: next };
+  });
+}
+
 export function applyBuildingIncreases(systems: TickSystem[], updates: BuildBuildingUpdate[]): TickSystem[] {
   if (updates.length === 0) return systems;
   const bySystem = new Map<string, Map<string, number>>();
@@ -957,6 +974,9 @@ export async function runWorldTick(
       systems = applyClaims(systems, dbWorld.claims);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
+      // Persist the construction proposal-pressure counters into the market rows (proposalPulses only —
+      // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
+      markets = applyBuildMarketUpdates(markets, dbWorld.proposalPulseUpdates);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
       processorsRun.push("directed-build");
     }

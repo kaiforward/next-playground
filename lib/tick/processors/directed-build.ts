@@ -16,6 +16,7 @@ import type {
   BuildBuildingUpdate,
   SystemClaim,
   SystemDevelopment,
+  ProposalPersistenceUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import {
   proposeFactionClaims,
@@ -166,6 +167,10 @@ export async function runDirectedBuildProcessor(
   const developments: SystemDevelopment[] = [];
   const nextOpen: WorldConstructionProject[] = [];
   const workPerformedByFaction = new Map<string, number>();
+  // Proposal-pressure counters advance for EVERY due faction's assessed markets — the construction
+  // clock, distinct from the economy's squeeze clock — regardless of whether a proposal is emitted or
+  // funded. Keyed by the market's composite id, the same convention the economy adapter writes by.
+  const proposalPersistence: ProposalPersistenceUpdate[] = [];
 
   for (const [factionId, group] of byFaction) {
     // The faction's per-pulse pool: eligible heads + centre output over developed systems
@@ -194,8 +199,14 @@ export async function runDirectedBuildProcessor(
 
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
     // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
+    // The assessment runs for every due faction so the proposal-pressure counter advances even when
+    // build automation is off — the switch gates PROPOSAL EMISSION, not the construction clock.
     const buildStates = group.map(toBuildState);
-    const buildProposals = skipBuild ? [] : planFactionProposals(buildStates, params.routeCost, existing, developmentRefs).proposals;
+    const buildPlan = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs);
+    for (const u of buildPlan.persistenceUpdates) {
+      proposalPersistence.push({ id: `${u.systemId}|${u.goodId}`, proposalPulses: u.proposalPulses });
+    }
+    const buildProposals = skipBuild ? [] : buildPlan.proposals;
 
     // Colony-establish proposals compete with builds on the same pool. Only faction-owned systems can
     // colonise (a null-faction group is independents — never); the develop param is omitted in build-only tests.
@@ -324,6 +335,9 @@ export async function runDirectedBuildProcessor(
   // Persist the due factions' open set (funded existing + new commitments, minus what landed) —
   // always, so a project that just landed is removed from the queue.
   await world.applyConstructionUpdates(dueKeys, nextOpen);
+
+  // Persist the construction proposal-pressure counters last — independent of ROI/funding outcome.
+  if (proposalPersistence.length > 0) await world.applyProposalPersistenceUpdates(proposalPersistence);
 
   return { workPerformedByFaction };
 }

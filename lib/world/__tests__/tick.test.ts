@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { runWorldTick, toTickSystems, applyBuildingIncreases } from "../tick";
+import { serializeWorld, deserializeWorld } from "../save";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -237,6 +238,47 @@ describe("runWorldTick", () => {
       expect(typeof market.productionSuppressed).toBe("boolean");
       expect(market.squeezePulses).toBeGreaterThanOrEqual(0);
       expect(market.squeezePulses).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it("advances the construction and economy clocks on their own cadences (divergent-pulse persistence)", async () => {
+    // The construction proposal-pressure counter and the economy squeeze counter are DISTINCT clocks
+    // written by different stages on independently-tunable cadences. Engineer a persistent food deficit
+    // at a developed homeworld (no food capacity, empty stock), seed BOTH counters at 1, then pulse the
+    // two cadences apart: each clock advances only on its own pulse, and the stale off-pulse read of the
+    // other clock is never counted.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const home = base.factions[0].homeworldId;
+    const prepared = {
+      ...base,
+      buildings: base.buildings.filter((b) => !(b.systemId === home && b.buildingType === "food")),
+      markets: base.markets.map((m) =>
+        m.systemId === home && m.goodId === "food"
+          ? { ...m, stock: 0, squeezePulses: 1, proposalPulses: 1 }
+          : m,
+      ),
+    };
+    const foodOf = (w: typeof prepared) =>
+      w.markets.find((m) => m.systemId === home && m.goodId === "food");
+
+    // Construction-only pulse: directed-build resolves, economy (month) does NOT. The build assessment
+    // advances proposalPulses; the stale economy read leaves squeezePulses untouched.
+    const buildOnly = (await runWorldTick(prepared, { cadence: { month: 999, construction: 1, logistics: 999 } })).world;
+    expect(foodOf(buildOnly)?.proposalPulses).toBe(2); // 1 → 2 (residual persists)
+    expect(foodOf(buildOnly)?.squeezePulses).toBe(1);  // unchanged — economy did not run
+
+    // Economy-only pulse: economy resolves and rations the empty deficit → squeezePulses advances; the
+    // stale build read (construction off-pulse) leaves proposalPulses untouched.
+    const econOnly = (await runWorldTick(prepared, { cadence: { month: 1, construction: 999, logistics: 999 } })).world;
+    expect(foodOf(econOnly)?.squeezePulses).toBe(2);  // 1 → 2 (rationed)
+    expect(foodOf(econOnly)?.proposalPulses).toBe(1); // unchanged — directed-build did not run
+
+    // The divergent-cadence result serializes and deserializes intact (proposalPulses survives the save).
+    const roundTrip = deserializeWorld(serializeWorld(buildOnly));
+    expect(roundTrip.ok).toBe(true);
+    if (roundTrip.ok) {
+      expect(foodOf(roundTrip.world)?.proposalPulses).toBe(2);
+      expect(foodOf(roundTrip.world)?.squeezePulses).toBe(1);
     }
   });
 

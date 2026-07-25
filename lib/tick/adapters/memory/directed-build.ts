@@ -4,6 +4,7 @@ import type {
   BuildBuildingUpdate,
   SystemClaim,
   SystemDevelopment,
+  ProposalPersistenceUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { developmentRefs, type DevelopmentRefs } from "@/lib/engine/development";
@@ -17,6 +18,8 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   readonly claims: SystemClaim[] = [];
   /** Developments resolved this run (developed tier + colony seed). */
   readonly developments: SystemDevelopment[] = [];
+  /** Proposal-pressure counters written this run, keyed by composite market id, clamped to integer [0,2]. */
+  readonly proposalPulseUpdates = new Map<string, number>();
   /** The live open-project set — updated in place by applyConstructionUpdates; read back by the tick body. */
   constructionProjects: WorldConstructionProject[];
 
@@ -68,6 +71,16 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
       ...this.constructionProjects.filter((p) => !set.has(p.factionId)),
       ...projects,
     ];
+  }
+
+  async applyProposalPersistenceUpdates(updates: ProposalPersistenceUpdate[]): Promise<void> {
+    // Clamp to integer [0,2] at the boundary, mirroring how the economy adapter narrows squeezePulses.
+    for (const u of updates) {
+      const clamped = Number.isFinite(u.proposalPulses)
+        ? Math.max(0, Math.min(2, Math.floor(u.proposalPulses)))
+        : 0;
+      this.proposalPulseUpdates.set(u.id, clamped);
+    }
   }
 
   async applyClaims(claims: SystemClaim[]): Promise<void> {

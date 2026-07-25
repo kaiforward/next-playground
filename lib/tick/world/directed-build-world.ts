@@ -45,6 +45,14 @@ export interface SystemClaim {
   factionId: string;
 }
 
+/** One proposal-pressure write: the saturating construction assessment counter for a market row. */
+export interface ProposalPersistenceUpdate {
+  /** Composite market id (`${systemId}|${goodId}`), the same key the economy adapter writes by. */
+  id: string;
+  /** Consecutive structural construction assessments, clamped to integer [0,2] at the adapter boundary. */
+  proposalPulses: number;
+}
+
 /** One development: a controlled system flips to developed and receives a conserved colony seed + bundled housing. */
 export interface SystemDevelopment {
   systemId: string;
@@ -68,6 +76,8 @@ export interface DirectedBuildWorld {
   applyBuildingIncreases(updates: BuildBuildingUpdate[]): Promise<void>;
   /** Replace the given factions' open construction projects with the funded/created set (landed removed). */
   applyConstructionUpdates(factionKeys: Array<string | null>, projects: WorldConstructionProject[]): Promise<void>;
+  /** Persist the saturating construction proposal-pressure counter per assessed market row. */
+  applyProposalPersistenceUpdates(updates: ProposalPersistenceUpdate[]): Promise<void>;
   /** Ownership writes from the claim step (unclaimed → controlled). */
   applyClaims(claims: SystemClaim[]): Promise<void>;
   /** Ownership writes from the develop step (controlled → developed + colony seed transfer). */
