@@ -314,15 +314,26 @@ function assessStructuralDeficits(
   const residualByKey = new Map<string, number>();
   for (const [goodId, candidates] of candidatesByGood) {
     const exporters = exportersByGood.get(goodId) ?? [];
-    const reachable = candidates.map((candidate) => ({
-      candidate,
-      hasExporter: exporters.some((exporter) => routeCost(exporter.systemId, candidate.systemId) !== null),
-    }));
+    // One reachability scan over (candidate × exporter): each candidate is reachable if any exporter
+    // reaches it, and every exporter that reaches at least one candidate is recorded here — so its spare
+    // can be summed below without re-running routeCost (an exporter reaching a candidate makes that
+    // candidate reachable, so the exporter is always among a reachable gap's suppliers).
+    const reachableExporterIds = new Set<string>();
+    const reachable = candidates.map((candidate) => {
+      let hasExporter = false;
+      for (const exporter of exporters) {
+        if (routeCost(exporter.systemId, candidate.systemId) !== null) {
+          hasExporter = true;
+          reachableExporterIds.add(exporter.systemId);
+        }
+      }
+      return { candidate, hasExporter };
+    });
     const reachableDemand = reachable
       .filter((entry) => entry.hasExporter)
       .reduce((sum, entry) => sum + entry.candidate.gross, 0);
     const reachableSpare = exporters
-      .filter((exporter) => reachable.some((entry) => entry.hasExporter && routeCost(exporter.systemId, entry.candidate.systemId) !== null))
+      .filter((exporter) => reachableExporterIds.has(exporter.systemId))
       .reduce((sum, exporter) => sum + exporter.spare, 0);
     const coveredFraction = reachableDemand > 0 ? Math.min(1, reachableSpare / reachableDemand) : 0;
     for (const entry of reachable) {
