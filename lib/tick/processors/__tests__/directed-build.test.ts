@@ -975,9 +975,9 @@ describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommit
     const withOld = new MemoryDirectedBuildWorld(rows, [oldWork]);
     const withOldResult = await runDirectedBuildProcessor(withOld, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
     const oldFood = withOldResult.buildCommitmentsByGood?.get("food") ?? 0;
-    // If the 1000 in-flight levels leaked into the count it would swamp this pulse's fresh proposal;
-    // the metric must stay in the same small range as the fresh run, never jump toward 1000+.
-    expect(oldFood).toBeLessThan(100);
+    // If the 1000 in-flight levels leaked into the count it would swamp this pulse's fresh proposal.
+    // In-flight work can only shrink the fresh count (it nets against the gap), never inflate it.
+    expect(oldFood).toBeLessThanOrEqual(freshFood);
   });
 
   it("counts a production-good level that completes (lands) within the same pulse", async () => {

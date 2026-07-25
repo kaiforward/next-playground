@@ -275,7 +275,7 @@ function formatTable(results: HarnessResults): string {
     );
   }
 
-  // Construction burst pacing (whole run) — proves the band-reconciliation rate cap
+  // Construction burst pacing (whole run) — proves the construction rate cap
   // (DIRECTED_BUILD.BUILD_RATE_CAP) actually bounds new-proposal velocity per pulse, per good.
   {
     const bb = results.buildBurstSummary;
