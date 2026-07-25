@@ -7,7 +7,7 @@ import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relat
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { housingPopCap } from "@/lib/engine/industry";
 import { BUILDING_TYPES, HOUSING_TYPE, labourTotal } from "@/lib/constants/industry";
-import type { WorldShip } from "../types";
+import type { World, WorldMarket, WorldShip } from "../types";
 
 async function runTicks(world: ReturnType<typeof generateWorld>, count: number) {
   let w = world;
@@ -516,6 +516,115 @@ describe("runWorldTick — per-stage wiring", () => {
 
     expect(after.flowEvents.some((f) => f.tick === staleTick)).toBe(false);
     expect(after.flowEvents.some((f) => f.tick === freshTick)).toBe(true);
+  });
+});
+
+// ── logistics ↔ economy assessment ordering ──────────────────────────
+// The tick runs economy BEFORE directed-logistics, so a pulse measures satisfaction/squeeze/unrest on
+// the recipient's PRE-import stock; the import lands afterward and never rewrites an already-measured
+// assessment. Same-tick logistics stock changes DO patch into build rows, but the persisted economy
+// fields wait for the NEXT economy pulse. These pin exactly that ordering end to end.
+
+/**
+ * Two developed same-faction systems linked both ways, with a water gradient: the recipient (B) strips
+ * its water producers and empties its water stock (a deficit sink that cannot self-supply), the donor
+ * (A) holds a large water reserve above its anchor and keeps its producers. `prepareRecipientWater`
+ * seeds the recipient's water assessment fields on top of the empty stock. Mirrors the water-gradient
+ * fixture the directed-logistics wiring tests above use.
+ */
+function twoSystemWaterGradient(prepareRecipientWater: (market: WorldMarket) => WorldMarket) {
+  const base = generateWorld({ systemCount: 100, seed: 42 });
+  const a = base.factions[0].homeworldId;
+  const b = base.factions[1].homeworldId;
+  const factionId = base.factions[0].id;
+  const world: World = {
+    ...base,
+    systems: base.systems.map((system) =>
+      system.id === b ? { ...system, factionId, unrest: 0 } : system,
+    ),
+    // B loses its water producers → it cannot refill and stays a structural water deficit.
+    buildings: base.buildings.filter(
+      (building) => !(building.systemId === b && building.buildingType === "water"),
+    ),
+    markets: base.markets.map((market) => {
+      if (market.systemId === a && market.goodId === "water") {
+        return { ...market, stock: 1_000_000 };
+      }
+      if (market.systemId === b && market.goodId === "water") {
+        return prepareRecipientWater({ ...market, stock: 0 });
+      }
+      return market;
+    }),
+    connections: [
+      ...base.connections,
+      { fromId: a, toId: b, fuelCost: 1 },
+      { fromId: b, toId: a, fuelCost: 1 },
+    ],
+  };
+  return { a, b, factionId, world };
+}
+
+describe("runWorldTick — logistics/assessment ordering", () => {
+  it("assesses the pre-import state on a coincident pulse, then recovers at the next economy pulse", async () => {
+    const { b, world } = twoSystemWaterGradient((market) => market);
+    const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
+    const bSystem = (w: World) => w.systems.find((s) => s.id === b)!;
+
+    // Coincident pulse: economy (month) AND logistics both resolve this tick. Construction stays off so
+    // directed-build contributes no noise. Economy runs first — it measures B's empty water market — and
+    // logistics moves the import in afterward.
+    const cadence = { month: 1, logistics: 1, construction: 999 };
+    const afterImport = (await runWorldTick(world, { cadence })).world;
+
+    // The import happened this same tick: a water flow into B, and its stock rose off the empty floor.
+    expect(afterImport.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
+    expect(bWater(afterImport).stock).toBeGreaterThan(0);
+
+    // …but the persisted assessment still describes the PRE-import (empty) state: satisfaction measured
+    // zero delivery, the squeeze clock advanced by one reference-time from zero, and unrest rose off its
+    // clean seed. A same-tick re-measure after the import would instead read satisfaction ≈ 1 and reset
+    // the squeeze clock — this is the assertion that catches that regression.
+    expect(bWater(afterImport).satisfaction).toBeCloseTo(0, 6);
+    expect(bWater(afterImport).squeezePulses).toBeCloseTo(catchUpFactor(1), 10);
+    expect(bSystem(afterImport).unrest).toBeGreaterThan(0);
+
+    // Next economy pulse: B now holds the imported water, so satisfaction recovers and the squeeze clock
+    // resets. Direction of recovery only — magnitude calibration is out of scope here. (Missing ⇒ 1 is
+    // the documented default; both reads are written by an economy pulse, so neither is actually absent.)
+    const importSatisfaction = bWater(afterImport).satisfaction ?? 1;
+    const afterRecovery = (await runWorldTick(afterImport, { cadence })).world;
+    const recoverySatisfaction = bWater(afterRecovery).satisfaction ?? 1;
+    expect(recoverySatisfaction).toBeGreaterThan(importSatisfaction);
+    expect(bWater(afterRecovery).squeezePulses).toBe(0);
+  });
+
+  it("retains the persisted assessment across a logistics-only tick until the next economy pulse", async () => {
+    // Seed a distinctive rationed assessment the economy would NOT reproduce for this state (an empty,
+    // productionless market would assess satisfaction 0 and realized rate 0), so retention is provable:
+    // if any stage re-measured it, these exact values would move.
+    const { b, world } = twoSystemWaterGradient((market) => ({
+      ...market,
+      satisfaction: 0.4,
+      squeezePulses: 0.5,
+      realizedProductionRate: 5,
+    }));
+    const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
+
+    // Logistics resolves; economy and construction do not.
+    const afterLogistics = (
+      await runWorldTick(world, { cadence: { month: 999, logistics: 1, construction: 999 } })
+    ).world;
+
+    // The import moved water in — stock changed.
+    expect(afterLogistics.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
+    expect(bWater(afterLogistics).stock).toBeGreaterThan(0);
+
+    // …but the seeded assessment is carried through untouched: no economy pulse ran to re-measure it, and
+    // logistics never writes these fields. An off-pulse economy run, or a logistics-side re-measure, would
+    // move at least one of them.
+    expect(bWater(afterLogistics).satisfaction).toBe(0.4);
+    expect(bWater(afterLogistics).squeezePulses).toBe(0.5);
+    expect(bWater(afterLogistics).realizedProductionRate).toBe(5);
   });
 });
 
