@@ -24,9 +24,9 @@ export interface MarketRowForLogistics {
   realizedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
   productionSuppressed?: boolean;
-  /** Consecutive rationed economy assessments, saturated at 2. */
+  /** Rationed-economy persistence clock: advanced by the pulse's reference-time span, saturated at 2. */
   squeezePulses?: number;
-  /** Consecutive structural construction assessments, saturated at 2. */
+  /** Structural-deficit persistence clock: advanced by the pulse's reference-time span, saturated at 2. */
   proposalPulses?: number;
   logisticsFundingBound?: boolean;
 }

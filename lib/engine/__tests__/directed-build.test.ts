@@ -1240,7 +1240,7 @@ describe("planFactionProposals: persistent structural policy", () => {
       const plan = planFactionProposals([policySystem(policyGood({ proposalPulses: pulses }))], () => 1, [], DEV_REFS, 0.5);
       expect(plan.persistenceUpdates[0]?.proposalPulses).toBeCloseTo(expected, 6);
       expect(plan.proposals.some((proposal) => proposal.role === "industry")).toBe(expected >= 2);
-      pulses = plan.persistenceUpdates[0]!.proposalPulses;
+      pulses = plan.persistenceUpdates[0]?.proposalPulses ?? 0;
     }
 
     // A coarser-than-reference cadence (advance 2): one assessment saturates and is immediately eligible.
