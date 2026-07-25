@@ -178,36 +178,15 @@ export function plannedHousingUnits(sys: BuildSystemState): number {
   return Math.min(Math.floor(headroom), Math.max(1, Math.ceil(wantUnits)));
 }
 
-/** A rate deficit (production < demand) with no reachable surplus of its good — the build target. */
+/** A structural build target: the margined, rate-capped share of one good's uncovered demand at a system. */
 export interface StructuralDeficit {
   systemId: string;
   goodId: string;
-  /** The per-tick flow to close = demand − production (> 0). Placement sizes capacity to this rate. */
+  /** The per-tick flow this assessment commits toward = the persistent residual × BUILD_RATE_CAP (> 0). */
   rateDeficit: number;
   demand: number;
 }
 
-/**
- * Find the rate deficits (production < demand) reachable supply cannot cover, netting the coverage
- * FLOW rather than testing mere existence (docs/planned/economy-colony-bootstrapping.md §3.1). A
- * good's build target is its RATE deficit (demand − production), not a days-of-supply stock shortfall:
- * capacity is built to meet the flow (docs/planned/economy-demand-driven-model.md §2), so a full
- * stock buffer does not cancel a structural shortfall. A self-supplier (production ≥ demand) has no
- * rate deficit and is skipped.
- *
- * Cancellation is flow-aware. An exporter's spare is its sustainable export RATE `production − demand`
- * (not a stock pile — a neighbour merely holding and draining stock has non-positive spare, so it never
- * cancels a deficit; logistics still ships that transient stock while local capacity comes up). Per
- * good, the reachable exporters' total spare is netted across all reachable deficits at once —
- * `coveredFraction = min(1, Σ spare / Σ reachable-deficit)` (first cut per §7.6) — so one exporter's
- * spare cannot fully cover two competing colonies. Each reachable deficit's residual
- * `rateDeficit × (1 − coveredFraction)` stays structural → buildable locally; a deficit with no
- * reachable exporter stays fully structural. Building serves one's own demand (self = cheapest route)
- * for whatever reachable supply cannot actually deliver.
- *
- * O(goods · systems) for the spare/deficit sums plus the same per-deficit reachability scan the
- * existence test already did — cheap enough for the per-pulse planner.
- */
 export interface ProposalPersistenceUpdate {
   systemId: string;
   goodId: string;
@@ -273,8 +252,21 @@ function effectiveBuildSystems(
 }
 
 /**
- * Evaluate the margin/feedback policy, then net the faction's reachable exporter spare before
- * advancing persistence. Suppressed capacity is latent spare for neighbours but never a local gap.
+ * The one gap-math implementation, shared by both planners (immediate for `planFactionBuilds`,
+ * persistence-gated for `planFactionProposals`). Per (system, good) it takes the larger of the
+ * provisioning-margin capacity gap (`max(0, (1 + PROVISION_MARGIN)·demand − capacity)`) and the
+ * squeeze-feedback gap, then nets the faction's reachable exporter spare against it before advancing
+ * persistence and rate-capping the residual. Suppressed capacity is latent spare for neighbours but
+ * never a local gap.
+ *
+ * Cancellation is flow-aware (docs/planned/economy-colony-bootstrapping.md §3.1). An exporter's spare
+ * is its sustainable export RATE (`production − demand`, or latent `capacity − demand` when suppressed)
+ * — not a stock pile, so a neighbour merely holding and draining stock never cancels a gap. Per good,
+ * the reachable exporters' total spare is netted across all reachable gaps at once —
+ * `coveredFraction = min(1, Σ spare / Σ reachable-gap)` (first cut per §7.6) — so one exporter's spare
+ * cannot fully cover two competing colonies; each reachable gap keeps its uncovered residual and a gap
+ * with no reachable exporter stays fully structural. Only economically-active (developed) systems
+ * contribute gaps or spare.
  */
 function assessStructuralDeficits(
   systems: BuildSystemState[],
@@ -356,53 +348,6 @@ function assessStructuralDeficits(
   }
 
   return { systems: effective, deficits, persistenceUpdates };
-}
-
-export function findStructuralDeficits(
-  systems: BuildSystemState[],
-  routeCost: RouteCost,
-): StructuralDeficit[] {
-  const deficits: Array<{ systemId: string; goodId: string; rateDeficit: number; demand: number }> = [];
-  // Reachable rate exporters per good, each carrying its spare export rate (production - demand > 0).
-  const exportersByGood = new Map<string, Array<{ systemId: string; spare: number }>>();
-  const spareByGood = new Map<string, number>();
-
-  for (const s of systems) {
-    for (const g of s.goods) {
-      const spare = (g.production ?? 0) - g.demand;
-      if (spare < 0) {
-        deficits.push({ systemId: s.systemId, goodId: g.goodId, rateDeficit: -spare, demand: g.demand });
-      } else if (spare > 0) {
-        const list = exportersByGood.get(g.goodId) ?? [];
-        list.push({ systemId: s.systemId, spare });
-        exportersByGood.set(g.goodId, list);
-        spareByGood.set(g.goodId, (spareByGood.get(g.goodId) ?? 0) + spare);
-      }
-    }
-  }
-
-  // First pass: mark which deficits have any reachable exporter, and sum the reachable demand per good
-  // — the denominator the shared spare is netted across.
-  const reachableDeficitByGood = new Map<string, number>();
-  const flagged = deficits.map((d) => {
-    const reachable = (exportersByGood.get(d.goodId) ?? []).some((e) => routeCost(e.systemId, d.systemId) !== null);
-    if (reachable) reachableDeficitByGood.set(d.goodId, (reachableDeficitByGood.get(d.goodId) ?? 0) + d.rateDeficit);
-    return { d, reachable };
-  });
-
-  // Second pass: an unreachable deficit is fully structural; a reachable one keeps its uncovered residual.
-  const structural: StructuralDeficit[] = [];
-  for (const { d, reachable } of flagged) {
-    if (!reachable) {
-      structural.push(d);
-      continue;
-    }
-    const reachableDeficit = reachableDeficitByGood.get(d.goodId) ?? 0;
-    const coveredFraction = reachableDeficit > 0 ? Math.min(1, (spareByGood.get(d.goodId) ?? 0) / reachableDeficit) : 0;
-    const residual = d.rateDeficit * (1 - coveredFraction);
-    if (residual > 0) structural.push({ systemId: d.systemId, goodId: d.goodId, rateDeficit: residual, demand: d.demand });
-  }
-  return structural;
 }
 
 /**
@@ -914,7 +859,9 @@ function planFactionBundles(
 
 /**
  * Flat build view of the planner — the same decisions `planFactionBundles` makes, ungrouped, in
- * emission order (housing pass, then industry opportunities by descending score). Kept as the stable
+ * emission order (housing pass, then industry opportunities by descending score). Shares the one gap
+ * assessment with `planFactionProposals` (same provisioning margin and rate cap) but takes it
+ * immediately — no two-pulse persistence gate and no in-flight projects to fold. Kept as the stable
  * unit-test surface for the planner's *what-gets-built* logic, independent of funding order.
  */
 export function planFactionBuilds(
@@ -922,7 +869,8 @@ export function planFactionBuilds(
   routeCost: RouteCost,
   refs: DevelopmentRefs,
 ): PlannedBuild[] {
-  return planFactionBundles(systems, routeCost, refs, findStructuralDeficits(systems, routeCost)).flatMap((bundle) =>
+  const assessment = assessStructuralDeficits(systems, [], routeCost, false);
+  return planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits).flatMap((bundle) =>
     bundle.items.map((item) => ({ systemId: bundle.systemId, buildingType: item.buildingType, count: item.levels })),
   );
 }
