@@ -77,9 +77,10 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
   });
 
   it("nets one exporter's spare across competing sinks (no double-coverage)", () => {
-    // Two sinks (gap 11 each, 22 total) share one exporter's spare 6 → coveredFraction 6/22 → each keeps
-    // a residual → both advance. A per-sink (rather than shared) cancellation would zero at least one.
-    const plan = planFactionProposals([sink("A", 10), sink("C", 10), exporter("B", 6)], allReachable, [], DEV_REFS);
+    // Two sinks (gap 11 each, 22 total) share one exporter's spare 14 → coveredFraction 14/22 → each
+    // keeps a residual → both advance. Spare exceeds a single sink's gap, so a per-sink (rather than
+    // shared) cancellation would fully cover and reset both — the assertion separates the two models.
+    const plan = planFactionProposals([sink("A", 10), sink("C", 10), exporter("B", 14)], allReachable, [], DEV_REFS);
     expect(orePulses(plan, "A")).toBe(2);
     expect(orePulses(plan, "C")).toBe(2);
   });
