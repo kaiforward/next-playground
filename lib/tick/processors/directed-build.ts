@@ -195,7 +195,7 @@ export async function runDirectedBuildProcessor(
     // Auto policy proposes new whole-level PROPOSALS toward the ceilings, aware of what is in flight;
     // value-order ranking (housing-leads, then descending bundle-ROI) reorders them before funding.
     const buildStates = group.map(toBuildState);
-    const buildProposals = skipBuild ? [] : planFactionProposals(buildStates, params.routeCost, existing, developmentRefs);
+    const buildProposals = skipBuild ? [] : planFactionProposals(buildStates, params.routeCost, existing, developmentRefs).proposals;
 
     // Colony-establish proposals compete with builds on the same pool. Only faction-owned systems can
     // colonise (a null-faction group is independents — never); the develop param is omitted in build-only tests.

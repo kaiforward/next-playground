@@ -311,9 +311,9 @@ describe("planFactionBuilds", () => {
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
@@ -330,9 +330,9 @@ describe("planFactionBuilds", () => {
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
     };
     const surplus: BuildSystemState = {
       systemId: "S", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
@@ -394,7 +394,7 @@ describe("planFactionBuilds", () => {
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
 
     const deficitFood: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
@@ -529,9 +529,9 @@ describe("planFactionBuilds — proactive housing", () => {
     // Builder has NO habitable land: the housing pass cannot fire, so any housing here
     // would be the deleted co-build. Expect production, zero housing.
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
     };
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
@@ -761,7 +761,7 @@ describe("planFactionBuilds — spare-labour gate", () => {
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     return [
       {
-        systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
+        systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
         slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
         goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50, capacityProduction: 0}],
       },
@@ -814,7 +814,7 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
       goods: [],
     };
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50, capacityProduction: 0}],
     };
@@ -830,9 +830,9 @@ const selfAndNeighbourRoute: RouteCost = (from, to) => (from === to ? 0 : 1);
 // (mirrors the file's existing deficit fixtures: stock 1, target 20, demand 5 → shortfall 19).
 function deficitOnly(goodId: string): BuildSystemState {
   return {
-    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
+    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId, stock: 1, targetStock: 20, demand: 5, capacityProduction: 0 }],
+    goods: [{ goodId, stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
   };
 }
 
@@ -937,7 +937,7 @@ describe("academy co-build", () => {
 // site B has ample population and general space, and locally produces ore (its recipe input).
 function heavyDeficitScenario(): BuildSystemState[] {
   const deficit: BuildSystemState = {
-    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
+    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     goods: [{ goodId: "metals", stock: 1, targetStock: 1000, demand: 500, capacityProduction: 0}],
   };
@@ -970,7 +970,7 @@ function crossFamilyDeficitScenario(): BuildSystemState[] {
   // Each deficit's RATE (demand − production) is sized to clear ANCHOR_MIN_THROUGHPUT on its own, so
   // both families independently qualify for a complex — proving the cap (not the floor) suppresses the second.
   const deficitMetals: BuildSystemState = {
-    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
+    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     goods: [{ goodId: "metals", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0, capacityProduction: 0 }],
   };
@@ -1000,7 +1000,7 @@ function anchoredVsGreenfieldScenario(): BuildSystemState[] {
   // per-unit must rank it first (the snowball).
   const rateDeficit = capUnits * OUTPUT_PER_UNIT.metals * 1.15;
   const deficit: BuildSystemState = {
-    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "unclaimed", buildings: {},
+    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     goods: [{ goodId: "metals", stock: 0, targetStock: 1, demand: rateDeficit, production: 0, capacityProduction: 0 }],
   };
@@ -1076,7 +1076,7 @@ describe("planFactionProposals", () => {
       control: "developed", population: 100, generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     });
-    const proposals = planFactionProposals([site], () => 1, [], DEV_REFS);
+    const proposals = planFactionProposals([site], () => 1, [], DEV_REFS).proposals;
     const housing = proposals.find((p) => p.role === "housing");
     expect(housing).toBeDefined();
     expect(housing!.kind).toBe("build");
@@ -1095,15 +1095,15 @@ describe("planFactionProposals", () => {
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 0, goods: [], // no habitable land → isolate industry
     };
-    const proposals = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS);
+    const proposals = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS).proposals;
     const food = proposals.find((p) => p.role === "industry" && p.items.some((i) => i.buildingType === "food"));
     expect(food).toBeDefined();
     expect(food!.value).toBeGreaterThan(0);                     // it serves real demand
@@ -1113,7 +1113,7 @@ describe("planFactionProposals", () => {
   });
 
   it("bundles a co-built academy INTO the production's proposal, gate-first (not as a separate proposal)", () => {
-    const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS);
+    const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS).proposals;
     const bundle = proposals.find((p) => p.items.some((i) => i.buildingType === "electronics"));
     expect(bundle).toBeDefined();
     const types = bundle!.items.map((i) => i.buildingType);
@@ -1136,12 +1136,12 @@ describe("planFactionProposals", () => {
     const open: WorldConstructionProject[] = [
       { kind: "build", id: "h", origin: "auto", factionId: "f1", systemId: "X", buildingType: HOUSING_TYPE, levels: 10, workTotal: 80, workDone: 0 },
     ];
-    expect(planFactionProposals([site], () => 1, [], DEV_REFS).some((p) => p.role === "housing")).toBe(true);
-    expect(planFactionProposals([site], () => 1, open, DEV_REFS).some((p) => p.role === "housing")).toBe(false);
+    expect(planFactionProposals([site], () => 1, [], DEV_REFS).proposals.some((p) => p.role === "housing")).toBe(true);
+    expect(planFactionProposals([site], () => 1, open, DEV_REFS).proposals.some((p) => p.role === "housing")).toBe(false);
   });
 
   it("flattening a proposal keeps its academy before the production it gates", () => {
-    const flat = flatItems(planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS));
+    const flat = flatItems(planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS).proposals);
     const schoolIdx = flat.findIndex((i) => i.buildingType === VOCATIONAL_SCHOOL_TYPE);
     const prodIdx = flat.findIndex((i) => i.buildingType === "electronics");
     expect(schoolIdx).toBeGreaterThanOrEqual(0);
@@ -1150,6 +1150,112 @@ describe("planFactionProposals", () => {
   });
 });
 
+function policySystem(
+  good: BuildGoodState,
+  partial: Partial<BuildSystemState> = {},
+): BuildSystemState {
+  return {
+    systemId: "P", factionId: "f1", control: "developed", population: 10_000, unrest: 0,
+    buildings: {}, slotCap: makeResourceVector({ arable: 1_000, ore: 1_000 }), generalSpace: 1_000, habitableSpace: 0,
+    goods: [good], ...partial,
+  };
+}
+
+function policyGood(overrides: Partial<BuildGoodState> = {}): BuildGoodState {
+  return {
+    goodId: "ore", stock: 0, targetStock: 100, demand: 10, production: 0, capacityProduction: 0,
+    proposalPulses: 1, ...overrides,
+  };
+}
+
+describe("planFactionProposals: persistent structural policy", () => {
+  it("keeps a 10% capacity margin, then caps the persistent residual before placement", () => {
+    const plan = planFactionProposals([policySystem(policyGood({ demand: 100, production: 100, capacityProduction: 100 }))], () => 1, [], DEV_REFS);
+    const food = plan.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
+    expect(food?.value).toBeCloseTo(4, 6); // 10 residual x 40%, before whole-level placement
+    expect(plan.persistenceUpdates).toEqual([{ systemId: "P", goodId: "ore", proposalPulses: 2 }]);
+  });
+
+  it("does not grow at 110% capacity and resets recovered persistence", () => {
+    const plan = planFactionProposals([policySystem(policyGood({ production: 10, capacityProduction: 11 }))], () => 1, [], DEV_REFS);
+    expect(plan.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
+    expect(plan.persistenceUpdates).toEqual([{ systemId: "P", goodId: "ore", proposalPulses: 0 }]);
+  });
+
+  it("uses the larger of capacity and squeeze feedback gaps, excluding funding-bound and suppressed feedback", () => {
+    const active = planFactionProposals([policySystem(policyGood({ demand: 10, production: 10, capacityProduction: 11, squeezePulses: 2, satisfaction: 0 }))], () => 1, [], DEV_REFS);
+    const food = active.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
+    expect(food?.value).toBeCloseTo(4, 6); // max(0, 10), not 10 + 0
+
+    const fundingBound = planFactionProposals([policySystem(policyGood({ production: 10, capacityProduction: 11, squeezePulses: 2, satisfaction: 0, logisticsFundingBound: true }))], () => 1, [], DEV_REFS);
+    expect(fundingBound.persistenceUpdates[0]?.proposalPulses).toBe(0);
+
+    const suppressed = planFactionProposals([policySystem(policyGood({ production: 0, capacityProduction: 0, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))], () => 1, [], DEV_REFS);
+    expect(suppressed.persistenceUpdates[0]?.proposalPulses).toBe(0);
+  });
+
+  it("nets reachable actual and suppressed latent spare before persistence", () => {
+    const sink = policySystem(policyGood(), { systemId: "sink" });
+    const actualExporter = policySystem(policyGood({ demand: 0, production: 20, capacityProduction: 20 }), { systemId: "actual", slotCap: emptyResourceVector() });
+    const actual = planFactionProposals([sink, actualExporter], () => 1, [], DEV_REFS);
+    expect(actual.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(0);
+
+    const latentExporter = policySystem(policyGood({ demand: 0, production: 0, capacityProduction: 20, productionSuppressed: true }), { systemId: "latent", slotCap: emptyResourceVector() });
+    const latent = planFactionProposals([sink, latentExporter], () => 1, [], DEV_REFS);
+    expect(latent.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(0);
+  });
+
+  it("requires two residual assessments, saturates at two, and resets on recovery", () => {
+    const first = planFactionProposals([policySystem(policyGood({ proposalPulses: 0 }))], () => 1, [], DEV_REFS);
+    expect(first.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
+    expect(first.persistenceUpdates[0]?.proposalPulses).toBe(1);
+
+    const second = planFactionProposals([policySystem(policyGood({ proposalPulses: 1 }))], () => 1, [], DEV_REFS);
+    expect(second.proposals.some((proposal) => proposal.role === "industry")).toBe(true);
+    expect(second.persistenceUpdates[0]?.proposalPulses).toBe(2);
+
+    const saturated = planFactionProposals([policySystem(policyGood({ proposalPulses: 2 }))], () => 1, [], DEV_REFS);
+    expect(saturated.persistenceUpdates[0]?.proposalPulses).toBe(2);
+
+    const recovered = planFactionProposals([policySystem(policyGood({ proposalPulses: 2, production: 10, capacityProduction: 11 }))], () => 1, [], DEV_REFS);
+    expect(recovered.persistenceUpdates[0]?.proposalPulses).toBe(0);
+  });
+
+  it("caps each residual and preserves the combined 40% cap across systems", () => {
+    const sixty = planFactionProposals([policySystem(policyGood({ demand: 600, production: 600, capacityProduction: 600 }))], () => 1, [], DEV_REFS);
+    expect(sixty.proposals.find((proposal) => proposal.role === "industry")?.value).toBeCloseTo(24, 6);
+
+    const a = policySystem(policyGood({ demand: 100, production: 100, capacityProduction: 100 }), { systemId: "a" });
+    const b = policySystem(policyGood({ demand: 100, production: 100, capacityProduction: 100 }), { systemId: "b" });
+    const combined = planFactionProposals([a, b], (from, to) => from === to ? 1 : null, [], DEV_REFS);
+    const value = combined.proposals.filter((proposal) => proposal.role === "industry").reduce((sum, proposal) => sum + proposal.value, 0);
+    expect(value).toBeCloseTo(8, 6);
+  });
+
+  it("counts every in-flight origin before placement, including its capacity and input demand", () => {
+    const queuedFood: WorldConstructionProject[] = [
+      { kind: "build", id: "manual-food", origin: "player", factionId: "f1", systemId: "P", buildingType: "ore", levels: 4, workTotal: 100, workDone: 1 },
+    ];
+    const settled = planFactionProposals([policySystem(policyGood())], () => 1, queuedFood, DEV_REFS);
+    expect(settled.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
+    const queuedAuto: WorldConstructionProject[] = [{ ...queuedFood[0], id: "auto-ore", origin: "auto" }];
+    const auto = planFactionProposals([policySystem(policyGood())], () => 1, queuedAuto, DEV_REFS);
+    expect(auto.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
+
+    const queuedMetals: WorldConstructionProject[] = [
+      { kind: "build", id: "auto-metals", origin: "auto", factionId: "f1", systemId: "P", buildingType: "metals", levels: 1, workTotal: 100, workDone: 1 },
+    ];
+    const inputPlan = planFactionProposals([
+      policySystem(policyGood({ goodId: "ore", demand: 0, production: 0, capacityProduction: 0, proposalPulses: 0 }), {
+        goods: [
+          policyGood({ goodId: "ore", demand: 0, production: 0, capacityProduction: 0, proposalPulses: 0 }),
+          policyGood({ goodId: "metals", demand: 0, production: 0, capacityProduction: 0, proposalPulses: 0 }),
+        ],
+      }),
+    ], () => 1, queuedMetals, DEV_REFS);
+    expect(inputPlan.persistenceUpdates.find((update) => update.goodId === "ore")?.proposalPulses).toBe(1);
+  });
+});
 describe("planFactionBuilds: develop gate", () => {
   const buildable = { population: 100, generalSpace: 50, habitableSpace: 50, goods: [] };
 
