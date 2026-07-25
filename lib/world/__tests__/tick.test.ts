@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { runWorldTick, toTickSystems, applyBuildingIncreases } from "../tick";
 import { serializeWorld, deserializeWorld } from "../save";
+import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -261,23 +262,25 @@ describe("runWorldTick", () => {
     const foodOf = (w: typeof prepared) =>
       w.markets.find((m) => m.systemId === home && m.goodId === "food");
 
-    // Construction-only pulse: directed-build resolves, economy (month) does NOT. The build assessment
-    // advances proposalPulses; the stale economy read leaves squeezePulses untouched.
+    // Construction-only pulse: directed-build resolves at a finer-than-reference cadence, economy (month)
+    // does NOT. The build assessment advances proposalPulses by that pulse's reference-time
+    // (catchUpFactor(1)); the stale economy read leaves squeezePulses untouched.
     const buildOnly = (await runWorldTick(prepared, { cadence: { month: 999, construction: 1, logistics: 999 } })).world;
-    expect(foodOf(buildOnly)?.proposalPulses).toBe(2); // 1 → 2 (residual persists)
+    expect(foodOf(buildOnly)?.proposalPulses).toBeCloseTo(1 + catchUpFactor(1), 10); // 1 → 1 + reference-time
     expect(foodOf(buildOnly)?.squeezePulses).toBe(1);  // unchanged — economy did not run
 
-    // Economy-only pulse: economy resolves and rations the empty deficit → squeezePulses advances; the
-    // stale build read (construction off-pulse) leaves proposalPulses untouched.
+    // Economy-only pulse: economy resolves and rations the empty deficit → squeezePulses advances by the
+    // same reference-time; the stale build read (construction off-pulse) leaves proposalPulses untouched.
     const econOnly = (await runWorldTick(prepared, { cadence: { month: 1, construction: 999, logistics: 999 } })).world;
-    expect(foodOf(econOnly)?.squeezePulses).toBe(2);  // 1 → 2 (rationed)
+    expect(foodOf(econOnly)?.squeezePulses).toBeCloseTo(1 + catchUpFactor(1), 10);  // 1 → 1 + reference-time
     expect(foodOf(econOnly)?.proposalPulses).toBe(1); // unchanged — directed-build did not run
 
-    // The divergent-cadence result serializes and deserializes intact (proposalPulses survives the save).
+    // The divergent-cadence result serializes and deserializes intact (the fractional proposalPulses
+    // survives the save byte-for-byte).
     const roundTrip = deserializeWorld(serializeWorld(buildOnly));
     expect(roundTrip.ok).toBe(true);
     if (roundTrip.ok) {
-      expect(foodOf(roundTrip.world)?.proposalPulses).toBe(2);
+      expect(foodOf(roundTrip.world)?.proposalPulses).toBe(foodOf(buildOnly)?.proposalPulses);
       expect(foodOf(roundTrip.world)?.squeezePulses).toBe(1);
     }
   });

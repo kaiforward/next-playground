@@ -202,7 +202,9 @@ export async function runDirectedBuildProcessor(
     // The assessment runs for every due faction so the proposal-pressure counter advances even when
     // build automation is off — the switch gates PROPOSAL EMISSION, not the construction clock.
     const buildStates = group.map(toBuildState);
-    const buildPlan = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs);
+    // Advance the proposal-pressure counter by this pulse's reference-time, so "two reference months
+    // of persistence" is the same wall-clock latency at any construction cadence (not two pulses).
+    const buildPlan = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs, catchUp);
     for (const u of buildPlan.persistenceUpdates) {
       proposalPersistence.push({ id: `${u.systemId}|${u.goodId}`, proposalPulses: u.proposalPulses });
     }

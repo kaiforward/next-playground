@@ -117,4 +117,24 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
     const views = await world.getMarketsForSystems(["s1"]);
     expect(views[0].squeezePulses).toBe(0);
   });
+
+  it("preserves a fractional squeeze counter (reference-time, not an integer assessment count)", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [sys({})],
+      markets: [market("ore")],
+      modifiers: [],
+    });
+    await world.applyMarketUpdates([{
+      id: "s1|ore",
+      stock: 1,
+      anchorMult: 1,
+      satisfaction: 1,
+      realizedProductionRate: 0,
+      productionSuppressed: false,
+      squeezePulses: 1.5,
+    }]);
+    expect(world.markets[0].squeezePulses).toBe(1.5); // not floored to 1
+    const views = await world.getMarketsForSystems(["s1"]);
+    expect(views[0].squeezePulses).toBe(1.5); // survives the read path too
+  });
 });

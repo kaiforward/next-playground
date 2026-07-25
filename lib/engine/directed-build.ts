@@ -56,9 +56,11 @@ export interface BuildGoodState {
   satisfaction?: number;
   /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
   productionSuppressed?: boolean;
-  /** Consecutive rationed economy assessments, saturated at 2. */
+  /** Reference-months a rationed economy assessment has persisted — a finite value in [0,2] advanced
+   *  per assessment by the economy interval's catchUpFactor (so the latency is cadence-invariant). */
   squeezePulses?: number;
-  /** Consecutive structural construction assessments, saturated at 2. */
+  /** Reference-months a structural construction assessment has persisted — a finite value in [0,2]
+   *  advanced per assessment by the construction interval's catchUpFactor. */
   proposalPulses?: number;
   /** A reachable logistics match was constrained by the faction's funded haul work. */
   logisticsFundingBound?: boolean;
@@ -273,6 +275,7 @@ function assessStructuralDeficits(
   openProjects: WorldConstructionProject[],
   routeCost: RouteCost,
   requirePersistence: boolean,
+  advance: number,
 ): StructuralAssessment {
   const effective = effectiveBuildSystems(systems, openProjects);
   const candidatesByGood = new Map<string, Array<{ systemId: string; gross: number }>>();
@@ -333,8 +336,11 @@ function assessStructuralDeficits(
     if (!isEconomicallyActive(system.control)) continue;
     for (const good of system.goods) {
       const residual = residualByKey.get(`${system.systemId}:${good.goodId}`) ?? 0;
+      // Advance by the reference-time this assessment represents (catchUpFactor of the caller's
+      // interval), not a flat +1, so the "two reference months of persistence" latency is the same
+      // wall-clock span at any construction cadence. The counter is fractional, finite, clamped [0,2].
       const nextPulses = residual > 0
-        ? Math.min(DIRECTED_BUILD.PERSISTENCE_PULSES, Math.max(0, Math.floor(good.proposalPulses ?? 0)) + 1)
+        ? Math.min(DIRECTED_BUILD.PERSISTENCE_PULSES, Math.max(0, good.proposalPulses ?? 0) + advance)
         : 0;
       persistenceUpdates.push({ systemId: system.systemId, goodId: good.goodId, proposalPulses: nextPulses });
       if (residual <= 0 || (requirePersistence && nextPulses < DIRECTED_BUILD.PERSISTENCE_PULSES)) continue;
@@ -868,8 +874,9 @@ export function planFactionBuilds(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   refs: DevelopmentRefs,
+  advance = 1,
 ): PlannedBuild[] {
-  const assessment = assessStructuralDeficits(systems, [], routeCost, false);
+  const assessment = assessStructuralDeficits(systems, [], routeCost, false, advance);
   return planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits).flatMap((bundle) =>
     bundle.items.map((item) => ({ systemId: bundle.systemId, buildingType: item.buildingType, count: item.levels })),
   );
@@ -885,14 +892,19 @@ export interface FactionBuildPlan {
  * Build proposals for a faction's next construction assessment. Open work is counted before any
  * policy decision: it consumes footprint/labour, contributes capacity and input demand, and cannot
  * be re-proposed. Housing remains proactive; only industry awaits a persistent residual.
+ *
+ * `advance` is the reference-time one assessment contributes to the persistence counter — the
+ * processor passes `catchUpFactor(interval)` so the two-reference-month latency is cadence-invariant;
+ * it defaults to 1 for direct callers.
  */
 export function planFactionProposals(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   openProjects: WorldConstructionProject[],
   refs: DevelopmentRefs,
+  advance = 1,
 ): FactionBuildPlan {
-  const assessment = assessStructuralDeficits(systems, openProjects, routeCost, true);
+  const assessment = assessStructuralDeficits(systems, openProjects, routeCost, true, advance);
   const factionBySystem = new Map(systems.map((system) => [system.systemId, system.factionId]));
   const proposals: BuildProposal[] = [];
   for (const bundle of planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits)) {

@@ -18,7 +18,7 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   readonly claims: SystemClaim[] = [];
   /** Developments resolved this run (developed tier + colony seed). */
   readonly developments: SystemDevelopment[] = [];
-  /** Proposal-pressure counters written this run, keyed by composite market id, clamped to integer [0,2]. */
+  /** Proposal-pressure counters written this run, keyed by composite market id, clamped to a finite [0,2]. */
   readonly proposalPulseUpdates = new Map<string, number>();
   /** The live open-project set — updated in place by applyConstructionUpdates; read back by the tick body. */
   constructionProjects: WorldConstructionProject[];
@@ -74,10 +74,11 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   }
 
   async applyProposalPersistenceUpdates(updates: ProposalPersistenceUpdate[]): Promise<void> {
-    // Clamp to integer [0,2] at the boundary, mirroring how the economy adapter narrows squeezePulses.
+    // Clamp to a finite [0,2] at the boundary (the counter is fractional reference-time, not an
+    // assessment count), mirroring how the economy adapter narrows squeezePulses.
     for (const u of updates) {
       const clamped = Number.isFinite(u.proposalPulses)
-        ? Math.max(0, Math.min(2, Math.floor(u.proposalPulses)))
+        ? Math.max(0, Math.min(2, u.proposalPulses))
         : 0;
       this.proposalPulseUpdates.set(u.id, clamped);
     }

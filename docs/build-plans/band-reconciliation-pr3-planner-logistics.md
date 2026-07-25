@@ -76,9 +76,9 @@ multiplier. The needs tooltip adds a Government row so visible parts still sum t
 realizedProductionRate?: number;
 /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
 productionSuppressed?: boolean;
-/** Consecutive rationed economy assessments, saturated at 2; missing => 0. */
+/** Reference-months a rationed economy assessment has persisted — a catchUp-advanced finite value in [0,2] (2 = two reference months); missing => 0. */
 squeezePulses?: number;
-/** Consecutive structural construction assessments, saturated at 2; missing => 0. */
+/** Reference-months a structural construction assessment has persisted — a catchUp-advanced finite value in [0,2] (2 = two reference months); missing => 0. */
 proposalPulses?: number;
 ```
 
@@ -91,9 +91,10 @@ multipliers are not suppression exclusions.
 
 ### 3. Counter clocks are distinct
 
-- Economy assessment: `satisfaction < 1` increments `squeezePulses`, full satisfaction resets, cap 2.
-- Construction assessment: positive **post-net** residual increments `proposalPulses`, zero resets,
-  cap 2.
+- Economy assessment: `satisfaction < 1` advances `squeezePulses` by the economy interval's
+  catchUpFactor, full satisfaction resets, clamped to a finite [0,2] (2 = two reference months).
+- Construction assessment: positive **post-net** residual advances `proposalPulses` by the construction
+  interval's catchUpFactor, zero resets, clamped to a finite [0,2] (2 = two reference months).
 - Build automation off still advances proposal counters; it gates proposal emission only.
 - Off-pulse readers do not advance either clock. A stale assessment is never counted twice.
 
@@ -175,7 +176,8 @@ or squeeze. Imports affect those at the next economy assessment. Do not reorder 
 
 - Pure engine, deterministic tick, finite JSON world state.
 - No forbidden `as`, postfix `!` outside test idiom, or `unknown`.
-- Clamp persisted rates/counters at adapter boundaries; counters are integers in `[0,2]`.
+- Clamp persisted rates/counters at adapter boundaries; the persistence counters are catchUp-advanced
+  finite values in `[0,2]` (2 = two reference months of persistence), not integer assessment counts.
 - Developed systems only; controlled/unclaimed markets remain inert.
 - Government boost is applied once; event consumption multiplier remains separate.
 - PR2 funding marker and isolated selling/decay signal keep their semantics.

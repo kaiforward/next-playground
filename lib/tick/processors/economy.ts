@@ -155,8 +155,10 @@ export async function runEconomyProcessor(
   // aggregated the system's modifiers, so there's no second aggregation pass.
   const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
     const realizedProductionRate = simulated[i].realized / catchUp;
+    // Advance by this pulse's reference-time (catchUpFactor), not a flat +1, so "two reference months
+    // rationed" is the same wall-clock latency at any economy cadence. Fractional, finite, clamped [0,2].
     const squeezePulses = satisfactionByIndex[i] < 1
-      ? Math.min(2, Math.max(0, Math.floor(m.squeezePulses ?? 0)) + 1)
+      ? Math.min(2, Math.max(0, m.squeezePulses ?? 0) + catchUp)
       : 0;
     return {
       id: m.id,

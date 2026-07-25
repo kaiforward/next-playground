@@ -78,7 +78,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
       const production = buildingProduction(sys.buildings, m.goodId, snap.state, sys.yields);
       const consumption = consumptionRate(m.goodId, snap.basis, sys.governmentType);
       const squeezePulses = typeof m.squeezePulses === "number" && Number.isFinite(m.squeezePulses)
-        ? Math.max(0, Math.min(2, Math.floor(m.squeezePulses)))
+        ? Math.max(0, Math.min(2, m.squeezePulses))
         : 0;
       views.push({
         id: `${m.systemId}|${m.goodId}`,
@@ -140,7 +140,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         satisfaction: isFinite(u.satisfaction) ? Math.max(0, Math.min(1, u.satisfaction)) : 1,
         realizedProductionRate: isFinite(u.realizedProductionRate) ? Math.max(0, u.realizedProductionRate) : 0,
         productionSuppressed: u.productionSuppressed,
-        squeezePulses: isFinite(u.squeezePulses) ? Math.max(0, Math.min(2, Math.floor(u.squeezePulses))) : 0,
+        squeezePulses: isFinite(u.squeezePulses) ? Math.max(0, Math.min(2, u.squeezePulses)) : 0,
       };
     });
     return Promise.resolve();

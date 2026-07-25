@@ -161,6 +161,21 @@ describe("serializeWorld / deserializeWorld", () => {
     });
   });
 
+  it("round-trips fractional persistence counters (reference-time, not integers)", () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const fractional: World = {
+      ...world,
+      markets: world.markets.map((market, index) =>
+        index === 0 ? { ...market, squeezePulses: 1.5, proposalPulses: 0.5 } : market,
+      ),
+    };
+    const result = deserializeWorld(serializeWorld(fractional));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.markets[0].squeezePulses).toBe(1.5);
+    expect(result.world.markets[0].proposalPulses).toBe(0.5);
+  });
+
   it("keeps new optional assessment values omitted in an old-shaped v8 save", () => {
     const world = generateWorld({ systemCount: 60, seed: 7 });
     const oldShaped: World = {

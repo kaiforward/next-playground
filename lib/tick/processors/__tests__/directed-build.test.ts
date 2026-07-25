@@ -313,6 +313,19 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     expect(w.proposalPulseUpdates.size).toBe(0);
   });
 
+  it("advances the clock by the interval's reference-time (catchUpFactor), not a flat step", async () => {
+    // A finer cadence advances the clock a fraction of a reference month per pulse; a coarser one
+    // advances more (and can saturate in one assessment) — so the persistence latency is the same
+    // wall-clock span at any construction cadence. Both ticks are a pulse boundary for their interval.
+    const fine = new MemoryDirectedBuildWorld([sink("A", 100, 0)]);
+    await runDirectedBuildProcessor(fine, { tick: DUE_TICK }, { interval: 12, routeCost: reachable, construction: mkConstruction(4) });
+    expect(fine.proposalPulseUpdates.get("A|food")).toBeCloseTo(0.5, 6); // catchUpFactor(12) = 0.5
+
+    const coarse = new MemoryDirectedBuildWorld([sink("A", 100, 0)]);
+    await runDirectedBuildProcessor(coarse, { tick: DUE_TICK }, { interval: 48, routeCost: reachable, construction: mkConstruction(4) });
+    expect(coarse.proposalPulseUpdates.get("A|food")).toBe(2); // catchUpFactor(48) = 2 saturates in one
+  });
+
   it("advances the clock with the player's build automation off, yet emits no proposals", async () => {
     // Build automation off gates PROPOSAL EMISSION, not the assessment: no new work is committed for the
     // faction, but the construction clock still advances at the developed sink.

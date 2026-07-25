@@ -385,15 +385,19 @@ function patchLogisticsMarketRows(
  * Fold directed-build's proposal-pressure counters back into the world market rows. Changes ONLY
  * `proposalPulses` (spread preserves every field the same-tick economy and logistics stages already
  * wrote — satisfaction, squeeze, realized rate, stock, funding-bound). `updates` keys are
- * `${systemId}|${goodId}`, the same composite key the market row groups are built by. No-op writes
- * (the value already equals what the row carries, treating a missing counter as 0) are skipped so an
- * unchanged market keeps its identity and a construction pulse only touches the rows it moved.
+ * `${systemId}|${goodId}`, the same composite key the market row groups are built by. The counter is
+ * fractional reference-time, so it is clamped to a finite [0,2] on the way into world state (NaN/Infinity
+ * guarded like every other persisted numeric field). No-op writes (the clamped value already equals what
+ * the row carries, treating a missing counter as 0) are skipped so an unchanged market keeps its identity
+ * and a construction pulse only touches the rows it moved.
  */
 function applyBuildMarketUpdates(markets: WorldMarket[], proposalPulseUpdates: Map<string, number>): WorldMarket[] {
   if (proposalPulseUpdates.size === 0) return markets;
   return markets.map((m) => {
-    const next = proposalPulseUpdates.get(`${m.systemId}|${m.goodId}`);
-    if (next === undefined || next === (m.proposalPulses ?? 0)) return m;
+    const raw = proposalPulseUpdates.get(`${m.systemId}|${m.goodId}`);
+    if (raw === undefined) return m;
+    const next = Number.isFinite(raw) ? Math.max(0, Math.min(2, raw)) : 0;
+    if (next === (m.proposalPulses ?? 0)) return m;
     return { ...m, proposalPulses: next };
   });
 }

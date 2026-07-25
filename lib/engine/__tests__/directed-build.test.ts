@@ -1232,6 +1232,23 @@ describe("planFactionProposals: persistent structural policy", () => {
     expect(recovered.persistenceUpdates[0]?.proposalPulses).toBe(0);
   });
 
+  it("advances the proposal clock by the per-assessment reference-time (fractional cadences)", () => {
+    // A finer-than-reference cadence (advance 0.5): four persistent assessments to reach the
+    // two-reference-month threshold, and no proposal emits until the counter actually reaches it.
+    let pulses = 0;
+    for (const expected of [0.5, 1.0, 1.5, 2.0]) {
+      const plan = planFactionProposals([policySystem(policyGood({ proposalPulses: pulses }))], () => 1, [], DEV_REFS, 0.5);
+      expect(plan.persistenceUpdates[0]?.proposalPulses).toBeCloseTo(expected, 6);
+      expect(plan.proposals.some((proposal) => proposal.role === "industry")).toBe(expected >= 2);
+      pulses = plan.persistenceUpdates[0]!.proposalPulses;
+    }
+
+    // A coarser-than-reference cadence (advance 2): one assessment saturates and is immediately eligible.
+    const coarse = planFactionProposals([policySystem(policyGood({ proposalPulses: 0 }))], () => 1, [], DEV_REFS, 2);
+    expect(coarse.persistenceUpdates[0]?.proposalPulses).toBe(2);
+    expect(coarse.proposals.some((proposal) => proposal.role === "industry")).toBe(true);
+  });
+
   it("caps each residual and preserves the combined 40% cap across systems", () => {
     const sixty = planFactionProposals([policySystem(policyGood({ demand: 600, production: 600, capacityProduction: 600 }))], () => 1, [], DEV_REFS);
     expect(sixty.proposals.find((proposal) => proposal.role === "industry")?.value).toBeCloseTo(24, 6);
