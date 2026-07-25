@@ -16,6 +16,8 @@ import {
 } from "@/lib/constants/industry";
 import { factionConstructionPool } from "@/lib/engine/construction";
 import { CONSTRUCTION } from "@/lib/constants/construction";
+import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
+import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import type { BuildBurstSummary } from "./types";
 
 /** How a developed system's built base breaks down by role/tier. */
@@ -221,6 +223,17 @@ export interface BuildCommitmentRecord {
   goodId: string;
   levels: number;
 }
+
+/**
+ * Ticks below which a quiet burst section reads as construction warm-up, not a broken directed-build wire.
+ * A structural deficit becomes a fundable proposal only after it survives the two-reference-month
+ * persistence window (`DIRECTED_BUILD.PERSISTENCE_PULSES`), and the first construction pulse lands at
+ * `CONSTRUCTION_INTERVAL` — so nothing autonomic can commit before roughly interval × (1 + persistence)
+ * ticks. This is the cadence floor; colony-driven bursts lag further, behind colonisation. A legibility
+ * bound, not a correctness one — below it, low activity means "too early", not "broken" (which the block's
+ * own NOTHING-COMMITTED line still flags).
+ */
+export const CONSTRUCTION_WARMUP_TICKS = CONSTRUCTION_INTERVAL * (1 + DIRECTED_BUILD.PERSISTENCE_PULSES);
 
 /**
  * Summarise the worst per-pulse construction burst per good across a run's directed-build

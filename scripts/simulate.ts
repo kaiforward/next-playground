@@ -26,7 +26,7 @@ import {
   buildExperimentResult,
 } from "../lib/tick-harness/experiment";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/tick-harness/population-analysis";
-import { summarizeColonisation, summarizeConstructionPool } from "../lib/tick-harness/build-analysis";
+import { summarizeColonisation, summarizeConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
@@ -289,7 +289,15 @@ function formatTable(results: HarnessResults): string {
         .join(", ");
       lines.push(`  worst per good: ${top}`);
     } else {
-      lines.push("  no autonomic production-good levels were committed this run");
+      lines.push("  NOTHING COMMITTED — directed-build recorded no autonomic production proposals this run");
+    }
+    if (results.config.tickCount < CONSTRUCTION_WARMUP_TICKS) {
+      lines.push(
+        `  warm-up: ${results.config.tickCount} ticks is below the ~${CONSTRUCTION_WARMUP_TICKS}-tick construction ` +
+        `warm-up window — a structural deficit only becomes a fundable proposal after the two-reference-month ` +
+        `persistence window, and the first pulse lands at the construction interval, so read low activity as ` +
+        `"too early", not "broken" (colony-driven bursts lag colonisation further; a matured read needs ~1500 ticks).`,
+      );
     }
   }
 

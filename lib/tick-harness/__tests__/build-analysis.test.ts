@@ -300,4 +300,12 @@ describe("summarizeBuildBursts", () => {
     const summary = summarizeBuildBursts(records);
     expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerPulse: 7, tick: 24 }]);
   });
+
+  it("keeps the first-seen tick on an equal-maxima tie (strict >, not >=)", () => {
+    // Two pulses commit the SAME max levels; the strict `>` means the first-seen tick (24) must be pinned,
+    // not overwritten by the later equal pulse (48). A `>=` regression would pin 48 instead.
+    const records: BuildCommitmentRecord[] = [rec(24, "food", 5), rec(48, "food", 5)];
+    const summary = summarizeBuildBursts(records);
+    expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerPulse: 5, tick: 24 }]);
+  });
 });

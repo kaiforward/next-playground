@@ -238,7 +238,7 @@ export interface WorldMarket {
   satisfaction?: number;
   /** Reference-cycle realized output; missing uses capacity until first assessment. */
   realizedProductionRate?: number;
-  /** Strike or maintenance reduced production; event modifiers are deliberately excluded. */
+  /** Strike or maintenance reduced production; event modifiers are deliberately excluded. Missing reads as false. */
   productionSuppressed?: boolean;
   /** Reference-months a rationed economy assessment has persisted — a finite value in [0,2], advanced
    *  per assessment by the economy interval's catchUpFactor (2 = two reference months). Missing reads as 0. */

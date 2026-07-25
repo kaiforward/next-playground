@@ -50,7 +50,7 @@ function consumedGoodIds(): string[] {
  * Per-good needs for one system, pressure-sorted descending (ties by want).
  * A wanted good with no market row reads satisfaction 0 (nothing to draw from).
  */
-export function computePopNeeds(basis: CivilianDemandBasis, governmentType: GovernmentType, markets: PopNeedsMarketRow[] = []): PopNeed[] {
+export function computePopNeeds(basis: CivilianDemandBasis, governmentType: GovernmentType, markets: PopNeedsMarketRow[]): PopNeed[] {
   const rowByGood = new Map(markets.map((m) => [m.goodId, m]));
   const wanted = consumedGoodIds()
     .map((goodId) => ({ goodId, want: consumptionRate(goodId, basis, governmentType) }))

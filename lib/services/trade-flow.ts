@@ -1,5 +1,5 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, flowEventsBySystem, governmentByFactionId, systemNameById } from "@/lib/services/world-index";
+import { buildingsBySystem, flowEventsBySystem, governmentByFactionId, governmentTypeForSystem, systemNameById } from "@/lib/services/world-index";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
@@ -74,7 +74,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
     },
     "yield",
   );
-  const governmentType = system.factionId ? governmentByFactionId().get(system.factionId) ?? "frontier" : "frontier";
+  const governmentType = governmentTypeForSystem(system, governmentByFactionId());
   const prodCon = capacityGoodRates(buildings, system.population, yields, governmentType);
   // Manufacturing input demand per good (recipe draw from local factories) — also local
   // consumption, but distinct from the civilian per-capita need carried in prodCon.consumption.

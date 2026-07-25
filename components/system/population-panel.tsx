@@ -14,7 +14,7 @@ import { needSeverity, splitNeedsLedger, SEVERITY_GLYPH, SEVERITY_TEXT } from "@
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
 
 // Tier swatch colours match the dataviz-validated categorical set (base copper /
-// technician deep-cyan / engineer purple) used elsewhere for consumer tiers.
+// technician deep-cyan / engineer purple / government slate) used elsewhere for consumer tiers.
 const TIER_META = [
   { key: "base", label: "Base population", color: "#d06a42" },
   { key: "technicians", label: "Technicians", color: "#0891b2" },

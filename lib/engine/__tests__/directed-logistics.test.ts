@@ -311,8 +311,14 @@ describe("strategic exporter reserve", () => {
     expect(target * 0.9 - drawable).toBeCloseTo(target * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC);
   });
 
-  it("does not treat a non-producer at 0.90 targetStock as an exporter", () => {
-    expect(surplusDrawable(90, 100, 5, 0)).toBe(0);
+  it("draws a producer below the anchor down to the reserve floor, where a non-producer draws nothing", () => {
+    const target = 100;
+    const reserve = target * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC; // 75
+    const stock = 80; // sits between the 0.75 reserve floor and the anchor (1.0× target)
+    // A producer above demand deep-draws below the anchor down to the reserve — it stops AT the reserve, not the anchor.
+    expect(surplusDrawable(stock, target, 5, 30)).toBeCloseTo(stock - reserve); // 5
+    // The same sub-anchor stock with no production draws nothing — the non-producer path needs stock > anchor.
+    expect(surplusDrawable(stock, target, 5, 0)).toBe(0);
   });
 
   it("does not deep-draw an input-starved former exporter despite its capacity", () => {

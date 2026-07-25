@@ -105,6 +105,45 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
   });
 });
 
+describe("assessStructuralDeficits — isEconomicallyActive gate", () => {
+  // Only developed systems contribute gaps or spare. A non-developed (unclaimed/controlled) sink or
+  // exporter that WOULD otherwise qualify must be fully excluded: no proposal, no spare that cancels a
+  // real gap, and no persistence write. Removing the gate would silently pass every other test in the file.
+  const allReachable: RouteCost = () => 1;
+
+  it("excludes non-developed systems from gaps, spare, and persistence writes", () => {
+    // A developed sink with an uncovered ore gap (one prior assessment).
+    const developedSink: BuildSystemState = {
+      systemId: "D", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand: 10, production: 0, capacityProduction: 0, proposalPulses: 1 }],
+    };
+    // An UNCLAIMED exporter with ample ore spare — would fully cancel D's gap if it counted.
+    const inactiveExporter: BuildSystemState = {
+      systemId: "E", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 100, targetStock: 50, demand: 4, production: 50, capacityProduction: 50 }],
+    };
+    // An UNCLAIMED sink with its own ore gap and buildable land — would otherwise emit a proposal + persistence write.
+    const inactiveSink: BuildSystemState = {
+      systemId: "U", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      slotCap: makeResourceVector({ ore: 10 }), generalSpace: 50, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand: 10, production: 0, capacityProduction: 0, proposalPulses: 1 }],
+    };
+
+    const plan = planFactionProposals([developedSink, inactiveExporter, inactiveSink], allReachable, [], DEV_REFS);
+
+    // The inactive exporter's spare does not count → the developed sink's gap stays uncovered → persistence advances to 2.
+    expect(plan.persistenceUpdates.find((u) => u.systemId === "D" && u.goodId === "ore")?.proposalPulses).toBe(2);
+    // The inactive sink gets NO persistence write and NO proposal.
+    expect(plan.persistenceUpdates.some((u) => u.systemId === "U")).toBe(false);
+    expect(plan.proposals.some((p) => p.systemId === "U")).toBe(false);
+    // The inactive exporter is neither candidate nor builder.
+    expect(plan.persistenceUpdates.some((u) => u.systemId === "E")).toBe(false);
+    expect(plan.proposals.some((p) => p.systemId === "E")).toBe(false);
+  });
+});
+
 describe("speculativeFloorExtra — development-scaled local-basics nudge (§3.2)", () => {
   // A developed colony with a food deposit and food demand, nothing built yet (low development).
   function foodColony(partial: Partial<BuildSystemState>): BuildSystemState {

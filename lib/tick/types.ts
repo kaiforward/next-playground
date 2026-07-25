@@ -79,11 +79,9 @@ export interface TickProcessorResult {
 }
 
 /** Transient, calibration-only signals a tick produced — never broadcast (`TickBroadcastRaw`)
- *  or folded into `World`. The calibration harness is the only reader. */
-export interface TickInstrumentation {
-  /** New autonomic production-good build levels committed this pulse, by good id (directed-build). */
-  buildCommitmentsByGood?: Map<string, number>;
-}
+ *  or folded into `World`. The calibration harness is the only reader. Derived from the processor
+ *  result so the shared field can't drift. */
+export type TickInstrumentation = Pick<TickProcessorResult, "buildCommitmentsByGood">;
 
 /** The full payload one tick's run hands to the broadcast layer. */
 export interface TickBroadcastRaw {

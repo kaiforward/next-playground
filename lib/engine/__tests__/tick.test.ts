@@ -143,17 +143,6 @@ describe("buildMarketTickEntry", () => {
     expect(e.consumptionRate).toBeCloseTo(10, 5);
   });
 
-  it("ignores a government boost on a good the system does not consume", () => {
-    const e = buildMarketTickEntry({
-      goodId: "food",
-      stock: 100,
-      ...BASE_BAND,
-      baseProductionRate: undefined,
-      baseConsumptionRate: undefined,
-    });
-    expect(e.consumptionRate).toBeUndefined(); // no base rate ⇒ boost cannot create consumption
-  });
-
   it("leaves consumption undefined when there is no base rate and no boost", () => {
     const e = buildMarketTickEntry({
       goodId: "food",

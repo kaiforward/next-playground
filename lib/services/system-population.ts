@@ -1,5 +1,5 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, governmentByFactionId } from "@/lib/services/world-index";
+import { buildingsBySystem, governmentByFactionId, governmentTypeForSystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
@@ -21,7 +21,7 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
   const basis = computeSystemLabourSnapshot(buildings, system.population).basis;
-  const governmentType = system.factionId ? governmentByFactionId().get(system.factionId) ?? "frontier" : "frontier";
+  const governmentType = governmentTypeForSystem(system, governmentByFactionId());
   const needs = systemPopNeeds(systemId, basis, governmentType);
 
   return {
