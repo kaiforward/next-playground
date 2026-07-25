@@ -16,6 +16,7 @@ import {
 } from "@/lib/constants/industry";
 import { factionConstructionPool } from "@/lib/engine/construction";
 import { CONSTRUCTION } from "@/lib/constants/construction";
+import type { BuildBurstSummary } from "./types";
 
 /** How a developed system's built base breaks down by role/tier. */
 interface BuildBreakdown {
@@ -206,4 +207,41 @@ export function summarizeConstructionPool(
     queueRemainingWork,
     queueEtaPulses: pool.total > 0 ? queueRemainingWork / pool.total : null,
   };
+}
+
+/**
+ * One tick's directed-build commitment for a single good — the flat record the harness
+ * accumulates across the whole run. Mirrors `WorldFlowEvent`'s role for `summarizeLogistics`:
+ * a pulse's per-good levels are gone the moment the tick returns (never persisted in `World`,
+ * per `runWorldTick().instrumentation`'s contract), so the harness must capture each pulse as it
+ * happens rather than reading the final world.
+ */
+export interface BuildCommitmentRecord {
+  tick: number;
+  goodId: string;
+  levels: number;
+}
+
+/**
+ * Summarise the worst per-pulse construction burst per good across a run's directed-build
+ * commitments — proof that the construction rate cap (`DIRECTED_BUILD.BUILD_RATE_CAP`) actually
+ * bounds new-proposal velocity, rather than merely asserting it exists. A silent run (no builds
+ * committed) reports zero/null, never NaN or an empty-array crash.
+ */
+export function summarizeBuildBursts(records: BuildCommitmentRecord[]): BuildBurstSummary {
+  const maxByGood = new Map<string, { levels: number; tick: number }>();
+  for (const r of records) {
+    const best = maxByGood.get(r.goodId);
+    if (!best || r.levels > best.levels) maxByGood.set(r.goodId, { levels: r.levels, tick: r.tick });
+  }
+
+  const byGood = [...maxByGood.entries()]
+    .map(([goodId, best]) => ({ goodId, maxLevelsPerPulse: best.levels, tick: best.tick }))
+    .sort((a, b) => b.maxLevelsPerPulse - a.maxLevelsPerPulse || a.goodId.localeCompare(b.goodId));
+
+  if (byGood.length === 0) {
+    return { byGood, globalMax: 0, worstGood: null, worstTick: null };
+  }
+  const worst = byGood[0];
+  return { byGood, globalMax: worst.maxLevelsPerPulse, worstGood: worst.goodId, worstTick: worst.tick };
 }

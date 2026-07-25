@@ -907,3 +907,102 @@ describe("construction funding gate", () => {
     expect(starved.constructionProjects[0].workDone).toBe(0);
   });
 });
+
+describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommitmentsByGood)", () => {
+  it("counts this pulse's new production-good proposal levels, keyed by good id", async () => {
+    // A: developed food sink with a saturated proposal clock (persistence-gated structural build
+    // actually emits). B: builder with habitable land AND slots → proposes both housing (not a good)
+    // and a food industry bundle (a good) this pulse.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const foodLevels = w.constructionProjects.reduce(
+      (sum, p) => (p.kind === "build" && p.buildingType === "food" ? sum + p.levels : sum),
+      0,
+    );
+    expect(foodLevels).toBeGreaterThan(0);
+    expect(result.buildCommitmentsByGood?.get("food")).toBe(foodLevels);
+  });
+
+  it("excludes housing — proactive substrate is not a production good", async () => {
+    // Default scenario: A is unclaimed (no structural deficit contributed), so only B's housing
+    // headroom proposes anything this pulse.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.constructionProjects.some((p) => p.kind === "build" && p.buildingType === HOUSING_TYPE)).toBe(true);
+    expect(result.buildCommitmentsByGood?.has(HOUSING_TYPE)).toBe(false);
+    expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0); // nothing else was proposed either
+  });
+
+  it("excludes construction-centre levels from the count", async () => {
+    // Same starved-backlog fixture as the "commits a centre project" case above: a food backlog deep
+    // enough that a centre is proposed alongside the ordinary food bundle.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 1000, { control: "developed", foodPulses: 1 }));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(2, 0.001),
+    });
+    const centres = w.constructionProjects.filter(
+      (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+    );
+    expect(centres.length).toBe(1); // sanity: a centre really was proposed
+    expect(result.buildCommitmentsByGood?.has(CONSTRUCTION_CENTRE_TYPE)).toBe(false);
+    expect(result.buildCommitmentsByGood?.get("food")).toBeGreaterThan(0);
+  });
+
+  it("excludes colony-establish proposals — not a production-good build", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
+    });
+    expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(true); // sanity
+    expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);
+  });
+
+  it("excludes already-open (old) work — a large in-flight project must not inflate the count", async () => {
+    const rows = scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 });
+
+    const fresh = new MemoryDirectedBuildWorld(rows);
+    const freshResult = await runDirectedBuildProcessor(fresh, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const freshFood = freshResult.buildCommitmentsByGood?.get("food") ?? 0;
+    expect(freshFood).toBeGreaterThan(0);
+
+    // A pre-existing 1000-level food project already open at B, from a prior pulse.
+    const oldWork: WorldConstructionProject = {
+      id: "old-food", kind: "build", origin: "auto", factionId: "f1", systemId: "B",
+      buildingType: "food", levels: 1000, workTotal: 1000 * 8, workDone: 0,
+    };
+    const withOld = new MemoryDirectedBuildWorld(rows, [oldWork]);
+    const withOldResult = await runDirectedBuildProcessor(withOld, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const oldFood = withOldResult.buildCommitmentsByGood?.get("food") ?? 0;
+    // If the 1000 in-flight levels leaked into the count it would swamp this pulse's fresh proposal;
+    // the metric must stay in the same small range as the fresh run, never jump toward 1000+.
+    expect(oldFood).toBeLessThan(100);
+  });
+
+  it("counts a production-good level that completes (lands) within the same pulse", async () => {
+    // Ample pool + cap: the food bundle proposed this pulse fully lands before the pulse ends.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1) });
+    const landedFood = w.buildingUpdates.find((u) => u.systemId === "B" && u.buildingType === "food");
+    expect(landedFood).toBeDefined(); // sanity: it actually landed this pulse, not just queued
+    expect(result.buildCommitmentsByGood?.get("food")).toBe(landedFood?.count);
+  });
+
+  it("reports no build commitments when nothing is proposed", async () => {
+    const balanced: SystemBuildRow[] = [{
+      systemId: "A", factionId: "f1", governmentType: "federation", control: "developed", population: 0, unrest: 0, buildings: {},
+      yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
+      markets: [foodMarket("A", 1)], // population 0 → no consumption → no rate deficit; no habitable land → no housing
+    }];
+    const w = new MemoryDirectedBuildWorld(balanced);
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
+    expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);
+  });
+
+  it("reports no build commitments on an off-boundary tick (monthly pulse)", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
+    const result = await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
+    expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);
+  });
+});

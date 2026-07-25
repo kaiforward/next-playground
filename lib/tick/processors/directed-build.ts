@@ -4,6 +4,7 @@ import { planFactionProposals, planFactionColonyProposals, type BuildSystemState
 import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
 import { planCentreProposal } from "@/lib/engine/construction-centre";
 import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
+import { GOODS } from "@/lib/constants/goods";
 import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
@@ -171,6 +172,13 @@ export async function runDirectedBuildProcessor(
   // clock, distinct from the economy's squeeze clock — regardless of whether a proposal is emitted or
   // funded. Keyed by the market's composite id, the same convention the economy adapter writes by.
   const proposalPersistence: ProposalPersistenceUpdate[] = [];
+  // Calibration instrumentation: new autonomic production-good levels committed THIS pulse, by good.
+  // Counts proposal levels (before funding), not the final queue — so it measures the planner's
+  // per-pulse output (the rate cap's target), not what the pool happened to afford. Housing, academies,
+  // complexes, construction centres, and colony-establish are never good ids, so `GOODS[buildingType]`
+  // excludes them without a separate kind check. Never fed into `TickBroadcastRaw`/SSE/world — the
+  // calibration harness (`runWorldTick().instrumentation`) is its only reader.
+  const buildCommitmentsByGood = new Map<string, number>();
 
   for (const [factionId, group] of byFaction) {
     // The faction's per-pulse pool: eligible heads + centre output over developed systems
@@ -270,6 +278,12 @@ export async function runDirectedBuildProcessor(
             workTotal: item.levels * workCostPerLevel(item.buildingType),
             workDone: 0,
           });
+          if (GOODS[item.buildingType]) {
+            buildCommitmentsByGood.set(
+              item.buildingType,
+              (buildCommitmentsByGood.get(item.buildingType) ?? 0) + item.levels,
+            );
+          }
         }
       } else {
         newProjects.push({
@@ -341,5 +355,5 @@ export async function runDirectedBuildProcessor(
   // Persist the construction proposal-pressure counters last — independent of ROI/funding outcome.
   if (proposalPersistence.length > 0) await world.applyProposalPersistenceUpdates(proposalPersistence);
 
-  return { workPerformedByFaction };
+  return { workPerformedByFaction, buildCommitmentsByGood };
 }

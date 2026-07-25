@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { summarizeColonisation, summarizeConstructionPool } from "../build-analysis";
+import { summarizeColonisation, summarizeConstructionPool, summarizeBuildBursts } from "../build-analysis";
+import type { BuildCommitmentRecord } from "../build-analysis";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, HEAVY_INDUSTRY_COMPLEX,
   CONSTRUCTION_CENTRE_TYPE,
@@ -240,5 +241,63 @@ describe("summarizeConstructionPool", () => {
     const outpost = devSys("cc", { control: "controlled", buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1 } });
     const s = summarizeConstructionPool([outpost], []);
     expect(s.centreLevels).toBe(0);
+  });
+});
+
+describe("summarizeBuildBursts", () => {
+  function rec(tick: number, goodId: string, levels: number): BuildCommitmentRecord {
+    return { tick, goodId, levels };
+  }
+
+  it("tracks each good's worst single-pulse commitment and the tick it occurred", () => {
+    const records: BuildCommitmentRecord[] = [
+      rec(24, "food", 3),
+      rec(48, "food", 7), // food's worst
+      rec(72, "food", 5),
+      rec(24, "metals", 10), // metals' (only, and worst) pulse
+    ];
+    const summary = summarizeBuildBursts(records);
+    const food = summary.byGood.find((g) => g.goodId === "food");
+    const metals = summary.byGood.find((g) => g.goodId === "metals");
+    expect(food).toEqual({ goodId: "food", maxLevelsPerPulse: 7, tick: 48 });
+    expect(metals).toEqual({ goodId: "metals", maxLevelsPerPulse: 10, tick: 24 });
+  });
+
+  it("sorts byGood descending by maxLevelsPerPulse, breaking ties alphabetically by goodId", () => {
+    const records: BuildCommitmentRecord[] = [
+      rec(24, "food", 5),
+      rec(24, "metals", 5), // tied with food — alphabetical tiebreak
+      rec(24, "electronics", 9),
+    ];
+    const summary = summarizeBuildBursts(records);
+    expect(summary.byGood.map((g) => g.goodId)).toEqual(["electronics", "food", "metals"]);
+  });
+
+  it("reports the galaxy-wide worst good/tick as globalMax/worstGood/worstTick", () => {
+    const records: BuildCommitmentRecord[] = [
+      rec(24, "food", 5),
+      rec(48, "metals", 12),
+      rec(72, "electronics", 8),
+    ];
+    const summary = summarizeBuildBursts(records);
+    expect(summary.globalMax).toBe(12);
+    expect(summary.worstGood).toBe("metals");
+    expect(summary.worstTick).toBe(48);
+  });
+
+  it("reports zero/null for an empty run (no builds committed) — no NaN, no crash", () => {
+    const summary = summarizeBuildBursts([]);
+    expect(summary.byGood).toEqual([]);
+    expect(summary.globalMax).toBe(0);
+    expect(summary.worstGood).toBeNull();
+    expect(summary.worstTick).toBeNull();
+  });
+
+  it("keeps the first-seen tick's max, not the LAST tick a good was committed", () => {
+    // The max is 7 at tick 24; later ticks propose fewer levels, so the tick pinned must stay 24 —
+    // proving the summary tracks the pulse the maximum happened at, not just the final observation.
+    const records: BuildCommitmentRecord[] = [rec(24, "food", 7), rec(48, "food", 2), rec(72, "food", 1)];
+    const summary = summarizeBuildBursts(records);
+    expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerPulse: 7, tick: 24 }]);
   });
 });

@@ -202,6 +202,7 @@ describe("TickLoop", () => {
         world: { ...world, meta: { ...world.meta, currentTick: world.meta.currentTick + 1 } },
         events: { currentTick: world.meta.currentTick + 1, events: {} },
         markets: [],
+        instrumentation: {},
       };
     });
 

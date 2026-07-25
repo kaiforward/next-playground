@@ -275,6 +275,24 @@ function formatTable(results: HarnessResults): string {
     );
   }
 
+  // Construction burst pacing (whole run) — proves the band-reconciliation rate cap
+  // (DIRECTED_BUILD.BUILD_RATE_CAP) actually bounds new-proposal velocity per pulse, per good.
+  {
+    const bb = results.buildBurstSummary;
+    lines.push("");
+    lines.push("Construction Burst Pacing (whole run):");
+    if (bb.byGood.length > 0) {
+      lines.push(`Worst burst: ${bb.worstGood} +${bb.globalMax} levels in one pulse @ t=${bb.worstTick}`);
+      const top = bb.byGood
+        .slice(0, 5)
+        .map((g) => `${g.goodId} +${g.maxLevelsPerPulse} (t=${g.tick})`)
+        .join(", ");
+      lines.push(`  worst per good: ${top}`);
+    } else {
+      lines.push("  no autonomic production-good levels were committed this run");
+    }
+  }
+
   // Faction treasury health — the coarse health bar for money.
   {
     const ts = results.treasurySummary;

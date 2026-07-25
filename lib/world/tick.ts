@@ -96,6 +96,7 @@ import type {
   TickBroadcastRaw,
   GlobalEventMap,
   EconomySignals,
+  TickInstrumentation,
 } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
@@ -555,7 +556,13 @@ let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number
 export async function runWorldTick(
   world: World,
   opts?: { cadence?: TickCadence },
-): Promise<{ world: World; events: TickBroadcastRaw; markets: WorldMarket[] }> {
+): Promise<{
+  world: World;
+  events: TickBroadcastRaw;
+  markets: WorldMarket[];
+  /** Calibration-only signals — never broadcast, never persisted. See `TickInstrumentation`. */
+  instrumentation: TickInstrumentation;
+}> {
   const cadence: TickCadence = opts?.cadence ?? {
     month: MONTH_LENGTH,
     construction: CONSTRUCTION_INTERVAL,
@@ -767,6 +774,10 @@ export async function runWorldTick(
   // it, because the treasury stage below reads them after the block closes.
   let constructionWorkByFaction: Map<string, number> | undefined;
   let logisticsWorkByFaction: Map<string, number> | undefined;
+  // Calibration-only: directed-build's per-pulse new autonomic production-good levels, by good.
+  // Declared here (not a local inside the block) purely to survive past the block's close, mirroring
+  // the two work maps above — read only by the final `instrumentation` return, never by treasury.
+  let buildCommitmentsByGood: Map<string, number> | undefined;
   const migrationResolves = isPulseTick(tick, cadence.month);
   const logisticsResolves = isPulseTick(tick, cadence.logistics);
   const buildResolves = isPulseTick(tick, cadence.construction);
@@ -982,6 +993,7 @@ export async function runWorldTick(
       // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
       markets = applyBuildMarketUpdates(markets, dbWorld.proposalPulseUpdates);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
+      buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
       processorsRun.push("directed-build");
     }
 
@@ -1122,5 +1134,8 @@ export async function runWorldTick(
   // `markets` is the same array folded into nextWorld above — returned so
   // callers that want this tick's market rows (the calibration harness) can
   // take them without reaching back into the world.
-  return { world: nextWorld, events: tickEvents, markets };
+  //
+  // `instrumentation` is calibration-only: never folded into `nextWorld`, `tickEvents`, or any
+  // broadcast/SSE payload — the calibration harness is its only reader.
+  return { world: nextWorld, events: tickEvents, markets, instrumentation: { buildCommitmentsByGood } };
 }
