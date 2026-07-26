@@ -176,7 +176,11 @@ export interface PopulationParams {
    * non-conserved sink, distinct from conserved migration.
    */
   overshootDeathRate: number;
-  /** r = population/popCap at which the growth brake reaches zero. */
+  /**
+   * r = population/popCap at which the growth brake reaches zero — shared boundary for two
+   * consumers: the growth brake here in populationDelta(), and (threaded by the population
+   * processor) the standing crowding-pressure ramp end in crowdingPressure().
+   */
   crowdBrakeEnd: number;
   /** Unrest above which the overshoot-death term fires (collapse regime only). */
   overshootDeathUnrestGate: number;

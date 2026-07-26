@@ -53,6 +53,9 @@ export async function runPopulationProcessor(
     // Crowding reads the population as this pulse STARTED — the floor is a level, so it is measured
     // at pulse start. A system that crosses r = 1 during this pulse therefore carries no crowding
     // pressure until the next one.
+    // The ramp end (crowdBrakeEnd) threads through params because it's a boundary shared with the
+    // growth brake; the ramp height (PRESSURE_MAX) has no other consumer, so it stays a module-scope
+    // constant instead — the mixed shape is deliberate, not an inconsistency.
     const crowd = crowdingPressure(s.population, s.popCap, params.population.crowdBrakeEnd, CROWDING.PRESSURE_MAX);
     const floor = clamp(taxPressure + crowd, 0, 1);
     const unrest = accumulateUnrest(s.unrest, d, floor, regime, scaledUnrest);

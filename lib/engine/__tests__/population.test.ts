@@ -80,6 +80,15 @@ describe("crowdFactor (growth brake)", () => {
     expect(crowdFactor(100, -50, BRAKE_END)).toBe(0);
     expect(Number.isFinite(crowdFactor(100, 0, BRAKE_END))).toBe(true);
   });
+  it("collapses to a hard step at the cap when crowdBrakeEnd <= 1 (span <= 0)", () => {
+    // span = crowdBrakeEnd - 1 <= 0 skips the smoothstep entirely: population > popCap ? 0 : 1.
+    expect(crowdFactor(999, 1000, 1)).toBe(1); // below cap
+    expect(crowdFactor(1000, 1000, 1)).toBe(1); // exactly at cap
+    expect(crowdFactor(1001, 1000, 1)).toBe(0); // above cap
+    // A brakeEnd below 1 hits the same branch (span is still <= 0).
+    expect(crowdFactor(999, 1000, 0.9)).toBe(1);
+    expect(crowdFactor(1001, 1000, 0.9)).toBe(0);
+  });
 });
 
 describe("crowdingPressure (standing unrest floor from overcrowding)", () => {
@@ -102,6 +111,15 @@ describe("crowdingPressure (standing unrest floor from overcrowding)", () => {
     expect(crowdingPressure(100, -10, BRAKE_END, MAX)).toBeCloseTo(MAX, 6);
     expect(crowdingPressure(0, 0, BRAKE_END, MAX)).toBe(0);
     expect(crowdingPressure(-5, -10, BRAKE_END, MAX)).toBe(0);
+  });
+  it("collapses to a hard step at the cap when brakeEnd <= 1 (span <= 0)", () => {
+    // span = brakeEnd - 1 <= 0 skips the linear ramp entirely: population > popCap ? maxPressure : 0.
+    expect(crowdingPressure(999, 1000, 1, MAX)).toBe(0); // below cap
+    expect(crowdingPressure(1000, 1000, 1, MAX)).toBe(0); // exactly at cap
+    expect(crowdingPressure(1001, 1000, 1, MAX)).toBeCloseTo(MAX, 6); // above cap
+    // A brakeEnd below 1 hits the same branch (span is still <= 0).
+    expect(crowdingPressure(999, 1000, 0.9, MAX)).toBe(0);
+    expect(crowdingPressure(1001, 1000, 0.9, MAX)).toBeCloseTo(MAX, 6);
   });
 });
 
