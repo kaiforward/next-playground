@@ -197,9 +197,13 @@ describe("strikeMultiplier", () => {
     expect(mid).toBeLessThan(1);
   });
   it("returns 1 (not NaN) when threshold = 1 — denominator guard", () => {
+    // threshold = 1 means "never suppress"; unrest is in [0,1] so unrest <= threshold
+    // always holds through normal gameplay, but a raw call with unrest just above 1
+    // (e.g. from a pre-clamp intermediate) would produce NaN without the guard.
     const atMax = strikeMultiplier(1, { threshold: 1, floorMultiplier: 0.2 });
     expect(Number.isNaN(atMax)).toBe(false);
     expect(atMax).toBe(1);
+    // Directly tests the division-by-zero path: unrest > threshold = 1
     const aboveMax = strikeMultiplier(1.001, { threshold: 1, floorMultiplier: 0.2 });
     expect(Number.isNaN(aboveMax)).toBe(false);
     expect(aboveMax).toBe(1);
