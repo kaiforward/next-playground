@@ -16,7 +16,13 @@ import type {
   EconomyWorld,
   MarketUpdate,
 } from "@/lib/tick/world/economy-world";
-import { dissatisfaction, strikeMultiplier, type GoodSatisfaction } from "@/lib/engine/population";
+import {
+  dissatisfaction,
+  strikeMultiplier,
+  supplyRegime,
+  type GoodSatisfaction,
+  type SupplyRegime,
+} from "@/lib/engine/population";
 import { pulseShard, isPulseTick, catchUpFactor } from "@/lib/tick/shard";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
@@ -205,12 +211,18 @@ export async function runEconomyProcessor(
       realizedProductionBySystem.set(m.systemId, bySystem);
     }
   });
+  // Two folds of the same per-good satisfactions: D is the magnitude of the shortfall,
+  // the regime is its rate class. A system with no consuming markets reads supplied.
   const dissatisfactionBySystem = new Map<string, number>();
+  const supplyRegimeBySystem = new Map<string, SupplyRegime>();
   for (const sysId of systemIds) {
-    dissatisfactionBySystem.set(sysId, dissatisfaction(goodsBySystem.get(sysId) ?? []));
+    const goods = goodsBySystem.get(sysId) ?? [];
+    dissatisfactionBySystem.set(sysId, dissatisfaction(goods));
+    supplyRegimeBySystem.set(sysId, supplyRegime(goods));
   }
   const economySignals: EconomySignals = {
     dissatisfactionBySystem,
+    supplyRegimeBySystem,
     sellingFactorBySystem,
     realizedProductionBySystem,
   };

@@ -298,6 +298,71 @@ describe("economy processor: dissatisfaction signal", () => {
   });
 });
 
+// ── Supply regime signal ──────────────────────────────────────────
+
+describe("economy processor: supply regime signal", () => {
+  // rationCover × demandRate = 2 × 1 = 2 is the ration knee; below it the delivered
+  // fraction is √(stock / 2), so these stocks pin an exact satisfaction:
+  //   100    → ≥ knee  → 1     (fully served)
+  //   1.28   → √0.64   → 0.8   (short of full, above the shortage line)
+  //   0.125  → √0.0625 → 0.25  (below the shortage line)
+  const SERVED_STOCK = 100;
+  const RATIONED_STOCK = 1.28;
+  const SHORT_STOCK = 0.125;
+
+  const regimeOf = (signals: EconomySignals | undefined, systemId: string) =>
+    requireEconomySignals(signals).supplyRegimeBySystem.get(systemId);
+  const satOf = (world: InMemoryEconomyWorld, goodId: string) =>
+    world.markets.find((m) => m.goodId === goodId)!.satisfaction;
+
+  it("reads supplied when every demanded good is served in full", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-fed", 0)],
+      markets: [makeMarket("sys-fed", "food", SERVED_STOCK), makeMarket("sys-fed", "water", SERVED_STOCK)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(satOf(world, "food")).toBe(1);
+    expect(satOf(world, "water")).toBe(1);
+    expect(regimeOf(result.economySignals, "sys-fed")).toBe("supplied");
+  });
+
+  it("reads rationing when one demanded good is short of full", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-short", 0)],
+      markets: [makeMarket("sys-short", "food", SERVED_STOCK), makeMarket("sys-short", "water", RATIONED_STOCK)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    // The fixture really is in the rationing band — served, but not fully.
+    expect(satOf(world, "water")).toBeCloseTo(0.8, 6);
+    expect(regimeOf(result.economySignals, "sys-short")).toBe("rationing");
+  });
+
+  it("reads shortage when one demanded good falls below the shortage line", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-starved", 0)],
+      markets: [makeMarket("sys-starved", "food", SERVED_STOCK), makeMarket("sys-starved", "water", SHORT_STOCK)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    // Deep enough that the worst good, not the fed one, sets the class.
+    expect(satOf(world, "water")).toBeCloseTo(0.25, 6);
+    expect(regimeOf(result.economySignals, "sys-starved")).toBe("shortage");
+  });
+
+  it("reads supplied for a producer with no local consumption", async () => {
+    // Population 0 → nothing is demanded locally, so an empty market cannot ration anyone.
+    const world = new InMemoryEconomyWorld({
+      systems: [{ ...makeProducerSystem("sys-pureprod", 0), population: 0 }],
+      markets: [makeMarket("sys-pureprod", "food", FIXTURE_BAND.minStock + 1)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(regimeOf(result.economySignals, "sys-pureprod")).toBe("supplied");
+  });
+});
+
 // ── Monthly pulse: whole-galaxy on the boundary, empty off it ──────
 
 describe("economy processor: monthly pulse coverage", () => {

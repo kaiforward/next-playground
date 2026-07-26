@@ -1,4 +1,5 @@
 import type { EventTypeId } from "@/lib/constants/events";
+import type { SupplyRegime } from "@/lib/engine/population";
 
 // ── Typed tick event payloads ─────────────────────────────────────
 
@@ -51,6 +52,8 @@ export interface TickContext {
 export interface EconomySignals {
   /** Per-system convex demand-weighted dissatisfaction D ∈ [0,1], for systems processed this tick. */
   dissatisfactionBySystem: Map<string, number>;
+  /** Per-system supplied/rationing/shortage fold of this pulse's consumption satisfaction. */
+  supplyRegimeBySystem: Map<string, SupplyRegime>;
   /**
    * Per-system, per-produced-good isolated selling factor ∈ [0,1] (1 = selling
    * freely, 0 = stock at the production ceiling). Consumed by infrastructure

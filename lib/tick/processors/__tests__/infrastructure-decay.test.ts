@@ -39,6 +39,7 @@ describe("infrastructure-decay processor", () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { population })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
+      supplyRegimeBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
     };
@@ -53,6 +54,7 @@ describe("infrastructure-decay processor", () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", {}), sys("s2", {})] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
+      supplyRegimeBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
     };
@@ -64,6 +66,7 @@ describe("infrastructure-decay processor", () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { unrest: 1, population: 4 * ORE_LABOUR })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
+      supplyRegimeBySystem: new Map(),
       sellingFactorBySystem: new Map(), // no selling factor recorded for s1 → defaults to 1
       realizedProductionBySystem: new Map(),
     };
@@ -80,6 +83,7 @@ describe("infrastructure-decay processor", () => {
     });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
+      supplyRegimeBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
     };
@@ -104,6 +108,7 @@ describe("infrastructure-decay processor", () => {
     });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s-starved", 0], ["s-funded", 0]]),
+      supplyRegimeBySystem: new Map(),
       sellingFactorBySystem: new Map(),
       realizedProductionBySystem: new Map(),
     };
@@ -126,6 +131,7 @@ describe("infrastructure-decay processor", () => {
     });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["protected", 0], ["ordinary", 0]]),
+      supplyRegimeBySystem: new Map(),
       sellingFactorBySystem: new Map([
         ["protected", new Map([["ore", 0]])],
         ["ordinary", new Map([["ore", 0]])],

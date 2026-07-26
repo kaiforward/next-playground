@@ -7,15 +7,37 @@ import type { WorldMarket } from "@/lib/world/types";
 import { civilianDemandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
+import type { SupplyRegime } from "@/lib/engine/population";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import { CROWDING } from "@/lib/constants/population";
+import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 
-const PARAMS = { unrest: { gain: 0.1, decay: 0.05 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 }, interval: 24 };
+// Non-rate shape knobs shared by the population fixtures below — the growth brake's end
+// and the overshoot-death gate. Every fixture sets overshootDeathRate 0, so the gate value
+// is inert here; only the rates differ between fixtures.
+const POP_SHAPE = { crowdBrakeEnd: CROWDING.BRAKE_END, overshootDeathUnrestGate: 0.65 };
 
-// Invariance fixture: a lower unrest decay than PARAMS. The unrest filter is integrated
+const PARAMS = {
+  unrest: { gainRationing: 0.1, gainShortage: 0.2, decay: 0.05, recoveryDecay: 0.1 },
+  population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
+  interval: 24,
+};
+
+// Invariance fixture: lower unrest rates than PARAMS. The unrest filter is integrated
 // with explicit Euler, whose split residue between one full step and two half steps is
 // ≈ 0.25·decay from a zero start — an integrator artifact, not a scaling error. Keeping
-// decay small holds that residue well under the 1% first-order bar the scaling must meet.
-const INVARIANCE_PARAMS = { unrest: { gain: 0.06, decay: 0.02 }, population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0 } };
+// every relaxation rate small holds that residue well under the 1% first-order bar the
+// scaling must meet, whichever regime selects it.
+const INVARIANCE_PARAMS = {
+  unrest: { gainRationing: 0.06, gainShortage: 0.06, decay: 0.02, recoveryDecay: 0.02 },
+  population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
+};
+
+// Unrest fixture for the floor/regime suites: distinct rates so an assertion naming the
+// wrong one cannot pass by coincidence.
+const RATES = { gainRationing: 0.06, gainShortage: 0.12, decay: 0.06, recoveryDecay: 0.12 };
+// Frozen population, so a run's only observable is the unrest integrator.
+const FROZEN_POP = { growthRate: 0, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE };
 
 /** A demand basis with no skilled work — matches these fixtures' academy-free systems. */
 const popOnly = (population: number): CivilianDemandBasis => ({
@@ -34,14 +56,24 @@ function sys(id: string, population: number, popCap: number, unrest = 0, buildin
 function market(systemId: string, goodId: string): WorldMarket {
   return { systemId, goodId, stock: 100, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
-function ctxWithD(d: Map<string, number>): TickContext {
+function ctxWithD(d: Map<string, number>, regimes: Map<string, SupplyRegime> = new Map()): TickContext {
   return {
     tick: 0,
     results: new Map([
-      ["economy", { economySignals: { dissatisfactionBySystem: d, sellingFactorBySystem: new Map(), realizedProductionBySystem: new Map() } }],
+      ["economy", {
+        economySignals: {
+          dissatisfactionBySystem: d,
+          supplyRegimeBySystem: regimes,
+          sellingFactorBySystem: new Map(),
+          realizedProductionBySystem: new Map(),
+        },
+      }],
     ]),
   };
 }
+
+const unrestOf = (world: InMemoryPopulationWorld, systemId: string) =>
+  world.systems.find((s) => s.id === systemId)!.unrest;
 
 describe("population processor", () => {
   it("grows a fed system and leaves unrest at 0", async () => {
@@ -53,17 +85,18 @@ describe("population processor", () => {
   });
   it("raises unrest and rewrites demandRate for a starved system", async () => {
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [market("a", "food")] });
-    await runPopulationProcessor(world, ctxWithD(new Map([["a", 1]])), PARAMS);
+    await runPopulationProcessor(world, ctxWithD(new Map([["a", 1]]), new Map([["a", "shortage"]])), PARAMS);
     const a = world.systems.find((s) => s.id === "a")!;
-    // Hand-derived from the start state (pop 500, cap 1000, unrest 0) under D=1, so these
-    // are an independent oracle rather than the processor's own output read back:
-    //   unrest = 0 + gain·1 − decay·0 = 0.1
-    //   Δpop   = growth·(1−D)=0 − decline·pop·unrest = −(0.02·500·0.1) = −1.0 → pop 499
-    expect(a.unrest).toBeCloseTo(0.1, 6);
-    expect(a.population).toBeCloseTo(499, 6);
+    // Hand-derived from the start state (pop 500, cap 1000, unrest 0) under D=1 in shortage,
+    // so these are an independent oracle rather than the processor's own output read back:
+    //   floor  = 0 (untaxed, under the housing cap)
+    //   unrest = floor + (1−decay)·(0 − floor) + gainShortage·1 = 0.2
+    //   Δpop   = growth·(1−D)=0 − decline·pop·unrest = −(0.02·500·0.2) = −2.0 → pop 498
+    expect(a.unrest).toBeCloseTo(0.2, 6);
+    expect(a.population).toBeCloseTo(498, 6);
     const m = world.markets.find((mm) => mm.systemId === "a")!;
-    // demandRate = civilian-only floor for food at pop 499 (no production-input draw here).
-    expect(m.demandRate).toBeCloseTo(civilianDemandRateForGood("food", popOnly(499), "federation"), 5);
+    // demandRate = civilian-only floor for food at pop 498 (no production-input draw here).
+    expect(m.demandRate).toBeCloseTo(civilianDemandRateForGood("food", popOnly(498), "federation"), 5);
   });
   it("includes production-input demand in the rewritten demandRate", async () => {
     // A smelter (metals building) draws ore as a recipe input. The ore market's
@@ -189,9 +222,12 @@ describe("population processor", () => {
     expect(world.systems[0].population).toBe(before);
   });
 
-  it("adds per-system tax pressure to the unrest integrator only", async () => {
-    // d = 0, unrest starts 0, interval 24 (catchUp 1), UNREST_PARAMS-style gain 0.06:
-    // taxed system integrates gain × pressure; untaxed stays at 0.
+  it("enters per-system tax pressure as the unrest floor, not as a gain", async () => {
+    // d = 0, unrest starts 0, interval 24 (catchUp 1), calm and supplied: the run relaxes
+    // toward the floor, so unrest moves recoveryDecay of the way to the tax pressure. A
+    // gain term would instead have integrated gainRationing × pressure — a different number
+    // that then decays back to zero rather than holding.
+    const pressure = TAX_LEVEL_UNREST_PRESSURE.very_high;
     const world = new InMemoryPopulationWorld({
       systems: [
         sys("taxed", 100, 1000, 0),
@@ -200,12 +236,141 @@ describe("population processor", () => {
       markets: [],
     });
     await runPopulationProcessor(world, ctxWithD(new Map([["taxed", 0], ["free", 0]])), {
-      unrest: { gain: 0.06, decay: 0.06 },
-      population: { growthRate: 0, declineRate: 0, overshootDeathRate: 0 },
+      unrest: RATES,
+      population: FROZEN_POP,
       interval: 24,
-      taxPressureBySystem: new Map([["taxed", 0.18]]),
+      taxPressureBySystem: new Map([["taxed", pressure]]),
     });
-    expect(world.systems.find((s) => s.id === "taxed")!.unrest).toBeCloseTo(0.06 * 0.18, 9);
-    expect(world.systems.find((s) => s.id === "free")!.unrest).toBe(0);
+    expect(unrestOf(world, "taxed")).toBeCloseTo(RATES.recoveryDecay * pressure, 9);
+    expect(unrestOf(world, "free")).toBe(0);
+  });
+
+  it("settles a calm, supplied, taxed system at exactly its tax pressure", async () => {
+    // The floor is the equilibrium: however many pulses run, a system with no
+    // dissatisfaction converges on its standing pressure and stops there.
+    const pressure = TAX_LEVEL_UNREST_PRESSURE.very_high;
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 100, 1000, 0)], markets: [] });
+    const ctx = ctxWithD(new Map([["a", 0]]));
+    const params = {
+      unrest: RATES,
+      population: FROZEN_POP,
+      interval: 24,
+      taxPressureBySystem: new Map([["a", pressure]]),
+    };
+    for (let pulse = 0; pulse < 120; pulse++) await runPopulationProcessor(world, ctx, params);
+    expect(unrestOf(world, "a")).toBeCloseTo(pressure, 6);
+    expect(unrestOf(world, "a")).toBeLessThan(pressure); // approached from below, never overshot
+  });
+
+  it("adds crowding above the housing cap to the standing floor", async () => {
+    // Three equally-taxed systems differing only in occupancy: at the cap crowding adds
+    // nothing, at the brake end it adds the full PRESSURE_MAX, and halfway adds half.
+    const cap = 1000;
+    const pressure = TAX_LEVEL_UNREST_PRESSURE.high;
+    const halfway = 1 + (CROWDING.BRAKE_END - 1) / 2;
+    const world = new InMemoryPopulationWorld({
+      systems: [
+        sys("roomy", cap, cap, 0),
+        sys("half", cap * halfway, cap, 0),
+        sys("packed", cap * CROWDING.BRAKE_END, cap, 0),
+      ],
+      markets: [],
+    });
+    await runPopulationProcessor(
+      world,
+      ctxWithD(new Map([["roomy", 0], ["half", 0], ["packed", 0]])),
+      {
+        unrest: RATES,
+        population: FROZEN_POP,
+        interval: 24,
+        taxPressureBySystem: new Map([["roomy", pressure], ["half", pressure], ["packed", pressure]]),
+      },
+    );
+    expect(unrestOf(world, "roomy")).toBeCloseTo(RATES.recoveryDecay * pressure, 9);
+    expect(unrestOf(world, "half")).toBeCloseTo(RATES.recoveryDecay * (pressure + CROWDING.PRESSURE_MAX / 2), 9);
+    expect(unrestOf(world, "packed")).toBeCloseTo(RATES.recoveryDecay * (pressure + CROWDING.PRESSURE_MAX), 9);
+  });
+
+  it("falls back to a crowding-only floor when no tax map is supplied", async () => {
+    const cap = 1000;
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("roomy", cap, cap, 0), sys("packed", cap * CROWDING.BRAKE_END, cap, 0)],
+      markets: [],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map([["roomy", 0], ["packed", 0]])), {
+      unrest: RATES,
+      population: FROZEN_POP,
+      interval: 24,
+    });
+    expect(unrestOf(world, "packed")).toBeCloseTo(RATES.recoveryDecay * CROWDING.PRESSURE_MAX, 9);
+    expect(unrestOf(world, "roomy")).toBe(0);
+  });
+
+  it("treats a system missing from the regime map as supplied", async () => {
+    // Equal starting unrest, no floor and no dissatisfaction, so the regime picks the
+    // relaxation rate alone: an unlisted system must shed unrest at the supplied
+    // (recovery) rate, not the slower rationing one.
+    const start = 0.5;
+    const world = new InMemoryPopulationWorld({
+      systems: [
+        sys("unlisted", 100, 1000, start),
+        sys("served", 100, 1000, start),
+        sys("short", 100, 1000, start),
+      ],
+      markets: [],
+    });
+    const regimes = new Map<string, SupplyRegime>([["served", "supplied"], ["short", "rationing"]]);
+    await runPopulationProcessor(
+      world,
+      ctxWithD(new Map([["unlisted", 0], ["served", 0], ["short", 0]]), regimes),
+      { unrest: RATES, population: FROZEN_POP, interval: 24 },
+    );
+    expect(unrestOf(world, "unlisted")).toBeCloseTo(start * (1 - RATES.recoveryDecay), 9);
+    expect(unrestOf(world, "unlisted")).toBe(unrestOf(world, "served"));
+    expect(unrestOf(world, "short")).toBeCloseTo(start * (1 - RATES.decay), 9);
+    expect(unrestOf(world, "short")).toBeGreaterThan(unrestOf(world, "unlisted"));
+  });
+
+  it("scales both gains and both relaxation rates by the catch-up factor", async () => {
+    // Interval 48 is two reference months, so one run must move exactly twice as far as one
+    // run at the reference interval — for each of the four rates. Gains are read from a
+    // zero start (no relaxation term) and relaxation from a raised start (no gain term).
+    const start = 0.5;
+    const d = 0.5;
+    const runAt = async (interval: number) => {
+      const world = new InMemoryPopulationWorld({
+        systems: [
+          sys("gain-rationing", 100, 1000, 0),
+          sys("gain-shortage", 100, 1000, 0),
+          sys("relax-rationing", 100, 1000, start),
+          sys("relax-supplied", 100, 1000, start),
+        ],
+        markets: [],
+      });
+      const regimes = new Map<string, SupplyRegime>([
+        ["gain-rationing", "rationing"],
+        ["gain-shortage", "shortage"],
+        ["relax-rationing", "rationing"],
+        ["relax-supplied", "supplied"],
+      ]);
+      const dissatisfaction = new Map([
+        ["gain-rationing", d], ["gain-shortage", d], ["relax-rationing", 0], ["relax-supplied", 0],
+      ]);
+      await runPopulationProcessor(world, ctxWithD(dissatisfaction, regimes), {
+        unrest: RATES, population: FROZEN_POP, interval,
+      });
+      return world;
+    };
+    const ref = await runAt(24);
+    const double = await runAt(48);
+
+    expect(unrestOf(ref, "gain-rationing")).toBeCloseTo(RATES.gainRationing * d, 9);
+    expect(unrestOf(double, "gain-rationing")).toBeCloseTo(2 * RATES.gainRationing * d, 9);
+    expect(unrestOf(ref, "gain-shortage")).toBeCloseTo(RATES.gainShortage * d, 9);
+    expect(unrestOf(double, "gain-shortage")).toBeCloseTo(2 * RATES.gainShortage * d, 9);
+    expect(unrestOf(ref, "relax-rationing")).toBeCloseTo(start * (1 - RATES.decay), 9);
+    expect(unrestOf(double, "relax-rationing")).toBeCloseTo(start * (1 - 2 * RATES.decay), 9);
+    expect(unrestOf(ref, "relax-supplied")).toBeCloseTo(start * (1 - RATES.recoveryDecay), 9);
+    expect(unrestOf(double, "relax-supplied")).toBeCloseTo(start * (1 - 2 * RATES.recoveryDecay), 9);
   });
 });
