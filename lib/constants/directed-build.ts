@@ -15,8 +15,10 @@ export const DIRECTED_BUILD = {
   D_SETTLE: 0.15,
   /** Relief trigger: autonomic housing builds once occupancy r = pop/popCap rises past this. */
   RELIEF_TRIGGER: 0.95,
-  /** Relief sizing: build enough whole levels to return r to ≈ this. Must sit strictly inside the
-   *  vacancy slack: 1 − RELIEF_TARGET < VACANCY_SLACK, so relief housing never feeds decay. */
+  /** Relief sizing: build enough whole levels to return r to ≈ this. Multi-level relief must land
+   *  inside the housing decay allowance — RELIEF_TARGET × (1 + VACANCY_SLACK) ≥ 1 — so the levels it
+   *  commits still read as used. Whole-level round-up drops a small site well below the target (a
+   *  1-level seed lands at r = 0.5), so that containment is a multi-level property, not a per-site one. */
   RELIEF_TARGET: 0.92,
   /**
    * Speculative self-supply floor (§3.2): the largest fraction of a basic's LOCAL demand an

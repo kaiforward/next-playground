@@ -624,10 +624,9 @@ function planFactionBundles(
   // back to the relief target, bounded by the habitable cap. Housing draws general space, so it
   // runs before industry — habitable land is housing's by right; factories take what's left.
   for (const site of working.values()) {
-    const want = plannedHousingUnits(site);
-    if (want <= 0) continue;
-    // Whole levels only: you commit a whole housing level or none. A sub-level want waits.
-    const levels = Math.floor(want);
+    // Whole levels only, and the want already is one: plannedHousingUnits rounds up to a whole
+    // level and land-clamps with a floor, so it never returns a fraction to re-round here.
+    const levels = plannedHousingUnits(site);
     if (levels < 1) continue;
     site.buildings[HOUSING_TYPE] = (site.buildings[HOUSING_TYPE] ?? 0) + levels;
     bundles.push({

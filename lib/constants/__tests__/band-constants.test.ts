@@ -41,11 +41,14 @@ describe("population / unrest constant dependencies", () => {
 });
 
 describe("housing relief constant dependencies", () => {
-  it("keeps the relief vacancy strictly inside the decay slack", () => {
-    // Relief sizing leaves 1 − RELIEF_TARGET of the new popCap empty. Housing decay tolerates
-    // VACANCY_SLACK of vacancy before a level reads as unused, so relief housing must land inside
-    // that allowance — otherwise the valve builds exactly the levels decay then tears back down.
-    expect(1 - DIRECTED_BUILD.RELIEF_TARGET).toBeLessThan(VACANCY_SLACK);
+  it("keeps the relief vacancy inside the decay slack", () => {
+    // Housing decay reads levels as fully used while count ≤ housingUsed(pop) × (1 + VACANCY_SLACK)
+    // (capacityUsed "pop_cap" in lib/engine/industry.ts). At occupancy r that is r × (1 + VACANCY_SLACK)
+    // ≥ 1, so relief must size back to a target the slack still covers — otherwise the valve commits
+    // exactly the levels decay then tears down. The two are fractions of DIFFERENT denominators (the
+    // slack of used housing, 1 − RELIEF_TARGET of built popCap), so comparing them directly would
+    // admit targets that break containment.
+    expect(DIRECTED_BUILD.RELIEF_TARGET * (1 + VACANCY_SLACK)).toBeGreaterThanOrEqual(1);
   });
 
   it("triggers relief above the occupancy it sizes back to", () => {

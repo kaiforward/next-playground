@@ -543,9 +543,9 @@ describe("planFactionBuilds — relief housing", () => {
       slotCap: emptyResourceVector(), generalSpace: 100000, habitableSpace: 100000,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
-    const pacedWant = Math.floor(plannedHousingUnits(sys));
-    expect(pacedWant).toBeGreaterThan(1); // a genuine multi-level commit, not a trivial one
-    expect(countFor(planFactionBuilds([sys], () => 1, DEV_REFS), "A", "housing")).toBe(pacedWant);
+    const reliefWant = plannedHousingUnits(sys);
+    expect(reliefWant).toBeGreaterThan(1); // a genuine multi-level commit, not a trivial one
+    expect(countFor(planFactionBuilds([sys], () => 1, DEV_REFS), "A", "housing")).toBe(reliefWant);
   });
 
   it("does not co-build housing on the industry path (housing comes only from the housing pass)", () => {
@@ -726,9 +726,12 @@ describe("habitableHousingHeadroom", () => {
 describe("plannedHousingUnits", () => {
   const fedGoods: BuildGoodState[] = [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0 }];
 
-  /** Occupancy r = pop ÷ popCap the site would sit at after committing `units` housing levels. */
+  /** Occupancy r = pop ÷ popCap the site would sit at after committing `units` housing levels.
+   *  popCap comes from the engine's own housingPopCap so the helper can never model a different
+   *  cap than the code under test. */
   function occupancyAfter(sys: BuildSystemState, units: number): number {
-    return sys.population / (housingPopCap(sys.buildings) + units * POP_CENTRE_DENSITY);
+    const built = { ...sys.buildings, [HOUSING_TYPE]: (sys.buildings[HOUSING_TYPE] ?? 0) + units };
+    return sys.population / housingPopCap(built);
   }
 
   it("builds nothing while occupancy is still below the relief trigger", () => {
