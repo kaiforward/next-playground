@@ -24,3 +24,11 @@ export const ECONOMY_CONSTANTS = {
    */
   RATION_COVER: 2,
 } as const;
+
+/**
+ * Civilian satisfaction (delivered/demanded) below which a demanded good counts as a
+ * Shortage rather than mere Rationing. The worst-demanded-good fold (`supplyRegime`)
+ * uses it to pick the unrest-accumulation rate, and needs-severity re-bases critical
+ * status on the same line. A strict `<` boundary: exactly this level is still Rationing.
+ */
+export const SHORTAGE_SATISFACTION = 0.5;
