@@ -24,7 +24,8 @@ export const DIRECTED_BUILD = {
    * Speculative self-supply floor (§3.2): the largest fraction of a basic's LOCAL demand an
    * undeveloped system stands up locally even when imports already cover it. The live floor is
    * this × (1 − systemDevelopment), so it is strongest on a raw colony and fades to nothing as the
-   * system matures — a bounded floor, not autarky, so specialisation survives. Calibrated in PR4.
+   * system matures — a bounded floor, not autarky, so specialisation survives. Calibrated against
+   * the simulator.
    */
   SPECULATIVE_FLOOR: 0.5,
   /** Capacity is deliberately held 10% above measured demand before it is structurally complete. */

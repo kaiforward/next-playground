@@ -778,6 +778,9 @@ export async function runWorldTick(
   // Declared here (not a local inside the block) purely to survive past the block's close, mirroring
   // the two work maps above — read only by the final `instrumentation` return, never by treasury.
   let buildCommitmentsByGood: Map<string, number> | undefined;
+  // Calibration-only: migration's per-pulse people-moved totals (colonist delivery + edge
+  // diffusion). Declared here for the same reason as buildCommitmentsByGood above.
+  let migrationMoved: TickInstrumentation["migrationMoved"];
   const migrationResolves = isPulseTick(tick, cadence.month);
   const logisticsResolves = isPulseTick(tick, cadence.logistics);
   const buildResolves = isPulseTick(tick, cadence.construction);
@@ -802,12 +805,13 @@ export async function runWorldTick(
     // ── migration ──
     {
       const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
-      await runMigrationProcessor(migWorld, newTickCtx(), {
+      const migResult = await runMigrationProcessor(migWorld, newTickCtx(), {
         interval: cadence.month,
         flow: MIGRATION_PARAMS,
         delivery: COLONY_DELIVERY_PARAMS,
       });
       systems = migWorld.systems;
+      migrationMoved = migResult.migrationMoved;
       processorsRun.push("migration");
     }
 
@@ -1137,5 +1141,10 @@ export async function runWorldTick(
   //
   // `instrumentation` is calibration-only: never folded into `nextWorld`, `tickEvents`, or any
   // broadcast/SSE payload — the calibration harness is its only reader.
-  return { world: nextWorld, events: tickEvents, markets, instrumentation: { buildCommitmentsByGood } };
+  return {
+    world: nextWorld,
+    events: tickEvents,
+    markets,
+    instrumentation: { buildCommitmentsByGood, migrationMoved },
+  };
 }

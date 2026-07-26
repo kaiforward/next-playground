@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { detectPingPong, summarizeInfrastructure } from "../population-analysis";
+import { detectPingPong, summarizeInfrastructure, summarizePopulation } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { CROWDING } from "@/lib/constants/population";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
 
@@ -82,5 +83,58 @@ describe("summarizeInfrastructure", () => {
     expect(summary.builtEnd).toBe(60);
     expect(summary.decayedPct).toBeCloseTo(40, 6);
     expect(summary.collapsedCount).toBe(1);
+  });
+});
+
+function popSys(id: string, population: number, popCap: number, unrest = 0): TickSystem {
+  return {
+    id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
+    governmentType: "frontier", population, popCap,
+    unrest, buildings: {}, buildingIdleMonths: {}, buildingCollapseDebt: {},
+    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+  };
+}
+
+describe("summarizePopulation", () => {
+  const BRAKE_END = CROWDING.BRAKE_END; // 1.15 — growth brakes to 0 at r = BRAKE_END
+
+  it("counts saturatedCount unchanged: population >= 98% of popCap, popCap > 0 only", () => {
+    const systems = [
+      popSys("at-cap", 980, 1000),   // r = 0.98 → saturated
+      popSys("below", 970, 1000),    // r = 0.97 → not saturated
+      popSys("no-housing", 500, 0),  // popCap 0 → excluded regardless of population
+    ];
+    const summary = summarizePopulation(systems, 1000, 0.65, BRAKE_END);
+    expect(summary.saturatedCount).toBe(1);
+  });
+
+  it("counts brakedCount only for popCap > 0 systems whose crowdFactor has fallen to <= 0.25", () => {
+    const systems = [
+      popSys("healthy", 1000, 1000),  // r = 1.0 → crowdFactor 1 → not braked
+      popSys("braked", 1120, 1000),   // r = 1.12 → deep in the brake, crowdFactor well below 0.25
+      popSys("uncrowded", 500, 1000), // r = 0.5 → crowdFactor 1 → not braked
+      // popCap 0 reads crowdFactor 0 (fully crowded) but must be excluded by the popCap > 0 guard —
+      // otherwise every unhoused system would misread as "braked" rather than "no housing at all".
+      popSys("no-housing", 500, 0),
+    ];
+    const summary = summarizePopulation(systems, 1000, 0.65, BRAKE_END);
+    expect(summary.brakedCount).toBe(1);
+  });
+
+  it("computes meanOccupancy as the mean of population/popCap over popCap > 0 systems only", () => {
+    const systems = [
+      popSys("a", 500, 1000),       // 0.5
+      popSys("b", 750, 1000),       // 0.75
+      popSys("no-housing", 999, 0), // excluded from both sum and count
+    ];
+    const summary = summarizePopulation(systems, 1000, 0.65, BRAKE_END);
+    expect(summary.meanOccupancy).toBeCloseTo(0.625, 6);
+  });
+
+  it("guards meanOccupancy to 0 (never NaN) when no system has popCap > 0", () => {
+    const systems = [popSys("a", 500, 0), popSys("b", 10, 0)];
+    const summary = summarizePopulation(systems, 100, 0.65, BRAKE_END);
+    expect(summary.meanOccupancy).toBe(0);
+    expect(Number.isFinite(summary.meanOccupancy)).toBe(true);
   });
 });

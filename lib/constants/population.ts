@@ -60,8 +60,8 @@ export const POPULATION_PARAMS: PopulationParams = {
  * addition, not SP2. Sim-tuned for stable-but-growing (no ping-pong).
  */
 export const MIGRATION_PARAMS: MigrationFlowParams = {
-  // jobs weight makes open jobs pull and unemployment push; headroom stays 1 so this is a
-  // pure addition, not a recalibration (the contentment/headroom/jobs mix is a PR4 rebalance).
+  // jobs weight makes open jobs pull and unemployment push; headroom stays 1 alongside it so the
+  // contentment/headroom/jobs mix pulls jointly rather than any one term dominating the gradient.
   weights: { contentment: 1, headroom: 1, jobs: 1 },
   // Local balancing only — colony population is supplied by the targeted colonist-delivery pass, not by
   // diffusion. Kept BELOW the natural growth rate (0.015) so edge diffusion can't drain a system faster
@@ -73,7 +73,8 @@ export const MIGRATION_PARAMS: MigrationFlowParams = {
   // staffed pool stays home; the future player speed-dial lowers this per chosen system, at a cost.
   employedGradientThreshold: 100,
   // Small always-on leak of staffed workers toward strongly-attractive colonies — the pop pump that
-  // lets colonisation proceed once home worlds saturate (spare labour ≈ 0). Coarse; PR4-calibrated.
+  // lets colonisation proceed once home worlds saturate (spare labour ≈ 0). Coarse first cut,
+  // calibrated against the simulator.
   employedLeakFraction: 0.02,
 };
 

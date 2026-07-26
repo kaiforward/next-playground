@@ -120,3 +120,56 @@ describe("migration processor", () => {
     expect(world.systems.find((s) => s.id === "colony")!.population).toBe(10);
   });
 });
+
+describe("migration throughput instrumentation (migrationMoved)", () => {
+  it("sums colonist deliveries and edge diffusion into separate migrationMoved fields when both occur", async () => {
+    const systems = [
+      sys("core", "f1", 1000, 1000, 0),   // delivery source
+      sys("colony", "f1", 10, 1000, 0),   // delivery sink
+      sys("a", "f1", 1000, 1000, 0.9),    // diffusion source
+      sys("b", "f1", 100, 1000, 0, JOBS), // diffusion sink
+    ];
+    const world = new InMemoryMigrationWorld(
+      { systems },
+      [conn("core", "colony"), conn("a", "b")],
+    );
+    const params = { ...PARAMS, delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 } };
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(result.migrationMoved?.colonists).toBeGreaterThan(0);
+    expect(result.migrationMoved?.diffusion).toBeGreaterThan(0);
+  });
+
+  it("reports no migrationMoved on an off-boundary tick", async () => {
+    const world = new InMemoryMigrationWorld(
+      { systems: [sys("a", "f1", 1000, 2000, 0.5), sys("b", "f1", 100, 2000, 0)] },
+      [conn("a", "b")],
+    );
+    const result = await runMigrationProcessor(world, ctx(1), { ...PARAMS, interval: REFERENCE_INTERVAL });
+    expect(result.migrationMoved).toBeUndefined();
+  });
+
+  it("migrationMoved.diffusion equals exactly the population edge diffusion displaced — conserved, no growth/death padding", async () => {
+    const systems = [sys("a", "f1", 1000, 1000, 0.9), sys("b", "f1", 100, 1000, 0, JOBS)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
+    const before = world.systems.find((s) => s.id === "a")!.population;
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), PARAMS); // PARAMS uses NO_DELIVERY → colonists 0
+    const after = world.systems.find((s) => s.id === "a")!.population;
+    expect(result.migrationMoved?.colonists).toBe(0);
+    expect(result.migrationMoved?.diffusion).toBeCloseTo(before - after, 5);
+  });
+
+  it("migrationMoved.colonists equals exactly the population colonist delivery moved — conserved, no growth/death padding", async () => {
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const params = {
+      ...PARAMS,
+      flow: { ...PARAMS.flow, maxOutflowFraction: 0 }, // isolates delivery — diffusion contributes nothing
+      delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 },
+    };
+    const before = world.systems.find((s) => s.id === "colony")!.population;
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    const after = world.systems.find((s) => s.id === "colony")!.population;
+    expect(result.migrationMoved?.diffusion).toBe(0);
+    expect(result.migrationMoved?.colonists).toBeCloseTo(after - before, 5);
+  });
+});

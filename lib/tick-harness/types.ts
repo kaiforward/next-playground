@@ -178,6 +178,26 @@ export interface BuildBurstSummary {
   worstTick: number | null;
 }
 
+// ── Migration throughput ─────────────────────────────────────────
+
+/**
+ * Whole-run migration throughput — people actually moved (conserved transfers only: colonist
+ * delivery + edge diffusion, never growth/death terms). Reads most meaningfully on a land-tight
+ * seed, where colony housing opens at r ≈ 1.0 with no spare headroom and growth must lean on the
+ * crowd brake + migration push instead of housing absorbing it directly; on a generous-headroom
+ * seed, low throughput here does not mean the push is broken — housing is doing the absorbing.
+ */
+export interface MigrationThroughputSummary {
+  /** Total people delivered by targeted colonist delivery across the run. */
+  totalColonists: number;
+  /** Total people moved by edge diffusion across the run. */
+  totalDiffusion: number;
+  /** Monthly pulses that resolved migration — the per-pulse mean's denominator. */
+  pulseCount: number;
+  /** (totalColonists + totalDiffusion) / pulseCount; 0 when pulseCount is 0 (never NaN). */
+  meanPerPulse: number;
+}
+
 // ── Region overview ─────────────────────────────────────────────
 
 export interface RegionOverviewEntry {
@@ -221,6 +241,8 @@ export interface HarnessResults {
   initialBuildingTotal: number;
   /** Population snapshots sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
   populationSnapshots: Array<Map<string, number>>;
+  /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
+  migrationThroughput: MigrationThroughputSummary;
   /** Faction-treasury health at simulation end — balances, income mix, funded fractions, shortfalls. */
   treasurySummary: TreasurySummary;
   /** Treasury balance trajectory sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */

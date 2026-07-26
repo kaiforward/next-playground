@@ -29,6 +29,7 @@ import type {
   MarketSnapshot,
   EventLifecycle,
   RegionOverviewEntry,
+  MigrationThroughputSummary,
 } from "./types";
 import type { TickEvent } from "@/lib/tick/rows";
 
@@ -89,6 +90,12 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // autonomic levels for. Transient instrumentation (`runWorldTick().instrumentation`) — never
   // persisted in `World` — so, like flowEvents, it must be captured as each tick happens.
   const buildCommitments: BuildCommitmentRecord[] = [];
+  // Whole-run migration throughput — colonist-delivery and edge-diffusion totals, plus the count
+  // of pulses that resolved (the per-pulse mean's denominator). Transient instrumentation
+  // (`runWorldTick().instrumentation`), so like buildCommitments it is accumulated per tick.
+  let migrationPulseCount = 0;
+  let migrationColonistsTotal = 0;
+  let migrationDiffusionTotal = 0;
   const activeEventTracker = new Map<string, ActiveEventRecord>();
   const completedEvents: EventLifecycle[] = [];
 
@@ -118,6 +125,12 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       for (const [goodId, levels] of result.instrumentation.buildCommitmentsByGood) {
         buildCommitments.push({ tick: world.meta.currentTick, goodId, levels });
       }
+    }
+
+    if (result.instrumentation.migrationMoved) {
+      migrationPulseCount++;
+      migrationColonistsTotal += result.instrumentation.migrationMoved.colonists;
+      migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
     }
 
     if (world.meta.currentTick % SNAPSHOT_INTERVAL === 0) {
@@ -155,6 +168,16 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const systemNames = new Map(world.systems.map((s) => [s.id, s.name]));
   const eventImpacts = computeEventImpacts(completedEvents, systemNames);
 
+  const migrationThroughput: MigrationThroughputSummary = {
+    totalColonists: migrationColonistsTotal,
+    totalDiffusion: migrationDiffusionTotal,
+    pulseCount: migrationPulseCount,
+    meanPerPulse:
+      migrationPulseCount > 0
+        ? (migrationColonistsTotal + migrationDiffusionTotal) / migrationPulseCount
+        : 0,
+  };
+
   return {
     config,
     economyScale: ECONOMY_SCALE,
@@ -170,6 +193,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     initialPopulationTotal,
     initialBuildingTotal,
     populationSnapshots,
+    migrationThroughput,
     treasurySummary: summarizeTreasuries(world.treasuries, treasurySnapshots),
     treasurySnapshots,
   };

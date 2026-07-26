@@ -39,6 +39,12 @@ export async function runMigrationProcessor(
   const deliveryDeltas = allocateColonists(developed, params.delivery);
   if (deliveryDeltas.length > 0) await world.applyMigrationDeltas(deliveryDeltas);
 
+  // Calibration instrumentation: the delivered amount is the sum of the positive (sink) side of
+  // the conserved deltas — equal in magnitude to what sources gave, since allocateColonists nets
+  // to zero per faction. Never broadcast, never persisted — see TickInstrumentation.
+  let colonistsMoved = 0;
+  for (const d of deliveryDeltas) if (Number.isFinite(d.delta) && d.delta > 0) colonistsMoved += d.delta;
+
   const systemIds = new Set<string>();
   for (const e of slice) { systemIds.add(e.aSystemId); systemIds.add(e.bSystemId); }
   const nodes = await world.getNodesForSystems([...systemIds]);
@@ -54,6 +60,10 @@ export async function runMigrationProcessor(
     return { unrest: n.unrest, population: n.population + (popDelta.get(id) ?? 0), popCap: n.popCap, labourDemand: n.labourDemand };
   };
 
+  // Calibration instrumentation: the gross per-edge amount moved, summed as each edge resolves —
+  // distinct from popDelta's net-per-system composition, which is what several edges touching one
+  // hub actually apply.
+  let diffusionMoved = 0;
   for (const edge of slice) {
     const a = liveNode(edge.aSystemId);
     const b = liveNode(edge.bSystemId);
@@ -64,6 +74,7 @@ export async function runMigrationProcessor(
     // scaled amount leaves `from` and arrives at `to`.
     const moved = quantity * catchUp;
     if (!Number.isFinite(moved) || moved <= 0) continue;
+    diffusionMoved += moved;
     const fromId = fromIsA ? edge.aSystemId : edge.bSystemId;
     const toId = fromIsA ? edge.bSystemId : edge.aSystemId;
     popDelta.set(fromId, (popDelta.get(fromId) ?? 0) - moved);
@@ -73,5 +84,5 @@ export async function runMigrationProcessor(
   const deltas: MigrationDelta[] = [];
   for (const [systemId, delta] of popDelta) if (delta !== 0) deltas.push({ systemId, delta });
   if (deltas.length > 0) await world.applyMigrationDeltas(deltas);
-  return {};
+  return { migrationMoved: { colonists: colonistsMoved, diffusion: diffusionMoved } };
 }

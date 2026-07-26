@@ -126,6 +126,7 @@ describe("ExperimentConfig", () => {
         initialPopulationTotal: 0,
         initialBuildingTotal: 0,
         populationSnapshots: [],
+        migrationThroughput: { totalColonists: 0, totalDiffusion: 0, pulseCount: 0, meanPerPulse: 0 },
         treasurySummary: {
           factionCount: 0, meanBalance: 0, minBalance: 0, maxBalance: 0,
           headsShare: 0, productionShare: 0,
@@ -151,6 +152,18 @@ describe("ExperimentConfig", () => {
     it("reports the zero/null build-burst shape for a run with no construction activity", () => {
       const saved = buildExperimentResult(minimalResults());
       expect(saved.buildBurstSummary).toEqual({ byGood: [], globalMax: 0, worstGood: null, worstTick: null });
+    });
+
+    it("includes the migration-throughput summary in the saved experiment JSON", () => {
+      const results = minimalResults();
+      results.migrationThroughput = { totalColonists: 120, totalDiffusion: 30, pulseCount: 3, meanPerPulse: 50 };
+      const saved = buildExperimentResult(results);
+      expect(saved.migrationThroughput).toEqual(results.migrationThroughput);
+    });
+
+    it("reports the zero shape for a run with no migration activity", () => {
+      const saved = buildExperimentResult(minimalResults());
+      expect(saved.migrationThroughput).toEqual({ totalColonists: 0, totalDiffusion: 0, pulseCount: 0, meanPerPulse: 0 });
     });
   });
 });

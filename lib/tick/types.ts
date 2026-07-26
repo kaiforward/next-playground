@@ -79,12 +79,16 @@ export interface TickProcessorResult {
    *  good id. Counts proposal levels, not the final funded queue. Calibration instrumentation
    *  only — surfaced via `runWorldTick().instrumentation`, never broadcast or persisted. */
   buildCommitmentsByGood?: Map<string, number>;
+  /** People moved this monthly pulse (colonist delivery + edge diffusion), conserved flows only.
+   *  Calibration instrumentation — surfaced via runWorldTick().instrumentation, never broadcast. */
+  migrationMoved?: { colonists: number; diffusion: number };
 }
 
 /** Transient, calibration-only signals a tick produced — never broadcast (`TickBroadcastRaw`)
  *  or folded into `World`. The calibration harness is the only reader. Derived from the processor
  *  result so the shared field can't drift. */
-export type TickInstrumentation = Pick<TickProcessorResult, "buildCommitmentsByGood">;
+export type TickInstrumentation =
+  Pick<TickProcessorResult, "buildCommitmentsByGood" | "migrationMoved">;
 
 /** The full payload one tick's run hands to the broadcast layer. */
 export interface TickBroadcastRaw {
