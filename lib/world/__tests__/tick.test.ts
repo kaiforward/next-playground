@@ -5,8 +5,11 @@ import { serializeWorld, deserializeWorld } from "../save";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { housingPopCap } from "@/lib/engine/industry";
-import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, labourTotal } from "@/lib/constants/industry";
+import { computeSystemLabourSnapshot, housingPopCap } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import {
+  BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, labourTotal,
+} from "@/lib/constants/industry";
 import { MONTH_LENGTH, type TickCadence } from "@/lib/constants/tick-cadence";
 import { CROWDING, POPULATION_PARAMS, STRIKE_PARAMS, UNREST_PARAMS } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
@@ -742,9 +745,43 @@ function fixtureSystem(world: World, systemId: string): WorldSystem {
   return world.systems.find((s) => s.id === systemId)!;
 }
 
-/** Every persisted per-good satisfaction at the fixture system — the D and regime premise. */
-function fixtureSatisfactions(world: World, systemId: string): number[] {
-  return world.markets.filter((m) => m.systemId === systemId).map((m) => m.satisfaction ?? 1);
+/**
+ * Per-good satisfaction at the fixture system, restricted to the goods the economy actually folds
+ * into D and the regime. A non-consumer is written satisfaction 1 and never enters either fold, so
+ * sweeping every market would quietly require that every good at this homeworld carry civilian
+ * demand. The filter mirrors the economy adapter's own predicate: civilian consumption > 0 at the
+ * system's labour basis and government.
+ */
+function demandedSatisfactions(world: World, systemId: string): number[] {
+  const system = fixtureSystem(world, systemId);
+  const governmentType = world.factions.find((f) => f.id === system.factionId)!.governmentType;
+  const buildings: Record<string, number> = {};
+  for (const b of world.buildings) if (b.systemId === systemId) buildings[b.buildingType] = b.count;
+  const { basis } = computeSystemLabourSnapshot(buildings, system.population);
+  return world.markets
+    .filter((m) => m.systemId === systemId && consumptionRate(m.goodId, basis, governmentType) > 0)
+    .map((m) => m.satisfaction ?? 1);
+}
+
+/**
+ * The D premise, asserted non-vacuously: every demanded good reads `expected`, AND the system has
+ * demanded goods at all — a system with no consumers folds to D = 0 whatever its markets say, so
+ * without the length check "all satisfied" could hold over an empty set.
+ */
+function expectDemandedSatisfaction(world: World, systemId: string, expected: number): void {
+  const satisfactions = demandedSatisfactions(world, systemId);
+  expect(satisfactions.length).toBeGreaterThan(0);
+  for (const satisfaction of satisfactions) expect(satisfaction).toBe(expected);
+}
+
+/**
+ * Whole housing levels the fixture system could still build — the land clamp on relief sizing.
+ * Mirrors `habitableHousingHeadroom` for a site whose only general-space user is its own housing.
+ */
+function fixtureLandHeadroom(system: WorldSystem): number {
+  const cost = effectiveSpaceCost(HOUSING_TYPE);
+  const used = FIXTURE_HOUSING_LEVELS * cost;
+  return Math.floor(Math.min(system.habitableSpace - used, system.generalSpace - used) / cost);
 }
 
 function withStock(world: World, systemId: string, stock: number): World {
@@ -763,7 +800,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
 
     // Premise: the pulse delivered every demanded good in full, so D folds to 0 and the regime is
     // Supplied whatever the demand weights.
-    for (const satisfaction of fixtureSatisfactions(after, systemId)) expect(satisfaction).toBe(1);
+    expectDemandedSatisfaction(after, systemId, 1);
     // Housing is untouched, so occupancy here is a pure population story — and it stays under the
     // cap, which is what leaves both the crowd brake open and the crowding term out of the floor.
     expect(grown.popCap).toBe(FIXTURE_POP_CAP);
@@ -796,7 +833,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     const after = await runTicks(world, MONTH_LENGTH, POPULATION_CADENCE);
     const crowded = fixtureSystem(after, systemId);
 
-    for (const satisfaction of fixtureSatisfactions(after, systemId)) expect(satisfaction).toBe(1);
+    expectDemandedSatisfaction(after, systemId, 1);
     // Still overcrowded, and housing never rose to meet it (the cap only moves by construction/decay).
     expect(crowded.popCap).toBe(FIXTURE_POP_CAP);
     expect(crowded.population).toBeGreaterThan(crowded.popCap);
@@ -831,9 +868,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
 
     // Premise: every demanded good delivered nothing, so D folds to exactly 1 and the worst-good
     // fold reads Shortage — both independent of the demand weights.
-    for (const satisfaction of fixtureSatisfactions(shortagePulse, systemId)) {
-      expect(satisfaction).toBe(0);
-    }
+    expectDemandedSatisfaction(shortagePulse, systemId, 0);
     // The system entered on its floor, so the relaxation term is zero and the whole rise is the
     // shortage gain integrating D = 1.
     const shortageUnrest = fixtureSystem(shortagePulse, systemId).unrest;
@@ -848,9 +883,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
       recovering = await runTicks(recovering, MONTH_LENGTH, POPULATION_CADENCE);
       // Supply is restored immediately — the regime flips back the very first assessment, and the
       // recovery below is the memory draining, not the shortage still being measured.
-      for (const satisfaction of fixtureSatisfactions(recovering, systemId)) {
-        expect(satisfaction).toBe(1);
-      }
+      expectDemandedSatisfaction(recovering, systemId, 1);
       unrestByPulse.push(fixtureSystem(recovering, systemId).unrest);
     }
 
@@ -882,7 +915,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     const before = fixtureSystem(world, systemId);
 
     // Fed: the persisted satisfactions the planner folds are full, so supply-dissatisfaction is 0.
-    for (const satisfaction of fixtureSatisfactions(world, systemId)) expect(satisfaction).toBe(1);
+    expectDemandedSatisfaction(world, systemId, 1);
     // Restive: unrest sits above the largest standing floor a system can carry (tax + full crowding),
     // so this is earned unrest, not baseline. The valve reads supply alone and opens anyway —
     // crowding is itself an unrest source, so a calm gate would starve the world that needs relief.
@@ -898,6 +931,9 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
       (before.population / DIRECTED_BUILD.RELIEF_TARGET - FIXTURE_POP_CAP) / POP_CENTRE_DENSITY,
     );
     expect(reliefLevels).toBe(14);
+    // The want is what sizes the build: relief is also clamped to the land, and this homeworld has
+    // ~688 whole housing levels of headroom left after its 250, so the clamp is nowhere near binding.
+    expect(fixtureLandHeadroom(before)).toBeGreaterThanOrEqual(reliefLevels);
 
     const reliefProjects = after.constructionProjects.filter(
       (p): p is WorldBuildProject =>
@@ -915,5 +951,45 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
       after.buildings.find((b) => b.systemId === systemId && b.buildingType === HOUSING_TYPE)?.count,
     ).toBe(FIXTURE_HOUSING_LEVELS);
     expect(fixtureSystem(after, systemId).popCap).toBe(FIXTURE_POP_CAP);
+  }, 60_000);
+
+  it("sizes relief housing to the population the same pulse just grew, at the shipped cadence", async () => {
+    // MONTH_LENGTH and CONSTRUCTION_INTERVAL are equal as shipped, so the relief valve's real pulse
+    // always coincides with the economy and population stages and the planner reads the POST-growth
+    // population. The fixture above parks the economy to buy an exact closed form; this one runs the
+    // DEFAULT cadence and pins the stage ordering instead, on ranges rather than a level count, so it
+    // does not re-encode world-gen incidentals.
+    const { world, systemId } = populationFixture(0.97, RESTIVE_UNREST);
+    const before = fixtureSystem(world, systemId);
+    const after = await runTicks(world, MONTH_LENGTH);
+    const grown = fixtureSystem(after, systemId);
+
+    expectDemandedSatisfaction(after, systemId, 1);
+    // The pulse grew the system and shed some of its unrest, and it is still both restive and armed.
+    expect(grown.population).toBeGreaterThan(before.population);
+    expect(grown.unrest).toBeGreaterThan(TAX_FLOOR + CROWDING.PRESSURE_MAX);
+    expect(grown.population).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TRIGGER * FIXTURE_POP_CAP);
+
+    const reliefProjects = after.constructionProjects.filter(
+      (p): p is WorldBuildProject =>
+        p.kind === "build" && p.systemId === systemId && p.buildingType === HOUSING_TYPE,
+    );
+    expect(reliefProjects).toHaveLength(1);
+    const reliefLevels = reliefProjects[0].levels;
+    expect(reliefLevels).toBeGreaterThanOrEqual(1);
+    expect(reliefProjects[0].workDone).toBeLessThan(reliefProjects[0].workTotal);
+    // Land is not the binding constraint, so the relief want is what sized this.
+    expect(fixtureLandHeadroom(grown)).toBeGreaterThanOrEqual(reliefLevels);
+    // Sized to bring the GROWN occupancy back to the relief target.
+    const relievedCap = (FIXTURE_HOUSING_LEVELS + reliefLevels) * POP_CENTRE_DENSITY;
+    expect(grown.population / relievedCap).toBeLessThanOrEqual(DIRECTED_BUILD.RELIEF_TARGET);
+
+    // The ordering itself: sizing against the population as it stood BEFORE the pulse would have
+    // committed strictly fewer levels, so this pins that directed-build read population after the
+    // population stage rather than from the start-of-tick snapshot.
+    const preGrowthLevels = Math.ceil(
+      (before.population / DIRECTED_BUILD.RELIEF_TARGET - FIXTURE_POP_CAP) / POP_CENTRE_DENSITY,
+    );
+    expect(reliefLevels).toBeGreaterThan(preGrowthLevels);
   }, 60_000);
 });
