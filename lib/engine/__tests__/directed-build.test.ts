@@ -1535,7 +1535,9 @@ describe("planFactionColonyProposals", () => {
     // Land-rich: whole-level habitable cap ≫ seedPop → full seed.
     const [rich] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "big", habitableSpace: 100 })], [], COLONY_PARAMS);
     expect(rich.seedPop).toBe(EXPANSION.COLONY_SEED_POP);
-    expect(rich.housingLevels).toBe(Math.ceil(EXPANSION.COLONY_SEED_POP / POP_CENTRE_DENSITY));
+    // Land-rich, so the whole-level habitable cap never clamps: own-need levels (ceil(2/20) = 1) plus
+    // the one bundled headroom level.
+    expect(rich.housingLevels).toBe(Math.ceil(EXPANSION.COLONY_SEED_POP / POP_CENTRE_DENSITY) + 1);
     expect(rich.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(rich.seedPop); // viable by construction
     expect(rich.work).toBeCloseTo(COLONISATION.COLONY_ESTABLISH_WORK + rich.housingLevels * workCostPerLevel(HOUSING_TYPE), 6);
     expect(rich.work).toBeGreaterThan(COLONISATION.COLONY_ESTABLISH_WORK); // housing is paid for, not free
@@ -1681,15 +1683,32 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
 describe("sizeColonyEstablish", () => {
   const params = { seedPop: 500, establishWork: 100 };
 
-  it("sizes seed to the whole-level habitable cap with housing to house it", () => {
+  it("land-tight: habitable space for exactly the seed's own levels keeps the clamp and opens at r ≈ 1.0", () => {
     const s = sizeColonyEstablish(3, params); // habitable 3 → 3 whole housing levels possible
     expect(s).not.toBeNull();
     if (s === null) return;
-    // habitableSpace 3 / housingCost 1 → maxHousingLevels 3 → habitableCap 60; seedPop
-    // min(500, 60) = 60; housingLevels min(3, ceil(60/20)=3) = 3 exactly.
+    // habitableSpace 3 / housingCost 1 → maxHousingLevels 3 → habitableCap 60; seedPop min(500, 60) = 60.
+    // Unclamped want would be ceil(60/20) + 1 = 4 levels, but the site only fits 3 whole levels, so the
+    // clamp holds at 3 — the site opens fully occupied (r = seedPop/popCap = 1.0), not with headroom.
+    expect(s.seedPop).toBe(60);
     expect(s.housingLevels).toBe(3);
-    expect(s.seedPop).toBeLessThanOrEqual(params.seedPop);
+    expect(s.seedPop).toBe(s.housingLevels * POP_CENTRE_DENSITY); // r = 1.0 exactly
     expect(s.work).toBe(params.establishWork + s.housingLevels * workCostPerLevel(HOUSING_TYPE));
+  });
+
+  it("land-rich: bundles one level of headroom beyond the seed's own need, opening at r < 1", () => {
+    const richParams = { seedPop: 30, establishWork: 100 };
+    const s = sizeColonyEstablish(10, richParams); // habitable 10 → 10 whole housing levels possible, plenty of room
+    expect(s).not.toBeNull();
+    if (s === null) return;
+    // seedPop 30 is well under the 200-pop habitable cap (10 levels × 20), so it lands unclamped. The
+    // seed's own-need level count is ceil(30/20) = 2; the headroom bundle adds one more level = 3.
+    expect(s.seedPop).toBe(30);
+    expect(s.housingLevels).toBe(3);
+    const popCap = s.housingLevels * POP_CENTRE_DENSITY;
+    expect(popCap).toBeGreaterThan(s.seedPop); // headroom ⇒ popCap ≥ seedPop + one level, r < 1
+    // `work` already scales with housingLevels, so the extra level shows up here with no second change site.
+    expect(s.work).toBe(richParams.establishWork + 3 * workCostPerLevel(HOUSING_TYPE));
   });
 
   it("returns null when the site cannot hold one whole housing level", () => {
