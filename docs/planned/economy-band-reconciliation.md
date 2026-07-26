@@ -285,6 +285,22 @@ recalibration.
   §1 funding-bound exclusion keeps a treasury dip from pruning demand-backed exporters. Stored
   idle-month counters survive saves harmlessly (healthy systems zero them on the first
   post-change run).
+- **Housing is headroom, not waste — the idle channel can't tell them apart.** An idle production
+  building is exactly the waste decay exists to prune; empty housing is capacity built deliberately
+  ahead of the people who will fill it. The idle test asks a steady-state question —
+  `capacityUsed("pop_cap") = min(count, population / POP_CENTRE_DENSITY × (1 + VACANCY_SLACK))` — so
+  it cannot distinguish the two, and every mechanism that builds housing ahead of demand collides
+  with it.
+- **Two collisions are on record.** Relief housing resolves it by construction: sizing to
+  `RELIEF_TARGET × (1 + VACANCY_SLACK) ≥ 1` keeps the sized result inside the vacancy slack, so decay
+  never reads it as idle. Colony-establish headroom does not — a colony opening at seed population 2
+  with two housing levels reads `floor(2 − 0.11) = 1` idle level from the moment it lands, and sheds
+  it after the idle buffer unless colonist delivery fills the colony to roughly 18 people first. The
+  trapped-colony population — 250 of 255 systems above the 0.75 collapse threshold tearing down their
+  own housing — is the same collision at scale.
+- **Resolution: the idle channel stops applying to housing.** Housing keeps its own corrections —
+  the relief valve's own sizing rule, and the unrest-collapse channel, which still tears housing down
+  when a system genuinely fails. Production capacity keeps the idle channel exactly as built.
 
 ## 6. Presentation contract — the panels speak regimes
 
