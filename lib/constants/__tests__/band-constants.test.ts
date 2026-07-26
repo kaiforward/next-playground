@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, TARGET_COVER, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING } from "@/lib/constants/population";
+import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { VACANCY_SLACK } from "@/lib/constants/infrastructure";
+import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 
 describe("band constant dependencies", () => {
   it("starts logistics replenishment well before emergency rationing", () => {
@@ -14,5 +18,51 @@ describe("band constant dependencies", () => {
   it("keeps rationing close to empty and the hold ceiling above the anchor", () => {
     expect(ECONOMY_CONSTANTS.RATION_COVER).toBeLessThan(TARGET_COVER);
     expect(ECONOMY_CONSTANTS.HOLD_COVER).toBeGreaterThan(1);
+  });
+  it("keeps the shortage line a proper interior satisfaction level", () => {
+    expect(SHORTAGE_SATISFACTION).toBeGreaterThan(0);
+    expect(SHORTAGE_SATISFACTION).toBeLessThan(1);
+  });
+});
+
+describe("population / unrest constant dependencies", () => {
+  it("gates overshoot death on the strike threshold", () => {
+    // The overshoot-death term is the collapse regime — it must fire on the same
+    // unrest at which production strikes, not a separately drifting number.
+    expect(POPULATION_PARAMS.overshootDeathUnrestGate).toBe(STRIKE_PARAMS.threshold);
+  });
+  it("shares one brake-end between the growth brake and the crowding pressure ramp", () => {
+    expect(POPULATION_PARAMS.crowdBrakeEnd).toBe(CROWDING.BRAKE_END);
+  });
+  it("cannot strike-spiral off crowding pressure alone", () => {
+    // Even a fully overcrowded world adds only PRESSURE_MAX to the standing floor,
+    // which must stay well under the strike threshold.
+    expect(CROWDING.PRESSURE_MAX).toBeLessThan(STRIKE_PARAMS.threshold);
+  });
+});
+
+describe("housing relief constant dependencies", () => {
+  it("keeps the relief vacancy inside the decay slack", () => {
+    // Housing decay reads levels as fully used while count ≤ housingUsed(pop) × (1 + VACANCY_SLACK)
+    // (capacityUsed "pop_cap" in lib/engine/industry.ts). At occupancy r that is r × (1 + VACANCY_SLACK)
+    // ≥ 1, so relief must size back to a target the slack still covers — otherwise the valve commits
+    // exactly the levels decay then tears down. The two are fractions of DIFFERENT denominators (the
+    // slack of used housing, 1 − RELIEF_TARGET of built popCap), so comparing them directly would
+    // admit targets that break containment.
+    expect(DIRECTED_BUILD.RELIEF_TARGET * (1 + VACANCY_SLACK)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("binds the two housing-capacity readings to one density", () => {
+    // Occupancy is read two ways: housingUsed(pop) divides by POP_CENTRE_DENSITY, housingPopCap()
+    // multiplies by the housing type's popProvided. The decay-containment invariant above compares
+    // fractions derived from both, so it only means anything while the two agree — a divergence
+    // would silently shift the r the relief valve targets away from the r decay measures.
+    expect(BUILDING_TYPES[HOUSING_TYPE].popProvided).toBe(POP_CENTRE_DENSITY);
+  });
+
+  it("triggers relief above the occupancy it sizes back to", () => {
+    // The trigger/target pair is a hysteresis band: a target at or above the trigger would make the
+    // sized want non-positive at the moment the valve opens, silently disabling relief entirely.
+    expect(DIRECTED_BUILD.RELIEF_TRIGGER).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TARGET);
   });
 });

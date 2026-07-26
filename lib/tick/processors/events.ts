@@ -36,6 +36,8 @@ import type {
   SystemShock,
 } from "@/lib/tick/world/events-world";
 
+const DEBUG = process.env.DEBUG_EVENTS === "1";
+
 /**
  * Expand a system's ShockRow[] into SystemShock[], preserving each row's shock
  * mode. Yields nothing for a null systemId (a region-scoped event) or an empty
@@ -150,9 +152,11 @@ export async function runEventsProcessor(
             : {},
         });
       }
-      console.log(
-        `[events] ${def.name} at ${sysName}: ${snap.phase} → ${nextPhase.name} (${duration} ticks)`,
-      );
+      if (DEBUG) {
+        console.log(
+          `[events] ${def.name} at ${sysName}: ${snap.phase} → ${nextPhase.name} (${duration} ticks)`,
+        );
+      }
     }
 
     // Spread — only for root events (no sourceEventId) that have spread rules.
@@ -247,9 +251,11 @@ export async function runEventsProcessor(
               refs: { system: { id: create.systemId, label: nameForLog } },
             });
           }
-          console.log(
-            `[events] Spread ${childDef.name} to ${nameForLog} from ${parentName} (severity: ${create.severity.toFixed(2)})`,
-          );
+          if (DEBUG) {
+            console.log(
+              `[events] Spread ${childDef.name} to ${nameForLog} from ${parentName} (severity: ${create.severity.toFixed(2)})`,
+            );
+          }
         }
       }
     }
@@ -258,7 +264,7 @@ export async function runEventsProcessor(
   // ── 3. Expire completed events ────────────────────────────────
   if (expiredIds.length > 0) {
     await world.expireEvents(expiredIds);
-    console.log(`[events] Expired ${expiredIds.length} event(s)`);
+    if (DEBUG) console.log(`[events] Expired ${expiredIds.length} event(s)`);
   }
 
   // ── 4. Spawn new events on spawn ticks ─────────────────────────
@@ -336,14 +342,16 @@ export async function runEventsProcessor(
         }
       }
 
-      const modifierCount = spawnCreates.reduce((n, c) => n + c.modifiers.length, 0);
-      console.log(
-        `[events] Spawn tick ${ctx.tick}: ${currentEvents.length} active, ${systems.length} systems, ` +
-          `caps={global:${caps.maxEventsGlobal},batch:${batchSize}}, ` +
-          `selected ${decisions.length} in ${selectMs.toFixed(0)}ms, ` +
-          `created ${decisions.length} events + ${modifierCount} modifiers + ${shocksApplied} shocks in ${createMs.toFixed(0)}ms`,
-      );
-    } else {
+      if (DEBUG) {
+        const modifierCount = spawnCreates.reduce((n, c) => n + c.modifiers.length, 0);
+        console.log(
+          `[events] Spawn tick ${ctx.tick}: ${currentEvents.length} active, ${systems.length} systems, ` +
+            `caps={global:${caps.maxEventsGlobal},batch:${batchSize}}, ` +
+            `selected ${decisions.length} in ${selectMs.toFixed(0)}ms, ` +
+            `created ${decisions.length} events + ${modifierCount} modifiers + ${shocksApplied} shocks in ${createMs.toFixed(0)}ms`,
+        );
+      }
+    } else if (DEBUG) {
       console.log(
         `[events] Spawn tick ${ctx.tick}: ${currentEvents.length} active, ${systems.length} systems, ` +
           `caps={global:${caps.maxEventsGlobal},batch:${batchSize}}, selected 0 in ${selectMs.toFixed(0)}ms`,

@@ -1,16 +1,21 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { accumulateUnrest, populationDelta, type UnrestParams } from "@/lib/engine/population";
+import {
+  accumulateUnrest, crowdingPressure, populationDelta, type UnrestParams,
+} from "@/lib/engine/population";
+import { CROWDING } from "@/lib/constants/population";
 import { catchUpFactor } from "@/lib/tick/shard";
+import { clamp } from "@/lib/utils/math";
 import type {
   PopulationProcessorParams, PopulationUpdate, PopulationWorld,
 } from "@/lib/tick/world/population-world";
 
 /**
- * Pure processor body. Reads the per-system dissatisfaction D the economy
- * processor recorded this tick (via ctx.results), integrates it into unrest,
- * applies logistic growth/decline, and rewrites demandRate for the new
- * population. Scoped to the economy's shard (D's key set), so per-tick
- * work is bounded and the satisfaction signal is fresh.
+ * Pure processor body. Reads the per-system dissatisfaction D and supply regime the
+ * economy processor recorded this tick (via ctx.results), relaxes unrest toward its
+ * standing-pressure floor while integrating D at the regime's rate, applies crowd-braked
+ * growth/decline, and rewrites demandRate for the new population. Scoped to the
+ * economy's shard (D's key set), so per-tick work is bounded and the satisfaction
+ * signal is fresh.
  */
 export async function runPopulationProcessor(
   world: PopulationWorld,
@@ -24,22 +29,38 @@ export async function runPopulationProcessor(
   const states = await world.getPopulationState(systemIds);
 
   // Rates are reference-denominated; one run applies catchUpFactor(interval)
-  // reference-months of change. Unrest is a linear filter, so both its gain and
-  // decay pre-scale (rescaling the time step); the population delta scales directly.
+  // reference-months of change. Unrest is a linear filter, so every gain and
+  // relaxation rate pre-scales (rescaling the time step) — accumulateUnrest clamps the
+  // scaled relaxation itself; the population delta scales directly.
   const catchUp = catchUpFactor(params.interval);
   const scaledUnrest: UnrestParams = {
-    gain: params.unrest.gain * catchUp,
+    gainRationing: params.unrest.gainRationing * catchUp,
+    gainShortage: params.unrest.gainShortage * catchUp,
     decay: params.unrest.decay * catchUp,
+    recoveryDecay: params.unrest.recoveryDecay * catchUp,
   };
 
   const popUpdates: PopulationUpdate[] = [];
   const demandPops: Array<{ systemId: string; population: number }> = [];
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
-    // Tax pressure raises unrest, not hunger: it feeds the integrator's d term
-    // (clamped inside accumulateUnrest) while the growth/decline delta keeps raw d.
+    const regime = signals.supplyRegimeBySystem.get(s.systemId) ?? "supplied";
+    // Standing pressure: what a system settles at with nothing going wrong. Tax raises
+    // unrest, not hunger, and overcrowding adds a bounded share on top — so both hold
+    // unrest up rather than being shed like a supply shock, while the growth/decline
+    // delta keeps raw d.
     const taxPressure = params.taxPressureBySystem?.get(s.systemId) ?? 0;
-    const unrest = accumulateUnrest(s.unrest, d + taxPressure, scaledUnrest);
+    // Crowding reads the population as this pulse STARTED — the floor is a level, so it is measured
+    // at pulse start. A system that crosses r = 1 during this pulse therefore carries no crowding
+    // pressure until the next one.
+    // The ramp end (crowdBrakeEnd) threads through params because it's a boundary shared with the
+    // growth brake; the ramp height (PRESSURE_MAX) has no other consumer, so it stays a module-scope
+    // constant instead — the mixed shape is deliberate, not an inconsistency.
+    const crowd = crowdingPressure(s.population, s.popCap, params.population.crowdBrakeEnd, CROWDING.PRESSURE_MAX);
+    const floor = clamp(taxPressure + crowd, 0, 1);
+    const unrest = accumulateUnrest(s.unrest, d, floor, regime, scaledUnrest);
+    // The delta reads the unrest this pulse just produced, so unrest resolves forward within the
+    // pulse while crowding lags it by one.
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
     popUpdates.push({ systemId: s.systemId, population, unrest });
     demandPops.push({ systemId: s.systemId, population });

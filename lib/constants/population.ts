@@ -4,11 +4,26 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
 
 /**
  * Unrest integration. Rates are per *population-processor run* — i.e. per economy-shard
- * update (every `MONTH_LENGTH` ticks, 24), not per game tick. Gain=decay means
- * only sustained high-D systems accumulate unrest; moderate supply deficits fade.
- * Calibrated against the simulator.
+ * update (every `MONTH_LENGTH` ticks, 24), not per game tick. Unrest relaxes toward a
+ * standing-pressure floor (tax + crowding) and integrates dissatisfaction on top:
+ * Shortage accumulates twice as fast as Rationing, and Supplied recovers twice as fast
+ * as either accumulates, so a relieved system sheds unrest quickly while a chronically
+ * short one climbs. Calibrated against the simulator.
  */
-export const UNREST_PARAMS: UnrestParams = { gain: 0.06, decay: 0.06 };
+export const UNREST_PARAMS: UnrestParams = {
+  gainRationing: 0.06,
+  gainShortage: 0.12,
+  decay: 0.06,
+  recoveryDecay: 0.12,
+};
+
+/**
+ * Overcrowding shape shared by the growth brake and the standing crowding-pressure ramp.
+ * BRAKE_END is r = population/popCap at which growth reaches zero and crowding pressure
+ * reaches its max; PRESSURE_MAX caps the standing unrest a fully overcrowded system adds,
+ * kept far below the strike threshold so overcrowding alone can never strike-spiral.
+ */
+export const CROWDING = { BRAKE_END: 1.15, PRESSURE_MAX: 0.05 } as const;
 
 /**
  * Strike production-suppression regime derived from unrest. Threshold triggers
@@ -19,16 +34,24 @@ export const UNREST_PARAMS: UnrestParams = { gain: 0.06, decay: 0.06 };
 export const STRIKE_PARAMS: StrikeParams = { threshold: 0.65, floorMultiplier: 0.25 };
 
 /**
- * Logistic growth/decline rates (per population-processor run, one per economy-shard
- * update). Growth asymptotes toward popCap when satisfied and calm; decline scales
- * with unrest. Symmetric rates: in the barren-but-alive galaxy most systems carry a
- * chronic low-grade higher-tier deficit (mining worlds can't source
- * consumer_goods/luxuries/medicine locally and the static economy can't build its way
- * out) — an asymmetric decline turned that unavoidable D≈0.4 into a steady galaxy-wide
- * drain. Equal rates let such systems hold steady while genuinely high-unrest ones still
- * decline. Calibrated against the simulator.
+ * Growth/decline rates (per population-processor run, one per economy-shard update).
+ * Growth runs at full rate until the housing cap, then the crowd brake ramps it to zero by
+ * `crowdBrakeEnd`; decline scales with unrest. Symmetric growth/decline rates: in the
+ * barren-but-alive galaxy most systems carry a chronic low-grade higher-tier deficit (mining
+ * worlds can't source consumer_goods/luxuries/medicine locally and the static economy can't
+ * build its way out) — an asymmetric decline turned that unavoidable D≈0.4 into a steady
+ * galaxy-wide drain. Equal rates let such systems hold steady while genuinely high-unrest
+ * ones still decline. The overshoot-death sink fires only in the strike regime
+ * (`overshootDeathUnrestGate`), so a calm over-capacity system displaces via migration, not
+ * death. Calibrated against the simulator.
  */
-export const POPULATION_PARAMS: PopulationParams = { growthRate: 0.015, declineRate: 0.015, overshootDeathRate: 0.05 };
+export const POPULATION_PARAMS: PopulationParams = {
+  growthRate: 0.015,
+  declineRate: 0.015,
+  overshootDeathRate: 0.05,
+  crowdBrakeEnd: CROWDING.BRAKE_END,
+  overshootDeathUnrestGate: STRIKE_PARAMS.threshold,
+};
 
 /**
  * Migration over the de-regioned intra-faction topology — the sole consumer of the
@@ -37,8 +60,8 @@ export const POPULATION_PARAMS: PopulationParams = { growthRate: 0.015, declineR
  * addition, not SP2. Sim-tuned for stable-but-growing (no ping-pong).
  */
 export const MIGRATION_PARAMS: MigrationFlowParams = {
-  // jobs weight makes open jobs pull and unemployment push; headroom stays 1 so this is a
-  // pure addition, not a recalibration (the contentment/headroom/jobs mix is a PR4 rebalance).
+  // jobs weight makes open jobs pull and unemployment push; headroom stays 1 alongside it so the
+  // contentment/headroom/jobs mix pulls jointly rather than any one term dominating the gradient.
   weights: { contentment: 1, headroom: 1, jobs: 1 },
   // Local balancing only — colony population is supplied by the targeted colonist-delivery pass, not by
   // diffusion. Kept BELOW the natural growth rate (0.015) so edge diffusion can't drain a system faster
@@ -50,7 +73,8 @@ export const MIGRATION_PARAMS: MigrationFlowParams = {
   // staffed pool stays home; the future player speed-dial lowers this per chosen system, at a cost.
   employedGradientThreshold: 100,
   // Small always-on leak of staffed workers toward strongly-attractive colonies — the pop pump that
-  // lets colonisation proceed once home worlds saturate (spare labour ≈ 0). Coarse; PR4-calibrated.
+  // lets colonisation proceed once home worlds saturate (spare labour ≈ 0). Coarse first cut,
+  // calibrated against the simulator.
   employedLeakFraction: 0.02,
 };
 

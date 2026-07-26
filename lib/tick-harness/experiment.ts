@@ -58,6 +58,8 @@ export interface ExperimentResult {
   treasurySnapshots: TreasurySnapshot[];
   /** Directed-build burst pacing — proves the construction rate cap bounds per-pulse proposal velocity. */
   buildBurstSummary: HarnessResults["buildBurstSummary"];
+  /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
+  migrationThroughput: HarnessResults["migrationThroughput"];
   elapsedMs: number;
 }
 
@@ -75,6 +77,7 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     treasurySummary: results.treasurySummary,
     treasurySnapshots: results.treasurySnapshots,
     buildBurstSummary: results.buildBurstSummary,
+    migrationThroughput: results.migrationThroughput,
     elapsedMs: results.elapsedMs,
   };
 }

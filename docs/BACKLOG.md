@@ -78,6 +78,26 @@ Well-defined, can start now.
   a support building whose skill1 draw is the binding constraint — a display-consistency note, not a
   correctness bug (both are internally consistent with what they each drive); worth a single shared
   staffing-estimate helper if the divergence ever confuses a player-facing readout.
+- **[S] Remove the dead `unrest` field from the directed-build path** — the build path carries a
+  per-system `unrest` copy that nothing reads. `BuildSystemState.unrest`
+  (`lib/engine/directed-build.ts`) and `SystemBuildRow.unrest` (`lib/tick/world/directed-build-world.ts`)
+  went dead when the housing relief valve replaced the settle-margin pacer: the valve is gated on
+  supply alone (`fed()` reads only `supplyDissatisfaction(sys.goods)`), so the old calm gate that
+  consumed unrest is gone. `fed()`'s docstring already records that unrest is deliberately not a gate —
+  the field is simply the leftover input. Verified dead three times independently (two task reviews
+  plus a cross-layer sweep): the only occurrences in the whole build path are the two declarations,
+  `unrest: row.unrest` in `toBuildState` (`lib/tick/processors/directed-build.ts`), and the row
+  construction in `lib/world/tick.ts`. Dead data that later readers will assume is load-bearing.
+  **Caveat that matters:** the *system's* `unrest` in world state is untouched and still written every
+  pulse by the population processor (`lib/tick/adapters/memory/population.ts`) — only the build-path
+  row copy is dead. Do not let a grep for `unrest` sweep the live one out with it.
+  **Blast radius: 4 production sites + 87 fixture sites** across three test files —
+  `lib/engine/__tests__/directed-build.test.ts` (66), `lib/tick/processors/__tests__/directed-build.test.ts`
+  (20), `lib/tick/adapters/memory/__tests__/directed-build.test.ts` (1). Mechanical breadth, not risk.
+  **Recipe:** drop the two declarations and the two mappings, then `npx tsc --noEmit` and delete each
+  `unrest: N,` the excess-property check flags; repeat until clean. Deliberately held out of the band
+  reconciliation population PR — the field is inert, so a ~91-site mechanical diff at that PR's tail
+  bought no functional ground while adding review surface where mechanical regressions hide.
 - **[M] System-finder dev tool** — A queryable dev panel (or `scripts/` CLI) to surface representative systems by characteristic for manual smoke-testing / QA: population band (dead/undeveloped/tiny-outpost/healthy), economy-type, deposit profile, building roster, NaN/anomaly checks — returning name + direct `/system/<id>` link. Recurring need whenever generation/economy changes land (e.g. verifying barren-but-alive systems read correctly). Build it against the in-memory world (`getWorld()`), surfaced in a `scripts/` CLI or the dev-tools panel.
 
 ## Needs Design

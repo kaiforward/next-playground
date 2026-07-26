@@ -5,14 +5,24 @@ import { serializeWorld, deserializeWorld } from "../save";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { housingPopCap } from "@/lib/engine/industry";
-import { BUILDING_TYPES, HOUSING_TYPE, labourTotal } from "@/lib/constants/industry";
-import type { World, WorldMarket, WorldShip } from "../types";
+import { computeSystemLabourSnapshot, housingPopCap } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import {
+  BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, labourTotal,
+} from "@/lib/constants/industry";
+import { MONTH_LENGTH, type TickCadence } from "@/lib/constants/tick-cadence";
+import { CROWDING, POPULATION_PARAMS, STRIKE_PARAMS, UNREST_PARAMS } from "@/lib/constants/population";
+import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
+import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import type { TaxLevel } from "@/lib/types/game";
+import type {
+  World, WorldBuildProject, WorldFactionTreasury, WorldMarket, WorldShip, WorldSystem,
+} from "../types";
 
-async function runTicks(world: ReturnType<typeof generateWorld>, count: number) {
+async function runTicks(world: World, count: number, cadence?: TickCadence) {
   let w = world;
   for (let i = 0; i < count; i++) {
-    const result = await runWorldTick(w);
+    const result = await runWorldTick(w, cadence ? { cadence } : undefined);
     w = result.world;
   }
   return w;
@@ -669,4 +679,317 @@ describe("applyBuildingIncreases — popCap", () => {
     );
     expect(after.popCap).toBe(capAbove);
   });
+});
+
+// ── population, unrest and housing relief composed through the real tick ──
+// Each mechanic below is covered in isolation by engine and processor tests. These drive the whole
+// pipeline — economy assessment → infrastructure decay → population → directed-build — and assert on
+// committed World state, because the failures worth catching live in the wiring: an unrest floor read
+// from the wrong stage, a regime signal that never reaches the integrator, a relief valve reading a
+// stale occupancy. Every expectation is derived from the constants and the stated formulas.
+
+/** Housing levels the fixture homeworld stands on; popCap follows from it. */
+const FIXTURE_HOUSING_LEVELS = 250;
+const FIXTURE_POP_CAP = FIXTURE_HOUSING_LEVELS * POP_CENTRE_DENSITY;
+/** The heaviest tax band, so the standing unrest floor is the largest a calm system can carry. */
+const FIXTURE_TAX_LEVEL: TaxLevel = "very_high";
+const TAX_FLOOR = TAX_LEVEL_UNREST_PRESSURE[FIXTURE_TAX_LEVEL];
+/** Cover deep enough that delivery stays full for the whole run (the pulse clamps it to maxStock). */
+const AMPLE_STOCK = 1e7;
+/** An interval no fixture tick is a resolution pulse of — parks a stage for the run. */
+const NEVER = 1_000_000;
+/** Reference month, with construction and logistics parked: unrest and growth resolve at their
+ *  calibrated per-month magnitudes (catchUpFactor = 1) and nothing else touches the fixture. */
+const POPULATION_CADENCE: TickCadence = { month: MONTH_LENGTH, construction: NEVER, logistics: NEVER };
+/** A construction-only pulse: the build planner resolves against a world the economy has not moved. */
+const CONSTRUCTION_CADENCE: TickCadence = { month: NEVER, construction: 1, logistics: NEVER };
+/** Occupancy past CROWDING.BRAKE_END, where the growth brake is fully shut and crowding pressure maxes. */
+const OVERSHOOT_OCCUPANCY = 1.16;
+/** Stored unrest for the relief fixture — earned unrest, well past any standing floor. */
+const RESTIVE_UNREST = 0.5;
+
+/**
+ * A developed homeworld reduced to housing alone, at a chosen occupancy r = population ÷ popCap and
+ * stored unrest, owned by a faction taxed at the heaviest band. Stripping the producers is what makes
+ * the supply regime a property of the fixture rather than of the galaxy: with no local output, every
+ * consumed good is served purely from the seeded stock, so ample stock reads Supplied and an emptied
+ * market reads Shortage on every demanded good at once. Its faction owns no other developed system, so
+ * migration has no open edge and colonist delivery nets to zero — population moves only by growth.
+ */
+function populationFixture(occupancy: number, unrest: number): { world: World; systemId: string } {
+  const base = generateWorld({ systemCount: 60, seed: 7 });
+  const systemId = base.factions[0].homeworldId;
+  const factionId = base.factions[0].id;
+  const world: World = {
+    ...base,
+    systems: base.systems.map((s): WorldSystem =>
+      s.id === systemId
+        ? { ...s, population: occupancy * FIXTURE_POP_CAP, popCap: FIXTURE_POP_CAP, unrest }
+        : s,
+    ),
+    buildings: [
+      ...base.buildings.filter((b) => b.systemId !== systemId),
+      { systemId, buildingType: HOUSING_TYPE, count: FIXTURE_HOUSING_LEVELS, idleMonths: 0, collapseDebt: 0 },
+    ],
+    markets: base.markets.map((m) =>
+      m.systemId === systemId ? { ...m, stock: AMPLE_STOCK, satisfaction: 1 } : m,
+    ),
+    treasuries: base.treasuries.map((t): WorldFactionTreasury =>
+      t.factionId === factionId ? { ...t, taxLevel: FIXTURE_TAX_LEVEL } : t,
+    ),
+  };
+  return { world, systemId };
+}
+
+function fixtureSystem(world: World, systemId: string): WorldSystem {
+  return world.systems.find((s) => s.id === systemId)!;
+}
+
+/**
+ * Per-good satisfaction at the fixture system, restricted to the goods the economy actually folds
+ * into D and the regime. A non-consumer is written satisfaction 1 and never enters either fold, so
+ * sweeping every market would quietly require that every good at this homeworld carry civilian
+ * demand. The filter mirrors the economy adapter's own predicate: civilian consumption > 0 at the
+ * system's labour basis and government.
+ */
+function demandedSatisfactions(world: World, systemId: string): number[] {
+  const system = fixtureSystem(world, systemId);
+  const governmentType = world.factions.find((f) => f.id === system.factionId)!.governmentType;
+  const buildings: Record<string, number> = {};
+  for (const b of world.buildings) if (b.systemId === systemId) buildings[b.buildingType] = b.count;
+  const { basis } = computeSystemLabourSnapshot(buildings, system.population);
+  return world.markets
+    .filter((m) => m.systemId === systemId && consumptionRate(m.goodId, basis, governmentType) > 0)
+    .map((m) => m.satisfaction ?? 1);
+}
+
+/**
+ * The D premise, asserted non-vacuously: every demanded good reads `expected`, AND the system has
+ * demanded goods at all — a system with no consumers folds to D = 0 whatever its markets say, so
+ * without the length check "all satisfied" could hold over an empty set.
+ */
+function expectDemandedSatisfaction(world: World, systemId: string, expected: number): void {
+  const satisfactions = demandedSatisfactions(world, systemId);
+  expect(satisfactions.length).toBeGreaterThan(0);
+  for (const satisfaction of satisfactions) expect(satisfaction).toBe(expected);
+}
+
+/**
+ * Whole housing levels the fixture system could still build — the land clamp on relief sizing.
+ * Mirrors `habitableHousingHeadroom` for a site whose only general-space user is its own housing.
+ */
+function fixtureLandHeadroom(system: WorldSystem): number {
+  const cost = effectiveSpaceCost(HOUSING_TYPE);
+  const used = FIXTURE_HOUSING_LEVELS * cost;
+  return Math.floor(Math.min(system.habitableSpace - used, system.generalSpace - used) / cost);
+}
+
+function withStock(world: World, systemId: string, stock: number): World {
+  return {
+    ...world,
+    markets: world.markets.map((m) => (m.systemId === systemId ? { ...m, stock } : m)),
+  };
+}
+
+describe("runWorldTick — population growth, unrest recovery and housing relief", () => {
+  it("grows a fed, taxed system at the full rate at r = 0.97 and holds unrest at the tax floor", async () => {
+    const { world, systemId } = populationFixture(0.97, TAX_FLOOR);
+    const before = fixtureSystem(world, systemId);
+    const after = await runTicks(world, MONTH_LENGTH, POPULATION_CADENCE);
+    const grown = fixtureSystem(after, systemId);
+
+    // Premise: the pulse delivered every demanded good in full, so D folds to 0 and the regime is
+    // Supplied whatever the demand weights.
+    expectDemandedSatisfaction(after, systemId, 1);
+    // Housing is untouched, so occupancy here is a pure population story — and it stays under the
+    // cap, which is what leaves both the crowd brake open and the crowding term out of the floor.
+    expect(grown.popCap).toBe(FIXTURE_POP_CAP);
+    expect(grown.population).toBeLessThan(grown.popCap);
+
+    // At D = 0 the integrator relaxes toward the standing floor, and this system starts exactly on
+    // it: tax pressure alone (r ≤ 1 contributes no crowding), so unrest holds.
+    expect(grown.unrest).toBeCloseTo(TAX_FLOOR, 12);
+
+    // Growth runs at the FULL rate below the cap — crowdFactor is 1 for r ≤ 1 and the satisfaction
+    // factor is 1 — against the standing floor's decline bite.
+    const catchUp = catchUpFactor(MONTH_LENGTH);
+    const growth = POPULATION_PARAMS.growthRate * before.population;
+    const decline = POPULATION_PARAMS.declineRate * before.population * TAX_FLOOR;
+    expect(grown.population).toBeCloseTo(before.population + (growth - decline) * catchUp, 6);
+
+    // Discrimination: a headroom-scaled growth term would leave only 3% of the rate at r = 0.97 —
+    // not merely slower, but a net DECLINE against the same tax floor.
+    const headroomScaled = growth * (1 - before.population / before.popCap);
+    expect(headroomScaled - decline).toBeLessThan(0);
+    expect(grown.population).toBeGreaterThan(before.population);
+  }, 60_000);
+
+  it("brakes growth to zero past the crowd-brake end without taking overshoot death below the gate", async () => {
+    expect(OVERSHOOT_OCCUPANCY).toBeGreaterThan(CROWDING.BRAKE_END);
+    // Standing floor at full overcrowding: tax plus the capped crowding pressure.
+    const floor = TAX_FLOOR + CROWDING.PRESSURE_MAX;
+    const { world, systemId } = populationFixture(OVERSHOOT_OCCUPANCY, floor);
+    const before = fixtureSystem(world, systemId);
+    const after = await runTicks(world, MONTH_LENGTH, POPULATION_CADENCE);
+    const crowded = fixtureSystem(after, systemId);
+
+    expectDemandedSatisfaction(after, systemId, 1);
+    // Still overcrowded, and housing never rose to meet it (the cap only moves by construction/decay).
+    expect(crowded.popCap).toBe(FIXTURE_POP_CAP);
+    expect(crowded.population).toBeGreaterThan(crowded.popCap);
+    // Crowding pressure saturates past the brake end, so unrest settles on that floor and stays there.
+    expect(crowded.unrest).toBeCloseTo(floor, 12);
+    // The whole point: even fully overcrowded, the standing floor is nowhere near the collapse gate.
+    expect(crowded.unrest).toBeLessThan(POPULATION_PARAMS.overshootDeathUnrestGate);
+
+    // Growth is braked to exactly zero, so the pulse's only population term is the unrest decline —
+    // no overshoot death, though the overshoot itself is large.
+    const catchUp = catchUpFactor(MONTH_LENGTH);
+    const decline = POPULATION_PARAMS.declineRate * before.population * floor;
+    expect(crowded.population).toBeCloseTo(before.population - decline * catchUp, 6);
+
+    // Discrimination: an ungated death term would have removed a further large slice of the overshoot.
+    const ungatedDeath =
+      POPULATION_PARAMS.overshootDeathRate * (before.population - before.popCap) * floor;
+    expect(ungatedDeath).toBeGreaterThan(0);
+    expect(crowded.population).toBeGreaterThan(before.population - (decline + ungatedDeath) * catchUp);
+  }, 60_000);
+
+  it("drains stored unrest geometrically at recoveryDecay after one full-shortage pulse", async () => {
+    const { world, systemId } = populationFixture(0.92, TAX_FLOOR);
+    // Empty the fixture system on the tick before the assessment, so the pulse measures a market
+    // that cannot deliver — and nothing else has had a chance to move it.
+    const drained = withStock(
+      await runTicks(world, MONTH_LENGTH - 1, POPULATION_CADENCE),
+      systemId,
+      0,
+    );
+    const shortagePulse = await runTicks(drained, 1, POPULATION_CADENCE);
+
+    // Premise: every demanded good delivered nothing, so D folds to exactly 1 and the worst-good
+    // fold reads Shortage — both independent of the demand weights.
+    expectDemandedSatisfaction(shortagePulse, systemId, 0);
+    // The system entered on its floor, so the relaxation term is zero and the whole rise is the
+    // shortage gain integrating D = 1.
+    const shortageUnrest = fixtureSystem(shortagePulse, systemId).unrest;
+    expect(shortageUnrest).toBeCloseTo(TAX_FLOOR + UNREST_PARAMS.gainShortage, 12);
+    // One bad pulse from the floor is recoverable — it does not reach the strike regime.
+    expect(shortageUnrest).toBeLessThan(STRIKE_PARAMS.threshold);
+
+    // Restock: the next assessment finds the market able to deliver again.
+    let recovering = withStock(shortagePulse, systemId, AMPLE_STOCK);
+    const unrestByPulse: number[] = [];
+    for (let pulse = 0; pulse < 4; pulse++) {
+      recovering = await runTicks(recovering, MONTH_LENGTH, POPULATION_CADENCE);
+      // Supply is restored immediately — the regime flips back the very first assessment, and the
+      // recovery below is the memory draining, not the shortage still being measured.
+      expectDemandedSatisfaction(recovering, systemId, 1);
+      unrestByPulse.push(fixtureSystem(recovering, systemId).unrest);
+    }
+
+    // The stored excess above the floor decays geometrically at the Supplied relaxation rate.
+    const excess = UNREST_PARAMS.gainShortage;
+    const retained = 1 - UNREST_PARAMS.recoveryDecay;
+    unrestByPulse.forEach((unrest, index) => {
+      expect(unrest).toBeCloseTo(TAX_FLOOR + excess * retained ** (index + 1), 12);
+    });
+
+    // Stated as the law rather than the values: each supplied pulse keeps exactly (1 - recoveryDecay)
+    // of the previous excess. A rate-agnostic snap to the floor, or a relaxation at the Rationing
+    // rate, breaks this ratio while still "going down".
+    const excessByPulse = [shortageUnrest, ...unrestByPulse].map((u) => u - TAX_FLOOR);
+    for (let i = 1; i < excessByPulse.length; i++) {
+      expect(excessByPulse[i]).toBeGreaterThan(0);
+      expect(excessByPulse[i]).toBeLessThan(excessByPulse[i - 1]);
+      expect(excessByPulse[i] / excessByPulse[i - 1]).toBeCloseTo(retained, 10);
+    }
+    // Housing never moved and occupancy stayed under the cap, so the floor was pure tax pressure —
+    // with no crowding term drifting into it — across the whole recovery.
+    const recovered = fixtureSystem(recovering, systemId);
+    expect(recovered.popCap).toBe(FIXTURE_POP_CAP);
+    expect(recovered.population).toBeLessThan(recovered.popCap);
+  }, 120_000);
+
+  it("commits relief housing sized back to the relief target on a fed but deeply restive system", async () => {
+    const { world, systemId } = populationFixture(0.97, RESTIVE_UNREST);
+    const before = fixtureSystem(world, systemId);
+
+    // Fed: the persisted satisfactions the planner folds are full, so supply-dissatisfaction is 0.
+    expectDemandedSatisfaction(world, systemId, 1);
+    // Restive: unrest sits above the largest standing floor a system can carry (tax + full crowding),
+    // so this is earned unrest, not baseline. The valve reads supply alone and opens anyway —
+    // crowding is itself an unrest source, so a calm gate would starve the world that needs relief.
+    expect(before.unrest).toBeGreaterThan(TAX_FLOOR + CROWDING.PRESSURE_MAX);
+    // Armed: occupancy is past the relief trigger.
+    expect(before.population).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TRIGGER * FIXTURE_POP_CAP);
+
+    const after = (await runWorldTick(world, { cadence: CONSTRUCTION_CADENCE })).world;
+
+    // Sized to bring occupancy back to the relief target, rounded up to whole levels:
+    // (4850 / 0.92 - 5000) / 20 = 13.59 → 14.
+    const reliefLevels = Math.ceil(
+      (before.population / DIRECTED_BUILD.RELIEF_TARGET - FIXTURE_POP_CAP) / POP_CENTRE_DENSITY,
+    );
+    expect(reliefLevels).toBe(14);
+    // The want is what sizes the build: relief is also clamped to the land, and this homeworld has
+    // ~688 whole housing levels of headroom left after its 250, so the clamp is nowhere near binding.
+    expect(fixtureLandHeadroom(before)).toBeGreaterThanOrEqual(reliefLevels);
+
+    const reliefProjects = after.constructionProjects.filter(
+      (p): p is WorldBuildProject =>
+        p.kind === "build" && p.systemId === systemId && p.buildingType === HOUSING_TYPE,
+    );
+    expect(reliefProjects).toHaveLength(1);
+    expect(reliefProjects[0].levels).toBe(reliefLevels);
+    // Once it lands, occupancy is at or under the relief target.
+    const relievedCap = (FIXTURE_HOUSING_LEVELS + reliefProjects[0].levels) * POP_CENTRE_DENSITY;
+    expect(before.population / relievedCap).toBeLessThanOrEqual(DIRECTED_BUILD.RELIEF_TARGET);
+
+    // It is a commitment, not an instant build: no level has landed and the cap has not moved.
+    expect(reliefProjects[0].workDone).toBeLessThan(reliefProjects[0].workTotal);
+    expect(
+      after.buildings.find((b) => b.systemId === systemId && b.buildingType === HOUSING_TYPE)?.count,
+    ).toBe(FIXTURE_HOUSING_LEVELS);
+    expect(fixtureSystem(after, systemId).popCap).toBe(FIXTURE_POP_CAP);
+  }, 60_000);
+
+  it("sizes relief housing to the population the same pulse just grew, at the shipped cadence", async () => {
+    // MONTH_LENGTH and CONSTRUCTION_INTERVAL are equal as shipped, so the relief valve's real pulse
+    // always coincides with the economy and population stages and the planner reads the POST-growth
+    // population. The fixture above parks the economy to buy an exact closed form; this one runs the
+    // DEFAULT cadence and pins the stage ordering instead, on ranges rather than a level count, so it
+    // does not re-encode world-gen incidentals.
+    const { world, systemId } = populationFixture(0.97, RESTIVE_UNREST);
+    const before = fixtureSystem(world, systemId);
+    const after = await runTicks(world, MONTH_LENGTH);
+    const grown = fixtureSystem(after, systemId);
+
+    expectDemandedSatisfaction(after, systemId, 1);
+    // The pulse grew the system and shed some of its unrest, and it is still both restive and armed.
+    expect(grown.population).toBeGreaterThan(before.population);
+    expect(grown.unrest).toBeGreaterThan(TAX_FLOOR + CROWDING.PRESSURE_MAX);
+    expect(grown.population).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TRIGGER * FIXTURE_POP_CAP);
+
+    const reliefProjects = after.constructionProjects.filter(
+      (p): p is WorldBuildProject =>
+        p.kind === "build" && p.systemId === systemId && p.buildingType === HOUSING_TYPE,
+    );
+    expect(reliefProjects).toHaveLength(1);
+    const reliefLevels = reliefProjects[0].levels;
+    expect(reliefLevels).toBeGreaterThanOrEqual(1);
+    expect(reliefProjects[0].workDone).toBeLessThan(reliefProjects[0].workTotal);
+    // Land is not the binding constraint, so the relief want is what sized this.
+    expect(fixtureLandHeadroom(grown)).toBeGreaterThanOrEqual(reliefLevels);
+    // Sized to bring the GROWN occupancy back to the relief target.
+    const relievedCap = (FIXTURE_HOUSING_LEVELS + reliefLevels) * POP_CENTRE_DENSITY;
+    expect(grown.population / relievedCap).toBeLessThanOrEqual(DIRECTED_BUILD.RELIEF_TARGET);
+
+    // The ordering itself: sizing against the population as it stood BEFORE the pulse would have
+    // committed strictly fewer levels, so this pins that directed-build read population after the
+    // population stage rather than from the start-of-tick snapshot.
+    const preGrowthLevels = Math.ceil(
+      (before.population / DIRECTED_BUILD.RELIEF_TARGET - FIXTURE_POP_CAP) / POP_CENTRE_DENSITY,
+    );
+    expect(reliefLevels).toBeGreaterThan(preGrowthLevels);
+  }, 60_000);
 });

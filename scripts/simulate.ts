@@ -28,7 +28,7 @@ import {
 import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/tick-harness/population-analysis";
 import { summarizeColonisation, summarizeConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
-import { STRIKE_PARAMS } from "@/lib/constants/population";
+import { STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
 import { toTickSystems } from "../lib/world/tick";
@@ -191,6 +191,7 @@ function formatTable(results: HarnessResults): string {
       finalTickSystems,
       initialPopulationTotal,
       STRIKE_PARAMS.threshold,
+      POPULATION_PARAMS.crowdBrakeEnd,
     );
     lines.push("");
     lines.push("Population & Unrest (end of simulation):");
@@ -207,7 +208,13 @@ function formatTable(results: HarnessResults): string {
       ["Growth %", pop.growthPct.toFixed(2) + "%"],
       ["Mean unrest", pop.meanUnrest.toFixed(3)],
       ["Max unrest", pop.maxUnrest.toFixed(3)],
-      ["Saturated (≥98% cap)", String(pop.saturatedCount)],
+      ["Occupancy (mean pop/cap)", pop.meanOccupancy.toFixed(3)],
+      // Pop ≈ popCap is the crowd brake's healthy resting state now (growth runs full-rate to r =
+      // 1, then brakes) — this is no longer a saturation pathology, just where a full world sits.
+      ["Near cap (≥98%, healthy)", String(pop.saturatedCount)],
+      // The actual pathology watch: pinned at the brake (crowdFactor ≤ 0.25) while relief housing
+      // exists and land is available means the growth valve is blocked, not that land ran out.
+      ["Braked (valve check)", String(pop.brakedCount)],
       ["Emptied (≤1)", String(pop.emptiedCount)],
       ["Striking (≥threshold)", String(pop.strikingCount)],
       ["Ping-pong (migration)", String(pingPong)],
@@ -215,6 +222,22 @@ function formatTable(results: HarnessResults): string {
     for (const [label, value] of pRows) {
       lines.push([pad(label, pWidths[0]), rpad(value, pWidths[1])].join(" | "));
     }
+  }
+
+  // Migration throughput (whole run) — reads most meaningfully on a land-tight seed, where colony
+  // housing opens at r ≈ 1.0 with no spare headroom (habitable-space-clamped bundling) and growth
+  // must lean on the crowd brake + migration push rather than housing absorbing it directly; on a
+  // generous-headroom seed, a low number here does not mean the push is broken — housing is doing
+  // the absorbing instead.
+  {
+    const mt = results.migrationThroughput;
+    lines.push("");
+    lines.push("Migration Throughput (whole run):");
+    lines.push(
+      `People moved: ${fmtNum(mt.totalColonists + mt.totalDiffusion)} total ` +
+        `(colonists ${fmtNum(mt.totalColonists)}, diffusion ${fmtNum(mt.totalDiffusion)}) ` +
+        `over ${mt.pulseCount} pulses, mean ${mt.meanPerPulse.toFixed(1)}/pulse`,
+    );
   }
 
   // Infrastructure decay summary

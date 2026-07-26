@@ -119,6 +119,15 @@ loosened magnitude tests stay range-y. Docs fold ON THE BRANCH before the final 
 fixed, `[L]` BACKLOG item deleted, these build files deleted, maturity-spread memory note
 re-audited.
 
+Decay/housing split (§5): retire the idle-contraction channel for housing — the idle test that
+prunes genuinely-unneeded production capacity stops applying to the housing building type, leaving
+housing's corrections to the relief valve's own sizing rule and the unrest-collapse channel alone.
+Both housing-sizing sites — the relief valve and colony-establish headroom — then sit inside
+containment by construction, so the band-constants containment assertion widens to cover both sites
+(colony establish as well as the relief valve) rather than the valve alone. Re-check the
+trapped-colony population once this lands: it is the same collision at scale, so it should clear
+alongside the single-colony case.
+
 The Population stability surface also explains the stored integral: current goods pressure,
 current tax pressure, and rising/stable/recovering direction, with a coarse recovery indication
 rather than a precise forecast. Keep diagnostics visible when `popCap <= 0` but population or

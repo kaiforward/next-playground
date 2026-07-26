@@ -2,8 +2,8 @@
  * PopulationWorld — data interface for the population processor.
  *
  * The processor runs over the systems the economy just processed this tick (the
- * economy shard), reading the dissatisfaction the economy recorded for them.
- * The adapter in `lib/tick/adapters/memory/population.ts` implements this.
+ * economy shard), reading the dissatisfaction and supply regime the economy recorded
+ * for them. The adapter in `lib/tick/adapters/memory/population.ts` implements this.
  */
 import type { UnrestParams, PopulationParams } from "@/lib/engine/population";
 export interface PopulationStateView {
@@ -35,7 +35,7 @@ export interface PopulationProcessorParams {
   /** Pulse interval in ticks; rates are reference-denominated and scaled by catchUpFactor. */
   interval: number;
   /** Per-system additive unrest pressure from the owning faction's tax level
-   *  (TAX_LEVEL_UNREST_PRESSURE). Enters the unrest integrator's d term only;
-   *  missing system or omitted map → 0. */
+   *  (TAX_LEVEL_UNREST_PRESSURE). Enters the unrest integrator's standing-pressure
+   *  floor only; missing system or omitted map → 0. */
   taxPressureBySystem?: ReadonlyMap<string, number>;
 }

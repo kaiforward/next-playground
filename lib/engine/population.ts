@@ -3,18 +3,29 @@
  *
  * The consequence spine: measure → accumulate → threshold → effect.
  *  - measure:    dissatisfaction() folds per-good satisfaction into one convex,
- *                demand-weighted number D for a system this tick.
- *  - accumulate: accumulateUnrest() integrates D into the stored unrest property.
+ *                demand-weighted number D, and supplyRegime() folds the same goods
+ *                into the worst-demanded-good rate class (supplied/rationing/shortage).
+ *                D picks the magnitude of the shortfall; the regime picks the rate.
+ *  - accumulate: accumulateUnrest() relaxes unrest toward a standing-pressure floor
+ *                (tax + crowding) and integrates D on top of it. Equilibrium sits at
+ *                the floor by construction, so recovery speed and the tax/crowding
+ *                meaning are decoupled; the regime selects both the excess-gain and
+ *                the relaxation rate (Supplied recovers faster than Rationing).
  *  - threshold:  strikeMultiplier() derives the production-suppression regime from
  *                unrest — a smooth ramp, not a binary halt. Unrest's own integral
  *                is the hysteresis, so no separate stored strike flag is needed.
- *  - effect:     populationDelta() is the logistic growth/decline term.
+ *  - effect:     populationDelta() grows at full rate until the cap, brakes to zero
+ *                across [cap, crowdBrakeEnd·cap] via crowdFactor(), declines with
+ *                unrest, and — only above the strike-level unrest gate — displaces
+ *                housing overshoot as non-conserved death.
  *
  * Each is a small, total function so additions to the spine are new terms, not
- * new branches.
+ * new branches. Every function is finite for any input (popCap ≤ 0, negative pop,
+ * catch-up-scaled rates > 1 included).
  */
 
 import { clamp } from "@/lib/utils/math";
+import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 
 /** One consumed good's signal for a system this tick. */
 export interface GoodSatisfaction {
@@ -44,21 +55,63 @@ export function dissatisfaction(goods: GoodSatisfaction[]): number {
   return d;
 }
 
+/** Supply-rate class for a system this tick, from the worst-supplied demanded good. */
+export type SupplyRegime = "supplied" | "rationing" | "shortage";
+
+/**
+ * Worst-demanded-good fold: "shortage" if any demanded good's satisfaction is below
+ * SHORTAGE_SATISFACTION, else "rationing" if any is short of full, else "supplied".
+ * Zero-demand goods are ignored; no demanded goods ⇒ "supplied".
+ *
+ * The regime picks the accumulation *rate* while D picks the *magnitude* — D is already
+ * demand-weighted, so a luxury-only shortage yields the fast gain times a small D. Bounded
+ * and monotonic; the fold deliberately does no second demand-weighting.
+ */
+export function supplyRegime(goods: GoodSatisfaction[]): SupplyRegime {
+  let regime: SupplyRegime = "supplied";
+  for (const g of goods) {
+    if (g.demanded <= 0) continue;
+    if (g.satisfaction < SHORTAGE_SATISFACTION) return "shortage";
+    if (g.satisfaction < 1) regime = "rationing";
+  }
+  return regime;
+}
+
 export interface UnrestParams {
-  /** How much one tick of full dissatisfaction adds to unrest. */
-  gain: number;
-  /** Fraction of unrest shed per tick when satisfied. */
+  /** Excess-integration gain per reference month while Rationing. */
+  gainRationing: number;
+  /** Excess-integration gain while Shortage. */
+  gainShortage: number;
+  /** Relaxation rate toward the standing-pressure floor while Rationing/Shortage. */
   decay: number;
+  /** Faster relaxation while Supplied — the recovery rate. */
+  recoveryDecay: number;
 }
 
 /**
- * Integrates dissatisfaction into unrest (the slow-moving stored property):
- *   unrest <- clamp(unrest + gain*D - decay*unrest, 0, 1)
- * Catastrophe lives in the integral — one bad tick is harmless, chronic shortage
- * climbs toward 1 over many ticks; relief decays it back toward 0.
+ * Relaxes unrest toward its standing-pressure floor and integrates dissatisfaction on top:
+ *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + gain(regime)*clamp(d,0,1), 0, 1)
+ * where k = clamp(regime === "supplied" ? recoveryDecay : decay, 0, 1) and
+ * gain = shortage → gainShortage, otherwise gainRationing.
+ *
+ * `floor` is the standing pressure (tax + crowding), clamped to [0,1] by the caller.
+ * At D = 0 unrest settles exactly at `floor` whatever the relaxation rate, so equilibrium
+ * and recovery speed are decoupled. Catastrophe lives in the integral — one bad pulse is
+ * recoverable, chronic shortage climbs toward 1. The caller pre-scales gains and decays by
+ * the catch-up factor; k is clamped after scaling, so a large catch-up can never flip the
+ * relaxation term and overshoot below the floor.
  */
-export function accumulateUnrest(unrest: number, d: number, params: UnrestParams): number {
-  return clamp(unrest + params.gain * clamp(d, 0, 1) - params.decay * unrest, 0, 1);
+export function accumulateUnrest(
+  unrest: number,
+  d: number,
+  floor: number,
+  regime: SupplyRegime,
+  params: UnrestParams,
+): number {
+  const k = clamp(regime === "supplied" ? params.recoveryDecay : params.decay, 0, 1);
+  const gain = regime === "shortage" ? params.gainShortage : params.gainRationing;
+  const relaxed = floor + (1 - k) * (unrest - floor);
+  return clamp(relaxed + gain * clamp(d, 0, 1), 0, 1);
 }
 
 export interface StrikeParams {
@@ -81,31 +134,72 @@ export function strikeMultiplier(unrest: number, params: StrikeParams): number {
   return 1 - t * (1 - params.floorMultiplier);
 }
 
+/**
+ * Growth brake from overcrowding: 1 while r = population/popCap ≤ 1, smoothstep down to
+ * 0 at r = crowdBrakeEnd. popCap ≤ 0 reads fully crowded (0) — never Infinity/NaN. Total.
+ */
+export function crowdFactor(population: number, popCap: number, crowdBrakeEnd: number): number {
+  if (popCap <= 0) return 0;
+  const span = crowdBrakeEnd - 1;
+  if (span <= 0) return population > popCap ? 0 : 1;
+  const t = clamp((population / popCap - 1) / span, 0, 1);
+  return 1 - t * t * (3 - 2 * t);
+}
+
+/**
+ * Bounded standing unrest pressure from overcrowding: 0 at r ≤ 1, linear to maxPressure at
+ * r ≥ brakeEnd. popCap ≤ 0 with population > 0 ⇒ maxPressure (fully crowded); both ≤ 0 ⇒ 0.
+ * Total and finite for any input. Bounded by maxPressure so overcrowding alone can never
+ * push the standing floor to the strike threshold.
+ */
+export function crowdingPressure(
+  population: number,
+  popCap: number,
+  brakeEnd: number,
+  maxPressure: number,
+): number {
+  if (popCap <= 0) return population > 0 ? maxPressure : 0;
+  const span = brakeEnd - 1;
+  if (span <= 0) return population > popCap ? maxPressure : 0;
+  const t = clamp((population / popCap - 1) / span, 0, 1);
+  return t * maxPressure;
+}
+
 export interface PopulationParams {
-  /** Logistic growth rate toward popCap when fully satisfied and calm. */
+  /** Growth rate at full satisfaction, calm, and uncrowded (r ≤ 1). */
   growthRate: number;
   /** Decline rate scaled by unrest. */
   declineRate: number;
   /**
    * Fraction of housing-overshoot (population − popCap) removed as death per run,
-   * scaled by unrest. Fires only when housing has rotted below its occupants (the
-   * unrest-snowball case) — a non-conserved sink, distinct from conserved migration.
+   * scaled by unrest. Fires only in the collapse regime (unrest above the gate) — a
+   * non-conserved sink, distinct from conserved migration.
    */
   overshootDeathRate: number;
+  /**
+   * r = population/popCap at which the growth brake reaches zero — shared boundary for two
+   * consumers: the growth brake here in populationDelta(), and (threaded by the population
+   * processor) the standing crowding-pressure ramp end in crowdingPressure().
+   */
+  crowdBrakeEnd: number;
+  /** Unrest above which the overshoot-death term fires (collapse regime only). */
+  overshootDeathUnrestGate: number;
 }
 
 /**
- * Logistic population change for one tick:
- *   delta = growthRate * pop * (1 - pop/popCap) * (1 - D)
- *         - declineRate * pop * unrest
- *         - overshootDeathRate * max(0, pop - popCap) * unrest
- * Fed and calm: grows toward popCap then asymptotes (no runaway).
- * Starved or unstable: net-declines. popCap = 0 suppresses the growth term entirely.
- * Housing-overshoot displacement: when housing has rotted below its occupants
- * (population > popCap — the unrest-snowball case), the excess is displaced; the
- * non-conserved death portion is removed here, unrest-weighted, so a violent collapse
- * is death-dominant. The conserved migration half is handled by the migration engine's
- * explicit overshoot coupling (negative headroom → repels outward migration).
+ * Population change for one tick:
+ *   growth  = growthRate * pop * crowdFactor(pop, popCap, crowdBrakeEnd) * (1 - D)
+ *   decline = declineRate * pop * clamp(unrest, 0, 1)
+ *   death   = unrest > overshootDeathUnrestGate
+ *               ? overshootDeathRate * max(0, pop - popCap) * clamp(unrest, 0, 1) : 0
+ *   delta   = growth - decline - death
+ * Fed and calm: grows at full rate until the cap, then the crowd brake ramps growth to
+ * zero across [popCap, crowdBrakeEnd·popCap] (no runaway past housing). popCap ≤ 0 zeroes
+ * growth via crowdFactor. Starved or unstable: net-declines. Housing-overshoot displacement:
+ * once housing has rotted below its occupants AND unrest is in the strike regime, the
+ * non-conserved death portion is removed here, unrest-weighted, so a violent collapse is
+ * death-dominant. The conserved migration half is handled by the migration engine's explicit
+ * overshoot coupling (negative headroom → repels outward migration).
  */
 export function populationDelta(
   population: number,
@@ -114,11 +208,13 @@ export function populationDelta(
   unrest: number,
   params: PopulationParams,
 ): number {
-  const headroom = popCap > 0 ? Math.max(0, 1 - population / popCap) : 0;
   const satisfactionFactor = clamp(1 - d, 0, 1);
-  const growth = params.growthRate * population * headroom * satisfactionFactor;
+  const growth =
+    params.growthRate * population * crowdFactor(population, popCap, params.crowdBrakeEnd) * satisfactionFactor;
   const decline = params.declineRate * population * clamp(unrest, 0, 1);
-  const overshoot = Math.max(0, population - popCap);
-  const displacementDeath = params.overshootDeathRate * overshoot * clamp(unrest, 0, 1);
-  return growth - decline - displacementDeath;
+  const death =
+    unrest > params.overshootDeathUnrestGate
+      ? params.overshootDeathRate * Math.max(0, population - popCap) * clamp(unrest, 0, 1)
+      : 0;
+  return growth - decline - death;
 }
