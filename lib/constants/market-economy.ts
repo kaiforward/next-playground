@@ -17,7 +17,7 @@ import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 import { marketBand } from "@/lib/engine/market-pricing";
-import type { ResourceVector } from "@/lib/types/game";
+import type { GovernmentType, ResourceVector } from "@/lib/types/game";
 
 /** Price-curve elasticity. k=1 reproduces the legacy demand/supply hyperbola. */
 export const DEFAULT_ELASTICITY = 1;
@@ -57,8 +57,8 @@ export const INITIAL_RESERVE_ANCHOR_FRAC = 0.75;
  * consumptionRate); the population processor recomputes it as population and
  * the labour allocation move.
  */
-export function civilianDemandRateForGood(goodId: string, basis: CivilianDemandBasis): number {
-  return Math.max(consumptionRate(goodId, basis), MIN_DEMAND);
+export function civilianDemandRateForGood(goodId: string, basis: CivilianDemandBasis, governmentType: GovernmentType): number {
+  return Math.max(consumptionRate(goodId, basis, governmentType), MIN_DEMAND);
 }
 
 /**
@@ -77,9 +77,10 @@ export function totalDemandRateForGood(
   basis: CivilianDemandBasis,
   buildings: Record<string, number>,
   yields: ResourceVector,
+  governmentType: GovernmentType,
   labourState?: LabourState,
 ): number {
-  const civilian = consumptionRate(goodId, basis);
+  const civilian = consumptionRate(goodId, basis, governmentType);
   const state = labourState ?? computeLabourState(buildings, basis.population);
   const industrial = inputDemandForGood(buildings, goodId, state, yields);
   return Math.max(civilian + industrial, MIN_DEMAND);
@@ -102,12 +103,13 @@ export function getInitialStock(
   yields: ResourceVector,
   population: number,
   goodId: string,
+  governmentType: GovernmentType,
 ): number {
   const snap = computeSystemLabourSnapshot(buildings, population);
   const production = buildingProduction(buildings, goodId, snap.state, yields);
-  const consumption = consumptionRate(goodId, snap.basis);
+  const consumption = consumptionRate(goodId, snap.basis, governmentType);
 
-  const demandRate = civilianDemandRateForGood(goodId, snap.basis);
+  const demandRate = civilianDemandRateForGood(goodId, snap.basis, governmentType);
   const g = GOODS[goodId];
   const band = g
     ? marketBand({

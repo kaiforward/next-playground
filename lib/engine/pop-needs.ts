@@ -14,6 +14,7 @@
 import { consumptionBreakdown, consumptionRate, type CivilianDemandBasis, type ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
+import type { GovernmentType } from "@/lib/types/game";
 
 export interface PopNeed {
   goodId: string;
@@ -49,10 +50,10 @@ function consumedGoodIds(): string[] {
  * Per-good needs for one system, pressure-sorted descending (ties by want).
  * A wanted good with no market row reads satisfaction 0 (nothing to draw from).
  */
-export function computePopNeeds(basis: CivilianDemandBasis, markets: PopNeedsMarketRow[]): PopNeed[] {
+export function computePopNeeds(basis: CivilianDemandBasis, governmentType: GovernmentType, markets: PopNeedsMarketRow[]): PopNeed[] {
   const rowByGood = new Map(markets.map((m) => [m.goodId, m]));
   const wanted = consumedGoodIds()
-    .map((goodId) => ({ goodId, want: consumptionRate(goodId, basis) }))
+    .map((goodId) => ({ goodId, want: consumptionRate(goodId, basis, governmentType) }))
     .filter((g) => g.want > 0);
   const totalWant = wanted.reduce((s, g) => s + g.want, 0);
   if (totalWant <= 0) return [];
@@ -68,7 +69,7 @@ export function computePopNeeds(basis: CivilianDemandBasis, markets: PopNeedsMar
         satisfaction,
         delivered: want * satisfaction,
         pressure: (want / totalWant) * gap * gap,
-        breakdown: consumptionBreakdown(goodId, basis),
+        breakdown: consumptionBreakdown(goodId, basis, governmentType),
       };
     })
     .sort((a, b) => b.pressure - a.pressure || b.want - a.want);

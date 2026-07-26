@@ -16,6 +16,8 @@ import {
   computeEventImpacts,
 } from "./event-analysis";
 import { summarizeLogistics } from "./logistics-analysis";
+import { summarizeBuildBursts } from "./build-analysis";
+import type { BuildCommitmentRecord } from "./build-analysis";
 import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
 import type { TreasurySnapshot } from "./treasury-analysis";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
@@ -83,6 +85,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // window every tick, so a run longer than that window can only be totalled by
   // taking each tick's transfers as they happen.
   const logisticsFlows: WorldFlowEvent[] = [];
+  // Whole-run directed-build commitments, one record per (tick, good) this pulse committed new
+  // autonomic levels for. Transient instrumentation (`runWorldTick().instrumentation`) — never
+  // persisted in `World` — so, like flowEvents, it must be captured as each tick happens.
+  const buildCommitments: BuildCommitmentRecord[] = [];
   const activeEventTracker = new Map<string, ActiveEventRecord>();
   const completedEvents: EventLifecycle[] = [];
 
@@ -106,6 +112,12 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
 
     for (const f of world.flowEvents) {
       if (f.tick === world.meta.currentTick) logisticsFlows.push(f);
+    }
+
+    if (result.instrumentation.buildCommitmentsByGood) {
+      for (const [goodId, levels] of result.instrumentation.buildCommitmentsByGood) {
+        buildCommitments.push({ tick: world.meta.currentTick, goodId, levels });
+      }
     }
 
     if (world.meta.currentTick % SNAPSHOT_INTERVAL === 0) {
@@ -150,6 +162,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     marketHealth,
     eventImpacts,
     logisticsActivity: summarizeLogistics(logisticsFlows),
+    buildBurstSummary: summarizeBuildBursts(buildCommitments),
     regionOverview,
     label,
     elapsedMs: performance.now() - start,

@@ -58,6 +58,7 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { MarketBand } from "@/lib/engine/market-pricing";
 import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
@@ -156,7 +157,7 @@ describe("buildingProduction", () => {
 
 describe("capacityGoodRates", () => {
   it("returns one entry per good with capacity production and population consumption", () => {
-    const rates = capacityGoodRates({ ore: 4 }, 1000, unitResourceVector());
+    const rates = capacityGoodRates({ ore: 4 }, 1000, unitResourceVector(), "frontier");
     const ore = rates.find((r) => r.goodId === "ore")!;
     const food = rates.find((r) => r.goodId === "food")!;
     expect(ore.production).toBeGreaterThan(0);
@@ -164,9 +165,22 @@ describe("capacityGoodRates", () => {
     expect(food.production).toBe(0); // no food buildings
     expect(food.consumption).toBeGreaterThan(0);
   });
+  it("uses the supplied government for capacity consumption", () => {
+    const population = 100;
+    const weapons = (governmentType: "frontier" | "militarist") =>
+      capacityGoodRates({}, population, unitResourceVector(), governmentType).find((rate) => rate.goodId === "weapons")!;
+    const frontier = weapons("frontier");
+    const militarist = weapons("militarist");
+    expect(militarist.consumption).toBeCloseTo(
+      consumptionRate("weapons", { population, technicians: 0, engineers: 0 }, "militarist"),
+      10,
+    );
+    expect(militarist.consumption).toBeGreaterThan(frontier.consumption);
+  });
+
   it("applies the tier-0 yield multiplier to ore production", () => {
-    const base = capacityGoodRates({ ore: 4 }, 1000, unitResourceVector());
-    const boosted = capacityGoodRates({ ore: 4 }, 1000, makeResourceVector({ ore: 3.0 }));
+    const base = capacityGoodRates({ ore: 4 }, 1000, unitResourceVector(), "frontier");
+    const boosted = capacityGoodRates({ ore: 4 }, 1000, makeResourceVector({ ore: 3.0 }), "frontier");
     const oreBase = base.find((r) => r.goodId === "ore")!.production;
     const oreBoosted = boosted.find((r) => r.goodId === "ore")!.production;
     expect(oreBoosted).toBeCloseTo(oreBase * 3.0, 6);
@@ -177,8 +191,8 @@ describe("capacityGoodRates", () => {
     const developed = { electronics: 6, vocational_school: 3, research_institute: 2 };
     const frontier = {};
     const pop = 2000;
-    const devRates = capacityGoodRates(developed, pop, unitResourceVector());
-    const froRates = capacityGoodRates(frontier, pop, unitResourceVector());
+    const devRates = capacityGoodRates(developed, pop, unitResourceVector(), "frontier");
+    const froRates = capacityGoodRates(frontier, pop, unitResourceVector(), "frontier");
     const get = (rates: SubstrateGoodRate[], id: string) => rates.find((r) => r.goodId === id)!;
     expect(get(devRates, "luxuries").consumption).toBeGreaterThan(get(froRates, "luxuries").consumption);
     expect(get(devRates, "consumer_goods").consumption).toBeGreaterThan(get(froRates, "consumer_goods").consumption);
@@ -226,7 +240,7 @@ describe("inputDemandFromProduction", () => {
     const pop = labourDemand(buildings); // population == labour demand ⇒ labourFulfil 1
     const state = computeLabourState(buildings, pop);
     const productionByGood = new Map(
-      capacityGoodRates(buildings, pop, yields).map((g) => [g.goodId, g.production]),
+      capacityGoodRates(buildings, pop, yields, "frontier").map((g) => [g.goodId, g.production]),
     );
     for (const goodId of ["ore", "minerals", "luxuries"]) {
       expect(inputDemandFromProduction(goodId, productionByGood)).toBeCloseTo(

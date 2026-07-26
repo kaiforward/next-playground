@@ -8,8 +8,6 @@
  */
 
 import { GOODS } from "@/lib/constants/goods";
-import { scaleValue } from "@/lib/constants/economy-scale";
-import { type GovernmentDefinition } from "@/lib/constants/government";
 import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
 import { buildMarketTickEntry, type MarketTickEntry } from "@/lib/engine/tick";
 import { marketBand } from "@/lib/engine/market-pricing";
@@ -36,8 +34,6 @@ export interface MarketTickInput {
   baseProductionRate?: number;
   /** Base consumption rate for this good (undefined = not a consumer). */
   baseConsumptionRate?: number;
-  /** Government definition for the system's owning faction (undefined if none). */
-  govDef?: GovernmentDefinition;
   /** Active economy modifiers for this system (already filtered). */
   modifiers: ModifierRow[];
   /** Modifier caps from constants. */
@@ -92,9 +88,6 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     maxStock: band.maxStock,
     baseProductionRate: input.baseProductionRate,
     baseConsumptionRate: input.baseConsumptionRate,
-    // Goods-magnitude consumption term — rides ECONOMY_SCALE like every other consumption
-    // rate, else it's an unscaled absolute that dominates consumption at low scale.
-    govConsumptionBoost: scaleValue(input.govDef?.consumptionBoosts[input.goodId] ?? 0),
     productionSuppress: input.productionSuppress,
   });
 

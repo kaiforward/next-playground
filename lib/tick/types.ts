@@ -72,7 +72,16 @@ export interface TickProcessorResult {
    *  points absorbed; directed-logistics: work-budget consumed). Transient input
    *  to the treasury settlement — not broadcast, not persisted. */
   workPerformedByFaction?: Map<string, number>;
+  /** New autonomic production-good build levels committed this pulse (directed-build), by
+   *  good id. Counts proposal levels, not the final funded queue. Calibration instrumentation
+   *  only — surfaced via `runWorldTick().instrumentation`, never broadcast or persisted. */
+  buildCommitmentsByGood?: Map<string, number>;
 }
+
+/** Transient, calibration-only signals a tick produced — never broadcast (`TickBroadcastRaw`)
+ *  or folded into `World`. The calibration harness is the only reader. Derived from the processor
+ *  result so the shared field can't drift. */
+export type TickInstrumentation = Pick<TickProcessorResult, "buildCommitmentsByGood">;
 
 /** The full payload one tick's run hands to the broadcast layer. */
 export interface TickBroadcastRaw {

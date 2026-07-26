@@ -74,6 +74,25 @@ describe("getSystemPopulation", () => {
     expect(consumerGoods.breakdown.technicians).toBeGreaterThan(0);
   });
 
+  it("projects the owning government boost into the needs ledger", () => {
+    if (system.factionId === null) throw new Error("expected owned population fixture");
+    setWorld({
+      ...world,
+      factions: world.factions.map((faction) =>
+        faction.id === system.factionId ? { ...faction, governmentType: "militarist" as const } : faction,
+      ),
+    });
+
+    const data = getSystemPopulation(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible population");
+    const weapons = data.needs.find((need) => need.goodId === "weapons")!;
+    expect(weapons.breakdown.government).toBeGreaterThan(0);
+    expect(weapons.want).toBeCloseTo(
+      weapons.breakdown.base + weapons.breakdown.technicians + weapons.breakdown.engineers + weapons.breakdown.government,
+      10,
+    );
+  });
+
   it("throws ServiceError(404) for an unknown system", () => {
     expect(() => getSystemPopulation("does-not-exist")).toThrow(ServiceError);
     try {

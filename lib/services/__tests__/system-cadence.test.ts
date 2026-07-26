@@ -76,6 +76,7 @@ function makeLogisticsRow(systemId: string, factionId: string | null): SystemLog
   return {
     systemId,
     factionId,
+    governmentType: factionId ? "federation" : "frontier",
     population: 100,
     buildings: {},
     yields: emptyResourceVector(),

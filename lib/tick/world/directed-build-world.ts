@@ -4,7 +4,7 @@
  * Sharding is PER-FACTION (the build planner needs all of a faction's systems
  * at once), matching logistics.
  */
-import type { ResourceVector } from "@/lib/types/game";
+import type { GovernmentType, ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
@@ -16,6 +16,7 @@ export interface SystemBuildRow {
   /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
   control: SystemControl;
   population: number;
+  governmentType: GovernmentType;
   /** Stored unrest integral 0…1 — the "calm" half of the settle gate. */
   unrest: number;
   buildings: Record<string, number>;
@@ -44,6 +45,15 @@ export interface SystemClaim {
   factionId: string;
 }
 
+/** One proposal-pressure write: the saturating construction assessment counter for a market row. */
+export interface ProposalPersistenceUpdate {
+  /** Composite market id (`${systemId}|${goodId}`), the same key the economy adapter writes by. */
+  id: string;
+  /** Reference-months a structural construction assessment has persisted; clamped to a finite [0,2] at
+   *  the adapter boundary (advanced per assessment by the construction interval's catchUpFactor). */
+  proposalPulses: number;
+}
+
 /** One development: a controlled system flips to developed and receives a conserved colony seed + bundled housing. */
 export interface SystemDevelopment {
   systemId: string;
@@ -67,6 +77,8 @@ export interface DirectedBuildWorld {
   applyBuildingIncreases(updates: BuildBuildingUpdate[]): Promise<void>;
   /** Replace the given factions' open construction projects with the funded/created set (landed removed). */
   applyConstructionUpdates(factionKeys: Array<string | null>, projects: WorldConstructionProject[]): Promise<void>;
+  /** Persist the saturating construction proposal-pressure counter per assessed market row. */
+  applyProposalPersistenceUpdates(updates: ProposalPersistenceUpdate[]): Promise<void>;
   /** Ownership writes from the claim step (unclaimed → controlled). */
   applyClaims(claims: SystemClaim[]): Promise<void>;
   /** Ownership writes from the develop step (controlled → developed + colony seed transfer). */

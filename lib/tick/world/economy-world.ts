@@ -10,7 +10,6 @@
  */
 
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
-import type { GovernmentType } from "@/lib/types/game";
 import type { EconomySimParams } from "@/lib/engine/tick";
 import type { StrikeParams } from "@/lib/engine/population";
 
@@ -28,8 +27,6 @@ export interface MarketView {
   regionId: string;
   goodId: string;
   stock: number;
-  /** Government of the system's owning faction — read per-market. */
-  governmentType: GovernmentType;
   /** Base production rate for this good. `undefined` means no built producer;
    *  `0` means built capacity is currently unable to produce due to staffing/skills. */
   baseProductionRate?: number;
@@ -40,6 +37,8 @@ export interface MarketView {
   demandRate: number;
   /** Built infrastructure storage capacity from the station market row. */
   storageCapacity: number;
+  /** Reference-months the previous rationed economy streak had persisted (finite, [0,2]); missing reads as 0. */
+  squeezePulses?: number;
 }
 
 /** Result of one market simulation step — written back via applyMarketUpdates. */
@@ -50,6 +49,13 @@ export interface MarketUpdate {
   anchorMult: number;
   /** Consumption satisfaction actually applied this pulse (delivered ÷ demanded; 1 for non-consumers). */
   satisfaction: number;
+  /** Realized output normalized to the reference economy interval. */
+  realizedProductionRate: number;
+  /** Whether strike or maintenance reduced production during this assessment. */
+  productionSuppressed: boolean;
+  /** Reference-months a rationed economy assessment has persisted — a finite value in [0,2] advanced per
+   *  assessment by the economy interval's catchUpFactor (2 = two reference months). */
+  squeezePulses: number;
 }
 
 export interface EconomyWorld {

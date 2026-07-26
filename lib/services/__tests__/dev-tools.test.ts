@@ -147,7 +147,10 @@ describe("resetEconomy", () => {
       },
       "yield",
     );
-    const expectedStock = getInitialStock(buildings, yields, system.population, targetGoodId);
+    const governmentType = system.factionId
+      ? seeded.factions.find((faction) => faction.id === system.factionId)?.governmentType ?? "frontier"
+      : "frontier";
+    const expectedStock = getInitialStock(buildings, yields, system.population, targetGoodId, governmentType);
 
     const resetRow = after.markets.find((m) => m.systemId === system.id && m.goodId === targetGoodId);
     expect(resetRow).toBeDefined();

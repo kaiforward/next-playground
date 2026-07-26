@@ -76,18 +76,21 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         producedGoodsBySystem.set(sys.id, producedGoods);
       }
       const production = buildingProduction(sys.buildings, m.goodId, snap.state, sys.yields);
-      const consumption = consumptionRate(m.goodId, snap.basis);
+      const consumption = consumptionRate(m.goodId, snap.basis, sys.governmentType);
+      const squeezePulses = typeof m.squeezePulses === "number" && Number.isFinite(m.squeezePulses)
+        ? Math.max(0, Math.min(2, m.squeezePulses))
+        : 0;
       views.push({
         id: `${m.systemId}|${m.goodId}`,
         systemId: m.systemId,
         regionId: sys.regionId,
         goodId: m.goodId,
         stock: m.stock,
-        governmentType: sys.governmentType,
         baseProductionRate: producedGoods.has(m.goodId) ? production : undefined,
         baseConsumptionRate: consumption > 0 ? consumption : undefined,
         demandRate: m.demandRate,
         storageCapacity: m.storageCapacity,
+        squeezePulses,
       });
     }
     return Promise.resolve(views);
@@ -135,6 +138,9 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         stock: isFinite(u.stock) ? u.stock : 0,
         anchorMult: isFinite(u.anchorMult) ? u.anchorMult : 1,
         satisfaction: isFinite(u.satisfaction) ? Math.max(0, Math.min(1, u.satisfaction)) : 1,
+        realizedProductionRate: isFinite(u.realizedProductionRate) ? Math.max(0, u.realizedProductionRate) : 0,
+        productionSuppressed: u.productionSuppressed,
+        squeezePulses: isFinite(u.squeezePulses) ? Math.max(0, Math.min(2, u.squeezePulses)) : 0,
       };
     });
     return Promise.resolve();

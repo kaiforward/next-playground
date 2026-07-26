@@ -3,7 +3,7 @@ import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build"
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
 import type { SystemBuildRow } from "@/lib/tick/world/directed-build-world";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
-import type { WorldConstructionProject } from "@/lib/world/types";
+import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { ClaimCandidate, ExpansionParams } from "@/lib/engine/expansion";
@@ -35,10 +35,12 @@ function mkConstruction(
 }
 
 // food market with a high demandRate so the band's targetStock is large — stock 1 is a deep deficit.
-function foodMarket(systemId: string, stock: number): MarketRowForLogistics {
+// `proposalPulses` seeds the persisted construction clock: a structural build only emits once the
+// residual has persisted PERSISTENCE_PULSES assessments, so a single-pulse test seeds the prior one.
+function foodMarket(systemId: string, stock: number, proposalPulses?: number): MarketRowForLogistics {
   return {
     id: `${systemId}|food`, goodId: "food", stock, anchorMult: 1,
-    demandRate: 1000, storageCapacity: 0,
+    demandRate: 1000, storageCapacity: 0, proposalPulses,
   };
 }
 
@@ -56,16 +58,25 @@ function builderSlots(n: number) {
 // A: deep structural food deficit, no capacity. B: builder with arable slots + population, reachable from A.
 // generalSpace defaults to habitableSpace (100) so housing's habitable-capped headroom also exhausts B's
 // general space, matching every pre-existing call site; the centre tests below widen it so a centre can
-// still site itself once housing has claimed its habitable-bounded share.
-function scenario(bFood: number, bHousing: number, slots = 20, generalSpace = 100): SystemBuildRow[] {
+// still site itself once housing has claimed its habitable-bounded share. `aOpts` lets the industry tests
+// mark A developed (only developed systems contribute counted deficits) and seed its persisted proposal
+// clock so the persistence-gated food build emits on the pulse under test; it defaults to the inert
+// unclaimed A every pre-existing call site relies on.
+function scenario(
+  bFood: number,
+  bHousing: number,
+  slots = 20,
+  generalSpace = 100,
+  aOpts?: { control?: SystemControl; foodPulses?: number },
+): SystemBuildRow[] {
   return [
     {
-      systemId: "A", factionId: "f1", control: "unclaimed", population: 100, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", governmentType: "federation", control: aOpts?.control ?? "unclaimed", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: emptyResourceVector(),
-      generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1)],
+      generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1, aOpts?.foodPulses)],
     },
     {
-      systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0,
+      systemId: "B", factionId: "f1", governmentType: "federation", control: "developed", population: 5000, unrest: 0,
       buildings: { food: bFood, housing: bHousing },
       yields: unitResourceVector(), slotCap: builderSlots(slots),
       generalSpace, habitableSpace: 100, markets: [],
@@ -140,7 +151,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     // systems can be developed), so independents absorb nothing; this pins that invariant
     // and the treasury export's null-faction exclusion together — if independents ever
     // gain building, this fails and forces a conscious attribution decision.
-    const w = new MemoryDirectedBuildWorld(scenario(0, 0).map((r) => ({ ...r, factionId: null })));
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0).map((r) => ({ ...r, factionId: null, governmentType: "frontier" })));
     const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
     expect(w.constructionProjects).toHaveLength(0);
     expect(w.buildingUpdates).toHaveLength(0);
@@ -156,7 +167,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
 
   it("commits nothing when there is nothing to build (no deficit, no housing headroom)", async () => {
     const balanced: SystemBuildRow[] = [{
-      systemId: "A", factionId: "f1", control: "developed", population: 0, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", governmentType: "federation", control: "developed", population: 0, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
       markets: [foodMarket("A", 1)], // population 0 → no consumption → no rate deficit; no habitable land → no housing
     }];
@@ -170,7 +181,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     // A fed (no unmet goods) and calm developed system with room for a few housing levels. A small
     // pool + cap fund a slice each pulse, so the level lands only after several pulses of work.
     const base: SystemBuildRow = {
-      systemId: "B", factionId: "f1", control: "developed", population: 300, unrest: 0,
+      systemId: "B", factionId: "f1", governmentType: "federation", control: "developed", population: 300, unrest: 0,
       buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 10, habitableSpace: 3, markets: [],
     };
@@ -208,9 +219,10 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
   }
 
   it("funds housing ahead of industry at the same builder (proactive substrate leads)", async () => {
-    // scenario(0,0): A has a deep food deficit, B is a developed builder with habitable land →
-    // B gets both a housing proposal and a food industry proposal. Housing must sort first.
-    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    // A is a developed food sink with a persisted proposal clock (only developed systems contribute
+    // counted deficits, and the structural build is persistence-gated); B is a developed builder with
+    // habitable land → B gets both a housing proposal and a food industry proposal. Housing sorts first.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
     const housingIdx = idx(w, "B", "housing");
     const foodIdx = idx(w, "B", "food");
@@ -239,21 +251,21 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
     // expand → fundQueue). The single-industry shipped tests can't exercise this cross-bundle ordering.
     const rows: SystemBuildRow[] = [
       {
-        systemId: "A1", factionId: "f1", control: "unclaimed", population: 10, unrest: 0, buildings: {},
+        systemId: "A1", factionId: "f1", governmentType: "federation", control: "developed", population: 10, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: emptyResourceVector(),
-        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A1", 1)],
+        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A1", 1, 1)],
       },
       {
-        systemId: "A2", factionId: "f1", control: "unclaimed", population: 100000, unrest: 0, buildings: {},
+        systemId: "A2", factionId: "f1", governmentType: "federation", control: "developed", population: 100000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: emptyResourceVector(),
-        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A2", 1)],
+        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A2", 1, 1)],
       },
       {
-        systemId: "B1", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
+        systemId: "B1", factionId: "f1", governmentType: "federation", control: "developed", population: 5000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: builderSlots(20), generalSpace: 100, habitableSpace: 100, markets: [],
       },
       {
-        systemId: "B2", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
+        systemId: "B2", factionId: "f1", governmentType: "federation", control: "developed", population: 5000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: builderSlots(20), generalSpace: 100, habitableSpace: 100, markets: [],
       },
     ];
@@ -276,6 +288,99 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
   });
 });
 
+describe("runDirectedBuildProcessor — proposal-pressure persistence (the construction clock)", () => {
+  // A developed food SINK (no capacity) whose persisted proposal clock advances toward the saturating
+  // PERSISTENCE_PULSES while its structural residual survives; a covered good resets to 0. Distinct from
+  // the economy's squeeze clock — this counter is written by directed-build, keyed by market id.
+  const sink = (systemId: string, population: number, foodPulses?: number): SystemBuildRow => ({
+    systemId, factionId: "f1", governmentType: "federation", control: "developed", population, unrest: 0,
+    buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
+    generalSpace: 0, habitableSpace: 0, markets: [foodMarket(systemId, 1, foodPulses)],
+  });
+
+  it("writes a saturating increment for a persistent deficit and a reset for a covered good", async () => {
+    // A: a pop-100 sink whose residual survives (prior clock 1 → 2, capped). Z: a pop-0 sink → no demand
+    // → no residual → the clock resets to 0. Both are due developed rows, so both write.
+    const w = new MemoryDirectedBuildWorld([sink("A", 100, 1), sink("Z", 0, 1)]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.proposalPulseUpdates.get("A|food")).toBe(2); // residual persists → saturating increment
+    expect(w.proposalPulseUpdates.get("Z|food")).toBe(0); // no demand → reset
+  });
+
+  it("writes nothing on an off-boundary tick (the clock is pulse-cadenced)", async () => {
+    const w = new MemoryDirectedBuildWorld([sink("A", 100, 1)]);
+    await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.proposalPulseUpdates.size).toBe(0);
+  });
+
+  it("advances the clock by the interval's reference-time (catchUpFactor), not a flat step", async () => {
+    // A finer cadence advances the clock a fraction of a reference month per pulse; a coarser one
+    // advances more (and can saturate in one assessment) — so the persistence latency is the same
+    // wall-clock span at any construction cadence. Both ticks are a pulse boundary for their interval.
+    const fine = new MemoryDirectedBuildWorld([sink("A", 100, 0)]);
+    await runDirectedBuildProcessor(fine, { tick: DUE_TICK }, { interval: 12, routeCost: reachable, construction: mkConstruction(4) });
+    expect(fine.proposalPulseUpdates.get("A|food")).toBeCloseTo(0.5, 6); // catchUpFactor(12) = 0.5
+
+    const coarse = new MemoryDirectedBuildWorld([sink("A", 100, 0)]);
+    await runDirectedBuildProcessor(coarse, { tick: DUE_TICK }, { interval: 48, routeCost: reachable, construction: mkConstruction(4) });
+    expect(coarse.proposalPulseUpdates.get("A|food")).toBe(2); // catchUpFactor(48) = 2 saturates in one
+  });
+
+  it("advances the clock with the player's build automation off, yet emits no proposals", async () => {
+    // Build automation off gates PROPOSAL EMISSION, not the assessment: no new work is committed for the
+    // faction, but the construction clock still advances at the developed sink.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+    });
+    expect(w.constructionProjects).toHaveLength(0);       // emission gated off
+    expect(w.proposalPulseUpdates.get("A|food")).toBe(2); // …but the clock still advanced
+  });
+
+  it("advances the build clock regardless of the colony automation switch (independent domains)", async () => {
+    // Colonisation off must not touch the build-domain construction clock: build stays on, so the food
+    // build still emits AND the clock advances — the colony switch is orthogonal to it.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+    });
+    expect(w.proposalPulseUpdates.get("A|food")).toBe(2);
+    expect(w.constructionProjects.some((p) => p.kind === "build" && p.systemId === "B" && p.buildingType === "food")).toBe(true);
+  });
+
+  // A developed food SELF-SUPPLIER: buildings cover 1.1× demand (no capacity gap) and a persisted realized
+  // rate of 0 keeps it off the exporter self-netting path — so the ONLY thing that can advance its clock is
+  // the squeeze-feedback gap, isolating the two guards that suppress it.
+  const rationedSelfSupplier = (extra: Partial<MarketRowForLogistics>): SystemBuildRow => ({
+    systemId: "S", factionId: "f1", governmentType: "federation", control: "developed", population: 20, unrest: 0,
+    buildings: { food: 10 }, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
+    markets: [{
+      id: "S|food", goodId: "food", stock: 50, anchorMult: 1, demandRate: 10, storageCapacity: 0,
+      squeezePulses: 2, satisfaction: 0, realizedProductionRate: 0, proposalPulses: 1, ...extra,
+    }],
+  });
+
+  it("advances the clock from a persistent squeeze when nothing blocks the feedback", async () => {
+    const w = new MemoryDirectedBuildWorld([rationedSelfSupplier({})]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.proposalPulseUpdates.get("S|food")).toBe(2); // squeeze feedback survives → increment
+  });
+
+  it("a fresh same-tick funding-bound match blocks the squeeze-feedback advance", async () => {
+    const w = new MemoryDirectedBuildWorld([rationedSelfSupplier({ logisticsFundingBound: true })]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.proposalPulseUpdates.get("S|food")).toBe(0); // feedback blocked, no capacity gap → reset
+  });
+
+  it("persisted production suppression blocks the construction-only feedback advance", async () => {
+    const w = new MemoryDirectedBuildWorld([rationedSelfSupplier({ productionSuppressed: true })]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.proposalPulseUpdates.get("S|food")).toBe(0); // suppressed output is transient, not a deficit → reset
+  });
+});
+
 describe("construction centres", () => {
   it("commits a centre project when the backlog runs beyond the frontier", async () => {
     // Deficit scenario with the pool throttled so committed work vastly outruns what BACKLOG_WINDOW
@@ -283,8 +388,9 @@ describe("construction centres", () => {
     // SMALL cap so the pool spreads across parallel fronts — the high-ROI centre must actually
     // receive work this pulse, because persist-if-funded drops a workless centre (next test). B's
     // general space is widened past its habitable cap (1000 vs the default 100) so a centre can still
-    // site itself once housing has claimed its habitable-bounded 100-unit share.
-    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 1000));
+    // site itself once housing has claimed its habitable-bounded 100-unit share. A is a developed food
+    // sink with a saturated proposal clock so the persistence-gated food backlog actually forms.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 1000, { control: "developed", foodPulses: 1 }));
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(2, 0.001),
@@ -320,7 +426,7 @@ describe("construction centres", () => {
     // pool into planCentreProposal (instead of the unscaled poolRef.total) would commit a centre at the
     // reference interval (24) but NOT at interval 48, while the correct unscaled valuation commits at
     // both (mirrors the non-reference-interval construction in "interval invariance" below).
-    const fullyHoused = scenario(0, 100, 20, 1000);
+    const fullyHoused = scenario(0, 100, 20, 1000, { control: "developed", foodPulses: 1 });
     const committed = async (interval: number): Promise<boolean> => {
       const w = new MemoryDirectedBuildWorld(fullyHoused);
       await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
@@ -356,7 +462,7 @@ const COLONY_PARAMS: ColonyEstablishParams = {
  *  pool funds only colonies. Population sets the throughput pool. */
 function saturatedHome(population: number): SystemBuildRow {
   return {
-    systemId: "home", factionId: "f1", control: "developed", population, unrest: 0,
+    systemId: "home", factionId: "f1", governmentType: "federation", control: "developed", population, unrest: 0,
     buildings: { [HOUSING_TYPE]: 5 },
     yields: unitResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 5, habitableSpace: 5, markets: [], // habitable fully housed (5 levels) → σ = 1, no housing headroom
@@ -370,7 +476,7 @@ function colonyCand(systemId: string, habitableSpace = 100): ColonyEstablishCand
 // One developed owned system so the faction is in the shard, with no build needs.
 function ownedOnly(factionId: string): SystemBuildRow {
   return {
-    systemId: `${factionId}-home`, factionId, control: "developed", population: 100, unrest: 0,
+    systemId: `${factionId}-home`, factionId, governmentType: "federation", control: "developed", population: 100, unrest: 0,
     buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0, markets: [],
   };
@@ -474,7 +580,7 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
  *  colony in the same pool. Population sets labour; the pool is kept scarce via mkConstruction's rate. */
 function homeWithFoodDeficit(population = 1000): SystemBuildRow {
   return {
-    systemId: "home", factionId: "f1", control: "developed", population, unrest: 0,
+    systemId: "home", factionId: "f1", governmentType: "federation", control: "developed", population, unrest: 0,
     buildings: { [HOUSING_TYPE]: 5 },
     yields: unitResourceVector(), slotCap: builderSlots(20),
     generalSpace: 5, habitableSpace: 5, markets: [foodMarket("home", 1)], // habitable fully housed → σ = 1
@@ -530,12 +636,12 @@ describe("runDirectedBuildProcessor — pool fairness floor", () => {
   // new, so funding is purely the two in-flight builds.
   const floorScenario = (): SystemBuildRow[] => [
     {
-      systemId: "H", factionId: "f1", control: "developed", population: 400, unrest: 0,
+      systemId: "H", factionId: "f1", governmentType: "federation", control: "developed", population: 400, unrest: 0,
       buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 20, markets: [],
     },
     {
-      systemId: "C", factionId: "f1", control: "developed", population: 2, unrest: 0,
+      systemId: "C", factionId: "f1", governmentType: "federation", control: "developed", population: 2, unrest: 0,
       buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 20, markets: [],
     },
@@ -565,7 +671,7 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
   // A developed builder with no build needs (fully housed, no markets) so the planner proposes nothing
   // new and funding is purely the in-flight queue. Ample population sets a pool far above the cap.
   const idleBuilder = (population: number): SystemBuildRow => ({
-    systemId: "B", factionId: "f1", control: "developed", population, unrest: 0,
+    systemId: "B", factionId: "f1", governmentType: "federation", control: "developed", population, unrest: 0,
     buildings: { [HOUSING_TYPE]: 5 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 5, habitableSpace: 5, markets: [],
   });
@@ -635,12 +741,12 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     // over-reserve the (halved) pool at interval 12, so the colony would get MORE than half.
     const floorScenario = (): SystemBuildRow[] => [
       {
-        systemId: "H", factionId: "f1", control: "developed", population: 400, unrest: 0,
+        systemId: "H", factionId: "f1", governmentType: "federation", control: "developed", population: 400, unrest: 0,
         buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 20, markets: [],
       },
       {
-        systemId: "C", factionId: "f1", control: "developed", population: 2, unrest: 0,
+        systemId: "C", factionId: "f1", governmentType: "federation", control: "developed", population: 2, unrest: 0,
         buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 20, markets: [],
       },
@@ -762,7 +868,7 @@ describe("construction funding gate", () => {
   // larger than the pool → absorbed work per pulse equals the pool exactly, making the
   // funded-fraction scaling directly observable via workPerformedByFaction.
   const row = (): SystemBuildRow => ({
-    systemId: "s1", factionId: "f1", control: "developed" as const,
+    systemId: "s1", factionId: "f1", governmentType: "federation", control: "developed" as const,
     population: 100, unrest: 0, buildings: {},
     yields: emptyResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0, markets: [],
@@ -799,5 +905,104 @@ describe("construction funding gate", () => {
     expect(starvedResult.workPerformedByFaction?.get("f1")).toBeUndefined();
     expect(starved.constructionProjects).toHaveLength(1);
     expect(starved.constructionProjects[0].workDone).toBe(0);
+  });
+});
+
+describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommitmentsByGood)", () => {
+  it("counts this pulse's new production-good proposal levels, keyed by good id", async () => {
+    // A: developed food sink with a saturated proposal clock (persistence-gated structural build
+    // actually emits). B: builder with habitable land AND slots → proposes both housing (not a good)
+    // and a food industry bundle (a good) this pulse.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const foodLevels = w.constructionProjects.reduce(
+      (sum, p) => (p.kind === "build" && p.buildingType === "food" ? sum + p.levels : sum),
+      0,
+    );
+    expect(foodLevels).toBeGreaterThan(0);
+    expect(result.buildCommitmentsByGood?.get("food")).toBe(foodLevels);
+  });
+
+  it("excludes housing — proactive substrate is not a production good", async () => {
+    // Default scenario: A is unclaimed (no structural deficit contributed), so only B's housing
+    // headroom proposes anything this pulse.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(w.constructionProjects.some((p) => p.kind === "build" && p.buildingType === HOUSING_TYPE)).toBe(true);
+    expect(result.buildCommitmentsByGood?.has(HOUSING_TYPE)).toBe(false);
+    expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0); // nothing else was proposed either
+  });
+
+  it("excludes construction-centre levels from the count", async () => {
+    // Same starved-backlog fixture as the "commits a centre project" case above: a food backlog deep
+    // enough that a centre is proposed alongside the ordinary food bundle.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 1000, { control: "developed", foodPulses: 1 }));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(2, 0.001),
+    });
+    const centres = w.constructionProjects.filter(
+      (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
+    );
+    expect(centres.length).toBe(1); // sanity: a centre really was proposed
+    expect(result.buildCommitmentsByGood?.has(CONSTRUCTION_CENTRE_TYPE)).toBe(false);
+    expect(result.buildCommitmentsByGood?.get("food")).toBeGreaterThan(0);
+  });
+
+  it("excludes colony-establish proposals — not a production-good build", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
+    });
+    expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(true); // sanity
+    expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);
+  });
+
+  it("excludes already-open (old) work — a large in-flight project must not inflate the count", async () => {
+    const rows = scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 });
+
+    const fresh = new MemoryDirectedBuildWorld(rows);
+    const freshResult = await runDirectedBuildProcessor(fresh, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const freshFood = freshResult.buildCommitmentsByGood?.get("food") ?? 0;
+    expect(freshFood).toBeGreaterThan(0);
+
+    // A pre-existing 1000-level food project already open at B, from a prior pulse.
+    const oldWork: WorldConstructionProject = {
+      id: "old-food", kind: "build", origin: "auto", factionId: "f1", systemId: "B",
+      buildingType: "food", levels: 1000, workTotal: 1000 * 8, workDone: 0,
+    };
+    const withOld = new MemoryDirectedBuildWorld(rows, [oldWork]);
+    const withOldResult = await runDirectedBuildProcessor(withOld, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    const oldFood = withOldResult.buildCommitmentsByGood?.get("food") ?? 0;
+    // If the 1000 in-flight levels leaked into the count it would swamp this pulse's fresh proposal.
+    // In-flight work can only shrink the fresh count (it nets against the gap), never inflate it.
+    expect(oldFood).toBeLessThanOrEqual(freshFood);
+  });
+
+  it("counts a production-good level that completes (lands) within the same pulse", async () => {
+    // Ample pool + cap: the food bundle proposed this pulse fully lands before the pulse ends.
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1) });
+    const landedFood = w.buildingUpdates.find((u) => u.systemId === "B" && u.buildingType === "food");
+    expect(landedFood).toBeDefined(); // sanity: it actually landed this pulse, not just queued
+    expect(result.buildCommitmentsByGood?.get("food")).toBe(landedFood?.count);
+  });
+
+  it("reports no build commitments when nothing is proposed", async () => {
+    const balanced: SystemBuildRow[] = [{
+      systemId: "A", factionId: "f1", governmentType: "federation", control: "developed", population: 0, unrest: 0, buildings: {},
+      yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
+      markets: [foodMarket("A", 1)], // population 0 → no consumption → no rate deficit; no habitable land → no housing
+    }];
+    const w = new MemoryDirectedBuildWorld(balanced);
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
+    expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);
+  });
+
+  it("reports no build commitments on an off-boundary tick (monthly pulse)", async () => {
+    const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
+    const result = await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
+    expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);
   });
 });

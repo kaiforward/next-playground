@@ -1,5 +1,5 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, marketsBySystem } from "./world-index";
+import { buildingsBySystem, governmentByFactionId, governmentTypeForSystem, marketsBySystem } from "./world-index";
 import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
@@ -27,9 +27,7 @@ import { deriveRegionDominantFaction } from "@/lib/utils/region";
 export function getUniverse(): UniverseData {
   const world = getWorld();
 
-  const factionGovById = new Map<string, GovernmentType>(
-    world.factions.map((f) => [f.id, f.governmentType]),
-  );
+  const factionGovById = governmentByFactionId();
   const factionNameById = new Map<string, string>(world.factions.map((f) => [f.id, f.name]));
 
   const systemFactionsByRegion = new Map<string, string[]>();
@@ -224,7 +222,8 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   );
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.
-  const popNeeds = systemPopNeeds(systemId, readout.labourAllocation);
+  const governmentType = governmentTypeForSystem(system, governmentByFactionId());
+  const popNeeds = systemPopNeeds(systemId, readout.labourAllocation, governmentType);
 
   return {
     visibility: "visible",
@@ -232,7 +231,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     ...readout,
     space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
     deposits: summariseDeposits(slotCap, worked, yields),
-    goods: capacityGoodRates(buildings, system.population, yields),
+    goods: capacityGoodRates(buildings, system.population, yields, governmentType),
     popNeeds,
   };
 }

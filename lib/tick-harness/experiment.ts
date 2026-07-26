@@ -56,6 +56,8 @@ export interface ExperimentResult {
   eventImpacts: HarnessResults["eventImpacts"];
   treasurySummary: TreasurySummary;
   treasurySnapshots: TreasurySnapshot[];
+  /** Directed-build burst pacing — proves the construction rate cap bounds per-pulse proposal velocity. */
+  buildBurstSummary: HarnessResults["buildBurstSummary"];
   elapsedMs: number;
 }
 
@@ -72,6 +74,7 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     eventImpacts: results.eventImpacts,
     treasurySummary: results.treasurySummary,
     treasurySnapshots: results.treasurySnapshots,
+    buildBurstSummary: results.buildBurstSummary,
     elapsedMs: results.elapsedMs,
   };
 }

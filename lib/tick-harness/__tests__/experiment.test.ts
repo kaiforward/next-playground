@@ -2,8 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   ExperimentConfigSchema,
   experimentToHarnessConfig,
+  buildExperimentResult,
 } from "../experiment";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
+import { generateWorld } from "@/lib/world/gen";
+import type { HarnessResults } from "../types";
 
 describe("ExperimentConfig", () => {
   describe("ExperimentConfigSchema", () => {
@@ -95,6 +98,59 @@ describe("ExperimentConfig", () => {
       const exp = ExperimentConfigSchema.parse({});
       const { label } = experimentToHarnessConfig(exp);
       expect(label).toBeUndefined();
+    });
+  });
+
+  describe("buildExperimentResult", () => {
+    // A minimal-but-fully-typed HarnessResults fixture — buildExperimentResult only projects a
+    // subset of fields, but the function takes the whole shape, so every field needs a value.
+    function minimalResults(): HarnessResults {
+      return {
+        config: { systemCount: 60, seed: 1, tickCount: 1 },
+        economyScale: 100,
+        marketSnapshots: [],
+        marketHealth: {
+          priceDispersion: [], stockDrift: [], stockPins: [],
+          priceLevels: { median: 1, p10: 1, p90: 1, cheapFrac: 0, nearFrac: 1, expensiveFrac: 0 },
+          coverLevels: [],
+        },
+        eventImpacts: [],
+        logisticsActivity: {
+          transferCount: 0, activeTicks: 0, totalQuantity: 0, meanTransferSize: 0,
+          participatingSystems: 0, byGood: [],
+        },
+        buildBurstSummary: { byGood: [], globalMax: 0, worstGood: null, worstTick: null },
+        regionOverview: [],
+        elapsedMs: 1,
+        finalWorld: generateWorld({ systemCount: 60, seed: 1 }),
+        initialPopulationTotal: 0,
+        initialBuildingTotal: 0,
+        populationSnapshots: [],
+        treasurySummary: {
+          factionCount: 0, meanBalance: 0, minBalance: 0, maxBalance: 0,
+          headsShare: 0, productionShare: 0,
+          fundedMeans: { maintenance: 0, logistics: 0, construction: 0 },
+          invalidRows: 0, firstShortfallTick: null,
+        },
+        treasurySnapshots: [],
+      };
+    }
+
+    it("includes the build-burst summary in the saved experiment JSON", () => {
+      const results = minimalResults();
+      results.buildBurstSummary = {
+        byGood: [{ goodId: "food", maxLevelsPerPulse: 7, tick: 48 }],
+        globalMax: 7,
+        worstGood: "food",
+        worstTick: 48,
+      };
+      const saved = buildExperimentResult(results);
+      expect(saved.buildBurstSummary).toEqual(results.buildBurstSummary);
+    });
+
+    it("reports the zero/null build-burst shape for a run with no construction activity", () => {
+      const saved = buildExperimentResult(minimalResults());
+      expect(saved.buildBurstSummary).toEqual({ byGood: [], globalMax: 0, worstGood: null, worstTick: null });
     });
   });
 });

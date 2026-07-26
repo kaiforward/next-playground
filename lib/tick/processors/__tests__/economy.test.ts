@@ -14,6 +14,7 @@ import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
@@ -681,5 +682,115 @@ describe("satisfaction — measured flow, persisted", () => {
     const d = result.economySignals?.dissatisfactionBySystem.get("sys-fold");
     expect(persisted).toBeCloseTo(0.5, 6); // the persisted flow measure
     expect(d).toBeCloseTo(0.25, 6); // = (1 − 0.5)², folded from that same persisted value
+  });
+});
+
+describe("economy processor: persisted planner assessment", () => {
+  it("normalizes the persisted realized rate while retaining raw pulse quantity for treasury", async () => {
+    const rates: number[] = [];
+    for (const interval of [12, 24, 48]) {
+      const world = new InMemoryEconomyWorld({
+        systems: [makeProducerSystem("producer", 0)],
+        markets: [makeMarket("producer", "food", FIXTURE_BAND.targetStock - 2)],
+        modifiers: [],
+      });
+      const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval });
+      const market = world.markets[0];
+      const rawQuantity = result.economySignals?.realizedProductionBySystem.get("producer")?.get("food") ?? 0;
+      expect(market.realizedProductionRate).toBeGreaterThan(0);
+      const persistedRate = market.realizedProductionRate;
+      if (persistedRate === undefined) throw new Error("Expected persisted realized rate");
+      expect(rawQuantity).toBeCloseTo(persistedRate * (interval / 24), 8);
+      rates.push(persistedRate);
+    }
+    expect(rates[0]).toBeCloseTo(rates[1], 8);
+    expect(rates[1]).toBeCloseTo(rates[2], 8);
+  });
+
+  it("writes explicit zero output for assessed producer and consumer markets", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("producer", 0), makeConsumerSystem("consumer", 0)],
+      markets: [
+        makeMarket("producer", "food", FIXTURE_BAND.maxStock),
+        makeMarket("consumer", "food", 0),
+      ],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(world.markets.find((market) => market.systemId === "producer")?.realizedProductionRate).toBe(0);
+    expect(world.markets.find((market) => market.systemId === "consumer")?.realizedProductionRate).toBe(0);
+  });
+
+  it("records only strike or maintenance as production suppression", async () => {
+    const strikeWorld = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("strike", 1)],
+      markets: [makeMarket("strike", "food", FIXTURE_BAND.targetStock - 2)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(strikeWorld, makeCtx(0), { ...ECON_PARAMS });
+    expect(strikeWorld.markets[0].productionSuppressed).toBe(true);
+
+    const maintenanceWorld = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("maintenance", 0)],
+      markets: [makeMarket("maintenance", "food", FIXTURE_BAND.targetStock - 2)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(maintenanceWorld, makeCtx(0), {
+      ...ECON_PARAMS,
+      maintenanceMalusBySystem: new Map([["maintenance", 0.5]]),
+    });
+    expect(maintenanceWorld.markets[0].productionSuppressed).toBe(true);
+
+    const eventWorld = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("event", 0)],
+      markets: [makeMarket("event", "food", FIXTURE_BAND.targetStock - 2)],
+      modifiers: [{
+        domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "event",
+        goodId: "food", parameter: "production_rate", value: 0.25,
+      }],
+    });
+    await runEconomyProcessor(eventWorld, makeCtx(0), { ...ECON_PARAMS });
+    expect(eventWorld.markets[0].productionSuppressed).toBe(false);
+  });
+
+  it("advances squeeze only on rationed assessments, saturates, and resets when fully served", async () => {
+    // At the reference interval catchUpFactor is 1, so each rationed assessment advances the clock by
+    // one whole reference month — the integer 0→1→2 saturation and full-satisfaction reset.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("consumer", 0)],
+      markets: [{ ...makeMarket("consumer", "food", 0), squeezePulses: 0 }],
+      modifiers: [],
+    });
+    const ref = { ...ECON_PARAMS, interval: REFERENCE_INTERVAL };
+    await runEconomyProcessor(world, makeCtx(0), ref);
+    expect(world.markets[0].squeezePulses).toBe(1);
+    await runEconomyProcessor(world, makeCtx(REFERENCE_INTERVAL), ref);
+    expect(world.markets[0].squeezePulses).toBe(2);
+    await runEconomyProcessor(world, makeCtx(2 * REFERENCE_INTERVAL), ref);
+    expect(world.markets[0].squeezePulses).toBe(2);
+    world.markets[0] = { ...world.markets[0], stock: FIXTURE_BAND.maxStock };
+    await runEconomyProcessor(world, makeCtx(3 * REFERENCE_INTERVAL), ref);
+    expect(world.markets[0].squeezePulses).toBe(0);
+  });
+
+  it("advances squeeze by the interval's reference-time (catchUpFactor), not a flat step", async () => {
+    // A finer cadence advances the clock a fraction of a reference month per pulse; a coarser one
+    // advances more (and saturates in one assessment) — so "two reference months rationed" is the same
+    // wall-clock latency at any economy cadence. Tick 0 is a pulse boundary for any interval.
+    const fine = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("consumer", 0)],
+      markets: [{ ...makeMarket("consumer", "food", 0), squeezePulses: 0 }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(fine, makeCtx(0), { ...ECON_PARAMS, interval: 12 });
+    expect(fine.markets[0].squeezePulses).toBeCloseTo(0.5, 6); // catchUpFactor(12) = 0.5
+
+    const coarse = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("consumer", 0)],
+      markets: [{ ...makeMarket("consumer", "food", 0), squeezePulses: 0 }],
+      modifiers: [],
+    });
+    await runEconomyProcessor(coarse, makeCtx(0), { ...ECON_PARAMS, interval: 48 });
+    expect(coarse.markets[0].squeezePulses).toBe(2); // catchUpFactor(48) = 2 saturates in one
   });
 });

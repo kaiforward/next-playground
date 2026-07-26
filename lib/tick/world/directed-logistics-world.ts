@@ -4,7 +4,7 @@
  * Sharding is PER-FACTION (matching needs all of a faction's systems at once), so the
  * adapter returns whole-faction system groups for the faction shard due this tick.
  */
-import type { ResourceVector } from "@/lib/types/game";
+import type { GovernmentType, ResourceVector } from "@/lib/types/game";
 
 /**
  * One market's raw band inputs (mirrors the fields marketBandForRow consumes).
@@ -20,6 +20,14 @@ export interface MarketRowForLogistics {
   storageCapacity: number;
   /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1). */
   satisfaction?: number;
+  /** Reference-cycle realized output; missing falls back to current capacity for old saves only. */
+  realizedProductionRate?: number;
+  /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
+  productionSuppressed?: boolean;
+  /** Rationed-economy persistence clock: advanced by the pulse's reference-time span, saturated at 2. */
+  squeezePulses?: number;
+  /** Structural-deficit persistence clock: advanced by the pulse's reference-time span, saturated at 2. */
+  proposalPulses?: number;
   logisticsFundingBound?: boolean;
 }
 
@@ -28,6 +36,7 @@ export interface SystemLogisticsRow {
   systemId: string;
   factionId: string | null;
   population: number;
+  governmentType: GovernmentType;
   buildings: Record<string, number>;
   /** Per-resource effective yields, for inputDemandForGood / capacityGoodRates. */
   yields: ResourceVector;

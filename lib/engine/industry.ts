@@ -14,7 +14,7 @@
  * supply-chain cascade. The same functions feed the live tick and the
  * substrate read service.
  */
-import type { GoodTier, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
+import type { GoodTier, GovernmentType, QualityBandId, ResourceType, ResourceVector } from "@/lib/types/game";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_PRODUCTION, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
@@ -495,12 +495,13 @@ export function capacityGoodRates(
   buildings: Record<string, number>,
   population: number,
   yields: ResourceVector,
+  governmentType: GovernmentType,
 ): SubstrateGoodRate[] {
   const snap = computeSystemLabourSnapshot(buildings, population);
   return GOOD_NAMES.map((goodId) => ({
     goodId,
     production: buildingProduction(buildings, goodId, snap.state, yields),
-    consumption: consumptionRate(goodId, snap.basis),
+    consumption: consumptionRate(goodId, snap.basis, governmentType),
   }));
 }
 

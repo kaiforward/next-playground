@@ -96,6 +96,7 @@ import type {
   TickBroadcastRaw,
   GlobalEventMap,
   EconomySignals,
+  TickInstrumentation,
 } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
@@ -273,6 +274,10 @@ function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLog
       demandRate: m.demandRate,
       storageCapacity: m.storageCapacity,
       satisfaction: m.satisfaction,
+      realizedProductionRate: m.realizedProductionRate,
+      productionSuppressed: m.productionSuppressed,
+      squeezePulses: m.squeezePulses,
+      proposalPulses: m.proposalPulses,
       logisticsFundingBound: m.logisticsFundingBound,
     };
     const list = bySystem.get(m.systemId);
@@ -290,6 +295,7 @@ function buildLogisticsRows(
     systemId: s.id,
     factionId: s.factionId,
     population: s.population,
+    governmentType: s.governmentType,
     buildings: s.buildings,
     yields: s.yields,
     markets: marketsBySystem.get(s.id) ?? [],
@@ -305,6 +311,7 @@ function buildBuildRows(
     factionId: s.factionId,
     control: s.control,
     population: s.population,
+    governmentType: s.governmentType,
     unrest: s.unrest,
     buildings: s.buildings,
     yields: s.yields,
@@ -373,6 +380,27 @@ function patchLogisticsMarketRows(
     );
   }
   return patched;
+}
+
+/**
+ * Fold directed-build's proposal-pressure counters back into the world market rows. Changes ONLY
+ * `proposalPulses` (spread preserves every field the same-tick economy and logistics stages already
+ * wrote — satisfaction, squeeze, realized rate, stock, funding-bound). `updates` keys are
+ * `${systemId}|${goodId}`, the same composite key the market row groups are built by. The counter is
+ * fractional reference-time, so it is clamped to a finite [0,2] on the way into world state (NaN/Infinity
+ * guarded like every other persisted numeric field). No-op writes (the clamped value already equals what
+ * the row carries, treating a missing counter as 0) are skipped so an unchanged market keeps its identity
+ * and a construction pulse only touches the rows it moved.
+ */
+function applyBuildMarketUpdates(markets: WorldMarket[], proposalPulseUpdates: Map<string, number>): WorldMarket[] {
+  if (proposalPulseUpdates.size === 0) return markets;
+  return markets.map((m) => {
+    const raw = proposalPulseUpdates.get(`${m.systemId}|${m.goodId}`);
+    if (raw === undefined) return m;
+    const next = Number.isFinite(raw) ? Math.max(0, Math.min(2, raw)) : 0;
+    if (next === (m.proposalPulses ?? 0)) return m;
+    return { ...m, proposalPulses: next };
+  });
 }
 
 export function applyBuildingIncreases(systems: TickSystem[], updates: BuildBuildingUpdate[]): TickSystem[] {
@@ -528,7 +556,13 @@ let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number
 export async function runWorldTick(
   world: World,
   opts?: { cadence?: TickCadence },
-): Promise<{ world: World; events: TickBroadcastRaw; markets: WorldMarket[] }> {
+): Promise<{
+  world: World;
+  events: TickBroadcastRaw;
+  markets: WorldMarket[];
+  /** Calibration-only signals — never broadcast, never persisted. See `TickInstrumentation`. */
+  instrumentation: TickInstrumentation;
+}> {
   const cadence: TickCadence = opts?.cadence ?? {
     month: MONTH_LENGTH,
     construction: CONSTRUCTION_INTERVAL,
@@ -740,6 +774,10 @@ export async function runWorldTick(
   // it, because the treasury stage below reads them after the block closes.
   let constructionWorkByFaction: Map<string, number> | undefined;
   let logisticsWorkByFaction: Map<string, number> | undefined;
+  // Calibration-only: directed-build's per-pulse new autonomic production-good levels, by good.
+  // Declared here (not a local inside the block) purely to survive past the block's close, mirroring
+  // the two work maps above — read only by the final `instrumentation` return, never by treasury.
+  let buildCommitmentsByGood: Map<string, number> | undefined;
   const migrationResolves = isPulseTick(tick, cadence.month);
   const logisticsResolves = isPulseTick(tick, cadence.logistics);
   const buildResolves = isPulseTick(tick, cadence.construction);
@@ -951,7 +989,11 @@ export async function runWorldTick(
       systems = applyClaims(systems, dbWorld.claims);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
+      // Persist the construction proposal-pressure counters into the market rows (proposalPulses only —
+      // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
+      markets = applyBuildMarketUpdates(markets, dbWorld.proposalPulseUpdates);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
+      buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
       processorsRun.push("directed-build");
     }
 
@@ -1092,5 +1134,8 @@ export async function runWorldTick(
   // `markets` is the same array folded into nextWorld above — returned so
   // callers that want this tick's market rows (the calibration harness) can
   // take them without reaching back into the world.
-  return { world: nextWorld, events: tickEvents, markets };
+  //
+  // `instrumentation` is calibration-only: never folded into `nextWorld`, `tickEvents`, or any
+  // broadcast/SSE payload — the calibration harness is its only reader.
+  return { world: nextWorld, events: tickEvents, markets, instrumentation: { buildCommitmentsByGood } };
 }

@@ -29,7 +29,7 @@ import {
 } from "@/lib/engine/colonisation-value";
 import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
-  familyAnchorBuff, familyThroughput,
+  familyAnchorBuff, familyThroughput, inputDemandFromProduction,
 } from "@/lib/engine/industry";
 
 /** Market state for one good at one system — the build planner's per-good input. */
@@ -46,12 +46,24 @@ export interface BuildGoodState {
    * supplies it via toGoodMarketStates (a GoodMarketState, which carries production).
    */
   production?: number;
+  /** Current building capacity. The tick path always supplies this separately from realized production. */
+  capacityProduction: number;
   /**
    * Persisted consumption satisfaction from the last economy pulse (delivered ÷ demanded, ∈
    * [0,1]; missing ⇒ 1) — supplyDissatisfaction's only input. stock/targetStock stay on this
    * type for the deficit finder and severity weights; they no longer feed the fed-proxy.
    */
   satisfaction?: number;
+  /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
+  productionSuppressed?: boolean;
+  /** Reference-months a rationed economy assessment has persisted — a finite value in [0,2] advanced
+   *  per assessment by the economy interval's catchUpFactor (so the latency is cadence-invariant). */
+  squeezePulses?: number;
+  /** Reference-months a structural construction assessment has persisted — a finite value in [0,2]
+   *  advanced per assessment by the construction interval's catchUpFactor. */
+  proposalPulses?: number;
+  /** A reachable logistics match was constrained by the faction's funded haul work. */
+  logisticsFundingBound?: boolean;
 }
 
 /** A system's buildable state — markets + the body-derived capacity it can build into. */
@@ -168,81 +180,191 @@ export function plannedHousingUnits(sys: BuildSystemState): number {
   return Math.min(Math.floor(headroom), Math.max(1, Math.ceil(wantUnits)));
 }
 
-/** A rate deficit (production < demand) with no reachable surplus of its good — the build target. */
+/** A structural build target: the margined, rate-capped share of one good's uncovered demand at a system. */
 export interface StructuralDeficit {
   systemId: string;
   goodId: string;
-  /** The per-tick flow to close = demand − production (> 0). Placement sizes capacity to this rate. */
+  /** The per-tick flow this assessment commits toward = the persistent residual × BUILD_RATE_CAP (> 0). */
   rateDeficit: number;
   demand: number;
 }
 
-/**
- * Find the rate deficits (production < demand) reachable supply cannot cover, netting the coverage
- * FLOW rather than testing mere existence (docs/planned/economy-colony-bootstrapping.md §3.1). A
- * good's build target is its RATE deficit (demand − production), not a days-of-supply stock shortfall:
- * capacity is built to meet the flow (docs/planned/economy-demand-driven-model.md §2), so a full
- * stock buffer does not cancel a structural shortfall. A self-supplier (production ≥ demand) has no
- * rate deficit and is skipped.
- *
- * Cancellation is flow-aware. An exporter's spare is its sustainable export RATE `production − demand`
- * (not a stock pile — a neighbour merely holding and draining stock has non-positive spare, so it never
- * cancels a deficit; logistics still ships that transient stock while local capacity comes up). Per
- * good, the reachable exporters' total spare is netted across all reachable deficits at once —
- * `coveredFraction = min(1, Σ spare / Σ reachable-deficit)` (first cut per §7.6) — so one exporter's
- * spare cannot fully cover two competing colonies. Each reachable deficit's residual
- * `rateDeficit × (1 − coveredFraction)` stays structural → buildable locally; a deficit with no
- * reachable exporter stays fully structural. Building serves one's own demand (self = cheapest route)
- * for whatever reachable supply cannot actually deliver.
- *
- * O(goods · systems) for the spare/deficit sums plus the same per-deficit reachability scan the
- * existence test already did — cheap enough for the per-pulse planner.
- */
-export function findStructuralDeficits(
-  systems: BuildSystemState[],
-  routeCost: RouteCost,
-): StructuralDeficit[] {
-  const deficits: Array<{ systemId: string; goodId: string; rateDeficit: number; demand: number }> = [];
-  // Reachable rate exporters per good, each carrying its spare export rate (production − demand > 0).
-  const exportersByGood = new Map<string, Array<{ systemId: string; spare: number }>>();
-  const spareByGood = new Map<string, number>();
+export interface ProposalPersistenceUpdate {
+  systemId: string;
+  goodId: string;
+  proposalPulses: number;
+}
 
-  for (const s of systems) {
-    for (const g of s.goods) {
-      const spare = (g.production ?? 0) - g.demand;
-      if (spare < 0) {
-        deficits.push({ systemId: s.systemId, goodId: g.goodId, rateDeficit: -spare, demand: g.demand });
-      } else if (spare > 0) {
-        const list = exportersByGood.get(g.goodId) ?? [];
-        list.push({ systemId: s.systemId, spare });
-        exportersByGood.set(g.goodId, list);
-        spareByGood.set(g.goodId, (spareByGood.get(g.goodId) ?? 0) + spare);
+interface StructuralAssessment {
+  systems: BuildSystemState[];
+  deficits: StructuralDeficit[];
+  persistenceUpdates: ProposalPersistenceUpdate[];
+}
+
+/** Open build levels folded into one system's effective construction state. */
+function queuedLevelsBySystem(openProjects: WorldConstructionProject[]): Map<string, Record<string, number>> {
+  const queued = new Map<string, Record<string, number>>();
+  for (const project of openProjects) {
+    if (project.kind !== "build") continue;
+    const levels = queued.get(project.systemId) ?? {};
+    levels[project.buildingType] = (levels[project.buildingType] ?? 0) + project.levels;
+    queued.set(project.systemId, levels);
+  }
+  return queued;
+}
+
+/**
+ * Fold all committed build levels into the planner's effective state. The standing realized rate is
+ * preserved; committed capacity can only add its non-negative delta, never rewrite an assessment.
+ * Queued consumers also expose their input draw before they land, keeping the supply chain honest.
+ */
+function effectiveBuildSystems(
+  systems: BuildSystemState[],
+  openProjects: WorldConstructionProject[],
+): BuildSystemState[] {
+  const queuedBySystem = queuedLevelsBySystem(openProjects);
+  return systems.map((system) => {
+    const queued = queuedBySystem.get(system.systemId);
+    if (!queued) return system;
+
+    const buildings = { ...system.buildings };
+    for (const [buildingType, levels] of Object.entries(queued)) {
+      buildings[buildingType] = (buildings[buildingType] ?? 0) + levels;
+    }
+    const queuedOutput = new Map<string, number>();
+    for (const [buildingType, levels] of Object.entries(queued)) {
+      const output = (OUTPUT_PER_UNIT[buildingType] ?? 0) * levels * familyAnchorBuff(buildings, buildingType);
+      if (output > 0) queuedOutput.set(buildingType, (queuedOutput.get(buildingType) ?? 0) + output);
+    }
+
+    const goods = system.goods.map((good) => {
+      const queuedCapacity = queuedOutput.get(good.goodId) ?? 0;
+      const capacityProduction = good.capacityProduction + queuedCapacity;
+      const standingProduction = good.production ?? good.capacityProduction;
+      const production = standingProduction + Math.max(0, capacityProduction - good.capacityProduction);
+      return {
+        ...good,
+        demand: good.demand + inputDemandFromProduction(good.goodId, queuedOutput),
+        capacityProduction,
+        production,
+      };
+    });
+    return { ...system, buildings, goods };
+  });
+}
+
+/**
+ * The one gap-math implementation, shared by both planners (immediate for `planFactionBuilds`,
+ * persistence-gated for `planFactionProposals`). Per (system, good) it takes the larger of the
+ * provisioning-margin capacity gap (`max(0, (1 + PROVISION_MARGIN)·demand − capacity)`) and the
+ * squeeze-feedback gap, then nets the faction's reachable exporter spare against it before advancing
+ * persistence and rate-capping the residual. Suppressed capacity is latent spare for neighbours but
+ * never a local gap.
+ *
+ * Cancellation is flow-aware (docs/planned/economy-colony-bootstrapping.md §3.1). An exporter's spare
+ * is its sustainable export RATE (`production − demand`, or latent `capacity − demand` when suppressed)
+ * — not a stock pile, so a neighbour merely holding and draining stock never cancels a gap. Per good,
+ * the reachable exporters' total spare is netted across all reachable gaps at once —
+ * `coveredFraction = min(1, Σ spare / Σ reachable-gap)` (first cut per §7.6) — so one exporter's spare
+ * cannot fully cover two competing colonies; each reachable gap keeps its uncovered residual and a gap
+ * with no reachable exporter stays fully structural. Only economically-active (developed) systems
+ * contribute gaps or spare.
+ */
+function assessStructuralDeficits(
+  systems: BuildSystemState[],
+  openProjects: WorldConstructionProject[],
+  routeCost: RouteCost,
+  requirePersistence: boolean,
+  advance: number,
+): StructuralAssessment {
+  const effective = effectiveBuildSystems(systems, openProjects);
+  const candidatesByGood = new Map<string, Array<{ systemId: string; gross: number }>>();
+  const exportersByGood = new Map<string, Array<{ systemId: string; spare: number }>>();
+  const persistenceUpdates: ProposalPersistenceUpdate[] = [];
+
+  for (const system of effective) {
+    if (!isEconomicallyActive(system.control)) continue;
+    for (const good of system.goods) {
+      const demand = Math.max(0, good.demand);
+      const capacity = Math.max(0, good.capacityProduction);
+      const production = Math.max(0, good.production ?? good.capacityProduction);
+      const suppressed = good.productionSuppressed === true;
+      const capacityGap = suppressed ? 0 : Math.max(0, (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demand - capacity);
+      const feedbackGap = !suppressed && !good.logisticsFundingBound && (good.squeezePulses ?? 0) >= DIRECTED_BUILD.PERSISTENCE_PULSES
+        ? demand * (1 - clamp(good.satisfaction ?? 1, 0, 1))
+        : 0;
+      const gross = Math.max(capacityGap, feedbackGap);
+      if (gross > 0) {
+        const candidates = candidatesByGood.get(good.goodId) ?? [];
+        candidates.push({ systemId: system.systemId, gross });
+        candidatesByGood.set(good.goodId, candidates);
+      }
+
+      const spare = suppressed
+        ? Math.max(0, capacity - demand)
+        : Math.max(0, production - demand);
+      if (spare > 0) {
+        const exporters = exportersByGood.get(good.goodId) ?? [];
+        exporters.push({ systemId: system.systemId, spare });
+        exportersByGood.set(good.goodId, exporters);
       }
     }
   }
 
-  // First pass: mark which deficits have any reachable exporter, and sum the reachable demand per good
-  // — the denominator the shared spare is netted across.
-  const reachableDeficitByGood = new Map<string, number>();
-  const flagged = deficits.map((d) => {
-    const reachable = (exportersByGood.get(d.goodId) ?? []).some((e) => routeCost(e.systemId, d.systemId) !== null);
-    if (reachable) reachableDeficitByGood.set(d.goodId, (reachableDeficitByGood.get(d.goodId) ?? 0) + d.rateDeficit);
-    return { d, reachable };
-  });
-
-  // Second pass: an unreachable deficit is fully structural; a reachable one keeps its uncovered residual.
-  const structural: StructuralDeficit[] = [];
-  for (const { d, reachable } of flagged) {
-    if (!reachable) {
-      structural.push(d);
-      continue;
+  const residualByKey = new Map<string, number>();
+  for (const [goodId, candidates] of candidatesByGood) {
+    const exporters = exportersByGood.get(goodId) ?? [];
+    // One reachability scan over (candidate × exporter): each candidate is reachable if any exporter
+    // reaches it, and every exporter that reaches at least one candidate is recorded here — so its spare
+    // can be summed below without re-running routeCost (an exporter reaching a candidate makes that
+    // candidate reachable, so the exporter is always among a reachable gap's suppliers).
+    const reachableExporterIds = new Set<string>();
+    const reachable = candidates.map((candidate) => {
+      let hasExporter = false;
+      for (const exporter of exporters) {
+        if (routeCost(exporter.systemId, candidate.systemId) !== null) {
+          hasExporter = true;
+          reachableExporterIds.add(exporter.systemId);
+        }
+      }
+      return { candidate, hasExporter };
+    });
+    const reachableDemand = reachable
+      .filter((entry) => entry.hasExporter)
+      .reduce((sum, entry) => sum + entry.candidate.gross, 0);
+    const reachableSpare = exporters
+      .filter((exporter) => reachableExporterIds.has(exporter.systemId))
+      .reduce((sum, exporter) => sum + exporter.spare, 0);
+    const coveredFraction = reachableDemand > 0 ? Math.min(1, reachableSpare / reachableDemand) : 0;
+    for (const entry of reachable) {
+      const residual = entry.hasExporter ? entry.candidate.gross * (1 - coveredFraction) : entry.candidate.gross;
+      residualByKey.set(`${entry.candidate.systemId}:${goodId}`, Math.max(0, residual));
     }
-    const reachableDeficit = reachableDeficitByGood.get(d.goodId) ?? 0;
-    const coveredFraction = reachableDeficit > 0 ? Math.min(1, (spareByGood.get(d.goodId) ?? 0) / reachableDeficit) : 0;
-    const residual = d.rateDeficit * (1 - coveredFraction);
-    if (residual > 0) structural.push({ systemId: d.systemId, goodId: d.goodId, rateDeficit: residual, demand: d.demand });
   }
-  return structural;
+
+  const deficits: StructuralDeficit[] = [];
+  for (const system of effective) {
+    if (!isEconomicallyActive(system.control)) continue;
+    for (const good of system.goods) {
+      const residual = residualByKey.get(`${system.systemId}:${good.goodId}`) ?? 0;
+      // Advance by the reference-time this assessment represents (catchUpFactor of the caller's
+      // interval), not a flat +1, so the "two reference months of persistence" latency is the same
+      // wall-clock span at any construction cadence. The counter is fractional, finite, clamped [0,2].
+      const nextPulses = residual > 0
+        ? Math.min(DIRECTED_BUILD.PERSISTENCE_PULSES, Math.max(0, good.proposalPulses ?? 0) + advance)
+        : 0;
+      persistenceUpdates.push({ systemId: system.systemId, goodId: good.goodId, proposalPulses: nextPulses });
+      if (residual <= 0 || (requirePersistence && nextPulses < DIRECTED_BUILD.PERSISTENCE_PULSES)) continue;
+      deficits.push({
+        systemId: system.systemId,
+        goodId: good.goodId,
+        rateDeficit: residual * DIRECTED_BUILD.BUILD_RATE_CAP,
+        demand: good.demand,
+      });
+    }
+  }
+
+  return { systems: effective, deficits, persistenceUpdates };
 }
 
 /**
@@ -479,6 +601,7 @@ function planFactionBundles(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   refs: DevelopmentRefs,
+  structural: StructuralDeficit[],
 ): PlannedBundle[] {
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
@@ -513,7 +636,7 @@ function planFactionBundles(
   }
 
   // ── Pass 2: labour-gated industry (industry follows the resident workforce). ──
-  const structural = findStructuralDeficits(systems, routeCost);
+
 
   // Remaining structural shortfall per (good → systemId → shortfall).
   const remainingByGood = new Map<string, Map<string, number>>();
@@ -547,7 +670,7 @@ function planFactionBundles(
   const surplusSystemsByGood = new Map<string, string[]>();
   for (const s of systems) {
     for (const g of s.goods) {
-      if (surplusDrawable(g.stock, g.targetStock, g.demand, g.production ?? 0) > 0) {
+      if (surplusDrawable(g.stock, g.targetStock, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
         const list = surplusSystemsByGood.get(g.goodId) ?? [];
         list.push(s.systemId);
         surplusSystemsByGood.set(g.goodId, list);
@@ -753,73 +876,63 @@ function planFactionBundles(
 
 /**
  * Flat build view of the planner — the same decisions `planFactionBundles` makes, ungrouped, in
- * emission order (housing pass, then industry opportunities by descending score). Kept as the stable
+ * emission order (housing pass, then industry opportunities by descending score). Shares the one gap
+ * assessment with `planFactionProposals` (same provisioning margin and rate cap) but takes it
+ * immediately — no two-pulse persistence gate and no in-flight projects to fold. Kept as the stable
  * unit-test surface for the planner's *what-gets-built* logic, independent of funding order.
  */
 export function planFactionBuilds(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   refs: DevelopmentRefs,
+  advance = 1,
 ): PlannedBuild[] {
-  return planFactionBundles(systems, routeCost, refs).flatMap((b) =>
-    b.items.map((i) => ({ systemId: b.systemId, buildingType: i.buildingType, count: i.levels })),
+  const assessment = assessStructuralDeficits(systems, [], routeCost, false, advance);
+  return planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits).flatMap((bundle) =>
+    bundle.items.map((item) => ({ systemId: bundle.systemId, buildingType: item.buildingType, count: item.levels })),
   );
 }
 
+/** Persistence write emitted alongside the pure faction build decisions. */
+export interface FactionBuildPlan {
+  proposals: BuildProposal[];
+  persistenceUpdates: ProposalPersistenceUpdate[];
+}
+
 /**
- * The auto queue policy: emit the whole-level PROPOSALS a faction should fund this pulse. It runs the
- * same ceiling logic as `planFactionBuilds` (proactive housing → labour-gated industry, with
- * academy/complex co-builds), but treats each system's **effective current** capacity as its built
- * levels PLUS the levels already in flight (`openProjects`) — so a level already under construction
- * counts as committed and is never proposed twice. Each returned `BuildProposal` bundles its
- * gate-first items with the served demand (`value`) and total work the funding stage ranks by; the
- * order here is the planner's natural one (housing, then industry by score) — the funding stage
- * (`orderProposals`) does the ROI re-ordering.
+ * Build proposals for a faction's next construction assessment. Open work is counted before any
+ * policy decision: it consumes footprint/labour, contributes capacity and input demand, and cannot
+ * be re-proposed. Housing remains proactive; only industry awaits a persistent residual.
  *
- * The throughput pool (not this planner) meters how fast the queue drains; this only decides WHAT to
- * commit, bounded by the physical ceilings the effective-current capacity encodes.
+ * `advance` is the reference-time one assessment contributes to the persistence counter — the
+ * processor passes `catchUpFactor(interval)` so the two-reference-month latency is cadence-invariant;
+ * it defaults to 1 for direct callers.
  */
 export function planFactionProposals(
   systems: BuildSystemState[],
   routeCost: RouteCost,
   openProjects: WorldConstructionProject[],
   refs: DevelopmentRefs,
-): BuildProposal[] {
-  // In-flight levels per (system, buildingType) — the "already committed" capacity. Only build
-  // projects contribute building levels here; a colony-establish carries no in-flight levels at a
-  // developed system (its own in-flight dedup is handled by planFactionColonyProposals).
-  const queuedBySystem = new Map<string, Record<string, number>>();
-  for (const p of openProjects) {
-    if (p.kind !== "build") continue;
-    const rec = queuedBySystem.get(p.systemId) ?? {};
-    rec[p.buildingType] = (rec[p.buildingType] ?? 0) + p.levels;
-    queuedBySystem.set(p.systemId, rec);
-  }
-
-  // Effective-current systems: fold in-flight levels onto the built base so every capacity, space,
-  // and labour gate sees the committed state and the planner only proposes what is NOT yet queued.
-  const augmented = systems.map((s) => {
-    const queued = queuedBySystem.get(s.systemId);
-    if (!queued) return s;
-    const buildings = { ...s.buildings };
-    for (const [type, levels] of Object.entries(queued)) buildings[type] = (buildings[type] ?? 0) + levels;
-    return { ...s, buildings };
-  });
-
-  const factionBySystem = new Map(systems.map((s) => [s.systemId, s.factionId]));
+  advance = 1,
+): FactionBuildPlan {
+  const assessment = assessStructuralDeficits(systems, openProjects, routeCost, true, advance);
+  const factionBySystem = new Map(systems.map((system) => [system.systemId, system.factionId]));
   const proposals: BuildProposal[] = [];
-  for (const b of planFactionBundles(augmented, routeCost, refs)) {
-    const factionId = factionBySystem.get(b.systemId);
-    // Only faction-owned systems can be developed (the build gate), so a bundle always has a faction;
-    // the guard both narrows the type and skips the impossible independent-system case.
-    if (factionId == null) continue;
-    proposals.push({ kind: "build", factionId, systemId: b.systemId, role: b.role, items: b.items, value: b.value, work: b.work });
+  for (const bundle of planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits)) {
+    const factionId = factionBySystem.get(bundle.systemId);
+    if (factionId === null || factionId === undefined) continue;
+    proposals.push({
+      kind: "build",
+      factionId,
+      systemId: bundle.systemId,
+      role: bundle.role,
+      items: bundle.items,
+      value: bundle.value,
+      work: bundle.work,
+    });
   }
-  return proposals;
+  return { proposals, persistenceUpdates: assessment.persistenceUpdates };
 }
-
-// ── Colony-establish proposals (the second consumer of the decision → gate → pace pipeline) ──────────
-
 /** A controlled system a faction could settle: its substrate + the developed seed source (from hop data). */
 export interface ColonyEstablishCandidate {
   systemId: string;

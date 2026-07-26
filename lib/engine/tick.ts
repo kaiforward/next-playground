@@ -121,7 +121,7 @@ export function simulateEconomyTick(
 /**
  * Pre-resolved inputs for building a MarketTickEntry — the caller resolves its
  * own row shape into this common shape, and the builder handles the shared
- * computation (gov consumption boost).
+ * computation.
  */
 export interface TickEntryInput {
   goodId: string;
@@ -141,15 +141,12 @@ export interface TickEntryInput {
   baseProductionRate?: number;
   /** Base consumption rate from the substrate driver (undefined = not a consumer). */
   baseConsumptionRate?: number;
-  /** Government consumption boost for this good. */
-  govConsumptionBoost: number;
   /** Production-only suppression multiplier (1 = none). Strike state from unrest. */
   productionSuppress?: number;
 }
 
 /**
- * Build a MarketTickEntry from pre-resolved inputs. Folds the government
- * consumption boost into the consumption rate. Callers spread event
+ * Build a MarketTickEntry from pre-resolved inputs. Callers spread event
  * productionMult/consumptionMult on top if present.
  */
 export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
@@ -158,10 +155,7 @@ export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
       ? input.baseProductionRate * (input.productionSuppress ?? 1)
       : undefined;
 
-  const consumptionRate =
-    input.baseConsumptionRate != null
-      ? input.baseConsumptionRate + input.govConsumptionBoost
-      : undefined;
+  const consumptionRate = input.baseConsumptionRate;
 
   return {
     goodId: input.goodId,

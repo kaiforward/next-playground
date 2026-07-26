@@ -124,7 +124,6 @@ describe("buildMarketTickEntry", () => {
       ...BASE_BAND,
       baseProductionRate: 10,
       baseConsumptionRate: undefined,
-      govConsumptionBoost: 0,
     });
     expect(e.productionRate).toBeCloseTo(10, 5);
     expect(e.stock).toBe(100);
@@ -133,28 +132,15 @@ describe("buildMarketTickEntry", () => {
     expect(e.maxStock).toBe(200);
   });
 
-  it("folds the government consumption boost into a consumed good's rate", () => {
+  it("does not add government consumption after shared demand resolution", () => {
     const e = buildMarketTickEntry({
       goodId: "food",
       stock: 100,
       ...BASE_BAND,
       baseProductionRate: undefined,
       baseConsumptionRate: 10,
-      govConsumptionBoost: 5,
     });
-    expect(e.consumptionRate).toBeCloseTo(10 + 5, 5); // base + boost
-  });
-
-  it("ignores a government boost on a good the system does not consume", () => {
-    const e = buildMarketTickEntry({
-      goodId: "food",
-      stock: 100,
-      ...BASE_BAND,
-      baseProductionRate: undefined,
-      baseConsumptionRate: undefined,
-      govConsumptionBoost: 5,
-    });
-    expect(e.consumptionRate).toBeUndefined(); // no base rate ⇒ boost cannot create consumption
+    expect(e.consumptionRate).toBeCloseTo(10, 5);
   });
 
   it("leaves consumption undefined when there is no base rate and no boost", () => {
@@ -164,7 +150,6 @@ describe("buildMarketTickEntry", () => {
       ...BASE_BAND,
       baseProductionRate: undefined,
       baseConsumptionRate: undefined,
-      govConsumptionBoost: 0,
     });
     expect(e.consumptionRate).toBeUndefined();
   });

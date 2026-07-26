@@ -10,7 +10,6 @@ import {
 } from "@/lib/engine/tick";
 import { simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import type { ModifierRow } from "@/lib/engine/events";
-import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
 import type {
   EconomyProcessorParams,
@@ -107,6 +106,15 @@ export async function runEconomyProcessor(
 
   // Read stored unrest from the previous tick to derive per-system strike multipliers.
   const unrestBySystem = await world.getUnrest(systemIds);
+  const productionSuppressBySystem = new Map<string, number>();
+  const productionSuppressedBySystem = new Map<string, boolean>();
+  for (const systemId of systemIds) {
+    const productionSuppress =
+      strikeMultiplier(unrestBySystem.get(systemId) ?? 0, strikeParams) *
+      (maintenanceMalusBySystem?.get(systemId) ?? 1);
+    productionSuppressBySystem.set(systemId, productionSuppress);
+    productionSuppressedBySystem.set(systemId, productionSuppress < 1);
+  }
 
   // Build tick entries via the shared market-tick builder. Government modifiers
   // are resolved per-market (a shard slice contains systems owned by different
@@ -123,10 +131,7 @@ export async function runEconomyProcessor(
       storageCapacity: m.storageCapacity,
       baseProductionRate: m.baseProductionRate != null ? m.baseProductionRate * catchUp : undefined,
       baseConsumptionRate: m.baseConsumptionRate != null ? m.baseConsumptionRate * catchUp : undefined,
-      govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
-      productionSuppress:
-        strikeMultiplier(unrestBySystem.get(m.systemId) ?? 0, strikeParams) *
-        (maintenanceMalusBySystem?.get(m.systemId) ?? 1),
+      productionSuppress: productionSuppressBySystem.get(m.systemId),
       modifiers: modifiersBySystem.get(m.systemId) ?? [],
       modifierCaps,
     }),
@@ -148,12 +153,25 @@ export async function runEconomyProcessor(
 
   // anchorMult comes straight off the resolved tick — the builder already
   // aggregated the system's modifiers, so there's no second aggregation pass.
-  const marketUpdates: MarketUpdate[] = markets.map((m, i) => ({
-    id: m.id,
-    stock: simulated[i].stock,
-    anchorMult: resolved[i].anchorMult,
-    satisfaction: satisfactionByIndex[i],
-  }));
+  const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
+    const realizedProductionRate = simulated[i].realized / catchUp;
+    // Advance by this pulse's reference-time (catchUpFactor), not a flat +1, so "two reference months
+    // rationed" is the same wall-clock latency at any economy cadence. Fractional, finite, clamped [0,2].
+    const squeezePulses = satisfactionByIndex[i] < 1
+      ? Math.min(2, Math.max(0, m.squeezePulses ?? 0) + catchUp)
+      : 0;
+    return {
+      id: m.id,
+      stock: simulated[i].stock,
+      anchorMult: resolved[i].anchorMult,
+      satisfaction: satisfactionByIndex[i],
+      realizedProductionRate: Number.isFinite(realizedProductionRate) && realizedProductionRate >= 0
+        ? realizedProductionRate
+        : 0,
+      productionSuppressed: productionSuppressedBySystem.get(m.systemId) ?? false,
+      squeezePulses,
+    };
+  });
 
   await world.applyMarketUpdates(marketUpdates);
 

@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { GOODS } from "@/lib/constants/goods";
 import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
+import { civilianDemandRateForGood, getInitialStock } from "@/lib/constants/market-economy";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { toTickSystems } from "../tick";
 
 describe("generateWorld", () => {
   const world = generateWorld({ systemCount: 120, seed: 42 });
@@ -40,6 +44,10 @@ describe("generateWorld", () => {
       expect(Number.isFinite(m.storageCapacity)).toBe(true);
       expect(Number.isFinite(m.demandRate)).toBe(true);
       expect(m.anchorMult).toBe(1);
+      expect(m.squeezePulses).toBe(0);
+      expect(m.proposalPulses).toBe(0);
+      expect(m.realizedProductionRate).toBeUndefined();
+      expect(m.productionSuppressed).toBeUndefined();
     }
   });
 
@@ -147,6 +155,34 @@ describe("generateWorld", () => {
     const worldA = generateWorld({ systemCount: 120, seed: 1 });
     const worldB = generateWorld({ systemCount: 120, seed: 2 });
     expect(worldA).not.toEqual(worldB);
+  });
+});
+
+describe("generateWorld: government demand", () => {
+  it("seeds owned markets from their faction government and unowned tick rows as frontier", () => {
+    const world = generateWorld({
+      systemCount: 60,
+      seed: 8,
+      playerFaction: { name: "Marshalate", governmentType: "militarist", doctrine: "hegemonic" },
+    });
+    const player = world.factions.find((faction) => faction.name === "Marshalate")!;
+    const home = world.systems.find((system) => system.id === player.homeworldId)!;
+    const buildings: Record<string, number> = {};
+    for (const building of world.buildings) {
+      if (building.systemId === home.id) buildings[building.buildingType] = building.count;
+    }
+    const yields = resourceVectorFromColumns({
+      yieldGas: home.yieldGas, yieldMinerals: home.yieldMinerals, yieldOre: home.yieldOre,
+      yieldBiomass: home.yieldBiomass, yieldArable: home.yieldArable, yieldWater: home.yieldWater,
+      yieldRadioactive: home.yieldRadioactive,
+    }, "yield");
+    const basis = computeSystemLabourSnapshot(buildings, home.population).basis;
+    const weapons = world.markets.find((market) => market.systemId === home.id && market.goodId === "weapons")!;
+    expect(weapons.demandRate).toBeCloseTo(civilianDemandRateForGood("weapons", basis, "militarist"), 10);
+    expect(weapons.stock).toBe(getInitialStock(buildings, yields, home.population, "weapons", "militarist"));
+
+    const unowned = world.systems.find((system) => system.factionId === null)!;
+    expect(toTickSystems(world).find((system) => system.id === unowned.id)?.governmentType).toBe("frontier");
   });
 });
 

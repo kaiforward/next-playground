@@ -7,6 +7,7 @@ import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
 import { runWorldTick } from "@/lib/world/tick";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
+import { governmentByFactionId, governmentTypeForSystem } from "@/lib/services/world-index";
 import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
@@ -158,6 +159,14 @@ export function getEconomySnapshot(): ServiceResult<{ systems: EconomySnapshotSy
 
 // ── Reset economy ───────────────────────────────────────────────
 
+/**
+ * Reset every market to its fresh-world state and clear all events/modifiers. Each row returns to its
+ * capacity-driven seed stock with a neutral anchor, and the tick-persisted flow-state fields are returned
+ * to their world-gen seed: satisfaction 1, the squeeze/proposal persistence counters 0, and the realized
+ * rate, suppression and logistics-binding flags dropped (so the row reads exactly as a freshly generated
+ * market). anchorMult resets to 1 alongside stock: all events (and their anchor_shift modifiers) are being
+ * cleared, so the neutral anchor is the correct clean-slate value.
+ */
 export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsCleared: number }> {
   if (!hasWorld()) {
     return { ok: false, error: "No world loaded." };
@@ -172,10 +181,8 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
     buildingsBySystem.set(b.systemId, bag);
   }
   const systemById = new Map(world.systems.map((s) => [s.id, s]));
+  const govByFaction = governmentByFactionId();
 
-  // Reset every market to its capacity-driven seed stock. anchorMult resets to
-  // 1 alongside stock: all events (and their anchor_shift modifiers) are being
-  // cleared, so the neutral anchor is the correct clean-slate value.
   const markets = world.markets.map((m) => {
     const sys = systemById.get(m.systemId);
     if (!sys) return m;
@@ -189,9 +196,15 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
     );
     const buildings = buildingsBySystem.get(sys.id) ?? {};
     return {
-      ...m,
-      stock: getInitialStock(buildings, yields, sys.population, m.goodId),
+      systemId: m.systemId,
+      goodId: m.goodId,
+      stock: getInitialStock(buildings, yields, sys.population, m.goodId, governmentTypeForSystem(sys, govByFaction)),
       anchorMult: 1,
+      demandRate: m.demandRate,
+      storageCapacity: m.storageCapacity,
+      satisfaction: 1,
+      squeezePulses: 0,
+      proposalPulses: 0,
     };
   });
 

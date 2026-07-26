@@ -26,7 +26,7 @@ import {
   buildExperimentResult,
 } from "../lib/tick-harness/experiment";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/tick-harness/population-analysis";
-import { summarizeColonisation, summarizeConstructionPool } from "../lib/tick-harness/build-analysis";
+import { summarizeColonisation, summarizeConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
@@ -273,6 +273,32 @@ function formatTable(results: HarnessResults): string {
       `  queue: ${fmtNum(cp.queueRemainingWork)} work remaining` +
         (cp.queueEtaPulses !== null ? ` ≈ ${cp.queueEtaPulses.toFixed(1)} pulses at current pool` : " (pool is zero — stalled)"),
     );
+  }
+
+  // Construction burst pacing (whole run) — proves the construction rate cap
+  // (DIRECTED_BUILD.BUILD_RATE_CAP) actually bounds new-proposal velocity per pulse, per good.
+  {
+    const bb = results.buildBurstSummary;
+    lines.push("");
+    lines.push("Construction Burst Pacing (whole run):");
+    if (bb.byGood.length > 0) {
+      lines.push(`Worst burst: ${bb.worstGood} +${bb.globalMax} levels in one pulse @ t=${bb.worstTick}`);
+      const top = bb.byGood
+        .slice(0, 5)
+        .map((g) => `${g.goodId} +${g.maxLevelsPerPulse} (t=${g.tick})`)
+        .join(", ");
+      lines.push(`  worst per good: ${top}`);
+    } else {
+      lines.push("  NOTHING COMMITTED — directed-build recorded no autonomic production proposals this run");
+    }
+    if (results.config.tickCount < CONSTRUCTION_WARMUP_TICKS) {
+      lines.push(
+        `  warm-up: ${results.config.tickCount} ticks is below the ~${CONSTRUCTION_WARMUP_TICKS}-tick construction ` +
+        `warm-up window — a structural deficit only becomes a fundable proposal after the two-reference-month ` +
+        `persistence window, and the first pulse lands at the construction interval, so read low activity as ` +
+        `"too early", not "broken" (colony-driven bursts lag colonisation further; a matured read needs ~1500 ticks).`,
+      );
+    }
   }
 
   // Faction treasury health — the coarse health bar for money.

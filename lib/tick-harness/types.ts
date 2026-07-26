@@ -148,6 +148,36 @@ export interface LogisticsActivitySummary {
   byGood: LogisticsGoodActivity[];
 }
 
+// ── Construction burst pacing ───────────────────────────────────
+
+/** One good's worst-case single-pulse directed-build commitment across a run. */
+export interface BuildBurstEntry {
+  goodId: string;
+  /** The largest count of new autonomic levels this good was ever committed in one pulse. */
+  maxLevelsPerPulse: number;
+  /** The tick at which that maximum occurred. */
+  tick: number;
+}
+
+/**
+ * Whole-run directed-build burst pacing — the instrument proving the construction rate cap
+ * (`DIRECTED_BUILD.BUILD_RATE_CAP`) actually bounds per-pulse proposal velocity. Aggregate market/
+ * queue health can look fine while one good's new-proposal levels spike in a single pulse (a
+ * planner burst rather than a smooth ramp); this measures that spike directly, per good and
+ * galaxy-wide, rather than reading it off the final world (the burst is gone by then — only the
+ * queue's end state survives).
+ */
+export interface BuildBurstSummary {
+  /** Per-good worst-case burst, descending by maxLevelsPerPulse (goodId ascending breaks ties). */
+  byGood: BuildBurstEntry[];
+  /** The single worst burst across every good this run — the headline number. 0 when nothing was committed. */
+  globalMax: number;
+  /** The good behind globalMax; null when the run committed nothing. */
+  worstGood: string | null;
+  /** The tick at which globalMax occurred; null when the run committed nothing. */
+  worstTick: number | null;
+}
+
 // ── Region overview ─────────────────────────────────────────────
 
 export interface RegionOverviewEntry {
@@ -175,6 +205,8 @@ export interface HarnessResults {
   eventImpacts: EventImpact[];
   /** Whole-run directed-logistics activity — did goods actually move. */
   logisticsActivity: LogisticsActivitySummary;
+  /** Whole-run directed-build burst pacing — the construction rate cap's per-pulse worst case. */
+  buildBurstSummary: BuildBurstSummary;
   /** Region overview for understanding the generated universe. */
   regionOverview: RegionOverviewEntry[];
   /** Optional label for experiment tracking. */
