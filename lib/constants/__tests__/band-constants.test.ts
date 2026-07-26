@@ -4,6 +4,7 @@ import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING } from "@/lib/constants/population";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { VACANCY_SLACK } from "@/lib/constants/infrastructure";
+import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 
 describe("band constant dependencies", () => {
   it("starts logistics replenishment well before emergency rationing", () => {
@@ -49,6 +50,14 @@ describe("housing relief constant dependencies", () => {
     // slack of used housing, 1 − RELIEF_TARGET of built popCap), so comparing them directly would
     // admit targets that break containment.
     expect(DIRECTED_BUILD.RELIEF_TARGET * (1 + VACANCY_SLACK)).toBeGreaterThanOrEqual(1);
+  });
+
+  it("binds the two housing-capacity readings to one density", () => {
+    // Occupancy is read two ways: housingUsed(pop) divides by POP_CENTRE_DENSITY, housingPopCap()
+    // multiplies by the housing type's popProvided. The decay-containment invariant above compares
+    // fractions derived from both, so it only means anything while the two agree — a divergence
+    // would silently shift the r the relief valve targets away from the r decay measures.
+    expect(BUILDING_TYPES[HOUSING_TYPE].popProvided).toBe(POP_CENTRE_DENSITY);
   });
 
   it("triggers relief above the occupancy it sizes back to", () => {
