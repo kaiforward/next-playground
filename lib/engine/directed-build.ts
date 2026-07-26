@@ -1,7 +1,7 @@
 /**
  * Pure directed-build planning — zero DB dependency. Two-pass faction build planner:
- * (1) Proactive housing pass — housing leads population, building ahead of the
- *     habitable cap at fed-and-calm systems before industry claims the space.
+ * (1) Housing relief pass — a fed system whose occupancy has outrun its housing gets
+ *     enough new levels to relieve the crowding, before industry claims the space.
  * (2) Demand-pulled, labour-gated industry pass — finds structural deficits (a
  *     deficit with no reachable surplus) and allocates production capacity, capped
  *     to what the already-resident population can staff (no co-built housing here).
@@ -73,7 +73,7 @@ export interface BuildSystemState {
   /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
   control: SystemControl;
   population: number;
-  /** Stored unrest integral 0…1 — the "calm" half of the settle gate. */
+  /** Stored unrest integral 0…1, as the population processor left it. */
   unrest: number;
   /** Current building counts (production types + "housing"). */
   buildings: Record<string, number>;
@@ -114,8 +114,8 @@ export function hopRouteCost(
 }
 
 /**
- * Delivered-flow dissatisfaction D in [0,1] for one system — the "fed" half of
- * the settle gate. Reuses the population engine's demand-weighted convex fold
+ * Delivered-flow dissatisfaction D in [0,1] for one system — the input to the
+ * housing "fed" gate. Reuses the population engine's demand-weighted convex fold
  * over the economy pulse's persisted per-good satisfaction (delivered ÷
  * demanded — the same measure the needs display reads), so a
  * deliberately-at-comfort exporter with full delivery reads as satisfied.
@@ -130,12 +130,14 @@ export function supplyDissatisfaction(goods: BuildGoodState[]): number {
   );
 }
 
-/** Settle gate: a system grows housing only when well-supplied (D ≤ D_SETTLE) and calm (unrest ≤ UNREST_SETTLE). */
-export function fedAndCalm(sys: BuildSystemState): boolean {
-  return (
-    supplyDissatisfaction(sys.goods) <= DIRECTED_BUILD.D_SETTLE &&
-    sys.unrest <= DIRECTED_BUILD.UNREST_SETTLE
-  );
+/**
+ * Fed gate: a system grows housing only while it is well-supplied (D ≤ D_SETTLE) — a starving
+ * world stands up nothing until its supply recovers. Unrest is deliberately NOT a gate: crowding
+ * is itself an unrest source, so refusing to build relief housing on a restive world would hold
+ * the valve shut on exactly the world that needs it.
+ */
+export function fed(sys: BuildSystemState): boolean {
+  return supplyDissatisfaction(sys.goods) <= DIRECTED_BUILD.D_SETTLE;
 }
 
 /**
@@ -154,29 +156,31 @@ export function habitableHousingHeadroom(sys: BuildSystemState): number {
 }
 
 /**
- * Proactive housing units to build at a site this cycle: paced to keep popCap a
- * SETTLE_MARGIN ahead of population, never past the habitable headroom. Returns 0
- * when the site is not fed-and-calm or already at its habitable cap. Housing leads —
- * it creates the popCap headroom the (untouched) population logistic then fills.
+ * Housing units to build at a site this cycle — a pressure-relief valve, not a lead-ahead pacer.
+ * Nothing is built until occupancy r = population ÷ popCap has risen past RELIEF_TRIGGER; past it
+ * the build is sized to bring r back down to RELIEF_TARGET, bounded by the habitable headroom.
+ * Returns 0 when the site is unfed, has no room for a whole level, or has nobody to relieve. A
+ * popCap of 0 with stranded residents is past the trigger, so a site whose housing is gone rebuilds
+ * as soon as it is fed again.
  *
- * Whole housing levels are lumpy (one level houses POP_CENTRE_DENSITY), so once occupancy has caught
- * the settle margin (targetPopCap > currentPopCap) the want is rounded UP to at least one whole level.
- * Without that round-up popCap could never ratchet above a small seed: a 1-level colony's margin-ahead
- * want is a fraction of a level, floored to nothing, so it would need population to exceed its own cap
- * (impossible — migration/growth both asymptote to popCap) before earning a 2nd level. Bounded by the
- * physical habitable headroom.
+ * Whole housing levels are lumpy (one level houses POP_CENTRE_DENSITY), so the want is rounded UP to
+ * at least one whole level. A small site's relief want is a fraction of a level, and flooring it
+ * would leave the valve permanently shut while occupancy kept climbing — a 1-level seed colony would
+ * never earn a 2nd level. Rounding up also means post-build r lands at or below RELIEF_TARGET
+ * exactly when the land permits it.
  */
 export function plannedHousingUnits(sys: BuildSystemState): number {
-  if (!fedAndCalm(sys)) return 0;
+  if (!fed(sys)) return 0;
   const headroom = habitableHousingHeadroom(sys);
   if (headroom < 1) return 0; // no room for even one whole level
   const popProvided = BUILDING_TYPES[HOUSING_TYPE]?.popProvided ?? POP_CENTRE_DENSITY;
   if (popProvided <= 0) return 0;
   const currentPopCap = housingPopCap(sys.buildings);
   const pop = Math.max(0, sys.population);
-  const targetPopCap = pop * (1 + DIRECTED_BUILD.SETTLE_MARGIN);
-  if (targetPopCap <= currentPopCap) return 0; // still housing headroom above the settle margin
+  if (pop <= DIRECTED_BUILD.RELIEF_TRIGGER * currentPopCap) return 0; // below the trigger: no pressure yet
+  const targetPopCap = pop / DIRECTED_BUILD.RELIEF_TARGET;            // size back to the relief target
   const wantUnits = (targetPopCap - currentPopCap) / popProvided;
+  if (wantUnits <= 0) return 0;
   return Math.min(Math.floor(headroom), Math.max(1, Math.ceil(wantUnits)));
 }
 
@@ -563,7 +567,7 @@ export interface BuildProposal {
   kind: "build";
   factionId: string;
   systemId: string;
-  /** Housing leads population (proactive substrate, no served-demand ROI); industry ranks by ROI. */
+  /** Housing relieves crowding (substrate, no served-demand ROI); industry ranks by ROI. */
   role: "housing" | "industry";
   /** Whole-level orders in gate-first funding order. */
   items: ProposalItem[];
@@ -615,10 +619,10 @@ function planFactionBundles(
 
   const bundles: PlannedBundle[] = [];
 
-  // ── Pass 1: proactive housing (housing leads population). ──
-  // Build housing toward the habitable cap wherever a system is fed and calm, paced a
-  // margin ahead of its current population. Housing draws general space, so it runs
-  // before industry — habitable land is housing's by right; factories take what's left.
+  // ── Pass 1: housing relief (housing follows crowding). ──
+  // Wherever a fed system's occupancy has outrun its housing, build the levels that bring it
+  // back to the relief target, bounded by the habitable cap. Housing draws general space, so it
+  // runs before industry — habitable land is housing's by right; factories take what's left.
   for (const site of working.values()) {
     const want = plannedHousingUnits(site);
     if (want <= 0) continue;
@@ -630,7 +634,7 @@ function planFactionBundles(
       systemId: site.systemId,
       role: "housing",
       items: [{ buildingType: HOUSING_TYPE, levels }],
-      value: 0, // proactive substrate — no served-demand ROI; the funding stage leads housing anyway
+      value: 0, // relief substrate — no served-demand ROI; the funding stage leads housing anyway
       work: levels * workCostPerLevel(HOUSING_TYPE),
     });
   }
@@ -902,7 +906,7 @@ export interface FactionBuildPlan {
 /**
  * Build proposals for a faction's next construction assessment. Open work is counted before any
  * policy decision: it consumes footprint/labour, contributes capacity and input demand, and cannot
- * be re-proposed. Housing remains proactive; only industry awaits a persistent residual.
+ * be re-proposed. Housing answers current crowding; only industry awaits a persistent residual.
  *
  * `advance` is the reference-time one assessment contributes to the persistence counter — the
  * processor passes `catchUpFactor(interval)` so the two-reference-month latency is cadence-invariant;

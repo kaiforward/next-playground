@@ -13,10 +13,11 @@ export const DIRECTED_BUILD = {
   SELF_COST: 0.5,
   /** "Fed" gate: grow housing only where supply-dissatisfaction D ≤ this (0…1). */
   D_SETTLE: 0.15,
-  /** "Calm" gate: grow housing only where stored unrest ≤ this (0…1). */
-  UNREST_SETTLE: 0.2,
-  /** Housing is paced to keep popCap at most this fraction ahead of current population. */
-  SETTLE_MARGIN: 0.25,
+  /** Relief trigger: autonomic housing builds once occupancy r = pop/popCap rises past this. */
+  RELIEF_TRIGGER: 0.95,
+  /** Relief sizing: build enough whole levels to return r to ≈ this. Must sit strictly inside the
+   *  vacancy slack: 1 − RELIEF_TARGET < VACANCY_SLACK, so relief housing never feeds decay. */
+  RELIEF_TARGET: 0.92,
   /**
    * Speculative self-supply floor (§3.2): the largest fraction of a basic's LOCAL demand an
    * undeveloped system stands up locally even when imports already cover it. The live floor is

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { ECONOMY_CONSTANTS, TARGET_COVER, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING } from "@/lib/constants/population";
+import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { VACANCY_SLACK } from "@/lib/constants/infrastructure";
 
 describe("band constant dependencies", () => {
   it("starts logistics replenishment well before emergency rationing", () => {
@@ -35,5 +37,20 @@ describe("population / unrest constant dependencies", () => {
     // Even a fully overcrowded world adds only PRESSURE_MAX to the standing floor,
     // which must stay well under the strike threshold.
     expect(CROWDING.PRESSURE_MAX).toBeLessThan(STRIKE_PARAMS.threshold);
+  });
+});
+
+describe("housing relief constant dependencies", () => {
+  it("keeps the relief vacancy strictly inside the decay slack", () => {
+    // Relief sizing leaves 1 − RELIEF_TARGET of the new popCap empty. Housing decay tolerates
+    // VACANCY_SLACK of vacancy before a level reads as unused, so relief housing must land inside
+    // that allowance — otherwise the valve builds exactly the levels decay then tears back down.
+    expect(1 - DIRECTED_BUILD.RELIEF_TARGET).toBeLessThan(VACANCY_SLACK);
+  });
+
+  it("triggers relief above the occupancy it sizes back to", () => {
+    // The trigger/target pair is a hysteresis band: a target at or above the trigger would make the
+    // sized want non-positive at the moment the valve opens, silently disabling relief entirely.
+    expect(DIRECTED_BUILD.RELIEF_TRIGGER).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TARGET);
   });
 });

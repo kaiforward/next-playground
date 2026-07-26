@@ -17,7 +17,7 @@ export interface SystemBuildRow {
   control: SystemControl;
   population: number;
   governmentType: GovernmentType;
-  /** Stored unrest integral 0…1 — the "calm" half of the settle gate. */
+  /** Stored unrest integral 0…1, as the population processor left it. */
   unrest: number;
   buildings: Record<string, number>;
   /** Per-resource effective yields, for the shared market-state derivation. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fedAndCalm, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fed, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
@@ -7,7 +7,7 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { emptyResourceVector, unitResourceVector, makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { OUTPUT_PER_UNIT, BUILDING_TYPES, labourTotal, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, HEAVY_INDUSTRY_COMPLEX, ANCHOR_MIN_THROUGHPUT, ANCHOR_FOOTPRINT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
-import { labourDemand } from "@/lib/engine/industry";
+import { labourDemand, housingPopCap } from "@/lib/engine/industry";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { ResourceVector } from "@/lib/types/game";
 import { COLONISATION } from "@/lib/constants/colonisation";
@@ -496,7 +496,7 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
   });
 });
 
-describe("planFactionBuilds — proactive housing", () => {
+describe("planFactionBuilds — relief housing", () => {
   it("does not build housing at a starved system", () => {
     const starved: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
@@ -507,13 +507,18 @@ describe("planFactionBuilds — proactive housing", () => {
     expect(countFor(planFactionBuilds([starved], () => 1, DEV_REFS), "A", "housing")).toBe(0);
   });
 
-  it("does not build housing at an unsettled (high-unrest) system", () => {
-    const unsettled: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0.9, control: "developed", buildings: {},
+  it("relieves a crowded system whose unrest sits at the maximum standing floor", () => {
+    // The deadlock case: a very-high-tax world (tax floor 0.18) that is also full (crowding 0.05)
+    // carries 0.23 standing unrest — more than any calm gate would admit. Its pop (98) is past the
+    // trigger against its 5-level cap (100), and crowding is exactly what the housing would relieve,
+    // so unrest must not hold the valve shut.
+    const crowded: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 98, unrest: 0.23, control: "developed",
+      buildings: { housing: 5 },
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
-    expect(countFor(planFactionBuilds([unsettled], () => 1, DEV_REFS), "A", "housing")).toBe(0);
+    expect(countFor(planFactionBuilds([crowded], () => 1, DEV_REFS), "A", "housing")).toBeGreaterThan(0);
   });
 
   it("never builds housing past the habitable cap", () => {
@@ -527,12 +532,12 @@ describe("planFactionBuilds — proactive housing", () => {
     expect(housing).toBeLessThanOrEqual(5); // habitableSpace 5 ÷ spaceCost 1
   });
 
-  it("commits the full settle-margin-paced housing want, unthrottled by any per-pop budget", () => {
-    // The housing pass commits floor(plannedHousingUnits) — the settle-margin-paced want — bounded
-    // only by the habitable cap, never by a per-pop budget (that throttle was removed). Headroom is
-    // ample here, so the pacing target (pop × (1 + SETTLE_MARGIN) ÷ popProvided) is the binding term
-    // and the commit equals that floored want. A reintroduced pop×0.05-style budget (80 at pop 1600)
-    // would cap the commit below the paced want — this pins that it does not.
+  it("commits the full relief want, unthrottled by any per-pop budget", () => {
+    // The housing pass commits floor(plannedHousingUnits) — the whole relief want — bounded only by
+    // the habitable cap, never by a per-pop budget (that throttle was removed). Headroom is ample
+    // here, so the relief target is the binding term and the commit equals that floored want. A
+    // reintroduced pop×0.05-style budget (80 at pop 1600) would cap the commit below the relief
+    // want — this pins that it does not.
     const sys: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 1600, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 100000, habitableSpace: 100000,
@@ -682,21 +687,23 @@ describe("supplyDissatisfaction — delivered flow", () => {
   });
 });
 
-describe("fedAndCalm", () => {
+describe("fed", () => {
   const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0}];
 
-  it("is true for a well-supplied, calm system", () => {
-    expect(fedAndCalm(sysWith({ goods: fedGoods, unrest: 0 }))).toBe(true);
-  });
-
-  it("is false when stored unrest exceeds the calm threshold", () => {
-    expect(fedAndCalm(sysWith({ goods: fedGoods, unrest: DIRECTED_BUILD.UNREST_SETTLE + 0.1 }))).toBe(false);
+  it("is true for a well-supplied system", () => {
+    expect(fed(sysWith({ goods: fedGoods }))).toBe(true);
   });
 
   it("is false when the system is starved (high supply dissatisfaction)", () => {
     // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
     const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 }];
-    expect(fedAndCalm(sysWith({ goods: starved, unrest: 0 }))).toBe(false);
+    expect(fed(sysWith({ goods: starved }))).toBe(false);
+  });
+
+  it("is true at maximum unrest — supply is the only gate on housing", () => {
+    // Reinstating any calm term here would deadlock relief: a fully restive world is precisely the
+    // one whose crowding the housing exists to relieve.
+    expect(fed(sysWith({ goods: fedGoods, unrest: 1 }))).toBe(true);
   });
 });
 
@@ -717,57 +724,90 @@ describe("habitableHousingHeadroom", () => {
 });
 
 describe("plannedHousingUnits", () => {
-  it("paces housing a settle-margin ahead of population (rounded up to whole levels)", () => {
-    // pop 100, no housing, ample habitable → target popCap = 100 × 1.25 = 125 → 6.25 → ceil 7 levels.
-    const units = plannedHousingUnits(sysWith({
-      population: 100, buildings: {}, generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
-    }));
-    expect(units).toBe(Math.ceil(125 / 20)); // 7
-  });
+  const fedGoods: BuildGoodState[] = [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0 }];
 
-  it("ratchets a small seed colony up by a whole level once occupancy passes the margin", () => {
-    // The colony-bootstrap case: pop 20 filling a 1-level seed (popCap 20). Target popCap = 25 > 20, so a
-    // fraction of a level is wanted — the OLD floor() returned 0 and welded popCap at the seed forever.
-    // It must now round UP to one whole level so popCap can ratchet above the seed.
-    const units = plannedHousingUnits(sysWith({
-      population: 20, buildings: { housing: 1 }, generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
-    }));
-    expect(units).toBe(1);
-  });
+  /** Occupancy r = pop ÷ popCap the site would sit at after committing `units` housing levels. */
+  function occupancyAfter(sys: BuildSystemState, units: number): number {
+    return sys.population / (housingPopCap(sys.buildings) + units * POP_CENTRE_DENSITY);
+  }
 
-  it("builds nothing while population is still below the current cap by more than the margin", () => {
-    // pop 2 in a 5-level colony (popCap 100): target = 2.5 ≪ 100, so there is ample housing headroom
-    // and no premature build.
-    const units = plannedHousingUnits(sysWith({
-      population: 2, buildings: { housing: 5 }, generalSpace: 100, habitableSpace: 100,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
-    }));
-    expect(units).toBe(0);
-  });
-
-  it("returns 0 when the system is not fed and calm", () => {
+  it("builds nothing while occupancy is still below the relief trigger", () => {
+    // pop 94 in a 5-level colony (popCap 100) → r = 0.94 ≤ RELIEF_TRIGGER: there is no pressure to
+    // relieve yet, and housing no longer runs ahead of population on a margin.
     expect(plannedHousingUnits(sysWith({
-      population: 100, generalSpace: 100, habitableSpace: 100, unrest: 0.9,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
+      population: 94, buildings: { housing: 5 }, generalSpace: 100, habitableSpace: 100, goods: fedGoods,
     }))).toBe(0);
   });
 
-  it("returns 0 at the habitable cap (no headroom)", () => {
+  it("builds once occupancy rises past the relief trigger", () => {
+    // The same colony two people later: r = 0.96 > RELIEF_TRIGGER, so the valve opens.
     expect(plannedHousingUnits(sysWith({
-      population: 100, buildings: { housing: 50 }, generalSpace: 100, habitableSpace: 50,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
+      population: 96, buildings: { housing: 5 }, generalSpace: 100, habitableSpace: 100, goods: fedGoods,
+    }))).toBeGreaterThan(0);
+  });
+
+  it("sizes the build to bring occupancy back to the relief target", () => {
+    // A colony well past its cap (pop 200 against popCap 100) with ample land: the committed levels
+    // must land r at RELIEF_TARGET or below, and one level fewer must not — so the sizing is the
+    // target, not merely "back under the trigger" or an unbounded fill.
+    const sys = sysWith({
+      population: 200, buildings: { housing: 5 }, generalSpace: 1000, habitableSpace: 1000, goods: fedGoods,
+    });
+    const units = plannedHousingUnits(sys);
+    expect(units).toBeGreaterThan(1); // genuine multi-level relief, not the one-level floor
+    expect(occupancyAfter(sys, units)).toBeLessThanOrEqual(DIRECTED_BUILD.RELIEF_TARGET);
+    expect(occupancyAfter(sys, units - 1)).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TARGET);
+  });
+
+  it("commits one whole level when the relief want is a fraction of one", () => {
+    // A 1-level seed colony exactly at its cap (pop 20, popCap 20) wants 0.09 of a level. Flooring
+    // that would leave the valve shut forever while occupancy kept climbing, so it rounds up.
+    expect(plannedHousingUnits(sysWith({
+      population: 20, buildings: { housing: 1 }, generalSpace: 100, habitableSpace: 100, goods: fedGoods,
+    }))).toBe(1);
+  });
+
+  it("rehouses stranded population when the site has no housing left at all", () => {
+    // popCap 0 with fed survivors still resident — the collapse-recovery path. Any positive pop is
+    // past the trigger here, and the build is sized to house them at the relief target.
+    const sys = sysWith({
+      population: 30, buildings: {}, generalSpace: 100, habitableSpace: 100, goods: fedGoods,
+    });
+    const units = plannedHousingUnits(sys);
+    expect(units).toBeGreaterThan(0);
+    expect(occupancyAfter(sys, units)).toBeLessThanOrEqual(DIRECTED_BUILD.RELIEF_TARGET);
+  });
+
+  it("builds nothing when there is nobody to relieve", () => {
+    // No population means no occupancy pressure at any cap — including the degenerate popCap 0,
+    // where an unguarded ratio would be 0/0. A negative pop (never emitted) floors to the same.
+    const empty = { generalSpace: 100, habitableSpace: 100, goods: fedGoods };
+    expect(plannedHousingUnits(sysWith({ ...empty, population: 0, buildings: {} }))).toBe(0);
+    expect(plannedHousingUnits(sysWith({ ...empty, population: 0, buildings: { housing: 3 } }))).toBe(0);
+    expect(plannedHousingUnits(sysWith({ ...empty, population: -5, buildings: {} }))).toBe(0);
+  });
+
+  it("returns 0 when the system is not fed", () => {
+    // Crowded well past the trigger but starving: supply is the one gate relief still waits on.
+    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 }];
+    expect(plannedHousingUnits(sysWith({
+      population: 200, buildings: { housing: 5 }, generalSpace: 100, habitableSpace: 100, goods: starved,
     }))).toBe(0);
   });
 
-  it("never targets more housing than the habitable land allows", () => {
-    // Huge pop, tiny habitable: housing is bounded by habitable (5 units), not population.
-    const units = plannedHousingUnits(sysWith({
-      population: 100000, buildings: {}, generalSpace: 1000, habitableSpace: 5,
-      goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
-    }));
-    expect(units).toBeCloseTo(5);
+  it("returns 0 at the habitable cap even under relief pressure", () => {
+    // pop 1200 against popCap 1000 (r = 1.2) with every habitable unit already housed: the pressure
+    // is real, the land is not there, and the valve stays shut rather than overbuilding.
+    expect(plannedHousingUnits(sysWith({
+      population: 1200, buildings: { housing: 50 }, generalSpace: 100, habitableSpace: 50, goods: fedGoods,
+    }))).toBe(0);
+  });
+
+  it("clamps the relief build to the habitable headroom", () => {
+    // Huge pop, 5 units of habitable land: the target wants thousands of levels, the land allows 5.
+    expect(plannedHousingUnits(sysWith({
+      population: 100000, buildings: {}, generalSpace: 1000, habitableSpace: 5, goods: fedGoods,
+    }))).toBe(5);
   });
 });
 
@@ -1326,9 +1366,10 @@ describe("planFactionProposals: persistent structural policy", () => {
 describe("planFactionBuilds: develop gate", () => {
   const buildable = { population: 100, generalSpace: 50, habitableSpace: 50, goods: [] };
 
-  it("builds nothing at a fed-and-calm system that is controlled but not developed", () => {
+  it("builds nothing at a fed system that is controlled but not developed", () => {
     const site = sysWith({ ...buildable, control: "controlled", buildings: {} });
-    expect(fedAndCalm(site)).toBe(true); // sanity: absent the gate it WOULD build housing
+    expect(fed(site)).toBe(true); // sanity: absent the gate it WOULD build housing
+    expect(plannedHousingUnits(site)).toBeGreaterThan(0); // …and it genuinely wants some
     expect(planFactionBuilds([site], () => 1, DEV_REFS)).toEqual([]);
   });
 
