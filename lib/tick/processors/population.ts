@@ -53,6 +53,10 @@ export async function runPopulationProcessor(
     const crowd = crowdingPressure(s.population, s.popCap, params.population.crowdBrakeEnd, CROWDING.PRESSURE_MAX);
     const floor = clamp(taxPressure + crowd, 0, 1);
     const unrest = accumulateUnrest(s.unrest, d, floor, regime, scaledUnrest);
+    // Solve order within one pulse: crowding reads the population as the pulse STARTED, while the
+    // population delta reads the unrest this pulse just produced. The floor is a level, so it is
+    // measured at pulse start; a system that crosses r = 1 during this pulse therefore carries no
+    // crowding pressure until the next one.
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
     popUpdates.push({ systemId: s.systemId, population, unrest });
     demandPops.push({ systemId: s.systemId, population });
