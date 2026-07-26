@@ -1706,7 +1706,10 @@ describe("sizeColonyEstablish", () => {
     expect(s.seedPop).toBe(30);
     expect(s.housingLevels).toBe(3);
     const popCap = s.housingLevels * POP_CENTRE_DENSITY;
-    expect(popCap).toBeGreaterThan(s.seedPop); // headroom ⇒ popCap ≥ seedPop + one level, r < 1
+    // Discriminating on its own: popCap ≥ seedPop + one whole level (60 ≥ 50). The pre-change formula
+    // (housingLevels 2, popCap 40) fails this (40 ≥ 50 is false), unlike a bare popCap > seedPop check
+    // (40 > 30 would still pass pre-change and not prove the headroom is really there).
+    expect(popCap).toBeGreaterThanOrEqual(s.seedPop + POP_CENTRE_DENSITY);
     // `work` already scales with housingLevels, so the extra level shows up here with no second change site.
     expect(s.work).toBe(richParams.establishWork + 3 * workCostPerLevel(HOUSING_TYPE));
   });
