@@ -50,7 +50,7 @@ export async function runPopulationProcessor(
     // unrest up rather than being shed like a supply shock, while the growth/decline
     // delta keeps raw d.
     const taxPressure = params.taxPressureBySystem?.get(s.systemId) ?? 0;
-    const crowd = crowdingPressure(s.population, s.popCap, CROWDING.BRAKE_END, CROWDING.PRESSURE_MAX);
+    const crowd = crowdingPressure(s.population, s.popCap, params.population.crowdBrakeEnd, CROWDING.PRESSURE_MAX);
     const floor = clamp(taxPressure + crowd, 0, 1);
     const unrest = accumulateUnrest(s.unrest, d, floor, regime, scaledUnrest);
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);

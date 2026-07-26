@@ -43,7 +43,9 @@ export const TAX_LEVEL_RATE_MULT: Record<TaxLevel, number> = {
   very_high: 1.6,
 };
 
-/** Proportional pressure fed into the per-system unrest integrator (consumed by the population processor). */
+/** Additive standing unrest floor carried by every system the faction owns — the level a
+ *  calm, well-supplied population settles at under this tax stance (consumed by the
+ *  population processor, which adds crowding pressure on top). */
 export const TAX_LEVEL_UNREST_PRESSURE: Record<TaxLevel, number> = {
   very_low: 0,
   low: 0.02,

@@ -352,13 +352,16 @@ describe("economy processor: supply regime signal", () => {
   });
 
   it("reads supplied for a producer with no local consumption", async () => {
-    // Population 0 → nothing is demanded locally, so an empty market cannot ration anyone.
+    // Population 0 → nothing is demanded locally, so even a market pinned below the
+    // shortage line rations nobody. Stock deep in the shortage zone is what makes this
+    // discriminating: were demand not suppressed, this system would read shortage.
     const world = new InMemoryEconomyWorld({
       systems: [{ ...makeProducerSystem("sys-pureprod", 0), population: 0 }],
-      markets: [makeMarket("sys-pureprod", "food", FIXTURE_BAND.minStock + 1)],
+      markets: [makeMarket("sys-pureprod", "food", SHORT_STOCK)],
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(result.economySignals!.dissatisfactionBySystem.get("sys-pureprod")).toBe(0);
     expect(regimeOf(result.economySignals, "sys-pureprod")).toBe("supplied");
   });
 });

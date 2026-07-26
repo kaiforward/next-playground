@@ -12,10 +12,13 @@ import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources"
 import { CROWDING } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 
+// Occupancy at which the growth brake reaches zero and the crowding-pressure ramp saturates
+// — one boundary these fixtures hand to the processor, which threads it to both terms.
+const BRAKE_END = 1.15;
 // Non-rate shape knobs shared by the population fixtures below — the growth brake's end
 // and the overshoot-death gate. Every fixture sets overshootDeathRate 0, so the gate value
 // is inert here; only the rates differ between fixtures.
-const POP_SHAPE = { crowdBrakeEnd: CROWDING.BRAKE_END, overshootDeathUnrestGate: 0.65 };
+const POP_SHAPE = { crowdBrakeEnd: BRAKE_END, overshootDeathUnrestGate: 0.65 };
 
 const PARAMS = {
   unrest: { gainRationing: 0.1, gainShortage: 0.2, decay: 0.05, recoveryDecay: 0.1 },
@@ -33,9 +36,9 @@ const INVARIANCE_PARAMS = {
   population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
 };
 
-// Unrest fixture for the floor/regime suites: distinct rates so an assertion naming the
-// wrong one cannot pass by coincidence.
-const RATES = { gainRationing: 0.06, gainShortage: 0.12, decay: 0.06, recoveryDecay: 0.12 };
+// Unrest fixture for the floor/regime suites: four pairwise-distinct rates, so an assertion
+// naming the wrong one cannot pass by coincidence.
+const RATES = { gainRationing: 0.05, gainShortage: 0.11, decay: 0.06, recoveryDecay: 0.12 };
 // Frozen population, so a run's only observable is the unrest integrator.
 const FROZEN_POP = { growthRate: 0, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE };
 
@@ -267,12 +270,12 @@ describe("population processor", () => {
     // nothing, at the brake end it adds the full PRESSURE_MAX, and halfway adds half.
     const cap = 1000;
     const pressure = TAX_LEVEL_UNREST_PRESSURE.high;
-    const halfway = 1 + (CROWDING.BRAKE_END - 1) / 2;
+    const halfway = 1 + (BRAKE_END - 1) / 2;
     const world = new InMemoryPopulationWorld({
       systems: [
         sys("roomy", cap, cap, 0),
         sys("half", cap * halfway, cap, 0),
-        sys("packed", cap * CROWDING.BRAKE_END, cap, 0),
+        sys("packed", cap * BRAKE_END, cap, 0),
       ],
       markets: [],
     });
@@ -294,7 +297,7 @@ describe("population processor", () => {
   it("falls back to a crowding-only floor when no tax map is supplied", async () => {
     const cap = 1000;
     const world = new InMemoryPopulationWorld({
-      systems: [sys("roomy", cap, cap, 0), sys("packed", cap * CROWDING.BRAKE_END, cap, 0)],
+      systems: [sys("roomy", cap, cap, 0), sys("packed", cap * BRAKE_END, cap, 0)],
       markets: [],
     });
     await runPopulationProcessor(world, ctxWithD(new Map([["roomy", 0], ["packed", 0]])), {
@@ -304,6 +307,52 @@ describe("population processor", () => {
     });
     expect(unrestOf(world, "packed")).toBeCloseTo(RATES.recoveryDecay * CROWDING.PRESSURE_MAX, 9);
     expect(unrestOf(world, "roomy")).toBe(0);
+  });
+
+  it("moves the growth brake and the crowding-pressure ramp together off one brake end", async () => {
+    // One over-capacity system, run twice against different crowdBrakeEnd params. At the
+    // default the system sits at the saturated end (growth fully braked, full crowding
+    // pressure); stretching the brake end to 1.6 puts the same occupancy halfway along both
+    // ramps, so growth resumes at half rate AND the pressure term halves. A brake end read
+    // from a constant for one term would leave that term pinned while the other moved.
+    const cap = 1000;
+    const population = 1300; // r = 1.3: past the default brake end, halfway to a 1.6 one
+    const growthRate = 0.02;
+    const runWithBrakeEnd = async (crowdBrakeEnd: number) => {
+      const world = new InMemoryPopulationWorld({ systems: [sys("s", population, cap, 0)], markets: [] });
+      await runPopulationProcessor(world, ctxWithD(new Map([["s", 0]])), {
+        unrest: RATES,
+        // Decline off, so population moves on the growth brake alone.
+        population: { growthRate, declineRate: 0, overshootDeathRate: 0, crowdBrakeEnd, overshootDeathUnrestGate: 0.65 },
+        interval: 24,
+      });
+      return world;
+    };
+
+    const atDefault = await runWithBrakeEnd(BRAKE_END);
+    expect(unrestOf(atDefault, "s")).toBeCloseTo(RATES.recoveryDecay * CROWDING.PRESSURE_MAX, 9);
+    expect(atDefault.systems[0].population).toBeCloseTo(population, 9); // growth fully braked
+
+    // r = 1.3 over a span of 0.6 ⇒ t = 0.5: half the crowding pressure, and a smoothstep
+    // brake of 1 − t²(3 − 2t) = 0.5 on growth.
+    const stretched = await runWithBrakeEnd(1.6);
+    expect(unrestOf(stretched, "s")).toBeCloseTo(RATES.recoveryDecay * (CROWDING.PRESSURE_MAX / 2), 9);
+    expect(stretched.systems[0].population).toBeCloseTo(population + growthRate * population * 0.5, 9);
+  });
+
+  it("clamps the standing floor at 1 when tax and crowding would overflow it", async () => {
+    // No tax level reaches this today; the clamp guards a future retune. floor saturates at
+    // 1, so one supplied run moves recoveryDecay of the way from 0 to 1 — an unclamped
+    // floor of 1.04 would have landed at 0.1248 instead.
+    const cap = 1000;
+    const world = new InMemoryPopulationWorld({ systems: [sys("overtaxed", cap * BRAKE_END, cap, 0)], markets: [] });
+    await runPopulationProcessor(world, ctxWithD(new Map([["overtaxed", 0]])), {
+      unrest: RATES,
+      population: FROZEN_POP,
+      interval: 24,
+      taxPressureBySystem: new Map([["overtaxed", 0.99]]),
+    });
+    expect(unrestOf(world, "overtaxed")).toBeCloseTo(RATES.recoveryDecay, 9);
   });
 
   it("treats a system missing from the regime map as supplied", async () => {
