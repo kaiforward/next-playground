@@ -75,7 +75,8 @@ export interface PopulationSummary {
   /** Systems with popCap > 0 whose growth brake has crushed to <= 0.25 (crowdFactor near the
    *  brake's end, r near CROWDING.BRAKE_END) — the pathology watch: pinned at the brake while
    *  relief housing exists and land is available means the growth valve is blocked, not that the
-   *  world is genuinely full. */
+   *  world is genuinely full. The count itself checks neither, so a high reading is a prompt to
+   *  look at land and relief builds, not evidence on its own that the valve is at fault. */
   brakedCount: number;
   /** Mean population/popCap across systems with popCap > 0 — the occupancy watch's headline
    *  number. 0 when no system has any housing (guarded so an all-zero-popCap run reports 0,
