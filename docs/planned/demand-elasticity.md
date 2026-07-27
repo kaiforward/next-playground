@@ -173,5 +173,10 @@ Tasks 2–6 (collapse ramp, housing occupancy floor, colony housing sizing, plan
 founding stock — none of which touch the fold), then take elasticity as its own slice, after which the
 rate regime and the unrest ceilings fall out of it cheaply.
 
+**This slice comes before the arc's presentation PR (PR6), not after it.** PR6's regime chips name
+states across the panels, and this is what settles what those states mean — building them first would
+mean naming states the simulation is about to redefine, which is exactly why presentation was split
+out of PR5.
+
 PR5 therefore ships without its largest unrest lever, and its simulator read should be expected to
 show collapse and colony recovery but little movement in mean unrest or striking share.

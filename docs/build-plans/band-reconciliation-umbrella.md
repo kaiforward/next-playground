@@ -145,6 +145,18 @@ retune needed. The unrest/tax half of §8 is parked with items 1–2, having not
 - **Interim incoherence (until PR6):** the panels still speak percentages, not regimes, and still
   name Strike at the presentation boundary rather than 0.65.
 
+### Demand elasticity — the parked unrest lever (before PR6)
+
+`docs/planned/demand-elasticity.md`. Necessity becomes a per-good property — elasticity, how much
+wanting survives when the good cannot be had — feeding demand, unrest, pricing, rationing and
+logistics priority. It replaces PR5 Task 1's summed-demand-share fold, which cannot separate a water
+failure from the ambient barren deficit at any threshold; once the primitive exists, that fold and
+the regime ceilings fall out of it cheaply, so PR5 Task 1 lands here rather than being re-planned.
+
+**Sequenced before PR6, not after.** PR6's chips name regimes, and this slice is what settles what a
+regime means — the same reason presentation was split out of PR5. It is a foundational change to
+demand rather than a slice of the containment work, so it is its own spec-review + plan cycle.
+
 ### PR6 — Regime presentation + docs fold (§6, §7 UI)
 
 Regime classifier (Supplied/Low reserve/Rationing/Shortage/Glut) as a pure engine helper on the shared
@@ -167,9 +179,11 @@ unrest remains; align the Strike label with the real 0.65 production-suppression
 label Needs as the latest economy assessment. The regime re-base retires the legacy 95% “met”
 cutoff, so any active rationing is named consistently.
 
-- Consumes from PR5: the collapse/colony behaviour the panels describe. The regime/unrest constants
-  the chips name are NOT settled — PR5 parked that fold pending demand-elasticity — so the chips are
-  built on the shipped worst-good regime, and re-basing them is that slice's business, not PR6's.
+- Consumes from PR5: the collapse/colony behaviour the panels describe, **and** the settled
+  regime/unrest constants the chips name. PR5 parked that fold, so those constants are NOT settled
+  yet — the demand-elasticity slice below must land first. Building the panels against the shipped
+  worst-good regime would mean naming states the simulation is about to redefine, which is the reason
+  presentation was split out of PR5 in the first place.
 
 ## Cross-PR interfaces (locked here so plans don't drift)
 
