@@ -8,7 +8,10 @@ import { GOODS } from "@/lib/constants/goods";
 import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
-import type { RouteCost } from "@/lib/engine/directed-logistics";
+import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
+import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
+import { COLONISATION } from "@/lib/constants/colonisation";
+import { TARGET_COVER } from "@/lib/constants/economy";
 import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
@@ -17,6 +20,7 @@ import type {
   BuildBuildingUpdate,
   SystemClaim,
   SystemDevelopment,
+  FoundingStockLine,
   ProposalPersistenceUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import {
@@ -69,6 +73,46 @@ export interface DirectedBuildProcessorParams {
   /** Latched funded.construction per faction (0–1) — scales the funded pool. Missing
    *  faction or omitted map → 1 (ungated: engine tests, independents). */
   fundingByFaction?: ReadonlyMap<string, number>;
+}
+
+/**
+ * Goods the founding system sends with a colony seed, and what it can actually spare.
+ *
+ * Sized on the COLONY's own basket — `consumptionRate` at the seed population, so the manifest is
+ * mostly food and water at a small seed and only a trace of anything an engineer would want, with no
+ * per-good list deciding what matters. The want per good is the same share of its pricing anchor that
+ * world-gen seeds a starting market at.
+ *
+ * Two caps make it honest. `surplusDrawable` is the source's own export rule, so provisioning a
+ * colony can never draw a founder below the reserve it keeps for itself; and `balance` carries what
+ * is left of each source across the whole pulse, so two colonies founded from one system draw from
+ * the same shrinking pile instead of both reading the opening stock. A source holding none of a good
+ * sends none of it.
+ *
+ * Lives here rather than in the planner because only the processor has the source's market rows; the
+ * pure planner has no market read or write path.
+ */
+function planFoundingStock(
+  source: SystemBuildRow,
+  seedPop: number,
+  balance: Map<string, number>,
+): FoundingStockLine[] {
+  if (seedPop <= 0) return [];
+  const basis: CivilianDemandBasis = { population: seedPop, technicians: 0, engineers: 0 };
+  const manifest: FoundingStockLine[] = [];
+  for (const good of toGoodMarketStates(source)) {
+    const colonyDemandRate = consumptionRate(good.goodId, basis, source.governmentType);
+    if (colonyDemandRate <= 0) continue; // the seed does not consume it
+    const want = COLONISATION.FOUNDING_STOCK_ANCHOR_FRAC * TARGET_COVER * colonyDemandRate;
+    const key = `${source.systemId}|${good.goodId}`;
+    const remaining = balance.get(key)
+      ?? surplusDrawable(good.stock, good.targetStock, good.demand, good.production ?? 0, good.productionSuppressed);
+    const quantity = Math.min(want, Math.max(0, remaining));
+    if (!(quantity > 0)) continue;
+    balance.set(key, remaining - quantity);
+    manifest.push({ goodId: good.goodId, quantity });
+  }
+  return manifest;
 }
 
 /** Build the engine's per-system build state: capacity + per-good market state (shared derivation). */
@@ -163,9 +207,15 @@ export async function runDirectedBuildProcessor(
   // Current counts per system, to turn a landed whole-level increment into an absolute write.
   const currentBySystem = new Map<string, Record<string, number>>();
   for (const r of rows) currentBySystem.set(r.systemId, r.buildings);
+  // Full rows by id — a landed colony reads its SOURCE's markets to size the founding endowment.
+  const rowBySystem = new Map(rows.map((r) => [r.systemId, r]));
 
   const landedBySystem = new Map<string, Map<string, number>>();
   const developments: SystemDevelopment[] = [];
+  // Remaining drawable stock per (source system, good) across the whole pulse, so two colonies
+  // founded from one system draw from the same shrinking pile rather than both reading its opening
+  // stock — the same conservation `applyDevelopments` gives the seed population itself.
+  const foundingStockBalance = new Map<string, number>();
   const nextOpen: WorldConstructionProject[] = [];
   const workPerformedByFaction = new Map<string, number>();
   // Proposal-pressure counters advance for EVERY due faction's assessed markets — the construction
@@ -325,9 +375,12 @@ export async function runDirectedBuildProcessor(
         byType.set(l.buildingType, (byType.get(l.buildingType) ?? 0) + l.levels);
         landedBySystem.set(l.systemId, byType);
       } else {
-        // A completed colony-establish → develop the system: seed transfer + bundled housing (applied in tick.ts).
+        // A completed colony-establish → develop the system: seed transfer + bundled housing + the
+        // founding stock its source can spare (all applied in tick.ts).
+        const source = rowBySystem.get(l.sourceSystemId);
         developments.push({
           systemId: l.systemId, sourceSystemId: l.sourceSystemId, seedPop: l.seedPop, housingLevels: l.housingLevels,
+          stockManifest: source ? planFoundingStock(source, l.seedPop, foundingStockBalance) : [],
         });
       }
     }

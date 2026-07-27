@@ -40,4 +40,19 @@ export const COLONISATION = {
    * first-cut — tuned against the simulator (colonies should populate broadly without dying empty).
    */
   MIN_SETTLER_SUPPLY: 5,
+  /**
+   * Share of a landed colony's own pricing anchor that its founding endowment aims at, per good the
+   * seed population actually consumes. A colony used to open holding nothing, at satisfaction 0 on
+   * every good, and began climbing out of a shortage it need never have been in — so it read as
+   * deprived from its first pulse. The endowment is DRAWN from the founding system's own warehouses
+   * and conserved: what the colony gains, the founder loses, capped so provisioning a colony can
+   * never ration its founder.
+   *
+   * Set to the same reserve policy world-gen seeds starting markets with
+   * (`INITIAL_RESERVE_ANCHOR_FRAC`, 0.75) — a founded colony should open no better and no worse
+   * stocked than a generated one. Held as its own constant rather than a reference to that one so
+   * calibration can move the two apart: a founder's willingness to part with stock is a different
+   * question from how full a world-gen market starts.
+   */
+  FOUNDING_STOCK_ANCHOR_FRAC: 0.75,
 } as const;

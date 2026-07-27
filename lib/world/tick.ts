@@ -491,6 +491,37 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
   });
 }
 
+/**
+ * Move each development's founding stock from the founding system's markets to the colony's, in one
+ * conserving pass: every line subtracts from `sourceSystemId` and adds the same quantity to
+ * `systemId`, so the galaxy's total holding of a good is unchanged. Quantities were already capped at
+ * the source's own drawable surplus and at a per-source running balance when the manifest was built,
+ * so nothing here can overdraw a founder or double-spend a shared source.
+ *
+ * A colony would otherwise open holding nothing and read as starving from its first pulse, before any
+ * logistics could reach it. Non-finite or non-positive lines are skipped rather than trusted — stock
+ * is world state, and `JSON.stringify` turns a NaN into null.
+ */
+export function applyFoundingStock(markets: WorldMarket[], developments: SystemDevelopment[]): WorldMarket[] {
+  const delta = new Map<string, number>();
+  for (const d of developments) {
+    for (const line of d.stockManifest) {
+      const quantity = line.quantity;
+      if (!Number.isFinite(quantity) || quantity <= 0) continue;
+      const from = `${d.sourceSystemId}|${line.goodId}`;
+      const to = `${d.systemId}|${line.goodId}`;
+      delta.set(from, (delta.get(from) ?? 0) - quantity);
+      delta.set(to, (delta.get(to) ?? 0) + quantity);
+    }
+  }
+  if (delta.size === 0) return markets;
+  return markets.map((m) => {
+    const change = delta.get(`${m.systemId}|${m.goodId}`);
+    if (change === undefined || change === 0) return m;
+    return { ...m, stock: Math.max(0, m.stock + change) };
+  });
+}
+
 // ── Relations-owned events (border_conflict, pact_under_negotiation,
 // alliance_dissolved) — the only WorldEvent rows carrying metadata ─────
 
@@ -995,6 +1026,8 @@ export async function runWorldTick(
       // Persist the construction proposal-pressure counters into the market rows (proposalPulses only —
       // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
       markets = applyBuildMarketUpdates(markets, dbWorld.proposalPulseUpdates);
+      // …and move each new colony's founding endowment out of its founder's warehouses, conserved.
+      markets = applyFoundingStock(markets, dbWorld.developments);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
       buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
       processorsRun.push("directed-build");

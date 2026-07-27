@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { applyDevelopments, applyBuildingIncreases } from "@/lib/world/tick";
+import { applyDevelopments, applyBuildingIncreases, applyFoundingStock } from "@/lib/world/tick";
 import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
+import type { WorldMarket } from "@/lib/world/types";
 import type { SystemDevelopment, BuildBuildingUpdate } from "@/lib/tick/world/directed-build-world";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -41,8 +42,8 @@ describe("applyDevelopments", () => {
     const targetB = makeSystem("target-b", 0);
     const systems = [source, targetA, targetB];
     const developments: SystemDevelopment[] = [
-      { systemId: "target-a", sourceSystemId: "source", seedPop: 50, housingLevels: 3 },
-      { systemId: "target-b", sourceSystemId: "source", seedPop: 50, housingLevels: 3 },
+      { systemId: "target-a", sourceSystemId: "source", seedPop: 50, housingLevels: 3, stockManifest: [] },
+      { systemId: "target-b", sourceSystemId: "source", seedPop: 50, housingLevels: 3, stockManifest: [] },
     ];
 
     const before = totalPopulation(systems);
@@ -74,7 +75,7 @@ describe("applyDevelopments", () => {
     target.popCap = 0; // inert controlled system
     const systems = [source, target];
     const developments: SystemDevelopment[] = [
-      { systemId: "target", sourceSystemId: "source", seedPop: 50, housingLevels: 3 },
+      { systemId: "target", sourceSystemId: "source", seedPop: 50, housingLevels: 3, stockManifest: [] },
     ];
 
     const before = totalPopulation(systems);
@@ -107,7 +108,7 @@ describe("applyDevelopments", () => {
     const systems = [source, colony];
     // A land-poor seed of 25 (below one full housing level's density) with a single bundled housing level.
     const developments: SystemDevelopment[] = [
-      { systemId: "colony", sourceSystemId: "source", seedPop: 25, housingLevels: 2, },
+      { systemId: "colony", sourceSystemId: "source", seedPop: 25, housingLevels: 2, stockManifest: [] },
     ];
     const after = applyDevelopments(systems, developments);
     const c = after.find((s) => s.id === "colony")!;
@@ -159,5 +160,95 @@ describe("applyBuildingIncreases — popCap tracks built housing", () => {
     const after = applyBuildingIncreases([colony], updates);
     const c = after.find((s) => s.id === "colony")!;
     expect(c.popCap).toBe(100); // max(100, housingPopCap(2)=40)
+  });
+});
+
+/** Minimal market row — only systemId/goodId/stock matter to applyFoundingStock. */
+function market(systemId: string, goodId: string, stock: number): WorldMarket {
+  return { systemId, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
+}
+
+const stockAt = (markets: WorldMarket[], systemId: string, goodId: string) =>
+  markets.find((m) => m.systemId === systemId && m.goodId === goodId)!.stock;
+
+const totalStock = (markets: WorldMarket[], goodId: string) =>
+  markets.filter((m) => m.goodId === goodId).reduce((n, m) => n + m.stock, 0);
+
+describe("applyFoundingStock", () => {
+  it("conserves each good exactly: the source loses what the colony gains", () => {
+    const markets = [
+      market("source", "food", 100), market("colony", "food", 0),
+      market("source", "water", 80), market("colony", "water", 0),
+    ];
+    const developments: SystemDevelopment[] = [{
+      systemId: "colony", sourceSystemId: "source", seedPop: 2, housingLevels: 1,
+      stockManifest: [{ goodId: "food", quantity: 12 }, { goodId: "water", quantity: 7 }],
+    }];
+
+    const after = applyFoundingStock(markets, developments);
+    expect(stockAt(after, "source", "food")).toBe(88);
+    expect(stockAt(after, "colony", "food")).toBe(12);
+    expect(stockAt(after, "source", "water")).toBe(73);
+    expect(stockAt(after, "colony", "water")).toBe(7);
+    // Nothing minted, nothing destroyed — the galaxy holds exactly what it did.
+    expect(totalStock(after, "food")).toBe(totalStock(markets, "food"));
+    expect(totalStock(after, "water")).toBe(totalStock(markets, "water"));
+  });
+
+  it("conserves across two colonies drawing on one shared source", () => {
+    const markets = [
+      market("source", "food", 100), market("a", "food", 0), market("b", "food", 0),
+    ];
+    const developments: SystemDevelopment[] = [
+      { systemId: "a", sourceSystemId: "source", seedPop: 2, housingLevels: 1, stockManifest: [{ goodId: "food", quantity: 30 }] },
+      { systemId: "b", sourceSystemId: "source", seedPop: 2, housingLevels: 1, stockManifest: [{ goodId: "food", quantity: 25 }] },
+    ];
+
+    const after = applyFoundingStock(markets, developments);
+    expect(stockAt(after, "source", "food")).toBe(45); // both draws land on one balance
+    expect(stockAt(after, "a", "food")).toBe(30);
+    expect(stockAt(after, "b", "food")).toBe(25);
+    expect(totalStock(after, "food")).toBe(totalStock(markets, "food"));
+  });
+
+  it("lands the colony unchanged when the manifest is empty, and serialises cleanly", () => {
+    const markets = [market("source", "food", 100), market("colony", "food", 0)];
+    const developments: SystemDevelopment[] = [{
+      systemId: "colony", sourceSystemId: "source", seedPop: 2, housingLevels: 1, stockManifest: [],
+    }];
+
+    const after = applyFoundingStock(markets, developments);
+    expect(after).toBe(markets); // no delta at all — the same array, not a rebuilt copy
+    expect(JSON.parse(JSON.stringify(developments[0])).stockManifest).toEqual([]);
+  });
+
+  it("skips a non-finite or non-positive line rather than writing it into world state", () => {
+    // Stock is world state and JSON.stringify turns NaN/Infinity into null, silently corrupting a save.
+    const markets = [market("source", "food", 100), market("colony", "food", 0)];
+    const developments: SystemDevelopment[] = [{
+      systemId: "colony", sourceSystemId: "source", seedPop: 2, housingLevels: 1,
+      stockManifest: [
+        { goodId: "food", quantity: Number.NaN },
+        { goodId: "food", quantity: Number.POSITIVE_INFINITY },
+        { goodId: "food", quantity: -5 },
+      ],
+    }];
+
+    const after = applyFoundingStock(markets, developments);
+    expect(stockAt(after, "source", "food")).toBe(100);
+    expect(stockAt(after, "colony", "food")).toBe(0);
+    for (const m of after) expect(Number.isFinite(m.stock)).toBe(true);
+  });
+
+  it("never drives a source's stock negative", () => {
+    const markets = [market("source", "food", 10), market("colony", "food", 0)];
+    const developments: SystemDevelopment[] = [{
+      systemId: "colony", sourceSystemId: "source", seedPop: 2, housingLevels: 1,
+      stockManifest: [{ goodId: "food", quantity: 25 }], // more than the source holds
+    }];
+
+    const after = applyFoundingStock(markets, developments);
+    expect(stockAt(after, "source", "food")).toBe(0); // floored, never negative
+    expect(stockAt(after, "colony", "food")).toBe(25);
   });
 });

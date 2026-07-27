@@ -14,6 +14,9 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY, CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
+import { surplusDrawable } from "@/lib/engine/directed-logistics";
+import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
+import { TARGET_COVER } from "@/lib/constants/economy";
 
 const reachable: RouteCost = () => 1;
 
@@ -1005,5 +1008,94 @@ describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommit
     const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
     const result = await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
     expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);
+  });
+});
+
+// ── founding stock endowment ─────────────────────────────────────
+// A colony used to open holding nothing, so it read as starving from its first pulse before any
+// logistics could reach it. It now arrives with a slice of its founder's warehouses, sized on its
+// OWN basket and capped by what the founder can spare.
+
+/** The seed population's own demand basis — no skilled work at a brand-new colony. */
+const SEED_BASIS: CivilianDemandBasis = {
+  population: EXPANSION.COLONY_SEED_POP, technicians: 0, engineers: 0,
+};
+
+/** What the colony wants of `goodId`: its share of its own pricing anchor, per the founding policy. */
+const foundingWant = (goodId: string) =>
+  COLONISATION.FOUNDING_STOCK_ANCHOR_FRAC * TARGET_COVER
+  * consumptionRate(goodId, SEED_BASIS, "federation");
+
+function stockedMarket(systemId: string, goodId: string, stock: number): MarketRowForLogistics {
+  return { id: `${systemId}|${goodId}`, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
+}
+
+/** A saturated home that also holds tradeable stock, so a founding manifest can actually be drawn. */
+function stockedHome(goodStocks: Record<string, number>): SystemBuildRow {
+  return {
+    ...saturatedHome(1000),
+    markets: Object.entries(goodStocks).map(([goodId, stock]) => stockedMarket("home", goodId, stock)),
+  };
+}
+
+const developColony = (w: MemoryDirectedBuildWorld, candidates: ColonyEstablishCandidate[]) =>
+  runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+    interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1),
+    develop: { candidateProvider: (f) => (f === "f1" ? candidates : []), params: COLONY_PARAMS },
+  });
+
+describe("runDirectedBuildProcessor: colony founding stock", () => {
+  it("weights the manifest like the colony's own basket, not a flat share", async () => {
+    // Ample stock of each, so the COLONY's want is what binds rather than the founder's spare.
+    const w = new MemoryDirectedBuildWorld([stockedHome({ food: 5_000, water: 5_000, luxuries: 5_000 })]);
+    await developColony(w, [colonyCand("c1")]);
+
+    const manifest = new Map(w.developments[0].stockManifest.map((l) => [l.goodId, l.quantity]));
+    for (const goodId of ["food", "water", "luxuries"]) {
+      expect(manifest.get(goodId)).toBeCloseTo(foundingWant(goodId), 6);
+    }
+    // The shape that matters: a 2-pop seed is sent staples, and only a trace of what nobody there
+    // yet consumes much of. Water and food are the biggest per-capita needs; luxuries the smallest.
+    expect(manifest.get("water")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
+    expect(manifest.get("food")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
+  });
+
+  it("never draws the founder below its own drawable surplus", async () => {
+    // targetStock = TARGET_COVER x demandRate(1) = 40, and the source holds barely above it, so
+    // surplusDrawable — not the colony's want — is the binding cap.
+    const anchor = TARGET_COVER;
+    const w = new MemoryDirectedBuildWorld([stockedHome({ food: anchor * 1.5 })]);
+    await developColony(w, [colonyCand("c1")]);
+
+    const food = w.developments[0].stockManifest.find((l) => l.goodId === "food");
+    const drawable = surplusDrawable(anchor * 1.5, anchor, 1, 0, false);
+    expect(drawable).toBeGreaterThan(0);
+    expect(food?.quantity ?? 0).toBeLessThanOrEqual(drawable);
+  });
+
+  it("sends nothing from a source that holds nothing, and the colony still lands", async () => {
+    const w = new MemoryDirectedBuildWorld([stockedHome({ food: 0, water: 0 })]);
+    await developColony(w, [colonyCand("c1")]);
+
+    expect(w.developments).toHaveLength(1);       // the colony is founded regardless
+    expect(w.developments[0].seedPop).toBe(EXPANSION.COLONY_SEED_POP);
+    expect(w.developments[0].stockManifest).toEqual([]);
+  });
+
+  it("draws two colonies from one shrinking source balance, never twice from the opening stock", async () => {
+    // Stock deliberately just above the anchor so one colony's want nearly exhausts the drawable
+    // surplus: without a shared balance the second colony would read the same opening figure and
+    // both would be granted it, minting stock the founder never had.
+    const w = new MemoryDirectedBuildWorld([stockedHome({ food: TARGET_COVER + foundingWant("food") * 1.5 })]);
+    await developColony(w, [colonyCand("c1"), colonyCand("c2")]);
+
+    expect(w.developments.length).toBeGreaterThanOrEqual(2);
+    const drawn = w.developments
+      .flatMap((d) => d.stockManifest)
+      .filter((l) => l.goodId === "food")
+      .reduce((n, l) => n + l.quantity, 0);
+    const drawable = surplusDrawable(TARGET_COVER + foundingWant("food") * 1.5, TARGET_COVER, 1, 0, false);
+    expect(drawn).toBeCloseTo(drawable, 6);          // the whole balance was spent…
+    expect(drawn).toBeLessThan(foundingWant("food") * 2); // …and it was NOT enough for two full wants
   });
 });
