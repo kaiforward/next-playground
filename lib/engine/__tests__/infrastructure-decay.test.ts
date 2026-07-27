@@ -229,7 +229,7 @@ describe("computeSystemDecay — interval awareness", () => {
     expect(r.collapseDebt).toBe(0);
   });
 
-  it("spends a catchUp-inflated budget across types, never twice on one", () => {
+  it("lapses the part of a catchUp-inflated budget it has no type to spend on", () => {
     // catchUp 2 at full severity owes floor(0 + 2) = 2 levels, but ore is the only eligible
     // type and each type gives up at most one level per run — so one level sheds and the
     // unspendable remainder lapses rather than banking.
@@ -299,18 +299,52 @@ describe("computeSystemDecay — proportionate unrest collapse", () => {
     expect(levelsShed(wide, wideResult.newCounts)).toBe(1);
   });
 
-  it("picks the least-used level first, breaking ties on type id", () => {
-    // ore is fully staffed and selling; the other two draw the same labour pool dry, so they
-    // sit at equal (lower) utilization and the tie resolves on ascending type id.
-    const buildings = { ore: 1, [TEN_TYPES[1]]: 1, [TEN_TYPES[2]]: 1 };
-    const idlest = [TEN_TYPES[1], TEN_TYPES[2]].sort()[0];
+  it("picks the least-used level first", () => {
+    // Both types are fully staffed, so utilization differs only by how well each SELLS: water
+    // moves a fifth of its output, ore all of it. The collapse level must land on water — the
+    // levels a system is failing to keep busy go before the ones it still leans on.
+    const buildings = { ore: 2, water: 2 };
     const result = computeSystemDecay(
-      { buildings, buildingIdleMonths: {}, collapseDebt: 0, population: ORE_LABOUR, unrest: 1, sellingFactor: fullSelling },
+      {
+        buildings,
+        buildingIdleMonths: {},
+        collapseDebt: 0,
+        population: 1e6, // far past both labour draws, so staffing is not the differentiator
+        unrest: 1,
+        sellingFactor: (goodId) => (goodId === "water" ? 0.2 : 1),
+      },
       PROP,
     );
     expect(levelsShed(buildings, result.newCounts)).toBe(1);
+    expect(result.newCounts.water).toBe(1); // the idlest seller gives up a level
     expect(result.newCounts.ore).toBeUndefined(); // the busy one survives
-    expect(result.newCounts[idlest]).toBe(0);
+  });
+
+  it("breaks an exact utilization tie on ascending type id", () => {
+    // Identical staffing and identical selling leaves nothing to choose between them, so the
+    // ordering falls back to the type id — the outcome must not depend on key insertion order.
+    const buildings = { water: 2, ore: 2 };
+    const result = computeSystemDecay(
+      { buildings, buildingIdleMonths: {}, collapseDebt: 0, population: 1e6, unrest: 1, sellingFactor: fullSelling },
+      PROP,
+    );
+    expect(levelsShed(buildings, result.newCounts)).toBe(1);
+    expect(result.newCounts.ore).toBe(1); // "ore" sorts before "water"
+    expect(result.newCounts.water).toBeUndefined();
+  });
+
+  it("spreads a multi-level budget one level per type", () => {
+    // catchUp 2 at full severity owes two levels and there are two eligible types, so each gives
+    // up exactly one — the budget spreads across the base instead of gutting a single industry.
+    const buildings = { ore: 3, water: 3 };
+    const result = computeSystemDecay(
+      { buildings, buildingIdleMonths: {}, collapseDebt: 0, population: 1e6, unrest: 1, sellingFactor: fullSelling },
+      PROP,
+      2,
+    );
+    expect(levelsShed(buildings, result.newCounts)).toBe(2);
+    expect(result.newCounts.ore).toBe(2);
+    expect(result.newCounts.water).toBe(2);
   });
 
   it("ramps with severity: just above the threshold is slow, full unrest is a level a run", () => {

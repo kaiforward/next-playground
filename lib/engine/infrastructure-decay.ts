@@ -19,8 +19,9 @@
  * unrest just above the threshold is slow and only total unrest reproduces a level per run. Housing
  * is shed only above resident occupancy, so this channel can never strand a population at popCap 0.
  *
- * Both counters are tick-denominated — they accrue `catchUp` per run, so the wall-clock teardown rate
- * is interval-invariant; the buffer and threshold stay in reference-month units. Counts stay whole
+ * Both counters are tick-denominated — the idle countdown accrues `catchUp` per run and the collapse
+ * debt `catchUp × severity`, so the wall-clock teardown rate is interval-invariant either way; the
+ * buffer and threshold stay in reference-month units. Counts stay whole
  * integers; decay is downward-only and floored at 0. Growth is the directed-build processor's job.
  * popCap recomputes from the surviving housing.
  */
@@ -42,7 +43,8 @@ export { housingUsed };
 export interface DecayParams {
   /** Sustained-idle runs (≈ months) a level must stay idle before the marginal level tears down. ≥ 1. */
   idleBufferMonths: number;
-  /** θ_decay: unrest strictly above this tears down a whole level immediately (the discrete collapse). */
+  /** θ_decay: unrest strictly above this tears levels down even while in use (the discrete collapse),
+   *  at a pace ramped by how far above it sits — see `collapseSeverity`. */
   unrestThreshold: number;
 }
 
@@ -153,25 +155,24 @@ export function computeSystemDecay(
     // holding population can never be torn down to popCap 0 through this channel. An emptied
     // colony's housing is fully eligible — the idle channel prunes that case independently.
     const housingFloor = Math.ceil(housingUsed(population));
-    const eligible = [...usedByType.keys()]
-      .filter((type) => {
+    const eligible = [...usedByType.entries()]
+      .filter(([type]) => {
         const count = newCounts[type] ?? buildings[type];
         if (count < 1) return false;
         return type !== HOUSING_TYPE || count - 1 >= housingFloor;
       })
       // Least-used first, ties by ascending type id: what a system is already failing to keep busy
-      // goes before what it still leans on, and the outcome never depends on key order.
-      .sort((a, b) => {
-        const ratioA = (usedByType.get(a) ?? 0) / buildings[a];
-        const ratioB = (usedByType.get(b) ?? 0) / buildings[b];
-        if (ratioA !== ratioB) return ratioA - ratioB;
-        return a < b ? -1 : 1;
-      });
+      // goes before what it still leans on, and the outcome never depends on key order. The ratio
+      // reads the run's start state, so both terms come from the same measurement.
+      .map(([type, used]): [string, number] => [type, used / buildings[type]])
+      .sort(([typeA, ratioA], [typeB, ratioB]) =>
+        ratioA !== ratioB ? ratioA - ratioB : typeA < typeB ? -1 : 1,
+      );
 
     // One level per type per run: the budget spreads across the base instead of gutting a single
     // industry. A system with fewer eligible types than levels owed sheds what it can and the
     // shortfall lapses — only the sub-level remainder carries forward.
-    for (const type of eligible) {
+    for (const [type] of eligible) {
       if (owed <= 0) break;
       newCounts[type] = Math.max(0, (newCounts[type] ?? buildings[type]) - 1);
       owed -= 1;
