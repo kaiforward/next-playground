@@ -156,17 +156,24 @@ derives `gain = ceiling × k` internally, where `k` is the already-selected rela
 - `floor` remains the exact equilibrium at D = 0 — tax semantics untouched.
 - Monotonicity and one-bad-pulse recoverability are preserved (same integrator).
 - Ordering invariant: `ceilingShortage > ceilingRationing`, asserted in a test.
-- Containment invariant: `ceilingRationing + <max tax pressure> + <crowding clamp> <` the strike
-  threshold, asserted in a test against `STRIKE_PARAMS.threshold`, `TAX_LEVEL_UNREST_PRESSURE`, and
-  `CROWDING.PRESSURE_MAX`. This is the guarantee the user's ruling rests on: chronic scarcity in
-  goods that barely matter must not be able to reach revolution.
 
 Initial cuts: `ceilingRationing = 0.45`, `ceilingShortage = 0.90`; `decay` and `recoveryDecay`
-unchanged at 0.06 / 0.12. Note the containment assertion binds `ceilingRationing` against
-`very_high` tax (0.18) + crowding (0.05): 0.45 + 0.23 = 0.68 exceeds 0.65, so **either
-`ceilingRationing` drops to ≈ 0.40 or the assertion is written against the default tax stance and
-the very-high-tax overlap is documented as intentional policy cost.** Resolve this explicitly in
-Task 1 — do not let the assertion be silently weakened to make a number fit.
+unchanged at 0.06 / 0.12.
+
+**Containment is two assertions, not one — decided 2026-07-27.** Very-high tax is *allowed* to push
+a chronically rationed, overcrowded world into striking: overcrowded + deprived + heavily taxed
+earning a strike is intended policy cost, even when the deprivation is in lower-tier goods. What
+remains forbidden at every tax stance is infrastructure collapse from ordinary scarcity.
+
+| Assertion | Sum at the initial cuts | Bound |
+| --- | --- | --- |
+| `ceilingRationing + TAX_LEVEL_UNREST_PRESSURE.normal + CROWDING.PRESSURE_MAX` < `STRIKE_PARAMS.threshold` | 0.45 + 0.05 + 0.05 = 0.55 | 0.65 |
+| `ceilingRationing + max(TAX_LEVEL_UNREST_PRESSURE) + CROWDING.PRESSURE_MAX` < `INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold` | 0.45 + 0.18 + 0.05 = 0.68 | 0.75 |
+
+Both are computed from the shared constants, never from hardcoded sums, so a later ceiling or tax
+change trips them. The intended gradient falls out: `high` tax (0.1) reaches 0.60 and does not
+strike; only `very_high` (0.18) crosses. Record that gradient in the constant's docstring —
+including that only genuine famine (the Shortage ceiling) can reach the collapse regime.
 
 The catch-up pre-scaling stays in the processor (`lib/tick/processors/population.ts:37-38`) and now
 scales the derived gains, not the ceilings; `k` stays clamped to [0,1] after scaling.
@@ -320,13 +327,15 @@ disk and ride this first commit — they are the design this plan implements, no
 - [ ] Update `UNREST_PARAMS` and its docstring (it currently states "Shortage accumulates twice as
   fast as Rationing" as a gain ratio).
 - [ ] Update the processor's catch-up pre-scaling to scale derived gains, not ceilings.
-- [ ] **Resolve the containment/very-high-tax tension explicitly** (Locked Decision 2) and record
-  the choice in the constant's docstring.
+- [ ] Record the tax gradient in the ceiling constants' docstring: normal/high tax cannot strike a
+  chronically rationed crowded world, `very_high` deliberately can, and no tax stance can collapse
+  its infrastructure (Locked Decision 2).
 - [ ] Tests: demand-share fold boundary cases (empty water ⇒ shortage; all tier-2 civilian empty ⇒
   rationing; luxuries-only ⇒ rationing; engineer-heavy luxuries ⇒ shortage; zero demand ⇒ supplied);
   equilibrium equals `floor + ceiling × D` for both regimes at several `decay` values; `floor` is the
   exact equilibrium at D = 0 for every tax level; ordering `ceilingShortage > ceilingRationing`;
-  the Rationing containment assertion; monotonicity in D; one bad pulse recoverable.
+  **both** containment assertions from the constants (strike-safe at normal tax, collapse-safe at
+  every tax); monotonicity in D; one bad pulse recoverable.
 
 **Commit:** `feat(population): demand-weighted unrest regime and per-regime unrest ceilings`
 
@@ -468,8 +477,8 @@ disk and ride this first commit — they are the design this plan implements, no
 - [ ] `supplyRegime` is demand-weighted with no per-good vital list; both its docstring and the
   `ECONOMY_CONSTANTS` comment are rewritten, not left describing the worst-good fold.
 - [ ] Unrest equilibrium is `floor + ceiling × D` by construction; tax is still the exact equilibrium
-  at D = 0; the Rationing containment assertion is real, and the very-high-tax tension was resolved
-  deliberately rather than by weakening the assertion.
+  at D = 0; both containment assertions compute from the shared constants rather than hardcoded
+  sums, and the deliberate very-high-tax strike overlap is documented, not silently absorbed.
 - [ ] Collapse teardown is independent of building-type count, ramped by severity, and a system
   holding population can never reach `popCap = 0`.
 - [ ] The idle channel is unchanged — housing is contained by sizing at **both** sites, not by an
