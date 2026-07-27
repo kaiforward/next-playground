@@ -215,19 +215,47 @@ recalibration.
   at the designed rate.
 
 - **The rate-selecting regime is demand-weighted, not worst-good.** The regime that picks the
-  accumulation rate is folded from how much of a system's *demand* is badly supplied — the share of
-  total demand sitting in goods below the Shortage satisfaction threshold — not from whether any
-  single demanded good is short. A worst-good fold makes the fast rate ambient rather than
-  exceptional: the barren-galaxy design guarantees a chronic higher-tier deficit at nearly every
-  system (`POPULATION_PARAMS` names it as an unavoidable D ≈ 0.4), so a mining colony with full
-  food and water and empty luxuries is graded identically to a system in famine. Demand weighting
-  already exists on the *magnitude* term D and is exactly the right instrument here: for an
-  ordinary population food and water are ~76% of the basket and luxuries ~3%, so empty food shelves
-  reach the threshold immediately and a luxury drought never does. It also composes with the
-  skilled baskets for free — luxuries appear only in the engineer basket, so an engineer-heavy
-  system genuinely does put luxuries at a demand share that can trip the fast rate, while a mining
-  colony does not. Requiring a per-good "vital" list is explicitly rejected: it is a magic list, and
-  it cannot express that same good mattering differently to different populations.
+  accumulation rate is folded from how much of a system's *demand* is badly supplied, not from
+  whether any single demanded good is short. A worst-good fold makes the fast rate ambient rather
+  than exceptional: the barren-galaxy design guarantees a chronic higher-tier deficit at nearly
+  every system (`POPULATION_PARAMS` names it as an unavoidable D ≈ 0.4), so a mining colony with
+  full food and water and empty luxuries is graded identically to a system in famine. Demand
+  weighting already exists on the *magnitude* term D and is the right instrument here. It also
+  composes with the skilled baskets for free — luxuries appear only in the engineer basket, so an
+  engineer-heavy system genuinely does put luxuries at a demand share that can trip the fast rate,
+  while a mining colony does not; that per-population variation is required behaviour. Requiring a
+  per-good "vital" list is explicitly rejected: it is a magic list, and it cannot express the same
+  good mattering differently to different populations.
+
+  **Which demand-weighted fold is UNRESOLVED — a summed-share fold cannot express this goal.** The
+  design intent is two-sided: ambient higher-tier scarcity must stop selecting the fast rate, *and*
+  a real food/water failure must still select it. Measured against the shipped basket (26 goods
+  carry positive civilian demand; world-gen creates a market for every system × every good, so the
+  fold sees the whole basket, not a civilian subset):
+
+  | Case | Unskilled world | Mature hub (15% tech / 4% eng) | Engineer-heavy |
+  | --- | --- | --- | --- |
+  | Water empty alone | 16.6% | 14.1% | 9.9% |
+  | Food empty alone | 14.3% | 12.1% | 8.5% |
+  | Tier-2 civilian trio empty | 10.7% | 20.7% | 34.7% |
+  | All tier-1+2 empty (the barren-chronic case) | 38.7% | 46.5% | 62.0% |
+
+  Summing the short goods' demand share therefore requires a cut `≤ 0.166` to grade a total water
+  failure as Shortage and a cut `> 0.387` to keep the barren-chronic deficit at Rationing. No value
+  satisfies both, so this is a structural limit of the summed fold rather than a calibration miss:
+  summing knows only *how much* demand is short, and the ambient deficit is short on more demand
+  than an acute one — eighteen small goods against one large one. (An earlier draft of this section
+  cited food and water as ~76% of the basket and luxuries as ~3%; those came from a six-good subset
+  that does not exist in the code.)
+
+  The leading candidate is to fold on the **largest single short good's demand share** — Shortage
+  once any one good below the Shortage satisfaction threshold is itself at least
+  `SHORTAGE_DEMAND_SHARE` of the system's demand. It keeps every property this section requires (no
+  vital list, per-system weights, engineer luxuries reachable at 11.3% while mining-colony luxuries
+  at 1.2% are not), and reads as a weight-gated version of the shipped worst-good fold rather than a
+  new mechanism. At a 0.10 cut it grades water and food empty as Shortage at both an unskilled world
+  and a hub, and the tier-2 trio and luxuries as Rationing at both. **Not ratified** — it changes the
+  fold this section locked, so it needs a design decision before implementation.
 
 - **Each regime bounds where unrest settles.** The accumulation gains are re-parameterised as
   `gain = ceiling × decay`, so each regime carries a named ceiling and the equilibrium under
@@ -242,6 +270,11 @@ recalibration.
   reach a regime reserved for catastrophe; the ceilings are what make that a guarantee rather than
   a calibration accident. Rationing's ceiling sits below the strike threshold by construction —
   asserted in a test.
+
+  The ceilings and the fold above ship together, because the containment guarantee is a claim about
+  the *pair*. "Nothing but famine reaches the collapse regime" holds only while ambient scarcity
+  selects Rationing; under the shipped worst-good fold the ambient case still selects Shortage, so
+  ceilings alone would carry a guarantee that is false in exactly the systems it exists to protect.
 
 - **Growth**: `rate × pop × (1 − D) × crowd(r)` where `r = pop ÷ popCap`. `crowd(r)` = 1 while
   `r ≤ 1.0`, braking smoothly to 0 at `r = CROWD_BRAKE_END` (initial 1.15). Population may exceed

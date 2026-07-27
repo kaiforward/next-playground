@@ -98,7 +98,8 @@ median price/base, and floor-pinned share should all move toward the §8 targets
 - The coordinating agent reads the full plan once and carries the Locked Interface Decisions and
   Global Constraints through every task.
 - Execute Tasks 1–6 sequentially. Do not parallelize implementation tasks: later tasks consume
-  interfaces introduced by earlier tasks.
+  interfaces introduced by earlier tasks. (Task 1 is parked on a design decision — see its header;
+  nothing downstream consumes it, so execution runs 2–6 and returns to it.)
 - Use one fresh implementation agent per task, sized to the task's integration and reasoning needs.
   Give it that task, the relevant locked decisions and global constraints, and only the interfaces
   produced by completed tasks that it needs.
@@ -296,6 +297,18 @@ headroom level.
 ---
 
 ### Task 1: Unrest engine — demand-weighted rate regime and regime ceilings
+
+> **PARKED — blocked on a design decision.** The summed-demand-share fold below cannot deliver its
+> own goal at any threshold: measured against the shipped 26-good basket, grading a total water
+> failure as Shortage needs a cut `≤ 0.166` while keeping the barren-chronic deficit at Rationing
+> needs `> 0.387`. The sanity table below is wrong — it was computed over a six-good subset, but
+> world-gen creates a market for every system × every good and the fold sees all of them. Locked
+> Decision 1 and the `SHORTAGE_DEMAND_SHARE = 0.25` cut are void; spec §3 now carries the measured
+> shares, the impossibility argument, and the unratified largest-short-good candidate. The ceilings
+> half is parked with the fold rather than shipped alone — the containment guarantee is a claim
+> about the pair, and ceilings under the shipped worst-good fold would assert protection that does
+> not hold. Tasks 2–6 do not depend on this task and proceed; resume here once the fold is decided,
+> and re-run Task 8 with both halves in place.
 
 **Modify:** `lib/engine/population.ts`, `lib/constants/population.ts`, `lib/constants/economy.ts`,
 `lib/tick/processors/population.ts`.
