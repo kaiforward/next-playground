@@ -1005,9 +1005,11 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
 
 /** Seed + bundled-housing sizing for a colony at `habitableSpace` — the planner's whole-level rule,
  *  shared with the player's direct-colony verb so both order identical projects. Null = the site
- *  can't hold one whole housing level (not viable). Bundles one level of headroom beyond the seed's
- *  own need (still clamped to the whole-level habitable cap) so a land-rich colony opens with room
- *  to grow instead of pinned at r = 1.0 the moment it lands. */
+ *  can't hold one whole housing level (not viable). Housing is sized to exactly the seed's own need
+ *  (still clamped to the whole-level habitable cap), so `popCap ≥ seedPop` on arrival with no spare
+ *  level bundled: a colony opening one level short of full sits inside the decay vacancy slack,
+ *  where a bundled headroom level would read idle and be torn down before the colony could grow
+ *  into it. The second level is earned from the housing relief valve like any other system's. */
 export interface ColonySizing { seedPop: number; housingLevels: number; work: number }
 
 export function sizeColonyEstablish(
@@ -1018,7 +1020,7 @@ export function sizeColonyEstablish(
   const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, habitableSpace) / housingCost) : 0;
   const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
   const seedPop = Math.min(params.seedPop, habitableCap);
-  const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY) + 1);
+  const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
   if (housingLevels < 1 || seedPop <= 0) return null;
   return { seedPop, housingLevels, work: params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE) };
 }

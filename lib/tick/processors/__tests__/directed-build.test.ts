@@ -543,9 +543,9 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
     expect(dev.systemId).toBe("c1");
     expect(dev.sourceSystemId).toBe("home");
     expect(dev.seedPop).toBe(EXPANSION.COLONY_SEED_POP);
-    // Viable by construction: bundled housing houses the whole seed, plus one headroom level (the
-    // candidate's land here is generous, so the whole-level habitable cap never clamps it back down).
-    expect(dev.housingLevels).toBe(Math.ceil(dev.seedPop / POP_CENTRE_DENSITY) + 1);
+    // Viable by construction: bundled housing houses the whole seed and no more (the candidate's land
+    // here is generous, so the whole-level habitable cap never clamps it back down).
+    expect(dev.housingLevels).toBe(Math.ceil(dev.seedPop / POP_CENTRE_DENSITY));
     expect(dev.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(dev.seedPop);
     // The completed establish project is removed from the open queue.
     expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
