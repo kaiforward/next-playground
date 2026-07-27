@@ -2,8 +2,8 @@
  * Colonisation-cost tuning — the establish/land/saturation knobs of the pool-funded expansion model
  * (docs/planned/economy-colonisation-cost.md §1–§3). First-cut, coarse values: only the relative shape
  * matters here (home-first while there is cheap building; expansion accelerating as habitable territory
- * fills). PR4 calibrates the magnitudes in the sequenced `L·σ`-first pass. Each is a tunable *input* with
- * a clear meaning — a per-doctrine lookup feeds them later; the valuation formula never changes.
+ * fills). Magnitudes are calibrated against the simulator. Each is a tunable *input* with a clear
+ * meaning — a per-doctrine lookup feeds them later; the valuation formula never changes.
  */
 export const COLONISATION = {
   /**
@@ -29,7 +29,7 @@ export const COLONISATION = {
    * Weight on the seed-population opportunity cost netted off a colony's value (§7.3). The cost is the
    * source's forgone output for the part of the seed that must come from staffed (not idle) workers,
    * so founding naturally prefers a job-short source; this dial bridges that lost-production figure into
-   * the value scalar. Coarse first-cut (per-doctrine later); PR4 calibrates it against LAND_PREMIUM/σ.
+   * the value scalar. Coarse first-cut (per-doctrine later), calibrated against LAND_PREMIUM/σ.
    */
   SEED_POP_COST_WEIGHT: 1.0,
   /**

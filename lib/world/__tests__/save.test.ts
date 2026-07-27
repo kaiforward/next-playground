@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { serializeWorld, deserializeWorld, sanitizeSaveName, SAVE_FORMAT_VERSION } from "../save";
 import type { World } from "../types";
+import { runWorldTick } from "../tick";
+import { MONTH_LENGTH } from "@/lib/constants/tick-cadence";
 
 describe("sanitizeSaveName", () => {
   it("lowercases and strips everything but [a-z0-9-_]", () => {
@@ -208,5 +210,64 @@ describe("save format — player seat", () => {
     const stale = JSON.stringify({ formatVersion: 5, world: { meta: {} } });
     const result = deserializeWorld(stale);
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("save compatibility — collapseDebt moved from building rows to system rows", () => {
+  /**
+   * A save written before the unrest-collapse debt became per-system: every system row lacks
+   * `collapseDebt`, and every building row still carries the retired per-type one. The format
+   * version was deliberately NOT bumped, because the debt is transient regime state that resets
+   * whenever unrest falls back below the decay threshold — never a balance anything is owed. This
+   * pins that the decision is safe rather than merely asserted.
+   */
+  function preMigrationSave(): string {
+    const world = generateWorld({ systemCount: 40, seed: 11 });
+    const legacy = {
+      formatVersion: SAVE_FORMAT_VERSION,
+      world: {
+        ...world,
+        systems: world.systems.map((s) => {
+          const { collapseDebt: _dropped, ...withoutDebt } = s;
+          return withoutDebt;
+        }),
+        buildings: world.buildings.map((b) => ({ ...b, collapseDebt: 0.4 })),
+      },
+    };
+    return JSON.stringify(legacy);
+  }
+
+  it("loads, and every system's missing collapseDebt reads 0", () => {
+    const result = deserializeWorld(preMigrationSave());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const s of result.world.systems) expect(s.collapseDebt ?? 0).toBe(0);
+  });
+
+  it("runs a tick without NaN or Infinity entering world state, and drops the stale field", async () => {
+    const result = deserializeWorld(preMigrationSave());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Past a monthly boundary, so the economy/population/decay pulse actually resolves.
+    let world: World = result.world;
+    for (let tick = 1; tick <= MONTH_LENGTH + 1; tick++) {
+      world = (await runWorldTick(world)).world;
+    }
+
+    // The retired per-building field is rebuilt away by the first tick's row flatten…
+    for (const b of world.buildings) expect("collapseDebt" in b).toBe(false);
+    // …and the per-system one is a finite, non-negative number everywhere.
+    for (const s of world.systems) {
+      const debt = s.collapseDebt ?? 0;
+      expect(Number.isFinite(debt)).toBe(true);
+      expect(debt).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(s.population)).toBe(true);
+      expect(Number.isFinite(s.popCap)).toBe(true);
+      expect(Number.isFinite(s.unrest)).toBe(true);
+    }
+    for (const m of world.markets) expect(Number.isFinite(m.stock)).toBe(true);
+    // And it still survives a full serialize round-trip after the migration.
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
   });
 });
