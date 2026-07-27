@@ -199,6 +199,31 @@ export interface MigrationThroughputSummary {
   meanPerPulse: number;
 }
 
+// ── Colony founding stock ───────────────────────────────────────
+
+/**
+ * How well fed colonies founded during the run were at their first assessed month. A colony used to
+ * open holding nothing on every good; the founding-stock endowment ships it a slice of its founder's
+ * warehouses. Measured at founding because a handful of new systems cannot move any galaxy-wide
+ * average — `medianCover` medians over every market and would read green through this entirely.
+ */
+export interface FoundingStockSummary {
+  /** Systems that became `developed` after tick 0 — colonies founded in play. */
+  foundedCount: number;
+  /** Those that reached their first post-founding economy pulse before the run ended. */
+  sampledCount: number;
+  /** Mean, over sampled colonies, of DEMAND-WEIGHTED satisfaction at that pulse — a good counts for
+   *  what the colony actually needs of it, so no water weighs far heavier than no reactor cores.
+   *  Should sit near 1; near 0 is a colony arriving genuinely unprovisioned. */
+  meanOpeningSatisfaction: number;
+  /** Mean, over sampled colonies, of the convex `dissatisfaction` fold the unrest engine itself
+   *  reads. Reported alongside the weighted mean so the instrument and the simulation cannot drift
+   *  into disagreeing about whether a colony opened deprived. */
+  meanOpeningDissatisfaction: number;
+  /** Sampled colonies that opened below half satisfaction. Should read ~0. */
+  openingDeprivedCount: number;
+}
+
 // ── Region overview ─────────────────────────────────────────────
 
 export interface RegionOverviewEntry {
@@ -244,6 +269,8 @@ export interface HarnessResults {
   populationSnapshots: Array<Map<string, number>>;
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
   migrationThroughput: MigrationThroughputSummary;
+  /** How well provisioned colonies founded during the run were at their first assessed month. */
+  foundingStock: FoundingStockSummary;
   /** Faction-treasury health at simulation end — balances, income mix, funded fractions, shortfalls. */
   treasurySummary: TreasurySummary;
   /** Treasury balance trajectory sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */

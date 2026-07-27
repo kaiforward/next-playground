@@ -5,9 +5,7 @@
  * synthetic id is minted from a monotonic counter rather than a cuid.
  */
 
-import { GOODS } from "@/lib/constants/goods";
-import { getInitialStock, civilianDemandRateForGood } from "@/lib/constants/market-economy";
-import { computeSystemLabourSnapshot, facilityStorageForGood } from "@/lib/engine/industry";
+import { createSystemMarkets } from "@/lib/world/markets";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
 import { slotColumns, qualColumns, yieldColumns } from "@/lib/engine/resources";
@@ -180,29 +178,22 @@ export function generateWorld(options: GenerateWorldOptions): World {
     fuelCost: c.fuelCost,
   }));
 
-  // ── Markets (every system × every good) ──
-  const goodIds = Object.keys(GOODS);
+  // ── Markets (developed systems only) ──
+  // An unclaimed system has no market: no one there produces, consumes, or stores anything. Rows are
+  // created when a system is settled (`lib/world/tick.ts`), opening empty. Seeding every rock would
+  // hand each future colony a full anchor's worth of goods nobody grew, and would swamp every
+  // galaxy-wide market reading with rows that can never move.
   const governmentByFactionId = new Map(factions.map((f) => [f.id, f.governmentType]));
   const markets: WorldMarket[] = universe.systems.flatMap((s, i) => {
-    const demandBasis = computeSystemLabourSnapshot(s.buildings, s.population).basis;
+    if (systems[i].control !== "developed") return [];
     const governmentType = systems[i].factionId ? governmentByFactionId.get(systems[i].factionId) ?? "frontier" : "frontier";
-    return goodIds.map((goodId) => {
-      const storageCapacity = facilityStorageForGood(s.buildings, goodId);
-      const stock = getInitialStock(s.buildings, s.yieldMult, s.population, goodId, governmentType);
-      // Guard: JSON.stringify silently turns NaN/Infinity into null, which would
-      // break the save/load round-trip — clamp defensively (mirrors seed.ts's
-      // Postgres NaN/Infinity guard, which exists for the same underlying reason).
-      return {
-        systemId: systemIds[i],
-        goodId,
-        stock: Number.isFinite(stock) ? stock : 0,
-        anchorMult: 1,
-        demandRate: civilianDemandRateForGood(goodId, demandBasis, governmentType),
-        storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
-        satisfaction: 1,
-        squeezePulses: 0,
-        proposalPulses: 0,
-      };
+    return createSystemMarkets({
+      systemId: systemIds[i],
+      buildings: s.buildings,
+      yields: s.yieldMult,
+      population: s.population,
+      governmentType,
+      seedStock: true,
     });
   });
 

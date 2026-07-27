@@ -238,12 +238,15 @@ headroom level.
 
 ### 6. Colony founding stock endowment (`lib/engine/directed-build.ts`, `lib/tick/world/directed-build-world.ts`, `lib/world/tick.ts`)
 
-- **Policy**: a landed colony seeds at the same reserve policy world-gen uses for starting markets —
-  `FOUNDING_STOCK_ANCHOR_FRAC` in `lib/constants/colonisation.ts`, initial value equal to
-  `INITIAL_RESERVE_ANCHOR_FRAC` (0.75), named separately so calibration can diverge them.
-- **Want**, per good the seed population consumes: `frac × anchor(colony demandRate)` computed from
-  the colony's own basket via the shared `consumptionRate` chokepoint (which already folds the
-  government boost — PR3). Goods the seed does not demand get nothing; no vital-goods list.
+- **Policy**: a landed colony opens with a share of a full days-of-supply cover on what its seed
+  population actually uses — `FOUNDING_STOCK_ANCHOR_FRAC` in `lib/constants/colonisation.ts`, initial
+  value equal to world-gen's `INITIAL_RESERVE_ANCHOR_FRAC` (0.75), named separately so calibration can
+  diverge them.
+- **Want**, per good the seed population consumes: `frac × TARGET_COVER × consumptionRate(colony basket)`
+  via the shared `consumptionRate` chokepoint (which already folds the government boost — PR3). The
+  RAW rate, not the good's pricing anchor: that anchor floors at `MIN_DEMAND`, which at a 2-pop seed
+  flattens nearly every good to one figure and would erase the basket's shape. Goods the seed does not
+  demand get nothing; no vital-goods list.
 - **Source and conservation**: drawn from the founding system's markets, capped by
   `surplusDrawable(...)` at the source so provisioning a colony can never ration its founder, and
   capped again by a running per-source balance across the pulse so two establishments sharing a
@@ -302,7 +305,7 @@ headroom level.
 > own goal at any threshold: measured against the shipped 26-good basket, grading a total water
 > failure as Shortage needs a cut `≤ 0.166` while keeping the barren-chronic deficit at Rationing
 > needs `> 0.387`. The sanity table below is wrong — it was computed over a six-good subset, but
-> world-gen creates a market for every system × every good and the fold sees all of them. Locked
+> every settled system carries a row for every good and the fold sees all of them. Locked
 > Decision 1 and the `SHORTAGE_DEMAND_SHARE = 0.25` cut are void. The intended replacement is the
 > demand-elasticity primitive in `docs/planned/demand-elasticity.md`, which carries the measured
 > basket, every rejected fold with its disqualifying evidence, and the stopgap fallback; spec §3

@@ -9,16 +9,19 @@
  * colonies (a planner/decision gap) or proposing but never funding them (a pacing/starvation gap).
  */
 import type { TickSystem } from "@/lib/tick/rows";
-import type { WorldConstructionProject } from "@/lib/world/types";
+import type { WorldConstructionProject, WorldMarket } from "@/lib/world/types";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
 import { factionConstructionPool } from "@/lib/engine/construction";
+import { dissatisfaction, type GoodSatisfaction } from "@/lib/engine/population";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import type { BuildBurstSummary } from "./types";
+import type { BuildBurstSummary, FoundingStockSummary } from "./types";
 
 /** How a developed system's built base breaks down by role/tier. */
 interface BuildBreakdown {
@@ -61,6 +64,126 @@ export interface ClassBuildStats {
   totalPopulation: number;
   /** Deposit-bearing systems (Σ slotCap > 0) in this class with no tier-0 extraction built. */
   depositsIdle: number;
+}
+
+/** A colony founded during the run, with the state of its first fully assessed month. */
+export interface FoundedColonyRecord {
+  systemId: string;
+  foundedTick: number;
+  /** Demand-weighted satisfaction at that pulse; null until sampled. */
+  openingSatisfaction: number | null;
+  /** The convex fold unrest itself reads (`dissatisfaction`) at that pulse; null until sampled. */
+  openingDissatisfaction: number | null;
+}
+
+/** Opening satisfaction below this reads as a colony that arrived deprived. */
+const OPENING_DEPRIVED_SATISFACTION = 0.5;
+
+/** The fields a founded colony's opening reading needs off its system row. */
+export type FoundedColonySystem =
+  Pick<TickSystem, "id" | "control" | "population" | "buildings" | "governmentType">;
+
+/**
+ * Record every colony founded during the run — a system that becomes `developed` after tick 0. The
+ * founding-stock endowment exists so a colony does not open starving, and a handful of brand-new
+ * systems is invisible to any galaxy-wide average, so it has to be caught as it happens.
+ *
+ * Detection only; the reading itself is `sampleFoundedColonies` at the first economy pulse STRICTLY
+ * after the founding tick, so it covers a whole assessed month of the colony's life rather than
+ * however much of one remained when it landed.
+ */
+export function trackFoundedColonies(
+  systems: ReadonlyArray<Pick<TickSystem, "id" | "control">>,
+  tick: number,
+  developedAtStart: ReadonlySet<string>,
+  tracker: Map<string, FoundedColonyRecord>,
+): void {
+  for (const s of systems) {
+    if (s.control !== "developed" || developedAtStart.has(s.id) || tracker.has(s.id)) continue;
+    tracker.set(s.id, {
+      systemId: s.id, foundedTick: tick, openingSatisfaction: null, openingDissatisfaction: null,
+    });
+  }
+}
+
+/** Is any tracked colony waiting for a reading it could take on this tick? */
+export function hasColonyAwaitingSample(
+  tracker: ReadonlyMap<string, FoundedColonyRecord>,
+  tick: number,
+): boolean {
+  for (const r of tracker.values()) {
+    if (r.openingSatisfaction === null && r.foundedTick < tick) return true;
+  }
+  return false;
+}
+
+/**
+ * Take the opening reading for every tracked colony whose first post-founding economy pulse is this
+ * tick. Call only on an economy pulse — satisfaction is written by that pulse and is unchanged between.
+ */
+export function sampleFoundedColonies(
+  systems: ReadonlyArray<FoundedColonySystem>,
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
+  tick: number,
+  tracker: Map<string, FoundedColonyRecord>,
+): void {
+  const due = new Map<string, FoundedColonySystem>();
+  for (const r of tracker.values()) {
+    if (r.openingSatisfaction !== null || r.foundedTick >= tick) continue;
+    const sys = systems.find((s) => s.id === r.systemId);
+    if (sys) due.set(r.systemId, sys);
+  }
+  if (due.size === 0) return;
+
+  // Weighted by each good's share of the COLONY's own demand, and folded with the same
+  // `dissatisfaction` the unrest engine reads. A flat mean over the basket would call a seed colony
+  // with no reactor cores as deprived as one with no water, and then disagree with the simulation.
+  const goodsBySystem = new Map<string, GoodSatisfaction[]>();
+  for (const m of markets) {
+    const sys = due.get(m.systemId);
+    if (!sys) continue;
+    const basis = computeSystemLabourSnapshot(sys.buildings, sys.population).basis;
+    const demanded = consumptionRate(m.goodId, basis, sys.governmentType);
+    if (demanded <= 0) continue; // the colony does not consume it — no opinion either way
+    const list = goodsBySystem.get(m.systemId) ?? [];
+    list.push({ satisfaction: m.satisfaction ?? 1, demanded });
+    goodsBySystem.set(m.systemId, list);
+  }
+  for (const [systemId, goods] of goodsBySystem) {
+    const record = tracker.get(systemId);
+    if (!record || goods.length === 0) continue;
+    let totalDemand = 0;
+    for (const g of goods) totalDemand += Math.max(0, g.demanded);
+    if (totalDemand <= 0) continue;
+    let weighted = 0;
+    for (const g of goods) weighted += (Math.max(0, g.demanded) / totalDemand) * g.satisfaction;
+    record.openingSatisfaction = weighted;
+    record.openingDissatisfaction = dissatisfaction(goods);
+  }
+}
+
+/** Fold the tracked colonies into the run's founding-stock health reading. */
+export function summarizeFoundingStock(
+  tracker: ReadonlyMap<string, FoundedColonyRecord>,
+): FoundingStockSummary {
+  let sampledCount = 0;
+  let satisfactionSum = 0;
+  let dissatisfactionSum = 0;
+  let openingDeprivedCount = 0;
+  for (const r of tracker.values()) {
+    if (r.openingSatisfaction === null || r.openingDissatisfaction === null) continue;
+    sampledCount++;
+    satisfactionSum += r.openingSatisfaction;
+    dissatisfactionSum += r.openingDissatisfaction;
+    if (r.openingSatisfaction < OPENING_DEPRIVED_SATISFACTION) openingDeprivedCount++;
+  }
+  return {
+    foundedCount: tracker.size,
+    sampledCount,
+    meanOpeningSatisfaction: sampledCount > 0 ? satisfactionSum / sampledCount : 0,
+    meanOpeningDissatisfaction: sampledCount > 0 ? dissatisfactionSum / sampledCount : 0,
+    openingDeprivedCount,
+  };
 }
 
 export interface ColonisationSummary {

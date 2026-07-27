@@ -230,8 +230,8 @@ recalibration.
   **Which demand-weighted fold is UNRESOLVED — a summed-share fold cannot express this goal.** The
   design intent is two-sided: ambient higher-tier scarcity must stop selecting the fast rate, *and*
   a real food/water failure must still select it. Measured against the shipped basket (26 goods
-  carry positive civilian demand; world-gen creates a market for every system × every good, so the
-  fold sees the whole basket, not a civilian subset):
+  carry positive civilian demand; every settled system carries a row for every good, so the fold sees
+  the whole basket, not a civilian subset):
 
   | Case | Unskilled world | Mature hub (15% tech / 4% eng) | Engineer-heavy |
   | --- | --- | --- | --- |

@@ -75,6 +75,7 @@ import { runPopulationProcessor } from "@/lib/tick/processors/population";
 import { runMigrationProcessor } from "@/lib/tick/processors/migration";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
 import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build";
+import { createSystemMarkets } from "@/lib/world/markets";
 import { runRelationsProcessor } from "@/lib/tick/processors/relations";
 import { runTreasuryProcessor } from "@/lib/tick/processors/treasury";
 
@@ -492,11 +493,54 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
 }
 
 /**
+ * Give each newly settled system its market rows, opening EMPTY. World-gen builds markets only for
+ * systems that are already developed — an unclaimed rock holds nothing — so a colony has no market at
+ * all until this runs, and the founder's endowment is the first stock it ever holds. Must therefore
+ * run before `applyFoundingStock`, whose credits land on these rows.
+ *
+ * Goods the system already has a row for are left alone, so redeveloping a system that was settled
+ * before keeps its warehouses rather than resetting them.
+ */
+export function addMarketsForSettledSystems(
+  markets: WorldMarket[],
+  systems: TickSystem[],
+  developments: SystemDevelopment[],
+): WorldMarket[] {
+  if (developments.length === 0) return markets;
+  const bySystem = new Map(systems.map((s) => [s.id, s]));
+  const existing = new Set(markets.map((m) => `${m.systemId}|${m.goodId}`));
+  const added: WorldMarket[] = [];
+  for (const d of developments) {
+    const sys = bySystem.get(d.systemId);
+    if (!sys) continue;
+    const rows = createSystemMarkets({
+      systemId: sys.id,
+      buildings: sys.buildings,
+      yields: sys.yields,
+      population: sys.population,
+      governmentType: sys.governmentType,
+      seedStock: false,
+    });
+    for (const row of rows) {
+      const key = `${row.systemId}|${row.goodId}`;
+      if (existing.has(key)) continue;
+      existing.add(key);
+      added.push(row);
+    }
+  }
+  return added.length > 0 ? [...markets, ...added] : markets;
+}
+
+/**
  * Move each development's founding stock from the founding system's markets to the colony's, in one
- * conserving pass: every line subtracts from `sourceSystemId` and adds the same quantity to
- * `systemId`, so the galaxy's total holding of a good is unchanged. Quantities were already capped at
- * the source's own drawable surplus and at a per-source running balance when the manifest was built,
- * so nothing here can overdraw a founder or double-spend a shared source.
+ * conserving pass: every line subtracts from `sourceSystemId` and adds the SAME quantity to
+ * `systemId`, so the galaxy's total holding of a good is unchanged. A line is clamped to what its
+ * source still holds across the pass, so conservation is a property of this function and not of its
+ * caller's caps — a manifest that overdraws simply moves less, never mints the difference.
+ *
+ * That clamp is the physical floor (you cannot move stock that is not there). How much a founder is
+ * WILLING to part with is a separate, much stricter question, answered upstream by `surplusDrawable`
+ * and a per-source running balance when the manifest is built.
  *
  * A colony would otherwise open holding nothing and read as starving from its first pulse, before any
  * logistics could reach it. Non-finite or non-positive lines are skipped rather than trusted — stock
@@ -504,14 +548,20 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
  */
 export function applyFoundingStock(markets: WorldMarket[], developments: SystemDevelopment[]): WorldMarket[] {
   const delta = new Map<string, number>();
+  const available = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.stock]));
   for (const d of developments) {
     for (const line of d.stockManifest) {
       const quantity = line.quantity;
       if (!Number.isFinite(quantity) || quantity <= 0) continue;
       const from = `${d.sourceSystemId}|${line.goodId}`;
+      // Credit only what the source can actually pay, drawn down across the whole pass, so
+      // conservation holds for any caller rather than resting on the manifest being pre-capped.
+      const moved = Math.min(quantity, available.get(from) ?? 0);
+      if (!(moved > 0)) continue;
+      available.set(from, (available.get(from) ?? 0) - moved);
       const to = `${d.systemId}|${line.goodId}`;
-      delta.set(from, (delta.get(from) ?? 0) - quantity);
-      delta.set(to, (delta.get(to) ?? 0) + quantity);
+      delta.set(from, (delta.get(from) ?? 0) - moved);
+      delta.set(to, (delta.get(to) ?? 0) + moved);
     }
   }
   if (delta.size === 0) return markets;
@@ -1026,7 +1076,9 @@ export async function runWorldTick(
       // Persist the construction proposal-pressure counters into the market rows (proposalPulses only —
       // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
       markets = applyBuildMarketUpdates(markets, dbWorld.proposalPulseUpdates);
-      // …and move each new colony's founding endowment out of its founder's warehouses, conserved.
+      // Each new colony gets its (empty) market rows, then its founder's endowment moves in — the
+      // first goods the system has ever held. Order matters: the endowment lands on these rows.
+      markets = addMarketsForSettledSystems(markets, systems, dbWorld.developments);
       markets = applyFoundingStock(markets, dbWorld.developments);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
       buildCommitmentsByGood = dbResult.buildCommitmentsByGood;

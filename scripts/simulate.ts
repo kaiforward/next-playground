@@ -292,6 +292,17 @@ function formatTable(results: HarnessResults): string {
     if (kinds.length > 0) {
       lines.push(`  colony projects by kind: ${kinds.map(([k, n]) => `${k}=${n}`).join(", ")}`);
     }
+    const fs = results.foundingStock;
+    lines.push(
+      `Founding stock: ${fs.foundedCount} colonies founded (${fs.sampledCount} reached a first assessment)`,
+    );
+    if (fs.sampledCount > 0) {
+      lines.push(
+        `  opening satisfaction (demand-weighted): mean ${fs.meanOpeningSatisfaction.toFixed(2)}, ` +
+          `dissatisfaction ${fs.meanOpeningDissatisfaction.toFixed(3)} | ` +
+          `opened deprived (<0.50): ${fs.openingDeprivedCount}`,
+      );
+    }
     const cp = summarizeConstructionPool(finalTickSystems, finalWorld.constructionProjects);
     lines.push(
       `Construction pool: base ${fmtNum(cp.poolBase)} + centres ${fmtNum(cp.poolCentres)} ` +

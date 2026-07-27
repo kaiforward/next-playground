@@ -127,6 +127,10 @@ describe("ExperimentConfig", () => {
         initialBuildingTotal: 0,
         populationSnapshots: [],
         migrationThroughput: { totalColonists: 0, totalDiffusion: 0, pulseCount: 0, meanPerPulse: 0 },
+        foundingStock: {
+          foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
+          meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
+        },
         treasurySummary: {
           factionCount: 0, meanBalance: 0, minBalance: 0, maxBalance: 0,
           headsShare: 0, productionShare: 0,

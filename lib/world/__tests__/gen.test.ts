@@ -16,8 +16,14 @@ describe("generateWorld", () => {
     expect(world.systems.length).toBeLessThanOrEqual(120);
   });
 
-  it("gives every system exactly one market row per good, with no duplicates", () => {
-    expect(world.markets.length).toBe(world.systems.length * goodIds.length);
+  it("gives every DEVELOPED system one market row per good, and unsettled systems none", () => {
+    // An unclaimed rock holds no goods — nobody there grew, shipped, or stored anything. Its rows are
+    // created when it is settled, so seeding them here would hand every future colony a full anchor's
+    // worth of stock nobody produced (and drown every galaxy-wide market reading in rows that cannot move).
+    const developed = world.systems.filter((s) => s.control === "developed");
+    expect(developed.length).toBeGreaterThan(0);       // sanity: the split is real, not an empty galaxy
+    expect(developed.length).toBeLessThan(world.systems.length);
+    expect(world.markets.length).toBe(developed.length * goodIds.length);
 
     const seen = new Set<string>();
     for (const m of world.markets) {
@@ -26,13 +32,14 @@ describe("generateWorld", () => {
       seen.add(key);
     }
 
-    const systemIds = new Set(world.systems.map((s) => s.id));
+    const developedIds = new Set(developed.map((s) => s.id));
     for (const sys of world.systems) {
       for (const goodId of goodIds) {
-        expect(seen.has(`${sys.id}|${goodId}`)).toBe(true);
+        expect(seen.has(`${sys.id}|${goodId}`)).toBe(developedIds.has(sys.id));
       }
     }
     // Every market row references a real system.
+    const systemIds = new Set(world.systems.map((s) => s.id));
     for (const m of world.markets) {
       expect(systemIds.has(m.systemId)).toBe(true);
     }

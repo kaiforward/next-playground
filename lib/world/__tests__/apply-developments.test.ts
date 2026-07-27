@@ -240,7 +240,7 @@ describe("applyFoundingStock", () => {
     for (const m of after) expect(Number.isFinite(m.stock)).toBe(true);
   });
 
-  it("never drives a source's stock negative", () => {
+  it("moves only what an overdrawing source actually holds, minting nothing", () => {
     const markets = [market("source", "food", 10), market("colony", "food", 0)];
     const developments: SystemDevelopment[] = [{
       systemId: "colony", sourceSystemId: "source", seedPop: 2, housingLevels: 1,
@@ -248,7 +248,8 @@ describe("applyFoundingStock", () => {
     }];
 
     const after = applyFoundingStock(markets, developments);
-    expect(stockAt(after, "source", "food")).toBe(0); // floored, never negative
-    expect(stockAt(after, "colony", "food")).toBe(25);
+    expect(stockAt(after, "source", "food")).toBe(0); // emptied, never negative
+    expect(stockAt(after, "colony", "food")).toBe(10); // credited what was debited, not the manifest
+    expect(totalStock(after, "food")).toBe(totalStock(markets, "food"));
   });
 });

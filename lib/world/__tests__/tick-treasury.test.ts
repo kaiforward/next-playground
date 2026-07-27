@@ -4,6 +4,8 @@ import { runWorldTick } from "@/lib/world/tick";
 import { MONTH_LENGTH } from "@/lib/constants/tick-cadence";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 import type { World } from "@/lib/world/types";
+import { createSystemMarkets } from "@/lib/world/markets";
+import { unitResourceVector } from "@/lib/engine/resources";
 
 /**
  * Rig a faction with a guaranteed intra-faction haul: promote an unclaimed
@@ -20,12 +22,23 @@ function rigLogisticsPair(world: World, factionId: string): World {
     return world.systems.find((s) => s.id === otherId)!.factionId === null;
   })!;
   const neighbourId = conn.fromId === home ? conn.toId : conn.fromId;
+  // Settling the neighbour by hand has to include its markets — an unsettled system has none, and the
+  // live develop path creates them the same way (`addMarketsForSettledSystems`). It has no buildings,
+  // and the food row the rig cares about is overwritten below regardless.
+  const neighbourMarkets = createSystemMarkets({
+    systemId: neighbourId,
+    buildings: {},
+    yields: unitResourceVector(),
+    population: 200,
+    governmentType: world.factions.find((f) => f.id === factionId)!.governmentType,
+    seedStock: false,
+  });
   return {
     ...world,
     systems: world.systems.map((s) =>
       s.id === neighbourId ? { ...s, factionId, control: "developed", population: 200 } : s,
     ),
-    markets: world.markets.map((m) => {
+    markets: [...world.markets, ...neighbourMarkets].map((m) => {
       if (m.systemId === neighbourId && m.goodId === "food")
         return { ...m, stock: 0, demandRate: 10 }; // anchor 400 → deep deficit
       if (m.systemId === home && m.goodId === "food")

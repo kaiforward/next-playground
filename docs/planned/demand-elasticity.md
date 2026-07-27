@@ -36,9 +36,10 @@ they need gas. Any fold that reads consumption volume as importance inherits tha
 
 ## Measured evidence — do not re-derive
 
-All figures from the shipped constants. World-gen creates a market for **every system × every good**,
-so the folds see the whole basket: **26 goods carry positive civilian demand**, not the six-good
-civilian subset earlier drafts assumed.
+All figures from the shipped constants. Every **settled** system carries a market row for **every
+good**, so the folds see the whole basket: **26 goods carry positive civilian demand**, not the
+six-good civilian subset earlier drafts assumed. (Unsettled systems have no market at all — they are
+not part of any fold, and they hold no stock.)
 
 ### Per-good demand share, ordinary unskilled world (pop 1000, federation)
 
