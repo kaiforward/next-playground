@@ -43,15 +43,18 @@ describe("population / unrest constant dependencies", () => {
   });
 });
 
-describe("housing containment — every sizing site lands inside the decay slack", () => {
-  // Two independent sites size housing: the relief valve (below) and colony establish. Both must
-  // land the result inside the vacancy slack decay reads, or the sizing commits exactly the levels
-  // decay then tears down — the treadmill this band is meant to make structurally impossible.
+describe("housing containment — both directed-build sizing sites land inside the decay slack", () => {
+  // The two sites the build planner sizes housing at: the relief valve (below) and colony establish.
+  // Both must land the result inside the vacancy allowance decay reads, or the sizing commits exactly
+  // the levels decay then tears down — the treadmill this band is meant to make structurally
+  // impossible. (World-gen's homeworld prefab sizes housing too, but against labour demand rather
+  // than residents, and is not part of this invariant.)
   it("opens a colony with no level the idle channel would immediately read as spare", () => {
     // Seeds swept across and around whole-level boundaries: the +1 headroom level this sizing used
     // to bundle put a fresh colony a whole level above its own occupancy, which reads idle from the
-    // moment it lands. `housingUsed × (1 + VACANCY_SLACK)` is the utilization decay measures, so
-    // idleLevels must be 0 at every viable seed size.
+    // moment it lands. The `min(count, …)` here is the decay engine's own clamp (capacityUsed
+    // "pop_cap" in lib/engine/industry.ts) — without it the proxy reads negative at boundary seeds
+    // and the assertion would be testing a quantity decay never computes.
     const ampleLand = 1e6; // never the binding constraint here — the seed is
     for (const seedPop of [1, 2, 19, 20, 21, 40, 41]) {
       const sizing = sizeColonyEstablish(ampleLand, { seedPop, establishWork: 0 });
@@ -60,12 +63,9 @@ describe("housing containment — every sizing site lands inside the decay slack
       expect(sizing.seedPop).toBe(seedPop);
       // Viable by construction: the landed colony can house everyone it was seeded with.
       expect(sizing.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(seedPop);
-      // …and carries no level decay would reclaim. The trigger is `idleLevels >= 1`, so the bound
-      // is < 1 rather than exactly 0: at seeds that land on a whole-level boundary the slack puts
-      // occupancy fractionally ABOVE the built count, which reads negative (over-crowded, never
-      // idle) — tighter containment, not looser.
-      const used = housingUsed(seedPop) * (1 + VACANCY_SLACK);
-      expect(idleLevels(sizing.housingLevels, used)).toBeLessThan(1);
+      // …and carries no whole level decay would reclaim (the trigger is `idleLevels >= 1`).
+      const used = Math.min(sizing.housingLevels, housingUsed(seedPop) * (1 + VACANCY_SLACK));
+      expect(idleLevels(sizing.housingLevels, used)).toBe(0);
     }
   });
 

@@ -1014,11 +1014,25 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
 
 /** Seed + bundled-housing sizing for a colony at `habitableSpace` — the planner's whole-level rule,
  *  shared with the player's direct-colony verb so both order identical projects. Null = the site
- *  can't hold one whole housing level (not viable). Housing is sized to exactly the seed's own need
- *  (still clamped to the whole-level habitable cap), so `popCap ≥ seedPop` on arrival with no spare
- *  level bundled: a colony opening one level short of full sits inside the decay vacancy slack,
- *  where a bundled headroom level would read idle and be torn down before the colony could grow
- *  into it. The second level is earned from the housing relief valve like any other system's. */
+ *  can't hold one whole housing level (not viable).
+ *
+ *  Housing is sized to exactly the seed's own need, so `popCap ≥ seedPop` on arrival with no spare
+ *  level bundled. What contains it is the whole-level round-up: `ceil` leaves strictly less than one
+ *  level vacant, and the idle channel only fires on a WHOLE idle level. A bundled headroom level put
+ *  a fresh colony a full level above its own occupancy, which reads idle from the moment it lands and
+ *  is torn down before the colony can grow into it; the second level is earned from the housing
+ *  relief valve like any other system's.
+ *
+ *  The containment holds against the seed as SIZED. `applyDevelopments` delivers
+ *  `min(seedPop, source spare)`, so a short delivery leaves the colony emptier than this assumed —
+ *  harmless while `housingLevels` is 1 (a single level is never a whole idle level under any
+ *  positive population), which the shipped seed guarantees. Sizing the seed against the housing unit
+ *  (see the deferred item in docs/planned/economy-band-reconciliation.md §5) would break that, and
+ *  must revisit this.
+ *
+ *  The `maxHousingLevels` clamp is redundant with the seed clamp above it — `seedPop` is already
+ *  capped to `maxHousingLevels × POP_CENTRE_DENSITY`, so the round-up can never exceed the land. It
+ *  is kept as a guard so the two clamps cannot drift apart silently. */
 export interface ColonySizing { seedPop: number; housingLevels: number; work: number }
 
 export function sizeColonyEstablish(
@@ -1030,6 +1044,10 @@ export function sizeColonyEstablish(
   const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
   const seedPop = Math.min(params.seedPop, habitableCap);
   const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
+  // `Number.isFinite` and not `< 1` alone: every comparison against NaN is false, so a NaN
+  // habitableSpace would slip past the viability guard and put NaN seedPop/housingLevels/work into a
+  // construction project and thence into a save, where JSON.stringify turns them into null.
+  if (!Number.isFinite(housingLevels) || !Number.isFinite(seedPop)) return null;
   if (housingLevels < 1 || seedPop <= 0) return null;
   return { seedPop, housingLevels, work: params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE) };
 }

@@ -1588,7 +1588,7 @@ describe("planFactionColonyProposals", () => {
     const [poor] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "small", habitableSpace: poorHabitable })], [], bigSeed);
     expect(poor.seedPop).toBe(Math.min(bigSeed.seedPop, 2 * POP_CENTRE_DENSITY));
     expect(poor.seedPop).toBeLessThan(bigSeed.seedPop);
-    expect(poor.housingLevels).toBeLessThanOrEqual(2);
+    expect(poor.housingLevels).toBe(2); // exactly the clamped seed's own need — no spare level
     expect(poor.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(poor.seedPop);
   });
 
@@ -1719,13 +1719,14 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
 describe("sizeColonyEstablish", () => {
   const params = { seedPop: 500, establishWork: 100 };
 
-  it("land-tight: the habitable clamp holds when the seed wants more levels than the site fits", () => {
+  it("land-tight: the seed clamp caps an oversized seed to what the site can house", () => {
     const s = sizeColonyEstablish(3, params); // habitable 3 → 3 whole housing levels possible
     expect(s).not.toBeNull();
     if (s === null) return;
     // habitableSpace 3 / housingCost 1 → maxHousingLevels 3 → habitableCap 60; seedPop min(500, 60) = 60,
-    // whose own need is ceil(60/20) = 3 levels — exactly what the site fits, so the clamp is not binding
-    // here but the seed cap is. The colony opens fully occupied (r = seedPop/popCap = 1.0).
+    // whose own need is ceil(60/20) = 3 levels — exactly what the site fits. The SEED clamp is what
+    // binds; the maxHousingLevels clamp downstream of it can no longer bind at all now the headroom
+    // level is gone, and is kept only so the two cannot drift apart. Opens fully occupied (r = 1.0).
     expect(s.seedPop).toBe(60);
     expect(s.housingLevels).toBe(3);
     expect(s.seedPop).toBe(s.housingLevels * POP_CENTRE_DENSITY); // r = 1.0 exactly
@@ -1751,6 +1752,13 @@ describe("sizeColonyEstablish", () => {
 
   it("returns null when the site cannot hold one whole housing level", () => {
     expect(sizeColonyEstablish(0.4, params)).toBeNull();
+  });
+
+  it("returns null rather than NaN sizing for a non-finite site", () => {
+    // Every comparison against NaN is false, so a bare `housingLevels < 1` guard would pass a NaN
+    // straight through into a construction project and thence into a save.
+    expect(sizeColonyEstablish(Number.NaN, params)).toBeNull();
+    expect(sizeColonyEstablish(10, { seedPop: Number.NaN, establishWork: 0 })).toBeNull();
   });
 
   it("keeps popCap ≥ seedPop at every seed size, including whole-level boundaries", () => {
