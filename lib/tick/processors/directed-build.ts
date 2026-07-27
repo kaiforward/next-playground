@@ -80,8 +80,10 @@ export interface DirectedBuildProcessorParams {
  *
  * Sized on the COLONY's own basket — `consumptionRate` at the seed population, so the manifest is
  * mostly food and water at a small seed and only a trace of anything an engineer would want, with no
- * per-good list deciding what matters. The want per good is the same share of its pricing anchor that
- * world-gen seeds a starting market at.
+ * per-good list deciding what matters. The want per good is `FOUNDING_STOCK_ANCHOR_FRAC` of a full
+ * cover of that raw rate: every good opens at the same days-of-supply of what the seed genuinely uses.
+ * Deliberately not a share of the good's pricing anchor — that anchor floors at `MIN_DEMAND`, which at
+ * a 2-pop seed flattens nearly every good to one figure and erases the basket's shape.
  *
  * Two caps make it honest. `surplusDrawable` is the source's own export rule, so provisioning a
  * colony can never draw a founder below the reserve it keeps for itself; and `balance` carries what

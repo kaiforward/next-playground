@@ -41,16 +41,20 @@ export const COLONISATION = {
    */
   MIN_SETTLER_SUPPLY: 5,
   /**
-   * Share of a landed colony's own pricing anchor that its founding endowment aims at, per good the
-   * seed population actually consumes. A colony used to open holding nothing, at satisfaction 0 on
-   * every good, and began climbing out of a shortage it need never have been in — so it read as
-   * deprived from its first pulse. The endowment is DRAWN from the founding system's own warehouses
-   * and conserved: what the colony gains, the founder loses, capped so provisioning a colony can
-   * never ration its founder.
+   * Share of a full days-of-supply cover (`TARGET_COVER`) that a landed colony's founding endowment
+   * aims at, per good the seed population actually consumes. A colony used to open holding nothing, at
+   * satisfaction 0 on every good, and began climbing out of a shortage it need never have been in — so
+   * it read as deprived from its first pulse. The endowment is DRAWN from the founding system's own
+   * warehouses and conserved: what the colony gains, the founder loses, capped so provisioning a
+   * colony can never ration its founder.
    *
-   * Set to the same reserve policy world-gen seeds starting markets with
-   * (`INITIAL_RESERVE_ANCHOR_FRAC`, 0.75) — a founded colony should open no better and no worse
-   * stocked than a generated one. Held as its own constant rather than a reference to that one so
+   * The want is sized on the seed's RAW consumption rate, so every good opens at the same cover of
+   * what that population genuinely uses — a manifest shaped like the colony's own basket. It is
+   * deliberately NOT world-gen parity: a generated market is sized off the `MIN_DEMAND`-floored rate,
+   * and at a 2-pop seed almost every good sits under that floor, so parity would ship the same bundle
+   * of ship frames as of water — centuries of supply of what nobody there uses.
+   *
+   * Numerically equal to world-gen's `INITIAL_RESERVE_ANCHOR_FRAC` but held as its own constant, so
    * calibration can move the two apart: a founder's willingness to part with stock is a different
    * question from how full a world-gen market starts.
    */

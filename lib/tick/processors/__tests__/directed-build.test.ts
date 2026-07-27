@@ -17,6 +17,7 @@ import { mulberry32 } from "@/lib/engine/universe-gen";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { TARGET_COVER } from "@/lib/constants/economy";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
 const reachable: RouteCost = () => 1;
 
@@ -1030,11 +1031,24 @@ function stockedMarket(systemId: string, goodId: string, stock: number): MarketR
   return { id: `${systemId}|${goodId}`, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
 
-/** A saturated home that also holds tradeable stock, so a founding manifest can actually be drawn. */
-function stockedHome(goodStocks: Record<string, number>): SystemBuildRow {
+/** The founding source's own population — what its export gate compares its output against. */
+const HOME_POP = 1000;
+
+/**
+ * A saturated home that also holds tradeable stock, so a founding manifest can actually be drawn.
+ * `exportRates` gives a good a realized output; above the home's own demand it becomes a structural
+ * exporter, drawable down to its strategic reserve rather than gated on the surplus margin.
+ */
+function stockedHome(
+  goodStocks: Record<string, number>,
+  exportRates: Record<string, number> = {},
+): SystemBuildRow {
   return {
-    ...saturatedHome(1000),
-    markets: Object.entries(goodStocks).map(([goodId, stock]) => stockedMarket("home", goodId, stock)),
+    ...saturatedHome(HOME_POP),
+    markets: Object.entries(goodStocks).map(([goodId, stock]) => ({
+      ...stockedMarket("home", goodId, stock),
+      realizedProductionRate: exportRates[goodId],
+    })),
   };
 }
 
@@ -1083,19 +1097,24 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
   });
 
   it("draws two colonies from one shrinking source balance, never twice from the opening stock", async () => {
-    // Stock deliberately just above the anchor so one colony's want nearly exhausts the drawable
-    // surplus: without a shared balance the second colony would read the same opening figure and
-    // both would be granted it, minting stock the founder never had.
-    const w = new MemoryDirectedBuildWorld([stockedHome({ food: TARGET_COVER + foundingWant("food") * 1.5 })]);
+    // A food exporter, so the drawable surplus slides continuously above the strategic reserve and can
+    // be parked at one-and-a-half wants — enough for the first colony's want and only a remainder for
+    // the second. Without a shared balance both would read the same opening figure and both would be
+    // granted a full want, minting stock the founder never had.
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 }, "federation");
+    const exportRate = homeDemand * 2;
+    const stock = TARGET_COVER * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC + foundingWant("food") * 1.5;
+    const w = new MemoryDirectedBuildWorld([stockedHome({ food: stock }, { food: exportRate })]);
     await developColony(w, [colonyCand("c1"), colonyCand("c2")]);
 
     expect(w.developments.length).toBeGreaterThanOrEqual(2);
-    const drawn = w.developments
-      .flatMap((d) => d.stockManifest)
-      .filter((l) => l.goodId === "food")
-      .reduce((n, l) => n + l.quantity, 0);
-    const drawable = surplusDrawable(TARGET_COVER + foundingWant("food") * 1.5, TARGET_COVER, 1, 0, false);
-    expect(drawn).toBeCloseTo(drawable, 6);          // the whole balance was spent…
-    expect(drawn).toBeLessThan(foundingWant("food") * 2); // …and it was NOT enough for two full wants
+    const draws = w.developments.map(
+      (d) => d.stockManifest.find((l) => l.goodId === "food")?.quantity ?? 0,
+    );
+    const drawable = surplusDrawable(stock, TARGET_COVER, homeDemand, exportRate, false);
+    expect(draws[0]).toBeCloseTo(foundingWant("food"), 6); // the first colony is fully provisioned…
+    expect(draws[1]).toBeGreaterThan(0);
+    expect(draws[1]).toBeLessThan(draws[0]);               // …the second gets only what is left…
+    expect(draws[0] + draws[1]).toBeCloseTo(drawable, 6);  // …and the pile is spent exactly once
   });
 });
