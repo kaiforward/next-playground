@@ -303,8 +303,10 @@ headroom level.
 > failure as Shortage needs a cut `≤ 0.166` while keeping the barren-chronic deficit at Rationing
 > needs `> 0.387`. The sanity table below is wrong — it was computed over a six-good subset, but
 > world-gen creates a market for every system × every good and the fold sees all of them. Locked
-> Decision 1 and the `SHORTAGE_DEMAND_SHARE = 0.25` cut are void; spec §3 now carries the measured
-> shares, the impossibility argument, and the unratified largest-short-good candidate. The ceilings
+> Decision 1 and the `SHORTAGE_DEMAND_SHARE = 0.25` cut are void. The intended replacement is the
+> demand-elasticity primitive in `docs/planned/demand-elasticity.md`, which carries the measured
+> basket, every rejected fold with its disqualifying evidence, and the stopgap fallback; spec §3
+> points at it. Elasticity is its own slice, not part of this PR. The ceilings
 > half is parked with the fold rather than shipped alone — the containment guarantee is a claim
 > about the pair, and ceilings under the shipped worst-good fold would assert protection that does
 > not hold. Tasks 2–6 do not depend on this task and proceed; resume here once the fold is decided,

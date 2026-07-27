@@ -248,14 +248,21 @@ recalibration.
   cited food and water as ~76% of the basket and luxuries as ~3%; those came from a six-good subset
   that does not exist in the code.)
 
-  The leading candidate is to fold on the **largest single short good's demand share** — Shortage
-  once any one good below the Shortage satisfaction threshold is itself at least
-  `SHORTAGE_DEMAND_SHARE` of the system's demand. It keeps every property this section requires (no
-  vital list, per-system weights, engineer luxuries reachable at 11.3% while mining-colony luxuries
-  at 1.2% are not), and reads as a weight-gated version of the shipped worst-good fold rather than a
-  new mechanism. At a 0.10 cut it grades water and food empty as Shortage at both an unskilled world
-  and a hub, and the tier-2 trio and luxuries as Rationing at both. **Not ratified** — it changes the
-  fold this section locked, so it needs a design decision before implementation.
+  **The intended answer is now demand elasticity — see `docs/planned/demand-elasticity.md`**, which
+  carries the measured basket, every rejected fold with its disqualifying evidence, and the primitive
+  itself. In short: necessity is not the *height* of a demand curve (consumption volume) but its
+  *slope* (how much wanting survives when the good cannot be had), and this model has only the
+  height. Volume is a bad necessity proxy in its own data — medicine's per-capita need sits below
+  gas's purely because medicine is tier-1. With elasticity the fold stops needing a definition of
+  deprivation at all: elastic goods' demand shrinks to meet supply, so they cannot carry a standing
+  deficit, so ambient higher-tier scarcity stops driving unrest at the source rather than being
+  filtered out by a threshold.
+
+  Any share-based fold — summed, largest-good, or a threshold on D — is a stopgap. If elasticity is
+  judged too large a change, the fallback is the **largest single term of D** (`max_g [share_g ×
+  (1 − sat_g)²]`, cut ≈ 0.10): continuous, no satisfaction cliff, and it separates every measured
+  scenario correctly, but it still reads necessity as consumption volume. Both the summed fold locked
+  above and the `SHORTAGE_SATISFACTION` cliff it depends on are disqualified on the evidence.
 
 - **Each regime bounds where unrest settles.** The accumulation gains are re-parameterised as
   `gain = ceiling × decay`, so each regime carries a named ceiling and the equilibrium under
