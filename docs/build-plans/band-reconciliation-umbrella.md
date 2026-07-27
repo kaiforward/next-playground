@@ -5,7 +5,7 @@ truth for every mechanic here) is `docs/planned/economy-band-reconciliation.md` 
 2026-07-20, spec-review gate run and all 13 findings folded in (report:
 `.claude/reviews/spec-economy-band-reconciliation-2026-07-20-182256.md`). This doc locks the PR
 decomposition, the cross-PR interfaces, and the expected interim states. Per-PR task plans are
-authored as each PR starts (PR1 and PR2 are complete); on final ship the
+authored as each PR starts (PR1–PR4 are shipped to the shared branch); on final ship the
 spec promotes to `docs/active/`, SPEC.md and `economy-equilibrium-rework.md` update, and every
 `band-reconciliation-*.md` build file here is deleted.
 
@@ -16,7 +16,7 @@ branch off the shared branch, `/uber-review`'d going in (diffing against the sha
 squashed/fast-forwarded into it. One final PR shared→main with a light sanity pass. `main` never
 sees an interim state — the interim incoherences listed per PR are shared-branch-only.
 
-## PR decomposition (5 PRs, in order)
+## PR decomposition (6 PRs, in order)
 
 ### PR1 — Curve geometry, floor retirement, satisfaction as persisted flow (§1 consume/produce knees, §4)
 
@@ -76,12 +76,15 @@ instrumentation, not final-world).
 
 Timing contract: directed logistics remains after economy/population in the tick. Imports arriving
 on a logistics pulse change stock immediately but affect satisfaction/unrest at the next economy
-assessment, never retroactively. Add an end-to-end ordering test; PR5 labels Needs as the latest
+assessment, never retroactively. Add an end-to-end ordering test; PR6 labels Needs as the latest
 assessment so this deliberate one-pulse lag is visible rather than looking stale.
 
+- **Status: shipped** — PR #199 (`d797c1b`).
 - Consumes from PR1: persisted `satisfaction` (squeeze = satisfaction < 1 for the pulse),
   `RATION_COVER`; from PR2: the funding-bound signal (shared exclusion logic). Structural
   exporters retain a separate strategic export-reserve floor; they are never drawn to two cycles.
+- **Superseded by PR5:** the backstop's suppression exclusion lands here system-wide, which locks
+  every striking system out of all build proposals. PR5 scopes it to the shortfall it explains.
 
 ### PR4 — Population, housing, colony headroom (§3)
 
@@ -100,9 +103,49 @@ gradually, and Shortage accumulates faster. Preserve monotonicity, the tax equil
 one-bad-pulse-is-recoverable rule. Add an end-to-end recovery test where Needs becomes Supplied
 immediately but stored unrest then declines at the calibrated recovery rate.
 
+- **Status: shipped** to `feat/band-reconciliation` at `1789c9a` (2026-07-27).
 - Consumes from PR2: `VACANCY_SLACK` (relief target 0.92 sits inside it — asserted in a test).
+- **Superseded by PR5:** the `+1` colony housing level (PR5 sizes housing to the seed instead,
+  putting colony establish inside the vacancy slack by construction). The regime-sensitive unrest
+  integration still stands as built — PR5 parked its replacement, so the worst-good fold plus
+  unbounded gains remains shipped behaviour until the demand-elasticity slice lands.
 
-### PR5 — Regime presentation + recalibration + docs fold (§6, §7 UI, §8)
+### PR5 — Collapse containment, colony survival, planner unblocking (§3, §4, §5, §2 suppression)
+
+The simulation half of what was one PR5. Scoped by a post-PR4 diagnosis: the shipped constants
+compound rather than correct, and the resulting galaxy is not one the presentation layer should be
+built against. On the 3000-tick equilibrium run at `1789c9a`: median price 1.94× base (target ≈ 1.0),
+tier-1/2 goods at ~0 cover with 50–77% of markets pinned empty, mean unrest 0.721, **371 of 570
+developed systems striking**, 262 systems collapsed to ≈ 0 buildings, and **246 colonies holding
+population at `popCap ≈ 0`**. Six changes, all sim-side, in the order they cut the loop:
+
+1. **Demand-weighted rate regime** (§3) — **PARKED, not shipped.** A summed-demand-share fold cannot
+   separate a water failure from the barren-chronic deficit at any threshold, measured against the
+   real 26-good basket. The replacement primitive is `docs/planned/demand-elasticity.md`; spec §3
+   points at it and it is its own slice.
+2. **Regime unrest ceilings** (§3) — **PARKED with (1).** The containment guarantee is a claim about
+   the pair; ceilings under the shipped worst-good fold would assert a protection that does not hold.
+3. **Proportionate unrest-collapse channel** (§5) — one level per run per *system* (not per building
+   type), severity scaling with distance above θ, and housing floored at resident occupancy so
+   `popCap = 0` with residents is unreachable.
+4. **Colony housing sized to seed** (§3, §5) — drop the bundled `+1` level; `ceil(seedPop ÷
+   POP_CENTRE_DENSITY)` sits inside the vacancy slack by construction. This *replaces* the
+   previously-planned "exempt housing from the idle channel" resolution, which is not built.
+5. **Colony founding stock endowment** (§4) — `colony_establish` carries cover on the seed's real
+   demand basket, drawn and conserved from the founding system's stock like the seed population.
+6. **Suppression exclusion scoped to the shortfall it explains** (§2) — per (system, good), applying
+   only to the capacity-vs-realized gap and never to demand-vs-capacity; plus exporter spare counted
+   on realized rather than latent output.
+
+Harness: striking share and stranded-population (`popCap ≈ 0` holding population) become headline
+metrics, plus founding-stock opening satisfaction; the §8 collapse/colony assertions land here.
+Treasury recalibration (§8) belongs to this PR since it moves the equilibria — measured as flat, no
+retune needed. The unrest/tax half of §8 is parked with items 1–2, having nothing to recalibrate.
+
+- **Interim incoherence (until PR6):** the panels still speak percentages, not regimes, and still
+  name Strike at the presentation boundary rather than 0.65.
+
+### PR6 — Regime presentation + docs fold (§6, §7 UI)
 
 Regime classifier (Supplied/Low reserve/Rationing/Shortage/Glut) as a pure engine helper on the shared
 constants with `RATION_EXIT_EPS` hysteresis and the §6 precedence rules; regime chips everywhere a
@@ -112,21 +155,10 @@ regime constants); population occupancy bar gains overshoot treatment + crowding
 becomes the primary unit. **UI gets the house collaborative wireframe pass (browser-viewable HTML
 prototype, breadth-first) before implementation.** Harness: regime-share metric (% of (system,
 good) pairs per regime in the simulate report); shock-recovery-tail read; `computeCoverLevels`
-excludes structural exporters. Recalibration: unrest/tax (tax now the only standing unrest floor)
-and treasury (realized output rises → production-tax income moves) re-run against the harness;
-loosened magnitude tests stay range-y. Docs fold ON THE BRANCH before the final review: spec →
+excludes structural exporters. Docs fold ON THE BRANCH before the final review: spec →
 `docs/active/`, SPEC.md + `economy-equilibrium-rework.md` updated, `economy.ts:168` doc pointer
 fixed, `[L]` BACKLOG item deleted, these build files deleted, maturity-spread memory note
 re-audited.
-
-Decay/housing split (§5): retire the idle-contraction channel for housing — the idle test that
-prunes genuinely-unneeded production capacity stops applying to the housing building type, leaving
-housing's corrections to the relief valve's own sizing rule and the unrest-collapse channel alone.
-Both housing-sizing sites — the relief valve and colony-establish headroom — then sit inside
-containment by construction, so the band-constants containment assertion widens to cover both sites
-(colony establish as well as the relief valve) rather than the valve alone. Re-check the
-trapped-colony population once this lands: it is the same collision at scale, so it should clear
-alongside the single-colony case.
 
 The Population stability surface also explains the stored integral: current goods pressure,
 current tax pressure, and rising/stable/recovering direction, with a coarse recovery indication
@@ -135,15 +167,19 @@ unrest remains; align the Strike label with the real 0.65 production-suppression
 label Needs as the latest economy assessment. The regime re-base retires the legacy 95% “met”
 cutoff, so any active rationing is named consistently.
 
+- Consumes from PR5: the collapse/colony behaviour the panels describe. The regime/unrest constants
+  the chips name are NOT settled — PR5 parked that fold pending demand-elasticity — so the chips are
+  built on the shipped worst-good regime, and re-basing them is that slice's business, not PR6's.
+
 ## Cross-PR interfaces (locked here so plans don't drift)
 
 | Interface | Producer | Consumers | Shape |
 | --- | --- | --- | --- |
-| `RATION_COVER` | PR1, `lib/constants/economy.ts` (`ECONOMY_CONSTANTS.RATION_COVER = 2`) | PR1 civilian/input draws, PR3 backstop, PR5 regimes | demand cycles |
-| `consumptionFactor(stock, rationStock)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, PR5 classifier | pure fn → [0,1] |
+| `RATION_COVER` | PR1, `lib/constants/economy.ts` (`ECONOMY_CONSTANTS.RATION_COVER = 2`) | PR1 civilian/input draws, PR3 backstop, PR6 regimes | demand cycles |
+| `consumptionFactor(stock, rationStock)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, PR6 classifier | pure fn → [0,1] |
 | initial/export reserve policy | PR1 seed / PR3 logistics | world-gen and structural exporters | separate from rationing; initially 0.75 × T |
-| `productionCeiling(stock, targetStock, holdCover)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, **PR2 selling factor**, PR5 Glut | pure fn → [0,1] |
-| `WorldMarket.satisfaction?: number` | PR1 economy pulse (missing ⇒ 1) | pop-needs read, fed-proxy, PR3 squeeze counters, PR5 chips | optional field, no save-version bump |
+| `productionCeiling(stock, targetStock, holdCover)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, **PR2 selling factor**, PR6 Glut | pure fn → [0,1] |
+| `WorldMarket.satisfaction?: number` | PR1 economy pulse (missing ⇒ 1) | pop-needs read, fed-proxy, PR3 squeeze counters, PR6 chips | optional field, no save-version bump |
 | `SimulatedMarketEntry.delivered` | PR1 supply-chain | economy processor satisfaction measure | `number` per entry |
 | `sellingFactorBySystem` signal | PR2 economy pulse | decay processor, `buildIndustryReadout` (recomputable read-side — stock+band only) | `Map<systemId, Map<goodId, number>>` |
 | funding-bound signal (unmet funded deficits) | PR2 logistics matcher | PR2 decay exclusion, PR3 backstop exclusion | shape decided in PR2 plan |
@@ -157,5 +193,7 @@ Per-PR: `npx vitest run` green (invariance bridges included — all knees are ba
 assertions stay range-y), `npx next build --webpack`, and a coarse `npm run simulate` read scoped
 to what has landed (each PR plan names its expected/deferred symptoms). Full §8 validation targets
 (no pops-short at rest, median price/base ≈ 1 with two-sided dispersion, stable housing, no burst
-builds, glut prunes, colonies populate, no NaN/runaway/pinning) are judged only after PR4, and the
-regime-share metric (PR5) becomes the permanent instrument.
+builds, glut prunes, colonies populate, no NaN/runaway/pinning) are judged **after PR5** — PR4's
+resting state is a compounding one, so its numbers measure the defect, not the design — and the
+regime-share metric (PR6) becomes the permanent instrument. PR5 additionally holds the headline
+striking-share and stranded-population reads.

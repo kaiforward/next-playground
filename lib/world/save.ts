@@ -8,6 +8,15 @@
  * meaning/shape of an existing one. An additive OPTIONAL field that old saves can
  * legitimately omit does NOT need a bump: the field simply stays `undefined` on
  * load, which is correct.
+ *
+ * A REMOVED field needs a bump only where losing its value misreads the world.
+ * Removing purely transient state does not: `WorldBuilding.collapseDebt` moved to
+ * `WorldSystem.collapseDebt` unbumped because the decay channel's debt is a regime
+ * accumulator that resets whenever unrest falls back below the threshold, never a
+ * balance anything is owed. An older save loads with the system field absent (read
+ * as 0), and the stale per-building value is dropped the first time `flattenBuildings`
+ * rebuilds the rows — so the worst case is one system starting its next collapse from
+ * zero rather than mid-accrual.
  * `deserializeWorld` does structural spot-checks, not exhaustive validation,
  * so an old save's shape can drift from the current `World` type without
  * tripping any of the checks below — the version bump is what makes old

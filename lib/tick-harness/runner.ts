@@ -16,8 +16,12 @@ import {
   computeEventImpacts,
 } from "./event-analysis";
 import { summarizeLogistics } from "./logistics-analysis";
-import { summarizeBuildBursts } from "./build-analysis";
-import type { BuildCommitmentRecord } from "./build-analysis";
+import {
+  summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
+  summarizeFoundingStock,
+} from "./build-analysis";
+import type { BuildCommitmentRecord, FoundedColonyRecord } from "./build-analysis";
+import { MONTH_LENGTH } from "@/lib/constants/tick-cadence";
 import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
 import type { TreasurySnapshot } from "./treasury-analysis";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
@@ -98,6 +102,13 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   let migrationDiffusionTotal = 0;
   const activeEventTracker = new Map<string, ActiveEventRecord>();
   const completedEvents: EventLifecycle[] = [];
+  // Colonies founded in play, sampled at their first assessed month. Every system already developed
+  // at tick 0 is world-gen's, not the colonisation loop's, so only later arrivals are tracked.
+  const developedAtStart = new Set(
+    tickSystemsAtStart.filter((s) => s.control === "developed").map((s) => s.id),
+  );
+  const foundedColonies = new Map<string, FoundedColonyRecord>();
+  const monthLength = config.cadence?.month ?? MONTH_LENGTH;
 
   const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
   const initialBuildingTotal = tickSystemsAtStart.reduce(
@@ -131,6 +142,16 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       migrationPulseCount++;
       migrationColonistsTotal += result.instrumentation.migrationMoved.colonists;
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
+    }
+
+    trackFoundedColonies(world.systems, world.meta.currentTick, developedAtStart, foundedColonies);
+    // The reading needs full tick rows (buildings + government drive the demand weights), so build
+    // them only on the pulse that actually has a colony to read — not every tick of the run.
+    if (
+      monthLength > 0 && world.meta.currentTick % monthLength === 0 &&
+      hasColonyAwaitingSample(foundedColonies, world.meta.currentTick)
+    ) {
+      sampleFoundedColonies(toTickSystems(world), currentMarkets, world.meta.currentTick, foundedColonies);
     }
 
     if (world.meta.currentTick % SNAPSHOT_INTERVAL === 0) {
@@ -194,6 +215,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     initialBuildingTotal,
     populationSnapshots,
     migrationThroughput,
+    foundingStock: summarizeFoundingStock(foundedColonies),
     treasurySummary: summarizeTreasuries(world.treasuries, treasurySnapshots),
     treasurySnapshots,
   };

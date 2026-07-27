@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { summarizeColonisation, summarizeConstructionPool, summarizeBuildBursts } from "../build-analysis";
-import type { BuildCommitmentRecord } from "../build-analysis";
+import {
+  summarizeColonisation, summarizeConstructionPool, summarizeBuildBursts,
+  trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summarizeFoundingStock,
+} from "../build-analysis";
+import type { BuildCommitmentRecord, FoundedColonyRecord, FoundedColonySystem } from "../build-analysis";
+import { EXPANSION } from "@/lib/constants/expansion";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, HEAVY_INDUSTRY_COMPLEX,
   CONSTRUCTION_CENTRE_TYPE,
@@ -38,7 +42,7 @@ function devSys(
     unrest: 0,
     buildings: opts.buildings ?? {},
     buildingIdleMonths: {},
-    buildingCollapseDebt: {},
+    collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: opts.slotCap ?? emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0,
@@ -307,5 +311,107 @@ describe("summarizeBuildBursts", () => {
     const records: BuildCommitmentRecord[] = [rec(24, "food", 5), rec(48, "food", 5)];
     const summary = summarizeBuildBursts(records);
     expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerPulse: 5, tick: 24 }]);
+  });
+});
+
+/**
+ * The founding-stock instrument. Its whole job is to see a symptom no galaxy-wide average can —
+ * a handful of brand-new colonies opening starved — so what must be pinned is that it samples the
+ * right systems at the right moment, weights goods by what the colony actually needs, and does not
+ * quietly read a colony as fed.
+ */
+describe("trackFoundedColonies / summarizeFoundingStock", () => {
+  /** A seed-sized colony: no buildings, so its basket is pure per-capita civilian demand. */
+  const sys = (id: string, control: SystemControl): FoundedColonySystem => ({
+    id, control, population: EXPANSION.COLONY_SEED_POP, buildings: {}, governmentType: "federation",
+  });
+  const mkt = (systemId: string, goodId: string, satisfaction: number) =>
+    ({ systemId, goodId, satisfaction });
+  const rec = (
+    systemId: string, openingSatisfaction: number | null, openingDissatisfaction: number | null,
+  ): FoundedColonyRecord => ({ systemId, foundedTick: 0, openingSatisfaction, openingDissatisfaction });
+
+  it("tracks only systems developed after tick 0, not world-gen's own", () => {
+    const tracker = new Map<string, FoundedColonyRecord>();
+    const developedAtStart = new Set(["home"]);
+    trackFoundedColonies(
+      [sys("home", "developed"), sys("c1", "developed"), sys("c2", "controlled")],
+      12, developedAtStart, tracker,
+    );
+
+    expect([...tracker.keys()]).toEqual(["c1"]);
+    expect(tracker.get("c1")?.foundedTick).toBe(12);
+  });
+
+  it("reads at the first pulse strictly after founding, never the founding pulse itself", () => {
+    const tracker = new Map<string, FoundedColonyRecord>();
+    const systems = [sys("c1", "developed")];
+    const markets = [mkt("c1", "food", 1), mkt("c1", "water", 1)];
+    trackFoundedColonies(systems, 24, new Set(), tracker);
+
+    // Founded ON a pulse tick: that same pulse assessed a system that did not exist for the month.
+    expect(hasColonyAwaitingSample(tracker, 24)).toBe(false);
+    sampleFoundedColonies(systems, markets, 24, tracker);
+    expect(tracker.get("c1")?.openingSatisfaction).toBeNull();
+
+    expect(hasColonyAwaitingSample(tracker, 48)).toBe(true);
+    sampleFoundedColonies(systems, markets, 48, tracker);
+    expect(tracker.get("c1")?.openingSatisfaction).toBeCloseTo(1, 6);
+    expect(tracker.get("c1")?.openingDissatisfaction).toBeCloseTo(0, 6);
+    // Once read, it stops asking to be read again.
+    expect(hasColonyAwaitingSample(tracker, 72)).toBe(false);
+  });
+
+  it("weights a good by the colony's own need for it, not one vote per good", () => {
+    // The discriminating shape: a seed needs far more water than luxuries. Starving it of luxuries
+    // must read as nearly fed; starving it of water must not. A flat mean scores both exactly 0.5.
+    const systems = [sys("c1", "developed")];
+
+    const noLuxuries = new Map<string, FoundedColonyRecord>();
+    trackFoundedColonies(systems, 24, new Set(), noLuxuries);
+    sampleFoundedColonies(systems, [mkt("c1", "water", 1), mkt("c1", "luxuries", 0)], 48, noLuxuries);
+
+    const noWater = new Map<string, FoundedColonyRecord>();
+    trackFoundedColonies(systems, 24, new Set(), noWater);
+    sampleFoundedColonies(systems, [mkt("c1", "water", 0), mkt("c1", "luxuries", 1)], 48, noWater);
+
+    expect(noLuxuries.get("c1")!.openingSatisfaction!).toBeGreaterThan(0.9);
+    expect(noWater.get("c1")!.openingSatisfaction!).toBeLessThan(0.1);
+    // ...and the unrest fold agrees, so instrument and simulation cannot drift apart.
+    expect(noWater.get("c1")!.openingDissatisfaction!)
+      .toBeGreaterThan(noLuxuries.get("c1")!.openingDissatisfaction!);
+  });
+
+  it("keeps the opening reading, ignoring later pulses", () => {
+    const tracker = new Map<string, FoundedColonyRecord>();
+    const systems = [sys("c1", "developed")];
+    trackFoundedColonies(systems, 24, new Set(), tracker);
+    sampleFoundedColonies(systems, [mkt("c1", "food", 0.9)], 48, tracker);
+    sampleFoundedColonies(systems, [mkt("c1", "food", 0.1)], 72, tracker); // later famine
+
+    expect(tracker.get("c1")?.openingSatisfaction).toBeCloseTo(0.9, 6);
+  });
+
+  it("counts a colony that opened deprived, and excludes the unsampled from the means", () => {
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["a", rec("a", 0.9, 0.01)],
+      ["b", rec("b", 0.1, 0.81)],
+      ["c", rec("c", null, null)],
+    ]);
+
+    const summary = summarizeFoundingStock(tracker);
+    expect(summary.foundedCount).toBe(3);
+    expect(summary.sampledCount).toBe(2);       // 'c' never reached a pulse — not a zero in the mean
+    expect(summary.meanOpeningSatisfaction).toBeCloseTo(0.5, 6);
+    expect(summary.meanOpeningDissatisfaction).toBeCloseTo(0.41, 6);
+    expect(summary.openingDeprivedCount).toBe(1);
+  });
+
+  it("reports zeroed means rather than NaN when no colony was ever founded", () => {
+    const summary = summarizeFoundingStock(new Map());
+    expect(summary).toEqual({
+      foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
+      meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
+    });
   });
 });

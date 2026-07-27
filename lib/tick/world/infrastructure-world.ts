@@ -18,8 +18,8 @@ export interface InfrastructureStateView {
   buildings: Record<string, number>;
   /** buildingType → sustained-idle countdown (the decay buffer's state). */
   buildingIdleMonths: Record<string, number>;
-  /** buildingType → fractional unrest-collapse accumulator (the catastrophic channel's state). */
-  buildingCollapseDebt: Record<string, number>;
+  /** The system's fractional unrest-collapse accumulator (the catastrophic channel's state). */
+  collapseDebt: number;
 }
 
 /** One building's decayed count (downward-only; floored at 0 by the adapter). */
@@ -36,10 +36,9 @@ export interface IdleMonthsUpdate {
   idleMonths: number;
 }
 
-/** One building's new unrest-collapse debt (the catastrophic channel's persisted state). */
+/** One system's new unrest-collapse debt (the catastrophic channel's persisted state). */
 export interface CollapseDebtUpdate {
   systemId: string;
-  buildingType: string;
   collapseDebt: number;
 }
 

@@ -262,12 +262,15 @@ function effectiveBuildSystems(
  * persistence-gated for `planFactionProposals`). Per (system, good) it takes the larger of the
  * provisioning-margin capacity gap (`max(0, (1 + PROVISION_MARGIN)·demand − capacity)`) and the
  * squeeze-feedback gap, then nets the faction's reachable exporter spare against it before advancing
- * persistence and rate-capping the residual. Suppressed capacity is latent spare for neighbours but
- * never a local gap.
+ * persistence and rate-capping the residual. Suppression is scoped to the shortfall it can actually
+ * explain: it silences the feedback gap only where the system already holds capacity in that good,
+ * and never suppresses the capacity gap, so a striking world can still be given the industry it has
+ * none of.
  *
  * Cancellation is flow-aware (docs/planned/economy-colony-bootstrapping.md §3.1). An exporter's spare
- * is its sustainable export RATE (`production − demand`, or latent `capacity − demand` when suppressed)
- * — not a stock pile, so a neighbour merely holding and draining stock never cancels a gap. Per good,
+ * is its sustainable export RATE (`production − demand`) measured on REALIZED output, so capacity
+ * idled by a strike never cancels someone else's gap — it is not a stock pile either, so a neighbour
+ * merely holding and draining stock never cancels a gap. Per good,
  * the reachable exporters' total spare is netted across all reachable gaps at once —
  * `coveredFraction = min(1, Σ spare / Σ reachable-gap)` (first cut per §7.6) — so one exporter's spare
  * cannot fully cover two competing colonies; each reachable gap keeps its uncovered residual and a gap
@@ -292,9 +295,14 @@ function assessStructuralDeficits(
       const demand = Math.max(0, good.demand);
       const capacity = Math.max(0, good.capacityProduction);
       const production = Math.max(0, good.production ?? good.capacityProduction);
-      const suppressed = good.productionSuppressed === true;
-      const capacityGap = suppressed ? 0 : Math.max(0, (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demand - capacity);
-      const feedbackGap = !suppressed && !good.logisticsFundingBound && (good.squeezePulses ?? 0) >= DIRECTED_BUILD.PERSISTENCE_PULSES
+      // A strike explains a shortfall only where the system already holds capacity in the good: with
+      // no capacity, output would be zero at any staffing level, so the gap is structural whatever
+      // the unrest — and refusing to propose it is what leaves a striking world permanently unable
+      // to build its way out. The capacity gap is therefore unconditional; `capacity = 0` is its
+      // ordinary case, not an exception.
+      const strikeExplains = good.productionSuppressed === true && capacity > 0;
+      const capacityGap = Math.max(0, (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demand - capacity);
+      const feedbackGap = !strikeExplains && !good.logisticsFundingBound && (good.squeezePulses ?? 0) >= DIRECTED_BUILD.PERSISTENCE_PULSES
         ? demand * (1 - clamp(good.satisfaction ?? 1, 0, 1))
         : 0;
       const gross = Math.max(capacityGap, feedbackGap);
@@ -304,9 +312,10 @@ function assessStructuralDeficits(
         candidatesByGood.set(good.goodId, candidates);
       }
 
-      const spare = suppressed
-        ? Math.max(0, capacity - demand)
-        : Math.max(0, production - demand);
+      // Spare is what a system actually produces above its own needs. Capacity standing idle behind a
+      // strike is not export anyone can plan against — counting it overstates the galaxy's spare and
+      // cancels real gaps against supply that never ships.
+      const spare = Math.max(0, production - demand);
       if (spare > 0) {
         const exporters = exportersByGood.get(good.goodId) ?? [];
         exporters.push({ systemId: system.systemId, spare });
@@ -1005,9 +1014,25 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
 
 /** Seed + bundled-housing sizing for a colony at `habitableSpace` — the planner's whole-level rule,
  *  shared with the player's direct-colony verb so both order identical projects. Null = the site
- *  can't hold one whole housing level (not viable). Bundles one level of headroom beyond the seed's
- *  own need (still clamped to the whole-level habitable cap) so a land-rich colony opens with room
- *  to grow instead of pinned at r = 1.0 the moment it lands. */
+ *  can't hold one whole housing level (not viable).
+ *
+ *  Housing is sized to exactly the seed's own need, so `popCap ≥ seedPop` on arrival with no spare
+ *  level bundled. What contains it is the whole-level round-up: `ceil` leaves strictly less than one
+ *  level vacant, and the idle channel only fires on a WHOLE idle level. A bundled headroom level put
+ *  a fresh colony a full level above its own occupancy, which reads idle from the moment it lands and
+ *  is torn down before the colony can grow into it; the second level is earned from the housing
+ *  relief valve like any other system's.
+ *
+ *  The containment holds against the seed as SIZED. `applyDevelopments` delivers
+ *  `min(seedPop, source spare)`, so a short delivery leaves the colony emptier than this assumed —
+ *  harmless while `housingLevels` is 1 (a single level is never a whole idle level under any
+ *  positive population), which the shipped seed guarantees. Sizing the seed against the housing unit
+ *  (see the deferred item in docs/planned/economy-band-reconciliation.md §5) would break that, and
+ *  must revisit this.
+ *
+ *  The `maxHousingLevels` clamp is redundant with the seed clamp above it — `seedPop` is already
+ *  capped to `maxHousingLevels × POP_CENTRE_DENSITY`, so the round-up can never exceed the land. It
+ *  is kept as a guard so the two clamps cannot drift apart silently. */
 export interface ColonySizing { seedPop: number; housingLevels: number; work: number }
 
 export function sizeColonyEstablish(
@@ -1018,9 +1043,16 @@ export function sizeColonyEstablish(
   const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, habitableSpace) / housingCost) : 0;
   const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
   const seedPop = Math.min(params.seedPop, habitableCap);
-  const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY) + 1);
+  const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
+  const work = params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE);
+  // `Number.isFinite` and not `< 1` alone: every comparison against NaN is false, so a NaN
+  // habitableSpace would slip past the viability guard and put NaN seedPop/housingLevels/work into a
+  // construction project and thence into a save, where JSON.stringify turns them into null. `work`
+  // is checked on its own account rather than inferred from the other two — it also carries
+  // `establishWork` straight from the caller.
+  if (!Number.isFinite(housingLevels) || !Number.isFinite(seedPop) || !Number.isFinite(work)) return null;
   if (housingLevels < 1 || seedPop <= 0) return null;
-  return { seedPop, housingLevels, work: params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE) };
+  return { seedPop, housingLevels, work };
 }
 
 /**

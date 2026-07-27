@@ -12,6 +12,15 @@ export interface InfrastructureSummary {
   collapsedCount: number;
 }
 
+/**
+ * A system somebody actually lives on. Every population/infrastructure reading below is a statement
+ * about inhabited worlds, and the galaxy is overwhelmingly empty — at default scale 580 of 600
+ * systems are unclaimed. Folding those in turns a rate into a measure of how much void was generated.
+ */
+function isSettled(s: TickSystem): boolean {
+  return s.control === "developed";
+}
+
 /** Σ of all building counts in a system. */
 function totalBuilt(s: TickSystem): number {
   let n = 0;
@@ -28,7 +37,10 @@ export function summarizeInfrastructure(
   for (const s of systems) {
     const built = totalBuilt(s);
     builtEnd += built;
-    if (built < 1) collapsedCount++;
+    // Only a SETTLED system can have collapsed. An unclaimed rock has no buildings because nobody
+    // ever built any — counting it as ghost industry buries the handful of real collapses under
+    // however many systems the galaxy happens to contain.
+    if (built < 1 && isSettled(s)) collapsedCount++;
   }
   return {
     builtStart: initialBuildingTotal,
@@ -69,6 +81,10 @@ export interface PopulationSummary {
   growthPct: number;
   meanUnrest: number;
   maxUnrest: number;
+  // Every field below counts, averages, or shares over SETTLED systems only (`totalStart`/`totalEnd`
+  // are galaxy-wide, but an unsettled system holds no people so the two agree). The galaxy is mostly
+  // void by design — rating unrest or striking against 600 systems when 20 are inhabited reports the
+  // emptiness of space, not the health of the economy.
   /** Systems within 2% of popCap — the crowd brake's healthy resting state (growth runs at full
    *  rate to r = population/popCap = 1, then brakes smoothly), not a saturation pathology. */
   saturatedCount: number;
@@ -86,7 +102,23 @@ export interface PopulationSummary {
   emptiedCount: number;
   /** Systems with unrest ≥ strikeThreshold (striking). */
   strikingCount: number;
+  /** Striking systems as a share of those counted, in [0,1]. The count alone reads differently as
+   *  the galaxy grows — 300 striking of 400 and 300 of 3000 are not the same galaxy. */
+  strikingShare: number;
+  /** Systems holding population with effectively no housing left (popCap ≈ 0). The trap the collapse
+   *  channel's housing floor closes: with popCap 0 the crowd brake reads fully crowded so growth is
+   *  exactly zero, overshoot-death fires, and the relief valve cannot rebuild until the system is
+   *  fed — which needs the capacity just demolished. Should read ~0; anything else is a population
+   *  that cannot grow, shrink into safety, or be helped. */
+  strandedCount: number;
+  /** Total population held in those stranded systems — how many people are actually caught, which
+   *  the count alone does not say. */
+  strandedPopulation: number;
 }
+
+/** popCap at or below this counts as "no housing left" — popCap is a whole-level multiple, so this
+ *  is comfortably below one level rather than an arbitrary epsilon. */
+const STRANDED_POP_CAP = 1e-6;
 
 export function summarizePopulation(
   systems: TickSystem[],
@@ -103,11 +135,21 @@ export function summarizePopulation(
   let occupancyCount = 0;
   let emptiedCount = 0;
   let strikingCount = 0;
+  let strandedCount = 0;
+  let strandedPopulation = 0;
 
-  for (const s of systems) {
-    totalEnd += s.population;
+  // Totals are over the whole galaxy (an unsettled system holds no people, so it adds nothing);
+  // every rate, share and count below is over settled systems, which is what they are claims about.
+  for (const s of systems) totalEnd += s.population;
+  const settled = systems.filter(isSettled);
+
+  for (const s of settled) {
     unrestSum += s.unrest;
     if (s.unrest > maxUnrest) maxUnrest = s.unrest;
+    if (s.population > 0 && s.popCap <= STRANDED_POP_CAP) {
+      strandedCount++;
+      strandedPopulation += s.population;
+    }
     if (s.popCap > 0) {
       if (s.population >= s.popCap * 0.98) saturatedCount++;
       if (crowdFactor(s.population, s.popCap, crowdBrakeEnd) <= 0.25) brakedCount++;
@@ -118,7 +160,7 @@ export function summarizePopulation(
     if (s.unrest >= strikeThreshold) strikingCount++;
   }
 
-  const n = Math.max(1, systems.length);
+  const n = Math.max(1, settled.length);
   return {
     totalStart,
     totalEnd,
@@ -130,5 +172,8 @@ export function summarizePopulation(
     meanOccupancy: occupancyCount > 0 ? occupancySum / occupancyCount : 0,
     emptiedCount,
     strikingCount,
+    strikingShare: settled.length > 0 ? strikingCount / settled.length : 0,
+    strandedCount,
+    strandedPopulation,
   };
 }

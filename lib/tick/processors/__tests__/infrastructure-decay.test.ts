@@ -12,7 +12,7 @@ function sys(id: string, over: Partial<TickSystem>): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 100, popCap: 200,
-    unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, buildingIdleMonths: {}, buildingCollapseDebt: {}, yields: unitResourceVector(),
+    unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, buildingIdleMonths: {}, collapseDebt: 0, yields: unitResourceVector(),
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     ...over,
   };
@@ -62,7 +62,7 @@ describe("infrastructure-decay processor", () => {
     expect(world.systems.find((x) => x.id === "s2")!.buildings).toEqual({ [HOUSING_TYPE]: 10, ore: 10 });
   });
 
-  it("defaults a missing selling factor to 1 and stacks idle + unrest teardowns", async () => {
+  it("defaults a missing selling factor to 1 and runs both channels in one pass", async () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { unrest: 1, population: 4 * ORE_LABOUR })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
@@ -71,13 +71,20 @@ describe("infrastructure-decay processor", () => {
       realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
-    // ore has ≥1 idle level (staffed 4 of 10) → sheds 1 at the buffer; unrest 1 > 0.75 → sheds 1 more.
-    expect(world.systems[0].buildings.ore).toBe(8);
+    const s = world.systems[0];
+    // Both ore and housing carry an idle level at this population, so the buffer prunes one of
+    // each. The catastrophic channel then spends its single level on the LEAST-used type —
+    // housing sits near a fifth of capacity against ore's staffed two fifths — so housing loses
+    // a second level and ore keeps the rest. Three levels total, not one per type per channel.
+    expect(s.buildings.ore).toBe(9);
+    expect(s.buildings[HOUSING_TYPE]).toBe(8);
   });
 
-  it("accrues collapse debt fractionally at a sub-reference interval (interval 12)", async () => {
-    // Above θ_decay, fully staffed (no idle level) → only the unrest channel acts. At interval 12
-    // (catchUp 0.5) the collapse debt builds 0.5 → 1.0: nothing torn down the first run, one level the second.
+  it("accrues collapse debt at severity × catch-up across runs (interval 12)", async () => {
+    // Above θ_decay, fully staffed (no idle level) → only the unrest channel acts. Severity at
+    // unrest 0.9 is (0.9 − 0.75) / 0.25 = 0.6, and interval 12 halves the run, so the debt builds
+    // 0.3 a run and only buys a whole level on the fourth. Both scalings compose here: a severity
+    // change and an interval change must each move this number.
     const world = new InMemoryInfrastructureWorld({
       systems: [sys("s1", { buildings: { ore: 3 }, unrest: 0.9, population: 3 * ORE_LABOUR })],
     });
@@ -87,13 +94,34 @@ describe("infrastructure-decay processor", () => {
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
     };
-    await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
-    expect(world.systems[0].buildings.ore).toBe(3); // nothing torn down yet
-    expect(world.systems[0].buildingCollapseDebt.ore).toBeCloseTo(0.5, 6); // debt persisted
+    for (const expected of [0.3, 0.6, 0.9]) {
+      await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
+      expect(world.systems[0].buildings.ore).toBe(3); // nothing torn down yet
+      expect(world.systems[0].collapseDebt).toBeCloseTo(expected, 6); // debt persisted per system
+    }
 
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
-    expect(world.systems[0].buildings.ore).toBe(2); // second run crosses 1.0 → one level shed
-    expect(world.systems[0].buildingCollapseDebt.ore).toBeCloseTo(0, 6);
+    expect(world.systems[0].buildings.ore).toBe(2); // fourth run crosses 1.0 → one level shed
+    expect(world.systems[0].collapseDebt).toBeCloseTo(0.2, 6); // remainder carries forward
+  });
+
+  it("clears a persisted collapse debt once unrest falls back below the threshold", async () => {
+    const world = new InMemoryInfrastructureWorld({
+      systems: [sys("s1", { buildings: { ore: 3 }, unrest: 0.9, population: 3 * ORE_LABOUR, collapseDebt: 0.2 })],
+    });
+    const signals: EconomySignals = {
+      dissatisfactionBySystem: new Map([["s1", 0]]),
+      supplyRegimeBySystem: new Map(),
+      sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      realizedProductionBySystem: new Map(),
+    };
+    await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
+    expect(world.systems[0].collapseDebt).toBeGreaterThan(0); // still in the regime
+
+    world.systems[0] = { ...world.systems[0], unrest: 0.5 };
+    await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
+    expect(world.systems[0].collapseDebt).toBe(0); // regime lapsed → debt erased, not frozen
+    expect(world.systems[0].buildings.ore).toBe(3);
   });
 
   it("scales the idle buffer by per-system maintenance funding", async () => {

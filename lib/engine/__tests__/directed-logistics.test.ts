@@ -334,6 +334,22 @@ describe("strategic exporter reserve", () => {
     expect(surplusDrawable(110, 100, 5, 30, true)).toBe(0);
   });
 
+  it("keeps its own suppression meaning, distinct from the build planner's", () => {
+    // Two questions, two answers, deliberately not unified. Here the question is a DRAWDOWN — may we
+    // ship this system down past its anchor as a free-flowing exporter? — and a struck producer is
+    // refused, because the output backing that reserve has stopped arriving. The build planner asks
+    // whether a strike EXPLAINS a shortfall, which is only ever true where the system already holds
+    // capacity in the good; a struck system with no capacity is still given the industry it lacks.
+    // Collapsing the two would either deep-draw a striking exporter or freeze a striking world out of
+    // construction entirely.
+    const unsuppressed = surplusDrawable(110, 100, 5, 30, false);
+    expect(unsuppressed).toBeGreaterThan(0);         // structural exporter: ships to its reserve
+    expect(surplusDrawable(110, 100, 5, 30, true)).toBeLessThan(unsuppressed);
+    // The flag only ever gates the structural-exporter fast path: a donor whose production does not
+    // exceed its demand is on the ordinary path either way, so suppression changes nothing there.
+    expect(surplusDrawable(150, 100, 5, 0, true)).toBe(surplusDrawable(150, 100, 5, 0, false));
+  });
+
   it("keeps suppressed and realized-zero former exporters on the ordinary excess path", () => {
     const recipient = sys("B", 0, { goodId: "ore", stock: 0, targetStock: 100, demand: 5 });
     const suppressed = sys("A", 100, {

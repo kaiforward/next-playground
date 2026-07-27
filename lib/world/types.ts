@@ -83,6 +83,10 @@ export interface WorldSystem {
   popCap: number;
   /** 0…1 — integral of demand-weighted dissatisfaction. */
   unrest: number;
+  /** Fractional unrest-collapse accumulator; whole levels tear down as it crosses integers, and it
+   *  resets whenever unrest falls back to the decay threshold. Absent ⇒ 0, so world-gen and older
+   *  saves both omit it: the debt is transient regime state, not an accrued balance. */
+  collapseDebt?: number;
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */
@@ -149,8 +153,6 @@ export interface WorldBuilding {
   count: number;
   /** Sustained-idle countdown for this (system, type): counts up while ≥1 whole level sits idle, resets on refill, sheds one level at the decay buffer. */
   idleMonths: number;
-  /** Fractional unrest-collapse accumulator for this (system, type); whole levels tear down as it crosses integers. Absent in pre-cadence saves ⇒ 0. */
-  collapseDebt?: number;
 }
 
 /** Fields every committed construction project shares — funded by `factionId`'s per-pulse pool. */

@@ -1275,27 +1275,63 @@ describe("planFactionProposals: persistent structural policy", () => {
     expect(plan.persistenceUpdates).toEqual([{ systemId: "P", goodId: "ore", proposalPulses: 0 }]);
   });
 
-  it("uses the larger of capacity and squeeze feedback gaps, excluding funding-bound and suppressed feedback", () => {
+  it("uses the larger of capacity and squeeze feedback gaps, excluding funding-bound feedback", () => {
     const active = planFactionProposals([policySystem(policyGood({ demand: 10, production: 10, capacityProduction: 11, squeezePulses: 2, satisfaction: 0 }))], () => 1, [], DEV_REFS);
     const ore = active.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
     expect(ore?.value).toBeCloseTo(4, 6); // max(0, 10), not 10 + 0
 
     const fundingBound = planFactionProposals([policySystem(policyGood({ production: 10, capacityProduction: 11, squeezePulses: 2, satisfaction: 0, logisticsFundingBound: true }))], () => 1, [], DEV_REFS);
     expect(fundingBound.persistenceUpdates[0]?.proposalPulses).toBe(0);
-
-    const suppressed = planFactionProposals([policySystem(policyGood({ production: 0, capacityProduction: 0, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))], () => 1, [], DEV_REFS);
-    expect(suppressed.persistenceUpdates[0]?.proposalPulses).toBe(0);
   });
 
-  it("nets reachable actual and suppressed latent spare before persistence", () => {
+  it("still finds a structural deficit at a striking system with no capacity in the good", () => {
+    // The lock this replaces: a strike anywhere at the system zeroed the need for EVERY good there,
+    // including ones it has never produced — so a struck world could never be given the industry that
+    // would end the shortage. With no capacity, output would be zero at any staffing level, so the
+    // gap is structural and a strike explains none of it.
+    const plan = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 0, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      () => 1, [], DEV_REFS,
+    );
+    // capacityGap = 1.1 × 10 − 0 = 11, rate-capped to 11 × 0.4.
+    const ore = plan.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
+    expect(ore?.value).toBeCloseTo(4.4, 6);
+    expect(plan.persistenceUpdates[0]?.proposalPulses).toBe(2);
+  });
+
+  it("proposes only the shortfall a striking system's own capacity does not already cover", () => {
+    // Capacity at 60% of demand: the strike explains the 60% that is not being produced right now,
+    // but not the 40% the system could never have made — that part is still proposed.
+    const short = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 6, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      () => 1, [], DEV_REFS,
+    );
+    const ore = short.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
+    expect(ore?.value).toBeCloseTo((1.1 * 10 - 6) * 0.4, 6); // the missing capacity only
+
+    // Capacity already past the provisioning margin: nothing structural is missing, and the squeeze
+    // feedback IS explained by the strike — so this system proposes nothing at all. Without the
+    // feedback exclusion its satisfaction-0 markets would read as a 10-unit gap.
+    const covered = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 12, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      () => 1, [], DEV_REFS,
+    );
+    expect(covered.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
+    expect(covered.persistenceUpdates[0]?.proposalPulses).toBe(0);
+  });
+
+  it("nets only REALIZED exporter spare before persistence — a striking exporter cancels nothing", () => {
     const sink = policySystem(policyGood(), { systemId: "sink" });
     const actualExporter = policySystem(policyGood({ demand: 0, production: 20, capacityProduction: 20 }), { systemId: "actual", slotCap: emptyResourceVector() });
     const actual = planFactionProposals([sink, actualExporter], () => 1, [], DEV_REFS);
     expect(actual.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(0);
 
+    // Same capacity, but struck and producing nothing. Counting its latent capacity as spare
+    // cancelled the sink's gap against supply that never shipped; only realized output counts, so
+    // the sink's deficit now survives to persistence.
     const latentExporter = policySystem(policyGood({ demand: 0, production: 0, capacityProduction: 20, productionSuppressed: true }), { systemId: "latent", slotCap: emptyResourceVector() });
     const latent = planFactionProposals([sink, latentExporter], () => 1, [], DEV_REFS);
-    expect(latent.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(0);
+    expect(latent.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(2);
   });
 
   it("requires two residual assessments, saturates at two, and resets on recovery", () => {
@@ -1535,9 +1571,9 @@ describe("planFactionColonyProposals", () => {
     // Land-rich: whole-level habitable cap ≫ seedPop → full seed.
     const [rich] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "big", habitableSpace: 100 })], [], COLONY_PARAMS);
     expect(rich.seedPop).toBe(EXPANSION.COLONY_SEED_POP);
-    // Land-rich, so the whole-level habitable cap never clamps: own-need levels (ceil(2/20) = 1) plus
-    // the one bundled headroom level.
-    expect(rich.housingLevels).toBe(Math.ceil(EXPANSION.COLONY_SEED_POP / POP_CENTRE_DENSITY) + 1);
+    // Land-rich, so the whole-level habitable cap never clamps: housing is exactly the seed's own
+    // need (ceil(2/20) = 1 level), with no spare level bundled on top.
+    expect(rich.housingLevels).toBe(Math.ceil(EXPANSION.COLONY_SEED_POP / POP_CENTRE_DENSITY));
     expect(rich.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(rich.seedPop); // viable by construction
     expect(rich.work).toBeCloseTo(COLONISATION.COLONY_ESTABLISH_WORK + rich.housingLevels * workCostPerLevel(HOUSING_TYPE), 6);
     expect(rich.work).toBeGreaterThan(COLONISATION.COLONY_ESTABLISH_WORK); // housing is paid for, not free
@@ -1552,7 +1588,7 @@ describe("planFactionColonyProposals", () => {
     const [poor] = planFactionColonyProposals("f1", developed, [candidate({ systemId: "small", habitableSpace: poorHabitable })], [], bigSeed);
     expect(poor.seedPop).toBe(Math.min(bigSeed.seedPop, 2 * POP_CENTRE_DENSITY));
     expect(poor.seedPop).toBeLessThan(bigSeed.seedPop);
-    expect(poor.housingLevels).toBeLessThanOrEqual(2);
+    expect(poor.housingLevels).toBe(2); // exactly the clamped seed's own need — no spare level
     expect(poor.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(poor.seedPop);
   });
 
@@ -1683,38 +1719,57 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
 describe("sizeColonyEstablish", () => {
   const params = { seedPop: 500, establishWork: 100 };
 
-  it("land-tight: habitable space for exactly the seed's own levels keeps the clamp and opens at r ≈ 1.0", () => {
+  it("land-tight: the seed clamp caps an oversized seed to what the site can house", () => {
     const s = sizeColonyEstablish(3, params); // habitable 3 → 3 whole housing levels possible
     expect(s).not.toBeNull();
     if (s === null) return;
-    // habitableSpace 3 / housingCost 1 → maxHousingLevels 3 → habitableCap 60; seedPop min(500, 60) = 60.
-    // Unclamped want would be ceil(60/20) + 1 = 4 levels, but the site only fits 3 whole levels, so the
-    // clamp holds at 3 — the site opens fully occupied (r = seedPop/popCap = 1.0), not with headroom.
+    // habitableSpace 3 / housingCost 1 → maxHousingLevels 3 → habitableCap 60; seedPop min(500, 60) = 60,
+    // whose own need is ceil(60/20) = 3 levels — exactly what the site fits. The SEED clamp is what
+    // binds; the maxHousingLevels clamp downstream of it can no longer bind at all now the headroom
+    // level is gone, and is kept only so the two cannot drift apart. Opens fully occupied (r = 1.0).
     expect(s.seedPop).toBe(60);
     expect(s.housingLevels).toBe(3);
     expect(s.seedPop).toBe(s.housingLevels * POP_CENTRE_DENSITY); // r = 1.0 exactly
     expect(s.work).toBe(params.establishWork + s.housingLevels * workCostPerLevel(HOUSING_TYPE));
   });
 
-  it("land-rich: bundles one level of headroom beyond the seed's own need, opening at r < 1", () => {
+  it("land-rich: sizes to the seed's own need alone, bundling no spare level", () => {
     const richParams = { seedPop: 30, establishWork: 100 };
     const s = sizeColonyEstablish(10, richParams); // habitable 10 → 10 whole housing levels possible, plenty of room
     expect(s).not.toBeNull();
     if (s === null) return;
-    // seedPop 30 is well under the 200-pop habitable cap (10 levels × 20), so it lands unclamped. The
-    // seed's own-need level count is ceil(30/20) = 2; the headroom bundle adds one more level = 3.
+    // seedPop 30 is well under the 200-pop habitable cap (10 levels × 20), so land is not the binding
+    // constraint — the seed alone sizes it, at ceil(30/20) = 2 levels. A bundled headroom level would
+    // put popCap at 60 against 30 residents, a whole empty level that reads idle the moment it lands.
     expect(s.seedPop).toBe(30);
-    expect(s.housingLevels).toBe(3);
+    expect(s.housingLevels).toBe(2);
     const popCap = s.housingLevels * POP_CENTRE_DENSITY;
-    // Discriminating on its own: popCap ≥ seedPop + one whole level (60 ≥ 50). The pre-change formula
-    // (housingLevels 2, popCap 40) fails this (40 ≥ 50 is false), unlike a bare popCap > seedPop check
-    // (40 > 30 would still pass pre-change and not prove the headroom is really there).
-    expect(popCap).toBeGreaterThanOrEqual(s.seedPop + POP_CENTRE_DENSITY);
-    // `work` already scales with housingLevels, so the extra level shows up here with no second change site.
-    expect(s.work).toBe(richParams.establishWork + 3 * workCostPerLevel(HOUSING_TYPE));
+    expect(popCap).toBeGreaterThanOrEqual(s.seedPop);          // viable by construction
+    expect(popCap).toBeLessThan(s.seedPop + POP_CENTRE_DENSITY); // …and no whole level of slack
+    // `work` scales with housingLevels, so the dropped level shows up here with no second change site.
+    expect(s.work).toBe(richParams.establishWork + 2 * workCostPerLevel(HOUSING_TYPE));
   });
 
   it("returns null when the site cannot hold one whole housing level", () => {
     expect(sizeColonyEstablish(0.4, params)).toBeNull();
+  });
+
+  it("returns null rather than NaN sizing for a non-finite site", () => {
+    // Every comparison against NaN is false, so a bare `housingLevels < 1` guard would pass a NaN
+    // straight through into a construction project and thence into a save.
+    expect(sizeColonyEstablish(Number.NaN, params)).toBeNull();
+    expect(sizeColonyEstablish(10, { seedPop: Number.NaN, establishWork: 0 })).toBeNull();
+  });
+
+  it("keeps popCap ≥ seedPop at every seed size, including whole-level boundaries", () => {
+    // The verb the player drives and the planner's own proposals both come through here, so the
+    // viability guarantee has to hold across the boundary cases, not just the round ones.
+    for (const seedPop of [1, 19, 20, 21, 39, 40, 41]) {
+      const s = sizeColonyEstablish(1e6, { seedPop, establishWork: 0 });
+      expect(s).not.toBeNull();
+      if (s === null) continue;
+      expect(s.housingLevels).toBe(Math.ceil(seedPop / POP_CENTRE_DENSITY));
+      expect(s.housingLevels * POP_CENTRE_DENSITY).toBeGreaterThanOrEqual(seedPop);
+    }
   });
 });

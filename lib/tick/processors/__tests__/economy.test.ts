@@ -84,7 +84,7 @@ function makeProducerSystem(id: string, unrest: number): TickSystem {
     unrest,
     buildings: { food: 2 },
     buildingIdleMonths: {},
-    buildingCollapseDebt: {},
+    collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,
@@ -106,7 +106,7 @@ function makeConsumerSystem(id: string, unrest: number): TickSystem {
     unrest,
     buildings: {},
     buildingIdleMonths: {},
-    buildingCollapseDebt: {},
+    collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,
@@ -464,7 +464,7 @@ describe("economy processor: supply-chain input-gating", () => {
         unrest: 0,
         buildings: { metals: 2, vocational_school: 1 }, // smelter + academy — no ore extractor
         buildingIdleMonths: {},
-        buildingCollapseDebt: {},
+        collapseDebt: 0,
         yields: unitResourceVector(),
         slotCap: emptyResourceVector(),
         generalSpace: 0,
@@ -819,6 +819,26 @@ describe("economy processor: persisted planner assessment", () => {
     });
     await runEconomyProcessor(eventWorld, makeCtx(0), { ...ECON_PARAMS });
     expect(eventWorld.markets[0].productionSuppressed).toBe(false);
+  });
+
+  it("flags suppression per market, not across every good at a striking system", async () => {
+    // The strike multiplier is a property of the system, but it can only suppress a good the system
+    // actually produces. Recording it system-wide told the build planner a strike explained the
+    // shortfall of goods this world has no industry for at all — so it refused to propose the very
+    // capacity that would end the shortage, and a striking system could never dig itself out.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("strike", 1)], // buildings: { food: 2 } — a food producer only
+      markets: [
+        makeMarket("strike", "food", FIXTURE_BAND.targetStock - 2),
+        makeMarket("strike", "ore", FIXTURE_BAND.targetStock - 2), // no ore industry here
+      ],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    const bySystemGood = (goodId: string) =>
+      world.markets.find((m) => m.systemId === "strike" && m.goodId === goodId)?.productionSuppressed;
+    expect(bySystemGood("food")).toBe(true);  // its own output really is struck
+    expect(bySystemGood("ore")).toBe(false);  // nothing to suppress — it never made any
   });
 
   it("advances squeeze only on rationed assessments, saturates, and resets when fully served", async () => {

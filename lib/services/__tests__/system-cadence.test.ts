@@ -64,7 +64,7 @@ function makeTickSystem(id: string, factionId: string | null): TickSystem {
     unrest: 0,
     buildings: {},
     buildingIdleMonths: {},
-    buildingCollapseDebt: {},
+    collapseDebt: 0,
     yields: emptyResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 100,

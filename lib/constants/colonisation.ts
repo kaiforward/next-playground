@@ -2,8 +2,8 @@
  * Colonisation-cost tuning — the establish/land/saturation knobs of the pool-funded expansion model
  * (docs/planned/economy-colonisation-cost.md §1–§3). First-cut, coarse values: only the relative shape
  * matters here (home-first while there is cheap building; expansion accelerating as habitable territory
- * fills). PR4 calibrates the magnitudes in the sequenced `L·σ`-first pass. Each is a tunable *input* with
- * a clear meaning — a per-doctrine lookup feeds them later; the valuation formula never changes.
+ * fills). Magnitudes are calibrated against the simulator. Each is a tunable *input* with a clear
+ * meaning — a per-doctrine lookup feeds them later; the valuation formula never changes.
  */
 export const COLONISATION = {
   /**
@@ -29,7 +29,7 @@ export const COLONISATION = {
    * Weight on the seed-population opportunity cost netted off a colony's value (§7.3). The cost is the
    * source's forgone output for the part of the seed that must come from staffed (not idle) workers,
    * so founding naturally prefers a job-short source; this dial bridges that lost-production figure into
-   * the value scalar. Coarse first-cut (per-doctrine later); PR4 calibrates it against LAND_PREMIUM/σ.
+   * the value scalar. Coarse first-cut (per-doctrine later), calibrated against LAND_PREMIUM/σ.
    */
   SEED_POP_COST_WEIGHT: 1.0,
   /**
@@ -40,4 +40,23 @@ export const COLONISATION = {
    * first-cut — tuned against the simulator (colonies should populate broadly without dying empty).
    */
   MIN_SETTLER_SUPPLY: 5,
+  /**
+   * Share of a full days-of-supply cover (`TARGET_COVER`) that a landed colony's founding endowment
+   * aims at, per good the seed population actually consumes. A colony used to open holding nothing, at
+   * satisfaction 0 on every good, and began climbing out of a shortage it need never have been in — so
+   * it read as deprived from its first pulse. The endowment is DRAWN from the founding system's own
+   * warehouses and conserved: what the colony gains, the founder loses, capped so provisioning a
+   * colony can never ration its founder.
+   *
+   * The want is sized on the seed's RAW consumption rate, so every good opens at the same cover of
+   * what that population genuinely uses — a manifest shaped like the colony's own basket. It is
+   * deliberately NOT world-gen parity: a generated market is sized off the `MIN_DEMAND`-floored rate,
+   * and at a 2-pop seed almost every good sits under that floor, so parity would ship the same bundle
+   * of ship frames as of water — centuries of supply of what nobody there uses.
+   *
+   * Numerically equal to world-gen's `INITIAL_RESERVE_ANCHOR_FRAC` but held as its own constant, so
+   * calibration can move the two apart: a founder's willingness to part with stock is a different
+   * question from how full a world-gen market starts.
+   */
+  FOUNDING_STOCK_ANCHOR_FRAC: 0.75,
 } as const;

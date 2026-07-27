@@ -183,9 +183,10 @@ export interface BuildBurstSummary {
 /**
  * Whole-run migration throughput — people actually moved (conserved transfers only: colonist
  * delivery + edge diffusion, never growth/death terms). Reads most meaningfully on a land-tight
- * seed, where colony housing opens at r ≈ 1.0 with no spare headroom and growth must lean on the
- * crowd brake + migration push instead of housing absorbing it directly; on a generous-headroom
- * seed, low throughput here does not mean the push is broken — housing is doing the absorbing.
+ * seed, where colony housing is sized to the seed's own need with no spare level and growth must
+ * lean on the crowd brake + migration push instead of housing absorbing it directly; on a
+ * generous-headroom seed, low throughput here does not mean the push is broken — housing is doing
+ * the absorbing.
  */
 export interface MigrationThroughputSummary {
   /** Total people delivered by targeted colonist delivery across the run. */
@@ -196,6 +197,31 @@ export interface MigrationThroughputSummary {
   pulseCount: number;
   /** (totalColonists + totalDiffusion) / pulseCount; 0 when pulseCount is 0 (never NaN). */
   meanPerPulse: number;
+}
+
+// ── Colony founding stock ───────────────────────────────────────
+
+/**
+ * How well fed colonies founded during the run were at their first assessed month. A colony used to
+ * open holding nothing on every good; the founding-stock endowment ships it a slice of its founder's
+ * warehouses. Measured at founding because a handful of new systems cannot move any galaxy-wide
+ * average — `medianCover` medians over every market and would read green through this entirely.
+ */
+export interface FoundingStockSummary {
+  /** Systems that became `developed` after tick 0 — colonies founded in play. */
+  foundedCount: number;
+  /** Those that reached their first post-founding economy pulse before the run ended. */
+  sampledCount: number;
+  /** Mean, over sampled colonies, of DEMAND-WEIGHTED satisfaction at that pulse — a good counts for
+   *  what the colony actually needs of it, so no water weighs far heavier than no reactor cores.
+   *  Should sit near 1; near 0 is a colony arriving genuinely unprovisioned. */
+  meanOpeningSatisfaction: number;
+  /** Mean, over sampled colonies, of the convex `dissatisfaction` fold the unrest engine itself
+   *  reads. Reported alongside the weighted mean so the instrument and the simulation cannot drift
+   *  into disagreeing about whether a colony opened deprived. */
+  meanOpeningDissatisfaction: number;
+  /** Sampled colonies that opened below half satisfaction. Should read ~0. */
+  openingDeprivedCount: number;
 }
 
 // ── Region overview ─────────────────────────────────────────────
@@ -243,6 +269,8 @@ export interface HarnessResults {
   populationSnapshots: Array<Map<string, number>>;
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
   migrationThroughput: MigrationThroughputSummary;
+  /** How well provisioned colonies founded during the run were at their first assessed month. */
+  foundingStock: FoundingStockSummary;
   /** Faction-treasury health at simulation end — balances, income mix, funded fractions, shortfalls. */
   treasurySummary: TreasurySummary;
   /** Treasury balance trajectory sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */

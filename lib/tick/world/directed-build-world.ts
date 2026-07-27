@@ -54,6 +54,12 @@ export interface ProposalPersistenceUpdate {
   proposalPulses: number;
 }
 
+/** One founding-stock line: goods moved from the founding system's market to the colony's. */
+export interface FoundingStockLine {
+  goodId: string;
+  quantity: number;
+}
+
 /** One development: a controlled system flips to developed and receives a conserved colony seed + bundled housing. */
 export interface SystemDevelopment {
   systemId: string;
@@ -62,6 +68,12 @@ export interface SystemDevelopment {
   seedPop: number;
   /** Housing levels placed on the colony with the establishment (viable by construction). */
   housingLevels: number;
+  /**
+   * Goods the founding system sends along with the seed, so the colony opens stocked rather than at
+   * satisfaction 0 on everything. Conserved — every line is subtracted from `sourceSystemId`'s market
+   * and added to `systemId`'s. Empty when the source can spare nothing.
+   */
+  stockManifest: FoundingStockLine[];
 }
 
 export interface DirectedBuildWorld {
