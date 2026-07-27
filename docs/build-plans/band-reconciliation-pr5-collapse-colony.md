@@ -478,9 +478,12 @@ disk and ride this first commit — they are the design this plan implements, no
   Interpret cohort composition explicitly: cover medians span all markets, so a change in the
   living/dead mix moves them independently of supply — quote live-cohort figures and per-good
   production/demand alongside any cover claim.
-- [ ] Run the §8 **unrest/tax recalibration** (tax is now the only standing unrest floor and the
-  ceilings change every equilibrium) and the **treasury recalibration** (realized output rises →
-  production-tax income moves). Keep magnitude tests range-y.
+- [x] Run the §8 **unrest/tax recalibration** — **moot**: the ceilings are parked with Task 1, so no
+  equilibrium moved and there is nothing to re-derive. Resumes with that slice.
+- [x] Run the §8 **treasury recalibration** (realized output rises → production-tax income moves) —
+  **done and flat**: the planner unblocking and exporter-spare change do lift realized output, but
+  measured treasury figures stayed inside the existing ranges, so no constants or magnitude-test
+  bounds are touched. Recorded here so the step reads as measured, not skipped.
 - [ ] If striking share and stranded population have not moved decisively toward zero, stop and
   report rather than tuning constants to mask a structural miss — the amplifiers above are the
   hypothesis under test.

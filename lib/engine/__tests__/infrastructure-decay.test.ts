@@ -395,6 +395,26 @@ describe("computeSystemDecay — proportionate unrest collapse", () => {
     expect(popCap).toBeGreaterThan(0);
   });
 
+  it("keeps the part-occupied level a fractional population needs (ceil, not floor)", () => {
+    // 2.5 levels' worth of residents occupy THREE levels — the third is half full, not absent. Every
+    // other test here uses an exact multiple of POP_CENTRE_DENSITY, where the rounding is invisible;
+    // at 2.5 a floor settles on 2 levels (popCap 40 < 50) and strands exactly the population the
+    // floor exists to protect.
+    const population = 2.5 * POP_CENTRE_DENSITY;
+    let buildings: Record<string, number> = { [HOUSING_TYPE]: 5 };
+    let popCap = 5 * POP_CENTRE_DENSITY;
+    for (let run = 0; run < 40; run++) {
+      const r = computeSystemDecay(
+        { buildings, buildingIdleMonths: {}, collapseDebt: 0, population, unrest: 1, sellingFactor: fullSelling },
+        PROP,
+      );
+      buildings = { ...buildings, ...r.newCounts };
+      popCap = r.popCap;
+      expect(popCap).toBeGreaterThanOrEqual(population);
+    }
+    expect(buildings[HOUSING_TYPE]).toBe(3); // the part-occupied level survives
+  });
+
   it("fully sheds the housing of a system holding nobody", () => {
     // A genuinely abandoned colony still cleans up — the floor is occupancy, not a reserved level.
     let buildings: Record<string, number> = { [HOUSING_TYPE]: 3 };

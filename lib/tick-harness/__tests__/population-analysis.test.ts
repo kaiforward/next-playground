@@ -178,6 +178,19 @@ describe("summarizePopulation — striking share and stranded population", () =>
     expect(summary.strandedPopulation).toBe(300);
   });
 
+  it("counts a popCap left as float residue, not just an exact zero", () => {
+    // What STRANDED_POP_CAP is FOR. Decay arithmetic can leave a cap at 5e-7 rather than a clean 0,
+    // which is the same trap — no housing, no growth, no way out — but every other fixture here uses
+    // exactly 0, so the constant's magnitude is otherwise untested and any value in (0, 20) passes.
+    const systems = [
+      popSys("residue", 100, 5e-7),   // stranded: below the epsilon, effectively no housing
+      popSys("sliver", 100, 1e-3),    // not stranded: a real, if tiny, cap
+    ];
+    const summary = summarizePopulation(systems, 200, 0.65, BRAKE_END);
+    expect(summary.strandedCount).toBe(1);
+    expect(summary.strandedPopulation).toBe(100);
+  });
+
   it("does not count a system that still has a whole housing level", () => {
     // Only an effectively-zero cap qualifies — a system merely over its cap is overcrowded, which is
     // the normal state of a full world, not the absorbing trap.

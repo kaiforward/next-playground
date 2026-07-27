@@ -1044,12 +1044,15 @@ export function sizeColonyEstablish(
   const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
   const seedPop = Math.min(params.seedPop, habitableCap);
   const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
+  const work = params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE);
   // `Number.isFinite` and not `< 1` alone: every comparison against NaN is false, so a NaN
   // habitableSpace would slip past the viability guard and put NaN seedPop/housingLevels/work into a
-  // construction project and thence into a save, where JSON.stringify turns them into null.
-  if (!Number.isFinite(housingLevels) || !Number.isFinite(seedPop)) return null;
+  // construction project and thence into a save, where JSON.stringify turns them into null. `work`
+  // is checked on its own account rather than inferred from the other two — it also carries
+  // `establishWork` straight from the caller.
+  if (!Number.isFinite(housingLevels) || !Number.isFinite(seedPop) || !Number.isFinite(work)) return null;
   if (housingLevels < 1 || seedPop <= 0) return null;
-  return { seedPop, housingLevels, work: params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE) };
+  return { seedPop, housingLevels, work };
 }
 
 /**

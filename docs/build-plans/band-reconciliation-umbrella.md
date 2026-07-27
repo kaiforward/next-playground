@@ -105,10 +105,10 @@ immediately but stored unrest then declines at the calibrated recovery rate.
 
 - **Status: shipped** to `feat/band-reconciliation` at `1789c9a` (2026-07-27).
 - Consumes from PR2: `VACANCY_SLACK` (relief target 0.92 sits inside it — asserted in a test).
-- **Superseded by PR5 in two places:** the `+1` colony housing level (PR5 sizes housing to the seed
-  instead, putting colony establish inside the vacancy slack by construction), and the
-  regime-sensitive unrest integration (PR5 makes the rate regime demand-weighted and gives each
-  regime a ceiling — the worst-good fold plus unbounded gains is what parks the galaxy in collapse).
+- **Superseded by PR5:** the `+1` colony housing level (PR5 sizes housing to the seed instead,
+  putting colony establish inside the vacancy slack by construction). The regime-sensitive unrest
+  integration still stands as built — PR5 parked its replacement, so the worst-good fold plus
+  unbounded gains remains shipped behaviour until the demand-elasticity slice lands.
 
 ### PR5 — Collapse containment, colony survival, planner unblocking (§3, §4, §5, §2 suppression)
 
@@ -119,13 +119,12 @@ tier-1/2 goods at ~0 cover with 50–77% of markets pinned empty, mean unrest 0.
 developed systems striking**, 262 systems collapsed to ≈ 0 buildings, and **246 colonies holding
 population at `popCap ≈ 0`**. Six changes, all sim-side, in the order they cut the loop:
 
-1. **Demand-weighted rate regime** (§3) — the unrest rate selector folds on the share of a system's
-   demand that is badly supplied, not on its single worst good. The worst-good fold makes the fast
-   rate ambient in a galaxy whose own design assumes a chronic higher-tier deficit everywhere.
-2. **Regime unrest ceilings** (§3) — gains re-parameterised as `ceiling × decay`, so equilibrium is
-   `floor + ceiling × D` and each regime bounds where unrest can settle. Rationing's ceiling sits
-   below the strike threshold by construction. Taken independently of (1)'s outcome: it is a
-   structural guarantee, not a calibration.
+1. **Demand-weighted rate regime** (§3) — **PARKED, not shipped.** A summed-demand-share fold cannot
+   separate a water failure from the barren-chronic deficit at any threshold, measured against the
+   real 26-good basket. The replacement primitive is `docs/planned/demand-elasticity.md`; spec §3
+   points at it and it is its own slice.
+2. **Regime unrest ceilings** (§3) — **PARKED with (1).** The containment guarantee is a claim about
+   the pair; ceilings under the shipped worst-good fold would assert a protection that does not hold.
 3. **Proportionate unrest-collapse channel** (§5) — one level per run per *system* (not per building
    type), severity scaling with distance above θ, and housing floored at resident occupancy so
    `popCap = 0` with residents is unreachable.
@@ -139,8 +138,9 @@ population at `popCap ≈ 0`**. Six changes, all sim-side, in the order they cut
    on realized rather than latent output.
 
 Harness: striking share and stranded-population (`popCap ≈ 0` holding population) become headline
-metrics; the §8 collapse/colony assertions land here. Recalibration of unrest/tax and treasury
-(§8) belongs to this PR, since it is this PR that moves the equilibria.
+metrics, plus founding-stock opening satisfaction; the §8 collapse/colony assertions land here.
+Treasury recalibration (§8) belongs to this PR since it moves the equilibria — measured as flat, no
+retune needed. The unrest/tax half of §8 is parked with items 1–2, having nothing to recalibrate.
 
 - **Interim incoherence (until PR6):** the panels still speak percentages, not regimes, and still
   name Strike at the presentation boundary rather than 0.65.
@@ -167,8 +167,9 @@ unrest remains; align the Strike label with the real 0.65 production-suppression
 label Needs as the latest economy assessment. The regime re-base retires the legacy 95% “met”
 cutoff, so any active rationing is named consistently.
 
-- Consumes from PR5: the settled regime/unrest constants the chips name. Building the panels
-  against pre-PR5 behaviour would mean naming states the simulation is about to redefine.
+- Consumes from PR5: the collapse/colony behaviour the panels describe. The regime/unrest constants
+  the chips name are NOT settled — PR5 parked that fold pending demand-elasticity — so the chips are
+  built on the shipped worst-good regime, and re-basing them is that slice's business, not PR6's.
 
 ## Cross-PR interfaces (locked here so plans don't drift)
 

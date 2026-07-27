@@ -206,10 +206,8 @@ export async function runDirectedBuildProcessor(
     openByFaction.set(p.factionId, list);
   }
 
-  // Current counts per system, to turn a landed whole-level increment into an absolute write.
-  const currentBySystem = new Map<string, Record<string, number>>();
-  for (const r of rows) currentBySystem.set(r.systemId, r.buildings);
-  // Full rows by id — a landed colony reads its SOURCE's markets to size the founding endowment.
+  // Full rows by id — current building counts turn a landed whole-level increment into an absolute
+  // write, and a landed colony reads its SOURCE's markets to size the founding endowment.
   const rowBySystem = new Map(rows.map((r) => [r.systemId, r]));
 
   const landedBySystem = new Map<string, Map<string, number>>();
@@ -394,7 +392,7 @@ export async function runDirectedBuildProcessor(
   // Emit absolute new counts = current + landed whole levels (integer).
   const updates: BuildBuildingUpdate[] = [];
   for (const [systemId, byType] of landedBySystem) {
-    const current = currentBySystem.get(systemId);
+    const current = rowBySystem.get(systemId)?.buildings;
     for (const [buildingType, levels] of byType) {
       if (levels <= 0) continue;
       const cur = current?.[buildingType] ?? 0;
