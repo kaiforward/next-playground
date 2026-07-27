@@ -262,12 +262,15 @@ function effectiveBuildSystems(
  * persistence-gated for `planFactionProposals`). Per (system, good) it takes the larger of the
  * provisioning-margin capacity gap (`max(0, (1 + PROVISION_MARGIN)·demand − capacity)`) and the
  * squeeze-feedback gap, then nets the faction's reachable exporter spare against it before advancing
- * persistence and rate-capping the residual. Suppressed capacity is latent spare for neighbours but
- * never a local gap.
+ * persistence and rate-capping the residual. Suppression is scoped to the shortfall it can actually
+ * explain: it silences the feedback gap only where the system already holds capacity in that good,
+ * and never suppresses the capacity gap, so a striking world can still be given the industry it has
+ * none of.
  *
  * Cancellation is flow-aware (docs/planned/economy-colony-bootstrapping.md §3.1). An exporter's spare
- * is its sustainable export RATE (`production − demand`, or latent `capacity − demand` when suppressed)
- * — not a stock pile, so a neighbour merely holding and draining stock never cancels a gap. Per good,
+ * is its sustainable export RATE (`production − demand`) measured on REALIZED output, so capacity
+ * idled by a strike never cancels someone else's gap — it is not a stock pile either, so a neighbour
+ * merely holding and draining stock never cancels a gap. Per good,
  * the reachable exporters' total spare is netted across all reachable gaps at once —
  * `coveredFraction = min(1, Σ spare / Σ reachable-gap)` (first cut per §7.6) — so one exporter's spare
  * cannot fully cover two competing colonies; each reachable gap keeps its uncovered residual and a gap
@@ -292,9 +295,14 @@ function assessStructuralDeficits(
       const demand = Math.max(0, good.demand);
       const capacity = Math.max(0, good.capacityProduction);
       const production = Math.max(0, good.production ?? good.capacityProduction);
-      const suppressed = good.productionSuppressed === true;
-      const capacityGap = suppressed ? 0 : Math.max(0, (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demand - capacity);
-      const feedbackGap = !suppressed && !good.logisticsFundingBound && (good.squeezePulses ?? 0) >= DIRECTED_BUILD.PERSISTENCE_PULSES
+      // A strike explains a shortfall only where the system already holds capacity in the good: with
+      // no capacity, output would be zero at any staffing level, so the gap is structural whatever
+      // the unrest — and refusing to propose it is what leaves a striking world permanently unable
+      // to build its way out. The capacity gap is therefore unconditional; `capacity = 0` is its
+      // ordinary case, not an exception.
+      const strikeExplains = good.productionSuppressed === true && capacity > 0;
+      const capacityGap = Math.max(0, (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demand - capacity);
+      const feedbackGap = !strikeExplains && !good.logisticsFundingBound && (good.squeezePulses ?? 0) >= DIRECTED_BUILD.PERSISTENCE_PULSES
         ? demand * (1 - clamp(good.satisfaction ?? 1, 0, 1))
         : 0;
       const gross = Math.max(capacityGap, feedbackGap);
@@ -304,9 +312,10 @@ function assessStructuralDeficits(
         candidatesByGood.set(good.goodId, candidates);
       }
 
-      const spare = suppressed
-        ? Math.max(0, capacity - demand)
-        : Math.max(0, production - demand);
+      // Spare is what a system actually produces above its own needs. Capacity standing idle behind a
+      // strike is not export anyone can plan against — counting it overstates the galaxy's spare and
+      // cancels real gaps against supply that never ships.
+      const spare = Math.max(0, production - demand);
       if (spare > 0) {
         const exporters = exportersByGood.get(good.goodId) ?? [];
         exporters.push({ systemId: system.systemId, spare });

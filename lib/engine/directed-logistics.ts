@@ -43,6 +43,14 @@ export function classifyMarketState(stock: number, targetStock: number): MarketC
  * suppressed or input-starved former exporters on the ordinary-donor path.
  * One definition, shared by the logistics matcher and the build planner so both read
  * "surplus" alike.
+ *
+ * `productionSuppressed` here is NOT the same test the build planner's structural
+ * assessment makes, and the two must not be collapsed into one. This is a DRAWDOWN
+ * decision — may we treat this system as a free-flowing exporter and ship it down past
+ * its anchor? — and a struck producer is correctly refused, because the output backing
+ * that reserve has stopped arriving. The planner asks a BUILD question — does a strike
+ * explain this shortfall, so that building more capacity would be the wrong answer? —
+ * which is only ever true where the system already holds capacity in the good.
  */
 export function surplusDrawable(
   stock: number,

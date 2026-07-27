@@ -1275,27 +1275,63 @@ describe("planFactionProposals: persistent structural policy", () => {
     expect(plan.persistenceUpdates).toEqual([{ systemId: "P", goodId: "ore", proposalPulses: 0 }]);
   });
 
-  it("uses the larger of capacity and squeeze feedback gaps, excluding funding-bound and suppressed feedback", () => {
+  it("uses the larger of capacity and squeeze feedback gaps, excluding funding-bound feedback", () => {
     const active = planFactionProposals([policySystem(policyGood({ demand: 10, production: 10, capacityProduction: 11, squeezePulses: 2, satisfaction: 0 }))], () => 1, [], DEV_REFS);
     const ore = active.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
     expect(ore?.value).toBeCloseTo(4, 6); // max(0, 10), not 10 + 0
 
     const fundingBound = planFactionProposals([policySystem(policyGood({ production: 10, capacityProduction: 11, squeezePulses: 2, satisfaction: 0, logisticsFundingBound: true }))], () => 1, [], DEV_REFS);
     expect(fundingBound.persistenceUpdates[0]?.proposalPulses).toBe(0);
-
-    const suppressed = planFactionProposals([policySystem(policyGood({ production: 0, capacityProduction: 0, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))], () => 1, [], DEV_REFS);
-    expect(suppressed.persistenceUpdates[0]?.proposalPulses).toBe(0);
   });
 
-  it("nets reachable actual and suppressed latent spare before persistence", () => {
+  it("still finds a structural deficit at a striking system with no capacity in the good", () => {
+    // The lock this replaces: a strike anywhere at the system zeroed the need for EVERY good there,
+    // including ones it has never produced — so a struck world could never be given the industry that
+    // would end the shortage. With no capacity, output would be zero at any staffing level, so the
+    // gap is structural and a strike explains none of it.
+    const plan = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 0, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      () => 1, [], DEV_REFS,
+    );
+    // capacityGap = 1.1 × 10 − 0 = 11, rate-capped to 11 × 0.4.
+    const ore = plan.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
+    expect(ore?.value).toBeCloseTo(4.4, 6);
+    expect(plan.persistenceUpdates[0]?.proposalPulses).toBe(2);
+  });
+
+  it("proposes only the shortfall a striking system's own capacity does not already cover", () => {
+    // Capacity at 60% of demand: the strike explains the 60% that is not being produced right now,
+    // but not the 40% the system could never have made — that part is still proposed.
+    const short = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 6, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      () => 1, [], DEV_REFS,
+    );
+    const ore = short.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
+    expect(ore?.value).toBeCloseTo((1.1 * 10 - 6) * 0.4, 6); // the missing capacity only
+
+    // Capacity already past the provisioning margin: nothing structural is missing, and the squeeze
+    // feedback IS explained by the strike — so this system proposes nothing at all. Without the
+    // feedback exclusion its satisfaction-0 markets would read as a 10-unit gap.
+    const covered = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 12, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      () => 1, [], DEV_REFS,
+    );
+    expect(covered.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
+    expect(covered.persistenceUpdates[0]?.proposalPulses).toBe(0);
+  });
+
+  it("nets only REALIZED exporter spare before persistence — a striking exporter cancels nothing", () => {
     const sink = policySystem(policyGood(), { systemId: "sink" });
     const actualExporter = policySystem(policyGood({ demand: 0, production: 20, capacityProduction: 20 }), { systemId: "actual", slotCap: emptyResourceVector() });
     const actual = planFactionProposals([sink, actualExporter], () => 1, [], DEV_REFS);
     expect(actual.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(0);
 
+    // Same capacity, but struck and producing nothing. Counting its latent capacity as spare
+    // cancelled the sink's gap against supply that never shipped; only realized output counts, so
+    // the sink's deficit now survives to persistence.
     const latentExporter = policySystem(policyGood({ demand: 0, production: 0, capacityProduction: 20, productionSuppressed: true }), { systemId: "latent", slotCap: emptyResourceVector() });
     const latent = planFactionProposals([sink, latentExporter], () => 1, [], DEV_REFS);
-    expect(latent.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(0);
+    expect(latent.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(2);
   });
 
   it("requires two residual assessments, saturates at two, and resets on recovery", () => {

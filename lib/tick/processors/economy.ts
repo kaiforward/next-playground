@@ -15,6 +15,7 @@ import type {
   EconomyProcessorParams,
   EconomyWorld,
   MarketUpdate,
+  MarketView,
 } from "@/lib/tick/world/economy-world";
 import {
   dissatisfaction,
@@ -113,14 +114,20 @@ export async function runEconomyProcessor(
   // Read stored unrest from the previous tick to derive per-system strike multipliers.
   const unrestBySystem = await world.getUnrest(systemIds);
   const productionSuppressBySystem = new Map<string, number>();
-  const productionSuppressedBySystem = new Map<string, boolean>();
   for (const systemId of systemIds) {
     const productionSuppress =
       strikeMultiplier(unrestBySystem.get(systemId) ?? 0, strikeParams) *
       (maintenanceMalusBySystem?.get(systemId) ?? 1);
     productionSuppressBySystem.set(systemId, productionSuppress);
-    productionSuppressedBySystem.set(systemId, productionSuppress < 1);
   }
+  // The multiplier is a property of the SYSTEM (its unrest and maintenance funding), but the flag it
+  // raises is a property of the MARKET: a good with no output of its own has nothing to suppress, so
+  // the malus reduces it by definition zero. Recording the flag per system instead marked every good
+  // at a striking world as suppressed, including ones it has never produced — which the build planner
+  // reads as "a strike explains this shortfall" and so refuses to propose the capacity that would end
+  // it. A striking world may be a bad exporter; it is not thereby well supplied.
+  const marketSuppressed = (m: MarketView): boolean =>
+    (productionSuppressBySystem.get(m.systemId) ?? 1) < 1 && (m.baseProductionRate ?? 0) > 0;
 
   // Build tick entries via the shared market-tick builder. Government modifiers
   // are resolved per-market (a shard slice contains systems owned by different
@@ -174,7 +181,7 @@ export async function runEconomyProcessor(
       realizedProductionRate: Number.isFinite(realizedProductionRate) && realizedProductionRate >= 0
         ? realizedProductionRate
         : 0,
-      productionSuppressed: productionSuppressedBySystem.get(m.systemId) ?? false,
+      productionSuppressed: marketSuppressed(m),
       squeezePulses,
     };
   });
