@@ -118,7 +118,7 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   threshold, reused), plus Glut as the producer-side exception, defined on the **isolated selling term alone**
   (`sellingFactor + slack < 1`), with **precedence**: understaffed and input-short classify first
   (their own §6 states) — only a fully-staffed, input-satisfied producer can read Glut, and the
-  selling factor contains no labour or input term to conflate them. Regime transitions carry an enter/exit band (`RATION_EXIT_EPS`, calibrated in PR5, around the
+  selling factor contains no labour or input term to conflate them. Regime transitions carry an enter/exit band (`RATION_EXIT_EPS`, calibrated with the presentation pass, around the
   relevant boundary) so systems parked at a boundary don't flap chips or spam the future alert
   feed. §6 makes the UI speak them.
 
@@ -151,6 +151,22 @@ recalibration.
   unrest/treasury problem; a multi-month strike outlasts any persistence filter and would
   otherwise mint permanent capacity that gluts when the strike ends). What remains — genuine
   capacity shortfalls, yield drift, event damage — builds.
+- **The suppression exclusion is scoped to the shortfall suppression actually explains, per
+  (system, good).** Capacity a strike does not possess cannot be the thing a strike is suppressing:
+  the exclusion applies only to the gap between what a system's built capacity *could* produce and
+  what it *is* producing, and never to the gap between demand and full capacity. A system whose
+  full-output capacity is below demand — including the ordinary case of **zero capacity in that
+  good** — is a genuine structural shortfall and remains buildable however restive it is. Stated as
+  one rule: compare demand against full-staffed capacity; build the difference when demand exceeds
+  it, and decline only when capacity covers demand while realized output does not. The
+  system-wide read is the failure mode this replaces — a single striking industry otherwise zeroes
+  every good's need at that system, so a colony with no extractor can never be proposed the
+  extractor whose absence is causing the shortage that is causing the strike. That loop has no
+  exit and it closes over any system in the strike regime.
+- **Exporter spare is realized, not latent**: the spare a suppressed system offers the matcher and
+  the deficit netting is its actual output above demand, never its un-struck capacity. Planning
+  against output that is not being produced overstates galaxy-wide spare and suppresses building
+  at the importers that need it.
 - **Response pacing** (kills the burst-build): a residual must persist 2 consecutive pulses before
   it is proposable, and each pulse proposes at most `BUILD_RATE_CAP` (~⅓–½, calibrated) of a good's
   outstanding gap — the correction ramps over 2–3 months. Distance-weighting the spare pool is a
@@ -198,6 +214,35 @@ recalibration.
   test proving that current Needs becomes Supplied immediately while stored unrest then declines
   at the designed rate.
 
+- **The rate-selecting regime is demand-weighted, not worst-good.** The regime that picks the
+  accumulation rate is folded from how much of a system's *demand* is badly supplied — the share of
+  total demand sitting in goods below the Shortage satisfaction threshold — not from whether any
+  single demanded good is short. A worst-good fold makes the fast rate ambient rather than
+  exceptional: the barren-galaxy design guarantees a chronic higher-tier deficit at nearly every
+  system (`POPULATION_PARAMS` names it as an unavoidable D ≈ 0.4), so a mining colony with full
+  food and water and empty luxuries is graded identically to a system in famine. Demand weighting
+  already exists on the *magnitude* term D and is exactly the right instrument here: for an
+  ordinary population food and water are ~76% of the basket and luxuries ~3%, so empty food shelves
+  reach the threshold immediately and a luxury drought never does. It also composes with the
+  skilled baskets for free — luxuries appear only in the engineer basket, so an engineer-heavy
+  system genuinely does put luxuries at a demand share that can trip the fast rate, while a mining
+  colony does not. Requiring a per-good "vital" list is explicitly rejected: it is a magic list, and
+  it cannot express that same good mattering differently to different populations.
+
+- **Each regime bounds where unrest settles.** The accumulation gains are re-parameterised as
+  `gain = ceiling × decay`, so each regime carries a named ceiling and the equilibrium under
+  sustained dissatisfaction is `floor + ceiling × D`. The integrator's shape is untouched (the
+  prohibition above still holds — this changes what the gains *mean*, not how they are applied),
+  the tax floor remains the exact equilibrium at D = 0, and the Shortage ceiling stays strictly
+  above the Rationing one. Without a ceiling the gains are free parameters whose ratio to the
+  relaxation rate silently sets the equilibrium: at the shipped values the Shortage equilibrium is
+  `floor + 2D`, so D ≈ 0.35 — below the chronic deficit the barren galaxy takes for granted —
+  settles a system above the 0.75 infrastructure-collapse threshold, and Rationing at `floor + D`
+  is only twice as forgiving. Chronic scarcity in goods that barely matter must not be able to
+  reach a regime reserved for catastrophe; the ceilings are what make that a guarantee rather than
+  a calibration accident. Rationing's ceiling sits below the strike threshold by construction —
+  asserted in a test.
+
 - **Growth**: `rate × pop × (1 − D) × crowd(r)` where `r = pop ÷ popCap`. `crowd(r)` = 1 while
   `r ≤ 1.0`, braking smoothly to 0 at `r = CROWD_BRAKE_END` (initial 1.15). Population may exceed
   popCap freely; the logistic headroom term is gone. Decline channels unchanged (unrest-scaled
@@ -207,13 +252,13 @@ recalibration.
   existing overshoot-repel coupling (verified shipped: attractiveness goes negative on overshoot
   and destination headroom blocks inflow at full systems). Full systems slow, grumble, and export
   people — **land exhaustion drives colonisation**. Migration *destinations* stay capped at popCap
-  (people move to where housing exists — coherent), and to keep the galaxy's absorption capacity
-  real now that the 25% pre-provision is retired, **colony establishment bundles one housing level
-  beyond the seed's need — where habitable land permits** — so new worlds open with genuine
-  headroom (the sizing helper clamps housing to habitable capacity, so a land-tight seed opens at
-  r ≈ 1.0 and relies on the crowd brake + migration push instead); the harness gains a
-  migration-throughput metric (§8, read on land-tight seeds specifically) and the relief target
-  (0.92) is the calibration lever if galaxy-wide migration turns construction-latency-bound.
+  (people move to where housing exists — coherent), and **colony establishment sizes housing to the
+  seed's own need — no bundled spare level** (§5 carries the reasoning); a new colony opens at the
+  occupancy its seed warrants and earns its second level from the relief valve like any other
+  system. The harness gains a migration-throughput metric (§8, read on land-tight seeds
+  specifically); the relief target (0.92) is the calibration lever if galaxy-wide migration turns
+  construction-latency-bound, and the idle buffer is the fallback lever if the tighter opening
+  absorption proves too slow.
 - **The overshoot-death channel is rescoped to the collapse regime**: it fires only while
   `unrest > the strike threshold`. Today "pop > popCap" is *synonymous* with housing rot (growth
   and migration both hard-cap at popCap), so the death term's trigger doubled as rot detection;
@@ -259,6 +304,26 @@ recalibration.
 - **Seed stocks stop inheriting the retired floor**: world-gen retains a separate
   `INITIAL_RESERVE_ANCHOR_FRAC = 0.75` floor. This is initial strategic reserve policy, not the
   emergency ration threshold; new markets must not seed at only two cycles.
+- **Colonies founded in play get the same courtesy, paid for by their founder.** World-gen seeds its
+  starting markets with a reserve; `colony_establish` seeds nothing, so a landed colony opens at
+  stock 0 on every good — maximum shortage on its first assessment, months before its first
+  extractor can finish or a route can reach it. It accumulates unrest the whole time and, under the
+  shipped constants, is destroyed before the question "is this colony viable?" is ever asked. The
+  establishment therefore carries a **founding stock endowment**: cover on the goods the seed
+  population actually consumes, **drawn from the founding system's own stock** and conserved exactly
+  as the seed population already is (`moved = min(want, what the source can spare)`), respecting the
+  same drawable floor logistics uses so provisioning a colony cannot ration the founder. Not minted;
+  the founder feels the cost.
+  - **Sized against the colony's real demand basket, with no vital-goods list.** Two settlers demand
+    overwhelmingly food and water and trace luxuries, so the shipment comes out weighted correctly
+    on its own. A founder that genuinely holds none of something sends none, and the colony opens
+    short on it — which the demand-weighted regime fold above correctly grades as a grumble rather
+    than a famine. Colonies inheriting their founder's poverty is desirable texture.
+  - **This buys a countdown, not immunity.** If neither local production nor a trade route arrives
+    before the stores run out, the colony still fails — on the merits, and late enough that the
+    failure is informative. Cover is calibrated against the time to stand up a first extractor, so a
+    colony doing the right thing survives to reap it, and the founder's cost is a real brake on
+    founding more colonies than a faction can provision.
 - **Decision — shared scarcity ramp**: below `rationStock`, civilian consumption and industrial
   input draws use the same factor. The shipped coupled tick remains deterministic and
   recipe-topological rather than promising a pro-rata allocation pass: civilian delivery occurs
@@ -275,8 +340,9 @@ recalibration.
 - **Idle buffer 6 → 12 reference-months.** Idle now means genuinely unneeded, so the buffer's only
   jobs are how long over-capacity lingers and how long a dead colony's infrastructure survives.
 - **Big-stack bias is cured by honest signals, not new machinery** — the whole-level trigger,
-  one-level-per-buffer pacing, unrest-collapse channel (θ = 0.75), academy/complex utilisation
-  reads, and single-level overshoot protection all stay exactly as built.
+  one-level-per-buffer pacing, academy/complex utilisation reads, and single-level overshoot
+  protection all stay exactly as built. The unrest-collapse channel keeps its threshold and its
+  purpose but is rescoped below.
 - **Couplings recorded**: maintenance funding's `bufferScale` (purse Plan 2) now governs
   glut-pruning speed and dead-colony persistence rather than a background treadmill — re-checked in
   §8. The decay-signal invariant lives here too: **the producer decay/Glut signal must never read
@@ -291,16 +357,44 @@ recalibration.
   `capacityUsed("pop_cap") = min(count, population / POP_CENTRE_DENSITY × (1 + VACANCY_SLACK))` — so
   it cannot distinguish the two, and every mechanism that builds housing ahead of demand collides
   with it.
-- **Two collisions are on record.** Relief housing resolves it by construction: sizing to
-  `RELIEF_TARGET × (1 + VACANCY_SLACK) ≥ 1` keeps the sized result inside the vacancy slack, so decay
-  never reads it as idle. Colony-establish headroom does not — a colony opening at seed population 2
-  with two housing levels reads `floor(2 − 0.11) = 1` idle level from the moment it lands, and sheds
-  it after the idle buffer unless colonist delivery fills the colony to roughly 18 people first. The
-  trapped-colony population — 250 of 255 systems above the 0.75 collapse threshold tearing down their
-  own housing — is the same collision at scale.
-- **Resolution: the idle channel stops applying to housing.** Housing keeps its own corrections —
-  the relief valve's own sizing rule, and the unrest-collapse channel, which still tears housing down
-  when a system genuinely fails. Production capacity keeps the idle channel exactly as built.
+- **Every housing-sizing site resolves the collision by construction — none of them is exempted.**
+  The idle test never fires on a stack whose spare capacity is under one whole level, so any sizing
+  rule landing inside the vacancy slack is permanently safe at every stack size. Relief housing
+  already satisfies it (`RELIEF_TARGET × (1 + VACANCY_SLACK) ≥ 1`). Colony establish is brought
+  inside the same rule by **sizing housing to the seed's own need and dropping the bundled spare
+  level**: `ceil(seedPop ÷ POP_CENTRE_DENSITY)` levels leaves under a whole level spare at every
+  seed size, where the previous `+1` had a colony opening at seed population 2 read
+  `floor(2 − 0.11) = 1` idle level from the moment it landed, shed after the idle buffer unless
+  colonist delivery reached roughly 18 pop first. Containment is asserted across both sites.
+  Exempting housing from the idle test was considered and rejected: it treats one badly-sized site
+  as a defect in a rule that is correct, and it would leave genuinely abandoned housing unpruned.
+- **The cost of dropping the spare level is opening absorption, and it is bounded** — a fresh colony
+  holds one level rather than two, and the relief valve adds the next within a pulse of the trigger.
+  The real tension is lumpiness: a 2-pop seed against a 20-pop housing unit means no colony can open
+  looking anything but empty. Sizing the *seed* against the housing unit is the deeper fix and is
+  deliberately deferred — it changes colonisation pacing and needs a founding policy. The idle
+  buffer is the fallback lever if the tighter opening absorption proves too slow.
+- **The trapped-colony population is not this collision at scale.** The idle channel takes a year to
+  bite and removes only the spare level; the unrest-collapse channel removes *occupied* housing in a
+  single run. The rescope below is what addresses it.
+- **The unrest-collapse channel is rescoped to be proportionate, and never to strand a population.**
+  It keeps θ = 0.75 and its purpose — the violent, discrete infrastructure collapse of a genuinely
+  failed system — but three properties change:
+  - **One level per run for the system, not one per building type.** The shipped channel iterates
+    building types and sheds a level from each, so teardown speed scales with how *varied* a
+    system's built base is: a ten-type world loses ten levels a month for the same unrest that costs
+    a one-type world a single level. Collapse must not punish development. The level is shed from
+    the least-used eligible type first (deterministic tie-break), so collapse eats the least-needed
+    thing first.
+  - **Severity scales with distance above the threshold** — unrest just over θ is a slow bleed,
+    total revolt is fast. The shipped cliff treats 0.76 and 1.00 identically, turning a threshold
+    crossing into immediate catastrophe with no observable ramp and nothing to react to.
+  - **Housing is floored at the occupancy its residents need.** A failing system may lose its
+    industry, its academies and its complexes; it may not be demolished out from under the people
+    living in it. `popCap = 0` with residents present is a near-absorbing trap — `crowd(r)` reads
+    fully crowded so growth is exactly zero, overshoot-death fires, and the relief valve cannot
+    rebuild until the system is fed, which it cannot become without the capacity just torn down.
+    Collapse must remain a decline that can be arrested, not a state with no exit.
 
 ## 6. Presentation contract — the panels speak regimes
 
@@ -362,9 +456,15 @@ Content contract only; concrete layout gets the house collaborative wireframe pa
 | `BUILD_RATE_CAP` | ~0.4 | Max fraction of a good's gap proposed per pulse |
 | `idleBufferMonths` | 12 (was 6) | Sustained-idle buffer |
 | housing pressure trigger / target | 0.95 / 0.92 | Autonomic housing relief band (target inside the vacancy slack) |
-| `RATION_EXIT_EPS` | calibrated in PR5 | Regime-chip enter/exit hysteresis around rationing |
+| `RATION_EXIT_EPS` | calibrated with the presentation pass | Regime-chip enter/exit hysteresis around rationing |
 | overshoot-death gate | strike threshold (0.65) | Unrest above which the overshoot-death term fires (collapse regime only) |
-| colony housing margin | +1 level | Housing bundled beyond seed need — new worlds open with real headroom |
+| colony housing sizing | `ceil(seedPop ÷ POP_CENTRE_DENSITY)` | No bundled spare level — inside the vacancy slack by construction (§5) |
+| shortage demand share | calibrated | Share of a system's demand in badly-supplied goods that selects the fast unrest rate (§3) |
+| unrest ceiling — Rationing | below the strike threshold | Equilibrium `floor + ceiling × D`; asserted under 0.65 (§3) |
+| unrest ceiling — Shortage | calibrated, > Rationing's | Only genuine famine may approach the collapse regime (§3) |
+| collapse severity ramp | 0 at θ → full at unrest 1 | Distance above θ scales teardown speed; replaces the cliff (§5) |
+| collapse teardown rate | 1 level per run per SYSTEM | Was one per building type — no longer scales with built variety (§5) |
+| founding stock cover | ≈ time to stand up a first extractor | Colony endowment drawn from the founder's stock (§4) |
 
 Constant dependencies asserted in tests compare the logistics trigger in demand cycles against
 `RATION_COVER`; and the decay/Glut
@@ -389,6 +489,17 @@ flow-only invariant, §1/§5).
   Also assert: Supplied recovery is faster than Rationing recovery; Shortage accumulates faster
   than shallow Rationing; tax equilibria remain ordered and intentional; one shortage pulse is
   recoverable; logistics delivered after assessment changes satisfaction on the next assessment.
+- **Additional targets for the collapse/colony pass**: a system supplied in its high-demand goods
+  and short only in low-demand ones stays off the fast unrest rate and settles below the strike
+  threshold; sustained Rationing cannot reach the 0.75 collapse threshold at any tax level; a
+  collapsing system's teardown rate is independent of how many building types it has built; a
+  system in collapse never reaches `popCap = 0` while it holds population; a system with zero
+  capacity in a good receives build proposals for it regardless of its unrest; a striking system
+  contributes only its realized output to exporter spare; and a colony founded into a supplied
+  region survives its opening months without entering the collapse regime while one founded beyond
+  logistics reach still fails. Track the **striking share** and the **stranded-population count**
+  (population with `popCap ≈ 0`) as headline health metrics — both were the loudest signal that the
+  shipped constants were compounding rather than correcting.
 - **Regime-share metric**: add % of (system, good) pairs per regime to the simulate report — the
   permanent instrument for this pass and future economy work.
 - **Further harness updates**: the population saturation watch inverts meaning (pop ≈ popCap
