@@ -216,7 +216,13 @@ function formatTable(results: HarnessResults): string {
       // exists and land is available means the growth valve is blocked, not that land ran out.
       ["Braked (valve check)", String(pop.brakedCount)],
       ["Emptied (≤1)", String(pop.emptiedCount)],
-      ["Striking (≥threshold)", String(pop.strikingCount)],
+      // Count and share together: the count alone reads differently as the galaxy grows, and
+      // striking is meant to be a transient minority rather than the ambient state.
+      ["Striking (≥threshold)", `${pop.strikingCount} (${(pop.strikingShare * 100).toFixed(1)}%)`],
+      // Population holding on at popCap ≈ 0 — housing torn out from under residents. Near-absorbing:
+      // growth is exactly zero at popCap 0, overshoot-death fires, and the relief valve cannot
+      // rebuild until the system is fed. Should read 0; anything else is people who cannot be helped.
+      ["Stranded (popCap ≈ 0)", `${pop.strandedCount} (${fmtNum(pop.strandedPopulation)} pop)`],
       ["Ping-pong (migration)", String(pingPong)],
     ];
     for (const [label, value] of pRows) {
@@ -225,10 +231,9 @@ function formatTable(results: HarnessResults): string {
   }
 
   // Migration throughput (whole run) — reads most meaningfully on a land-tight seed, where colony
-  // housing opens at r ≈ 1.0 with no spare headroom (habitable-space-clamped bundling) and growth
-  // must lean on the crowd brake + migration push rather than housing absorbing it directly; on a
-  // generous-headroom seed, a low number here does not mean the push is broken — housing is doing
-  // the absorbing instead.
+  // housing is sized to the seed's own need with no spare level, so growth must lean on the crowd
+  // brake + migration push rather than housing absorbing it directly; on a generous-headroom seed, a
+  // low number here does not mean the push is broken — housing is doing the absorbing instead.
   {
     const mt = results.migrationThroughput;
     lines.push("");

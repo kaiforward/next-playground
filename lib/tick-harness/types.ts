@@ -183,9 +183,10 @@ export interface BuildBurstSummary {
 /**
  * Whole-run migration throughput — people actually moved (conserved transfers only: colonist
  * delivery + edge diffusion, never growth/death terms). Reads most meaningfully on a land-tight
- * seed, where colony housing opens at r ≈ 1.0 with no spare headroom and growth must lean on the
- * crowd brake + migration push instead of housing absorbing it directly; on a generous-headroom
- * seed, low throughput here does not mean the push is broken — housing is doing the absorbing.
+ * seed, where colony housing is sized to the seed's own need with no spare level and growth must
+ * lean on the crowd brake + migration push instead of housing absorbing it directly; on a
+ * generous-headroom seed, low throughput here does not mean the push is broken — housing is doing
+ * the absorbing.
  */
 export interface MigrationThroughputSummary {
   /** Total people delivered by targeted colonist delivery across the run. */

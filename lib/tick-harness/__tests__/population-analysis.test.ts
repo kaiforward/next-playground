@@ -138,3 +138,55 @@ describe("summarizePopulation", () => {
     expect(Number.isFinite(summary.meanOccupancy)).toBe(true);
   });
 });
+
+describe("summarizePopulation — striking share and stranded population", () => {
+  const BRAKE_END = CROWDING.BRAKE_END;
+
+  it("reports striking as a share of systems alongside the raw count", () => {
+    // The count alone reads differently as the galaxy grows: 1 of 4 and 1 of 400 are not the same
+    // galaxy, and striking is meant to be a transient minority rather than the ambient state.
+    const systems = [
+      popSys("calm-a", 100, 1000, 0.1),
+      popSys("calm-b", 100, 1000, 0.1),
+      popSys("calm-c", 100, 1000, 0.64),  // just under the threshold
+      popSys("striking", 100, 1000, 0.65), // exactly at it — inclusive
+    ];
+    const summary = summarizePopulation(systems, 400, 0.65, BRAKE_END);
+    expect(summary.strikingCount).toBe(1);
+    expect(summary.strikingShare).toBeCloseTo(0.25, 6);
+  });
+
+  it("reports 0 share, not NaN, for an empty galaxy", () => {
+    const summary = summarizePopulation([], 0, 0.65, BRAKE_END);
+    expect(summary.strikingShare).toBe(0);
+    expect(Number.isFinite(summary.strikingShare)).toBe(true);
+    expect(summary.strandedCount).toBe(0);
+    expect(summary.strandedPopulation).toBe(0);
+  });
+
+  it("counts population stranded at popCap ≈ 0, and how many people are caught there", () => {
+    // The trap the collapse channel's housing floor closes: residents with no housing left cannot
+    // grow (crowdFactor reads fully crowded at popCap 0) and cannot be rebuilt for until fed.
+    const systems = [
+      popSys("stranded-a", 240, 0),      // housing torn out from under 240 people
+      popSys("stranded-b", 60, 0),
+      popSys("abandoned", 0, 0),         // no housing AND nobody home — not stranded, just empty
+      popSys("healthy", 500, 1000),
+    ];
+    const summary = summarizePopulation(systems, 800, 0.65, BRAKE_END);
+    expect(summary.strandedCount).toBe(2);
+    expect(summary.strandedPopulation).toBe(300);
+  });
+
+  it("does not count a system that still has a whole housing level", () => {
+    // Only an effectively-zero cap qualifies — a system merely over its cap is overcrowded, which is
+    // the normal state of a full world, not the absorbing trap.
+    const systems = [
+      popSys("overcrowded", 1200, 1000),
+      popSys("tiny-cap", 100, 20),
+    ];
+    const summary = summarizePopulation(systems, 1300, 0.65, BRAKE_END);
+    expect(summary.strandedCount).toBe(0);
+    expect(summary.strandedPopulation).toBe(0);
+  });
+});

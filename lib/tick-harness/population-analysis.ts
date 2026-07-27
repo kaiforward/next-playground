@@ -86,7 +86,23 @@ export interface PopulationSummary {
   emptiedCount: number;
   /** Systems with unrest ≥ strikeThreshold (striking). */
   strikingCount: number;
+  /** Striking systems as a share of those counted, in [0,1]. The count alone reads differently as
+   *  the galaxy grows — 300 striking of 400 and 300 of 3000 are not the same galaxy. */
+  strikingShare: number;
+  /** Systems holding population with effectively no housing left (popCap ≈ 0). The trap the collapse
+   *  channel's housing floor closes: with popCap 0 the crowd brake reads fully crowded so growth is
+   *  exactly zero, overshoot-death fires, and the relief valve cannot rebuild until the system is
+   *  fed — which needs the capacity just demolished. Should read ~0; anything else is a population
+   *  that cannot grow, shrink into safety, or be helped. */
+  strandedCount: number;
+  /** Total population held in those stranded systems — how many people are actually caught, which
+   *  the count alone does not say. */
+  strandedPopulation: number;
 }
+
+/** popCap at or below this counts as "no housing left" — popCap is a whole-level multiple, so this
+ *  is comfortably below one level rather than an arbitrary epsilon. */
+const STRANDED_POP_CAP = 1e-6;
 
 export function summarizePopulation(
   systems: TickSystem[],
@@ -103,11 +119,17 @@ export function summarizePopulation(
   let occupancyCount = 0;
   let emptiedCount = 0;
   let strikingCount = 0;
+  let strandedCount = 0;
+  let strandedPopulation = 0;
 
   for (const s of systems) {
     totalEnd += s.population;
     unrestSum += s.unrest;
     if (s.unrest > maxUnrest) maxUnrest = s.unrest;
+    if (s.population > 0 && s.popCap <= STRANDED_POP_CAP) {
+      strandedCount++;
+      strandedPopulation += s.population;
+    }
     if (s.popCap > 0) {
       if (s.population >= s.popCap * 0.98) saturatedCount++;
       if (crowdFactor(s.population, s.popCap, crowdBrakeEnd) <= 0.25) brakedCount++;
@@ -130,5 +152,8 @@ export function summarizePopulation(
     meanOccupancy: occupancyCount > 0 ? occupancySum / occupancyCount : 0,
     emptiedCount,
     strikingCount,
+    strikingShare: systems.length > 0 ? strikingCount / systems.length : 0,
+    strandedCount,
+    strandedPopulation,
   };
 }
