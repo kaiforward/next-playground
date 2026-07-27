@@ -160,22 +160,21 @@ export function toTickSystems(world: World): TickSystem[] {
     world.factions.map((f) => [f.id, f.governmentType]),
   );
 
-  // One pass over the flat building rows builds each system's roster: the count plus the two
-  // decay-counter records (idle countdown, unrest-collapse debt), keyed together so a system is
-  // resolved with a single map lookup.
+  // One pass over the flat building rows builds each system's roster: the count plus the per-type
+  // idle countdown, keyed together so a system is resolved with a single map lookup. The
+  // unrest-collapse debt is per system, not per type, and rides the system row instead.
   const rosterBySystem = new Map<
     string,
-    { counts: Record<string, number>; idleMonths: Record<string, number>; collapseDebt: Record<string, number> }
+    { counts: Record<string, number>; idleMonths: Record<string, number> }
   >();
   for (const b of world.buildings) {
     let roster = rosterBySystem.get(b.systemId);
     if (!roster) {
-      roster = { counts: {}, idleMonths: {}, collapseDebt: {} };
+      roster = { counts: {}, idleMonths: {} };
       rosterBySystem.set(b.systemId, roster);
     }
     roster.counts[b.buildingType] = b.count;
     roster.idleMonths[b.buildingType] = b.idleMonths;
-    roster.collapseDebt[b.buildingType] = b.collapseDebt ?? 0;
   }
 
   return world.systems.map((s) => {
@@ -197,7 +196,7 @@ export function toTickSystems(world: World): TickSystem[] {
       unrest: s.unrest,
       buildings: roster?.counts ?? {},
       buildingIdleMonths: roster?.idleMonths ?? {},
-      buildingCollapseDebt: roster?.collapseDebt ?? {},
+      collapseDebt: s.collapseDebt ?? 0,
       yields: resourceVectorFromColumns(
         {
           yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -237,6 +236,7 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
       population: tickSystem.population,
       popCap: tickSystem.popCap,
       unrest: tickSystem.unrest,
+      collapseDebt: tickSystem.collapseDebt,
     };
   });
 }
@@ -252,7 +252,6 @@ function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
           buildingType,
           count,
           idleMonths: s.buildingIdleMonths[buildingType] ?? 0,
-          collapseDebt: s.buildingCollapseDebt[buildingType] ?? 0,
         });
       }
     }

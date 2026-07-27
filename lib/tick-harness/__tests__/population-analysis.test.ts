@@ -67,7 +67,7 @@ function infraSys(id: string, buildings: Record<string, number>, popCap: number)
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 50, popCap,
-    unrest: 0, buildings, buildingIdleMonths: {}, buildingCollapseDebt: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    unrest: 0, buildings, buildingIdleMonths: {}, collapseDebt: 0, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 
@@ -90,7 +90,7 @@ function popSys(id: string, population: number, popCap: number, unrest = 0): Tic
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population, popCap,
-    unrest, buildings: {}, buildingIdleMonths: {}, buildingCollapseDebt: {},
+    unrest, buildings: {}, buildingIdleMonths: {}, collapseDebt: 0,
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }

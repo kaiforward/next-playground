@@ -170,7 +170,6 @@ export function generateWorld(options: GenerateWorldOptions): World {
         buildingType,
         count,
         idleMonths: 0,
-        collapseDebt: 0,
       })),
   );
 

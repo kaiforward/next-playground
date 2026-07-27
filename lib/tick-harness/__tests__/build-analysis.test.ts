@@ -38,7 +38,7 @@ function devSys(
     unrest: 0,
     buildings: opts.buildings ?? {},
     buildingIdleMonths: {},
-    buildingCollapseDebt: {},
+    collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: opts.slotCap ?? emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0,

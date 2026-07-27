@@ -729,7 +729,7 @@ function populationFixture(occupancy: number, unrest: number): { world: World; s
     ),
     buildings: [
       ...base.buildings.filter((b) => b.systemId !== systemId),
-      { systemId, buildingType: HOUSING_TYPE, count: FIXTURE_HOUSING_LEVELS, idleMonths: 0, collapseDebt: 0 },
+      { systemId, buildingType: HOUSING_TYPE, count: FIXTURE_HOUSING_LEVELS, idleMonths: 0 },
     ],
     markets: base.markets.map((m) =>
       m.systemId === systemId ? { ...m, stock: AMPLE_STOCK, satisfaction: 1 } : m,

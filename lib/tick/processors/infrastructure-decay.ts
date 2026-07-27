@@ -52,7 +52,7 @@ export async function runInfrastructureDecayProcessor(
       {
         buildings: s.buildings,
         buildingIdleMonths: s.buildingIdleMonths,
-        buildingCollapseDebt: s.buildingCollapseDebt,
+        collapseDebt: s.collapseDebt,
         population: s.population,
         unrest: s.unrest,
         sellingFactor: (goodId) => selling?.get(goodId) ?? 1,
@@ -67,8 +67,8 @@ export async function runInfrastructureDecayProcessor(
     for (const [buildingType, idleMonths] of Object.entries(result.newIdleMonths)) {
       idleUpdates.push({ systemId: s.systemId, buildingType, idleMonths });
     }
-    for (const [buildingType, collapseDebt] of Object.entries(result.newCollapseDebt)) {
-      debtUpdates.push({ systemId: s.systemId, buildingType, collapseDebt });
+    if (result.collapseDebt !== s.collapseDebt) {
+      debtUpdates.push({ systemId: s.systemId, collapseDebt: result.collapseDebt });
     }
     if (HOUSING_TYPE in result.newCounts) {
       popCapUpdates.push({ systemId: s.systemId, popCap: result.popCap });
