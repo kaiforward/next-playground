@@ -82,6 +82,7 @@ describe("getSystemIndustry", () => {
     // one consumptionRate call — they must not drift apart.
     const data = getSystemIndustry(system.id);
     if (data.visibility !== "visible") throw new Error("expected visible industry");
+    expect(data.popNeeds.length).toBeGreaterThan(0);
     for (const need of data.popNeeds) {
       const rate = data.goods.find((good) => good.goodId === need.goodId)!;
       expect(rate.consumption, need.goodId).toBeCloseTo(need.want, 10);

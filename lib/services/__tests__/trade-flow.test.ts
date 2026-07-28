@@ -5,6 +5,8 @@ import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 
 // Imports/exports are summed over the flow window then normalised to a per-logistics-cycle
 // rate (so they share units with production/consumption). Expected values follow suit.
@@ -87,6 +89,26 @@ describe("getSystemLogistics", () => {
   it("returns { visibility: 'unknown' } for a nonexistent system", () => {
     const data = getSystemLogistics("does-not-exist");
     expect(data).toEqual({ visibility: "unknown" });
+  });
+
+  it("carries the system's own civilian consumption onto every logistics row", () => {
+    // The row's `consumption` is the service's capacityGoodRates pass; derive it independently from
+    // the system's building-derived labour basis so the wiring stays pinned to a real value.
+    const data = getSystemLogistics(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+
+    const buildings: Record<string, number> = {};
+    for (const b of world.buildings) {
+      if (b.systemId === system.id) buildings[b.buildingType] = b.count;
+    }
+    const { basis } = computeSystemLabourSnapshot(buildings, system.population);
+
+    expect(data.rows.length).toBeGreaterThan(0);
+    for (const row of data.rows) {
+      expect(row.consumption, row.goodId).toBeCloseTo(consumptionRate(row.goodId, basis), 10);
+    }
+    // Non-vacuous: a populated system genuinely draws at least one good.
+    expect(data.rows.some((r) => r.consumption > 0)).toBe(true);
   });
 
   it("excludes flows older than the history window", () => {

@@ -72,7 +72,7 @@ describe("ECONOMY_SCALE dynamic invariance", () => {
   it("per-(system,good) stock is scale-normalised-identical across the first monthly pulse", async () => {
     const SEED = 745878428; // colonies + a monthly pulse in-window (logistics is covered by a focused test)
     const SYSTEM_COUNT = 60;
-    const TICKS = 30; // past the first economy pulse (tick 24), where the gov-consumption term bites
+    const TICKS = 30; // past the first economy pulse (tick 24), where per-capita demand first bites
     const TOL = 1e-6; // pure FP is ~1e-15 here; a quantised/absolute term diverges ~1e-3+
 
     const s1 = await runAtScale("1", SEED, SYSTEM_COUNT, TICKS);

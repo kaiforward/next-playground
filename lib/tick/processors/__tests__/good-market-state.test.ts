@@ -3,6 +3,7 @@ import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector } from "@/lib/engine/resources";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
 function foodMarket(stock: number, demandRate: number): MarketRowForLogistics {
@@ -23,7 +24,12 @@ describe("toGoodMarketStates", () => {
     expect(out[0].stock).toBe(7);
     expect(out[0].targetStock).toBe(marketBandForRow(m, GOODS[m.goodId]).targetStock);
     expect(Number.isFinite(out[0].demand)).toBe(true);
-    expect(out[0].demand).toBeGreaterThanOrEqual(0);
+    // With no buildings the industrial draw is 0, so `demand` is exactly the civilian rate at the
+    // system's own labour basis — pins the civ + industrial composition, not just its finiteness.
+    expect(out[0].demand).toBeCloseTo(
+      consumptionRate("food", { population: 100, technicians: 0, engineers: 0 }),
+      10,
+    );
   });
 
   it("returns one entry per market row", () => {
