@@ -1,17 +1,17 @@
 /**
- * Home-system prefab — the self-sufficient industrial base a faction capital starts with, sized to its
- * government's demand.
+ * Home-system prefab — the self-sufficient industrial base a faction capital starts with.
  *
  * A faction homeworld is not seeded by the fractional substrate allocator (whose scale-down + whole-level
  * floor wiped small manufacturing counts, leaving the galaxy extraction-only). Instead it is stamped with
  * this deterministic prefab: whole-integer building counts sized so local production meets its residents'
- * full civilian consumption — the per-capita baseline plus the technician/engineer skilled baskets AND the
- * faction government's consumption boost — plus the recipe draw of its own factories: a real tier-0 → tier-2
- * economy, computed per government from the economy constants (no per-system rounding, no guessing).
+ * full civilian consumption — the per-capita baseline plus the technician/engineer skilled baskets — plus
+ * the recipe draw of its own factories: a real tier-0 → tier-2 economy, computed from the economy
+ * constants (no per-system rounding, no guessing). Civilian demand is population-proportional, so one
+ * prefab serves every government.
  *
- * Counts are ECONOMY_SCALE-invariant: OUTPUT_PER_UNIT, GOOD_CONSUMPTION and the government boost carry the
- * same scale factor, so the production ≥ consumption balance holds at any scale. The prefab is stamped onto
- * a guaranteed garden body sized to fit it (see world-gen), so nothing is ever floored or scaled down.
+ * Counts are ECONOMY_SCALE-invariant: OUTPUT_PER_UNIT and GOOD_CONSUMPTION carry the same scale factor,
+ * so the production ≥ consumption balance holds at any scale. The prefab is stamped onto a guaranteed
+ * garden body sized to fit it (see world-gen), so nothing is ever floored or scaled down.
  */
 import { GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import {
@@ -31,7 +31,6 @@ import { consumptionRate } from "@/lib/engine/physical-economy";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import type { GeneratedBody } from "@/lib/engine/body-gen";
-import type { GovernmentType } from "@/lib/types/game";
 
 /** Resident population of a faction capital — a large established core (~5 B people at 1 pop = 1 M). */
 export const HOME_SYSTEM_POP = 5000;
@@ -48,12 +47,12 @@ export function isCovered(goodId: string): boolean {
 }
 
 /**
- * Whole-integer building counts for a capital of `pop` residents under `governmentType`. Each covered good
- * is sized to meet its full civilian consumption — the per-capita baseline PLUS the skilled-worker baskets
- * that technicians and engineers consume on top of it PLUS the government's consumption boost (the exact
- * live `consumptionRate`) — plus the recipe draw of its downstream producers (walked in reverse topological
- * order so a producer's input demand is counted before its inputs are sized), academies to license the
- * skilled work the factories draw, and housing to hold the population.
+ * Whole-integer building counts for a capital of `pop` residents. Each covered good is sized to meet its
+ * full civilian consumption — the per-capita baseline PLUS the skilled-worker baskets that technicians and
+ * engineers consume on top of it (the exact live `consumptionRate`) — plus the recipe draw of its
+ * downstream producers (walked in reverse topological order so a producer's input demand is counted before
+ * its inputs are sized), academies to license the skilled work the factories draw, and housing to hold the
+ * population.
  *
  * The skilled baskets depend on the technician/engineer headcount, which itself depends on the buildings
  * being sized, so the sizing iterates to a fixed point. It converges in a few passes because the basket
@@ -61,12 +60,12 @@ export function isCovered(goodId: string): boolean {
  * licensed skilled demand (academies license it, housing covers it), so technicians = `skill1Demand` and
  * engineers = `skill2Demand` of the base being built.
  */
-export function computeHomeworldBuildings(pop: number, governmentType: GovernmentType): Record<string, number> {
+export function computeHomeworldBuildings(pop: number): Record<string, number> {
   let buildings: Record<string, number> = {};
   let technicians = 0;
   let engineers = 0;
   for (let pass = 0; pass < 8; pass++) {
-    const next = sizeCapitalBuildings(pop, technicians, engineers, governmentType);
+    const next = sizeCapitalBuildings(pop, technicians, engineers);
     if (sameBuildings(next, buildings)) break;
     buildings = next;
     technicians = skill1Demand(buildings);
@@ -77,20 +76,18 @@ export function computeHomeworldBuildings(pop: number, governmentType: Governmen
 
 /**
  * One sizing pass for the given skilled headcount: size every covered good to its baseline + basket +
- * government-boost + recipe demand, add academies to license the skilled draw, then housing to hold the
- * residents and staff the base. `technicians`/`engineers` carry the skilled-basket demand from the previous
- * fixed-point pass; `governmentType` supplies the same consumption boost the live economy applies.
+ * recipe demand, add academies to license the skilled draw, then housing to hold the residents and staff
+ * the base. `technicians`/`engineers` carry the skilled-basket demand from the previous fixed-point pass.
  */
 function sizeCapitalBuildings(
   pop: number,
   technicians: number,
   engineers: number,
-  governmentType: GovernmentType,
 ): Record<string, number> {
   const basis = { population: pop, technicians, engineers };
   const demand: Record<string, number> = {};
   for (const g of Object.keys(OUTPUT_PER_UNIT)) {
-    demand[g] = consumptionRate(g, basis, governmentType);
+    demand[g] = consumptionRate(g, basis);
   }
 
   const buildings: Record<string, number> = {};
@@ -124,13 +121,9 @@ function sameBuildings(a: Record<string, number>, b: Record<string, number>): bo
   return true;
 }
 
-/**
- * The frontier reference stamp: the unboosted baseline building counts + resident population. A capital's
- * actual stamp is sized to its faction's government at world-gen (computeHomeworldBuildings), which raises
- * production for its boosted goods above this baseline.
- */
+/** The stamp every faction capital receives: the baseline building counts + resident population. */
 export const HOME_SYSTEM_PREFAB: { buildings: Record<string, number>; population: number } = {
-  buildings: computeHomeworldBuildings(HOME_SYSTEM_POP, "frontier"),
+  buildings: computeHomeworldBuildings(HOME_SYSTEM_POP),
   population: HOME_SYSTEM_POP,
 };
 
@@ -141,12 +134,12 @@ const GARDEN_QUALITY = 1.3;
 
 /**
  * The guaranteed garden world a faction capital sits on: one deterministic body with a habitable span,
- * general space, and a spread of deposit slots all sized `GARDEN_MARGIN`× the government's prefab footprint,
- * so the whole prefab (housing + factories + extractors) always fits with headroom — no flooring, ever.
+ * general space, and a spread of deposit slots all sized `GARDEN_MARGIN`× the prefab's footprint, so the
+ * whole prefab (housing + factories + extractors) always fits with headroom — no flooring, ever.
  * Prepended to the homeworld's procedural bodies (which stay as varied scenery + extra deposits).
  */
-export function homeworldGardenBody(governmentType: GovernmentType): GeneratedBody {
-  const b = computeHomeworldBuildings(HOME_SYSTEM_POP, governmentType);
+export function homeworldGardenBody(): GeneratedBody {
+  const b = computeHomeworldBuildings(HOME_SYSTEM_POP);
   const slots = emptyResourceVector();
   let housingHabitable = 0;
   let factoryGeneral = 0;

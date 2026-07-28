@@ -750,16 +750,15 @@ function fixtureSystem(world: World, systemId: string): WorldSystem {
  * into D and the regime. A non-consumer is written satisfaction 1 and never enters either fold, so
  * sweeping every market would quietly require that every good at this homeworld carry civilian
  * demand. The filter mirrors the economy adapter's own predicate: civilian consumption > 0 at the
- * system's labour basis and government.
+ * system's labour basis.
  */
 function demandedSatisfactions(world: World, systemId: string): number[] {
   const system = fixtureSystem(world, systemId);
-  const governmentType = world.factions.find((f) => f.id === system.factionId)!.governmentType;
   const buildings: Record<string, number> = {};
   for (const b of world.buildings) if (b.systemId === systemId) buildings[b.buildingType] = b.count;
   const { basis } = computeSystemLabourSnapshot(buildings, system.population);
   return world.markets
-    .filter((m) => m.systemId === systemId && consumptionRate(m.goodId, basis, governmentType) > 0)
+    .filter((m) => m.systemId === systemId && consumptionRate(m.goodId, basis) > 0)
     .map((m) => m.satisfaction ?? 1);
 }
 

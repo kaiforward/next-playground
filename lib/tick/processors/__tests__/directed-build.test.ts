@@ -1025,7 +1025,7 @@ const SEED_BASIS: CivilianDemandBasis = {
 /** What the colony wants of `goodId`: its share of its own pricing anchor, per the founding policy. */
 const foundingWant = (goodId: string) =>
   COLONISATION.FOUNDING_STOCK_ANCHOR_FRAC * TARGET_COVER
-  * consumptionRate(goodId, SEED_BASIS, "federation");
+  * consumptionRate(goodId, SEED_BASIS);
 
 function stockedMarket(systemId: string, goodId: string, stock: number): MarketRowForLogistics {
   return { id: `${systemId}|${goodId}`, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
@@ -1101,7 +1101,7 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
     // be parked at one-and-a-half wants — enough for the first colony's want and only a remainder for
     // the second. Without a shared balance both would read the same opening figure and both would be
     // granted a full want, minting stock the founder never had.
-    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 }, "federation");
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
     const exportRate = homeDemand * 2;
     const stock = TARGET_COVER * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC + foundingWant("food") * 1.5;
     const w = new MemoryDirectedBuildWorld([stockedHome({ food: stock }, { food: exportRate })]);

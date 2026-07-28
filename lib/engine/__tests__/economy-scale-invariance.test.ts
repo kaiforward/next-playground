@@ -33,14 +33,14 @@ function scenario(mods: Awaited<ReturnType<typeof loadAtScale>>) {
   const buildings: Record<string, number> = { food: 10, [industryConsts.HOUSING_TYPE]: 5 };
 
   const popOnly = { population: pop, technicians: 0, engineers: 0 };
-  const demandFood = market.civilianDemandRateForGood("food", popOnly, "frontier");             // need-driven
-  const demandFloored = market.civilianDemandRateForGood("ship_frames", { population: 1, technicians: 0, engineers: 0 }, "frontier"); // MIN_DEMAND-floored
+  const demandFood = market.civilianDemandRateForGood("food", popOnly);             // need-driven
+  const demandFloored = market.civilianDemandRateForGood("ship_frames", { population: 1, technicians: 0, engineers: 0 }); // MIN_DEMAND-floored
   const storageCapacity = industryEngine.facilityStorageForGood(buildings, "food");
 
   // Basket-good demand with skilled work: luxuries scale through consumptionRate's
   // SKILL2_CONSUMPTION term, which rides ECONOMY_SCALE the same as GOOD_CONSUMPTION
   // (both flow through scaleRecord).
-  const demandLuxuriesSkilled = market.civilianDemandRateForGood("luxuries", { population: pop, technicians: 0, engineers: 200 }, "frontier");
+  const demandLuxuriesSkilled = market.civilianDemandRateForGood("luxuries", { population: pop, technicians: 0, engineers: 200 });
 
   const band = pricing.marketBand({
     demandRate: demandFood,

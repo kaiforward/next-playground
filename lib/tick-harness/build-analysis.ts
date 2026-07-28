@@ -143,7 +143,7 @@ export function sampleFoundedColonies(
     const sys = due.get(m.systemId);
     if (!sys) continue;
     const basis = computeSystemLabourSnapshot(sys.buildings, sys.population).basis;
-    const demanded = consumptionRate(m.goodId, basis, sys.governmentType);
+    const demanded = consumptionRate(m.goodId, basis);
     if (demanded <= 0) continue; // the colony does not consume it — no opinion either way
     const list = goodsBySystem.get(m.systemId) ?? [];
     list.push({ satisfaction: m.satisfaction ?? 1, demanded });

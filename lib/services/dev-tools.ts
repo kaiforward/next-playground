@@ -7,7 +7,6 @@ import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
 import { runWorldTick } from "@/lib/world/tick";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
-import { governmentByFactionId, governmentTypeForSystem } from "@/lib/services/world-index";
 import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
@@ -181,7 +180,6 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
     buildingsBySystem.set(b.systemId, bag);
   }
   const systemById = new Map(world.systems.map((s) => [s.id, s]));
-  const govByFaction = governmentByFactionId();
 
   const markets = world.markets.map((m) => {
     const sys = systemById.get(m.systemId);
@@ -198,7 +196,7 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
     return {
       systemId: m.systemId,
       goodId: m.goodId,
-      stock: getInitialStock(buildings, yields, sys.population, m.goodId, governmentTypeForSystem(sys, govByFaction)),
+      stock: getInitialStock(buildings, yields, sys.population, m.goodId),
       anchorMult: 1,
       demandRate: m.demandRate,
       storageCapacity: m.storageCapacity,

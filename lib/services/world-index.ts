@@ -1,6 +1,5 @@
 import { getWorld, getWorldVersion } from "@/lib/world/store";
 import type { World, WorldFlowEvent, WorldMarket } from "@/lib/world/types";
-import type { GovernmentType } from "@/lib/types/game";
 
 /**
  * Lazy per-version indexes over the world store, shared by the read services.
@@ -64,18 +63,6 @@ export const flowEventsBySystem = versionCached((world) => {
 export const governmentByFactionId = versionCached(
   (world) => new Map(world.factions.map((f) => [f.id, f.governmentType])),
 );
-
-/**
- * A system's owning government, with the frontier fallback for an unclaimed system (no faction) or one
- * whose faction is missing from the map. Owns the fallback so read paths don't repeat it. Pass the cached
- * `governmentByFactionId()` map (hoist it above hot loops so the version-cache lookup isn't repeated per row).
- */
-export function governmentTypeForSystem(
-  system: { factionId: string | null },
-  govByFaction: Map<string, GovernmentType>,
-): GovernmentType {
-  return system.factionId ? govByFaction.get(system.factionId) ?? "frontier" : "frontier";
-}
 
 /** System display names by id. */
 export const systemNameById = versionCached(

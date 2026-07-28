@@ -12,9 +12,6 @@ import {
   SKILL1_CONSUMPTION,
   SKILL2_CONSUMPTION,
 } from "@/lib/constants/physical-economy";
-import { scaleValue } from "@/lib/constants/economy-scale";
-import { GOVERNMENT_TYPES } from "@/lib/constants/government";
-import type { GovernmentType } from "@/lib/types/game";
 
 /**
  * Civilian demand basis for one system: headcount plus skilled work performed.
@@ -30,40 +27,35 @@ export interface CivilianDemandBasis {
   engineers: number;
 }
 
-/** The four additive terms of consumptionRate, separated for display. */
+/** The three additive terms of consumptionRate, separated for display. */
 export interface ConsumptionBreakdown {
   base: number;
   technicians: number;
   engineers: number;
-  government: number;
 }
 
 /** consumptionRate split into its per-capita baseline and per-grade basket terms. */
-export function consumptionBreakdown(
-  goodId: string,
-  basis: CivilianDemandBasis,
-  governmentType: GovernmentType,
-): ConsumptionBreakdown {
+export function consumptionBreakdown(goodId: string, basis: CivilianDemandBasis): ConsumptionBreakdown {
   return {
     base: (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.population),
     technicians: (SKILL1_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.technicians),
     engineers: (SKILL2_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.engineers),
-    government: scaleValue(GOVERNMENT_TYPES[governmentType].consumptionBoosts[goodId] ?? 0),
   };
 }
 
 /**
  * Civilian consumption rate: per-capita baseline + additive per-grade baskets.
+ * Population-proportional throughout — there is no flat per-system term, so the
+ * basket's SHAPE is the same at a 2-pop seed and a 5000-pop capital.
  * Sums the same terms as consumptionBreakdown but stays allocation-free — it
  * runs per (good, system) on the tick hot path; the breakdown object is for
  * the display read path only.
  */
-export function consumptionRate(goodId: string, basis: CivilianDemandBasis, governmentType: GovernmentType): number {
+export function consumptionRate(goodId: string, basis: CivilianDemandBasis): number {
   return (
     (GOOD_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.population) +
     (SKILL1_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.technicians) +
-    (SKILL2_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.engineers) +
-    scaleValue(GOVERNMENT_TYPES[governmentType].consumptionBoosts[goodId] ?? 0)
+    (SKILL2_CONSUMPTION[goodId] ?? 0) * Math.max(0, basis.engineers)
   );
 }
 

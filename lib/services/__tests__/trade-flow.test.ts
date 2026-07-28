@@ -5,7 +5,6 @@ import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
-import type { GovernmentType } from "@/lib/types/game";
 
 // Imports/exports are summed over the flow window then normalised to a per-logistics-cycle
 // rate (so they share units with production/consumption). Expected values follow suit.
@@ -88,23 +87,6 @@ describe("getSystemLogistics", () => {
   it("returns { visibility: 'unknown' } for a nonexistent system", () => {
     const data = getSystemLogistics("does-not-exist");
     expect(data).toEqual({ visibility: "unknown" });
-  });
-
-  it("reflects the owning government's consumption boost in the logistics rows", () => {
-    if (system.factionId === null) throw new Error("expected owned logistics fixture");
-    const weaponsConsumption = (governmentType: GovernmentType): number => {
-      setWorld({
-        ...world,
-        factions: world.factions.map((faction) =>
-          faction.id === system.factionId ? { ...faction, governmentType } : faction,
-        ),
-      });
-      const data = getSystemLogistics(system.id);
-      if (data.visibility !== "visible") throw new Error("expected visible logistics");
-      return data.rows.find((r) => r.goodId === "weapons")!.consumption;
-    };
-    // Militarist boosts weapons consumption; federation does not — the boost must ride the logistics row.
-    expect(weaponsConsumption("militarist")).toBeGreaterThan(weaponsConsumption("federation"));
   });
 
   it("excludes flows older than the history window", () => {

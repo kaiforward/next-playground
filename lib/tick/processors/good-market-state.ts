@@ -22,7 +22,7 @@ export interface MarketStateSource {
 }
 
 export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
-  const rates = capacityGoodRates(row.buildings, row.population, row.yields, row.governmentType);
+  const rates = capacityGoodRates(row.buildings, row.population, row.yields);
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
   const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
 

@@ -3,7 +3,7 @@
  * Deterministic given a seed value via mulberry32 PRNG.
  */
 
-import type { EconomyType, GovernmentType, ResourceVector, SunClass } from "@/lib/types/game";
+import type { EconomyType, ResourceVector, SunClass } from "@/lib/types/game";
 import { generateSubstrate, substrateAggregates, type GeneratedBody } from "./body-gen";
 import { deriveEconomyTypeLabel } from "./economy-type";
 import { computeHomeworldBuildings, HOME_SYSTEM_POP, homeworldGardenBody } from "./homeworld-prefab";
@@ -639,22 +639,21 @@ export function generateConnections(
  * is stamped with the self-sufficient home-system prefab sized to its government's demand, on a guaranteed
  * garden body sized to fit it; every other system stays an empty deposit field that expansion colonises
  * into. The garden body is prepended to the homeworld's procedural bodies (kept as scenery), and the
- * space/slot/yield aggregates + economy label are recomputed to match. `homeworldGovernments` maps each
- * homeworld's system index to its faction's government. Mutates `systems` in place.
+ * space/slot/yield aggregates + economy label are recomputed to match. `homeworldIndices` holds the
+ * system index of every faction capital. Mutates `systems` in place.
  */
 export function stampHomeworldPrefabs(
   systems: GeneratedSystem[],
-  homeworldGovernments: Map<number, GovernmentType>,
+  homeworldIndices: Set<number>,
 ): void {
   for (const s of systems) {
-    const governmentType = homeworldGovernments.get(s.index);
-    if (governmentType === undefined) {
+    if (!homeworldIndices.has(s.index)) {
       s.population = 0; // already bare from generateSubstrate — belt-and-braces
       s.buildings = {};
       s.popCap = 0;
       continue;
     }
-    const bodies = [homeworldGardenBody(governmentType), ...s.bodies];
+    const bodies = [homeworldGardenBody(), ...s.bodies];
     const agg = substrateAggregates(bodies);
     s.bodies = bodies;
     s.slotCap = agg.slotCap;
@@ -663,7 +662,7 @@ export function stampHomeworldPrefabs(
     s.availableSpace = agg.availableSpace;
     s.yieldMult = agg.yieldMult;
     s.bodyDanger = agg.bodyDanger;
-    s.buildings = computeHomeworldBuildings(HOME_SYSTEM_POP, governmentType);
+    s.buildings = computeHomeworldBuildings(HOME_SYSTEM_POP);
     s.population = HOME_SYSTEM_POP;
     s.popCap = housingPopCap(s.buildings);
     s.economyType = deriveEconomyTypeLabel(s.slotCap, s.yieldMult, s.population);
@@ -689,10 +688,7 @@ export function generateUniverse(
     playerFaction,
   });
 
-  const homeworldGovernments = new Map(
-    factions.map((f) => [f.homeworldSystemIndex, f.governmentType]),
-  );
-  stampHomeworldPrefabs(systems, homeworldGovernments);
+  stampHomeworldPrefabs(systems, new Set(factions.map((f) => f.homeworldSystemIndex)));
 
   const systemFactionAssignments = assignHomeworldOwnership(systems.length, factions);
 

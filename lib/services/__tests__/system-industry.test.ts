@@ -77,21 +77,15 @@ describe("getSystemIndustry", () => {
     expect(water?.goodName).toBe("Water");
   });
 
-  it("keeps industry capacity and population needs on the same government demand", () => {
-    if (system.factionId === null) throw new Error("expected owned industry fixture");
-    setWorld({
-      ...world,
-      factions: world.factions.map((faction) =>
-        faction.id === system.factionId ? { ...faction, governmentType: "militarist" as const } : faction,
-      ),
-    });
-
+  it("keeps industry capacity and population needs on the same civilian demand", () => {
+    // The Industry readout's per-good consumption and the needs ledger's want are two projections of
+    // one consumptionRate call — they must not drift apart.
     const data = getSystemIndustry(system.id);
     if (data.visibility !== "visible") throw new Error("expected visible industry");
-    const weaponsNeed = data.popNeeds.find((need) => need.goodId === "weapons")!;
-    const weaponsRate = data.goods.find((good) => good.goodId === "weapons")!;
-    expect(weaponsNeed.breakdown.government).toBeGreaterThan(0);
-    expect(weaponsRate.consumption).toBeCloseTo(weaponsNeed.want, 10);
+    for (const need of data.popNeeds) {
+      const rate = data.goods.find((good) => good.goodId === need.goodId)!;
+      expect(rate.consumption, need.goodId).toBeCloseTo(need.want, 10);
+    }
   });
 
   it("treats a funding-bound glutted producer as demand-backed", () => {

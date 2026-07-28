@@ -57,8 +57,8 @@ describe("toGoodMarketStates", () => {
     const base = { buildings: {}, population: 100, yields: unitResourceVector(), markets: [market] };
     const [frontier] = toGoodMarketStates({ ...base, governmentType: "frontier" });
     const [militarist] = toGoodMarketStates({ ...base, governmentType: "militarist" });
-    const expectedBoost = consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 }, "militarist")
-      - consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 }, "frontier");
+    const expectedBoost = consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 })
+      - consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 });
     expect(militarist.demand - frontier.demand).toBeCloseTo(expectedBoost, 10);
   });
 

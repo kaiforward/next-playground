@@ -165,8 +165,8 @@ describe("generateWorld", () => {
   });
 });
 
-describe("generateWorld: government demand", () => {
-  it("seeds owned markets from their faction government and unowned tick rows as frontier", () => {
+describe("generateWorld: market seeding", () => {
+  it("seeds owned markets from the shared civilian basket and unowned tick rows as frontier", () => {
     const world = generateWorld({
       systemCount: 60,
       seed: 8,
@@ -185,8 +185,8 @@ describe("generateWorld: government demand", () => {
     }, "yield");
     const basis = computeSystemLabourSnapshot(buildings, home.population).basis;
     const weapons = world.markets.find((market) => market.systemId === home.id && market.goodId === "weapons")!;
-    expect(weapons.demandRate).toBeCloseTo(civilianDemandRateForGood("weapons", basis, "militarist"), 10);
-    expect(weapons.stock).toBe(getInitialStock(buildings, yields, home.population, "weapons", "militarist"));
+    expect(weapons.demandRate).toBeCloseTo(civilianDemandRateForGood("weapons", basis), 10);
+    expect(weapons.stock).toBe(getInitialStock(buildings, yields, home.population, "weapons"));
 
     const unowned = world.systems.find((system) => system.factionId === null)!;
     expect(toTickSystems(world).find((system) => system.id === unowned.id)?.governmentType).toBe("frontier");

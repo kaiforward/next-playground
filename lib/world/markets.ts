@@ -32,7 +32,7 @@ export function createSystemMarkets(seed: SystemMarketSeed): WorldMarket[] {
   return Object.keys(GOODS).map((goodId) => {
     const storageCapacity = facilityStorageForGood(seed.buildings, goodId);
     const stock = seed.seedStock
-      ? getInitialStock(seed.buildings, seed.yields, seed.population, goodId, seed.governmentType)
+      ? getInitialStock(seed.buildings, seed.yields, seed.population, goodId)
       : 0;
     // Guard: JSON.stringify silently turns NaN/Infinity into null, which would break the
     // save/load round-trip — clamp defensively.
@@ -41,7 +41,7 @@ export function createSystemMarkets(seed: SystemMarketSeed): WorldMarket[] {
       goodId,
       stock: Number.isFinite(stock) ? stock : 0,
       anchorMult: 1,
-      demandRate: civilianDemandRateForGood(goodId, basis, seed.governmentType),
+      demandRate: civilianDemandRateForGood(goodId, basis),
       storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
       satisfaction: 1,
       squeezePulses: 0,
