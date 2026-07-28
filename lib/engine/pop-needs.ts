@@ -6,13 +6,12 @@
  * boundary bias is gone. The stored measure is taken against total civilian
  * demand; rationing is pro-rata, so the delivered fraction is identical for
  * every civilian drawer.
- * Pressure mirrors the demand-share × gap² shape of the `dissatisfaction()`
- * sum, weighted by unfloored civilian want (the pulse's own shares fold in
- * demand floors and modifiers, so magnitudes can differ slightly). Pure —
- * callers pass market rows and a demand basis.
+ * Pressure mirrors the necessity-weighted share × gap² shape of the `dissatisfaction()` sum, weighted
+ * by unfloored civilian want × GOOD_NECESSITY (the pulse's own shares fold in demand floors and
+ * modifiers, so magnitudes can differ slightly). Pure — callers pass market rows and a demand basis.
  */
 import { consumptionBreakdown, consumptionRate, type CivilianDemandBasis, type ConsumptionBreakdown } from "@/lib/engine/physical-economy";
-import { GOOD_CONSUMPTION, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { GOOD_CONSUMPTION, GOOD_NECESSITY, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 
 export interface PopNeed {
@@ -23,7 +22,7 @@ export interface PopNeed {
   satisfaction: number;
   /** want × satisfaction. */
   delivered: number;
-  /** demandShare × (1 − satisfaction)² — this good's term in the system's dissatisfaction sum. */
+  /** necessityWeightedShare × (1 − satisfaction)² — this good's term in the system's dissatisfaction sum. */
   pressure: number;
   breakdown: ConsumptionBreakdown;
 }
@@ -56,18 +55,20 @@ export function computePopNeeds(basis: CivilianDemandBasis, markets: PopNeedsMar
     .filter((g) => g.want > 0);
   const totalWant = wanted.reduce((s, g) => s + g.want, 0);
   if (totalWant <= 0) return [];
+  const totalWeight = wanted.reduce((s, g) => s + g.want * (GOOD_NECESSITY[g.goodId] ?? 0), 0);
 
   return wanted
     .map(({ goodId, want }) => {
       const row = rowByGood.get(goodId);
       const satisfaction = row ? Math.max(0, Math.min(1, row.satisfaction ?? 1)) : 0;
       const gap = 1 - satisfaction;
+      const weight = want * (GOOD_NECESSITY[goodId] ?? 0);
       return {
         goodId,
         want,
         satisfaction,
         delivered: want * satisfaction,
-        pressure: (want / totalWant) * gap * gap,
+        pressure: totalWeight > 0 ? (weight / totalWeight) * gap * gap : 0,
         breakdown: consumptionBreakdown(goodId, basis),
       };
     })

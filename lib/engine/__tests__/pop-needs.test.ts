@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computePopNeeds } from "@/lib/engine/pop-needs";
-import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { GOOD_CONSUMPTION, GOOD_NECESSITY } from "@/lib/constants/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 
 const basis = { population: 1000, technicians: 50, engineers: 10 };
@@ -16,10 +16,13 @@ describe("computePopNeeds — stored satisfaction", () => {
   it("reads the persisted flow, not a stock recompute", () => {
     const needs = computePopNeeds(basis, [{ goodId: bigGood, satisfaction: 0.6 }]);
     const fed = needs.find((n) => n.goodId === bigGood)!;
-    const totalWant = needs.reduce((s, n) => s + n.want, 0);
+    // The share is over want × necessity, rebuilt from the shipped table so a weight change moves
+    // this oracle rather than silently invalidating it.
+    const totalWeight = needs.reduce((s, n) => s + n.want * GOOD_NECESSITY[n.goodId], 0);
+    const share = (fed.want * GOOD_NECESSITY[bigGood]) / totalWeight;
     expect(fed.satisfaction).toBeCloseTo(0.6, 5);
     expect(fed.delivered).toBeCloseTo(fed.want * 0.6, 5);
-    expect(fed.pressure).toBeCloseTo((fed.want / totalWant) * 0.4 * 0.4, 5);
+    expect(fed.pressure).toBeCloseTo(share * 0.4 * 0.4, 5);
   });
 
   it("treats a missing satisfaction field as fully served (pre-change save)", () => {
@@ -43,10 +46,25 @@ describe("computePopNeeds — stored satisfaction", () => {
     expect(under.find((n) => n.goodId === smallGood)!.satisfaction).toBe(0);
   });
 
-  it("pressures use demand shares (sum over goods of share = 1 when all fully starved)", () => {
+  it("pressures use necessity-weighted shares (sum over goods of share = 1 when all fully starved)", () => {
     const needs = computePopNeeds(basis, consumedIds.map((id) => ({ goodId: id, satisfaction: 0 })));
     const total = needs.reduce((s, n) => s + n.pressure, 0);
     expect(total).toBeCloseTo(1, 5);
+  });
+
+  it("ranks an unmet high-necessity good above an unmet low-necessity one, matching the simulation", () => {
+    // The ledger's sort key is the panel's ordering AND the API's "contribution to unrest". If it
+    // weighted raw want it would rank luxuries above medicine while the fold ranks the opposite.
+    const engineerBasis = { population: 1000, technicians: 0, engineers: 200 };
+    const needs = computePopNeeds(engineerBasis, [
+      { goodId: "medicine", satisfaction: 0 },
+      { goodId: "luxuries", satisfaction: 0 },
+    ]);
+    const medicine = needs.find((n) => n.goodId === "medicine")!;
+    const luxuries = needs.find((n) => n.goodId === "luxuries")!;
+    // The engineer basket wants MORE luxuries than medicine, so raw want inverts the ranking.
+    expect(luxuries.want).toBeGreaterThan(medicine.want);
+    expect(medicine.pressure).toBeGreaterThan(luxuries.pressure);
   });
 
   it("excludes goods this basis does not want", () => {
