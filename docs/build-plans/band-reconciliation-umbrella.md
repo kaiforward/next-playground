@@ -196,12 +196,14 @@ cutoff, so any active rationing is named consistently.
 - Consumes from PR5: the collapse/colony behaviour the panels describe, **and** the settled
   regime/unrest constants the chips name. PR5 parked that fold; the necessity-weighting slice below
   settled it, so the constants the chips name are now fixed.
-- **Inherited from the necessity slice:** the five-band stability ramp (`lib/utils/stability.ts`,
-  stops at 0.2/0.4/0.6/0.8) must be re-cut against the measured post-fold unrest distribution — every
-  healthy system now sits in the bottom band and three of five bands are famine-only. The measured
-  distribution is in the slice's 3000-tick run. Also inherited: the per-good chip bands (stock-cover
-  based, a different labelling from the system regime this slice settles), and any label steadiness
-  those chips need, which is a display concern with display tools — no persisted regime state ships.
+- **Inherited from the necessity slice:** check the five-band stability ramp (`lib/utils/stability.ts`,
+  stops at 0.2/0.4/0.6/0.8) against the measured post-fold unrest distribution, which is a usable
+  spread rather than the degenerate one a lower ambient level might have implied — over 573 settled
+  systems at 3000 ticks: 22% below 0.2, 41% in [0.2, 0.4), and the remaining ~37% spread across the
+  top three bands (only 5.6% at or above the 0.65 strike line). The bands need confirming against a
+  second seed, not obviously re-cutting. Also inherited: the per-good chip bands (stock-cover based, a
+  different labelling from the system regime this slice settles), and any label steadiness those chips
+  need, which is a display concern with display tools — no persisted regime state ships.
 - **Docs fold additions:** `docs/active/gameplay/economy.md` and `player-seat-purse.md` describe the
   unrest spine; the fold is now necessity-weighted with named ceilings and a survival floor.
 
