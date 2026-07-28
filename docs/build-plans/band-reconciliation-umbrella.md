@@ -148,17 +148,24 @@ retune needed. The unrest/tax half of §8 is parked with items 1–2, having not
 ### Necessity-weighted unrest — the parked unrest lever (before PR6)
 
 `docs/planned/necessity-weighted-unrest.md`. Necessity becomes its own authored per-good table
-(`GOOD_NECESSITY`) weighting each good's demand share in the dissatisfaction fold, plus a per-good cap
-on how much unrest one good can ever contribute. It replaces PR5 Task 1's summed-demand-share fold —
-the weight is what that fold was missing — and lands PR5 Task 2's regime ceilings as optional
-tidy-up rather than a co-requirement, since the per-good cap does the containment job at finer grain.
-The same pass deletes `GOVERNMENT_TYPES.consumptionBoosts`, a flat population-independent term that
-dominates a small colony's demand basket.
+(`GOOD_NECESSITY`) weighting each good's demand share in the dissatisfaction fold. It replaces PR5
+Task 1's summed-demand-share fold — the weight is what that fold was missing — and **lands PR5 Task 2's
+regime ceilings with it as a co-requirement**: no single ceiling can hold sustained Rationing below
+collapse while still letting a total food failure collapse, so the two-regime structure is load-bearing
+and the ceilings carry the containment guarantee. The ceiling is blended across the regime cut rather
+than switched, which removes any need for regime hysteresis in the simulation. A survival-good floor
+selects Shortage whenever water or food falls below `SHORTAGE_SATISFACTION`, since the squared gap
+alone cannot express partial famine. The same pass deletes `GOVERNMENT_TYPES.consumptionBoosts`, a flat
+population-independent term that dominates a small colony's demand basket.
 
-Demand itself does not move: pricing, bands, the ration threshold, logistics, the planner and decay
-are untouched. An earlier draft of this slice proposed necessity as demand *elasticity* (demand
-contracting under scarcity); that framing was reviewed, found to break the glut/decay signal, pricing,
-the logistics deficit gate and the build planner, and abandoned.
+Demand is unchanged for the eighteen unboosted goods — pricing, bands, the ration threshold, logistics,
+the planner and decay are untouched for those. For the **eight goods the governments boosted** the
+deletion does move `demandRate`, and the anchor/glut/capacity fallout is booked as a validation target.
+An earlier draft of this slice proposed necessity as demand *elasticity* (demand contracting under
+scarcity); that framing was reviewed, found to break the glut/decay signal, pricing, the logistics
+deficit gate and the build planner, and abandoned. A second draft carried a per-good contribution cap;
+`/spec-review` showed it can never bind at the authored weights, and the guarantee it was meant to
+provide is a test instead.
 
 **Sequenced before PR6, not after.** PR6's chips name regimes, and this slice is what settles what a
 regime means — the same reason presentation was split out of PR5.
