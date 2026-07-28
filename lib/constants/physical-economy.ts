@@ -90,6 +90,64 @@ export const GOOD_CONSUMPTION: Record<string, number> = scaleRecord({
 });
 
 /**
+ * Per-good necessity — how much NOT having a good counts as suffering, in (0,1]. A peer table to
+ * GOOD_CONSUMPTION and deliberately NOT derived from it: consumption volume is a tier gradient
+ * (medicine 0.001 sits below gas 0.004 purely because medicine is tier-1), the price floor/ceiling
+ * pair is a pure tier lookup, and `volatility` is unread — so every existing signal that looks like
+ * necessity gets it backwards. People still want the luxuries; this table just stops the model
+ * calling not having them suffering.
+ *
+ * Dimensionless: it weights a ratio, so it never rides ECONOMY_SCALE (no scaleRecord). Only the
+ * relative shape matters; magnitudes are a first draft and the simulator owns the finals. Moving any
+ * weight moves the scenario arithmetic the shortage cut was drawn against — re-derive it (see
+ * lib/constants/__tests__/band-constants.test.ts), don't nudge the cut.
+ */
+export const GOOD_NECESSITY: Record<string, number> = {
+  // Survival — losing either of these must be able to collapse a system.
+  water: 1.0,
+  food: 1.0,
+  // Health.
+  medicine: 0.8,
+  // Daily life.
+  gas: 0.4,
+  textiles: 0.4,
+  // Broad utility.
+  consumer_goods: 0.35,
+  fuel: 0.3,
+  // Industrial staples.
+  biomass: 0.15,
+  chemicals: 0.15,
+  electronics: 0.15,
+  // Industrial inputs.
+  ore: 0.1,
+  minerals: 0.1,
+  metals: 0.1,
+  polymers: 0.1,
+  // Discretionary / military.
+  radioactives: 0.05,
+  alloys: 0.05,
+  components: 0.05,
+  machinery: 0.05,
+  luxuries: 0.05,
+  // Pure war matériel — a population deprived of these is not deprived.
+  munitions: 0.02,
+  hull_plating: 0.02,
+  weapons: 0.02,
+  weapons_systems: 0.01,
+  targeting_arrays: 0.01,
+  reactor_cores: 0.01,
+  ship_frames: 0.01,
+};
+
+/**
+ * The goods whose deprivation is famine rather than scarcity. Below SHORTAGE_SATISFACTION on either
+ * one, a system reads Shortage whatever the rest of the basket looks like: dissatisfaction squares
+ * the gap, so water at half rations folds to only ~0.09 and no workable cut on the fold alone
+ * catches a population that is genuinely on half rations.
+ */
+export const SURVIVAL_GOODS: readonly string[] = ["water", "food"];
+
+/**
  * Per-grade civilian consumption baskets — per skilled head, ADDED on top of the
  * unskilled GOOD_CONSUMPTION baseline (never replacing it). The head counts are
  * skilled work performed (computeLabourAllocation technicians/engineers), so

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   GOOD_PRODUCTION,
   GOOD_CONSUMPTION,
+  GOOD_NECESSITY,
+  SURVIVAL_GOODS,
   LABOUR_HALF_POP,
   SKILL1_CONSUMPTION,
   SKILL2_CONSUMPTION,
@@ -27,6 +29,38 @@ describe("GOOD_PRODUCTION / GOOD_CONSUMPTION coverage", () => {
     for (const goodId of GOOD_NAMES) {
       expect(GOOD_PRODUCTION[goodId].coeff).toBeGreaterThan(0);
       expect(GOOD_CONSUMPTION[goodId]).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe("GOOD_NECESSITY", () => {
+  it("weights every good, and only real goods", () => {
+    // Total over GOODS by construction: a good added without a weight would silently drop out of
+    // the unrest fold (weight 0), so the build fails here instead.
+    const known = new Set(GOOD_NAMES);
+    for (const goodId of GOOD_NAMES) {
+      const n = GOOD_NECESSITY[goodId];
+      expect(n, `necessity: ${goodId}`).toBeGreaterThan(0);
+      expect(n, `necessity: ${goodId}`).toBeLessThanOrEqual(1);
+    }
+    for (const goodId of Object.keys(GOOD_NECESSITY)) expect(known.has(goodId), goodId).toBe(true);
+  });
+
+  it("is authored, not read off consumption volume — medicine outweighs gas", () => {
+    // The defect this table exists to fix: GOOD_CONSUMPTION is a TIER gradient, so medicine (0.001)
+    // sits below gas (0.004) purely because medicine is tier-1. Necessity must invert that.
+    expect(GOOD_CONSUMPTION.medicine).toBeLessThan(GOOD_CONSUMPTION.gas);
+    expect(GOOD_NECESSITY.medicine).toBeGreaterThan(GOOD_NECESSITY.gas);
+  });
+
+  it("puts the survival goods strictly at the top", () => {
+    for (const goodId of SURVIVAL_GOODS) {
+      expect(GOOD_NAMES, goodId).toContain(goodId);
+      expect(GOOD_NECESSITY[goodId], goodId).toBe(1);
+    }
+    for (const goodId of GOOD_NAMES) {
+      if (SURVIVAL_GOODS.includes(goodId)) continue;
+      expect(GOOD_NECESSITY[goodId], goodId).toBeLessThan(1);
     }
   });
 });
