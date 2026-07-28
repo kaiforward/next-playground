@@ -30,7 +30,6 @@ function rigLogisticsPair(world: World, factionId: string): World {
     buildings: {},
     yields: unitResourceVector(),
     population: 200,
-    governmentType: world.factions.find((f) => f.id === factionId)!.governmentType,
     seedStock: false,
   });
   return {

@@ -76,7 +76,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         producedGoodsBySystem.set(sys.id, producedGoods);
       }
       const production = buildingProduction(sys.buildings, m.goodId, snap.state, sys.yields);
-      const consumption = consumptionRate(m.goodId, snap.basis, sys.governmentType);
+      const consumption = consumptionRate(m.goodId, snap.basis);
       const squeezePulses = typeof m.squeezePulses === "number" && Number.isFinite(m.squeezePulses)
         ? Math.max(0, Math.min(2, m.squeezePulses))
         : 0;

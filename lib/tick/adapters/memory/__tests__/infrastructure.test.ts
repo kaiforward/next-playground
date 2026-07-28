@@ -7,7 +7,7 @@ import type { TickSystem } from "@/lib/tick/rows";
 function sys(id: string, buildings: Record<string, number>, idle: Record<string, number> = {}, debt = 0): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
-    governmentType: "frontier", population: 100, popCap: 200,
+    governmentType: "federation", population: 100, popCap: 200,
     unrest: 0.3, buildings, buildingIdleMonths: idle, collapseDebt: debt, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }

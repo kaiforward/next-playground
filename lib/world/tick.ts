@@ -295,7 +295,6 @@ function buildLogisticsRows(
     systemId: s.id,
     factionId: s.factionId,
     population: s.population,
-    governmentType: s.governmentType,
     buildings: s.buildings,
     yields: s.yields,
     markets: marketsBySystem.get(s.id) ?? [],
@@ -311,7 +310,6 @@ function buildBuildRows(
     factionId: s.factionId,
     control: s.control,
     population: s.population,
-    governmentType: s.governmentType,
     unrest: s.unrest,
     buildings: s.buildings,
     yields: s.yields,
@@ -518,7 +516,6 @@ export function addMarketsForSettledSystems(
       buildings: sys.buildings,
       yields: sys.yields,
       population: sys.population,
-      governmentType: sys.governmentType,
       seedStock: false,
     });
     for (const row of rows) {

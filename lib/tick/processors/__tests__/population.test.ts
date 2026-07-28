@@ -99,7 +99,7 @@ describe("population processor", () => {
     expect(a.population).toBeCloseTo(498, 6);
     const m = world.markets.find((mm) => mm.systemId === "a")!;
     // demandRate = civilian-only floor for food at pop 498 (no production-input draw here).
-    expect(m.demandRate).toBeCloseTo(civilianDemandRateForGood("food", popOnly(498), "federation"), 5);
+    expect(m.demandRate).toBeCloseTo(civilianDemandRateForGood("food", popOnly(498)), 5);
   });
   it("includes production-input demand in the rewritten demandRate", async () => {
     // A smelter (metals building) draws ore as a recipe input. The ore market's
@@ -123,8 +123,8 @@ describe("population processor", () => {
     // Ore has no per-capita need, so civilian-only gives MIN_DEMAND. Ore is also not a
     // basket good, so the population-only basis matches the system's real (technician-
     // bearing) basis for this good.
-    const civilianOnly = civilianDemandRateForGood("ore", popOnly(afterPop), "federation");
-    const withIndustrial = totalDemandRateForGood("ore", popOnly(afterPop), buildings, unitResourceVector(), "federation");
+    const civilianOnly = civilianDemandRateForGood("ore", popOnly(afterPop));
+    const withIndustrial = totalDemandRateForGood("ore", popOnly(afterPop), buildings, unitResourceVector());
 
     // The smelter's ore draw must push the rate above the civilian-only floor.
     expect(withIndustrial).toBeGreaterThan(civilianOnly);
@@ -149,28 +149,14 @@ describe("population processor", () => {
     expect(snap.basis.technicians).toBeGreaterThan(0);
 
     // The technician basket term separates the real basis from population-only…
-    expect(civilianDemandRateForGood("consumer_goods", snap.basis, "federation")).toBeGreaterThan(
-      civilianDemandRateForGood("consumer_goods", popOnly(afterPop), "federation"),
+    expect(civilianDemandRateForGood("consumer_goods", snap.basis)).toBeGreaterThan(
+      civilianDemandRateForGood("consumer_goods", popOnly(afterPop)),
     );
     // …and the market row carries the real-basis total, not the population-only one.
-    const realBasisTotal = totalDemandRateForGood("consumer_goods", snap.basis, buildings, unitResourceVector(), "federation", snap.state);
-    const popOnlyTotal = totalDemandRateForGood("consumer_goods", popOnly(afterPop), buildings, unitResourceVector(), "federation", snap.state);
+    const realBasisTotal = totalDemandRateForGood("consumer_goods", snap.basis, buildings, unitResourceVector(), snap.state);
+    const popOnlyTotal = totalDemandRateForGood("consumer_goods", popOnly(afterPop), buildings, unitResourceVector(), snap.state);
     expect(m.demandRate).toBeCloseTo(realBasisTotal, 6);
     expect(m.demandRate).not.toBeCloseTo(popOnlyTotal, 6);
-  });
-
-  it("rewrites a government boost exactly once", async () => {
-    const militarist = { ...sys("m", 500, 1000), governmentType: "militarist" as const };
-    const world = new InMemoryPopulationWorld({ systems: [militarist], markets: [market("m", "weapons")] });
-    await runPopulationProcessor(world, ctxWithD(new Map([["m", 0]])), PARAMS);
-
-    const afterPop = world.systems.find((s) => s.id === "m")!.population;
-    const weapons = world.markets.find((m) => m.systemId === "m" && m.goodId === "weapons")!;
-    const expected = civilianDemandRateForGood("weapons", popOnly(afterPop), "militarist");
-    expect(weapons.demandRate).toBeCloseTo(expected, 6);
-    expect(weapons.demandRate).toBeGreaterThan(
-      civilianDemandRateForGood("weapons", popOnly(afterPop), "frontier"),
-    );
   });
 
   it("halving the interval halves the per-run growth (wall-clock rate preserved)", async () => {

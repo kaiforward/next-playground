@@ -75,12 +75,12 @@ function scenario(
 ): SystemBuildRow[] {
   return [
     {
-      systemId: "A", factionId: "f1", governmentType: "federation", control: aOpts?.control ?? "unclaimed", population: 100, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", control: aOpts?.control ?? "unclaimed", population: 100, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1, aOpts?.foodPulses)],
     },
     {
-      systemId: "B", factionId: "f1", governmentType: "federation", control: "developed", population: 5000, unrest: 0,
+      systemId: "B", factionId: "f1", control: "developed", population: 5000, unrest: 0,
       buildings: { food: bFood, housing: bHousing },
       yields: unitResourceVector(), slotCap: builderSlots(slots),
       generalSpace, habitableSpace: 100, markets: [],
@@ -171,7 +171,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
 
   it("commits nothing when there is nothing to build (no deficit, no housing headroom)", async () => {
     const balanced: SystemBuildRow[] = [{
-      systemId: "A", factionId: "f1", governmentType: "federation", control: "developed", population: 0, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", control: "developed", population: 0, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
       markets: [foodMarket("A", 1)], // population 0 → no consumption → no rate deficit; no habitable land → no housing
     }];
@@ -185,7 +185,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     // A fed (no unmet goods) and calm developed system with room for a few housing levels. A small
     // pool + cap fund a slice each pulse, so the level lands only after several pulses of work.
     const base: SystemBuildRow = {
-      systemId: "B", factionId: "f1", governmentType: "federation", control: "developed", population: 300, unrest: 0,
+      systemId: "B", factionId: "f1", control: "developed", population: 300, unrest: 0,
       buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 10, habitableSpace: 3, markets: [],
     };
@@ -255,21 +255,21 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
     // expand → fundQueue). The single-industry shipped tests can't exercise this cross-bundle ordering.
     const rows: SystemBuildRow[] = [
       {
-        systemId: "A1", factionId: "f1", governmentType: "federation", control: "developed", population: 10, unrest: 0, buildings: {},
+        systemId: "A1", factionId: "f1", control: "developed", population: 10, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A1", 1, 1)],
       },
       {
-        systemId: "A2", factionId: "f1", governmentType: "federation", control: "developed", population: 100000, unrest: 0, buildings: {},
+        systemId: "A2", factionId: "f1", control: "developed", population: 100000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A2", 1, 1)],
       },
       {
-        systemId: "B1", factionId: "f1", governmentType: "federation", control: "developed", population: 5000, unrest: 0, buildings: {},
+        systemId: "B1", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: builderSlots(20), generalSpace: 100, habitableSpace: 100, markets: [],
       },
       {
-        systemId: "B2", factionId: "f1", governmentType: "federation", control: "developed", population: 5000, unrest: 0, buildings: {},
+        systemId: "B2", factionId: "f1", control: "developed", population: 5000, unrest: 0, buildings: {},
         yields: unitResourceVector(), slotCap: builderSlots(20), generalSpace: 100, habitableSpace: 100, markets: [],
       },
     ];
@@ -297,7 +297,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
   // PERSISTENCE_PULSES while its structural residual survives; a covered good resets to 0. Distinct from
   // the economy's squeeze clock — this counter is written by directed-build, keyed by market id.
   const sink = (systemId: string, population: number, foodPulses?: number): SystemBuildRow => ({
-    systemId, factionId: "f1", governmentType: "federation", control: "developed", population, unrest: 0,
+    systemId, factionId: "f1", control: "developed", population, unrest: 0,
     buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0, markets: [foodMarket(systemId, 1, foodPulses)],
   });
@@ -358,7 +358,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
   // rate of 0 keeps it off the exporter self-netting path — so the ONLY thing that can advance its clock is
   // the squeeze-feedback gap, isolating the two guards that suppress it.
   const rationedSelfSupplier = (extra: Partial<MarketRowForLogistics>): SystemBuildRow => ({
-    systemId: "S", factionId: "f1", governmentType: "federation", control: "developed", population: 20, unrest: 0,
+    systemId: "S", factionId: "f1", control: "developed", population: 20, unrest: 0,
     buildings: { food: 10 }, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
     markets: [{
       id: "S|food", goodId: "food", stock: 50, anchorMult: 1, demandRate: 10, storageCapacity: 0,
@@ -466,7 +466,7 @@ const COLONY_PARAMS: ColonyEstablishParams = {
  *  pool funds only colonies. Population sets the throughput pool. */
 function saturatedHome(population: number): SystemBuildRow {
   return {
-    systemId: "home", factionId: "f1", governmentType: "federation", control: "developed", population, unrest: 0,
+    systemId: "home", factionId: "f1", control: "developed", population, unrest: 0,
     buildings: { [HOUSING_TYPE]: 5 },
     yields: unitResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 5, habitableSpace: 5, markets: [], // habitable fully housed (5 levels) → σ = 1, no housing headroom
@@ -480,7 +480,7 @@ function colonyCand(systemId: string, habitableSpace = 100): ColonyEstablishCand
 // One developed owned system so the faction is in the shard, with no build needs.
 function ownedOnly(factionId: string): SystemBuildRow {
   return {
-    systemId: `${factionId}-home`, factionId, governmentType: "federation", control: "developed", population: 100, unrest: 0,
+    systemId: `${factionId}-home`, factionId, control: "developed", population: 100, unrest: 0,
     buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0, markets: [],
   };
@@ -585,7 +585,7 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
  *  colony in the same pool. Population sets labour; the pool is kept scarce via mkConstruction's rate. */
 function homeWithFoodDeficit(population = 1000): SystemBuildRow {
   return {
-    systemId: "home", factionId: "f1", governmentType: "federation", control: "developed", population, unrest: 0,
+    systemId: "home", factionId: "f1", control: "developed", population, unrest: 0,
     buildings: { [HOUSING_TYPE]: 5 },
     yields: unitResourceVector(), slotCap: builderSlots(20),
     generalSpace: 5, habitableSpace: 5, markets: [foodMarket("home", 1)], // habitable fully housed → σ = 1
@@ -641,12 +641,12 @@ describe("runDirectedBuildProcessor — pool fairness floor", () => {
   // new, so funding is purely the two in-flight builds.
   const floorScenario = (): SystemBuildRow[] => [
     {
-      systemId: "H", factionId: "f1", governmentType: "federation", control: "developed", population: 400, unrest: 0,
+      systemId: "H", factionId: "f1", control: "developed", population: 400, unrest: 0,
       buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 20, markets: [],
     },
     {
-      systemId: "C", factionId: "f1", governmentType: "federation", control: "developed", population: 2, unrest: 0,
+      systemId: "C", factionId: "f1", control: "developed", population: 2, unrest: 0,
       buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 20, markets: [],
     },
@@ -676,7 +676,7 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
   // A developed builder with no build needs (fully housed, no markets) so the planner proposes nothing
   // new and funding is purely the in-flight queue. Ample population sets a pool far above the cap.
   const idleBuilder = (population: number): SystemBuildRow => ({
-    systemId: "B", factionId: "f1", governmentType: "federation", control: "developed", population, unrest: 0,
+    systemId: "B", factionId: "f1", control: "developed", population, unrest: 0,
     buildings: { [HOUSING_TYPE]: 5 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 5, habitableSpace: 5, markets: [],
   });
@@ -746,12 +746,12 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     // over-reserve the (halved) pool at interval 12, so the colony would get MORE than half.
     const floorScenario = (): SystemBuildRow[] => [
       {
-        systemId: "H", factionId: "f1", governmentType: "federation", control: "developed", population: 400, unrest: 0,
+        systemId: "H", factionId: "f1", control: "developed", population: 400, unrest: 0,
         buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 20, markets: [],
       },
       {
-        systemId: "C", factionId: "f1", governmentType: "federation", control: "developed", population: 2, unrest: 0,
+        systemId: "C", factionId: "f1", control: "developed", population: 2, unrest: 0,
         buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
         generalSpace: 0, habitableSpace: 20, markets: [],
       },
@@ -873,7 +873,7 @@ describe("construction funding gate", () => {
   // larger than the pool → absorbed work per pulse equals the pool exactly, making the
   // funded-fraction scaling directly observable via workPerformedByFaction.
   const row = (): SystemBuildRow => ({
-    systemId: "s1", factionId: "f1", governmentType: "federation", control: "developed" as const,
+    systemId: "s1", factionId: "f1", control: "developed" as const,
     population: 100, unrest: 0, buildings: {},
     yields: emptyResourceVector(), slotCap: emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0, markets: [],
@@ -996,7 +996,7 @@ describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommit
 
   it("reports no build commitments when nothing is proposed", async () => {
     const balanced: SystemBuildRow[] = [{
-      systemId: "A", factionId: "f1", governmentType: "federation", control: "developed", population: 0, unrest: 0, buildings: {},
+      systemId: "A", factionId: "f1", control: "developed", population: 0, unrest: 0, buildings: {},
       yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
       markets: [foodMarket("A", 1)], // population 0 → no consumption → no rate deficit; no habitable land → no housing
     }];
@@ -1025,7 +1025,7 @@ const SEED_BASIS: CivilianDemandBasis = {
 /** What the colony wants of `goodId`: its share of its own pricing anchor, per the founding policy. */
 const foundingWant = (goodId: string) =>
   COLONISATION.FOUNDING_STOCK_ANCHOR_FRAC * TARGET_COVER
-  * consumptionRate(goodId, SEED_BASIS, "federation");
+  * consumptionRate(goodId, SEED_BASIS);
 
 function stockedMarket(systemId: string, goodId: string, stock: number): MarketRowForLogistics {
   return { id: `${systemId}|${goodId}`, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
@@ -1101,7 +1101,7 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
     // be parked at one-and-a-half wants — enough for the first colony's want and only a remainder for
     // the second. Without a shared balance both would read the same opening figure and both would be
     // granted a full want, minting stock the founder never had.
-    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 }, "federation");
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
     const exportRate = homeDemand * 2;
     const stock = TARGET_COVER * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC + foundingWant("food") * 1.5;
     const w = new MemoryDirectedBuildWorld([stockedHome({ food: stock }, { food: exportRate })]);

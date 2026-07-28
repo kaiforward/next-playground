@@ -103,7 +103,7 @@ function planFoundingStock(
   const basis: CivilianDemandBasis = { population: seedPop, technicians: 0, engineers: 0 };
   const manifest: FoundingStockLine[] = [];
   for (const good of toGoodMarketStates(source)) {
-    const colonyDemandRate = consumptionRate(good.goodId, basis, source.governmentType);
+    const colonyDemandRate = consumptionRate(good.goodId, basis);
     if (colonyDemandRate <= 0) continue; // the seed does not consume it
     const want = COLONISATION.FOUNDING_STOCK_ANCHOR_FRAC * TARGET_COVER * colonyDemandRate;
     const key = `${source.systemId}|${good.goodId}`;

@@ -19,11 +19,13 @@ import { describe, it, expect, vi, afterEach } from "vitest";
  * (`Math.round`/`floor` on a goods amount) or left as an unscaled absolute — those
  * are a rounding error at S=100 but a large fraction at S=1, so they diverge only
  * at low scale and compound through every monthly pulse. This broad end-to-end guard
- * reliably exercises the seed-stock de-rounding (from tick 0) and the government
- * consumption scaling (it runs past the first monthly economy pulse, where that term
- * first bites). The logistics-transfer term is guarded directly by a focused unit test
- * (`lib/tick/processors/__tests__/directed-logistics.test.ts`) instead, because directed
- * transfers don't reliably fire within this short window for an arbitrary seed.
+ * reliably exercises the seed-stock de-rounding (from tick 0) and every per-capita
+ * demand term through the monthly economy pulse. There is no longer a flat scaled
+ * demand term in the civilian path to exercise — the civilian basket is
+ * population-proportional throughout — so that specific coverage is gone rather than
+ * merely untested. The logistics-transfer term is guarded directly by a focused unit
+ * test (`lib/tick/processors/__tests__/directed-logistics.test.ts`) instead, because
+ * directed transfers don't reliably fire within this short window for an arbitrary seed.
  *
  * ECONOMY_SCALE is resolved once at module import, so each scale runs against a
  * freshly-imported constants + tick graph (resetModules + stubEnv), mirroring the
@@ -70,7 +72,7 @@ describe("ECONOMY_SCALE dynamic invariance", () => {
   it("per-(system,good) stock is scale-normalised-identical across the first monthly pulse", async () => {
     const SEED = 745878428; // colonies + a monthly pulse in-window (logistics is covered by a focused test)
     const SYSTEM_COUNT = 60;
-    const TICKS = 30; // past the first economy pulse (tick 24), where the gov-consumption term bites
+    const TICKS = 30; // past the first economy pulse (tick 24), where per-capita demand first bites
     const TOL = 1e-6; // pure FP is ~1e-15 here; a quantised/absolute term diverges ~1e-3+
 
     const s1 = await runAtScale("1", SEED, SYSTEM_COUNT, TICKS);

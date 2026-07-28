@@ -17,7 +17,6 @@ import {
 } from "../universe-gen";
 import { HOME_SYSTEM_PREFAB } from "@/lib/engine/homeworld-prefab";
 import { emptyResourceVector } from "@/lib/engine/resources";
-import type { GovernmentType } from "@/lib/types/game";
 import {
   genConfigForSystemCount,
   DEFAULT_SYSTEM_COUNT,
@@ -425,14 +424,14 @@ describe("generateConnections", () => {
 // ── Emergent starting condition (home-system prefab) ────────────
 
 describe("stampHomeworldPrefabs", () => {
-  it("stamps the government-sized home-system prefab onto a garden body for each homeworld, leaves the rest bare", () => {
+  it("stamps the home-system prefab onto a garden body for each homeworld, leaves the rest bare", () => {
     const systems = [
       mkSys({ index: 0, population: 0, buildings: {} }),
       mkSys({ index: 1, population: 0, buildings: {} }),
     ];
     const homeworldBodiesBefore = systems[0].bodies.length;
 
-    stampHomeworldPrefabs(systems, new Map<number, GovernmentType>([[0, "frontier"]]));
+    stampHomeworldPrefabs(systems, new Set([0]));
 
     // Homeworld: stamped with the prefab, on a prepended guaranteed garden body.
     expect(systems[0].buildings).toEqual(HOME_SYSTEM_PREFAB.buildings);

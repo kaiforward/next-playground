@@ -23,7 +23,7 @@ describe("GOVERNMENT_TYPES", () => {
     const requiredKeys: ReadonlyArray<keyof GovernmentDefinition> = [
       "name", "description",
       "dangerBaseline",
-      "eventWeights", "consumptionBoosts",
+      "eventWeights",
     ];
 
     for (const type of ALL_GOVERNMENT_TYPES) {

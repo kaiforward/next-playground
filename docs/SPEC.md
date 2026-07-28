@@ -147,7 +147,6 @@ flowchart TD
     FA -- "per-system government<br/>(via factionId)" --> GOV
     FA -- "doctrine + status<br/>(drift bias, alliance gating)" --> REL
 
-    GOV -- "consumption boosts" --> EC
     GOV -- "danger baseline<br/>(readout only)" --> NF
 
     REL -- "border_conflict /<br/>pact_under_negotiation /<br/>alliance_dissolved events" --> EV
@@ -171,7 +170,6 @@ Key interactions:
 - **Population → Economy**: `unrest` from the previous tick drives the strike suppression multiplier applied to production each economy run; rewritten `demandRate` flows into the pricing reference (`TARGET_COVER × demandRate × anchorMult`)
 - **Population → Migration**: The migration processor reads updated `population` and `unrest` from the population processor in the same tick to compute attractiveness gradients and relocate population
 - **Migration → Population (next tick)**: Population moved this tick is reflected in the next tick's growth/decline and satisfaction calculations — no in-transit state, relocation is instantaneous
-- **Government → Economy**: Consumption boosts
 - **Government → Navigation**: Danger baseline (overview readout only)
 - **Factions → Government**: Government type is sourced from each system's owning faction (no longer per-region)
 - **Factions → Relations**: Doctrine pair and status drive drift bias; status gates alliance capacity (planned)

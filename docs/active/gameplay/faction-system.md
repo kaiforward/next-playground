@@ -40,7 +40,7 @@ Factions are hand-crafted named entities with distinct identity and behavior.
 |---|---|---|
 | name | string | Unique faction name (e.g. "Terran Sovereignty") |
 | description | text | Lore, personality, background |
-| government | GovernmentType | Economic identity — drives market behavior, internal modifiers |
+| government | GovernmentType | Political character — drives event weights and transit danger |
 | doctrine | Doctrine | Political identity — drives foreign policy and war behavior |
 | homeworld | system_id | Capital system. Very hard to capture (see [war-system.md](../../planned/war-system.md) §5) |
 | territory | [system_ids] | Derived from systems that have `factionId` |
@@ -113,13 +113,13 @@ Government type is strictly an **economic/internal** axis. It defines how a fact
 
 Two factions can share a government type and still be bitter enemies. A federation and another federation may both be democratic internally but have completely opposing doctrines and interests.
 
-**Status: Implemented.** All 8 government types live in `GOVERNMENT_TYPES` (`lib/constants/government.ts`) with concrete starting values. The economy processor reads `governmentType` per-market (sourced from `system.faction.governmentType`).
+**Status: Implemented.** All 8 government types live in `GOVERNMENT_TYPES` (`lib/constants/government.ts`) with concrete starting values. Government type is an **event-weight and danger axis**: it carries no economic modifier, and nothing in the economy or demand chain reads it. A replacement economic axis is a planned government-layer revisit ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md)).
 
-**Design rule**: Every government type has trade-offs — buffs balanced by debuffs. No type is strictly better or worse, just different. Each shapes its regions' markets in a distinct direction.
+**Design rule**: Every government type has trade-offs — buffs balanced by debuffs. No type is strictly better or worse, just different. The mechanical surface today is event weights and transit danger; the flavour below is the character each type is written toward.
 
 8 government types (expanded from the original 4 in [economy.md](./economy.md)):
 
-| Government | Economic identity |
+| Government | Character |
 |---|---|
 | Federation | Balanced, regulated, stable |
 | Corporate | Pro-trade, low regulation, profit-maximizing |
@@ -130,18 +130,18 @@ Two factions can share a government type and still be bitter enemies. A federati
 | Militarist | War economy, resource-hungry, mobilized |
 | Theocratic | Ideological, community-driven, insular |
 
-Concrete economic modifiers per government type. These are the live shipped values from `GOVERNMENT_TYPES`.
+Concrete modifiers per government type. These are the live shipped values from `GOVERNMENT_TYPES`.
 
-| Government | Danger | Consumption boost |
-|---|---|---|
-| Federation | 0.00 | medicine |
-| Corporate | 0.02 | luxuries |
-| Authoritarian | 0.00 | weapons, fuel |
-| Frontier | 0.10 | — |
-| Cooperative | 0.00 | food, medicine |
-| Technocratic | 0.01 | electronics |
-| Militarist | 0.05 | weapons, fuel, machinery |
-| Theocratic | 0.03 | food, medicine, textiles |
+| Government | Danger |
+|---|---|
+| Federation | 0.00 |
+| Corporate | 0.02 |
+| Authoritarian | 0.00 |
+| Frontier | 0.10 |
+| Cooperative | 0.00 |
+| Technocratic | 0.01 |
+| Militarist | 0.05 |
+| Theocratic | 0.03 |
 
 ---
 

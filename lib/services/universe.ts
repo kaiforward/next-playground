@@ -1,5 +1,5 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, governmentByFactionId, governmentTypeForSystem, marketsBySystem } from "./world-index";
+import { buildingsBySystem, governmentByFactionId, marketsBySystem } from "./world-index";
 import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
@@ -222,8 +222,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   );
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.
-  const governmentType = governmentTypeForSystem(system, governmentByFactionId());
-  const popNeeds = systemPopNeeds(systemId, readout.labourAllocation, governmentType);
+  const popNeeds = systemPopNeeds(systemId, readout.labourAllocation);
 
   return {
     visibility: "visible",
@@ -231,7 +230,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     ...readout,
     space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
     deposits: summariseDeposits(slotCap, worked, yields),
-    goods: capacityGoodRates(buildings, system.population, yields, governmentType),
+    goods: capacityGoodRates(buildings, system.population, yields),
     popNeeds,
   };
 }

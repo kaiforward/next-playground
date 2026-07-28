@@ -65,8 +65,9 @@ Realized-aware classification: `toGoodMarketStates`' `production` figure applies
 multipliers and input gates (the tick already emits `realizedProductionBySystem`; thread it — and
 last-pulse persistence for off-month pulses — into the planner rows/ctx, which today get a bare
 `{ tick }` at `lib/world/tick.ts:774/860`). Gov consumption boost folds at the shared
-civilian-demand chokepoint (`consumptionRate`/`capacityGoodRates`, threading government type) so
-band, planner demand, and cover chip all see it. `PROVISION_MARGIN` (0.10–0.15) on capacity
+civilian-demand chokepoint (`consumptionRate`/`capacityGoodRates`) so band, planner demand, and
+cover chip all see it — superseded: the necessity slice deletes the boost outright, so the
+chokepoint no longer threads a government type. `PROVISION_MARGIN` (0.10–0.15) on capacity
 targets; feedback backstop (rationing ≥ 2 pulses ⇒ structural, with funding-bound and suppression
 exclusions); response pacing (2-pulse proposal persistence + `BUILD_RATE_CAP` ≈ 0.4); structural
 exporters drawable to a separate strategic export-reserve floor (non-producers keep the anchor floor). New per-(system, good)
