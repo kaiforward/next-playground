@@ -307,7 +307,7 @@ headroom level.
 > needs `> 0.387`. The sanity table below is wrong — it was computed over a six-good subset, but
 > every settled system carries a row for every good and the fold sees all of them. Locked
 > Decision 1 and the `SHORTAGE_DEMAND_SHARE = 0.25` cut are void. The intended replacement is the
-> demand-elasticity primitive in `docs/planned/demand-elasticity.md`, which carries the measured
+> necessity primitive in `docs/planned/necessity-weighted-unrest.md`, which carries the measured
 > basket, every rejected fold with its disqualifying evidence, and the stopgap fallback; spec §3
 > points at it. Elasticity is its own slice, not part of this PR. The ceilings
 > half is parked with the fold rather than shipped alone — the containment guarantee is a claim

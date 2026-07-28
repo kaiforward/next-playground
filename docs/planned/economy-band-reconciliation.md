@@ -240,29 +240,26 @@ recalibration.
   | Tier-2 civilian trio empty | 10.7% | 20.7% | 34.7% |
   | All tier-1+2 empty (the barren-chronic case) | 38.7% | 46.5% | 62.0% |
 
-  Summing the short goods' demand share therefore requires a cut `≤ 0.166` to grade a total water
-  failure as Shortage and a cut `> 0.387` to keep the barren-chronic deficit at Rationing. No value
-  satisfies both, so this is a structural limit of the summed fold rather than a calibration miss:
-  summing knows only *how much* demand is short, and the ambient deficit is short on more demand
-  than an acute one — eighteen small goods against one large one. (An earlier draft of this section
-  cited food and water as ~76% of the basket and luxuries as ~3%; those came from a six-good subset
-  that does not exist in the code.)
+  Summing the short goods' *unweighted* demand share therefore requires a cut `≤ 0.166` to grade a
+  total water failure as Shortage and a cut `> 0.387` to keep the barren-chronic deficit at
+  Rationing, and no value satisfies both. (An earlier draft of this section cited food and water as
+  ~76% of the basket and luxuries as ~3%; those came from a six-good subset that does not exist in
+  the code.)
 
-  **The intended answer is now demand elasticity — see `docs/planned/demand-elasticity.md`**, which
-  carries the measured basket, every rejected fold with its disqualifying evidence, and the primitive
-  itself. In short: necessity is not the *height* of a demand curve (consumption volume) but its
-  *slope* (how much wanting survives when the good cannot be had), and this model has only the
-  height. Volume is a bad necessity proxy in its own data — medicine's per-capita need sits below
-  gas's purely because medicine is tier-1. With elasticity the fold stops needing a definition of
-  deprivation at all: elastic goods' demand shrinks to meet supply, so they cannot carry a standing
-  deficit, so ambient higher-tier scarcity stops driving unrest at the source rather than being
-  filtered out by a threshold.
+  **The answer is a per-good necessity weight — see
+  [necessity-weighted-unrest.md](./necessity-weighted-unrest.md).** The failure above is a missing
+  weight, not a structural limit of summing: eighteen goods nobody needs badly should not outweigh
+  the one good everybody needs absolutely. Weighting each good's demand share by an authored
+  necessity number inverts the ordering the right way — a water failure scores ~2.7× the ambient
+  chronic deficit instead of ~0.43× — so a cut exists that grades famine as Shortage and ambient
+  scarcity as Rationing. A per-good cap on each good's contribution then makes containment a
+  guarantee rather than a calibration outcome. Necessity must be *authored*: every attempt to read it
+  off an existing signal fails, because consumption volume puts medicine below gas and any
+  satisfaction-gated fold scores water at 0.49 identically to water at 0.00.
 
-  Any share-based fold — summed, largest-good, or a threshold on D — is a stopgap. If elasticity is
-  judged too large a change, the fallback is the **largest single term of D** (`max_g [share_g ×
-  (1 − sat_g)²]`, cut ≈ 0.10): continuous, no satisfaction cliff, and it separates every measured
-  scenario correctly, but it still reads necessity as consumption volume. Both the summed fold locked
-  above and the `SHORTAGE_SATISFACTION` cliff it depends on are disqualified on the evidence.
+  That spec also deletes `GOVERNMENT_TYPES.consumptionBoosts`, a flat population-independent
+  consumption term that is 2.4% of a pop-1000 basket and ~93% of a 2-pop colony's — which made every
+  new colony read as a famine and the founding manifest come out ~99% medicine by quantity.
 
 - **Each regime bounds where unrest settles.** The accumulation gains are re-parameterised as
   `gain = ceiling × decay`, so each regime carries a named ceiling and the equilibrium under
@@ -499,7 +496,7 @@ Content contract only; concrete layout gets the house collaborative wireframe pa
 | `RATION_EXIT_EPS` | calibrated with the presentation pass | Regime-chip enter/exit hysteresis around rationing |
 | overshoot-death gate | strike threshold (0.65) | Unrest above which the overshoot-death term fires (collapse regime only) |
 | colony housing sizing | `ceil(seedPop ÷ POP_CENTRE_DENSITY)` | No bundled spare level — inside the vacancy slack by construction (§5) |
-| shortage demand share | calibrated | Share of a system's demand in badly-supplied goods that selects the fast unrest rate (§3) |
+| shortage cut on D | calibrated | Necessity-weighted dissatisfaction that selects the fast unrest rate — owned by [necessity-weighted-unrest.md](./necessity-weighted-unrest.md) (§3) |
 | unrest ceiling — Rationing | below the strike threshold | Equilibrium `floor + ceiling × D`; asserted under 0.65 (§3) |
 | unrest ceiling — Shortage | calibrated, > Rationing's | Only genuine famine may approach the collapse regime (§3) |
 | collapse severity ramp | 0 at θ → full at unrest 1 | Distance above θ scales teardown speed; replaces the cliff (§5) |
