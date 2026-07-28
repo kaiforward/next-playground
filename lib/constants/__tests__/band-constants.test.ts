@@ -1,10 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { ECONOMY_CONSTANTS, TARGET_COVER, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import {
+  ECONOMY_CONSTANTS,
+  TARGET_COVER,
+  SHORTAGE_SATISFACTION,
+  D_SHORTAGE_CUT,
+  D_SHORTAGE_BLEND,
+} from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
-import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING } from "@/lib/constants/population";
+import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING, UNREST_PARAMS } from "@/lib/constants/population";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { VACANCY_SLACK } from "@/lib/constants/infrastructure";
+import { VACANCY_SLACK, INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
+import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
+import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import { unrestCeiling } from "@/lib/engine/population";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import { housingUsed, idleLevels } from "@/lib/engine/infrastructure-decay";
 
@@ -40,6 +51,127 @@ describe("population / unrest constant dependencies", () => {
     // Even a fully overcrowded world adds only PRESSURE_MAX to the standing floor,
     // which must stay well under the strike threshold.
     expect(CROWDING.PRESSURE_MAX).toBeLessThan(STRIKE_PARAMS.threshold);
+  });
+});
+
+/**
+ * Each good's weighted share of the ordinary unskilled basket — exactly the quantity the fold
+ * divides by, rebuilt from the shipped tables so a weight change moves these numbers instead of
+ * silently invalidating them. Unskilled: the basket is population-proportional, so the shares are
+ * the same at any population.
+ */
+function weightedShares(): Map<string, number> {
+  const basis = { population: 1000, technicians: 0, engineers: 0 };
+  const raw = new Map<string, number>();
+  let total = 0;
+  for (const goodId of GOOD_NAMES) {
+    const w = consumptionRate(goodId, basis) * GOOD_NECESSITY[goodId];
+    raw.set(goodId, w);
+    total += w;
+  }
+  const shares = new Map<string, number>();
+  for (const [goodId, w] of raw) shares.set(goodId, w / total);
+  return shares;
+}
+
+/** D when `empty` are at satisfaction 0 and everything else is fully delivered. */
+function dFor(empty: readonly string[]): number {
+  const shares = weightedShares();
+  let d = 0;
+  for (const goodId of empty) d += shares.get(goodId) ?? 0;
+  return d;
+}
+
+/** Equilibrium unrest under sustained D at a given standing floor: floor + ceiling(D) × D. */
+function settled(d: number, floor: number, survivalShortfall = false): number {
+  return floor + unrestCeiling(d, survivalShortfall, UNREST_PARAMS) * d;
+}
+
+const MAX_FLOOR = Math.max(...Object.values(TAX_LEVEL_UNREST_PRESSURE)) + CROWDING.PRESSURE_MAX;
+const COLLAPSE = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
+const TIER1PLUS2 = GOOD_NAMES.filter((g) => (GOOD_TIER_BY_KEY[g] ?? 0) > 0);
+
+describe("necessity fold — the separation the shortage cut was drawn against", () => {
+  it("grades a total water or food failure above the ambient barren-galaxy deficit", () => {
+    // The whole point of the weight. Unweighted, the ambient deficit scored 2.2x a total water
+    // failure, so no cut could separate them; weighted, the ordering inverts.
+    const ambient = dFor(TIER1PLUS2);
+    expect(dFor(["water"])).toBeGreaterThan(ambient * 2);
+    expect(dFor(["food"])).toBeGreaterThan(ambient * 2);
+  });
+
+  it("puts the shortage cut strictly between the two", () => {
+    expect(D_SHORTAGE_CUT).toBeGreaterThan(dFor(TIER1PLUS2));
+    expect(D_SHORTAGE_CUT).toBeLessThanOrEqual(dFor(["food"]));
+  });
+});
+
+describe("unrest containment — the guarantees the two ceilings carry", () => {
+  it("keeps the Shortage ceiling strictly above the Rationing one", () => {
+    expect(UNREST_PARAMS.ceilingShortage).toBeGreaterThan(UNREST_PARAMS.ceilingRationing);
+  });
+
+  it("never lets sustained Rationing reach collapse, at any tax", () => {
+    // Worst sustained Rationing: D just under the cut, the highest tax stance, fully overcrowded.
+    expect(settled(D_SHORTAGE_CUT - 1e-9, MAX_FLOOR)).toBeLessThan(COLLAPSE);
+  });
+
+  it("lets a total water or food failure collapse, even at zero tax", () => {
+    expect(settled(dFor(["water"]), 0)).toBeGreaterThan(COLLAPSE);
+    expect(settled(dFor(["food"]), 0)).toBeGreaterThan(COLLAPSE);
+  });
+
+  it("lets a total water or food failure drive net decline at every tax level", () => {
+    // An uncrowded system declines when unrest > 1 − D (growth and decline share a rate).
+    for (const good of ["water", "food"]) {
+      const d = dFor([good]);
+      for (const pressure of Object.values(TAX_LEVEL_UNREST_PRESSURE)) {
+        expect(settled(d, pressure), `${good} @ ${pressure}`).toBeGreaterThan(1 - d);
+      }
+    }
+  });
+
+  it("lets no non-survival good, alone, reach the strike threshold at any tax", () => {
+    // The guarantee the deleted per-good contribution cap was meant to carry. It is a claim about
+    // the constants, so it is a test rather than a runtime min() that can only cause harm when it fires.
+    for (const goodId of GOOD_NAMES) {
+      if (SURVIVAL_GOODS.includes(goodId)) continue;
+      const d = dFor([goodId]);
+      expect(settled(d, MAX_FLOOR), goodId).toBeLessThan(STRIKE_PARAMS.threshold);
+    }
+  });
+
+  it("still lets a broad shortage strike under overcrowding and very-high tax, below collapse", () => {
+    // "Only famine collapses" must not become "nothing but famine ever strikes".
+    const worstRationing = settled(D_SHORTAGE_CUT - 1e-9, MAX_FLOOR);
+    expect(worstRationing).toBeGreaterThan(STRIKE_PARAMS.threshold);
+    expect(worstRationing).toBeLessThan(COLLAPSE);
+  });
+
+  it("blends the ceiling across the cut instead of switching it", () => {
+    const below = unrestCeiling(D_SHORTAGE_CUT - 1e-6, false, UNREST_PARAMS);
+    const above = unrestCeiling(D_SHORTAGE_CUT + 1e-6, false, UNREST_PARAMS);
+    expect(Math.abs(above - below)).toBeLessThan(1e-4);
+    expect(below).toBe(UNREST_PARAMS.ceilingRationing);
+    expect(unrestCeiling(D_SHORTAGE_CUT + D_SHORTAGE_BLEND, false, UNREST_PARAMS))
+      .toBeCloseTo(UNREST_PARAMS.ceilingShortage, 10);
+  });
+
+  it("holds the Rationing ceiling across the whole Rationing range", () => {
+    // The ramp starts AT the cut, never below it — otherwise the containment guarantee above
+    // would only hold at the bottom of the band.
+    for (const d of [0, 0.05, 0.1, 0.2, D_SHORTAGE_CUT - 1e-9]) {
+      expect(unrestCeiling(d, false, UNREST_PARAMS), `D=${d}`).toBe(UNREST_PARAMS.ceilingRationing);
+    }
+  });
+
+  it("promotes a survival shortfall to the Shortage ceiling at any D", () => {
+    expect(unrestCeiling(0.05, true, UNREST_PARAMS)).toBe(UNREST_PARAMS.ceilingShortage);
+  });
+
+  it("keeps the housing fed-gate below the shortage cut", () => {
+    // A system the simulation calls starving must never be standing up new housing.
+    expect(DIRECTED_BUILD.D_SETTLE).toBeLessThan(D_SHORTAGE_CUT);
   });
 });
 

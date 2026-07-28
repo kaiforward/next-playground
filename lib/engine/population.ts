@@ -2,15 +2,17 @@
  * Pure population-dynamics functions — zero DB dependency.
  *
  * The consequence spine: measure → accumulate → threshold → effect.
- *  - measure:    dissatisfaction() folds per-good satisfaction into one convex,
- *                demand-weighted number D, and supplyRegime() folds the same goods
- *                into the worst-demanded-good rate class (supplied/rationing/shortage).
- *                D picks the magnitude of the shortfall; the regime picks the rate.
+ *  - measure:    dissatisfaction() folds per-good satisfaction into one convex number D
+ *                weighted by demand × authored necessity, and foldSupplyState() classes
+ *                the same goods as supplied/rationing/shortage — a cut on D plus a
+ *                water/food survival floor. D picks the magnitude of the shortfall;
+ *                the class picks the relaxation rate and carries the survival bit.
  *  - accumulate: accumulateUnrest() relaxes unrest toward a standing-pressure floor
- *                (tax + crowding) and integrates D on top of it. Equilibrium sits at
- *                the floor by construction, so recovery speed and the tax/crowding
- *                meaning are decoupled; the regime selects both the excess-gain and
- *                the relaxation rate (Supplied recovers faster than Rationing).
+ *                (tax + crowding) and integrates D on top of it, with gain =
+ *                unrestCeiling(D, survivalShortfall) × the relaxation rate. Equilibrium is
+ *                therefore exactly floor + ceiling × D at any rate, so the named ceilings
+ *                state maxima and recovery speed, catch-up and equilibrium are all
+ *                decoupled (Supplied recovers faster than Rationing).
  *  - threshold:  strikeMultiplier() derives the production-suppression regime from
  *                unrest — a smooth ramp, not a binary halt. Unrest's own integral
  *                is the hysteresis, so no separate stored strike flag is needed.
@@ -25,7 +27,7 @@
  */
 
 import { clamp } from "@/lib/utils/math";
-import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT } from "@/lib/constants/economy";
+import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT, D_SHORTAGE_BLEND } from "@/lib/constants/economy";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 
 /** One consumed good's signal for a system this tick. */
@@ -109,10 +111,11 @@ export function foldSupplyState(goods: GoodSatisfaction[], d: number): SupplySta
 }
 
 export interface UnrestParams {
-  /** Excess-integration gain per reference month while Rationing. */
-  gainRationing: number;
-  /** Excess-integration gain while Shortage. */
-  gainShortage: number;
+  /** Maximum equilibrium unrest ABOVE the standing floor while Rationing — the value settled unrest
+   *  reaches at D = 1, and hence the named bound the regime carries. */
+  ceilingRationing: number;
+  /** …and while Shortage. Strictly above ceilingRationing. */
+  ceilingShortage: number;
   /** Relaxation rate toward the standing-pressure floor while Rationing/Shortage. */
   decay: number;
   /** Faster relaxation while Supplied — the recovery rate. */
@@ -120,29 +123,50 @@ export interface UnrestParams {
 }
 
 /**
- * Relaxes unrest toward its standing-pressure floor and integrates dissatisfaction on top:
- *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + gain(regime)*clamp(d,0,1), 0, 1)
- * where k = clamp(regime === "supplied" ? recoveryDecay : decay, 0, 1) and
- * gain = shortage → gainShortage, otherwise gainRationing.
+ * The equilibrium unrest ceiling this reading carries, in ceilingRationing…ceilingShortage.
  *
- * `floor` is the standing pressure (tax + crowding), clamped to [0,1] by the caller.
- * At D = 0 unrest settles exactly at `floor` whatever the relaxation rate, so equilibrium
- * and recovery speed are decoupled. Catastrophe lives in the integral — one bad pulse is
- * recoverable, chronic shortage climbs toward 1. The caller pre-scales gains and decays by
- * the catch-up factor; k is clamped after scaling, so a large catch-up can never flip the
- * relaxation term and overshoot below the floor.
+ * Two selectors, deliberately shaped differently. D drives a CONTINUOUS ramp across
+ * [D_SHORTAGE_CUT, D_SHORTAGE_CUT + D_SHORTAGE_BLEND]: switching there would double a system's
+ * settled unrest for an arbitrarily small change in delivered goods and land that step across strike
+ * onset. The ramp starts at the cut, so the ceiling is exactly ceilingRationing across the whole
+ * Rationing range and the containment guarantee holds at the top of it. A survival shortfall is a
+ * step to ceilingShortage: famine in water or food is graded as famine whatever the fold says, which
+ * is the guarantee the floor exists to make explicit rather than hope emerges from a squared average.
+ * Total and monotone in both inputs.
+ */
+export function unrestCeiling(d: number, survivalShortfall: boolean, params: UnrestParams): number {
+  if (survivalShortfall) return params.ceilingShortage;
+  const ramp = D_SHORTAGE_BLEND > 0
+    ? clamp((d - D_SHORTAGE_CUT) / D_SHORTAGE_BLEND, 0, 1)
+    : (d >= D_SHORTAGE_CUT ? 1 : 0);
+  return params.ceilingRationing + ramp * (params.ceilingShortage - params.ceilingRationing);
+}
+
+/**
+ * Relaxes unrest toward its standing-pressure floor and integrates dissatisfaction on top:
+ *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + ceiling*k*clamp(d,0,1), 0, 1)
+ * where k = clamp(supplied ? recoveryDecay : decay, 0, 1) and ceiling = unrestCeiling(d, …).
+ *
+ * Because the gain is `ceiling × k` rather than an independent number, the fixed point is exactly
+ * `floor + ceiling × D` for ANY relaxation rate — so equilibrium, recovery speed and the tick's
+ * catch-up factor are fully decoupled, and each ceiling constant states a maximum rather than
+ * implying one through a ratio. `floor` is the standing pressure (tax + crowding), clamped to [0,1]
+ * by the caller; at D = 0 unrest settles exactly at `floor`. Catastrophe still lives in the integral —
+ * one bad pulse is recoverable, chronic shortage climbs toward the ceiling. The caller pre-scales the
+ * decays by the catch-up factor (never the ceilings); k is clamped after scaling, so a large catch-up
+ * can never flip the relaxation term and overshoot below the floor.
  */
 export function accumulateUnrest(
   unrest: number,
   d: number,
   floor: number,
-  regime: SupplyRegime,
+  supply: SupplyState,
   params: UnrestParams,
 ): number {
-  const k = clamp(regime === "supplied" ? params.recoveryDecay : params.decay, 0, 1);
-  const gain = regime === "shortage" ? params.gainShortage : params.gainRationing;
+  const k = clamp(supply.regime === "supplied" ? params.recoveryDecay : params.decay, 0, 1);
+  const ceiling = unrestCeiling(d, supply.survivalShortfall, params);
   const relaxed = floor + (1 - k) * (unrest - floor);
-  return clamp(relaxed + gain * clamp(d, 0, 1), 0, 1);
+  return clamp(relaxed + ceiling * k * clamp(d, 0, 1), 0, 1);
 }
 
 export interface StrikeParams {

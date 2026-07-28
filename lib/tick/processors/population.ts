@@ -28,14 +28,13 @@ export async function runPopulationProcessor(
   const systemIds = [...signals.dissatisfactionBySystem.keys()];
   const states = await world.getPopulationState(systemIds);
 
-  // Rates are reference-denominated; one run applies catchUpFactor(interval)
-  // reference-months of change. Unrest is a linear filter, so every gain and
-  // relaxation rate pre-scales (rescaling the time step) — accumulateUnrest clamps the
-  // scaled relaxation itself; the population delta scales directly.
+  // Rates are reference-denominated; one run applies catchUpFactor(interval) reference-months of
+  // change. Only the relaxation rates rescale the time step — the ceilings are dimensionless bounds
+  // on the equilibrium, and the gain is derived from the (scaled, clamped) rate inside
+  // accumulateUnrest, so equilibrium is catch-up invariant by construction.
   const catchUp = catchUpFactor(params.interval);
   const scaledUnrest: UnrestParams = {
-    gainRationing: params.unrest.gainRationing * catchUp,
-    gainShortage: params.unrest.gainShortage * catchUp,
+    ...params.unrest,
     decay: params.unrest.decay * catchUp,
     recoveryDecay: params.unrest.recoveryDecay * catchUp,
   };
@@ -44,7 +43,8 @@ export async function runPopulationProcessor(
   const demandPops: Array<{ systemId: string; population: number }> = [];
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
-    const regime = signals.supplyStateBySystem.get(s.systemId)?.regime ?? "supplied";
+    const supply = signals.supplyStateBySystem.get(s.systemId)
+      ?? { regime: "supplied", survivalShortfall: false };
     // Standing pressure: what a system settles at with nothing going wrong. Tax raises
     // unrest, not hunger, and overcrowding adds a bounded share on top — so both hold
     // unrest up rather than being shed like a supply shock, while the growth/decline
@@ -58,7 +58,7 @@ export async function runPopulationProcessor(
     // constant instead — the mixed shape is deliberate, not an inconsistency.
     const crowd = crowdingPressure(s.population, s.popCap, params.population.crowdBrakeEnd, CROWDING.PRESSURE_MAX);
     const floor = clamp(taxPressure + crowd, 0, 1);
-    const unrest = accumulateUnrest(s.unrest, d, floor, regime, scaledUnrest);
+    const unrest = accumulateUnrest(s.unrest, d, floor, supply, scaledUnrest);
     // The delta reads the unrest this pulse just produced, so unrest resolves forward within the
     // pulse while crowding lags it by one.
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
