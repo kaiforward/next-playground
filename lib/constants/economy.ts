@@ -26,9 +26,30 @@ export const ECONOMY_CONSTANTS = {
 } as const;
 
 /**
- * Civilian satisfaction (delivered/demanded) below which a demanded good counts as a
- * Shortage rather than mere Rationing. The worst-demanded-good fold (`supplyRegime`)
- * uses it to pick the unrest-accumulation rate. A strict `<` boundary: exactly this
- * level is still Rationing.
+ * Civilian satisfaction (delivered/demanded) below which a demanded good counts as a Shortage rather
+ * than mere Rationing. Its live consumer is the survival-good floor (`foldSupplyState`): water or food
+ * below this level selects Shortage for the whole system whatever the fold says. A strict `<`
+ * boundary: exactly this level is still Rationing.
  */
 export const SHORTAGE_SATISFACTION = 0.5;
+
+/**
+ * System dissatisfaction D at or above which the supply regime reads Shortage rather than Rationing.
+ * Cut against the measured 26-good basket under GOOD_NECESSITY: the ambient barren-galaxy deficit
+ * (every tier-1 and tier-2 good empty) folds to ≈0.14 while a total water failure folds to ≈0.37, so
+ * any cut in (0.141, 0.319] grades famine as Shortage and ambient scarcity as Rationing. Both
+ * endpoints are scenario values, not constants — moving any necessity weight moves them, so re-derive
+ * rather than nudge (lib/constants/__tests__/band-constants.test.ts asserts the separation holds).
+ * First cut; the simulator owns the final.
+ */
+export const D_SHORTAGE_CUT = 0.25;
+
+/**
+ * Width of the D band above the cut across which the unrest ceiling ramps from the Rationing value to
+ * the Shortage one. The ramp starts AT the cut and never below it, so the Rationing containment
+ * guarantee (sustained Rationing cannot reach collapse at any tax) holds across the whole Rationing
+ * range; a hard branch here would instead double a system's settled unrest for an arbitrarily small
+ * change in delivered goods, and land that step across strike onset. Narrow enough that a total food
+ * failure still reaches the full Shortage ceiling — asserted from the constants, not assumed.
+ */
+export const D_SHORTAGE_BLEND = 0.05;

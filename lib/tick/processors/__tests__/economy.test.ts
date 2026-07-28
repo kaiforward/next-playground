@@ -311,7 +311,7 @@ describe("economy processor: supply regime signal", () => {
   const SHORT_STOCK = 0.125;
 
   const regimeOf = (signals: EconomySignals | undefined, systemId: string) =>
-    requireEconomySignals(signals).supplyRegimeBySystem.get(systemId);
+    requireEconomySignals(signals).supplyStateBySystem.get(systemId)?.regime;
   const satOf = (world: InMemoryEconomyWorld, goodId: string) =>
     world.markets.find((m) => m.goodId === goodId)!.satisfaction;
 
@@ -346,7 +346,8 @@ describe("economy processor: supply regime signal", () => {
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    // Deep enough that the worst good, not the fed one, sets the class.
+    // Water is a survival good below the shortage line, so the floor selects shortage for the
+    // whole system however well the rest of the basket is served.
     expect(satOf(world, "water")).toBeCloseTo(0.25, 6);
     expect(regimeOf(result.economySignals, "sys-starved")).toBe("shortage");
   });

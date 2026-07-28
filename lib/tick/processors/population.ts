@@ -44,7 +44,7 @@ export async function runPopulationProcessor(
   const demandPops: Array<{ systemId: string; population: number }> = [];
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
-    const regime = signals.supplyRegimeBySystem.get(s.systemId) ?? "supplied";
+    const regime = signals.supplyStateBySystem.get(s.systemId)?.regime ?? "supplied";
     // Standing pressure: what a system settles at with nothing going wrong. Tax raises
     // unrest, not hunger, and overcrowding adds a bounded share on top — so both hold
     // unrest up rather than being shed like a supply shock, while the growth/decline

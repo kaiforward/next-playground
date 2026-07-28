@@ -124,6 +124,7 @@ export function hopRouteCost(
 export function supplyDissatisfaction(goods: BuildGoodState[]): number {
   return dissatisfaction(
     goods.map((g) => ({
+      goodId: g.goodId,
       satisfaction: clamp(g.satisfaction ?? 1, 0, 1),
       demanded: Math.max(0, g.demand),
     })),

@@ -7,7 +7,7 @@ import type { WorldMarket } from "@/lib/world/types";
 import { civilianDemandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
-import type { SupplyRegime } from "@/lib/engine/population";
+import type { SupplyRegime, SupplyState } from "@/lib/engine/population";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { CROWDING } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
@@ -60,13 +60,16 @@ function market(systemId: string, goodId: string): WorldMarket {
   return { systemId, goodId, stock: 100, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
 function ctxWithD(d: Map<string, number>, regimes: Map<string, SupplyRegime> = new Map()): TickContext {
+  const states = new Map<string, SupplyState>(
+    [...regimes].map(([systemId, regime]) => [systemId, { regime, survivalShortfall: false }]),
+  );
   return {
     tick: 0,
     results: new Map([
       ["economy", {
         economySignals: {
           dissatisfactionBySystem: d,
-          supplyRegimeBySystem: regimes,
+          supplyStateBySystem: states,
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: new Map(),
         },

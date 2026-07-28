@@ -1,5 +1,5 @@
 import type { EventTypeId } from "@/lib/constants/events";
-import type { SupplyRegime } from "@/lib/engine/population";
+import type { SupplyState } from "@/lib/engine/population";
 
 // ── Typed tick event payloads ─────────────────────────────────────
 
@@ -46,14 +46,15 @@ export interface TickContext {
 
 /**
  * Transient economy-to-population signal threaded in-memory via `ctx.results`.
- * Measures per-system demand-weighted satisfaction from post-tick stock.
+ * Measures per-system necessity-weighted satisfaction from post-tick stock.
  * Not broadcast, not persisted.
  */
 export interface EconomySignals {
-  /** Per-system convex demand-weighted dissatisfaction D ∈ [0,1], for systems processed this tick. */
+  /** Per-system convex necessity-weighted dissatisfaction D ∈ [0,1], for systems processed this tick. */
   dissatisfactionBySystem: Map<string, number>;
-  /** Per-system supplied/rationing/shortage fold of this pulse's consumption satisfaction. */
-  supplyRegimeBySystem: Map<string, SupplyRegime>;
+  /** Per-system supplied/rationing/shortage reading of this pulse's consumption satisfaction, with
+   *  the survival-good shortfall bit the unrest ceiling reads. */
+  supplyStateBySystem: Map<string, SupplyState>;
   /**
    * Per-system, per-produced-good isolated selling factor ∈ [0,1] (1 = selling
    * freely, 0 = stock at the production ceiling). Consumed by infrastructure

@@ -146,7 +146,7 @@ export function sampleFoundedColonies(
     const demanded = consumptionRate(m.goodId, basis);
     if (demanded <= 0) continue; // the colony does not consume it — no opinion either way
     const list = goodsBySystem.get(m.systemId) ?? [];
-    list.push({ satisfaction: m.satisfaction ?? 1, demanded });
+    list.push({ goodId: m.goodId, satisfaction: m.satisfaction ?? 1, demanded });
     goodsBySystem.set(m.systemId, list);
   }
   for (const [systemId, goods] of goodsBySystem) {

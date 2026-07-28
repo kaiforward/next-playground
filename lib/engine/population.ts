@@ -25,56 +25,87 @@
  */
 
 import { clamp } from "@/lib/utils/math";
-import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT } from "@/lib/constants/economy";
+import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 
 /** One consumed good's signal for a system this tick. */
 export interface GoodSatisfaction {
+  /** Which good this reading is for — resolves its GOOD_NECESSITY weight and survival status. */
+  goodId: string;
   /** delivered / demanded in [0,1]; 1 = well-fed, 0 = floor-pinned. */
   satisfaction: number;
-  /** demanded_g = civilian demand (per-capita baseline + skilled baskets) — the demand-share weight. */
+  /** demanded_g = civilian demand (per-capita baseline + skilled baskets). */
   demanded: number;
 }
 
+/** demanded × necessity — the fold's weight. An unweighted good contributes nothing, either way. */
+function goodWeight(g: GoodSatisfaction): number {
+  return Math.max(0, g.demanded) * Math.max(0, GOOD_NECESSITY[g.goodId] ?? 0);
+}
+
 /**
- * Convex, demand-weighted dissatisfaction D in [0,1] for one system:
- *   D = sum_g demandShare_g * (1 - satisfaction_g)^2,  demandShare_g = demanded_g / sum(demanded)
- * Importance comes from demand magnitude (people need ~8x more food than luxuries),
- * not a separate field; convexity makes a deep shortage dominate many shallow ones.
- * Returns 0 when nothing is demanded.
+ * Convex, necessity-weighted dissatisfaction D in [0,1] for one system:
+ *   weight_g = demanded_g × necessity_g,  share_g = weight_g / Σ weight
+ *   D        = Σ share_g × (1 − satisfaction_g)²
+ * Importance is the AUTHORED necessity weight times how much is actually wanted — demand volume alone
+ * is a tier gradient and ranks medicine below gas. Convexity makes a deep shortage dominate many
+ * shallow ones. Necessity is resolved from goodId here rather than passed in, so no call site can
+ * diverge on the table. Returns 0 when Σ weight ≤ 0.
  */
 export function dissatisfaction(goods: GoodSatisfaction[]): number {
-  let totalDemand = 0;
-  for (const g of goods) totalDemand += Math.max(0, g.demanded);
-  if (totalDemand <= 0) return 0;
+  let totalWeight = 0;
+  for (const g of goods) totalWeight += goodWeight(g);
+  if (totalWeight <= 0) return 0;
   let d = 0;
   for (const g of goods) {
-    const share = Math.max(0, g.demanded) / totalDemand;
+    const share = goodWeight(g) / totalWeight;
     const gap = 1 - clamp(g.satisfaction, 0, 1);
     d += share * gap * gap;
   }
   return d;
 }
 
-/** Supply-rate class for a system this tick, from the worst-supplied demanded good. */
+/** Supply-rate class for a system this tick. */
 export type SupplyRegime = "supplied" | "rationing" | "shortage";
 
 /**
- * Worst-demanded-good fold: "shortage" if any demanded good's satisfaction is below
- * SHORTAGE_SATISFACTION, else "rationing" if any is short of full, else "supplied".
- * Zero-demand goods are ignored; no demanded goods ⇒ "supplied".
- *
- * The regime picks the accumulation *rate* while D picks the *magnitude* — D is already
- * demand-weighted, so a luxury-only shortage yields the fast gain times a small D. Bounded
- * and monotonic; the fold deliberately does no second demand-weighting.
+ * The system's supply reading. `survivalShortfall` is carried alongside the label because the two
+ * drive different things: the label picks the relaxation rate, the shortfall promotes the unrest
+ * ceiling to the Shortage bound (see unrestCeiling). It cannot be inferred back from the label —
+ * a D-driven Shortage and a survival-driven one carry the same label and must not carry the same
+ * ceiling shape.
  */
-export function supplyRegime(goods: GoodSatisfaction[]): SupplyRegime {
-  let regime: SupplyRegime = "supplied";
+export interface SupplyState {
+  regime: SupplyRegime;
+  /** A demanded survival good (water/food) is below SHORTAGE_SATISFACTION. */
+  survivalShortfall: boolean;
+}
+
+/** Is a demanded survival good below the shortage line? */
+function hasSurvivalShortfall(goods: GoodSatisfaction[]): boolean {
   for (const g of goods) {
-    if (g.demanded <= 0) continue;
-    if (g.satisfaction < SHORTAGE_SATISFACTION) return "shortage";
-    if (g.satisfaction < 1) regime = "rationing";
+    if (g.demanded <= 0 || !SURVIVAL_GOODS.includes(g.goodId)) continue;
+    if (clamp(g.satisfaction, 0, 1) < SHORTAGE_SATISFACTION) return true;
   }
-  return regime;
+  return false;
+}
+
+/**
+ * The SYSTEM-level supply label, from the dissatisfaction the same goods folded to plus the
+ * survival-good floor:
+ *  - shortage  — D ≥ D_SHORTAGE_CUT, or a demanded survival good below SHORTAGE_SATISFACTION.
+ *  - supplied  — D exactly 0. Reachable exactly, not approximately: delivery is full while stock
+ *                covers the ration knee, so every gap above it is exactly 0.
+ *  - rationing — anything in between.
+ * `d` is the caller's own `dissatisfaction(goods)` over the SAME array, passed rather than recomputed
+ * so the two folds cannot diverge. This label is about the whole system; the per-good chips read
+ * stock cover and are a different labelling entirely.
+ */
+export function foldSupplyState(goods: GoodSatisfaction[], d: number): SupplyState {
+  const survivalShortfall = hasSurvivalShortfall(goods);
+  if (survivalShortfall) return { regime: "shortage", survivalShortfall };
+  if (d >= D_SHORTAGE_CUT) return { regime: "shortage", survivalShortfall };
+  return { regime: d > 0 ? "rationing" : "supplied", survivalShortfall };
 }
 
 export interface UnrestParams {

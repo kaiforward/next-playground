@@ -6,53 +6,114 @@ import {
   populationDelta,
   crowdFactor,
   crowdingPressure,
-  supplyRegime,
+  foldSupplyState,
   type UnrestParams,
   type PopulationParams,
 } from "../population";
-import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT } from "@/lib/constants/economy";
 
-describe("dissatisfaction (convex, demand-weighted)", () => {
+describe("dissatisfaction (convex, necessity-weighted)", () => {
   it("is 0 when fully satisfied and 0 when nothing is demanded", () => {
-    expect(dissatisfaction([{ satisfaction: 1, demanded: 10 }, { satisfaction: 1, demanded: 2 }])).toBeCloseTo(0, 6);
+    expect(dissatisfaction([
+      { goodId: "food", satisfaction: 1, demanded: 10 },
+      { goodId: "luxuries", satisfaction: 1, demanded: 2 },
+    ])).toBeCloseTo(0, 6);
     expect(dissatisfaction([])).toBe(0);
-    expect(dissatisfaction([{ satisfaction: 0, demanded: 0 }])).toBe(0);
+    expect(dissatisfaction([{ goodId: "food", satisfaction: 0, demanded: 0 }])).toBe(0);
   });
-  it("weights a high-demand good's deficit far above a low-demand good's (~demand share)", () => {
-    const foodCut = dissatisfaction([{ satisfaction: 0, demanded: 18 }, { satisfaction: 1, demanded: 2 }]);
-    const luxCut = dissatisfaction([{ satisfaction: 1, demanded: 18 }, { satisfaction: 0, demanded: 2 }]);
-    expect(foodCut).toBeGreaterThan(luxCut * 5);
+
+  it("ranks by necessity, not by how much is bought", () => {
+    // Equal demand, opposite necessity: the medicine shortfall must dominate the luxuries one even
+    // though the basket wants exactly as much of each. Demand-share alone cannot express this.
+    const medicineCut = dissatisfaction([
+      { goodId: "medicine", satisfaction: 0, demanded: 10 },
+      { goodId: "luxuries", satisfaction: 1, demanded: 10 },
+    ]);
+    const luxCut = dissatisfaction([
+      { goodId: "medicine", satisfaction: 1, demanded: 10 },
+      { goodId: "luxuries", satisfaction: 0, demanded: 10 },
+    ]);
+    expect(medicineCut).toBeGreaterThan(luxCut * 5);
   });
-  it("convexity: one deep shortage dominates broad shallow tightness", () => {
-    const deep = dissatisfaction([{ satisfaction: 0, demanded: 10 }, { satisfaction: 1, demanded: 90 }]);
-    const shallow = dissatisfaction([{ satisfaction: 0.9, demanded: 100 }]);
+
+  it("still weights by how much is wanted, at equal necessity", () => {
+    const deep = dissatisfaction([
+      { goodId: "water", satisfaction: 0, demanded: 90 },
+      { goodId: "food", satisfaction: 1, demanded: 10 },
+    ]);
+    const shallow = dissatisfaction([
+      { goodId: "water", satisfaction: 1, demanded: 90 },
+      { goodId: "food", satisfaction: 0, demanded: 10 },
+    ]);
     expect(deep).toBeGreaterThan(shallow);
+  });
+
+  it("convexity: one deep shortage dominates broad shallow tightness", () => {
+    const deep = dissatisfaction([
+      { goodId: "water", satisfaction: 0, demanded: 10 },
+      { goodId: "water", satisfaction: 1, demanded: 90 },
+    ]);
+    const shallow = dissatisfaction([{ goodId: "water", satisfaction: 0.9, demanded: 100 }]);
+    expect(deep).toBeGreaterThan(shallow);
+  });
+
+  it("ignores a good with no authored necessity rather than guessing one", () => {
+    // Totality is enforced by a constants test; at runtime an unknown id must not invent a weight.
+    expect(dissatisfaction([
+      { goodId: "not_a_good", satisfaction: 0, demanded: 100 },
+      { goodId: "water", satisfaction: 1, demanded: 10 },
+    ])).toBe(0);
   });
 });
 
-describe("supplyRegime (worst-demanded-good fold)", () => {
-  it("is supplied when every demanded good is fully satisfied", () => {
-    expect(supplyRegime([{ satisfaction: 1, demanded: 10 }, { satisfaction: 1, demanded: 2 }])).toBe("supplied");
+describe("foldSupplyState (D cut + survival floor)", () => {
+  const full = (goodId: string, demanded: number) => ({ goodId, satisfaction: 1, demanded });
+
+  it("is supplied only at D exactly 0", () => {
+    const goods = [full("water", 10), full("luxuries", 2)];
+    expect(foldSupplyState(goods, dissatisfaction(goods)).regime).toBe("supplied");
+    expect(foldSupplyState([], 0).regime).toBe("supplied");
   });
-  it("is supplied when nothing is demanded (empty or zero-demand)", () => {
-    expect(supplyRegime([])).toBe("supplied");
-    expect(supplyRegime([{ satisfaction: 0, demanded: 0 }])).toBe("supplied");
+
+  it("is rationing for any positive D below the cut", () => {
+    const goods = [{ goodId: "luxuries", satisfaction: 0, demanded: 2 }, full("water", 100)];
+    const state = foldSupplyState(goods, dissatisfaction(goods));
+    expect(state.regime).toBe("rationing");
+    expect(state.survivalShortfall).toBe(false);
   });
-  it("ignores zero-demand goods when folding", () => {
-    // A starving zero-demand good must not force a regime — only demanded goods count.
-    expect(supplyRegime([{ satisfaction: 0, demanded: 0 }, { satisfaction: 1, demanded: 5 }])).toBe("supplied");
-    expect(supplyRegime([{ satisfaction: 0, demanded: 0 }, { satisfaction: 0.8, demanded: 5 }])).toBe("rationing");
+
+  it("is shortage at or above the cut", () => {
+    expect(foldSupplyState([full("ore", 10)], D_SHORTAGE_CUT).regime).toBe("shortage");
+    expect(foldSupplyState([full("ore", 10)], D_SHORTAGE_CUT - 1e-9).regime).toBe("rationing");
   });
-  it("is rationing when any demanded good is short of full but none below the shortage line", () => {
-    expect(supplyRegime([{ satisfaction: 0.8, demanded: 10 }, { satisfaction: 1, demanded: 2 }])).toBe("rationing");
+
+  it("selects shortage from the survival floor even when D is far below the cut", () => {
+    // Water at half rations folds to ~0.09 — nowhere near any workable cut, yet the population is
+    // genuinely on half rations. This is the case the floor exists for.
+    const goods = [
+      { goodId: "water", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 100 },
+      full("ore", 400),
+    ];
+    const d = dissatisfaction(goods);
+    expect(d).toBeLessThan(D_SHORTAGE_CUT);
+    const state = foldSupplyState(goods, d);
+    expect(state.regime).toBe("shortage");
+    expect(state.survivalShortfall).toBe(true);
   });
-  it("is shortage when any demanded good is below the shortage line", () => {
-    expect(supplyRegime([{ satisfaction: 0.4, demanded: 10 }, { satisfaction: 1, demanded: 2 }])).toBe("shortage");
+
+  it("treats exactly the shortage satisfaction line as not a survival shortfall (strict <)", () => {
+    const goods = [{ goodId: "food", satisfaction: SHORTAGE_SATISFACTION, demanded: 100 }];
+    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
   });
-  it("treats exactly the shortage line as rationing, not shortage (strict <)", () => {
-    // satisfaction === SHORTAGE_SATISFACTION is short of full but not below the line.
-    expect(supplyRegime([{ satisfaction: SHORTAGE_SATISFACTION, demanded: 10 }])).toBe("rationing");
-    expect(supplyRegime([{ satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 10 }])).toBe("shortage");
+
+  it("ignores a zero-demand survival good", () => {
+    const goods = [{ goodId: "water", satisfaction: 0, demanded: 0 }, full("ore", 5)];
+    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
+  });
+
+  it("does not let a non-survival good trip the floor at any depth", () => {
+    const goods = [{ goodId: "luxuries", satisfaction: 0, demanded: 5 }, full("water", 5)];
+    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
   });
 });
 
