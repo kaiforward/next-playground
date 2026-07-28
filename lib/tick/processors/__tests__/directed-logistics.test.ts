@@ -100,7 +100,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
 
   it("fills a deficit toward its anchor in one delivery — never overshoots into surplus", async () => {
     // Regression for the catch-up overshoot: a single delivery is a level-fill toward the
-    // days-of-supply anchor (targetStock), NOT a rate that scales with the shard interval.
+    // months-of-supply anchor (targetStock), NOT a rate that scales with the shard interval.
     // mB: stock 10, anchor 40 → must land at the anchor (40), not be doubled into surplus (≥56).
     const systems = [
       {

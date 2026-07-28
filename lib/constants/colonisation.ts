@@ -41,7 +41,7 @@ export const COLONISATION = {
    */
   MIN_SETTLER_SUPPLY: 5,
   /**
-   * Share of a full days-of-supply cover (`TARGET_COVER`) that a landed colony's founding endowment
+   * Share of a full months-of-supply cover (`TARGET_COVER`) that a landed colony's founding endowment
    * aims at, per good the seed population actually consumes. A colony used to open holding nothing, at
    * satisfaction 0 on every good, and began climbing out of a shortage it need never have been in — so
    * it read as deprived from its first pulse. The endowment is DRAWN from the founding system's own

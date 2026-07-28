@@ -1,10 +1,10 @@
-/** Days of total local demand held at the price/base reserve anchor. */
+/** Months of total local demand held at the price/base reserve anchor. */
 export const TARGET_COVER = 40;
 
 /** Economy simulation constants — used by the economy tick. */
 export const ECONOMY_CONSTANTS = {
   /**
-   * Operating-ceiling cover: a producer holds up to HOLD_COVER × the days-of-supply
+   * Operating-ceiling cover: a producer holds up to HOLD_COVER × the months-of-supply
    * anchor (targetStock) before idling spare capacity. The production ceiling factor
    * runs at full rate to the anchor, then ramps linearly to 0 over
    * [targetStock, HOLD_COVER × targetStock] instead of at the storage ceiling, so
@@ -16,11 +16,16 @@ export const ECONOMY_CONSTANTS = {
    */
   HOLD_COVER: 1.3,
   /**
-   * Emergency stock cover in demand cycles. Civilian delivery and industrial
-   * input draws remain full while stock covers at least this many cycles of
+   * Emergency stock cover in demand months. Civilian delivery and industrial
+   * input draws remain full while stock covers at least this many months of
    * total local demand; below it, explicit rationing ramps toward zero at empty.
-   * Deliberately independent of the 40-cycle pricing/reserve anchor: an
+   * Deliberately independent of the 40-month pricing/reserve anchor: an
    * underfilled strategic reserve is not itself an unmet current need.
+   *
+   * The gap between the logistics deficit signal (0.8 × the 40-month anchor) and this knee is roughly
+   * 30 logistics pulses, and logistics resolves every pulse — a system that starves never ran out of
+   * warning, it ran out of supply or of budget to move it. Widening this buffer is never the fix for
+   * a starving galaxy; the early warning belongs in the UI, not in unrest.
    */
   RATION_COVER: 2,
 } as const;

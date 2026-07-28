@@ -49,7 +49,7 @@ export interface PriceLevelSummary {
 
 export interface CoverLevelEntry {
   goodId: string;
-  /** Median stock / targetStock (days-of-supply cover) across systems. */
+  /** Median stock / targetStock (months-of-supply cover) across systems. */
   medianCover: number;
   /** Fraction of markets at/above the surplus margin. */
   surplusFrac: number;

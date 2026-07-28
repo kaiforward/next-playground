@@ -30,7 +30,7 @@ export function curveForGoodRow(
 /**
  * Build a display MarketEntry from a market row's stock + good. Price is the
  * derived spot readout; `stock` is floored so the player never sees fractional
- * goods. `demandRate` is the market row's days-of-supply denominator and
+ * goods. `demandRate` is the market row's months-of-supply denominator and
  * `anchorMult` (default 1) its stored anchor-shift multiplier — together they
  * centre the pricing curve.
  */

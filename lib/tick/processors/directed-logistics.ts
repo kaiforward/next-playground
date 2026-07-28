@@ -53,7 +53,7 @@ function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: numb
  *
  * Catch-up scaling is split down the middle of the mechanic:
  *  - Deliveries are NOT scaled. A transfer is an absolute *level-fill* toward the
- *    days-of-supply anchor (shortfall = targetStock − stock). Multiplying a gap-fill
+ *    months-of-supply anchor (shortfall = targetStock − stock). Multiplying a gap-fill
  *    by the interval ratio overshoots the anchor — it pushes recipients past the
  *    surplus margin (≈2× anchor), wasting hauls and flipping fresh recipients into
  *    donors / cheap re-export targets. The anchor (40 economy-runs of cover) already

@@ -2,7 +2,7 @@
  * Shared per-system market-state derivation for the directed-logistics matcher and
  * the directed-build planner. Given one system's buildings/population/yields and its
  * market rows, produce the engine's GoodMarketState[]: per good, current stock, the
- * days-of-supply price anchor (targetStock), and total demand (civilian consumption +
+ * months-of-supply price anchor (targetStock), and total demand (civilian consumption +
  * industrial input draw). One definition so both processors read markets identically.
  */
 import type { ResourceVector } from "@/lib/types/game";

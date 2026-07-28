@@ -22,7 +22,7 @@ import { housingUsed, idleLevels } from "@/lib/engine/infrastructure-decay";
 describe("band constant dependencies", () => {
   it("starts logistics replenishment well before emergency rationing", () => {
     // Imports must arrive before rationing starts: receivers classify as
-    // The deficit threshold is an anchor fraction; convert it to demand cycles
+    // The deficit threshold is an anchor fraction; convert it to demand months
     // before comparing it with the independently-defined ration threshold.
     expect(DIRECTED_LOGISTICS.DEFICIT_FRACTION * TARGET_COVER).toBeGreaterThan(
       ECONOMY_CONSTANTS.RATION_COVER,

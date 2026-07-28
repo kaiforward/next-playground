@@ -104,6 +104,14 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
+- **Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
+  real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
+  is currently 1 for every good and `GOODS.priceFloor`/`priceCeiling` is a pure tier lookup with zero
+  per-good variation. Booked from `docs/planned/necessity-weighted-unrest.md`.
+- **Government layer revisit** — `GOVERNMENT_TYPES` carries only event weights and a danger baseline
+  since the flat `consumptionBoosts` term was deleted; decide what, if anything, replaces it as an
+  economic axis. Governments are economically inert until then. Booked from
+  `docs/planned/necessity-weighted-unrest.md`.
 - **[M] Faction-screen colonise verb with map-based target selection** — deferred from the Slice 2
   control-surface design pass (2026-07-18). The faction construction command card gets a colonise
   action that enters a **map target-selection mode** (eligible systems highlighted, click to direct
