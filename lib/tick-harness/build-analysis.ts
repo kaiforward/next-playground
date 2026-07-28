@@ -81,7 +81,7 @@ const OPENING_DEPRIVED_SATISFACTION = 0.5;
 
 /** The fields a founded colony's opening reading needs off its system row. */
 export type FoundedColonySystem =
-  Pick<TickSystem, "id" | "control" | "population" | "buildings" | "governmentType">;
+  Pick<TickSystem, "id" | "control" | "population" | "buildings">;
 
 /**
  * Record every colony founded during the run — a system that becomes `developed` after tick 0. The

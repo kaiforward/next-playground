@@ -58,7 +58,7 @@ function makeTickSystem(id: string, factionId: string | null): TickSystem {
     regionId: "region-1",
     factionId,
     control: factionId ? "developed" : "unclaimed",
-    governmentType: "federation",
+    governmentType: factionId ? "federation" : "frontier",
     population: 100,
     popCap: 200,
     unrest: 0,
@@ -76,7 +76,6 @@ function makeLogisticsRow(systemId: string, factionId: string | null): SystemLog
   return {
     systemId,
     factionId,
-    governmentType: factionId ? "federation" : "frontier",
     population: 100,
     buildings: {},
     yields: emptyResourceVector(),

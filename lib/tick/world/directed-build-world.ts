@@ -4,7 +4,7 @@
  * Sharding is PER-FACTION (the build planner needs all of a faction's systems
  * at once), matching logistics.
  */
-import type { GovernmentType, ResourceVector } from "@/lib/types/game";
+import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
@@ -16,7 +16,6 @@ export interface SystemBuildRow {
   /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
   control: SystemControl;
   population: number;
-  governmentType: GovernmentType;
   /** Stored unrest integral 0…1, as the population processor left it. */
   unrest: number;
   buildings: Record<string, number>;

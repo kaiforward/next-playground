@@ -35,8 +35,8 @@ function devSys(
 ): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1",
+    governmentType: "federation",
     control: opts.control ?? "developed",
-    governmentType: "frontier",
     population: opts.population ?? 0,
     popCap: opts.popCap ?? 1000,
     unrest: 0,
@@ -323,7 +323,7 @@ describe("summarizeBuildBursts", () => {
 describe("trackFoundedColonies / summarizeFoundingStock", () => {
   /** A seed-sized colony: no buildings, so its basket is pure per-capita civilian demand. */
   const sys = (id: string, control: SystemControl): FoundedColonySystem => ({
-    id, control, population: EXPANSION.COLONY_SEED_POP, buildings: {}, governmentType: "federation",
+    id, control, population: EXPANSION.COLONY_SEED_POP, buildings: {},
   });
   const mkt = (systemId: string, goodId: string, satisfaction: number) =>
     ({ systemId, goodId, satisfaction });

@@ -183,16 +183,13 @@ export function generateWorld(options: GenerateWorldOptions): World {
   // created when a system is settled (`lib/world/tick.ts`), opening empty. Seeding every rock would
   // hand each future colony a full anchor's worth of goods nobody grew, and would swamp every
   // galaxy-wide market reading with rows that can never move.
-  const governmentByFactionId = new Map(factions.map((f) => [f.id, f.governmentType]));
   const markets: WorldMarket[] = universe.systems.flatMap((s, i) => {
     if (systems[i].control !== "developed") return [];
-    const governmentType = systems[i].factionId ? governmentByFactionId.get(systems[i].factionId) ?? "frontier" : "frontier";
     return createSystemMarkets({
       systemId: systemIds[i],
       buildings: s.buildings,
       yields: s.yieldMult,
       population: s.population,
-      governmentType,
       seedStock: true,
     });
   });

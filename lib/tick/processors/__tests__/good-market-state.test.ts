@@ -17,7 +17,7 @@ describe("toGoodMarketStates", () => {
   it("passes stock + goodId through and uses the band's targetStock", () => {
     const m = foodMarket(7, 40);
     const out = toGoodMarketStates({
-      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(), markets: [m],
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
     });
     expect(out).toHaveLength(1);
     expect(out[0].goodId).toBe("food");
@@ -29,7 +29,7 @@ describe("toGoodMarketStates", () => {
 
   it("returns one entry per market row", () => {
     const out = toGoodMarketStates({
-      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(),
+      buildings: {}, population: 100, yields: unitResourceVector(),
       markets: [foodMarket(5, 20), { ...foodMarket(5, 20), id: "A|water", goodId: "water" }],
     });
     expect(out.map((g) => g.goodId)).toEqual(["food", "water"]);
@@ -38,7 +38,7 @@ describe("toGoodMarketStates", () => {
   it("surfaces local production per good (powers the matcher's self-supply gate)", () => {
     // A system with gas extractors produces gas → production must be reported > 0.
     const out = toGoodMarketStates({
-      buildings: { gas: 3 }, population: 100, governmentType: "federation", yields: unitResourceVector(),
+      buildings: { gas: 3 }, population: 100, yields: unitResourceVector(),
       markets: [{ ...foodMarket(100, 5), id: "A|gas", goodId: "gas" }],
     });
     const gas = out.find((g) => g.goodId === "gas")!;
@@ -47,7 +47,7 @@ describe("toGoodMarketStates", () => {
 
   it("reports zero production for a good the system does not make", () => {
     const out = toGoodMarketStates({
-      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(), markets: [foodMarket(50, 20)],
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(50, 20)],
     });
     expect(out[0].production).toBe(0);
   });
@@ -55,8 +55,8 @@ describe("toGoodMarketStates", () => {
   it("passes the government boost once into planner and logistics demand", () => {
     const market = { ...foodMarket(20, 40), id: "A|weapons", goodId: "weapons" };
     const base = { buildings: {}, population: 100, yields: unitResourceVector(), markets: [market] };
-    const [frontier] = toGoodMarketStates({ ...base, governmentType: "frontier" });
-    const [militarist] = toGoodMarketStates({ ...base, governmentType: "militarist" });
+    const [frontier] = toGoodMarketStates({ ...base,});
+    const [militarist] = toGoodMarketStates({ ...base,});
     const expectedBoost = consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 })
       - consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 });
     expect(militarist.demand - frontier.demand).toBeCloseTo(expectedBoost, 10);
@@ -65,19 +65,19 @@ describe("toGoodMarketStates", () => {
   it("threads the persisted satisfaction through to GoodMarketState", () => {
     const withSatisfaction = { ...foodMarket(20, 40), satisfaction: 0.7 };
     const [withValue] = toGoodMarketStates({
-      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(), markets: [withSatisfaction],
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [withSatisfaction],
     });
     expect(withValue.satisfaction).toBe(0.7);
 
     const [withoutValue] = toGoodMarketStates({
-      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(), markets: [foodMarket(20, 40)],
+      buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(20, 40)],
     });
     expect(withoutValue.satisfaction).toBeUndefined();
   });
 
   it("uses explicit realized production including zero, while missing values fall back to capacity", () => {
     const base = {
-      buildings: { food: 3 }, population: 100, governmentType: "federation" as const,
+      buildings: { food: 3 }, population: 100,
       yields: unitResourceVector(), markets: [{ ...foodMarket(20, 40), realizedProductionRate: 0 }],
     };
     const [assessed] = toGoodMarketStates(base);
@@ -93,7 +93,7 @@ describe("toGoodMarketStates", () => {
 
   it("threads assessment policy fields through the one shared market derivation", () => {
     const [state] = toGoodMarketStates({
-      buildings: {}, population: 100, governmentType: "federation", yields: unitResourceVector(),
+      buildings: {}, population: 100, yields: unitResourceVector(),
       markets: [{
         ...foodMarket(20, 40), satisfaction: 0.5, productionSuppressed: true,
         squeezePulses: 2, proposalPulses: 1, logisticsFundingBound: true,
