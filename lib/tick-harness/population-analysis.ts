@@ -1,5 +1,8 @@
 import type { TickSystem } from "@/lib/tick/rows";
-import { crowdFactor } from "@/lib/engine/population";
+import { crowdFactor, dissatisfaction, foldSupplyState, type GoodSatisfaction } from "@/lib/engine/population";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
+import type { WorldMarket } from "@/lib/world/types";
 
 export interface InfrastructureSummary {
   /** Total building count across all systems at tick 0. */
@@ -175,5 +178,67 @@ export function summarizePopulation(
     strikingShare: settled.length > 0 ? strikingCount / settled.length : 0,
     strandedCount,
     strandedPopulation,
+  };
+}
+
+/**
+ * Per-system share of each supply regime at the end of the run — the permanent instrument for the
+ * unrest fold. Recomputed from the final world's persisted per-good satisfaction against each
+ * system's own civilian demand, which is exactly what the economy pulse folded, so the reading is the
+ * simulation's own classification rather than a parallel one. Settled systems only: an unclaimed rock
+ * has no market and no opinion.
+ */
+export interface SupplyRegimeSummary {
+  counted: number;
+  supplied: number;
+  rationing: number;
+  shortage: number;
+  suppliedShare: number;
+  rationingShare: number;
+  shortageShare: number;
+  /** Mean D over counted systems — the magnitude behind the labels. */
+  meanDissatisfaction: number;
+}
+
+export function summarizeSupplyRegimes(
+  systems: TickSystem[],
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
+): SupplyRegimeSummary {
+  const settled = new Map(systems.filter(isSettled).map((s) => [s.id, s]));
+  const goodsBySystem = new Map<string, GoodSatisfaction[]>();
+  const basisBySystem = new Map<string, CivilianDemandBasis>();
+  for (const m of markets) {
+    const sys = settled.get(m.systemId);
+    if (!sys) continue;
+    let basis = basisBySystem.get(m.systemId);
+    if (basis === undefined) {
+      basis = computeSystemLabourSnapshot(sys.buildings, sys.population).basis;
+      basisBySystem.set(m.systemId, basis);
+    }
+    const demanded = consumptionRate(m.goodId, basis);
+    if (demanded <= 0) continue;
+    const list = goodsBySystem.get(m.systemId) ?? [];
+    list.push({ goodId: m.goodId, satisfaction: m.satisfaction ?? 1, demanded });
+    goodsBySystem.set(m.systemId, list);
+  }
+
+  let supplied = 0, rationing = 0, shortage = 0, dSum = 0;
+  for (const systemId of settled.keys()) {
+    const goods = goodsBySystem.get(systemId) ?? [];
+    const d = dissatisfaction(goods);
+    dSum += d;
+    const regime = foldSupplyState(goods, d).regime;
+    if (regime === "supplied") supplied++;
+    else if (regime === "rationing") rationing++;
+    else shortage++;
+  }
+  const counted = settled.size;
+  const share = (n: number) => (counted > 0 ? n / counted : 0);
+  return {
+    counted, supplied, rationing, shortage,
+    suppliedShare: share(supplied),
+    rationingShare: share(rationing),
+    shortageShare: share(shortage),
+    meanDissatisfaction: counted > 0 ? dSum / counted : 0,
   };
 }

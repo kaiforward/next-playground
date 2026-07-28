@@ -25,7 +25,7 @@ import {
   experimentToHarnessConfig,
   buildExperimentResult,
 } from "../lib/tick-harness/experiment";
-import { summarizePopulation, detectPingPong, summarizeInfrastructure } from "../lib/tick-harness/population-analysis";
+import { summarizePopulation, detectPingPong, summarizeInfrastructure, summarizeSupplyRegimes } from "../lib/tick-harness/population-analysis";
 import { summarizeColonisation, summarizeConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
 import { STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
@@ -228,6 +228,22 @@ function formatTable(results: HarnessResults): string {
     for (const [label, value] of pRows) {
       lines.push([pad(label, pWidths[0]), rpad(value, pWidths[1])].join(" | "));
     }
+
+    const regimes = summarizeSupplyRegimes(finalTickSystems, finalWorld.markets);
+    lines.push("");
+    lines.push("Supply regimes (per settled system, end of simulation):");
+    const rWidths = [24, 12, 12];
+    lines.push([pad("Regime", rWidths[0]), rpad("Systems", rWidths[1]), rpad("Share", rWidths[2])].join(" | "));
+    lines.push(rWidths.map((w) => "-".repeat(w)).join("-+-"));
+    const rRows: [string, number, number][] = [
+      ["Supplied", regimes.supplied, regimes.suppliedShare],
+      ["Rationing", regimes.rationing, regimes.rationingShare],
+      ["Shortage", regimes.shortage, regimes.shortageShare],
+    ];
+    for (const [l, n, sh] of rRows) {
+      lines.push([pad(l, rWidths[0]), rpad(String(n), rWidths[1]), rpad(`${(sh * 100).toFixed(1)}%`, rWidths[2])].join(" | "));
+    }
+    lines.push(`  mean D ${regimes.meanDissatisfaction.toFixed(3)} over ${regimes.counted} settled systems`);
   }
 
   // Migration throughput (whole run) — reads most meaningfully on a land-tight seed, where colony

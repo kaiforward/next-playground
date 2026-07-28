@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectPingPong, summarizeInfrastructure, summarizePopulation } from "../population-analysis";
+import { detectPingPong, summarizeInfrastructure, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
@@ -201,5 +201,28 @@ describe("summarizePopulation — striking share and stranded population", () =>
     const summary = summarizePopulation(systems, 1300, 0.65, BRAKE_END);
     expect(summary.strandedCount).toBe(0);
     expect(summary.strandedPopulation).toBe(0);
+  });
+});
+
+describe("summarizeSupplyRegimes", () => {
+  const mkt = (systemId: string, goodId: string, satisfaction: number) => ({ systemId, goodId, satisfaction });
+
+  it("classifies settled systems and reports shares that sum to 1", () => {
+    const systems = [popSys("fed", 100, 1000), popSys("thirsty", 100, 1000)];
+    const summary = summarizeSupplyRegimes(systems, [
+      mkt("fed", "water", 1), mkt("fed", "food", 1),
+      mkt("thirsty", "water", 0), mkt("thirsty", "food", 1),
+    ]);
+    expect(summary.counted).toBe(2);
+    expect(summary.supplied).toBe(1);
+    expect(summary.shortage).toBe(1);
+    expect(summary.suppliedShare + summary.rationingShare + summary.shortageShare).toBeCloseTo(1, 10);
+  });
+
+  it("counts only settled systems and never reports NaN for an empty galaxy", () => {
+    const summary = summarizeSupplyRegimes([], []);
+    expect(summary.counted).toBe(0);
+    expect(Number.isFinite(summary.suppliedShare)).toBe(true);
+    expect(summary.meanDissatisfaction).toBe(0);
   });
 });
