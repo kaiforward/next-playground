@@ -181,7 +181,8 @@ recalibration.
   suppression locally — extend the planner rows (or ctx.results) explicitly. Off-month-pulse
   fallback: when the logistics/construction pulse lands where `economySignals` is undefined, the
   planners read the last persisted month-pulse values.
-- **The government consumption boost folds into `demandRate`**: today it is added to the drain
+- **The government consumption boost folds into `demandRate`** (superseded — the necessity slice
+  deletes the boost, see below): today it is added to the drain
   *after* the band is built, so on low-civilian-demand goods (weapons/fuel at militarist systems)
   the anchor understates true demand up to ~2×, the §6 cover chip would lie, and the boost can
   exceed the provisioning margin entirely — parking those goods permanently in the backstop path.

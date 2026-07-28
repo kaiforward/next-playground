@@ -3,7 +3,6 @@ import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector } from "@/lib/engine/resources";
-import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
 function foodMarket(stock: number, demandRate: number): MarketRowForLogistics {
@@ -50,16 +49,6 @@ describe("toGoodMarketStates", () => {
       buildings: {}, population: 100, yields: unitResourceVector(), markets: [foodMarket(50, 20)],
     });
     expect(out[0].production).toBe(0);
-  });
-
-  it("passes the government boost once into planner and logistics demand", () => {
-    const market = { ...foodMarket(20, 40), id: "A|weapons", goodId: "weapons" };
-    const base = { buildings: {}, population: 100, yields: unitResourceVector(), markets: [market] };
-    const [frontier] = toGoodMarketStates({ ...base,});
-    const [militarist] = toGoodMarketStates({ ...base,});
-    const expectedBoost = consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 })
-      - consumptionRate("weapons", { population: 100, technicians: 0, engineers: 0 });
-    expect(militarist.demand - frontier.demand).toBeCloseTo(expectedBoost, 10);
   });
 
   it("threads the persisted satisfaction through to GoodMarketState", () => {

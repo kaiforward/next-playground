@@ -19,11 +19,13 @@ import { describe, it, expect, vi, afterEach } from "vitest";
  * (`Math.round`/`floor` on a goods amount) or left as an unscaled absolute — those
  * are a rounding error at S=100 but a large fraction at S=1, so they diverge only
  * at low scale and compound through every monthly pulse. This broad end-to-end guard
- * reliably exercises the seed-stock de-rounding (from tick 0) and the government
- * consumption scaling (it runs past the first monthly economy pulse, where that term
- * first bites). The logistics-transfer term is guarded directly by a focused unit test
- * (`lib/tick/processors/__tests__/directed-logistics.test.ts`) instead, because directed
- * transfers don't reliably fire within this short window for an arbitrary seed.
+ * reliably exercises the seed-stock de-rounding (from tick 0) and every per-capita
+ * demand term through the monthly economy pulse. There is no longer a flat scaled
+ * demand term in the civilian path to exercise — the civilian basket is
+ * population-proportional throughout — so that specific coverage is gone rather than
+ * merely untested. The logistics-transfer term is guarded directly by a focused unit
+ * test (`lib/tick/processors/__tests__/directed-logistics.test.ts`) instead, because
+ * directed transfers don't reliably fire within this short window for an arbitrary seed.
  *
  * ECONOMY_SCALE is resolved once at module import, so each scale runs against a
  * freshly-imported constants + tick graph (resetModules + stubEnv), mirroring the

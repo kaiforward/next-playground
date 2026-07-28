@@ -106,7 +106,7 @@ A system runs a positive **net balance** for a good when its production exceeds 
 
 **Emergent geography:** raw goods flow from deposit-rich frontier worlds toward populous cores; manufactured goods follow wherever build space and labour concentrate. Economy-type labels now reflect the build-space allocation at world-gen — a system seeded with more extractor capacity reads as `extraction`, one with heavier manufacturing allocation reads as `industrial` — rather than a coarse labour-only heuristic.
 
-All `outputPerUnit` constants and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller output and smaller need). The government `consumptionBoost` layers on top of consumption; strike suppression scales production down when `unrest` exceeds the strike threshold.
+All `outputPerUnit` constants and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller output and smaller need). Civilian demand is population-proportional throughout — there is no flat per-system term, so the basket's shape is the same at a 2-pop seed and a 5000-pop capital. Strike suppression scales production down when `unrest` exceeds the strike threshold.
 
 ### Infrastructure Decay
 
@@ -143,20 +143,24 @@ At seed/reset time each market's starting stock is **cover-based** (`getInitialS
 
 All 8 government types are implemented. Every type has trade-offs — buffs balanced by debuffs. Source of truth: `lib/constants/government.ts`. For faction and identity framing see [faction-system.md](./faction-system.md).
 
-| Government | Danger | Consumption boosts |
-|---|---|---|
-| Federation | 0.00 | medicine |
-| Corporate | 0.02 | luxuries |
-| Authoritarian | 0.00 | weapons, fuel |
-| Frontier | 0.10 | — |
-| Cooperative | 0.00 | food, medicine |
-| Technocratic | 0.01 | electronics |
-| Militarist | 0.05 | weapons, fuel, machinery |
-| Theocratic | 0.03 | food, medicine, textiles |
+Government type carries **no economic modifier** — it is an event-weight and danger axis. Civilian
+demand is identical under all eight types; a replacement economic axis is a planned government-layer
+revisit ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md)).
+
+| Government | Danger |
+|---|---|
+| Federation | 0.00 |
+| Corporate | 0.02 |
+| Authoritarian | 0.00 |
+| Frontier | 0.10 |
+| Cooperative | 0.00 |
+| Technocratic | 0.01 |
+| Militarist | 0.05 |
+| Theocratic | 0.03 |
 
 ### Government Effects on Gameplay
 - **Danger baseline**: Feeds the system danger readout (world attribute — nothing mechanical consumes it since the arrival pipeline was cut). Frontier is the highest at 10%.
-- **Consumption boosts**: Extra consumption per tick for specific goods (e.g., authoritarian +1 weapons consumption) — drains stock faster, raising price.
+- **Event weights**: Per-type adjustments to event-type likelihood (see `lib/constants/government.ts`).
 
 ---
 
@@ -305,8 +309,7 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                civilian + production-input consumption rates;
                                demand rate -> days-of-supply pricing reference;
                                net balance + facility storage -> per-market band
-                               -> seed stock + import dependence;
-                               government -> consumption boosts
+                               -> seed stock + import dependence
 2  Tick evolution (each tick)  input-gated self-limiting production (the
                                supply-chain cascade) + civilian consumption,
                                strike suppression (from unrest),
