@@ -39,6 +39,11 @@ export interface BuildGoodState {
   targetStock: number;
   /** Total local demand rate (civilian + industrial); severity weight + the self-supply gate (vs production). */
   demand: number;
+  /** Civilian-only demand rate — the fed-gate's weight (see supplyDissatisfaction). Optional for
+   *  engine-test fixtures, which then read as having nobody to feed (D = 0, i.e. fed) exactly as a
+   *  missing `satisfaction` reads as fully delivered; the tick path always supplies it via
+   *  toGoodMarketStates. */
+  civilianDemand?: number;
   /**
    * Local production rate of this good. A self-supplier (production ≥ demand) is never a
    * structural deficit — its low standing stock is throughput, not need (mirrors the logistics
@@ -114,19 +119,19 @@ export function hopRouteCost(
 }
 
 /**
- * Delivered-flow dissatisfaction D in [0,1] for one system — the input to the
- * housing "fed" gate. Reuses the population engine's demand-weighted convex fold
- * over the economy pulse's persisted per-good satisfaction (delivered ÷
- * demanded — the same measure the needs display reads), so a
- * deliberately-at-comfort exporter with full delivery reads as satisfied.
- * Missing satisfaction (engine-test fixtures, pre-change saves) ⇒ 1.
+ * Civilian-only, necessity-weighted dissatisfaction D in [0,1] for one system — the input to the
+ * housing "fed" gate. Reuses the population engine's fold over the economy pulse's persisted per-good
+ * satisfaction (delivered ÷ demanded — the same measure the needs display reads), so a
+ * deliberately-at-comfort exporter with full delivery reads as satisfied. Weighted by CIVILIAN demand
+ * alone: the gate means exactly one thing, "are the people here fed?", and industrial-input
+ * starvation is not a reason to refuse shelter. Missing satisfaction ⇒ 1; missing civilian demand ⇒ 0.
  */
 export function supplyDissatisfaction(goods: BuildGoodState[]): number {
   return dissatisfaction(
     goods.map((g) => ({
       goodId: g.goodId,
       satisfaction: clamp(g.satisfaction ?? 1, 0, 1),
-      demanded: Math.max(0, g.demand),
+      demanded: Math.max(0, g.civilianDemand ?? 0),
     })),
   );
 }

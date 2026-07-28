@@ -62,14 +62,21 @@ function sys(
   systemId: string,
   generation: number,
   good: {
-    goodId: string; stock: number; targetStock: number; demand: number; production?: number;
-    capacityProduction?: number; productionSuppressed?: boolean;
+    goodId: string; stock: number; targetStock: number; demand: number; civilianDemand?: number;
+    production?: number; capacityProduction?: number; productionSuppressed?: boolean;
   },
 ): SystemLogisticsState {
   const production = good.production ?? 0;
   return {
     systemId, factionId: "f1", generation,
-    goods: [{ ...good, production, capacityProduction: good.capacityProduction ?? production }],
+    goods: [{
+      ...good,
+      production,
+      capacityProduction: good.capacityProduction ?? production,
+      // The matcher never reads it (only the build planner's fed-gate does); these fixtures are
+      // pure consumers, so all of their demand is civilian.
+      civilianDemand: good.civilianDemand ?? good.demand,
+    }],
   };
 }
 

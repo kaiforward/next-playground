@@ -81,6 +81,10 @@ export interface GoodMarketState {
   targetStock: number;
   /** Total local demand rate (civilian + industrial). Severity weight + the self-supply gate (vs production). */
   demand: number;
+  /** The civilian half of `demand` alone (per-capita baseline + skilled baskets, no industrial input
+   *  draw). The housing fed-gate folds this: necessity is authored on the civilian axis, so weighting
+   *  a refinery's ore draw with it would collapse D however starved its factories are. */
+  civilianDemand: number;
   /** Realized production rate from the last economy assessment. A system that self-supplies (production >= demand) is never a deficit sink. */
   production: number;
   /** Current building capacity, retained separately for construction target sizing. */
