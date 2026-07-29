@@ -10,6 +10,35 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
+- **[M] Rename the unit-sense "pulse" to "cycle"** — one concept, one word. A **cycle** is the
+  resolution period (`CYCLE_LENGTH` = 24 ticks); anything counting those periods must say *cycle*, and
+  where the economy's and logistics' periods need distinguishing the fix is a qualifier
+  (`economyCycles` / `logisticsCycles`), never a second noun. Today "pulse" doubles as a synonym for the
+  period, so e.g. `necessity-weighted-unrest.md` says "`RATION_COVER` (2) **pulses** of demand" and
+  "`TARGET_COVER` (40) **pulses**" two lines after establishing cover is measured in *cycles*.
+  **Scope — the unit sense only (~400 of ~1,140 total "pulse" occurrences).** Identifiers:
+  `squeezePulses`, `proposalPulses`, `proposalPulseUpdates`, `etaPulses`, `forecastEtaPulses`,
+  `forecastIndependentEtaPulses`, `queueEtaPulses`, `foodPulses`, `orePulses`, `maxPulses`,
+  `nextPulses`, `maxLevelsPerPulse`, `maxClaimsPerPulse`, `meanPerPulse`, `nextPulseGain(s)`,
+  `pulseCount`, `migrationPulseCount`, `excessByPulse`, `unrestByPulse`, `shortagePulse`,
+  `protectedPulse`, `landedAtPulse`, `landingPulse`, `landedPulse`, `ordinaryPulse` — plus the bare
+  "pulses" unit prose.
+  **`squeezePulses` and `proposalPulses` are persisted `WorldMarket` fields** → needs a
+  `SAVE_FORMAT_VERSION` bump. Cheap while the work sits on a shared branch: `main` only ever observes
+  the final number at merge, so intermediate bumps cost nothing.
+  **Do NOT sweep the event sense (~80 occurrences)** — `isPulseTick`, `pulseShard`, `pulseGroup`,
+  `economyOffPulsePayload`, `sawOffPulseAccrual`. Those name the *instant*, not the period: the pulse is
+  the **first tick of the cycle**, on which economy/logistics/build all resolve. That is a genuinely
+  different concept from the 24-tick period and keeping one word for each is the point of this entry.
+  **Open naming decision (settle before starting):** "pulse" is agreed to be the right *concept* but
+  possibly the wrong *word* — it conveys a periodic beat, not "the first tick of the cycle". Candidates:
+  `isCycleStart` (maximally literal, and it is exactly what `tick % CYCLE_LENGTH === 0` tests) or
+  `isResolutionTick` (names the function; "resolution" is already the codebase's verb — "the whole
+  galaxy resolves together"). They can also coexist: the tick is the **cycle start**, and what happens
+  on it is the **resolution**. Deciding this changes ~80 further sites, so settle it first.
+  Booked from the cycles-vocabulary sweep review (PR #204), which established "cycle" as the reserved
+  term and so exposed the overload. Same care as that sweep: a quoted citation of superseded wording
+  must stay quoted, and a blanket replace will hit real-world durations and adverbs that need re-flowing.
 - **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips deliberately ship with
   figures plus the single sentence "Higher-pressure needs create more unrest." (a needs-visibility build
   decision: final wording waits for a dedicated nested-tooltip pass). When that pass happens, also
