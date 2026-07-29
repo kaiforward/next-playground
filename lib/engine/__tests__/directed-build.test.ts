@@ -699,7 +699,10 @@ describe("supplyDissatisfaction — delivered flow", () => {
 });
 
 describe("fed", () => {
-  const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0}];
+  // civilianDemand carries the fold's weight, so it must be present for these to exercise the
+  // genuine well-supplied branch — omitting it zeroes the weight and D short-circuits to 0 for
+  // "nobody to feed" rather than "everyone is fed".
+  const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 1 }];
 
   it("is true for a well-supplied system", () => {
     expect(fed(sysWith({ goods: fedGoods }))).toBe(true);
@@ -735,7 +738,7 @@ describe("habitableHousingHeadroom", () => {
 });
 
 describe("plannedHousingUnits", () => {
-  const fedGoods: BuildGoodState[] = [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0 }];
+  const fedGoods: BuildGoodState[] = [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, civilianDemand: 5, capacityProduction: 0, satisfaction: 1 }];
 
   /** Occupancy r = pop ÷ popCap the site would sit at after committing `units` housing levels.
    *  popCap comes from the engine's own housingPopCap so the helper can never model a different

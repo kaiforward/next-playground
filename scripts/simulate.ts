@@ -229,7 +229,7 @@ function formatTable(results: HarnessResults): string {
       lines.push([pad(label, pWidths[0]), rpad(value, pWidths[1])].join(" | "));
     }
 
-    const regimes = summarizeSupplyRegimes(finalTickSystems, finalWorld.markets);
+    const regimes = summarizeSupplyRegimes(finalTickSystems, finalWorld.markets, finalWorld.events);
     lines.push("");
     lines.push("Supply regimes (per settled system, end of simulation):");
     const rWidths = [24, 12, 12];

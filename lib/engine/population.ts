@@ -9,10 +9,10 @@
  *                the class picks the relaxation rate and carries the survival bit.
  *  - accumulate: accumulateUnrest() relaxes unrest toward a standing-pressure floor
  *                (tax + crowding) and integrates D on top of it, with gain =
- *                unrestCeiling(D, survivalShortfall) × the relaxation rate. Equilibrium is
- *                therefore exactly floor + ceiling × D at any rate, so the named ceilings
- *                state maxima and recovery speed, catch-up and equilibrium are all
- *                decoupled (Supplied recovers faster than Rationing).
+ *                unrestSlope(D, survivalShortfall) × the relaxation rate. Equilibrium is
+ *                therefore min(1, floor + slope × D) at any rate, so the named slopes
+ *                state exchange rates and recovery speed, catch-up and equilibrium are
+ *                all decoupled (Supplied recovers faster than Rationing).
  *  - threshold:  strikeMultiplier() derives the production-suppression regime from
  *                unrest — a smooth ramp, not a binary halt. Unrest's own integral
  *                is the hysteresis, so no separate stored strike flag is needed.
@@ -73,9 +73,9 @@ export type SupplyRegime = "supplied" | "rationing" | "shortage";
 /**
  * The system's supply reading. `survivalShortfall` is carried alongside the label because the two
  * drive different things: the label picks the relaxation rate, the shortfall promotes the unrest
- * ceiling to the Shortage bound (see unrestCeiling). It cannot be inferred back from the label —
+ * slope to the Shortage bound (see unrestSlope). It cannot be inferred back from the label —
  * a D-driven Shortage and a survival-driven one carry the same label and must not carry the same
- * ceiling shape.
+ * slope shape.
  */
 export interface SupplyState {
   regime: SupplyRegime;
@@ -111,11 +111,12 @@ export function foldSupplyState(goods: GoodSatisfaction[], d: number): SupplySta
 }
 
 export interface UnrestParams {
-  /** Maximum equilibrium unrest ABOVE the standing floor while Rationing — the value settled unrest
-   *  reaches at D = 1, and hence the named bound the regime carries. */
-  ceilingRationing: number;
-  /** …and while Shortage. Strictly above ceilingRationing. */
-  ceilingShortage: number;
+  /** Settled unrest ABOVE the standing floor, per unit of D, while Rationing — an exchange rate, not
+   *  a cap. It equals settled unrest only at D = 1, which does not occur (mean D ~0.15); the state
+   *  itself is [0,1] and saturates there. */
+  slopeRationing: number;
+  /** …and while Shortage. Strictly above slopeRationing. */
+  slopeShortage: number;
   /** Relaxation rate toward the standing-pressure floor while Rationing/Shortage. */
   decay: number;
   /** Faster relaxation while Supplied — the recovery rate. */
@@ -123,38 +124,45 @@ export interface UnrestParams {
 }
 
 /**
- * The equilibrium unrest ceiling this reading carries, in ceilingRationing…ceilingShortage.
+ * The unrest-per-D slope this reading carries, in slopeRationing…slopeShortage.
  *
  * Two selectors, deliberately shaped differently. D drives a CONTINUOUS ramp across
  * [D_SHORTAGE_CUT, D_SHORTAGE_CUT + D_SHORTAGE_BLEND]: switching there would double a system's
  * settled unrest for an arbitrarily small change in delivered goods and land that step across strike
- * onset. The ramp starts at the cut, so the ceiling is exactly ceilingRationing across the whole
+ * onset. The ramp starts at the cut, so the slope is exactly slopeRationing across the whole
  * Rationing range and the containment guarantee holds at the top of it. A survival shortfall is a
- * step to ceilingShortage: famine in water or food is graded as famine whatever the fold says, which
+ * step to slopeShortage: famine in water or food is graded as famine whatever the fold says, which
  * is the guarantee the floor exists to make explicit rather than hope emerges from a squared average.
  * Total and monotone in both inputs.
  */
-export function unrestCeiling(d: number, survivalShortfall: boolean, params: UnrestParams): number {
-  if (survivalShortfall) return params.ceilingShortage;
+export function unrestSlope(d: number, survivalShortfall: boolean, params: UnrestParams): number {
+  if (survivalShortfall) return params.slopeShortage;
   const ramp = D_SHORTAGE_BLEND > 0
     ? clamp((d - D_SHORTAGE_CUT) / D_SHORTAGE_BLEND, 0, 1)
     : (d >= D_SHORTAGE_CUT ? 1 : 0);
-  return params.ceilingRationing + ramp * (params.ceilingShortage - params.ceilingRationing);
+  return params.slopeRationing + ramp * (params.slopeShortage - params.slopeRationing);
 }
 
 /**
  * Relaxes unrest toward its standing-pressure floor and integrates dissatisfaction on top:
- *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + ceiling*k*clamp(d,0,1), 0, 1)
- * where k = clamp(supplied ? recoveryDecay : decay, 0, 1) and ceiling = unrestCeiling(d, …).
+ *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + slope*k*clamp(d,0,1), 0, 1)
+ * where k = clamp(supplied ? recoveryDecay : decay, 0, 1) and slope = unrestSlope(d, …).
  *
- * Because the gain is `ceiling × k` rather than an independent number, the fixed point is exactly
- * `floor + ceiling × D` for ANY relaxation rate — so equilibrium, recovery speed and the tick's
- * catch-up factor are fully decoupled, and each ceiling constant states a maximum rather than
- * implying one through a ratio. `floor` is the standing pressure (tax + crowding), clamped to [0,1]
- * by the caller; at D = 0 unrest settles exactly at `floor`. Catastrophe still lives in the integral —
- * one bad pulse is recoverable, chronic shortage climbs toward the ceiling. The caller pre-scales the
- * decays by the catch-up factor (never the ceilings); k is clamped after scaling, so a large catch-up
- * can never flip the relaxation term and overshoot below the floor.
+ * Because the gain is `slope × k` rather than an independent number, the fixed point is
+ * `min(1, floor + slope × D)` for ANY relaxation rate — so equilibrium, recovery speed and the
+ * tick's catch-up factor are fully decoupled, and each slope constant states an exchange rate
+ * rather than implying one through a ratio. `floor` is the standing pressure (tax + crowding),
+ * clamped to [0,1] by the caller; at D = 0 unrest settles exactly at `floor`.
+ *
+ * The `min` is load-bearing, not defensive: unrest is a [0,1] state while the slopes exceed 1, so
+ * `floor + slope × D` can ask for more than the state can hold. That only happens in the extreme
+ * corner (highest tax + full crowding + a total food failure asks ~1.16), where distinct severities
+ * do collapse to a single maxed-out reading — the graduated response holds everywhere below it.
+ *
+ * Catastrophe still lives in the integral — one bad pulse is recoverable, chronic shortage climbs
+ * toward the settled level. The caller pre-scales the decays by the catch-up factor (never the
+ * slopes); k is clamped after scaling, so a large catch-up can never flip the relaxation term and
+ * overshoot below the floor.
  */
 export function accumulateUnrest(
   unrest: number,
@@ -164,9 +172,9 @@ export function accumulateUnrest(
   params: UnrestParams,
 ): number {
   const k = clamp(supply.regime === "supplied" ? params.recoveryDecay : params.decay, 0, 1);
-  const ceiling = unrestCeiling(d, supply.survivalShortfall, params);
+  const slope = unrestSlope(d, supply.survivalShortfall, params);
   const relaxed = floor + (1 - k) * (unrest - floor);
-  return clamp(relaxed + ceiling * k * clamp(d, 0, 1), 0, 1);
+  return clamp(relaxed + slope * k * clamp(d, 0, 1), 0, 1);
 }
 
 export interface StrikeParams {

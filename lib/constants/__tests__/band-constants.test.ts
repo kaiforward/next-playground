@@ -15,7 +15,7 @@ import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { unrestCeiling } from "@/lib/engine/population";
+import { unrestSlope } from "@/lib/engine/population";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import { housingUsed, idleLevels } from "@/lib/engine/infrastructure-decay";
 
@@ -82,9 +82,9 @@ function dFor(empty: readonly string[]): number {
   return d;
 }
 
-/** Equilibrium unrest under sustained D at a given standing floor: floor + ceiling(D) × D. */
+/** Equilibrium unrest under sustained D at a given standing floor: floor + slope(D) × D. */
 function settled(d: number, floor: number, survivalShortfall = false): number {
-  return floor + unrestCeiling(d, survivalShortfall, UNREST_PARAMS) * d;
+  return floor + unrestSlope(d, survivalShortfall, UNREST_PARAMS) * d;
 }
 
 const MAX_FLOOR = Math.max(...Object.values(TAX_LEVEL_UNREST_PRESSURE)) + CROWDING.PRESSURE_MAX;
@@ -106,9 +106,9 @@ describe("necessity fold — the separation the shortage cut was drawn against",
   });
 });
 
-describe("unrest containment — the guarantees the two ceilings carry", () => {
-  it("keeps the Shortage ceiling strictly above the Rationing one", () => {
-    expect(UNREST_PARAMS.ceilingShortage).toBeGreaterThan(UNREST_PARAMS.ceilingRationing);
+describe("unrest containment — the guarantees the two slopes carry", () => {
+  it("keeps the Shortage slope strictly above the Rationing one", () => {
+    expect(UNREST_PARAMS.slopeShortage).toBeGreaterThan(UNREST_PARAMS.slopeRationing);
   });
 
   it("never lets sustained Rationing reach collapse, at any tax", () => {
@@ -148,25 +148,25 @@ describe("unrest containment — the guarantees the two ceilings carry", () => {
     expect(worstRationing).toBeLessThan(COLLAPSE);
   });
 
-  it("blends the ceiling across the cut instead of switching it", () => {
-    const below = unrestCeiling(D_SHORTAGE_CUT - 1e-6, false, UNREST_PARAMS);
-    const above = unrestCeiling(D_SHORTAGE_CUT + 1e-6, false, UNREST_PARAMS);
+  it("blends the slope across the cut instead of switching it", () => {
+    const below = unrestSlope(D_SHORTAGE_CUT - 1e-6, false, UNREST_PARAMS);
+    const above = unrestSlope(D_SHORTAGE_CUT + 1e-6, false, UNREST_PARAMS);
     expect(Math.abs(above - below)).toBeLessThan(1e-4);
-    expect(below).toBe(UNREST_PARAMS.ceilingRationing);
-    expect(unrestCeiling(D_SHORTAGE_CUT + D_SHORTAGE_BLEND, false, UNREST_PARAMS))
-      .toBeCloseTo(UNREST_PARAMS.ceilingShortage, 10);
+    expect(below).toBe(UNREST_PARAMS.slopeRationing);
+    expect(unrestSlope(D_SHORTAGE_CUT + D_SHORTAGE_BLEND, false, UNREST_PARAMS))
+      .toBeCloseTo(UNREST_PARAMS.slopeShortage, 10);
   });
 
-  it("holds the Rationing ceiling across the whole Rationing range", () => {
+  it("holds the Rationing slope across the whole Rationing range", () => {
     // The ramp starts AT the cut, never below it — otherwise the containment guarantee above
     // would only hold at the bottom of the band.
     for (const d of [0, 0.05, 0.1, 0.2, D_SHORTAGE_CUT - 1e-9]) {
-      expect(unrestCeiling(d, false, UNREST_PARAMS), `D=${d}`).toBe(UNREST_PARAMS.ceilingRationing);
+      expect(unrestSlope(d, false, UNREST_PARAMS), `D=${d}`).toBe(UNREST_PARAMS.slopeRationing);
     }
   });
 
-  it("promotes a survival shortfall to the Shortage ceiling at any D", () => {
-    expect(unrestCeiling(0.05, true, UNREST_PARAMS)).toBe(UNREST_PARAMS.ceilingShortage);
+  it("promotes a survival shortfall to the Shortage slope at any D", () => {
+    expect(unrestSlope(0.05, true, UNREST_PARAMS)).toBe(UNREST_PARAMS.slopeShortage);
   });
 
   it("keeps the housing fed-gate below the shortage cut", () => {

@@ -7,7 +7,7 @@ import {
   crowdFactor,
   crowdingPressure,
   foldSupplyState,
-  unrestCeiling,
+  unrestSlope,
   type UnrestParams,
   type PopulationParams,
   type SupplyRegime,
@@ -188,7 +188,7 @@ describe("crowdingPressure (standing unrest floor from overcrowding)", () => {
 });
 
 describe("accumulateUnrest (floor-relaxation integrator)", () => {
-  const params: UnrestParams = { ceilingRationing: 1.8, ceilingShortage: 2.5, decay: 0.06, recoveryDecay: 0.12 };
+  const params: UnrestParams = { slopeRationing: 1.8, slopeShortage: 2.5, decay: 0.06, recoveryDecay: 0.12 };
   const state = (regime: SupplyRegime, survivalShortfall = false): SupplyState => ({ regime, survivalShortfall });
   const SUPPLIED = state("supplied");
   const RATIONING = state("rationing");
@@ -208,19 +208,34 @@ describe("accumulateUnrest (floor-relaxation integrator)", () => {
     expect(below).toBeCloseTo(0.3, 6);
   });
 
-  it("settles at floor + ceiling x D under sustained dissatisfaction", () => {
-    // The reparameterisation's whole point: each ceiling IS the maximum equilibrium unrest above the
+  it("settles at floor + slope x D under sustained dissatisfaction", () => {
+    // The reparameterisation's whole point: the slope is settled unrest per unit of D above the
     // floor, so the settled value is readable straight off the constants rather than implied by a
-    // gain/decay ratio. Two D's, one either side of the shortage cut.
+    // gain/decay ratio. Two D's, one either side of the shortage cut. Both sums stay under 1, so
+    // the state's own clamp is not in play here — that boundary is pinned separately below.
     for (const [d, floor] of [[0.1, 0.2], [0.3, 0]] as const) {
       let u = 0;
       for (let i = 0; i < 500; i++) u = accumulateUnrest(u, d, floor, RATIONING, params);
-      expect(u, `D=${d}`).toBeCloseTo(floor + unrestCeiling(d, false, params) * d, 6);
+      expect(floor + unrestSlope(d, false, params) * d, `D=${d}`).toBeLessThan(1);
+      expect(u, `D=${d}`).toBeCloseTo(floor + unrestSlope(d, false, params) * d, 6);
     }
   });
 
+  it("saturates at 1 when floor + slope x D would exceed the state's own range", () => {
+    // The slopes exceed 1 by design — D is small (mean ~0.15), so a slope of 1 could never lift
+    // famine over the strike threshold. That means `floor + slope × D` can ask for more than unrest
+    // can hold, and equilibrium is min(1, …) rather than the raw sum. This is the corner where it
+    // bites: the highest standing floor (very-high tax + full crowding) under a total water failure.
+    const floor = 0.23;
+    const d = 0.37;
+    expect(floor + unrestSlope(d, true, params) * d).toBeGreaterThan(1); // the raw sum overflows
+    let u = 0;
+    for (let i = 0; i < 500; i++) u = accumulateUnrest(u, d, floor, state("shortage", true), params);
+    expect(u).toBe(1);
+  });
+
   it("reaches the same equilibrium at any relaxation rate", () => {
-    // gain = ceiling x decay, so the rate sets only how fast equilibrium arrives, never where it is —
+    // gain = slope x decay, so the rate sets only how fast equilibrium arrives, never where it is —
     // which is what makes the settled level invariant to the tick's catch-up factor.
     const slow: UnrestParams = { ...params, decay: 0.06 };
     const fast: UnrestParams = { ...params, decay: 0.5 };
@@ -256,11 +271,11 @@ describe("accumulateUnrest (floor-relaxation integrator)", () => {
     expect(famine).toBeGreaterThan(ordinary);
   });
 
-  it("is monotonic in both ceiling selectors — a worse reading never lowers settled unrest", () => {
+  it("is monotonic in both slope selectors — a worse reading never lowers settled unrest", () => {
     // Equilibrium, not one step: the regime label picks only the approach rate, so comparing single
     // steps across labels compares speeds rather than severities.
     const floor = 0.2;
-    const eq = (d: number, survivalShortfall: boolean) => floor + unrestCeiling(d, survivalShortfall, params) * d;
+    const eq = (d: number, survivalShortfall: boolean) => floor + unrestSlope(d, survivalShortfall, params) * d;
     for (const d of [0, 0.05, 0.14, 0.25, 0.28, 0.32, 0.5, 1]) {
       expect(eq(d, true), `D=${d}`).toBeGreaterThanOrEqual(eq(d, false));
     }
@@ -279,7 +294,7 @@ describe("accumulateUnrest (floor-relaxation integrator)", () => {
   });
 
   it("clamps output to [0,1]", () => {
-    const big: UnrestParams = { ...params, ceilingRationing: 50, ceilingShortage: 50 };
+    const big: UnrestParams = { ...params, slopeRationing: 50, slopeShortage: 50 };
     expect(accumulateUnrest(1, 1, 0.9, SHORTAGE, big)).toBe(1);
     expect(accumulateUnrest(0, 0, 0, SUPPLIED, params)).toBe(0);
   });

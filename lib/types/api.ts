@@ -152,9 +152,9 @@ export type SystemDetailResponse = ApiResponse<SystemDetailData>;
 export interface PopNeedData {
   goodId: string;
   goodName: string;
-  /** Civilian want — unfloored consumption rate (units/cyc), NOT the MIN_DEMAND-floored pricing figure. */
+  /** Civilian want — unfloored consumption rate (units/month), NOT the MIN_DEMAND-floored pricing figure. */
   want: number;
-  /** want × satisfaction — what's actually delivered (units/cyc). */
+  /** want × satisfaction — what's actually delivered (units/month). */
   delivered: number;
   /** delivered ÷ want, in [0,1] — the consume gate at current stock; 1 = fully met. */
   satisfaction: number;

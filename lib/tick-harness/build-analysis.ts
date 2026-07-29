@@ -15,9 +15,8 @@ import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
 import { factionConstructionPool } from "@/lib/engine/construction";
-import { dissatisfaction, type GoodSatisfaction } from "@/lib/engine/population";
-import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
-import { consumptionRate } from "@/lib/engine/physical-economy";
+import { dissatisfaction } from "@/lib/engine/population";
+import { goodSatisfactionsBySystem } from "@/lib/tick-harness/good-satisfaction";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -138,17 +137,7 @@ export function sampleFoundedColonies(
   // Weighted by each good's share of the COLONY's own demand, and folded with the same
   // `dissatisfaction` the unrest engine reads. A flat mean over the basket would call a seed colony
   // with no reactor cores as deprived as one with no water, and then disagree with the simulation.
-  const goodsBySystem = new Map<string, GoodSatisfaction[]>();
-  for (const m of markets) {
-    const sys = due.get(m.systemId);
-    if (!sys) continue;
-    const basis = computeSystemLabourSnapshot(sys.buildings, sys.population).basis;
-    const demanded = consumptionRate(m.goodId, basis);
-    if (demanded <= 0) continue; // the colony does not consume it — no opinion either way
-    const list = goodsBySystem.get(m.systemId) ?? [];
-    list.push({ goodId: m.goodId, satisfaction: m.satisfaction ?? 1, demanded });
-    goodsBySystem.set(m.systemId, list);
-  }
+  const goodsBySystem = goodSatisfactionsBySystem(due, markets);
   for (const [systemId, goods] of goodsBySystem) {
     const record = tracker.get(systemId);
     if (!record || goods.length === 0) continue;

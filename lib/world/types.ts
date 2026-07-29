@@ -81,7 +81,7 @@ export interface WorldSystem {
   population: number;
   /** Maximum sustainable population. */
   popCap: number;
-  /** 0…1 — integral of demand-weighted dissatisfaction. */
+  /** 0…1 — integral of necessity-weighted dissatisfaction. */
   unrest: number;
   /** Fractional unrest-collapse accumulator; whole levels tear down as it crosses integers, and it
    *  resets whenever unrest falls back to the decay threshold. Absent ⇒ 0, so world-gen and older

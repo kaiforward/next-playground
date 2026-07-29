@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
+import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
@@ -305,13 +306,19 @@ describe("economy processor: supply regime signal", () => {
   // fraction is √(stock / 2), so these stocks pin an exact satisfaction:
   //   100    → ≥ knee  → 1     (fully served)
   //   1.28   → √0.64   → 0.8   (short of full, above the shortage line)
-  //   0.125  → √0.0625 → 0.25  (below the shortage line)
+  //   0.405  → √0.2025 → 0.45  (just below the shortage line — D stays under the cut)
+  //   0.125  → √0.0625 → 0.25  (well below the shortage line — D also crosses the cut)
   const SERVED_STOCK = 100;
   const RATIONED_STOCK = 1.28;
+  const MILD_SHORT_STOCK = 0.405;
   const SHORT_STOCK = 0.125;
 
   const regimeOf = (signals: EconomySignals | undefined, systemId: string) =>
     requireEconomySignals(signals).supplyStateBySystem.get(systemId)?.regime;
+  const stateOf = (signals: EconomySignals | undefined, systemId: string) =>
+    requireEconomySignals(signals).supplyStateBySystem.get(systemId);
+  const dOf = (signals: EconomySignals | undefined, systemId: string) =>
+    requireEconomySignals(signals).dissatisfactionBySystem.get(systemId);
   const satOf = (world: InMemoryEconomyWorld, goodId: string) =>
     world.markets.find((m) => m.goodId === goodId)!.satisfaction;
 
@@ -346,10 +353,27 @@ describe("economy processor: supply regime signal", () => {
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    // Water is a survival good below the shortage line, so the floor selects shortage for the
-    // whole system however well the rest of the basket is served.
+    // A deep water shortage: both selectors agree here — water is below the shortage line AND the
+    // squared gap pushes D over the cut on its own. The next test isolates the floor from the cut.
     expect(satOf(world, "water")).toBeCloseTo(0.25, 6);
+    expect(dOf(result.economySignals, "sys-starved")).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);
     expect(regimeOf(result.economySignals, "sys-starved")).toBe("shortage");
+  });
+
+  it("promotes to shortage from the survival floor alone, with D below the cut", async () => {
+    // The floor's whole reason to exist: water just under the shortage line is famine even though
+    // the squared fold reads it as mild. Without hasSurvivalShortfall this fixture reads "rationing",
+    // so it fails if the floor is removed — which the deep-shortage case above cannot detect.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("sys-thirsty", 0)],
+      markets: [makeMarket("sys-thirsty", "food", SERVED_STOCK), makeMarket("sys-thirsty", "water", MILD_SHORT_STOCK)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(satOf(world, "water")).toBeCloseTo(0.45, 6);
+    expect(satOf(world, "water")).toBeLessThan(SHORTAGE_SATISFACTION); // below the survival line
+    expect(dOf(result.economySignals, "sys-thirsty")).toBeLessThan(D_SHORTAGE_CUT); // but D is mild
+    expect(stateOf(result.economySignals, "sys-thirsty")).toEqual({ regime: "shortage", survivalShortfall: true });
   });
 
   it("reads supplied for a producer with no local consumption", async () => {

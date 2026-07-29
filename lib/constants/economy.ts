@@ -50,11 +50,11 @@ export const SHORTAGE_SATISFACTION = 0.5;
 export const D_SHORTAGE_CUT = 0.25;
 
 /**
- * Width of the D band above the cut across which the unrest ceiling ramps from the Rationing value to
+ * Width of the D band above the cut across which the unrest slope ramps from the Rationing value to
  * the Shortage one. The ramp starts AT the cut and never below it, so the Rationing containment
  * guarantee (sustained Rationing cannot reach collapse at any tax) holds across the whole Rationing
  * range; a hard branch here would instead double a system's settled unrest for an arbitrarily small
  * change in delivered goods, and land that step across strike onset. Narrow enough that a total food
- * failure still reaches the full Shortage ceiling — asserted from the constants, not assumed.
+ * failure still reaches the full Shortage slope — asserted from the constants, not assumed.
  */
 export const D_SHORTAGE_BLEND = 0.05;

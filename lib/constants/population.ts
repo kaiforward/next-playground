@@ -5,22 +5,28 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
 /**
  * Unrest integration. Rates are per *population-processor run* — i.e. per economy-shard update
  * (every `MONTH_LENGTH` ticks, 24), not per game tick. Unrest relaxes toward a standing-pressure
- * floor (tax + crowding) and integrates dissatisfaction on top, settling at exactly
- * `floor + ceiling × D`: each ceiling IS the maximum equilibrium unrest its regime can carry, so the
- * numbers state bounds instead of implying them through a blind gain/decay ratio, and the
- * equilibrium is independent of the relaxation rate (and therefore of the catch-up factor). Supplied
- * recovers twice as fast as either regime accumulates, so a relieved system sheds unrest quickly
- * while a chronically short one climbs.
+ * floor (tax + crowding) and integrates dissatisfaction on top, settling at
+ * `min(1, floor + slope × D)`, independent of the relaxation rate (and therefore of the catch-up
+ * factor). Supplied recovers twice as fast as either regime accumulates, so a relieved system sheds
+ * unrest quickly while a chronically short one climbs.
  *
- * Both ceilings are load-bearing and no single number replaces them: sustained Rationing must stay
+ * Each slope is an EXCHANGE RATE, not a cap: how much settled unrest one unit of D buys. It exceeds
+ * 1 because D itself is small — measured mean D is ~0.15 and a total water failure only reaches
+ * ~0.37, so a slope of 1 could never lift famine over the strike threshold. The slope equals settled
+ * unrest only at D = 1 (every good wholly undelivered), which does not occur; read 2.5 as "famine
+ * bites 2.5× as hard per unit of shortage", never as a reachable unrest value. Unrest is a [0,1]
+ * state and `accumulateUnrest` clamps to it, so the sum saturates in the extreme corner — highest
+ * tax plus full crowding plus a total food failure asks for ~1.16 and gets 1.0.
+ *
+ * Both slopes are load-bearing and no single number replaces them: sustained Rationing must stay
  * below the collapse threshold at the highest tax, while a total food failure must cross it at zero
  * tax. Those two bounds do not overlap — famine genuinely needs a steeper response than ordinary
  * scarcity, not merely a larger D. Both are asserted from the shared constants in
  * lib/constants/__tests__/band-constants.test.ts. First cuts; the simulator owns the finals.
  */
 export const UNREST_PARAMS: UnrestParams = {
-  ceilingRationing: 1.8,
-  ceilingShortage: 2.5,
+  slopeRationing: 1.8,
+  slopeShortage: 2.5,
   decay: 0.06,
   recoveryDecay: 0.12,
 };

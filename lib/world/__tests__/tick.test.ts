@@ -869,9 +869,9 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     // reads Shortage — both independent of the necessity weights.
     expectDemandedSatisfaction(shortagePulse, systemId, 0);
     // The system entered on its floor, so the relaxation term is zero and the whole rise is the
-    // shortage gain integrating D = 1. Gain is ceiling x relaxation rate, derived here rather than
-    // named, so the assertion follows a ceiling retune instead of going stale against one.
-    const shortageGain = UNREST_PARAMS.ceilingShortage * UNREST_PARAMS.decay;
+    // shortage gain integrating D = 1. Gain is slope x relaxation rate, derived here rather than
+    // named, so the assertion follows a slope retune instead of going stale against one.
+    const shortageGain = UNREST_PARAMS.slopeShortage * UNREST_PARAMS.decay;
     const shortageUnrest = fixtureSystem(shortagePulse, systemId).unrest;
     expect(shortageUnrest).toBeCloseTo(TAX_FLOOR + shortageGain, 12);
     // One bad pulse from the floor is recoverable — it does not reach the strike regime.
