@@ -37,7 +37,7 @@ export interface MarketView {
   demandRate: number;
   /** Built infrastructure storage capacity from the station market row. */
   storageCapacity: number;
-  /** Reference-months the previous rationed economy streak had persisted (finite, [0,2]); missing reads as 0. */
+  /** Reference-cycles the previous rationed economy streak had persisted (finite, [0,2]); missing reads as 0. */
   squeezePulses?: number;
 }
 
@@ -53,8 +53,8 @@ export interface MarketUpdate {
   realizedProductionRate: number;
   /** Whether strike or maintenance reduced production during this assessment. */
   productionSuppressed: boolean;
-  /** Reference-months a rationed economy assessment has persisted — a finite value in [0,2] advanced per
-   *  assessment by the economy interval's catchUpFactor (2 = two reference months). */
+  /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced per
+   *  assessment by the economy interval's catchUpFactor (2 = two reference cycles). */
   squeezePulses: number;
 }
 

@@ -3,7 +3,7 @@ import { generateWorld } from "../gen";
 import { serializeWorld, deserializeWorld, sanitizeSaveName, SAVE_FORMAT_VERSION } from "../save";
 import type { World } from "../types";
 import { runWorldTick } from "../tick";
-import { MONTH_LENGTH } from "@/lib/constants/tick-cadence";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 
 describe("sanitizeSaveName", () => {
   it("lowercases and strips everything but [a-z0-9-_]", () => {
@@ -59,17 +59,17 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 8 (faction treasuries)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(8);
+  it("is at save format version 9 (cycles vocabulary)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(9);
   });
 
-  it("rejects a prior-version (v7) save — saves break on the shape bump", () => {
-    const json = JSON.stringify({ formatVersion: 7, world });
+  it("rejects a prior-version (v8) save — saves break on the shape bump", () => {
+    const json = JSON.stringify({ formatVersion: 8, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
 
-  it("round-trips construction projects + building idleMonths unchanged", () => {
+  it("round-trips construction projects + building idleCycles unchanged", () => {
     const withConstruction: World = {
       ...world,
       constructionProjects: [
@@ -85,7 +85,7 @@ describe("serializeWorld / deserializeWorld", () => {
           workDone: 12,
         },
       ],
-      buildings: world.buildings.map((b, i) => ({ ...b, idleMonths: i === 0 ? 3 : 0 })),
+      buildings: world.buildings.map((b, i) => ({ ...b, idleCycles: i === 0 ? 3 : 0 })),
     };
     const result = deserializeWorld(serializeWorld(withConstruction));
     expect(result.ok).toBe(true);
@@ -178,7 +178,7 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.world.markets[0].proposalPulses).toBe(0.5);
   });
 
-  it("keeps new optional assessment values omitted in an old-shaped v8 save", () => {
+  it("keeps new optional assessment values omitted in an old-shaped save", () => {
     const world = generateWorld({ systemCount: 60, seed: 7 });
     const oldShaped: World = {
       ...world,
@@ -249,9 +249,9 @@ describe("save compatibility — collapseDebt moved from building rows to system
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // Past a monthly boundary, so the economy/population/decay pulse actually resolves.
+    // Past a cycle boundary, so the economy/population/decay pulse actually resolves.
     let world: World = result.world;
-    for (let tick = 1; tick <= MONTH_LENGTH + 1; tick++) {
+    for (let tick = 1; tick <= CYCLE_LENGTH + 1; tick++) {
       world = (await runWorldTick(world)).world;
     }
 

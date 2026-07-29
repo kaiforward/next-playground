@@ -271,7 +271,7 @@ function countFor(builds: PlannedBuild[], systemId: string, type: string): numbe
 }
 
 describe("planFactionBuilds", () => {
-  it("sizes a tier-0 build to the demand RATE, not the 40-day stock target (over-extraction regression)", () => {
+  it("sizes a tier-0 build to the demand RATE, not the 40-cycle stock target (over-extraction regression)", () => {
     // A developed system with an ample arable deposit: demand rate 20/tick, no local production,
     // ample labour. It reaches itself (self-cost) so it self-supplies. The stock model built
     // servedOutput/perUnit where servedOutput = targetStock − stock = 40×20 = 800 → ~228 food units
@@ -1366,7 +1366,7 @@ describe("planFactionProposals: persistent structural policy", () => {
 
   it("advances the proposal clock by the per-assessment reference-time (fractional cadences)", () => {
     // A finer-than-reference cadence (advance 0.5): four persistent assessments to reach the
-    // two-reference-month threshold, and no proposal emits until the counter actually reaches it.
+    // two-reference-cycle threshold, and no proposal emits until the counter actually reaches it.
     let pulses = 0;
     for (const expected of [0.5, 1.0, 1.5, 2.0]) {
       const plan = planFactionProposals([policySystem(policyGood({ proposalPulses: pulses }))], () => 1, [], DEV_REFS, 0.5);

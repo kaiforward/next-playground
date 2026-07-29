@@ -4,7 +4,7 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
 
 /**
  * Unrest integration. Rates are per *population-processor run* — i.e. per economy-shard update
- * (every `MONTH_LENGTH` ticks, 24), not per game tick. Unrest relaxes toward a standing-pressure
+ * (every `CYCLE_LENGTH` ticks, 24), not per game tick. Unrest relaxes toward a standing-pressure
  * floor (tax + crowding) and integrates dissatisfaction on top, settling at
  * `min(1, floor + slope × D)`, independent of the relaxation rate (and therefore of the catch-up
  * factor). Supplied recovers twice as fast as either regime accumulates, so a relieved system sheds

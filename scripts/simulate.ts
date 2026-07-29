@@ -349,7 +349,7 @@ function formatTable(results: HarnessResults): string {
     if (results.config.tickCount < CONSTRUCTION_WARMUP_TICKS) {
       lines.push(
         `  warm-up: ${results.config.tickCount} ticks is below the ~${CONSTRUCTION_WARMUP_TICKS}-tick construction ` +
-        `warm-up window — a structural deficit only becomes a fundable proposal after the two-reference-month ` +
+        `warm-up window — a structural deficit only becomes a fundable proposal after the two-reference-cycle ` +
         `persistence window, and the first pulse lands at the construction interval, so read low activity as ` +
         `"too early", not "broken" (colony-driven bursts lag colonisation further; a matured read needs ~1500 ticks).`,
       );

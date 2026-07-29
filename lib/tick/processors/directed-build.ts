@@ -46,11 +46,11 @@ export interface DirectedBuildProcessorParams {
     floorBase: number;
     /** Development at which a colony weans fully off the pool floor. */
     floorKnee: number;
-    /** Points one fully-staffed Construction Centre level adds per reference month. */
+    /** Points one fully-staffed Construction Centre level adds per reference cycle. */
     pointsPerLevel: number;
-    /** Reference months of centre output its proposal value amortises. */
+    /** Reference cycles of centre output its proposal value amortises. */
     paybackHorizon: number;
-    /** Reference months of pool drain defining the centre-valuation frontier. */
+    /** Reference cycles of pool drain defining the centre-valuation frontier. */
     backlogWindow: number;
     /** Mints a unique id for each newly-committed project (backed by the world's nextId counter). */
     mintId: () => string;
@@ -134,7 +134,7 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
 }
 
 /**
- * Pure processor body. Monthly resolution pulse (mirrors directed-logistics): on the
+ * Pure processor body. Cycle resolution pulse (mirrors directed-logistics): on the
  * boundary tick (`tick % interval === 0`) every faction is planned at once via
  * `pulseShard`; every other tick is a no-op.
  *
@@ -232,7 +232,7 @@ export async function runDirectedBuildProcessor(
 
   for (const [factionId, group] of byFaction) {
     // The faction's per-pulse pool: eligible heads + centre output over developed systems
-    // (controlled/unclaimed are inert). Valuation reads the unscaled reference-month pool;
+    // (controlled/unclaimed are inert). Valuation reads the unscaled reference-cycle pool;
     // funding scales it by catchUp like every pulse income. The pool drains the queue; it
     // never enqueues.
     const poolRef = factionConstructionPool(
@@ -260,7 +260,7 @@ export async function runDirectedBuildProcessor(
     // The assessment runs for every due faction so the proposal-pressure counter advances even when
     // build automation is off — the switch gates PROPOSAL EMISSION, not the construction clock.
     const buildStates = group.map(toBuildState);
-    // Advance the proposal-pressure counter by this pulse's reference-time, so "two reference months
+    // Advance the proposal-pressure counter by this pulse's reference-time, so "two reference cycles
     // of persistence" is the same wall-clock latency at any construction cadence (not two pulses).
     const buildPlan = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs, catchUp);
     for (const u of buildPlan.persistenceUpdates) {

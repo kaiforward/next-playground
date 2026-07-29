@@ -212,7 +212,7 @@ export interface MigrationEntry {
 }
 
 /** Per-system ownership reading for the political territory + system markers. Tick-scoped: ownership
- *  changes on the monthly claim/develop pulse, so this rides a tick-invalidated path (not the static atlas). */
+ *  changes on the cycle claim/develop pulse, so this rides a tick-invalidated path (not the static atlas). */
 export interface OwnershipEntry {
   systemId: string;
   factionId: string | null;

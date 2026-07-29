@@ -8,7 +8,7 @@ function sys(id: string, buildings: Record<string, number>, idle: Record<string,
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "federation", population: 100, popCap: 200,
-    unrest: 0.3, buildings, buildingIdleMonths: idle, collapseDebt: debt, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    unrest: 0.3, buildings, buildingIdleCycles: idle, collapseDebt: debt, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 
@@ -35,19 +35,19 @@ describe("InMemoryInfrastructureWorld", () => {
     expect(world.systems.find((s) => s.id === "s1")!.buildings.ore).toBe(0); // floored
   });
 
-  it("writes idleMonths back per building, overwriting stale counts and leaving unmentioned systems untouched", async () => {
+  it("writes idleCycles back per building, overwriting stale counts and leaving unmentioned systems untouched", async () => {
     const world = new InMemoryInfrastructureWorld({
       systems: [sys("s1", { ore: 3, [HOUSING_TYPE]: 2 }, { ore: 5 }), sys("s2", { ore: 1 }, { ore: 9 })],
     });
-    await world.applyIdleMonths([
-      { systemId: "s1", buildingType: "ore", idleMonths: 6 },
-      { systemId: "s1", buildingType: HOUSING_TYPE, idleMonths: 0 },
+    await world.applyIdleCycles([
+      { systemId: "s1", buildingType: "ore", idleCycles: 6 },
+      { systemId: "s1", buildingType: HOUSING_TYPE, idleCycles: 0 },
     ]);
     const s1 = world.systems.find((s) => s.id === "s1")!;
-    expect(s1.buildingIdleMonths.ore).toBe(6); // overwrote the stale 5
-    expect(s1.buildingIdleMonths[HOUSING_TYPE]).toBe(0); // newly recorded
+    expect(s1.buildingIdleCycles.ore).toBe(6); // overwrote the stale 5
+    expect(s1.buildingIdleCycles[HOUSING_TYPE]).toBe(0); // newly recorded
     // s2 received no update → its idle map survives verbatim.
-    expect(world.systems.find((s) => s.id === "s2")!.buildingIdleMonths).toEqual({ ore: 9 });
+    expect(world.systems.find((s) => s.id === "s2")!.buildingIdleCycles).toEqual({ ore: 9 });
   });
 
   it("applies popCap updates", async () => {

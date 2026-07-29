@@ -137,11 +137,11 @@ orthogonal to that — it changes how much the *shortfall* counts, not how much 
 `satisfaction` is a **flow**: delivered ÷ demanded for one good in one pulse. It is not a stock gauge,
 and the distinction decides where every threshold in this document sits. Delivery is **full** while
 stock covers at least `RATION_COVER` (2) pulses of demand; below that it ramps as `√(stock / rationStock)`.
-The pricing anchor is `TARGET_COVER` (40) pulses. Because an economy pulse is one month, **cover is
-measured in months, not days** — the "days-of-supply" wording in the shipped docstrings is legacy and
+The pricing anchor is `TARGET_COVER` (40) pulses. Because an economy pulse is one cycle, **cover is
+measured in cycles, not days** — the "days-of-supply" wording in the shipped docstrings is legacy and
 should be corrected where it appears.
 
-| Stock (months of demand) | Satisfaction | State |
+| Stock (cycles of demand) | Satisfaction | State |
 | --- | --- | --- |
 | 40 — the pricing anchor | 1.00 | normal |
 | 20 — half the strategic reserve | 1.00 | reserve drawing down, nobody hungry |
@@ -152,9 +152,9 @@ should be corrected where it appears.
 
 So a healthy system's `D` is **exactly** zero, not approximately — every gap is exactly 0 while stock
 sits anywhere above the knee. And satisfaction 0.5 means people are receiving half of what they need
-to eat, with under half a month in the warehouse: it is already a severe state, not a mild squeeze.
+to eat, with under half a cycle in the warehouse: it is already a severe state, not a mild squeeze.
 `RATION_COVER = 2` stands as authored — an underfilled strategic reserve is genuinely not an unmet
-current need, and the gap between the deficit signal (0.8 × anchor, i.e. 32 months) and the knee gives
+current need, and the gap between the deficit signal (0.8 × anchor, i.e. 32 cycles) and the knee gives
 roughly 30 logistics pulses of warning, with logistics resolving every pulse. **A system that starves
 never ran out of warning; it ran out of supply or of budget to move it** — so widening the buffer is
 never the fix for a starving galaxy.
@@ -375,7 +375,7 @@ does not exist yet.
   galaxy-wide at the same pulse that de-suppressed output raises exporter spare and covered fraction —
   two effects pushing opposite ways, resultant not derivable from the constants.
 - **Infrastructure decay swaps channels.** The unrest-teardown channel fires at essentially every
-  settled system today and goes to exactly zero after this pass — correct, but it leaves the 12-month
+  settled system today and goes to exactly zero after this pass — correct, but it leaves the 12-cycle
   idle channel as the only pruner at the same moment rising output pushes stock toward the operating
   ceiling and turns strike-throttled producers into glut-idlers.
 

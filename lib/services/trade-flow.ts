@@ -93,7 +93,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   // Imports/exports are summed over the FLOW_HISTORY_TICKS window; normalise to a
   // per-logistics-cycle rate so they share units with the production/consumption rates.
   // Flow events are written only by directed-logistics, so the window holds one batch
-  // per LOGISTICS_INTERVAL — not per month.
+  // per LOGISTICS_INTERVAL — i.e. one per logistics cycle, not one per economy cycle.
   const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL;
   const model = buildLogisticsRows(prodCon, flowsByGood, cyclesInWindow, inputDemandByGood);
 

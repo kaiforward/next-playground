@@ -62,8 +62,8 @@ describe("getSystemPopulation", () => {
       ...world,
       buildings: [
         ...withoutTarget,
-        { systemId: system.id, buildingType: "metals", count: 3, idleMonths: 0 },
-        { systemId: system.id, buildingType: "vocational_school", count: 1, idleMonths: 0 },
+        { systemId: system.id, buildingType: "metals", count: 3, idleCycles: 0 },
+        { systemId: system.id, buildingType: "vocational_school", count: 1, idleCycles: 0 },
       ],
     });
 

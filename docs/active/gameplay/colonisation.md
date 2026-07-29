@@ -1,7 +1,7 @@
 # Colonisation — Pool-Funded Expansion & Colony Bootstrapping
 
 > **Detailed spec** for how a faction turns open frontier into productive worlds. Colonisation runs inside
-> the directed-build processor's monthly pulse, ahead of the build step, and shares the faction construction
+> the directed-build processor's cycle pulse, ahead of the build step, and shares the faction construction
 > pool with build-out. Sits *on* the autonomic build/pool machinery in
 > [economy-autonomic-agency.md](./economy-autonomic-agency.md), the territorial `control` tiers in
 > [faction-system.md](./faction-system.md#territorial-expansion-claim-and-develop), and the intra-faction
@@ -12,7 +12,7 @@
 
 ## Key mechanics (the headline)
 
-A faction grows its territory in two ownership steps a month: **claim** stakes a cheap, near-instant border
+A faction grows its territory in two ownership steps a cycle: **claim** stakes a cheap, near-instant border
 (`unclaimed → controlled`), and **develop** settles a controlled system into a live colony
 (`controlled → developed`). Developing is not free or instant — it is a **pool-funded, timed
 colony-establish project** drawn from the same per-faction construction pool that builds housing and
@@ -198,7 +198,7 @@ fill. (Full autonomic-build detail: [economy-autonomic-agency.md](./economy-auto
 ## Populating a colony — routed delivery + fullness-gated migration
 
 Gradient diffusion migration is a local flow: it balances neighbours but mathematically cannot reach a colony
-several hops from any population (people puddle near the cores). Two mechanisms fix that, both on the monthly
+several hops from any population (people puddle near the cores). Two mechanisms fix that, both on the cycle
 migration pulse:
 
 - **Routed colonist delivery** (`lib/engine/colonist-delivery.ts`) is the primary colony population supply.

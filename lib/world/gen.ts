@@ -167,7 +167,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
         systemId: systemIds[i],
         buildingType,
         count,
-        idleMonths: 0,
+        idleCycles: 0,
       })),
   );
 

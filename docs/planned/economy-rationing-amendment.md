@@ -32,7 +32,7 @@ the final two cycles of aggregate local demand and ramps toward zero delivery at
 ## Separation of policies
 
 `demandRate` is the stored aggregate local draw-rate denominator, including civilian and
-industrial demand. It is the authority for demand-cycle cover until the next monthly rewrite.
+industrial demand. It is the authority for demand-cycle cover until the next cycle's rewrite.
 
 Pricing anchor shifts change `targetStock`, price, and reserve policy; they do not change
 `rationStock` or physical access at fixed stock and demand. Temporary consumption multipliers

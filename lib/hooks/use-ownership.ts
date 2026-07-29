@@ -13,7 +13,7 @@ export interface SystemOwnership {
 
 /**
  * All-systems ownership (faction + developed tier), keyed by systemId. Tick-scoped: claims and
- * developments move ownership on the monthly pulse, so this rides a tick-invalidated path (see
+ * developments move ownership on the cycle pulse, so this rides a tick-invalidated path (see
  * useTickInvalidation) rather than the static atlas. Always enabled — the political territory layer
  * and the filled/hollow system markers both read ownership regardless of the selected map mode.
  *

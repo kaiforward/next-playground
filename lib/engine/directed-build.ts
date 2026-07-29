@@ -61,10 +61,10 @@ export interface BuildGoodState {
   satisfaction?: number;
   /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
   productionSuppressed?: boolean;
-  /** Reference-months a rationed economy assessment has persisted — a finite value in [0,2] advanced
+  /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced
    *  per assessment by the economy interval's catchUpFactor (so the latency is cadence-invariant). */
   squeezePulses?: number;
-  /** Reference-months a structural construction assessment has persisted — a finite value in [0,2]
+  /** Reference-cycles a structural construction assessment has persisted — a finite value in [0,2]
    *  advanced per assessment by the construction interval's catchUpFactor. */
   proposalPulses?: number;
   /** A reachable logistics match was constrained by the faction's funded haul work. */
@@ -367,7 +367,7 @@ function assessStructuralDeficits(
     for (const good of system.goods) {
       const residual = residualByKey.get(`${system.systemId}:${good.goodId}`) ?? 0;
       // Advance by the reference-time this assessment represents (catchUpFactor of the caller's
-      // interval), not a flat +1, so the "two reference months of persistence" latency is the same
+      // interval), not a flat +1, so the "two reference cycles of persistence" latency is the same
       // wall-clock span at any construction cadence. The counter is fractional, finite, clamped [0,2].
       const nextPulses = residual > 0
         ? Math.min(DIRECTED_BUILD.PERSISTENCE_PULSES, Math.max(0, good.proposalPulses ?? 0) + advance)
@@ -923,7 +923,7 @@ export interface FactionBuildPlan {
  * be re-proposed. Housing answers current crowding; only industry awaits a persistent residual.
  *
  * `advance` is the reference-time one assessment contributes to the persistence counter — the
- * processor passes `catchUpFactor(interval)` so the two-reference-month latency is cadence-invariant;
+ * processor passes `catchUpFactor(interval)` so the two-reference-cycle latency is cadence-invariant;
  * it defaults to 1 for direct callers.
  */
 export function planFactionProposals(

@@ -80,8 +80,8 @@ only thing that can reverse it is later faction treasury spend (build-out + unre
 
 `WorldBuilding.count` is a whole-integer **level count**, mutated **downward only** and always by whole
 levels. Decay runs on the existing economy-shard cadence (the same fixed-interval shard as the economy and
-population processors, every `ECONOMY_UPDATE_INTERVAL` ticks ≈ one month) and reads the freshly-computed
-`labourFulfillment` and market state. Writes apply batched `count` + `idleMonths` deltas across the shard in
+population processors, every `ECONOMY_UPDATE_INTERVAL` ticks ≈ one cycle) and reads the freshly-computed
+`labourFulfillment` and market state. Writes apply batched `count` + `idleCycles` deltas across the shard in
 one pass, never per-row.
 
 ### "Used" depends on the building's role
@@ -101,16 +101,16 @@ one pass, never per-row.
 
 **(1) Idle contraction — buffered, whole-level, keeps the world tidy.** While a whole level sits idle
 (`floor(count − used) ≥ 1`), a per-`(system, type)` idle countdown ticks up; when it reaches
-`idleBufferMonths`, the marginal idle level tears down (`count -= 1`) and the countdown resets:
+`idleBufferCycles`, the marginal idle level tears down (`count -= 1`) and the countdown resets:
 
 ```
 idle ← (floor(count − used) ≥ 1) ? idle + 1 : 0        // resets on refill (hysteresis)
-if idle ≥ idleBufferMonths:  count ← count − 1;  idle ← 0
+if idle ≥ idleBufferCycles:  count ← count − 1;  idle ← 0
 ```
 
 The buffer *is* the hysteresis — a transient labour dip or a single unsold run costs nothing, because the
 countdown resets the moment the level refills; only a *sustained* idle level compounds down, one whole level
-per buffer period. The countdown state (`WorldBuilding.idleMonths`) is persisted; utilization itself is
+per buffer period. The countdown state (`WorldBuilding.idleCycles`) is persisted; utilization itself is
 derived each run (no stored "abandonment" integral).
 
 **(2) Unrest teardown — catastrophic, the snowball.** Above an unrest threshold, a whole level is *torn down
@@ -126,7 +126,7 @@ capacity, deepening the shortage that drives the unrest — a self-reinforcing s
 gets rebuilt, where — is the committed, throughput-paced project layer, not part of decay.)
 
 Decay never takes `count` below `0`, and only ever removes **whole levels**, so counts stay integer.
-`idleBufferMonths` and `θ_decay` are simulator-tunable knobs (see Calibration).
+`idleBufferCycles` and `θ_decay` are simulator-tunable knobs (see Calibration).
 
 ### `popCap` recomputes live
 
@@ -260,7 +260,7 @@ decline term as the non-conserved death sink); Industry panel rework.
 
 ## Open calibration knobs (all simulator-tunable)
 
-- `idleBufferMonths` (how many sustained-idle runs before the marginal idle level sheds — the buffer's stickiness).
+- `idleBufferCycles` (how many sustained-idle runs before the marginal idle level sheds — the buffer's stickiness).
 - `θ_decay` (unrest-teardown onset — how failed a system must be before it sheds working levels).
 - The `outputUptake` curve (how "chronically unsold" maps to a decay-eligible idle fraction).
 - Housing-overshoot displacement rate and the unrest-weighted migration-vs-death split (low unrest → flee,

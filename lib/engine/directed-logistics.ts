@@ -93,10 +93,10 @@ export interface GoodMarketState {
   satisfaction?: number;
   /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
   productionSuppressed?: boolean;
-  /** Reference-months a rationed economy assessment has persisted — a finite value in [0,2] advanced per
+  /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced per
    *  assessment by the economy interval's catchUpFactor. */
   squeezePulses?: number;
-  /** Reference-months a structural construction assessment has persisted — a finite value in [0,2]
+  /** Reference-cycles a structural construction assessment has persisted — a finite value in [0,2]
    *  advanced per assessment by the construction interval's catchUpFactor. */
   proposalPulses?: number;
   /** A reachable logistics match was constrained by the faction's funded haul work. */

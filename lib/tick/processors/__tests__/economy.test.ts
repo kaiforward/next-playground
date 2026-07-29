@@ -5,7 +5,7 @@
  *   1. Strike suppression: high unrest reduces post-tick stock for producers.
  *   2. Dissatisfaction signal: the returned `economySignals.dissatisfactionBySystem`
  *      reflects demand satisfaction from post-tick stock.
- *   3. Monthly pulse: the whole galaxy resolves on the boundary tick
+ *   3. Cycle pulse: the whole galaxy resolves on the boundary tick
  *      (tick % interval === 0), nothing off-boundary.
  */
 
@@ -84,7 +84,7 @@ function makeProducerSystem(id: string, unrest: number): TickSystem {
     popCap: 1000,
     unrest,
     buildings: { food: 2 },
-    buildingIdleMonths: {},
+    buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
@@ -106,7 +106,7 @@ function makeConsumerSystem(id: string, unrest: number): TickSystem {
     popCap: 2000,
     unrest,
     buildings: {},
-    buildingIdleMonths: {},
+    buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),
@@ -391,11 +391,11 @@ describe("economy processor: supply regime signal", () => {
   });
 });
 
-// ── Monthly pulse: whole-galaxy on the boundary, empty off it ──────
+// ── Cycle pulse: whole-galaxy on the boundary, empty off it ──────
 
-describe("economy processor: monthly pulse coverage", () => {
+describe("economy processor: cycle pulse coverage", () => {
   it("processes every system on the boundary tick and none off-boundary", async () => {
-    const interval = 4; // small MONTH_LENGTH stand-in for the test
+    const interval = 4; // small CYCLE_LENGTH stand-in for the test
     const systems = Array.from({ length: 10 }, (_, i) => makeProducerSystem(`sys-${i}`, 0));
     const sortedIds = systems.map((s) => s.id).sort((a, b) => a.localeCompare(b));
     const markets = systems.map((s) => makeMarket(s.id, "food", 100));
@@ -488,7 +488,7 @@ describe("economy processor: supply-chain input-gating", () => {
         popCap: 200,
         unrest: 0,
         buildings: { metals: 2, vocational_school: 1 }, // smelter + academy — no ore extractor
-        buildingIdleMonths: {},
+        buildingIdleCycles: {},
         collapseDebt: 0,
         yields: unitResourceVector(),
         slotCap: emptyResourceVector(),
@@ -868,7 +868,7 @@ describe("economy processor: persisted planner assessment", () => {
 
   it("advances squeeze only on rationed assessments, saturates, and resets when fully served", async () => {
     // At the reference interval catchUpFactor is 1, so each rationed assessment advances the clock by
-    // one whole reference month — the integer 0→1→2 saturation and full-satisfaction reset.
+    // one whole reference cycle — the integer 0→1→2 saturation and full-satisfaction reset.
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("consumer", 0)],
       markets: [{ ...makeMarket("consumer", "food", 0), squeezePulses: 0 }],
@@ -887,8 +887,8 @@ describe("economy processor: persisted planner assessment", () => {
   });
 
   it("advances squeeze by the interval's reference-time (catchUpFactor), not a flat step", async () => {
-    // A finer cadence advances the clock a fraction of a reference month per pulse; a coarser one
-    // advances more (and saturates in one assessment) — so "two reference months rationed" is the same
+    // A finer cadence advances the clock a fraction of a reference cycle per pulse; a coarser one
+    // advances more (and saturates in one assessment) — so "two reference cycles rationed" is the same
     // wall-clock latency at any economy cadence. Tick 0 is a pulse boundary for any interval.
     const fine = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("consumer", 0)],

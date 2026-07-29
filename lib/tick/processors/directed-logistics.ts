@@ -46,7 +46,7 @@ function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: numb
 }
 
 /**
- * Pure processor body. Monthly resolution pulse: on the boundary tick
+ * Pure processor body. Cycle resolution pulse: on the boundary tick
  * (`tick % interval === 0`) every faction is matched at once via `pulseShard`;
  * every other tick is a no-op. Matched volume is moved silently (stock deltas +
  * logistics flow rows).

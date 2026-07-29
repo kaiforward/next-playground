@@ -80,7 +80,7 @@ export interface TickProcessorResult {
    *  good id. Counts proposal levels, not the final funded queue. Calibration instrumentation
    *  only — surfaced via `runWorldTick().instrumentation`, never broadcast or persisted. */
   buildCommitmentsByGood?: Map<string, number>;
-  /** People moved this monthly pulse (colonist delivery + edge diffusion), conserved flows only.
+  /** People moved this cycle pulse (colonist delivery + edge diffusion), conserved flows only.
    *  Calibration instrumentation — surfaced via runWorldTick().instrumentation, never broadcast. */
   migrationMoved?: { colonists: number; diffusion: number };
 }

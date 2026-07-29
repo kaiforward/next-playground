@@ -42,7 +42,7 @@ export interface SettlementLadderResult {
   /** Money actually paid per band. */
   paid: TreasuryBands;
   /** Paid fraction of each band's FULL bill — the effective funding level its
-   *  consumers run at next month. When a band's bill is 0 this is the slider
+   *  consumers run at next cycle. When a band's bill is 0 this is the slider
    *  value (never 0/0). */
   funded: TreasuryBands;
 }

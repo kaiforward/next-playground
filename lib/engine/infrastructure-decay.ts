@@ -5,7 +5,7 @@
  * measures a building's utilization (resolved uniformly by `buildingUsed`, dispatched on its typed
  * output) and:
  *  - idle contraction (buffered): while a whole level sits idle, a per-(system, type) countdown accrues
- *    the run's catch-up factor (elapsed reference-months); only after a sustained-idle buffer does the
+ *    the run's catch-up factor (elapsed reference-cycles); only after a sustained-idle buffer does the
  *    marginal idle level tear down — and the countdown resets the moment it refills, so a brief dip
  *    costs nothing.
  *  - unrest teardown (catastrophic): above a threshold ONE per-system collapse debt accrues at the
@@ -21,7 +21,7 @@
  *
  * Both counters are tick-denominated — the idle countdown accrues `catchUp` per run and the collapse
  * debt `catchUp × severity`, so the wall-clock teardown rate is interval-invariant either way; the
- * buffer and threshold stay in reference-month units. Counts stay whole
+ * buffer and threshold stay in reference-cycle units. Counts stay whole
  * integers; decay is downward-only and floored at 0. Growth is the directed-build processor's job.
  * popCap recomputes from the surviving housing.
  */
@@ -41,8 +41,8 @@ import { clamp } from "@/lib/utils/math";
 export { housingUsed };
 
 export interface DecayParams {
-  /** Sustained-idle runs (≈ months) a level must stay idle before the marginal level tears down. ≥ 1. */
-  idleBufferMonths: number;
+  /** Sustained-idle cycles a level must stay idle before the marginal level tears down. ≥ 1. */
+  idleBufferCycles: number;
   /** θ_decay: unrest strictly above this tears levels down even while in use (the discrete collapse),
    *  at a pace ramped by how far above it sits — see `collapseSeverity`. */
   unrestThreshold: number;
@@ -52,7 +52,7 @@ export interface SystemDecayInput {
   /** buildingType → whole-integer level count. */
   buildings: Record<string, number>;
   /** buildingType → current sustained-idle countdown (the decay buffer's state). */
-  buildingIdleMonths: Record<string, number>;
+  buildingIdleCycles: Record<string, number>;
   /** The system's fractional unrest-collapse accumulator (the catastrophic channel's state). */
   collapseDebt: number;
   population: number;
@@ -67,7 +67,7 @@ export interface SystemDecayResult {
   /** buildingType → new (strictly lower) integer count. Only entries that lost a whole level. */
   newCounts: Record<string, number>;
   /** buildingType → new idle countdown. Only entries whose countdown changed. */
-  newIdleMonths: Record<string, number>;
+  newIdleCycles: Record<string, number>;
   /** The system's carried-forward collapse debt: the sub-level remainder, or 0 out of the regime. */
   collapseDebt: number;
   /** popCap recomputed from the post-decay housing count. */
@@ -77,7 +77,7 @@ export interface SystemDecayResult {
 /**
  * How hard the catastrophic channel bites, ∈ [0,1]: how far unrest sits above θ_decay across the
  * range remaining above it. 0 at or below θ (the channel is off and its debt resets), 1 at unrest 1
- * — where it reproduces one whole level per reference month. Total for every input: a θ ≥ 1 leaves
+ * — where it reproduces one whole level per reference cycle. Total for every input: a θ ≥ 1 leaves
  * no span to divide by, so anything above it reads full severity rather than NaN.
  */
 export function collapseSeverity(unrest: number, threshold: number): number {
@@ -107,7 +107,7 @@ export function computeSystemDecay(
   /** Rate multiplier for this run (interval / REFERENCE_INTERVAL); 1 = reference cadence. */
   catchUp = 1,
 ): SystemDecayResult {
-  const { buildings, buildingIdleMonths, population, unrest } = input;
+  const { buildings, buildingIdleCycles, population, unrest } = input;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
   const ctx: UtilizationContext = {
@@ -120,7 +120,7 @@ export function computeSystemDecay(
   };
 
   const newCounts: Record<string, number> = {};
-  const newIdleMonths: Record<string, number> = {};
+  const newIdleCycles: Record<string, number> = {};
   // Utilization is measured once, against the state the run started in — it drives the idle
   // countdown here and orders the collapse channel below off the same reading.
   const usedByType = new Map<string, number>();
@@ -129,16 +129,16 @@ export function computeSystemDecay(
     if (count <= 0) continue;
     const used = buildingUsed(type, count, ctx);
     usedByType.set(type, used);
-    const prevIdle = buildingIdleMonths[type] ?? 0;
+    const prevIdle = buildingIdleCycles[type] ?? 0;
 
-    // Hysteresis: the countdown accrues elapsed reference-months while ≥1 whole level
+    // Hysteresis: the countdown accrues elapsed reference-cycles while ≥1 whole level
     // is idle, and resets the moment it refills.
     let idle = idleLevels(count, used) >= 1 ? prevIdle + catchUp : 0;
-    if (idle >= params.idleBufferMonths) {
+    if (idle >= params.idleBufferCycles) {
       newCounts[type] = Math.max(0, count - 1); // shed the marginal idle level and restart its countdown
       idle = 0;
     }
-    if (idle !== prevIdle) newIdleMonths[type] = idle;
+    if (idle !== prevIdle) newIdleCycles[type] = idle;
   }
 
   // Catastrophic channel: one debt for the whole system, accruing at the severity of the breach
@@ -182,5 +182,5 @@ export function computeSystemDecay(
   // popCap tracks the post-decay housing count (POP_BASELINE_FLOOR stays at 0).
   const decayedBuildings = { ...buildings, ...newCounts };
   const popCap = housingPopCap(decayedBuildings) + SUBSTRATE_GEN.POP_BASELINE_FLOOR;
-  return { newCounts, newIdleMonths, collapseDebt, popCap };
+  return { newCounts, newIdleCycles, collapseDebt, popCap };
 }

@@ -53,7 +53,7 @@ const popOnly = (population: number): CivilianDemandBasis => ({
 function sys(id: string, population: number, popCap: number, unrest = 0, buildings: Record<string, number> = {}): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed", governmentType: "federation",
-    population, popCap, unrest, buildings, buildingIdleMonths: {}, collapseDebt: 0,
+    population, popCap, unrest, buildings, buildingIdleCycles: {}, collapseDebt: 0,
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
@@ -371,7 +371,7 @@ describe("population processor", () => {
   });
 
   it("scales the relaxation rates — and hence the derived gains — by the catch-up factor", async () => {
-    // Interval 48 is two reference months, so one run must move exactly twice as far as one run at
+    // Interval 48 is two reference cycles, so one run must move exactly twice as far as one run at
     // the reference interval. Only the relaxation rates are scaled; the gain is slope × rate, so it
     // rides along while the slopes stay dimensionless exchange rates. Gains are read from a zero start (no
     // relaxation term) and relaxation from a raised start (D = 0, so no gain term). Which slope

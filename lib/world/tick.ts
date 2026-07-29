@@ -14,10 +14,10 @@
  * directed-logistics and directed-build each performed this tick.
  *
  * Only ship-arrivals and events run every tick. Everything from economy to
- * directed-build resolves on the monthly pulse (`isPulseTick`), and its setup is
+ * directed-build resolves on the cycle pulse (`isPulseTick`), and its setup is
  * gated on that same predicate rather than built and discarded — the bodies bail
  * internally too, so the gate is an optimisation, not the rule. Treasury settles
- * on the same monthly pulse but also runs off-pulse to accrue work performed by
+ * on the same cycle pulse but also runs off-pulse to accrue work performed by
  * directed-logistics/directed-build's own (finer) cadences. Relations keeps its
  * own `RELATIONS_FREQUENCY` cadence.
  *
@@ -42,7 +42,7 @@ import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { MONTH_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
+import { CYCLE_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -166,16 +166,16 @@ export function toTickSystems(world: World): TickSystem[] {
   // unrest-collapse debt is per system, not per type, and rides the system row instead.
   const rosterBySystem = new Map<
     string,
-    { counts: Record<string, number>; idleMonths: Record<string, number> }
+    { counts: Record<string, number>; idleCycles: Record<string, number> }
   >();
   for (const b of world.buildings) {
     let roster = rosterBySystem.get(b.systemId);
     if (!roster) {
-      roster = { counts: {}, idleMonths: {} };
+      roster = { counts: {}, idleCycles: {} };
       rosterBySystem.set(b.systemId, roster);
     }
     roster.counts[b.buildingType] = b.count;
-    roster.idleMonths[b.buildingType] = b.idleMonths;
+    roster.idleCycles[b.buildingType] = b.idleCycles;
   }
 
   return world.systems.map((s) => {
@@ -196,7 +196,7 @@ export function toTickSystems(world: World): TickSystem[] {
       popCap: s.popCap,
       unrest: s.unrest,
       buildings: roster?.counts ?? {},
-      buildingIdleMonths: roster?.idleMonths ?? {},
+      buildingIdleCycles: roster?.idleCycles ?? {},
       collapseDebt: s.collapseDebt ?? 0,
       yields: resourceVectorFromColumns(
         {
@@ -252,7 +252,7 @@ function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
           systemId: s.id,
           buildingType,
           count,
-          idleMonths: s.buildingIdleMonths[buildingType] ?? 0,
+          idleCycles: s.buildingIdleCycles[buildingType] ?? 0,
         });
       }
     }
@@ -641,7 +641,7 @@ export async function runWorldTick(
   instrumentation: TickInstrumentation;
 }> {
   const cadence: TickCadence = opts?.cadence ?? {
-    month: MONTH_LENGTH,
+    cycle: CYCLE_LENGTH,
     construction: CONSTRUCTION_INTERVAL,
     logistics: LOGISTICS_INTERVAL,
   };
@@ -676,24 +676,24 @@ export async function runWorldTick(
   const newTickCtx = (): TickContext => ({ tick, results: new Map() });
 
   // ── latched treasury funding (read at tick START = last settlement's latch;
-  // the treasury stage settles LAST, so every consumer below runs one month
+  // the treasury stage settles LAST, so every consumer below runs one cycle
   // behind — the accepted funding lag, same shape as construction's). Built
   // only when a consuming stage resolves this tick (the same gating convention
   // as the pulse setup below); absent it reads as fully funded downstream. ──
   const fundedByFaction =
     treasuries.length > 0 &&
-    (isPulseTick(tick, cadence.month) ||
+    (isPulseTick(tick, cadence.cycle) ||
       isPulseTick(tick, cadence.logistics) ||
       isPulseTick(tick, cadence.construction))
       ? new Map(treasuries.map((t) => [t.factionId, t.funded]))
       : undefined;
 
-  // Per-system effect maps for the monthly-pulse stages (economy malus, decay
+  // Per-system effect maps for the cycle-pulse stages (economy malus, decay
   // buffer, unrest tax pressure). Only built when those stages resolve.
   let maintenanceMalusBySystem: Map<string, number> | undefined;
   let maintenanceBufferScaleBySystem: Map<string, number> | undefined;
   let taxPressureBySystem: Map<string, number> | undefined;
-  if (isPulseTick(tick, cadence.month) && treasuries.length > 0) {
+  if (isPulseTick(tick, cadence.cycle) && treasuries.length > 0) {
     const taxPressureByFaction = new Map(
       treasuries.map((t) => [t.factionId, TAX_LEVEL_UNREST_PRESSURE[t.taxLevel]]),
     );
@@ -771,10 +771,10 @@ export async function runWorldTick(
   // is pure waste. The gate emits the same off-pulse broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
-  if (isPulseTick(tick, cadence.month)) {
+  if (isPulseTick(tick, cadence.cycle)) {
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
-      interval: cadence.month,
+      interval: cadence.cycle,
       simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER, rationCover: ECONOMY_CONSTANTS.RATION_COVER },
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
@@ -787,7 +787,7 @@ export async function runWorldTick(
     processorsRun.push("economy");
   } else {
     mergeGlobalEvents(globalEvents, {
-      globalEvents: economyOffPulsePayload(tick, cadence.month),
+      globalEvents: economyOffPulsePayload(tick, cadence.cycle),
     });
   }
 
@@ -806,7 +806,7 @@ export async function runWorldTick(
       { tick, results: new Map([["economy", { economySignals }]]) },
       {
         decay: INFRASTRUCTURE_DECAY_PARAMS,
-        interval: cadence.month,
+        interval: cadence.cycle,
         bufferScaleBySystem: maintenanceBufferScaleBySystem,
         logisticsFundingBoundBySystem,
       },
@@ -821,15 +821,15 @@ export async function runWorldTick(
     await runPopulationProcessor(
       popWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.month, taxPressureBySystem },
+      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.cycle, taxPressureBySystem },
     );
     systems = popWorld.systems;
     markets = popWorld.markets;
     processorsRun.push("population");
   }
 
-  // ── monthly pulse: migration, directed-logistics, directed-build (pulse-gated) ──
-  // Each stage below resolves on the monthly pulse and bails internally otherwise, but
+  // ── cycle pulse: migration, directed-logistics, directed-build (pulse-gated) ──
+  // Each stage below resolves on the cycle pulse and bails internally otherwise, but
   // its setup — the participation set, the open-edge graph, the per-system market row
   // groups, the ownership maps — is read by nothing else, so off-pulse it was all built
   // and thrown away. The gate stops building those inputs; the bodies are untouched.
@@ -837,7 +837,7 @@ export async function runWorldTick(
   // The condition is the disjunction of the stages' OWN pulse predicates, each built
   // from the interval that stage's body is handed below, because the setup is shared
   // and any one stage resolving is reason to build it. The three intervals are three
-  // independent knobs (migration rides the month; build and logistics have their own):
+  // independent knobs (migration rides the cycle; build and logistics have their own):
   // gating on just one of them would let a retune of another silently skip that stage's
   // pulses — a performance mechanism quietly deciding a gameplay cadence. A disjunction
   // fails the safe way, building setup nobody reads rather than dropping work. (Gating
@@ -858,7 +858,7 @@ export async function runWorldTick(
   // Calibration-only: migration's per-pulse people-moved totals (colonist delivery + edge
   // diffusion). Declared here for the same reason as buildCommitmentsByGood above.
   let migrationMoved: TickInstrumentation["migrationMoved"];
-  const migrationResolves = isPulseTick(tick, cadence.month);
+  const migrationResolves = isPulseTick(tick, cadence.cycle);
   const logisticsResolves = isPulseTick(tick, cadence.logistics);
   const buildResolves = isPulseTick(tick, cadence.construction);
   if (migrationResolves || logisticsResolves || buildResolves) {
@@ -883,7 +883,7 @@ export async function runWorldTick(
     {
       const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
       const migResult = await runMigrationProcessor(migWorld, newTickCtx(), {
-        interval: cadence.month,
+        interval: cadence.cycle,
         flow: MIGRATION_PARAMS,
         delivery: COLONY_DELIVERY_PARAMS,
       });
@@ -950,7 +950,7 @@ export async function runWorldTick(
 
     // ── directed-build ──
     // ⚠ Splitting construction's decision cadence from its execution cadence lands
-    // inside this gate: work would accrue every tick while planning stays monthly, so
+    // inside this gate: work would accrue every tick while planning stays per-cycle, so
     // the per-tick funding step has to be carved back out of the pulse block above.
     // Planning inputs only move on the pulse, so the gate is correct as it stands.
     {
@@ -1082,16 +1082,16 @@ export async function runWorldTick(
       processorsRun.push("directed-build");
     }
 
-  } // ── end monthly pulse ──
+  } // ── end cycle pulse ──
 
-  // ── treasury (monthly settlement; off-pulse it only accrues band-pulse work) ──
+  // ── treasury (cycle settlement; off-pulse it only accrues band-pulse work) ──
   {
-    const treasuryResolves = isPulseTick(tick, cadence.month);
+    const treasuryResolves = isPulseTick(tick, cadence.cycle);
     const hasWork =
       (constructionWorkByFaction?.size ?? 0) > 0 || (logisticsWorkByFaction?.size ?? 0) > 0;
     if (treasuries.length > 0 && (treasuryResolves || hasWork)) {
       // The processor reads systems only when settling — an off-pulse accrual
-      // tick (band work without a month boundary) skips the O(systems) build.
+      // tick (band work without a cycle boundary) skips the O(systems) build.
       const treasuryWorld = new InMemoryTreasuryWorld({
         treasuries,
         systems: treasuryResolves
@@ -1112,12 +1112,12 @@ export async function runWorldTick(
           results: economySignals ? new Map([["economy", { economySignals }]]) : new Map(),
         },
         {
-          interval: cadence.month,
+          interval: cadence.cycle,
           economyScale: ECONOMY_SCALE,
           constructionWorkByFaction: constructionWorkByFaction ?? new Map(),
           logisticsWorkByFaction: logisticsWorkByFaction ?? new Map(),
           rates: {
-            headsTaxPerMonth: TREASURY.HEADS_TAX_PER_MONTH,
+            headsTaxPerCycle: TREASURY.HEADS_TAX_PER_CYCLE,
             headsWeights: { ...TREASURY.HEADS_WEIGHTS },
             productionTaxRate: TREASURY.PRODUCTION_TAX_RATE,
             referenceValues: REFERENCE_VALUE,
@@ -1134,13 +1134,13 @@ export async function runWorldTick(
 
   // Directed-logistics is the only writer of flowEvents, and it only appends on the
   // pulse — but the prune stays every-tick, outside the gate above, so the retention
-  // window is enforced on the tick it expires rather than up to a month late. It is a
+  // window is enforced on the tick it expires rather than up to a cycle late. It is a
   // filter over an already-bounded log; the pulse gate is not worth the drift.
   const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
   flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
 
   // ── relations (gated by RELATIONS_FREQUENCY, offset 0 — the one stage on its
-  // own cadence rather than the monthly pulse the block above rides) ──
+  // own cadence rather than the cycle pulse the block above rides) ──
   if (world.factions.length >= 2 && tick % RELATIONS_FREQUENCY === 0) {
     const territoryByFaction = new Map<string, Set<string>>();
     for (const s of world.systems) {

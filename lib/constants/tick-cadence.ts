@@ -6,22 +6,22 @@
 export const REFERENCE_INTERVAL = 24;
 
 /**
- * One "month" = the societal resolution-pulse period, in ticks. Economy,
+ * One "cycle" = the societal resolution-pulse period, in ticks. Economy,
  * population, infrastructure-decay, and migration resolve for the whole galaxy on
- * ticks where `tick % MONTH_LENGTH === 0`. A real knob: every rider scales by
+ * ticks where `tick % CYCLE_LENGTH === 0`. A real knob: every rider scales by
  * `catchUpFactor`, so tuning it changes granularity, not wall-clock rates.
  */
-export const MONTH_LENGTH = 24;
+export const CYCLE_LENGTH = 24;
 
-/** Directed-build's resolution pulse, in ticks. Independent of MONTH_LENGTH — relative pacing knob. */
+/** Directed-build's resolution pulse, in ticks. Independent of CYCLE_LENGTH — relative pacing knob. */
 export const CONSTRUCTION_INTERVAL = 24;
 
-/** Directed-logistics' resolution pulse, in ticks. Independent of MONTH_LENGTH — relative pacing knob. */
+/** Directed-logistics' resolution pulse, in ticks. Independent of CYCLE_LENGTH — relative pacing knob. */
 export const LOGISTICS_INTERVAL = 24;
 
 /** Per-run cadence override (dev/test surface — the live loop always uses the constants). */
 export interface TickCadence {
-  month: number;
+  cycle: number;
   construction: number;
   logistics: number;
 }

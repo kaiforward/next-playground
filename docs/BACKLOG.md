@@ -10,20 +10,35 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
-- **[M] Finish the cycles vocabulary sweep — "month" is still the reference time unit in code** — the
-  in-fiction unit is the **cycle**: the timescale is deliberately unfixed (it is space), so months and
-  days are both wrong. The necessity-unrest slice converted the supply/cover vocabulary
-  ("days-of-supply" → "months-of-supply" → **cycles-of-supply**, plus `TARGET_COVER`/`HOLD_COVER`/
-  `RATION_COVER` and the `/cyc` unit labels), but stopped at prose. "Month" remains the codebase's name
-  for the reference time unit in ~390 further sites, and the rest is not a docstring pass:
-  - `WorldBuilding.idleMonths` is a **persisted World field** → renaming needs a `SAVE_FORMAT_VERSION` bump.
-  - `cadence.month` is in the **experiment YAML schema** (`lib/tick-harness/experiment.ts`) → renaming
-    breaks every committed config under `experiments/`.
-  - `MONTH_LENGTH` (~50 refs), `DecayParams.idleBufferMonths`, `TREASURY.HEADS_TAX_PER_MONTH` /
-    `headsTaxPerMonth`, and the pervasive "reference month(s)" unit prose (~40 sites).
-  Do it as one mechanical PR (`tsc` verifies the identifier half) with the save bump and a note that old
-  experiment configs need their `cadence.month` key renamed. User-facing `/cyc` copy in `components/`
-  already uses the right word and needs no change.
+- **[M] Rename the unit-sense "pulse" to "cycle"** — one concept, one word. A **cycle** is the
+  resolution period (`CYCLE_LENGTH` = 24 ticks); anything counting those periods must say *cycle*, and
+  where the economy's and logistics' periods need distinguishing the fix is a qualifier
+  (`economyCycles` / `logisticsCycles`), never a second noun. Today "pulse" doubles as a synonym for the
+  period, so e.g. `necessity-weighted-unrest.md` says "`RATION_COVER` (2) **pulses** of demand" and
+  "`TARGET_COVER` (40) **pulses**" two lines after establishing cover is measured in *cycles*.
+  **Scope — the unit sense only (~400 of ~1,140 total "pulse" occurrences).** Identifiers:
+  `squeezePulses`, `proposalPulses`, `proposalPulseUpdates`, `etaPulses`, `forecastEtaPulses`,
+  `forecastIndependentEtaPulses`, `queueEtaPulses`, `foodPulses`, `orePulses`, `maxPulses`,
+  `nextPulses`, `maxLevelsPerPulse`, `maxClaimsPerPulse`, `meanPerPulse`, `nextPulseGain(s)`,
+  `pulseCount`, `migrationPulseCount`, `excessByPulse`, `unrestByPulse`, `shortagePulse`,
+  `protectedPulse`, `landedAtPulse`, `landingPulse`, `landedPulse`, `ordinaryPulse` — plus the bare
+  "pulses" unit prose.
+  **`squeezePulses` and `proposalPulses` are persisted `WorldMarket` fields** → needs a
+  `SAVE_FORMAT_VERSION` bump. Cheap while the work sits on a shared branch: `main` only ever observes
+  the final number at merge, so intermediate bumps cost nothing.
+  **Do NOT sweep the event sense (~80 occurrences)** — `isPulseTick`, `pulseShard`, `pulseGroup`,
+  `economyOffPulsePayload`, `sawOffPulseAccrual`. Those name the *instant*, not the period: the pulse is
+  the **first tick of the cycle**, on which economy/logistics/build all resolve. That is a genuinely
+  different concept from the 24-tick period and keeping one word for each is the point of this entry.
+  **Open naming decision (settle before starting):** "pulse" is agreed to be the right *concept* but
+  possibly the wrong *word* — it conveys a periodic beat, not "the first tick of the cycle". Candidates:
+  `isCycleStart` (maximally literal, and it is exactly what `tick % CYCLE_LENGTH === 0` tests) or
+  `isResolutionTick` (names the function; "resolution" is already the codebase's verb — "the whole
+  galaxy resolves together"). They can also coexist: the tick is the **cycle start**, and what happens
+  on it is the **resolution**. Deciding this changes ~80 further sites, so settle it first.
+  Booked from the cycles-vocabulary sweep review (PR #204), which established "cycle" as the reserved
+  term and so exposed the overload. Same care as that sweep: a quoted citation of superseded wording
+  must stay quoted, and a blanket replace will hit real-world durations and adverbs that need re-flowing.
 - **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips deliberately ship with
   figures plus the single sentence "Higher-pressure needs create more unrest." (a needs-visibility build
   decision: final wording waits for a dedicated nested-tooltip pass). When that pass happens, also
@@ -58,8 +73,8 @@ Well-defined, can start now.
 - **[S] Funding sliders: EU5-style immediate number + shorted-only exception display** — decided
   2026-07-20 at purse Plan 3 merge. Today each band row shows "set X% · runs Y% — shorted", where
   `runs` is last settlement's latched paid fraction. Two problems: the steady state duplicates the
-  same number twice, and the display **conflates the one-month latch lag with genuine insolvency** —
-  raising a slider mid-month shows "— shorted" for the rest of the month even though nothing was
+  same number twice, and the display **conflates the one-cycle latch lag with genuine insolvency** —
+  raising a slider mid-cycle shows "— shorted" for the rest of the cycle even though nothing was
   shorted (last settlement simply ran the old setting). Change to the Paradox convention: show the
   set value only, updating immediately (next-cycle effect implicit), and surface the amber
   "— shorted" **only when the last settlement genuinely could not pay what was asked**. Detecting
@@ -67,7 +82,19 @@ Well-defined, can start now.
   (compare `funded` against them) — a `WorldTreasurySettlement` field, i.e. a save-format bump, which
   is why this didn't fold into the merge. Touches `FundingSlider` (drop the dual label), the
   treasury processor (snapshot the sliders), and the construction-card readout (same shorted rule).
-- **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
+- **[S] `cyclesInWindow` divides by `LOGISTICS_INTERVAL` but claims a per-economy-cycle rate** —
+  `buildLogisticsRows`' docstring (`lib/engine/logistics.ts:41-44`) says the parameter normalises
+  window-summed imports/exports into a **per-economy-cycle** rate so the External column shares units
+  with Internal production/consumption. Its one caller computes it as
+  `FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL` (`lib/services/trade-flow.ts`). Those agree only because
+  `CYCLE_LENGTH` and `LOGISTICS_INTERVAL` are both 24 as shipped — and `tick-cadence.ts` explicitly
+  documents `LOGISTICS_INTERVAL` as "Independent of `CYCLE_LENGTH` — relative pacing knob". Tune
+  either one and the logistics panel's External column silently stops sharing units with Internal,
+  with no error. Decide which the column actually wants — the **economy cycle**, to match Internal, or
+  the **logistics cycle**, to match the batch cadence — then make the name, the docstring and the
+  divisor agree, naming it `economyCyclesInWindow` / `logisticsCyclesInWindow` accordingly. Surfaced by
+  the cycles-vocabulary review — the sweep made "cycle" a reserved term, which is what exposed the two
+  senses sitting four lines apart. Pre-existing; not introduced by that PR. — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
 - **[S] Colony seed-source tie-break differs between the player verb and the planner on an exact hop
   tie** — the player's direct-colony verb (`findSeedSource`, `lib/services/colony-eligibility.ts`) picks
@@ -159,7 +186,7 @@ Direction is clear, approach needs a design doc before implementation.
   remaining cost there other than events (67.5%). **Gating cannot touch it**: ship-arrivals and events
   both genuinely run every tick and both consume `TickSystem` rows, so the join has to happen. The
   lever is to *narrow* it, not skip it — it walks every building row in the galaxy to build the count
-  and idle-months rosters, then maps every system, and off-pulse the only consumers are ship-arrivals
+  and idle-cycles rosters, then maps every system, and off-pulse the only consumers are ship-arrivals
   (ids/names) and events (ids, names, control, region). Worth checking what those two actually read
   before assuming the full row is needed; a cheaper off-pulse projection, or moving the roster join
   behind what needs it, is the likely shape. Fold into the events re-point only if that pass changes
@@ -167,7 +194,7 @@ Direction is clear, approach needs a design doc before implementation.
 - **[M] Tick perf: the events processor scales worst in the tick — and is now two-thirds of it** — it
   costs 1.3ms/tick at 600 systems and ~9-10ms at 2,400: **~7× the cost for 4× the systems**, the worst
   scaling curve of any stage. Two shipped changes have hollowed out everything around it without
-  touching it — deleting the market World↔Tick round-trip, then gating the monthly-pulse stages' setup
+  touching it — deleting the market World↔Tick round-trip, then gating the cycle-pulse stages' setup
   — so its share has gone **19.4% → ~40% → 67.5% of an off-pulse tick**. It legitimately runs every
   tick (phase progression, plus a spawn every `EVENT_SPAWN_INTERVAL`), so neither lever touched it;
   the cost is the processor itself. Off-pulse it now essentially *is* the tick: events 67.5%,

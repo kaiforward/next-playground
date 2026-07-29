@@ -8,7 +8,7 @@ import type { TreasuryPolicyInput } from "@/lib/schemas/treasury";
 
 /**
  * One faction's treasury surface. Tick-dynamic (the settlement snapshot moves
- * on the month pulse) — tick-invalidated via useTickInvalidation. The vital
+ * on the cycle pulse) — tick-invalidated via useTickInvalidation. The vital
  * tile, the treasury card, and the construction readout share this key, so
  * co-rendered surfaces cost one fetch.
  */

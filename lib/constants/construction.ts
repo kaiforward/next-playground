@@ -9,7 +9,7 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 
 /**
  * Committed-construction tuning. First-draft, simulator-calibrated in PR4 — only the relative shape
- * matters here (build times span months; wealth buys parallel fronts, not instant builds).
+ * matters here (build times span cycles; wealth buys parallel fronts, not instant builds).
  *
  * A per-faction throughput pool (`Σ pop × THROUGHPUT_PER_POP`) funds a queue of construction projects.
  * Each active build absorbs at most `PER_BUILD_ABSORPTION_CAP` construction points per pulse, so a
@@ -35,13 +35,13 @@ export const CONSTRUCTION = {
   FLOOR_DEV_KNEE: 0.3,
   /**
    * Construction points one fully-staffed Construction Centre level adds to its faction's pool per
-   * reference month. Set well above what the level's own labour draw would yield as eligible heads
+   * reference cycle. Set well above what the level's own labour draw would yield as eligible heads
    * (25 heads × THROUGHPUT_PER_POP ≈ 1.25), so substituting capital + technicians for raw labour pays.
    */
   POINTS_PER_LEVEL: 5,
-  /** Reference months of point output a centre's value is amortised over (the ROI numerator horizon). */
+  /** Reference cycles of point output a centre's value is amortised over (the ROI numerator horizon). */
   PAYBACK_HORIZON: 12,
-  /** Reference months of pool drain that define the funding frontier — work beyond it is "starved". */
+  /** Reference cycles of pool drain that define the funding frontier — work beyond it is "starved". */
   BACKLOG_WINDOW: 6,
 } as const;
 

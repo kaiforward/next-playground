@@ -22,7 +22,7 @@ function makeSystem(id: string, population: number): TickSystem {
     popCap: 1000,
     unrest: 0,
     buildings: {},
-    buildingIdleMonths: {},
+    buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),

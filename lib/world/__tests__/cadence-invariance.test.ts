@@ -6,7 +6,7 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
 /**
  * Interval invariance — the whole tick, not just one processor.
  *
- * The three cadence knobs (month / construction / logistics) change granularity,
+ * The three cadence knobs (cycle / construction / logistics) change granularity,
  * never wall-clock rate: every pulse rider scales its per-run flows and per-pulse
  * incomes by `catchUpFactor`, so running the same seed for the same tick span at
  * interval 12 reproduces the interval-24 baseline's rates — population growth and
@@ -19,7 +19,7 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
  * given code), so TOL is a real bar, not a noise band: the honest run-to-run rate
  * difference is ~1.8e-3 (dominated by that fundQueue redistribution), while dropping a
  * processor's `catchUp` diverges an order of magnitude past it — verified by removing
- * the population delta's scaling (month12 population 6e-4 → 1.7e-2) and construction's
+ * the population delta's scaling (cycle12 population 6e-4 → 1.7e-2) and construction's
  * (build12 buildings 1.8e-3 → 8.2e-2). TOL sits between: it catches either break with
  * >3x margin and clears the honest baseline with >2.5x headroom.
  *
@@ -32,16 +32,16 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
  * Treasury balance gets its own, looser tolerance: it inherits the same fundQueue
  * redistribution noise as buildings (construction bills are billed off pendingWork,
  * which forks on the divergent RNG stream), plus its own settlement-boundary rounding
- * as pulses land on different ticks — the honest month12 baseline is ~2.2e-2, an order
+ * as pulses land on different ticks — the honest cycle12 baseline is ~2.2e-2, an order
  * of magnitude above the shared TOL. TREASURY_TOL sits between: dropping `catchUp`
  * from a single income term (heads tax) diverges to ~2.0e-1 — still ~3.3x past
  * TREASURY_TOL — while TREASURY_TOL itself clears the honest baseline with >2.5x
  * headroom.
  */
 
-const SEED = 745878428; // colonies + monthly pulses in-window (shared with the ECONOMY_SCALE invariance test)
+const SEED = 745878428; // colonies + cycle pulses in-window (shared with the ECONOMY_SCALE invariance test)
 const SYSTEM_COUNT = 60;
-const TICKS = 480; // 20 reference-months — long enough for growth and construction rates to accumulate
+const TICKS = 480; // 20 reference-cycles — long enough for growth and construction rates to accumulate
 const TOL = 5e-3;
 const TREASURY_TOL = 6e-2; // measured honest baseline ~2.24e-2 — see header note
 
@@ -75,11 +75,11 @@ describe("cadence interval invariance", () => {
     "wall-clock rates match across intervals (each knob turned in isolation)",
     async () => {
       const base = await runAtCadence(undefined); // all 24
-      const month12 = await runAtCadence({ month: 12, construction: 24, logistics: 24 });
-      const build12 = await runAtCadence({ month: 24, construction: 12, logistics: 24 });
+      const cycle12 = await runAtCadence({ cycle: 12, construction: 24, logistics: 24 });
+      const build12 = await runAtCadence({ cycle: 24, construction: 12, logistics: 24 });
 
       for (const [name, v] of [
-        ["month12", month12],
+        ["cycle12", cycle12],
         ["build12", build12],
       ] as const) {
         const dPop = relDiff(base.population, v.population);

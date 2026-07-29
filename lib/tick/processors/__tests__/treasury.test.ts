@@ -6,7 +6,7 @@ import type { TickContext } from "@/lib/tick/types";
 import type { WorldFactionTreasury } from "@/lib/world/types";
 
 const RATES: TreasuryProcessorParams["rates"] = {
-  headsTaxPerMonth: 0.01,
+  headsTaxPerCycle: 0.01,
   headsWeights: { unskilled: 1, technicians: 3, engineers: 9 },
   productionTaxRate: 0.05,
   referenceValues: { food: 20 },
@@ -59,7 +59,7 @@ function ctxWithRealized(tick: number, realized: Map<string, Map<string, number>
 const SYSTEM = { systemId: "sys-1", factionId: "faction-1", population: 100, buildings: { housing: 4, food: 2 } };
 
 describe("treasury processor", () => {
-  it("settles on the month pulse: collects both lines, pays bills, latches funded fractions", async () => {
+  it("settles on the cycle pulse: collects both lines, pays bills, latches funded fractions", async () => {
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
     await runTreasuryProcessor(
       world,
@@ -68,7 +68,7 @@ describe("treasury processor", () => {
     );
     const t = world.treasuries[0];
     const settled = t.lastSettlement;
-    if (settled === null) throw new Error("expected a settlement on the month pulse");
+    if (settled === null) throw new Error("expected a settlement on the cycle pulse");
     expect(settled.headsIncome).toBeGreaterThan(0);
     expect(settled.productionIncome).toBeCloseTo(10 * 20 * 0.05);
     expect(settled.maintenanceBill).toBeGreaterThan(0);
@@ -89,15 +89,15 @@ describe("treasury processor", () => {
 
     await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams({ economyScale: 100 }));
     const settled = world.treasuries[0].lastSettlement;
-    if (settled === null) throw new Error("expected a settlement on the month pulse");
+    if (settled === null) throw new Error("expected a settlement on the cycle pulse");
     expect(settled.constructionBill).toBeCloseTo(8 * 0.5);
     expect(settled.logisticsBill).toBeCloseTo(0.4 * 0.05);
     expect(world.treasuries[0].pendingWork).toEqual({ logistics: 0, construction: 0 });
   });
 
-  it("scales the monthly rates by catchUpFactor but never the per-pulse quantities", async () => {
+  it("scales the per-cycle rates by catchUpFactor but never the per-pulse quantities", async () => {
     // Identical worlds settled at tick 24 under interval 24 (catchUp 1) vs 12 (catchUp 0.5):
-    // heads tax and maintenance are monthly rates and must halve; realized production and
+    // heads tax and maintenance are per-cycle rates and must halve; realized production and
     // accrued band work arrive already pulse-scaled and must not be rescaled.
     const seed = () =>
       new InMemoryTreasuryWorld({
@@ -134,7 +134,7 @@ describe("treasury processor", () => {
       constructionWorkByFaction: new Map([["faction-1", NaN]]),
     }));
     const settled = world.treasuries[0].lastSettlement;
-    if (settled === null) throw new Error("expected a settlement on the month pulse");
+    if (settled === null) throw new Error("expected a settlement on the cycle pulse");
     expect(settled.constructionBill).toBe(0);
     expect(JSON.parse(JSON.stringify(world.treasuries[0]))).toEqual(world.treasuries[0]);
   });
