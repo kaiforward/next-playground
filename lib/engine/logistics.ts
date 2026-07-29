@@ -38,19 +38,32 @@ const EMPTY_AGG: GoodFlowAggregate = {
  * neither prod/con nor flow are dropped. Rows are ordered tier-ascending then
  * internal-net-descending (stable by goodId), so both columns share one order.
  *
- * `cyclesInWindow` normalises the imports/exports — which are SUMMED over the
- * whole flow-retention window — into a per-economy-cycle RATE, so the External
- * column shares units with the Internal production/consumption rates (both
- * per-cycle) and the two are directly comparable. Default 1 = raw window totals.
+ * `referenceCyclesInWindow` normalises the imports/exports — which are SUMMED
+ * over the whole flow-retention window — into a **per-`REFERENCE_INTERVAL`** RATE,
+ * so the External column shares units with the Internal production/consumption
+ * rates and the two are directly comparable. Default 1 = raw window totals.
  * Partner quantities are normalised the same way so tooltips read in /cyc too.
+ *
+ * The reference interval, not either cadence, is the correct denominator: the
+ * Internal rates come straight from `capacityGoodRates`, and the economy applies
+ * them scaled by `catchUpFactor(CYCLE_LENGTH)` once per cycle — so their
+ * throughput is one raw rate per `REFERENCE_INTERVAL` ticks at ANY cycle length.
+ * Directed logistics scales identically, so the window sum is likewise
+ * cadence-invariant. Dividing by the count of economy cycles (or of logistics
+ * cycles) in the window is right only while that cadence happens to equal 24.
+ *
+ * Residual, deliberately not fixed here: the panel's `/cyc` label. At
+ * `CYCLE_LENGTH !== 24` both columns still agree with each other — and both read
+ * per-reference-interval while the label claims per-cycle. Correcting the label
+ * is a display decision, not a units one.
  */
 export function buildLogisticsRows(
   prodCon: ReadonlyArray<SubstrateGoodRate>,
   flowsByGood: ReadonlyMap<string, GoodFlowAggregate>,
-  cyclesInWindow: number = 1,
+  referenceCyclesInWindow: number = 1,
   inputDemandByGood: ReadonlyMap<string, number> = new Map(),
 ): LogisticsRowModel {
-  const norm = cyclesInWindow > 0 ? cyclesInWindow : 1;
+  const norm = referenceCyclesInWindow > 0 ? referenceCyclesInWindow : 1;
   const normPartners = (ps: TradeFlowPartner[]): TradeFlowPartner[] =>
     norm === 1 ? ps : ps.map((p) => ({ ...p, quantity: p.quantity / norm }));
 

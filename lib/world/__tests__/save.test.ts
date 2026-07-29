@@ -59,12 +59,12 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 9 (cycles vocabulary)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(9);
+  it("is at save format version 10 (squeeze/proposal counters renamed to cycles)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(10);
   });
 
-  it("rejects a prior-version (v8) save — saves break on the shape bump", () => {
-    const json = JSON.stringify({ formatVersion: 8, world });
+  it("rejects a prior-version (v9) save — saves break on the shape bump", () => {
+    const json = JSON.stringify({ formatVersion: 9, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
