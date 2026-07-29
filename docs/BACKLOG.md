@@ -61,10 +61,11 @@ Well-defined, can start now.
   `CYCLE_LENGTH` and `LOGISTICS_INTERVAL` are both 24 as shipped — and `tick-cadence.ts` explicitly
   documents `LOGISTICS_INTERVAL` as "Independent of `CYCLE_LENGTH` — relative pacing knob". Tune
   either one and the logistics panel's External column silently stops sharing units with Internal,
-  with no error. Decide which unit the column actually wants (economy cycle, to match Internal; or
-  logistics pulse, to match the batch cadence), then make the name, the docstring and the divisor
-  agree. Surfaced by the cycles-vocabulary review — the sweep made "cycle" a reserved term, which is
-  what exposed the two senses sitting four lines apart. Pre-existing; not introduced by that PR. — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
+  with no error. Decide which the column actually wants — the **economy cycle**, to match Internal, or
+  the **logistics cycle**, to match the batch cadence — then make the name, the docstring and the
+  divisor agree, naming it `economyCyclesInWindow` / `logisticsCyclesInWindow` accordingly. Surfaced by
+  the cycles-vocabulary review — the sweep made "cycle" a reserved term, which is what exposed the two
+  senses sitting four lines apart. Pre-existing; not introduced by that PR. — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
 - **[S] Colony seed-source tie-break differs between the player verb and the planner on an exact hop
   tie** — the player's direct-colony verb (`findSeedSource`, `lib/services/colony-eligibility.ts`) picks
