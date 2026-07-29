@@ -164,7 +164,7 @@ Keep the initial seed reserve separate. Assert
 ### 8. Persisted markets are the only cadence fallback
 
 Do not pass economy `ctx.results` to logistics/build. Coincident cycles see economy's freshly persisted
-fields; mid-cycle cycles see the last assessment; old saves use documented defaults. One path avoids
+fields; mid-cycle reads see the last assessment; old saves use documented defaults. One path avoids
 same-tick/fallback divergence.
 
 ### 9. Timing stays economy → population → logistics → build

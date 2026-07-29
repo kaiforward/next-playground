@@ -500,7 +500,7 @@ consumption scaling as one of the two things the bridge exists to exercise. Rewr
  * The invariant breaks the instant any goods-magnitude term is quantised
  * (`Math.round`/`floor` on a goods amount) or left as an unscaled absolute — those
  * are a rounding error at S=100 but a large fraction at S=1, so they diverge only
- * at low scale and compound through every cycle. This broad end-to-end guard
+ * at low scale and compound through every cycle start. This broad end-to-end guard
  * reliably exercises the seed-stock de-rounding (from tick 0) and every per-capita
  * demand term through the economy cycle. There is no longer a flat scaled
  * demand term in the civilian path to exercise — the civilian basket is
