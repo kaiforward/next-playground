@@ -2,7 +2,7 @@
  * Experiment system — YAML config parsing, validation, and result serialization.
  *
  * The calibration harness is a thin wrapper over `generateWorld` +
- * `runWorldTick`: the pulse cadence is the one per-run override channel —
+ * `runWorldTick`: the cycle cadence is the one per-run override channel —
  * otherwise `runWorldTick` reads the same code constants the live game does — so
  * an experiment config names the world to generate, how long to run it, and
  * (optionally) the cadence to run it at.
@@ -56,7 +56,7 @@ export interface ExperimentResult {
   eventImpacts: HarnessResults["eventImpacts"];
   treasurySummary: TreasurySummary;
   treasurySnapshots: TreasurySnapshot[];
-  /** Directed-build burst pacing — proves the construction rate cap bounds per-pulse proposal velocity. */
+  /** Directed-build burst pacing — proves the construction rate cap bounds per-cycle proposal velocity. */
   buildBurstSummary: HarnessResults["buildBurstSummary"];
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
   migrationThroughput: HarnessResults["migrationThroughput"];

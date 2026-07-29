@@ -23,12 +23,12 @@ export function ConstructionRow({
   showSystem: boolean;
   onCancel?: (projectId: string) => void;
 }) {
-  const stalled = row.etaPulses === null;
+  const stalled = row.etaCycles === null;
   const baseTitle =
     row.kind === "colony_establish" ? "Establish Colony" : `${row.buildingLabel} ×${row.levels}`;
   const titleText = showSystem ? `${baseTitle} — ${row.systemName}` : baseTitle; // plain, for aria
-  const rate = Math.round(row.nextPulseGain * 10) / 10; // 1-dp; avoids "+0/pulse" noise
-  const rateText = rate > 0 ? `+${rate}/pulse` : "waiting";
+  const rate = Math.round(row.nextCycleGain * 10) / 10; // 1-dp; avoids "+0/cyc" noise
+  const rateText = rate > 0 ? `+${rate}/cyc` : "waiting";
 
   return (
     <div className="border-b border-border/40 py-2 last:border-b-0">
@@ -51,7 +51,7 @@ export function ConstructionRow({
         <span
           className={`ml-auto font-mono text-[11px] ${stalled ? "text-status-amber-light" : "text-text-secondary"}`}
         >
-          {formatEta(row.etaPulses)}
+          {formatEta(row.etaCycles)}
         </span>
       </div>
 
@@ -98,7 +98,7 @@ export function ConstructionRow({
         value={row.workDone}
         max={row.workTotal}
         valueText={`${Math.round(row.progress * 100)}%`}
-        projected={row.nextPulseGain}
+        projected={row.nextCycleGain}
         color={stalled ? "amber" : "copper"}
         ariaLabel={`${titleText}: ${Math.round(row.progress * 100)}% complete, ${rateText}`}
       />

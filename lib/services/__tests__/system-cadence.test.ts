@@ -87,14 +87,14 @@ afterEach(() => {
   clearWorld();
 });
 
-describe("getSystemCadence — cycle pulse", () => {
-  it("returns pulseGroup 0 for every system (all resolve on the cycle boundary)", () => {
+describe("getSystemCadence — cycle start", () => {
+  it("returns resolutionGroup 0 for every system (all resolve on the cycle boundary)", () => {
     const ids = ["zulu", "alpha", "mike", "bravo", "yankee"];
     const systems = ids.map((id) => makeSystem(id, null));
     setWorld(buildWorld(systems));
 
     for (const s of systems) {
-      expect(getSystemCadence(s.id)).toEqual({ pulseGroup: 0 });
+      expect(getSystemCadence(s.id)).toEqual({ resolutionGroup: 0 });
     }
   });
 });

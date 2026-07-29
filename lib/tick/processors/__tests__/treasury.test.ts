@@ -59,7 +59,7 @@ function ctxWithRealized(tick: number, realized: Map<string, Map<string, number>
 const SYSTEM = { systemId: "sys-1", factionId: "faction-1", population: 100, buildings: { housing: 4, food: 2 } };
 
 describe("treasury processor", () => {
-  it("settles on the cycle pulse: collects both lines, pays bills, latches funded fractions", async () => {
+  it("settles on the cycle start: collects both lines, pays bills, latches funded fractions", async () => {
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
     await runTreasuryProcessor(
       world,
@@ -68,7 +68,7 @@ describe("treasury processor", () => {
     );
     const t = world.treasuries[0];
     const settled = t.lastSettlement;
-    if (settled === null) throw new Error("expected a settlement on the cycle pulse");
+    if (settled === null) throw new Error("expected a settlement on the cycle start");
     expect(settled.headsIncome).toBeGreaterThan(0);
     expect(settled.productionIncome).toBeCloseTo(10 * 20 * 0.05);
     expect(settled.maintenanceBill).toBeGreaterThan(0);
@@ -76,7 +76,7 @@ describe("treasury processor", () => {
     expect(t.updatedAtTick).toBe(24);
   });
 
-  it("accrues work off-pulse without settling, and bills it at the next settlement", async () => {
+  it("accrues work mid-cycle without settling, and bills it at the next settlement", async () => {
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
     await runTreasuryProcessor(world, { tick: 12, results: new Map() }, makeParams({
       constructionWorkByFaction: new Map([["faction-1", 8]]),
@@ -89,16 +89,16 @@ describe("treasury processor", () => {
 
     await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams({ economyScale: 100 }));
     const settled = world.treasuries[0].lastSettlement;
-    if (settled === null) throw new Error("expected a settlement on the cycle pulse");
+    if (settled === null) throw new Error("expected a settlement on the cycle start");
     expect(settled.constructionBill).toBeCloseTo(8 * 0.5);
     expect(settled.logisticsBill).toBeCloseTo(0.4 * 0.05);
     expect(world.treasuries[0].pendingWork).toEqual({ logistics: 0, construction: 0 });
   });
 
-  it("scales the per-cycle rates by catchUpFactor but never the per-pulse quantities", async () => {
+  it("scales the per-cycle rates by catchUpFactor but never the per-cycle quantities", async () => {
     // Identical worlds settled at tick 24 under interval 24 (catchUp 1) vs 12 (catchUp 0.5):
     // heads tax and maintenance are per-cycle rates and must halve; realized production and
-    // accrued band work arrive already pulse-scaled and must not be rescaled.
+    // accrued band work arrive already cycle-scaled and must not be rescaled.
     const seed = () =>
       new InMemoryTreasuryWorld({
         treasuries: [makeTreasury({ pendingWork: { logistics: 2, construction: 8 } })],
@@ -134,7 +134,7 @@ describe("treasury processor", () => {
       constructionWorkByFaction: new Map([["faction-1", NaN]]),
     }));
     const settled = world.treasuries[0].lastSettlement;
-    if (settled === null) throw new Error("expected a settlement on the cycle pulse");
+    if (settled === null) throw new Error("expected a settlement on the cycle start");
     expect(settled.constructionBill).toBe(0);
     expect(JSON.parse(JSON.stringify(world.treasuries[0]))).toEqual(world.treasuries[0]);
   });
@@ -152,7 +152,7 @@ describe("treasury processor", () => {
     expect(t.balance).toBe(0);
   });
 
-  it("is a no-op off-pulse with no work", async () => {
+  it("is a no-op mid-cycle with no work", async () => {
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
     await runTreasuryProcessor(world, { tick: 7, results: new Map() }, makeParams());
     expect(world.treasuries[0].updatedAtTick).toBe(0);

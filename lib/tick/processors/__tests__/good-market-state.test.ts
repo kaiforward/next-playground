@@ -110,12 +110,12 @@ describe("toGoodMarketStates", () => {
       buildings: {}, population: 100, yields: unitResourceVector(),
       markets: [{
         ...foodMarket(20, 40), satisfaction: 0.5, productionSuppressed: true,
-        squeezePulses: 2, proposalPulses: 1, logisticsFundingBound: true,
+        squeezeCycles: 2, proposalCycles: 1, logisticsFundingBound: true,
       }],
     });
     expect(state).toMatchObject({
-      satisfaction: 0.5, productionSuppressed: true, squeezePulses: 2,
-      proposalPulses: 1, logisticsFundingBound: true,
+      satisfaction: 0.5, productionSuppressed: true, squeezeCycles: 2,
+      proposalCycles: 1, logisticsFundingBound: true,
     });
   });
 });

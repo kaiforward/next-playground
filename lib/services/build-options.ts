@@ -8,7 +8,7 @@ import { getWorld, hasWorld } from "@/lib/world/store";
 import { ServiceError } from "@/lib/services/errors";
 import { computeBuildOptions } from "@/lib/engine/build-options";
 import {
-  factionConstructionPool, forecastIndependentEtaPulses, orderOpenProjects,
+  factionConstructionPool, forecastIndependentEtaCycles, orderOpenProjects,
 } from "@/lib/engine/construction";
 import { buildingLabel } from "@/lib/engine/construction-readout";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
@@ -86,7 +86,7 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
   // Queue-aware ETA: a 1-level order placed NOW joins the queue behind everything committed (it is
   // a fresh player row). Each open option's hypothetical is independent of the others (it answers
   // "what if I ordered just this one"), but they all share the same committed prefix, so one
-  // `forecastIndependentEtaPulses` call simulates that prefix once instead of once per option —
+  // `forecastIndependentEtaCycles` call simulates that prefix once instead of once per option —
   // see the function's own doc comment for why the hypotheticals don't compete with each other.
   const pool = factionConstructionPool(
     world.systems
@@ -107,12 +107,12 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
     });
   });
   const etas = hypotheticals.length > 0
-    ? forecastIndependentEtaPulses(factionProjects, hypotheticals, pool, cap)
+    ? forecastIndependentEtaCycles(factionProjects, hypotheticals, pool, cap)
     : [];
   const etaByOptionIndex = new Map(openIndices.map((optionIndex, k) => [optionIndex, etas[k]]));
 
   const decorated: BuildOptionData[] = options.map((o, i) => ({
-    ...o, label: buildingLabel(o.buildingType), etaPulses: etaByOptionIndex.get(i) ?? null,
+    ...o, label: buildingLabel(o.buildingType), etaCycles: etaByOptionIndex.get(i) ?? null,
   }));
 
   return { mode: "build", options: decorated };

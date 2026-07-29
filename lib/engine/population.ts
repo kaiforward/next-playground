@@ -159,7 +159,7 @@ export function unrestSlope(d: number, survivalShortfall: boolean, params: Unres
  * corner (highest tax + full crowding + a total food failure asks ~1.16), where distinct severities
  * do collapse to a single maxed-out reading — the graduated response holds everywhere below it.
  *
- * Catastrophe still lives in the integral — one bad pulse is recoverable, chronic shortage climbs
+ * Catastrophe still lives in the integral — one bad cycle is recoverable, chronic shortage climbs
  * toward the settled level. The caller pre-scales the decays by the catch-up factor (never the
  * slopes); k is clamped after scaling, so a large catch-up can never flip the relaxation term and
  * overshoot below the floor.

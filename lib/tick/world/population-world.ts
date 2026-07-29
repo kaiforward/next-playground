@@ -32,7 +32,7 @@ export interface PopulationWorld {
 export interface PopulationProcessorParams {
   unrest: UnrestParams;
   population: PopulationParams;
-  /** Pulse interval in ticks; rates are reference-denominated and scaled by catchUpFactor. */
+  /** Cycle length in ticks; rates are reference-denominated and scaled by catchUpFactor. */
   interval: number;
   /** Per-system additive unrest pressure from the owning faction's tax level
    *  (TAX_LEVEL_UNREST_PRESSURE). Enters the unrest integrator's standing-pressure

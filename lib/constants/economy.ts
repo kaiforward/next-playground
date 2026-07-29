@@ -23,7 +23,7 @@ export const ECONOMY_CONSTANTS = {
    * underfilled strategic reserve is not itself an unmet current need.
    *
    * The gap between the logistics deficit signal (0.8 × the 40-cycle anchor) and this knee is roughly
-   * 30 logistics pulses, and logistics resolves every pulse — a system that starves never ran out of
+   * 30 logistics cycles, and logistics resolves every cycle — a system that starves never ran out of
    * warning, it ran out of supply or of budget to move it. Widening this buffer is never the fix for
    * a starving galaxy; the early warning belongs in the UI, not in unrest.
    */

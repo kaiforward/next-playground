@@ -82,7 +82,7 @@ Two entry points, both served by one feasibility computation (`computeBuildOptio
   housing, support, charted deposits including unworked ones). One click queues +1 level; a **second**
   click on the same row extends the same open player project rather than opening a second row
   (`levels += 1`, `workTotal += workPerLevel` on the standing `(system, buildingType)` row) — orders
-  batch into one ledger entry. A hover tooltip carries the quick numbers (work · ≈pulses at the current
+  batch into one ledger entry. A hover tooltip carries the quick numbers (work · ≈cycles at the current
   pool); a hard-blocked row renders the `+` disabled with its reason.
 - **New-industry dialog** — for types with no ledger row yet (including academies): building + levels +
   a live feasibility readout (space, deposit slots, labour added, estimated staffing, work, ETA). Hard
@@ -122,13 +122,13 @@ Funding order across the whole faction queue reads: **in-flight committed work �
 new autonomic proposals**, implemented as a stable partition of the *stored* open set
 (`orderOpenProjects`, `lib/engine/construction.ts`): everything already committed (any origin, any
 `workDone`) keeps its stored front-first order; fresh player rows (`origin: "player"` with `workDone ≤
-0`) move to the back of that, preserving their own insertion order. The caller appends this pulse's new
+0`) move to the back of that, preserving their own insertion order. The caller appends this cycle's new
 autonomic proposals after. The function is an **identity on any queue with no fresh player rows** — an
 AI-only queue is untouched bit-for-bit, so the calibration harness needs no gate beyond its existing
 one.
 
 Persist-if-funded (autonomic colonies and Construction Centres are dropped when they receive no work this
-pulse, so their price stays live rather than queue-jumping later) is **auto-only**: a player order has no
+cycle, so their price stays live rather than queue-jumping later) is **auto-only**: a player order has no
 re-emitter, so it always persists until funded or cancelled, never silently dropped.
 
 ---
@@ -150,7 +150,7 @@ validation — the UI never learns a different truth than what the mutation will
   past spare labour); the player is allowed to make it.
 
 ETAs are **queue-aware**: a hypothetical order joins the queue behind everything already committed
-(exactly like a real fresh player row would), so the reported pulse count reflects where it would
+(exactly like a real fresh player row would), so the reported cycle count reflects where it would
 actually land, not an isolated forecast.
 
 ---
@@ -193,7 +193,7 @@ actually land, not an isolated forecast.
 `runWorldTick` awaits only in-memory adapters (already-resolved promises resolve as microtasks), so the
 event loop never reaches an HTTP handler mid-tick. Player-order mutation services therefore need no
 mutex: they read and replace the in-memory world synchronously between ticks, and the open-project rows
-they append are exactly what the next directed-build pulse funds. See the header comment in
+they append are exactly what the next directed-build cycle funds. See the header comment in
 `lib/services/construction-orders.ts`.
 
 ---

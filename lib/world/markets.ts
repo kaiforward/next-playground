@@ -43,8 +43,8 @@ export function createSystemMarkets(seed: SystemMarketSeed): WorldMarket[] {
       demandRate: civilianDemandRateForGood(goodId, basis),
       storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
       satisfaction: 1,
-      squeezePulses: 0,
-      proposalPulses: 0,
+      squeezeCycles: 0,
+      proposalCycles: 0,
     };
   });
 }

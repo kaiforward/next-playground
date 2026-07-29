@@ -211,18 +211,18 @@ skilled employment exists.
 A **Construction Centre** (`CONSTRUCTION_CENTRE_TYPE`) is a non-producing building — normal general-space
 footprint, a tier-1-factory-like labour draw (mostly unskilled + a technician draw) — that substitutes
 capital for the labour a skilled economy has absorbed: each staffed level adds
-`CONSTRUCTION.POINTS_PER_LEVEL × min(labourFulfil, skill1Fulfil)` to the faction pool per pulse, gated by
+`CONSTRUCTION.POINTS_PER_LEVEL × min(labourFulfil, skill1Fulfil)` to the faction pool per cycle, gated by
 its own staffing (an unstaffable centre sheds levels via ordinary idle-decay like any building). A centre
 serves no market demand, so it carries no invented value — instead **a construction point is worth the
-best work the pool can't yet fund**: per faction per pulse, `planCentreProposal`
-(`lib/engine/construction-centre.ts`) walks the backlog (in-flight projects + this pulse's ordered
+best work the pool can't yet fund**: per faction per cycle, `planCentreProposal`
+(`lib/engine/construction-centre.ts`) walks the backlog (in-flight projects + this cycle's ordered
 proposals) against what the pool drains within `CONSTRUCTION.BACKLOG_WINDOW` reference cycles; the best
 ROI beyond that frontier prices at most one centre proposal (`value = POINTS_PER_LEVEL × r ×
 PAYBACK_HORIZON`), sited at the developed system with the most spare labour and space. It then competes
 in the ordinary ROI ordering like any other proposal. Emergent and self-limiting: a deep backlog of
 *valuable* work prices a centre in; a draining backlog or a backlog of junk never does; a landed centre
 grows the pool, pushing the frontier out and depressing the next centre's value. A centre project is
-**persist-if-funded** — like a colony, an unfunded centre is dropped and re-priced next pulse rather than
+**persist-if-funded** — like a colony, an unfunded centre is dropped and re-priced next cycle rather than
 queue-jumping later work with a stale commitment.
 
 ---
@@ -241,16 +241,16 @@ by this slice.
 
 ## Cadence
 
-Both halves run on a slow **resolution pulse** — `LOGISTICS_INTERVAL` and `CONSTRUCTION_INTERVAL` (24 ticks
+Both halves run on their own slow **cycle** — `LOGISTICS_INTERVAL` and `CONSTRUCTION_INTERVAL` (24 ticks
 each, independently tunable from the economy's `CYCLE_LENGTH`) — a big, predictable current, per the
-"nothing vanishes while you watch" legibility requirement. `pulseShard` resolves **every faction together**
-on the boundary tick (`tick % interval === 0`); each processor scales its per-pulse budget by
+"nothing vanishes while you watch" legibility requirement. `cycleStartShard` resolves **every faction together**
+on the boundary tick (`tick % interval === 0`); each processor scales its per-cycle budget by
 `catchUpFactor(interval)`, so the wall-clock rate is invariant to the interval at any universe scale. Two
 processors join the tick pipeline:
 
 - **`directedLogistics`** (`dependsOn: economy`) — classify markets, match surplus→deficit, apply silent
   stock deltas + `logistics` flow rows.
-- **`directedBuild`** (`dependsOn: directed-logistics`) — on the same cycle pulse, before its build
+- **`directedBuild`** (`dependsOn: directed-logistics`) — on the same cycle start, before its build
   step, each faction runs one **claim** and one **develop** step to grow its territory (see the
   [faction-system](./faction-system.md#territorial-expansion-claim-and-develop) control-flag model):
   claim scores in-reach unclaimed systems (substrate × proximity, absolute so factions compare
@@ -260,7 +260,7 @@ processors join the tick pipeline:
   colony-establish** for those that win pool priority, which on completion flips the system to
   `developed` with a tiny conserved seed population and the housing to hold it (see
   [colonisation](./colonisation.md)). Only after these two steps does the build step run — the develop-gate
-  everywhere is `system.control === "developed"`, so a system claimed this pulse is build-eligible only
+  everywhere is `system.control === "developed"`, so a system claimed this cycle is build-eligible only
   once it has also been developed. Builds are applied as upward `WorldBuilding.count` increments
   (continuous Float; removal stays decay's job).
 
@@ -296,7 +296,7 @@ shared deficit/surplus/self-supply classification; greedy surplus→deficit matc
 + `logistics` flow rows; proactive housing (fed-and-calm, paced ahead of population, capped at habitable
 land); rate-deficit-driven, labour-gated industry builds (whole-level spare-labour gate; the planner
 proposes toward the physical ceilings, and the per-faction construction throughput pool alone paces the
-committed queue); both processors on their cycle resolution pulse.
+committed queue); both processors on their own cycle start.
 
 **Deferred (explicitly out):**
 - **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy

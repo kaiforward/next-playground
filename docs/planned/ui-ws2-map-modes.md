@@ -136,7 +136,7 @@ because directed arcs fight map density (the exact problem the logistics overlay
   internally but **discards it** (only per-system population deltas survive, folded into `population`). P2 persists
   it as a windowed log — a **sibling of `WorldFlowEvent`** (`flowEvents`) — from which arrows render directly and
   per-system **net** numbers fall out as a free aggregation if wanted. Note the process is a **bursty cycle
-  pulse** (sharded), so the window must span enough ticks not to flicker.
+  cycle** (sharded), so the window must span enough ticks not to flicker.
 - **Logistics settled holistically here.** It is the last remaining overlay and the same flow-viz problem; the
   choices (keep as overlay / rework the rendering / fold into an "economic lens") are decided in this pass, not
   piecemeal.
@@ -179,7 +179,7 @@ because directed arcs fight map density (the exact problem the logistics overlay
 - **Mode label** — "Migration" vs "Attraction" for the attractiveness mode's toggle name.
 - **Price default good** on mode entry.
 - **P2** — arrow density + colour vs logistics (they share lanes; distinct hues + rarely-both-on), window width
-  for the bursty cycle pulse, and logistics' final fate.
+  for the bursty cycle start, and logistics' final fate.
 
 ## Sequence
 

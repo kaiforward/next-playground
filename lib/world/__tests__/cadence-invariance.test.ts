@@ -7,12 +7,12 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
  * Interval invariance — the whole tick, not just one processor.
  *
  * The three cadence knobs (cycle / construction / logistics) change granularity,
- * never wall-clock rate: every pulse rider scales its per-run flows and per-pulse
+ * never wall-clock rate: every cycle rider scales its per-run flows and per-cycle
  * incomes by `catchUpFactor`, so running the same seed for the same tick span at
  * interval 12 reproduces the interval-24 baseline's rates — population growth and
  * buildings landed.
  *
- * The comparison is statistical, not exact: halving an interval lands the pulses on
+ * The comparison is statistical, not exact: halving an interval lands the cycles on
  * different ticks, so the two runs draw different RNG streams and `fundQueue`'s
  * non-homogeneous `remaining` term distributes construction differently. With a fixed
  * seed each run is still deterministic (no flake — always passes or always fails on
@@ -32,14 +32,14 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
  * Treasury balance gets its own, looser tolerance: it inherits the same fundQueue
  * redistribution noise as buildings (construction bills are billed off pendingWork,
  * which forks on the divergent RNG stream), plus its own settlement-boundary rounding
- * as pulses land on different ticks — the honest cycle12 baseline is ~2.2e-2, an order
+ * as cycles land on different ticks — the honest cycle12 baseline is ~2.2e-2, an order
  * of magnitude above the shared TOL. TREASURY_TOL sits between: dropping `catchUp`
  * from a single income term (heads tax) diverges to ~2.0e-1 — still ~3.3x past
  * TREASURY_TOL — while TREASURY_TOL itself clears the honest baseline with >2.5x
  * headroom.
  */
 
-const SEED = 745878428; // colonies + cycle pulses in-window (shared with the ECONOMY_SCALE invariance test)
+const SEED = 745878428; // colonies + cycle starts in-window (shared with the ECONOMY_SCALE invariance test)
 const SYSTEM_COUNT = 60;
 const TICKS = 480; // 20 reference-cycles — long enough for growth and construction rates to accumulate
 const TOL = 5e-3;

@@ -12,14 +12,14 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
  * matters here (build times span cycles; wealth buys parallel fronts, not instant builds).
  *
  * A per-faction throughput pool (`Σ pop × THROUGHPUT_PER_POP`) funds a queue of construction projects.
- * Each active build absorbs at most `PER_BUILD_ABSORPTION_CAP` construction points per pulse, so a
- * level's minimum build time is `workCostPerLevel ÷ cap` pulses — a floor wealth cannot buy past. A
+ * Each active build absorbs at most `PER_BUILD_ABSORPTION_CAP` construction points per cycle, so a
+ * level's minimum build time is `workCostPerLevel ÷ cap` cycles — a floor wealth cannot buy past. A
  * larger pool spreads across more builds (parallel fronts ≈ pool ÷ cap), never finishing one faster.
  */
 export const CONSTRUCTION = {
-  /** Construction points a faction's pool gains per unit population per pulse (matches the old build scale). */
+  /** Construction points a faction's pool gains per unit population per cycle (matches the old build scale). */
   THROUGHPUT_PER_POP: 0.05,
-  /** Most points one build can absorb per pulse — sets the minimum build time (work ÷ cap) and the front count. */
+  /** Most points one build can absorb per cycle — sets the minimum build time (work ÷ cap) and the front count. */
   PER_BUILD_ABSORPTION_CAP: 4,
   /** Fallback per-level work cost for a building type with no explicit override (tier-derived below). */
   DEFAULT_WORK_PER_LEVEL: 20,

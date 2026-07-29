@@ -32,7 +32,7 @@ describe("MemoryDirectedLogisticsWorld", () => {
 // targetStock = 40×1×1 = 40; minStock = 40/2 = 20; maxStock = 40/0.5 + storageCapacity = 80+storageCapacity.
 // mA: stock=95, storageCapacity=20 → targetStock=40; surplusThreshold=40×1.4=56; 95≥56 ✓ surplus; drawable=95−40=55.
 // mB: stock=10, storageCapacity=20 → targetStock=40; deficitThreshold=40×0.8=32; 10<32 ✓ deficit; shortfall=40−10=30.
-// tick=0 (cycle pulse boundary): pulseShard(1, 0, 24) → start=0, end=1 (all factions redistribute).
+// tick=0 (cycle start boundary): cycleStartShard(1, 0, 24) → start=0, end=1 (all factions redistribute).
 // engine quantity=min(shortfall 30, drawable 55, affordable 200)=30. A logistics delivery is a level-fill
 // toward the anchor, so the body moves exactly that (no catch-up): moved=min(30, 95−20, 100−10)=30 → mB lands at 40 (=anchor).
 function market(
@@ -49,7 +49,7 @@ function market(
   };
 }
 
-const DUE_TICK = 0; // cycle pulse: all factions redistribute on ticks where tick % interval === 0
+const DUE_TICK = 0; // cycle start: all factions redistribute on ticks where tick % interval === 0
 
 describe("runDirectedLogisticsProcessor (body)", () => {
   it("moves staple surplus to a deficit system and records a logistics flow", async () => {
@@ -168,8 +168,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(world.flows).toHaveLength(0);
   });
 
-  it("moves nothing on an off-boundary tick (cycle pulse)", async () => {
-    // Same surplus(mA)+deficit(mB) as the happy path, but tick=1: pulseShard(1, 1, 24) is an
+  it("moves nothing on an off-boundary tick (cycle start)", async () => {
+    // Same surplus(mA)+deficit(mB) as the happy path, but tick=1: cycleStartShard(1, 1, 24) is an
     // empty window off the cycle boundary, so NO faction redistributes — distinct from the
     // empty-world early return.
     const systems = [
@@ -194,15 +194,15 @@ describe("runDirectedLogisticsProcessor (body)", () => {
   });
 
   // A market with a big demandRate → big targetStock, so the deficit's shortfall and the donor's
-  // drawable both dwarf the per-pulse work budget: the budget is the binding constraint.
+  // drawable both dwarf the per-cycle work budget: the budget is the binding constraint.
   function bigMarket(id: string, goodId: string, stock: number, demandRate: number) {
     return { id, goodId, stock, anchorMult: 1, demandRate, storageCapacity: 0 };
   }
 
   it("haul budget scales with the interval; deliveries stay gap-fills", async () => {
-    // Budget-bound: huge deficit + huge drawable, so the per-pulse work budget (Σ pop × generation)
+    // Budget-bound: huge deficit + huge drawable, so the per-cycle work budget (Σ pop × generation)
     // binds — moved = budget ÷ route cost. Halving the interval halves the budget, so it moves half
-    // as much per pulse (same wall-clock haul capacity when run twice as often).
+    // as much per cycle (same wall-clock haul capacity when run twice as often).
     const budgetBound = () => [
       { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [bigMarket("mA", "food", 100000, 1000)] },
       { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [bigMarket("mB", "food", 10, 1000)] },

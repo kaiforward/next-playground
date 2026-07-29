@@ -123,7 +123,7 @@ export function getInitialStock(
   const coverMult = SEED_COVER_MIN + producerShare * (SEED_COVER_MAX - SEED_COVER_MIN);
   // Stock is a continuous float balance — do NOT round to whole units. Rounding the seed
   // quantizes it (~0.3% error at ECONOMY_SCALE=1, negligible at 100), which breaks the
-  // goods-side scale-invariance from tick 0 and compounds through every economy pulse.
+  // goods-side scale-invariance from tick 0 and compounds through every economy cycle.
   //
   // Initial reserve policy is independent of the emergency ration threshold.
   return Math.max(

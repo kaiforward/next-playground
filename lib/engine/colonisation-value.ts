@@ -143,7 +143,7 @@ function depositRichness(slotCap: ResourceVector): number {
 
 /**
  * Colony value on the build-comparable demand-rate axis: U(c) + L(c)·(σ_floor + (1−σ_floor)·σ).
- * `unblockedByResource` and `saturation` are the faction-level aggregates (computed once per pulse
+ * `unblockedByResource` and `saturation` are the faction-level aggregates (computed once per cycle
  * by the caller); `candidate` is the controlled system being scored. `U` is coefficient-free (it is
  * already unmet demand); `L` carries the land coefficients; `σ` gates how much of `L` is live.
  */

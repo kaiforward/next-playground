@@ -313,7 +313,7 @@ function DepositGhostRow({
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
       <td />
       <td />
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaPulses)}</td>
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
       {showActionColumn && <td />}
     </tr>
   );
@@ -327,7 +327,7 @@ function BuildingGhostRow({
     <tr className="border-b border-border/40 last:border-b-0">
       <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaPulses)}</td>
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
       {showActionColumn && <td />}
     </tr>
   );

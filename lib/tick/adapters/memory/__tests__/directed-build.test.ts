@@ -49,16 +49,16 @@ describe("MemoryDirectedBuildWorld: claim + develop capture", () => {
 });
 
 describe("MemoryDirectedBuildWorld: proposal-persistence clamp", () => {
-  it("clamps persisted proposal pulses to a finite [0,2] at the boundary", async () => {
+  it("clamps persisted proposal cycles to a finite [0,2] at the boundary", async () => {
     const world = new MemoryDirectedBuildWorld([]);
     const updates: ProposalPersistenceUpdate[] = [
-      { id: "sysA:ore", proposalPulses: NaN }, // non-finite → 0
-      { id: "sysB:ore", proposalPulses: 3 },   // above the cap → 2
-      { id: "sysC:ore", proposalPulses: -1 },  // below the floor → 0
+      { id: "sysA:ore", proposalCycles: NaN }, // non-finite → 0
+      { id: "sysB:ore", proposalCycles: 3 },   // above the cap → 2
+      { id: "sysC:ore", proposalCycles: -1 },  // below the floor → 0
     ];
     await world.applyProposalPersistenceUpdates(updates);
-    expect(world.proposalPulseUpdates.get("sysA:ore")).toBe(0);
-    expect(world.proposalPulseUpdates.get("sysB:ore")).toBe(2);
-    expect(world.proposalPulseUpdates.get("sysC:ore")).toBe(0);
+    expect(world.proposalCycleUpdates.get("sysA:ore")).toBe(0);
+    expect(world.proposalCycleUpdates.get("sysB:ore")).toBe(2);
+    expect(world.proposalCycleUpdates.get("sysC:ore")).toBe(0);
   });
 });

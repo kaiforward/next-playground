@@ -42,8 +42,8 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
       capacityProduction: prodByKey.get(m.goodId) ?? 0,
       satisfaction: m.satisfaction,
       productionSuppressed: m.productionSuppressed,
-      squeezePulses: m.squeezePulses,
-      proposalPulses: m.proposalPulses,
+      squeezeCycles: m.squeezeCycles,
+      proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
     });
   }

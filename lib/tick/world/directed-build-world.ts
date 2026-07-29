@@ -50,7 +50,7 @@ export interface ProposalPersistenceUpdate {
   id: string;
   /** Reference-cycles a structural construction assessment has persisted; clamped to a finite [0,2] at
    *  the adapter boundary (advanced per assessment by the construction interval's catchUpFactor). */
-  proposalPulses: number;
+  proposalCycles: number;
 }
 
 /** One founding-stock line: goods moved from the founding system's market to the colony's. */

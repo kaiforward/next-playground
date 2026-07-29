@@ -257,7 +257,7 @@ function formatTable(results: HarnessResults): string {
     lines.push(
       `People moved: ${fmtNum(mt.totalColonists + mt.totalDiffusion)} total ` +
         `(colonists ${fmtNum(mt.totalColonists)}, diffusion ${fmtNum(mt.totalDiffusion)}) ` +
-        `over ${mt.pulseCount} pulses, mean ${mt.meanPerPulse.toFixed(1)}/pulse`,
+        `over ${mt.cycleCount} cycles, mean ${mt.meanPerCycle.toFixed(1)}/cycle`,
     );
   }
 
@@ -326,21 +326,21 @@ function formatTable(results: HarnessResults): string {
     );
     lines.push(
       `  queue: ${fmtNum(cp.queueRemainingWork)} work remaining` +
-        (cp.queueEtaPulses !== null ? ` ≈ ${cp.queueEtaPulses.toFixed(1)} pulses at current pool` : " (pool is zero — stalled)"),
+        (cp.queueEtaCycles !== null ? ` ≈ ${cp.queueEtaCycles.toFixed(1)} cycles at current pool` : " (pool is zero — stalled)"),
     );
   }
 
   // Construction burst pacing (whole run) — proves the construction rate cap
-  // (DIRECTED_BUILD.BUILD_RATE_CAP) actually bounds new-proposal velocity per pulse, per good.
+  // (DIRECTED_BUILD.BUILD_RATE_CAP) actually bounds new-proposal velocity per cycle, per good.
   {
     const bb = results.buildBurstSummary;
     lines.push("");
     lines.push("Construction Burst Pacing (whole run):");
     if (bb.byGood.length > 0) {
-      lines.push(`Worst burst: ${bb.worstGood} +${bb.globalMax} levels in one pulse @ t=${bb.worstTick}`);
+      lines.push(`Worst burst: ${bb.worstGood} +${bb.globalMax} levels in one cycle @ t=${bb.worstTick}`);
       const top = bb.byGood
         .slice(0, 5)
-        .map((g) => `${g.goodId} +${g.maxLevelsPerPulse} (t=${g.tick})`)
+        .map((g) => `${g.goodId} +${g.maxLevelsPerCycle} (t=${g.tick})`)
         .join(", ");
       lines.push(`  worst per good: ${top}`);
     } else {
@@ -350,7 +350,7 @@ function formatTable(results: HarnessResults): string {
       lines.push(
         `  warm-up: ${results.config.tickCount} ticks is below the ~${CONSTRUCTION_WARMUP_TICKS}-tick construction ` +
         `warm-up window — a structural deficit only becomes a fundable proposal after the two-reference-cycle ` +
-        `persistence window, and the first pulse lands at the construction interval, so read low activity as ` +
+        `persistence window, and the first cycle lands at the construction interval, so read low activity as ` +
         `"too early", not "broken" (colony-driven bursts lag colonisation further; a matured read needs ~1500 ticks).`,
       );
     }

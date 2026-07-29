@@ -18,16 +18,16 @@ export interface MarketRowForLogistics {
   anchorMult: number;
   demandRate: number;
   storageCapacity: number;
-  /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1). */
+  /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1). */
   satisfaction?: number;
   /** Reference-cycle realized output; missing falls back to current capacity for old saves only. */
   realizedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
   productionSuppressed?: boolean;
-  /** Rationed-economy persistence clock: advanced by the pulse's reference-time span, saturated at 2. */
-  squeezePulses?: number;
-  /** Structural-deficit persistence clock: advanced by the pulse's reference-time span, saturated at 2. */
-  proposalPulses?: number;
+  /** Rationed-economy persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
+  squeezeCycles?: number;
+  /** Structural-deficit persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
+  proposalCycles?: number;
   logisticsFundingBound?: boolean;
 }
 

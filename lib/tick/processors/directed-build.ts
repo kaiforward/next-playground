@@ -1,5 +1,5 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
+import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
 import { planCentreProposal } from "@/lib/engine/construction-centre";
@@ -38,9 +38,9 @@ export interface DirectedBuildProcessorParams {
   routeCost: RouteCost;
   /** Construction funding: the per-build absorption cap, the pool rate per pop, and a unique-id minter. */
   construction: {
-    /** Most construction points one build can absorb per pulse (sets the minimum build time). */
+    /** Most construction points one build can absorb per cycle (sets the minimum build time). */
     cap: number;
-    /** Construction points a faction's pool gains per unit population per pulse. */
+    /** Construction points a faction's pool gains per unit population per cycle. */
     throughputPerPop: number;
     /** Max pool-floor points reserved per young colony at development 0 (§7.9). 0 disables the floor. */
     floorBase: number;
@@ -87,7 +87,7 @@ export interface DirectedBuildProcessorParams {
  *
  * Two caps make it honest. `surplusDrawable` is the source's own export rule, so provisioning a
  * colony can never draw a founder below the reserve it keeps for itself; and `balance` carries what
- * is left of each source across the whole pulse, so two colonies founded from one system draw from
+ * is left of each source across the whole cycle, so two colonies founded from one system draw from
  * the same shrinking pile instead of both reading the opening stock. A source holding none of a good
  * sends none of it.
  *
@@ -134,25 +134,25 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
 }
 
 /**
- * Pure processor body. Cycle resolution pulse (mirrors directed-logistics): on the
+ * Pure processor body. Cycle resolution (mirrors directed-logistics): on the
  * boundary tick (`tick % interval === 0`) every faction is planned at once via
- * `pulseShard`; every other tick is a no-op.
+ * `cycleStartShard`; every other tick is a no-op.
  *
  * Construction is committed and throughput-paced: each due faction's auto queue policy
  * (`planFactionProposals`) proposes whole-level bundles toward its ceilings (subtracting the
  * levels already in flight); `orderProposals` ranks them by value (housing leads, then descending
- * bundle-ROI) and each is expanded gate-first into project rows; the faction's per-pulse throughput
+ * bundle-ROI) and each is expanded gate-first into project rows; the faction's per-cycle throughput
  * pool funds the front-first queue (`fundQueue`, in-flight first) at a per-build absorption cap, and
  * only projects whose work COMPLETES land — applied as whole-integer building-count increments. The
- * open-project set is persisted each pulse (funded, plus new commitments, minus what landed). Removal
+ * open-project set is persisted each cycle (funded, plus new commitments, minus what landed). Removal
  * of levels stays whole-level decay's job — this only adds.
  *
  * Colonisation is the second consumer of the same decision → gate → pace pipeline: each faction's
  * controlled candidates are scored (`planFactionColonyProposals`, via colonyValue), interleaved with build
  * bundles by ROI (`orderProposals`), and expanded into colony-establish projects. There is no instant
- * develop flip — a `colony_establish` accrues work over pulses like any build and, on COMPLETION, develops
+ * develop flip — a `colony_establish` accrues work over cycles like any build and, on COMPLETION, develops
  * its target (seed transfer + bundled housing via `applyDevelopments`). Only funded colony proposals
- * persist as in-flight projects, so the open queue is bounded without a per-pulse develop cap.
+ * persist as in-flight projects, so the open queue is bounded without a per-cycle develop cap.
  */
 export async function runDirectedBuildProcessor(
   world: DirectedBuildWorld,
@@ -162,11 +162,11 @@ export async function runDirectedBuildProcessor(
   const factionKeys = await world.getFactionShardKeys();
   if (factionKeys.length === 0) return {};
 
-  const { start, end } = pulseShard(factionKeys.length, ctx.tick, params.interval);
+  const { start, end } = cycleStartShard(factionKeys.length, ctx.tick, params.interval);
   const dueKeys = factionKeys.slice(start, end);
   if (dueKeys.length === 0) return {};
 
-  // Per-pulse incomes are reference-denominated; scale all three together so wall-clock build time,
+  // Per-cycle incomes are reference-denominated; scale all three together so wall-clock build time,
   // parallel-front count (pool ÷ cap), and the floor's relative strength are interval-invariant. Work
   // costs and ceilings are stocks — never scaled.
   const catchUp = catchUpFactor(params.interval);
@@ -174,7 +174,7 @@ export async function runDirectedBuildProcessor(
 
   // ── Claim phase (control tier): every due faction proposes its best in-reach claim; conflicts
   // resolve deterministically (score, seeded-RNG ties); winners are written as ownership assignments.
-  // Newly claimed systems are `controlled` (not developed), so the build phase ignores them this pulse. ──
+  // Newly claimed systems are `controlled` (not developed), so the build phase ignores them this cycle. ──
   if (params.claim) {
     const proposals: ClaimProposal[] = [];
     for (const key of dueKeys) {
@@ -212,7 +212,7 @@ export async function runDirectedBuildProcessor(
 
   const landedBySystem = new Map<string, Map<string, number>>();
   const developments: SystemDevelopment[] = [];
-  // Remaining drawable stock per (source system, good) across the whole pulse, so two colonies
+  // Remaining drawable stock per (source system, good) across the whole cycle, so two colonies
   // founded from one system draw from the same shrinking pile rather than both reading its opening
   // stock — the same conservation `applyDevelopments` gives the seed population itself.
   const foundingStockBalance = new Map<string, number>();
@@ -222,18 +222,18 @@ export async function runDirectedBuildProcessor(
   // clock, distinct from the economy's squeeze clock — regardless of whether a proposal is emitted or
   // funded. Keyed by the market's composite id, the same convention the economy adapter writes by.
   const proposalPersistence: ProposalPersistenceUpdate[] = [];
-  // Calibration instrumentation: new autonomic production-good levels committed THIS pulse, by good.
+  // Calibration instrumentation: new autonomic production-good levels committed THIS cycle, by good.
   // Counts proposal levels (before funding), not the final queue — so it measures the planner's
-  // per-pulse output (the rate cap's target), not what the pool happened to afford. Housing, academies,
+  // per-cycle output (the rate cap's target), not what the pool happened to afford. Housing, academies,
   // complexes, construction centres, and colony-establish are never good ids, so `GOODS[buildingType]`
   // excludes them without a separate kind check. Never fed into `TickBroadcastRaw`/SSE/world — the
   // calibration harness (`runWorldTick().instrumentation`) is its only reader.
   const buildCommitmentsByGood = new Map<string, number>();
 
   for (const [factionId, group] of byFaction) {
-    // The faction's per-pulse pool: eligible heads + centre output over developed systems
+    // The faction's per-cycle pool: eligible heads + centre output over developed systems
     // (controlled/unclaimed are inert). Valuation reads the unscaled reference-cycle pool;
-    // funding scales it by catchUp like every pulse income. The pool drains the queue; it
+    // funding scales it by catchUp like every cycle income. The pool drains the queue; it
     // never enqueues.
     const poolRef = factionConstructionPool(
       group.map((r) => ({ control: r.control, population: r.population, buildings: r.buildings })),
@@ -243,7 +243,7 @@ export async function runDirectedBuildProcessor(
       },
     );
     // Money is fuel, not capacity: the funded fraction scales what share of the
-    // physical pool's throughput runs this pulse. Valuation (centre pricing, ROI)
+    // physical pool's throughput runs this cycle. Valuation (centre pricing, ROI)
     // keeps reading the unscaled reference pool.
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
     const pool = poolRef.total * catchUp * funded;
@@ -260,11 +260,11 @@ export async function runDirectedBuildProcessor(
     // The assessment runs for every due faction so the proposal-pressure counter advances even when
     // build automation is off — the switch gates PROPOSAL EMISSION, not the construction clock.
     const buildStates = group.map(toBuildState);
-    // Advance the proposal-pressure counter by this pulse's reference-time, so "two reference cycles
-    // of persistence" is the same wall-clock latency at any construction cadence (not two pulses).
+    // Advance the proposal-pressure counter by this cycle's reference-time, so "two reference cycles
+    // of persistence" is the same wall-clock latency at any construction cadence (not two cycles).
     const buildPlan = planFactionProposals(buildStates, params.routeCost, existing, developmentRefs, catchUp);
     for (const u of buildPlan.persistenceUpdates) {
-      proposalPersistence.push({ id: `${u.systemId}|${u.goodId}`, proposalPulses: u.proposalPulses });
+      proposalPersistence.push({ id: `${u.systemId}|${u.goodId}`, proposalCycles: u.proposalCycles });
     }
     const buildProposals = skipBuild ? [] : buildPlan.proposals;
 
@@ -298,7 +298,7 @@ export async function runDirectedBuildProcessor(
 
     let ordered = orderProposals([...buildProposals, ...colonyProposals]);
 
-    // At most one centre proposal per pulse, priced off the backlog frontier; it re-enters the
+    // At most one centre proposal per cycle, priced off the backlog frontier; it re-enters the
     // ROI ordering as a normal proposal (independent systems — null faction — never build centres).
     // A centre is a build-domain proposal, so it is gated by the same switch as ordinary builds.
     if (factionId !== null && !skipBuild) {
@@ -352,7 +352,7 @@ export async function runDirectedBuildProcessor(
     }
 
     // Fund front-first (in-flight work finishes before new commitments, then fresh player orders,
-    // then this pulse's new autonomic proposals), with the development-scaled colony floor reserved
+    // then this cycle's new autonomic proposals), with the development-scaled colony floor reserved
     // ahead of the ROI order; land completed levels.
     const { projects: fundedOpen, landed, absorbed } = fundQueueWithFloor(
       [...orderOpenProjects(existing), ...newProjects], pool, cap, reserved,
@@ -361,7 +361,7 @@ export async function runDirectedBuildProcessor(
     if (factionId !== null && absorbed > 0) workPerformedByFaction.set(factionId, absorbed);
     for (const p of fundedOpen) {
       // Persist-if-funded applies to AUTONOMIC colonies and centres only — they are re-emitted and
-      // re-priced next pulse, so a workless row is dropped to keep the queue live. A player order is
+      // re-priced next cycle, so a workless row is dropped to keep the queue live. A player order is
       // a standing commitment with no re-emitter: it always persists until funded or cancelled.
       if (p.origin !== "player") {
         if (p.kind === "colony_establish" && p.workDone <= 0) continue;

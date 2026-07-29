@@ -247,16 +247,16 @@ describe("runWorldTick", () => {
     for (const market of assessed) {
       expect(Number.isFinite(market.realizedProductionRate)).toBe(true);
       expect(typeof market.productionSuppressed).toBe("boolean");
-      expect(market.squeezePulses).toBeGreaterThanOrEqual(0);
-      expect(market.squeezePulses).toBeLessThanOrEqual(2);
+      expect(market.squeezeCycles).toBeGreaterThanOrEqual(0);
+      expect(market.squeezeCycles).toBeLessThanOrEqual(2);
     }
   });
 
-  it("advances the construction and economy clocks on their own cadences (divergent-pulse persistence)", async () => {
+  it("advances the construction and economy clocks on their own cadences (divergent-cycle persistence)", async () => {
     // The construction proposal-pressure counter and the economy squeeze counter are DISTINCT clocks
     // written by different stages on independently-tunable cadences. Engineer a persistent food deficit
-    // at a developed homeworld (no food capacity, empty stock), seed BOTH counters at 1, then pulse the
-    // two cadences apart: each clock advances only on its own pulse, and the stale off-pulse read of the
+    // at a developed homeworld (no food capacity, empty stock), seed BOTH counters at 1, then cycle the
+    // two cadences apart: each clock advances only on its own cycle, and the stale mid-cycle read of the
     // other clock is never counted.
     const base = generateWorld({ systemCount: 100, seed: 42 });
     const home = base.factions[0].homeworldId;
@@ -265,33 +265,33 @@ describe("runWorldTick", () => {
       buildings: base.buildings.filter((b) => !(b.systemId === home && b.buildingType === "food")),
       markets: base.markets.map((m) =>
         m.systemId === home && m.goodId === "food"
-          ? { ...m, stock: 0, squeezePulses: 1, proposalPulses: 1 }
+          ? { ...m, stock: 0, squeezeCycles: 1, proposalCycles: 1 }
           : m,
       ),
     };
     const foodOf = (w: typeof prepared) =>
       w.markets.find((m) => m.systemId === home && m.goodId === "food");
 
-    // Construction-only pulse: directed-build resolves at a finer-than-reference cadence, economy (cycle)
-    // does NOT. The build assessment advances proposalPulses by that pulse's reference-time
-    // (catchUpFactor(1)); the stale economy read leaves squeezePulses untouched.
+    // Construction-only cycle: directed-build resolves at a finer-than-reference cadence, economy (cycle)
+    // does NOT. The build assessment advances proposalCycles by that cycle's reference-time
+    // (catchUpFactor(1)); the stale economy read leaves squeezeCycles untouched.
     const buildOnly = (await runWorldTick(prepared, { cadence: { cycle: 999, construction: 1, logistics: 999 } })).world;
-    expect(foodOf(buildOnly)?.proposalPulses).toBeCloseTo(1 + catchUpFactor(1), 10); // 1 → 1 + reference-time
-    expect(foodOf(buildOnly)?.squeezePulses).toBe(1);  // unchanged — economy did not run
+    expect(foodOf(buildOnly)?.proposalCycles).toBeCloseTo(1 + catchUpFactor(1), 10); // 1 → 1 + reference-time
+    expect(foodOf(buildOnly)?.squeezeCycles).toBe(1);  // unchanged — economy did not run
 
-    // Economy-only pulse: economy resolves and rations the empty deficit → squeezePulses advances by the
-    // same reference-time; the stale build read (construction off-pulse) leaves proposalPulses untouched.
+    // Economy-only cycle: economy resolves and rations the empty deficit → squeezeCycles advances by the
+    // same reference-time; the stale build read (construction mid-cycle) leaves proposalCycles untouched.
     const econOnly = (await runWorldTick(prepared, { cadence: { cycle: 1, construction: 999, logistics: 999 } })).world;
-    expect(foodOf(econOnly)?.squeezePulses).toBeCloseTo(1 + catchUpFactor(1), 10);  // 1 → 1 + reference-time
-    expect(foodOf(econOnly)?.proposalPulses).toBe(1); // unchanged — directed-build did not run
+    expect(foodOf(econOnly)?.squeezeCycles).toBeCloseTo(1 + catchUpFactor(1), 10);  // 1 → 1 + reference-time
+    expect(foodOf(econOnly)?.proposalCycles).toBe(1); // unchanged — directed-build did not run
 
-    // The divergent-cadence result serializes and deserializes intact (the fractional proposalPulses
+    // The divergent-cadence result serializes and deserializes intact (the fractional proposalCycles
     // survives the save byte-for-byte).
     const roundTrip = deserializeWorld(serializeWorld(buildOnly));
     expect(roundTrip.ok).toBe(true);
     if (roundTrip.ok) {
-      expect(foodOf(roundTrip.world)?.proposalPulses).toBe(foodOf(buildOnly)?.proposalPulses);
-      expect(foodOf(roundTrip.world)?.squeezePulses).toBe(1);
+      expect(foodOf(roundTrip.world)?.proposalCycles).toBe(foodOf(buildOnly)?.proposalCycles);
+      expect(foodOf(roundTrip.world)?.squeezeCycles).toBe(1);
     }
   });
 
@@ -487,18 +487,18 @@ describe("runWorldTick — per-stage wiring", () => {
       ),
     };
     const cadence = { cycle: 1, logistics: 1, construction: 99 };
-    const protectedPulse = (await runWorldTick(prepared, { cadence })).world;
-    const protectedBuilding = protectedPulse.buildings.find(
+    const protectedCycle = (await runWorldTick(prepared, { cadence })).world;
+    const protectedBuilding = protectedCycle.buildings.find(
       (building) => building.systemId === systemId && building.buildingType === producer.buildingType,
     )!;
     expect(protectedBuilding.count).toBe(count);
     expect(protectedBuilding.idleCycles).toBe(0);
-    expect(protectedPulse.markets.find(
+    expect(protectedCycle.markets.find(
       (market) => market.systemId === systemId && market.goodId === goodId,
     )?.logisticsFundingBound).toBe(false);
 
-    const ordinaryPulse = (await runWorldTick(protectedPulse, { cadence })).world;
-    const ordinaryBuilding = ordinaryPulse.buildings.find(
+    const ordinaryCycle = (await runWorldTick(protectedCycle, { cadence })).world;
+    const ordinaryBuilding = ordinaryCycle.buildings.find(
       (building) => building.systemId === systemId && building.buildingType === producer.buildingType,
     )!;
     expect(ordinaryBuilding.count).toBe(count);
@@ -530,10 +530,10 @@ describe("runWorldTick — per-stage wiring", () => {
 });
 
 // ── logistics ↔ economy assessment ordering ──────────────────────────
-// The tick runs economy BEFORE directed-logistics, so a pulse measures satisfaction/squeeze/unrest on
+// The tick runs economy BEFORE directed-logistics, so a cycle measures satisfaction/squeeze/unrest on
 // the recipient's PRE-import stock; the import lands afterward and never rewrites an already-measured
 // assessment. Same-tick logistics stock changes DO patch into build rows, but the persisted economy
-// fields wait for the NEXT economy pulse. These pin exactly that ordering end to end.
+// fields wait for the NEXT economy cycle. These pin exactly that ordering end to end.
 
 /**
  * Two developed same-faction systems linked both ways, with a water gradient: the recipient (B) strips
@@ -575,12 +575,12 @@ function twoSystemWaterGradient(prepareRecipientWater: (market: WorldMarket) => 
 }
 
 describe("runWorldTick — logistics/assessment ordering", () => {
-  it("assesses the pre-import state on a coincident pulse, then recovers at the next economy pulse", async () => {
+  it("assesses the pre-import state on a coincident cycle start, then recovers at the next economy cycle", async () => {
     const { b, world } = twoSystemWaterGradient((market) => market);
     const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
     const bSystem = (w: World) => w.systems.find((s) => s.id === b)!;
 
-    // Coincident pulse: economy (cycle) AND logistics both resolve this tick. Construction stays off so
+    // Coincident cycle start: economy (on CYCLE_LENGTH) AND logistics both resolve this tick. Construction stays off so
     // directed-build contributes no noise. Economy runs first — it measures B's empty water market — and
     // logistics moves the import in afterward.
     const cadence = { cycle: 1, logistics: 1, construction: 999 };
@@ -595,27 +595,27 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     // clean seed. A same-tick re-measure after the import would instead read satisfaction ≈ 1 and reset
     // the squeeze clock — this is the assertion that catches that regression.
     expect(bWater(afterImport).satisfaction).toBeCloseTo(0, 6);
-    expect(bWater(afterImport).squeezePulses).toBeCloseTo(catchUpFactor(1), 10);
+    expect(bWater(afterImport).squeezeCycles).toBeCloseTo(catchUpFactor(1), 10);
     expect(bSystem(afterImport).unrest).toBeGreaterThan(0);
 
-    // Next economy pulse: B now holds the imported water, so satisfaction recovers and the squeeze clock
+    // Next economy cycle: B now holds the imported water, so satisfaction recovers and the squeeze clock
     // resets. Direction of recovery only — magnitude calibration is out of scope here. (Missing ⇒ 1 is
-    // the documented default; both reads are written by an economy pulse, so neither is actually absent.)
+    // the documented default; both reads are written by an economy cycle, so neither is actually absent.)
     const importSatisfaction = bWater(afterImport).satisfaction ?? 1;
     const afterRecovery = (await runWorldTick(afterImport, { cadence })).world;
     const recoverySatisfaction = bWater(afterRecovery).satisfaction ?? 1;
     expect(recoverySatisfaction).toBeGreaterThan(importSatisfaction);
-    expect(bWater(afterRecovery).squeezePulses).toBe(0);
+    expect(bWater(afterRecovery).squeezeCycles).toBe(0);
   });
 
-  it("retains the persisted assessment across a logistics-only tick until the next economy pulse", async () => {
+  it("retains the persisted assessment across a logistics-only tick until the next economy cycle", async () => {
     // Seed a distinctive rationed assessment the economy would NOT reproduce for this state (an empty,
     // productionless market would assess satisfaction 0 and realized rate 0), so retention is provable:
     // if any stage re-measured it, these exact values would move.
     const { b, world } = twoSystemWaterGradient((market) => ({
       ...market,
       satisfaction: 0.4,
-      squeezePulses: 0.5,
+      squeezeCycles: 0.5,
       realizedProductionRate: 5,
     }));
     const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
@@ -629,11 +629,11 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     expect(afterLogistics.flowEvents.some((f) => f.toSystemId === b && f.goodId === "water")).toBe(true);
     expect(bWater(afterLogistics).stock).toBeGreaterThan(0);
 
-    // …but the seeded assessment is carried through untouched: no economy pulse ran to re-measure it, and
-    // logistics never writes these fields. An off-pulse economy run, or a logistics-side re-measure, would
+    // …but the seeded assessment is carried through untouched: no economy cycle ran to re-measure it, and
+    // logistics never writes these fields. A mid-cycle economy run, or a logistics-side re-measure, would
     // move at least one of them.
     expect(bWater(afterLogistics).satisfaction).toBe(0.4);
-    expect(bWater(afterLogistics).squeezePulses).toBe(0.5);
+    expect(bWater(afterLogistics).squeezeCycles).toBe(0.5);
     expect(bWater(afterLogistics).realizedProductionRate).toBe(5);
   });
 });
@@ -694,14 +694,14 @@ const FIXTURE_POP_CAP = FIXTURE_HOUSING_LEVELS * POP_CENTRE_DENSITY;
 /** The heaviest tax band, so the standing unrest floor is the largest a calm system can carry. */
 const FIXTURE_TAX_LEVEL: TaxLevel = "very_high";
 const TAX_FLOOR = TAX_LEVEL_UNREST_PRESSURE[FIXTURE_TAX_LEVEL];
-/** Cover deep enough that delivery stays full for the whole run (the pulse clamps it to maxStock). */
+/** Cover deep enough that delivery stays full for the whole run (the cycle clamps it to maxStock). */
 const AMPLE_STOCK = 1e7;
-/** An interval no fixture tick is a resolution pulse of — parks a stage for the run. */
+/** An interval no fixture tick is a resolution cycle of — parks a stage for the run. */
 const NEVER = 1_000_000;
 /** Reference cycle, with construction and logistics parked: unrest and growth resolve at their
  *  calibrated per-cycle magnitudes (catchUpFactor = 1) and nothing else touches the fixture. */
 const POPULATION_CADENCE: TickCadence = { cycle: CYCLE_LENGTH, construction: NEVER, logistics: NEVER };
-/** A construction-only pulse: the build planner resolves against a world the economy has not moved. */
+/** A construction-only cycle: the build planner resolves against a world the economy has not moved. */
 const CONSTRUCTION_CADENCE: TickCadence = { cycle: NEVER, construction: 1, logistics: NEVER };
 /** Occupancy past CROWDING.BRAKE_END, where the growth brake is fully shut and crowding pressure maxes. */
 const OVERSHOOT_OCCUPANCY = 1.16;
@@ -797,7 +797,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     const after = await runTicks(world, CYCLE_LENGTH, POPULATION_CADENCE);
     const grown = fixtureSystem(after, systemId);
 
-    // Premise: the pulse delivered every demanded good in full, so D folds to 0 and the regime is
+    // Premise: the cycle delivered every demanded good in full, so D folds to 0 and the regime is
     // Supplied whatever the demand weights.
     expectDemandedSatisfaction(after, systemId, 1);
     // Housing is untouched, so occupancy here is a pure population story — and it stays under the
@@ -841,7 +841,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     // The whole point: even fully overcrowded, the standing floor is nowhere near the collapse gate.
     expect(crowded.unrest).toBeLessThan(POPULATION_PARAMS.overshootDeathUnrestGate);
 
-    // Growth is braked to exactly zero, so the pulse's only population term is the unrest decline —
+    // Growth is braked to exactly zero, so the cycle's only population term is the unrest decline —
     // no overshoot death, though the overshoot itself is large.
     const catchUp = catchUpFactor(CYCLE_LENGTH);
     const decline = POPULATION_PARAMS.declineRate * before.population * floor;
@@ -854,55 +854,55 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     expect(crowded.population).toBeGreaterThan(before.population - (decline + ungatedDeath) * catchUp);
   }, 60_000);
 
-  it("drains stored unrest geometrically at recoveryDecay after one full-shortage pulse", async () => {
+  it("drains stored unrest geometrically at recoveryDecay after one full-shortage cycle", async () => {
     const { world, systemId } = populationFixture(0.92, TAX_FLOOR);
-    // Empty the fixture system on the tick before the assessment, so the pulse measures a market
+    // Empty the fixture system on the tick before the assessment, so the cycle measures a market
     // that cannot deliver — and nothing else has had a chance to move it.
     const drained = withStock(
       await runTicks(world, CYCLE_LENGTH - 1, POPULATION_CADENCE),
       systemId,
       0,
     );
-    const shortagePulse = await runTicks(drained, 1, POPULATION_CADENCE);
+    const shortageCycle = await runTicks(drained, 1, POPULATION_CADENCE);
 
     // Premise: every demanded good delivered nothing, so D folds to exactly 1 and the supply state
     // reads Shortage — both independent of the necessity weights.
-    expectDemandedSatisfaction(shortagePulse, systemId, 0);
+    expectDemandedSatisfaction(shortageCycle, systemId, 0);
     // The system entered on its floor, so the relaxation term is zero and the whole rise is the
     // shortage gain integrating D = 1. Gain is slope x relaxation rate, derived here rather than
     // named, so the assertion follows a slope retune instead of going stale against one.
     const shortageGain = UNREST_PARAMS.slopeShortage * UNREST_PARAMS.decay;
-    const shortageUnrest = fixtureSystem(shortagePulse, systemId).unrest;
+    const shortageUnrest = fixtureSystem(shortageCycle, systemId).unrest;
     expect(shortageUnrest).toBeCloseTo(TAX_FLOOR + shortageGain, 12);
-    // One bad pulse from the floor is recoverable — it does not reach the strike regime.
+    // One bad cycle from the floor is recoverable — it does not reach the strike regime.
     expect(shortageUnrest).toBeLessThan(STRIKE_PARAMS.threshold);
 
     // Restock: the next assessment finds the market able to deliver again.
-    let recovering = withStock(shortagePulse, systemId, AMPLE_STOCK);
-    const unrestByPulse: number[] = [];
-    for (let pulse = 0; pulse < 4; pulse++) {
+    let recovering = withStock(shortageCycle, systemId, AMPLE_STOCK);
+    const unrestByCycle: number[] = [];
+    for (let cycle = 0; cycle < 4; cycle++) {
       recovering = await runTicks(recovering, CYCLE_LENGTH, POPULATION_CADENCE);
       // Supply is restored immediately — the regime flips back the very first assessment, and the
       // recovery below is the memory draining, not the shortage still being measured.
       expectDemandedSatisfaction(recovering, systemId, 1);
-      unrestByPulse.push(fixtureSystem(recovering, systemId).unrest);
+      unrestByCycle.push(fixtureSystem(recovering, systemId).unrest);
     }
 
     // The stored excess above the floor decays geometrically at the Supplied relaxation rate.
     const excess = shortageGain;
     const retained = 1 - UNREST_PARAMS.recoveryDecay;
-    unrestByPulse.forEach((unrest, index) => {
+    unrestByCycle.forEach((unrest, index) => {
       expect(unrest).toBeCloseTo(TAX_FLOOR + excess * retained ** (index + 1), 12);
     });
 
-    // Stated as the law rather than the values: each supplied pulse keeps exactly (1 - recoveryDecay)
+    // Stated as the law rather than the values: each supplied cycle keeps exactly (1 - recoveryDecay)
     // of the previous excess. A rate-agnostic snap to the floor, or a relaxation at the Rationing
     // rate, breaks this ratio while still "going down".
-    const excessByPulse = [shortageUnrest, ...unrestByPulse].map((u) => u - TAX_FLOOR);
-    for (let i = 1; i < excessByPulse.length; i++) {
-      expect(excessByPulse[i]).toBeGreaterThan(0);
-      expect(excessByPulse[i]).toBeLessThan(excessByPulse[i - 1]);
-      expect(excessByPulse[i] / excessByPulse[i - 1]).toBeCloseTo(retained, 10);
+    const excessByCycle = [shortageUnrest, ...unrestByCycle].map((u) => u - TAX_FLOOR);
+    for (let i = 1; i < excessByCycle.length; i++) {
+      expect(excessByCycle[i]).toBeGreaterThan(0);
+      expect(excessByCycle[i]).toBeLessThan(excessByCycle[i - 1]);
+      expect(excessByCycle[i] / excessByCycle[i - 1]).toBeCloseTo(retained, 10);
     }
     // Housing never moved and occupancy stayed under the cap, so the floor was pure tax pressure —
     // with no crowding term drifting into it — across the whole recovery.
@@ -954,8 +954,8 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     expect(fixtureSystem(after, systemId).popCap).toBe(FIXTURE_POP_CAP);
   }, 60_000);
 
-  it("sizes relief housing to the population the same pulse just grew, at the shipped cadence", async () => {
-    // CYCLE_LENGTH and CONSTRUCTION_INTERVAL are equal as shipped, so the relief valve's real pulse
+  it("sizes relief housing to the population the same cycle just grew, at the shipped cadence", async () => {
+    // CYCLE_LENGTH and CONSTRUCTION_INTERVAL are equal as shipped, so the relief valve's real cycle
     // always coincides with the economy and population stages and the planner reads the POST-growth
     // population. The fixture above parks the economy to buy an exact closed form; this one runs the
     // DEFAULT cadence and pins the stage ordering instead, on ranges rather than a level count, so it
@@ -966,7 +966,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     const grown = fixtureSystem(after, systemId);
 
     expectDemandedSatisfaction(after, systemId, 1);
-    // The pulse grew the system and shed some of its unrest, and it is still both restive and armed.
+    // The cycle grew the system and shed some of its unrest, and it is still both restive and armed.
     expect(grown.population).toBeGreaterThan(before.population);
     expect(grown.unrest).toBeGreaterThan(TAX_FLOOR + CROWDING.PRESSURE_MAX);
     expect(grown.population).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TRIGGER * FIXTURE_POP_CAP);
@@ -985,7 +985,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     const relievedCap = (FIXTURE_HOUSING_LEVELS + reliefLevels) * POP_CENTRE_DENSITY;
     expect(grown.population / relievedCap).toBeLessThanOrEqual(DIRECTED_BUILD.RELIEF_TARGET);
 
-    // The ordering itself: sizing against the population as it stood BEFORE the pulse would have
+    // The ordering itself: sizing against the population as it stood BEFORE the cycle would have
     // committed strictly fewer levels, so this pins that directed-build read population after the
     // population stage rather than from the start-of-tick snapshot.
     const preGrowthLevels = Math.ceil(

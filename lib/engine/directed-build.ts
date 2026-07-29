@@ -54,7 +54,7 @@ export interface BuildGoodState {
   /** Current building capacity. The tick path always supplies this separately from realized production. */
   capacityProduction: number;
   /**
-   * Persisted consumption satisfaction from the last economy pulse (delivered ÷ demanded, ∈
+   * Persisted consumption satisfaction from the last economy cycle (delivered ÷ demanded, ∈
    * [0,1]; missing ⇒ 1) — supplyDissatisfaction's only input. stock/targetStock stay on this
    * type for the deficit finder and severity weights; they no longer feed the fed-proxy.
    */
@@ -63,10 +63,10 @@ export interface BuildGoodState {
   productionSuppressed?: boolean;
   /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced
    *  per assessment by the economy interval's catchUpFactor (so the latency is cadence-invariant). */
-  squeezePulses?: number;
+  squeezeCycles?: number;
   /** Reference-cycles a structural construction assessment has persisted — a finite value in [0,2]
    *  advanced per assessment by the construction interval's catchUpFactor. */
-  proposalPulses?: number;
+  proposalCycles?: number;
   /** A reachable logistics match was constrained by the faction's funded haul work. */
   logisticsFundingBound?: boolean;
 }
@@ -120,7 +120,7 @@ export function hopRouteCost(
 
 /**
  * Civilian-only, necessity-weighted dissatisfaction D in [0,1] for one system — the input to the
- * housing "fed" gate. Reuses the population engine's fold over the economy pulse's persisted per-good
+ * housing "fed" gate. Reuses the population engine's fold over the economy cycle's persisted per-good
  * satisfaction (delivered ÷ demanded — the same measure the needs display reads), so a
  * deliberately-at-comfort exporter with full delivery reads as satisfied. Weighted by CIVILIAN demand
  * alone: the gate means exactly one thing, "are the people here fed?", and industrial-input
@@ -202,7 +202,7 @@ export interface StructuralDeficit {
 export interface ProposalPersistenceUpdate {
   systemId: string;
   goodId: string;
-  proposalPulses: number;
+  proposalCycles: number;
 }
 
 interface StructuralAssessment {
@@ -308,7 +308,7 @@ function assessStructuralDeficits(
       // ordinary case, not an exception.
       const strikeExplains = good.productionSuppressed === true && capacity > 0;
       const capacityGap = Math.max(0, (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demand - capacity);
-      const feedbackGap = !strikeExplains && !good.logisticsFundingBound && (good.squeezePulses ?? 0) >= DIRECTED_BUILD.PERSISTENCE_PULSES
+      const feedbackGap = !strikeExplains && !good.logisticsFundingBound && (good.squeezeCycles ?? 0) >= DIRECTED_BUILD.PERSISTENCE_CYCLES
         ? demand * (1 - clamp(good.satisfaction ?? 1, 0, 1))
         : 0;
       const gross = Math.max(capacityGap, feedbackGap);
@@ -369,11 +369,11 @@ function assessStructuralDeficits(
       // Advance by the reference-time this assessment represents (catchUpFactor of the caller's
       // interval), not a flat +1, so the "two reference cycles of persistence" latency is the same
       // wall-clock span at any construction cadence. The counter is fractional, finite, clamped [0,2].
-      const nextPulses = residual > 0
-        ? Math.min(DIRECTED_BUILD.PERSISTENCE_PULSES, Math.max(0, good.proposalPulses ?? 0) + advance)
+      const nextCycles = residual > 0
+        ? Math.min(DIRECTED_BUILD.PERSISTENCE_CYCLES, Math.max(0, good.proposalCycles ?? 0) + advance)
         : 0;
-      persistenceUpdates.push({ systemId: system.systemId, goodId: good.goodId, proposalPulses: nextPulses });
-      if (residual <= 0 || (requirePersistence && nextPulses < DIRECTED_BUILD.PERSISTENCE_PULSES)) continue;
+      persistenceUpdates.push({ systemId: system.systemId, goodId: good.goodId, proposalCycles: nextCycles });
+      if (residual <= 0 || (requirePersistence && nextCycles < DIRECTED_BUILD.PERSISTENCE_CYCLES)) continue;
       deficits.push({
         systemId: system.systemId,
         goodId: good.goodId,
@@ -896,7 +896,7 @@ function planFactionBundles(
  * Flat build view of the planner — the same decisions `planFactionBundles` makes, ungrouped, in
  * emission order (housing pass, then industry opportunities by descending score). Shares the one gap
  * assessment with `planFactionProposals` (same provisioning margin and rate cap) but takes it
- * immediately — no two-pulse persistence gate and no in-flight projects to fold. Kept as the stable
+ * immediately — no two-cycle persistence gate and no in-flight projects to fold. Kept as the stable
  * unit-test surface for the planner's *what-gets-built* logic, independent of funding order.
  */
 export function planFactionBuilds(
@@ -971,7 +971,7 @@ export interface ColonyEstablishParams extends ColonyValueParams {
   habitableFloor: number;
   /** Weight on the seed-pop opportunity cost netted off colony value (COLONISATION.SEED_POP_COST_WEIGHT). */
   popCostWeight: number;
-  /** Settler supply (drawable pop/pulse) a faction must have per hungry colony to open another — the anti-sprawl gate (COLONISATION.MIN_SETTLER_SUPPLY). */
+  /** Settler supply (drawable pop/cycle) a faction must have per hungry colony to open another — the anti-sprawl gate (COLONISATION.MIN_SETTLER_SUPPLY). */
   minSettlerSupply: number;
   /** Fraction of a source's staffed workers drawable as settlers (mirrors MIGRATION_PARAMS.employedLeakFraction). */
   employedLeakFraction: number;
@@ -1067,7 +1067,7 @@ export function sizeColonyEstablish(
  * (territory saturation σ, and the unmet demand each missing resource unblocks) are computed once from the
  * faction's DEVELOPED systems; each candidate is then valued with `colonyValue` and sized to its land —
  * seed capped to the whole-level habitable capacity and housing sized to house it, so the landed colony has
- * `popCap ≥ seedPop` (viable by construction). There is NO per-pulse cap: every eligible candidate is
+ * `popCap ≥ seedPop` (viable by construction). There is NO per-cycle cap: every eligible candidate is
  * proposed; the pool decides which advance (a proposal persists as an in-flight project only once funded —
  * enforced by the processor's persist-if-funded). A candidate already being established (open project) or
  * below the habitable floor / lacking a whole housing level is skipped. The `Map`/`Set` aggregates are
@@ -1134,7 +1134,7 @@ export function planFactionColonyProposals(
 
   // Settler-supply founding gate: a faction only opens new colonies while it can still deliver its
   // minimum settler supply to each colony it is ALREADY trying to fill (+ each new one). Releasable
-  // settler flow this pulse = idle spare labour + the always-on employed leak, summed over developed
+  // settler flow this cycle = idle spare labour + the always-on employed leak, summed over developed
   // systems; "hungry" absorbers are developed systems still below their housing cap. Founding is
   // capped to `floor(releasable / minSettlerSupply) − hungry` best-valued candidates, so a faction
   // fills what it has before it sprawls into colonies it can never populate. `minSettlerSupply ≤ 0`

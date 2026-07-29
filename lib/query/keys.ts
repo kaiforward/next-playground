@@ -39,7 +39,7 @@ export const queryKeys = {
   // Per-system logistics (imports/exports + prod/con dashboard) — tick-invalidated.
   systemLogisticsAll: ["systemLogistics"] as const,
   systemLogistics: (systemId: string) => ["systemLogistics", systemId] as const,
-  // Per-system construction section — tick-invalidated (progress advances each funded pulse).
+  // Per-system construction section — tick-invalidated (progress advances each funded cycle).
   systemConstructionAll: ["systemConstruction"] as const,
   systemConstruction: (systemId: string) => ["systemConstruction", systemId] as const,
   // Per-system player build options (feasibility + verbs) — tick-invalidated.

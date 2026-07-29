@@ -92,20 +92,20 @@ describe("factionConstructionPool", () => {
 });
 
 describe("fundQueue", () => {
-  it("advances a single build by min(cap, remaining, pool) each pulse — duration emerges as work ÷ cap", () => {
+  it("advances a single build by min(cap, remaining, pool) each cycle — duration emerges as work ÷ cap", () => {
     const cap = 10;
-    // workTotal = 8 × cap, pool = cap → the build absorbs exactly `cap` per pulse and lands on pulse 8.
+    // workTotal = 8 × cap, pool = cap → the build absorbs exactly `cap` per cycle and lands on cycle 8.
     let projects = [project("p", HOUSING_TYPE, 1, 0, 8 * cap)];
-    let landedPulse = 0;
-    for (let pulse = 1; pulse <= 8; pulse++) {
+    let landedCycle = 0;
+    for (let cycle = 1; cycle <= 8; cycle++) {
       const r = fundQueue(projects, cap, cap);
       projects = r.projects;
       if (r.landed.length > 0) {
-        landedPulse = pulse;
+        landedCycle = cycle;
         break;
       }
     }
-    expect(landedPulse).toBe(8);
+    expect(landedCycle).toBe(8);
   });
 
   it("does not land before the work is complete", () => {
@@ -118,7 +118,7 @@ describe("fundQueue", () => {
 
   it("lands a project's whole levels at workDone ≥ workTotal and removes it from the open set", () => {
     const cap = 10;
-    // One pulse from completion: remaining work = 5 ≤ cap → lands this pulse.
+    // One cycle from completion: remaining work = 5 ≤ cap → lands this cycle.
     const r = fundQueue([project("p", HOUSING_TYPE, 3, 25, 30)], cap, cap);
     expect(r.projects).toHaveLength(0);
     expect(r.landed).toHaveLength(1);
@@ -134,7 +134,7 @@ describe("fundQueue", () => {
     expect(r.projects.map((p) => p.workDone)).toEqual([cap, cap, cap, cap, 0]);
   });
 
-  it("cascades leftover from a near-complete front to the next build in one pulse", () => {
+  it("cascades leftover from a near-complete front to the next build in one cycle", () => {
     const cap = 10;
     // First build needs only 3 more (< cap): it takes 3, the remaining 7 of its cap-share… no — cap is
     // per-build, so leftover POOL (not cap) cascades. pool = 12: p1 takes min(cap,3,12)=3 → lands;
@@ -223,7 +223,7 @@ describe("fundQueueWithFloor", () => {
 
   it("returns unspent reserve to the general pool rather than wasting it", () => {
     const cap = 10;
-    // Reserve (100) far exceeds what the one eligible build can absorb this pulse (cap = 10); the surplus
+    // Reserve (100) far exceeds what the one eligible build can absorb this cycle (cap = 10); the surplus
     // must fund the non-eligible homeworld build, not vanish.
     const col = projectAt("c", "colony", "food", 1, 0, 1000);
     const home = projectAt("h", "home", "food", 1, 0, 1000);

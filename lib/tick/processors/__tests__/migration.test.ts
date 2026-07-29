@@ -16,7 +16,7 @@ const PARAMS = {
   delivery: NO_DELIVERY,
 };
 
-// Migration is now a cycle pulse: all edges process on ticks where tick % interval === 0.
+// Migration is now a cycle start: all edges process on ticks where tick % interval === 0.
 const EDGE_TICK = 0;
 
 // A tier-0 production building demands 10 heads/unit (labourTotal), so `{ food: 100 }` opens
@@ -81,7 +81,7 @@ describe("migration processor", () => {
     expect(moved2).toBeCloseTo(2 * moved1, 5);
   });
 
-  it("moves nothing on an off-boundary tick (cycle pulse)", async () => {
+  it("moves nothing on an off-boundary tick (cycle start)", async () => {
     const world = new InMemoryMigrationWorld(
       { systems: [sys("a", "f1", 1000, 2000, 0.5), sys("b", "f1", 100, 2000, 0)] },
       [conn("a", "b")],
@@ -109,13 +109,13 @@ describe("migration processor", () => {
   });
 
   it("skips colonist delivery on an off-boundary tick (delivery is cycle-gated)", async () => {
-    // Same source + empty colony and the real delivery params that DO move people on a pulse boundary (the
-    // case above), but run on an off-boundary tick: the cycle-pulse gate must skip the whole processor,
-    // so delivery moves nobody. Guards the delivery pass from drifting above the pulse guard (a 24× rate).
+    // Same source + empty colony and the real delivery params that DO move people on a cycle boundary (the
+    // case above), but run on an off-boundary tick: the cycle-start gate must skip the whole processor,
+    // so delivery moves nobody. Guards the delivery pass from drifting above the cycle-start guard (a 24× rate).
     const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
     const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
     const params = { ...PARAMS, delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 } };
-    await runMigrationProcessor(world, ctx(1), params); // tick 1 % 24 ≠ 0 → off-boundary, whole pulse skipped
+    await runMigrationProcessor(world, ctx(1), params); // tick 1 % 24 ≠ 0 → off-boundary, whole cycle skipped
     expect(world.systems.find((s) => s.id === "core")!.population).toBe(1000);
     expect(world.systems.find((s) => s.id === "colony")!.population).toBe(10);
   });

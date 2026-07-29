@@ -201,8 +201,8 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
       demandRate: m.demandRate,
       storageCapacity: m.storageCapacity,
       satisfaction: 1,
-      squeezePulses: 0,
-      proposalPulses: 0,
+      squeezeCycles: 0,
+      proposalCycles: 0,
     };
   });
 

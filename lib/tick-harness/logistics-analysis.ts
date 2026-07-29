@@ -22,7 +22,7 @@ import type { LogisticsActivitySummary } from "./types";
  * MAX_HOPS, which is colonisation-paced: at the default system count / seed nothing transfers before
  * ~tick 456, so a sub-window run reports a pre-logistics galaxy — one of the three economy pillars
  * essentially outside its window. Measured at 600 systems / seed 42: 500 ticks → 30 transfers over
- * 2 pulses; 1500 ticks → 14,200 over 44. This is a legibility bound, not a correctness one — below it,
+ * 2 cycles; 1500 ticks → 14,200 over 44. This is a legibility bound, not a correctness one — below it,
  * low activity means "too early", not "broken" (which the block's own NOTHING-MOVED line still flags).
  */
 export const LOGISTICS_WARMUP_TICKS = 600;

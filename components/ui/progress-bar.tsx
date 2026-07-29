@@ -45,7 +45,7 @@ interface ProgressBarProps extends ProgressBarVariants {
   formatValue?: (n: number) => string;
   /** Overrides the right-hand "value / max" readout with a single custom string (e.g. a percentage). The fill still tracks value/max. */
   valueText?: string;
-  /** Optional "projected next step" amount (same unit as value/max) rendered as a lighter segment after the fill — e.g. next pulse's construction gain. */
+  /** Optional "projected next step" amount (same unit as value/max) rendered as a lighter segment after the fill — e.g. next cycle's construction gain. */
   projected?: number;
 }
 

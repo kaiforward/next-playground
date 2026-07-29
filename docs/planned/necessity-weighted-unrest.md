@@ -134,12 +134,12 @@ orthogonal to that — it changes how much the *shortfall* counts, not how much 
 
 ### What satisfaction actually measures
 
-`satisfaction` is a **flow**: delivered ÷ demanded for one good in one pulse. It is not a stock gauge,
+`satisfaction` is a **flow**: delivered ÷ demanded for one good in one cycle. It is not a stock gauge,
 and the distinction decides where every threshold in this document sits. Delivery is **full** while
-stock covers at least `RATION_COVER` (2) pulses of demand; below that it ramps as `√(stock / rationStock)`.
-The pricing anchor is `TARGET_COVER` (40) pulses. Because an economy pulse is one cycle, **cover is
-measured in cycles, not days** — the "days-of-supply" wording in the shipped docstrings is legacy and
-should be corrected where it appears.
+stock covers at least `RATION_COVER` (2) cycles of demand; below that it ramps as `√(stock / rationStock)`.
+The pricing anchor is `TARGET_COVER` (40) cycles. **Cover is measured in cycles, not days** — the
+"days-of-supply" wording in the shipped docstrings is legacy and should be corrected where it
+appears.
 
 | Stock (cycles of demand) | Satisfaction | State |
 | --- | --- | --- |
@@ -155,7 +155,7 @@ sits anywhere above the knee. And satisfaction 0.5 means people are receiving ha
 to eat, with under half a cycle in the warehouse: it is already a severe state, not a mild squeeze.
 `RATION_COVER = 2` stands as authored — an underfilled strategic reserve is genuinely not an unmet
 current need, and the gap between the deficit signal (0.8 × anchor, i.e. 32 cycles) and the knee gives
-roughly 30 logistics pulses of warning, with logistics resolving every pulse. **A system that starves
+roughly 30 logistics cycles of warning, with logistics resolving every cycle. **A system that starves
 never ran out of warning; it ran out of supply or of budget to move it** — so widening the buffer is
 never the fix for a starving galaxy.
 
@@ -173,7 +173,7 @@ inversion, and anything gated on a satisfaction cliff scores water at 0.49 ident
 ## The fold
 
 Vocabulary: `sat_g` is per-good civilian satisfaction (delivered ÷ demanded, the flow measured at the
-economy pulse); `demanded_g` is that good's civilian demand.
+economy cycle); `demanded_g` is that good's civilian demand.
 
 ```
 weight_g   = demanded_g × necessity_g
@@ -358,13 +358,13 @@ cleared the bar only because its basket share is 2.4 points higher. The Shortage
 
 **Reads unrest, must be instrumented:** this pass takes ambient equilibrium unrest from ~0.82 to ~0.30
 galaxy-wide and clears the strike flag almost everywhere. Four shipped mechanics read unrest or that
-flag, and all four change behaviour at the same pulse. Every one of their constants was calibrated
+flag, and all four change behaviour at the same cycle. Every one of their constants was calibrated
 against the striking galaxy, so none is pre-tuned here — they are **measured before and after, and
 retuned only where the sim shows a problem.** Tuning them now would be tuning against a galaxy that
 does not exist yet.
 
 - **The purse.** Production tax is levied on realized output, which strike suppression currently cuts
-  to ~64% galaxy-wide; ending the ambient strike raises the tax base ~1.5× in one pulse while
+  to ~64% galaxy-wide; ending the ambient strike raises the tax base ~1.5× in one cycle while
   maintenance bills, which scale with standing build work, do not move. Funded fractions and the
   maintenance output malus both shift.
 - **Directed logistics.** `surplusDrawable`'s deep-exporter path is gated on the strike flag, so today
@@ -372,7 +372,7 @@ does not exist yet.
   become drawable down to their strategic reserve — haul volume and the logistics bill step up.
 - **The build planner's squeeze-feedback backstop.** `strikeExplains` silences the feedback gap
   wherever a system holds capacity in a rationed good, i.e. almost everywhere today. It switches on
-  galaxy-wide at the same pulse that de-suppressed output raises exporter spare and covered fraction —
+  galaxy-wide at the same cycle that de-suppressed output raises exporter spare and covered fraction —
   two effects pushing opposite ways, resultant not derivable from the constants.
 - **Infrastructure decay swaps channels.** The unrest-teardown channel fires at essentially every
   settled system today and goes to exactly zero after this pass — correct, but it leaves the 12-cycle
@@ -436,7 +436,7 @@ Harness targets, on top of the existing coarse health bar:
 - **Built capacity in the eight boosted goods stabilises** over a long run rather than ratcheting
   toward zero — the one-off anchor correction must not become a permanent teardown.
 - Before/after readings for each of the four unrest consumers above: faction solvency and funded
-  fractions, transfers per logistics pulse, levels committed per build pulse, and levels shed per
+  fractions, transfers per logistics cycle, levels committed per build cycle, and levels shed per
   decay channel.
 - The per-**system** share of the three `SupplyRegime` classes is reported in the simulate output — the
   permanent instrument for this pass and future economy work. (The per-good five-state chip metric is

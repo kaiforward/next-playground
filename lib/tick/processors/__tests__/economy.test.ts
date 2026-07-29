@@ -5,7 +5,7 @@
  *   1. Strike suppression: high unrest reduces post-tick stock for producers.
  *   2. Dissatisfaction signal: the returned `economySignals.dissatisfactionBySystem`
  *      reflects demand satisfaction from post-tick stock.
- *   3. Cycle pulse: the whole galaxy resolves on the boundary tick
+ *   3. Cycle start: the whole galaxy resolves on the boundary tick
  *      (tick % interval === 0), nothing off-boundary.
  */
 
@@ -391,9 +391,9 @@ describe("economy processor: supply regime signal", () => {
   });
 });
 
-// ── Cycle pulse: whole-galaxy on the boundary, empty off it ──────
+// ── Cycle start: whole-galaxy on the boundary, empty off it ──────
 
-describe("economy processor: cycle pulse coverage", () => {
+describe("economy processor: cycle start coverage", () => {
   it("processes every system on the boundary tick and none off-boundary", async () => {
     const interval = 4; // small CYCLE_LENGTH stand-in for the test
     const systems = Array.from({ length: 10 }, (_, i) => makeProducerSystem(`sys-${i}`, 0));
@@ -431,7 +431,7 @@ describe("economy processor: cycle pulse coverage", () => {
     // runs, isolating the catch-up factor as the only difference.
     const start = FIXTURE_BAND.minStock + (FIXTURE_BAND.maxStock - FIXTURE_BAND.minStock) / 2;
 
-    // Both runs resolve on tick 0 — a pulse boundary for ANY interval — so the
+    // Both runs resolve on tick 0 — a cycle boundary for ANY interval — so the
     // whole list is processed in each. interval=1 → catchUpFactor 1/24;
     // interval=2 → catchUpFactor 2/24, exactly double the per-resolution step.
     const w1 = new InMemoryEconomyWorld(
@@ -581,7 +581,7 @@ describe("economy processor: selling factor signal", () => {
     }
   });
 
-  it("uses start stock even when the pulse materially changes final stock", async () => {
+  it("uses start stock even when the cycle materially changes final stock", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("p", 0)],
       markets: [makeMarket("p", "food", 40)],
@@ -779,7 +779,7 @@ describe("satisfaction — measured flow, persisted", () => {
 });
 
 describe("economy processor: persisted planner assessment", () => {
-  it("normalizes the persisted realized rate while retaining raw pulse quantity for treasury", async () => {
+  it("normalizes the persisted realized rate while retaining raw cycle quantity for treasury", async () => {
     const rates: number[] = [];
     for (const interval of [12, 24, 48]) {
       const world = new InMemoryEconomyWorld({
@@ -871,39 +871,39 @@ describe("economy processor: persisted planner assessment", () => {
     // one whole reference cycle — the integer 0→1→2 saturation and full-satisfaction reset.
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("consumer", 0)],
-      markets: [{ ...makeMarket("consumer", "food", 0), squeezePulses: 0 }],
+      markets: [{ ...makeMarket("consumer", "food", 0), squeezeCycles: 0 }],
       modifiers: [],
     });
     const ref = { ...ECON_PARAMS, interval: REFERENCE_INTERVAL };
     await runEconomyProcessor(world, makeCtx(0), ref);
-    expect(world.markets[0].squeezePulses).toBe(1);
+    expect(world.markets[0].squeezeCycles).toBe(1);
     await runEconomyProcessor(world, makeCtx(REFERENCE_INTERVAL), ref);
-    expect(world.markets[0].squeezePulses).toBe(2);
+    expect(world.markets[0].squeezeCycles).toBe(2);
     await runEconomyProcessor(world, makeCtx(2 * REFERENCE_INTERVAL), ref);
-    expect(world.markets[0].squeezePulses).toBe(2);
+    expect(world.markets[0].squeezeCycles).toBe(2);
     world.markets[0] = { ...world.markets[0], stock: FIXTURE_BAND.maxStock };
     await runEconomyProcessor(world, makeCtx(3 * REFERENCE_INTERVAL), ref);
-    expect(world.markets[0].squeezePulses).toBe(0);
+    expect(world.markets[0].squeezeCycles).toBe(0);
   });
 
   it("advances squeeze by the interval's reference-time (catchUpFactor), not a flat step", async () => {
-    // A finer cadence advances the clock a fraction of a reference cycle per pulse; a coarser one
+    // A finer cadence advances the clock a fraction of a reference cycle per resolution; a coarser one
     // advances more (and saturates in one assessment) — so "two reference cycles rationed" is the same
-    // wall-clock latency at any economy cadence. Tick 0 is a pulse boundary for any interval.
+    // wall-clock latency at any economy cadence. Tick 0 is a cycle boundary for any interval.
     const fine = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("consumer", 0)],
-      markets: [{ ...makeMarket("consumer", "food", 0), squeezePulses: 0 }],
+      markets: [{ ...makeMarket("consumer", "food", 0), squeezeCycles: 0 }],
       modifiers: [],
     });
     await runEconomyProcessor(fine, makeCtx(0), { ...ECON_PARAMS, interval: 12 });
-    expect(fine.markets[0].squeezePulses).toBeCloseTo(0.5, 6); // catchUpFactor(12) = 0.5
+    expect(fine.markets[0].squeezeCycles).toBeCloseTo(0.5, 6); // catchUpFactor(12) = 0.5
 
     const coarse = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("consumer", 0)],
-      markets: [{ ...makeMarket("consumer", "food", 0), squeezePulses: 0 }],
+      markets: [{ ...makeMarket("consumer", "food", 0), squeezeCycles: 0 }],
       modifiers: [],
     });
     await runEconomyProcessor(coarse, makeCtx(0), { ...ECON_PARAMS, interval: 48 });
-    expect(coarse.markets[0].squeezePulses).toBe(2); // catchUpFactor(48) = 2 saturates in one
+    expect(coarse.markets[0].squeezeCycles).toBe(2); // catchUpFactor(48) = 2 saturates in one
   });
 });

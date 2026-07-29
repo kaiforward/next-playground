@@ -1,7 +1,7 @@
 # Colonisation — Pool-Funded Expansion & Colony Bootstrapping
 
 > **Detailed spec** for how a faction turns open frontier into productive worlds. Colonisation runs inside
-> the directed-build processor's cycle pulse, ahead of the build step, and shares the faction construction
+> the directed-build processor's cycle start, ahead of the build step, and shares the faction construction
 > pool with build-out. Sits *on* the autonomic build/pool machinery in
 > [economy-autonomic-agency.md](./economy-autonomic-agency.md), the territorial `control` tiers in
 > [faction-system.md](./faction-system.md#territorial-expansion-claim-and-develop), and the intra-faction
@@ -39,11 +39,11 @@ other system begins an empty deposit field that expansion colonises into.
 ## Colony lifecycle
 
 ```
-unclaimed ─(cheap, reach-bounded claim; per-pulse cap)→ controlled
+unclaimed ─(cheap, reach-bounded claim; per-cycle cap)→ controlled
 controlled ─(planner scores it as a colony candidate: ROI(c) vs the faction's build ROIs)→
   if its ROI wins pool priority: a COLONY-ESTABLISH project is funded
     (work = base settle cost + the bundled seed housing's build cost)
-  ─(funded from the shared pool over several pulses, value-ordered)→ project completes →
+  ─(funded from the shared pool over several cycles, value-ordered)→ project completes →
     system flips `developed`  +  conserved seed pop transferred  +  housing placed to hold the seed
   ─(now a normal developed system)→ colonist delivery + migration populate it;
     demand-driven build-out fills its deposits/industry as ordinary opportunities
@@ -51,9 +51,9 @@ controlled ─(planner scores it as a colony candidate: ROI(c) vs the faction's 
 
 Every arrow after `controlled` is paced by the same construction pool, so expansion and build-out share one
 budget and one value ranking. **Claim** stays cheap and near-instant here — it is just drawing the border,
-bounded by reach (`EXPANSION.REACH_JUMPS`) and a small per-pulse claim cap; controlled-but-undeveloped
+bounded by reach (`EXPANSION.REACH_JUMPS`) and a small per-cycle claim cap; controlled-but-undeveloped
 systems may pile up as inert borders (population 0, no pool draw). **Develop** is the funded, timed project;
-there is no per-pulse develop cap — the pool and the settler-supply gate pace it.
+there is no per-cycle develop cap — the pool and the settler-supply gate pace it.
 
 ---
 
@@ -141,21 +141,21 @@ academies/complex that gate it (scored at the bundle's ROI so an enabler raises 
 gate-first order), and a `ColonyProposal` is a single-item colony-establish carrying its `colonyValue` and
 `establishWork`. Funding orders all proposals by descending ROI and drains them front-first from the
 per-faction throughput pool (`fundQueue` stays the decision-free drainer; the ROI ordering is entirely a
-reorder of its input). In-flight projects from prior pulses finish before equal-ROI newcomers, so started work
+reorder of its input). In-flight projects from prior cycles finish before equal-ROI newcomers, so started work
 never starves.
 
-There is **no per-pulse develop cap**: every eligible controlled candidate above the ROI floor is proposed,
+There is **no per-cycle develop cap**: every eligible controlled candidate above the ROI floor is proposed,
 and a proposal is persisted as an in-flight `colony_establish` project only once it **receives funding** — so
-the top-ROI few advance while the rest are simply re-scored next pulse and the queue never balloons with
-unfunded colonies. Work accrues over pulses; the system flips `developed` only when the project completes.
-That spread over pulses **is** the establish time — the establish cost is paid in the currency of forgone
+the top-ROI few advance while the rest are simply re-scored next cycle and the queue never balloons with
+unfunded colonies. Work accrues over cycles; the system flips `developed` only when the project completes.
+That spread over cycles **is** the establish time — the establish cost is paid in the currency of forgone
 building. To run faster or slower, move the cost (`COLONY_ESTABLISH_WORK`) or the `σ_floor`/`LAND_PREMIUM`
 knobs, never add a cap.
 
 ### The settler-supply founding gate
 
 A second, population-side throttle keeps a faction from founding more colonies than it can actually populate.
-Each pulse it computes its **releasable settler flow** — idle spare labour plus a small always-on staffed leak,
+Each cycle it computes its **releasable settler flow** — idle spare labour plus a small always-on staffed leak,
 summed over its developed systems — and the number of **hungry** colonies still below their housing cap. New
 foundings are capped to `floor(releasable ÷ MIN_SETTLER_SUPPLY) − hungryColonies` of the best-valued
 candidates, so a faction fills the colonies it has before it sprawls into ones it can never fill. The gate
@@ -171,7 +171,7 @@ An establish completes into a viable colony in one atomic step (`applyDevelopmen
   capacity)` — a land-poor system takes a proportionally smaller seed. It transfers from the nearest developed
   same-faction system, fixed at proposal time and capped at apply time by what that source can still spare, so
   it is subtracted from the source and added to the colony — never minted. A shared source's remaining
-  spendable population is tracked across the pulse so two establishments can't both draw the same people.
+  spendable population is tracked across the cycle so two establishments can't both draw the same people.
 - **Housing is bundled, sized to hold the seed.** `housingLevels = ceil(seedPop ÷ POP_CENTRE_DENSITY)`, bounded
   by the colony's habitable land, so `popCap ≥ seedPop` the instant the colony exists. There is no `popCap ≈ 0`
   stranded-population state. The bundled housing's build cost is rolled into the establish work total.
@@ -199,10 +199,10 @@ fill. (Full autonomic-build detail: [economy-autonomic-agency.md](./economy-auto
 
 Gradient diffusion migration is a local flow: it balances neighbours but mathematically cannot reach a colony
 several hops from any population (people puddle near the cores). Two mechanisms fix that, both on the cycle
-migration pulse:
+migration cycle:
 
 - **Routed colonist delivery** (`lib/engine/colonist-delivery.ts`) is the primary colony population supply.
-  Each pulse every sufficiently-populated developed system contributes a rate-capped slice of its **idle spare**
+  Each cycle every sufficiently-populated developed system contributes a rate-capped slice of its **idle spare**
   (population above its own job needs — never its working population, so cores don't crater) into a faction
   pool, and the pool is **water-filled** across the faction's developed systems: it raises the *emptiest*
   colonies first toward a common level, capped by each one's housing headroom. Because it fills the lowest, not
@@ -274,6 +274,6 @@ originators. The verb shares the planner's own eligibility check and sizing func
 autonomic one: same habitable floor, same reachable-seed-source requirement, same land-sized seed +
 bundled housing. It enters the same `world.constructionProjects` queue with `origin: "player"`, funds from
 the same per-faction pool, and — unlike an autonomic colony-establish — is never dropped for going
-unfunded a pulse (persist-if-funded is auto-only; a player order is a standing commitment until funded or
+unfunded a cycle (persist-if-funded is auto-only; a player order is a standing commitment until funded or
 cancelled). Player rows also outrank new autonomic proposals in funding order. Full verb + UI detail:
 [player-seat.md](./player-seat.md).

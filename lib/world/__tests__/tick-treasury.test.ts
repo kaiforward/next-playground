@@ -50,7 +50,7 @@ function rigLogisticsPair(world: World, factionId: string): World {
 }
 
 describe("treasury over the live tick", () => {
-  it("settles every faction on the cycle pulse with finite, non-negative state", async () => {
+  it("settles every faction on the cycle start with finite, non-negative state", async () => {
     let world = generateWorld({ systemCount: 40, seed: 11 });
     let sawTreasuryRun = false;
     for (let i = 0; i < CYCLE_LENGTH; i++) {
@@ -77,28 +77,28 @@ describe("treasury over the live tick", () => {
     expect(totalIncome).toBeGreaterThan(0);
   });
 
-  it("accrues band-pulse work off the cycle pulse without settling, then bills it at the boundary", async () => {
-    // Divergent cadences: construction/logistics pulse at 24 while the cycle is 48,
+  it("accrues the bands' work mid-cycle without settling, then bills it at the boundary", async () => {
+    // Divergent cadences: construction/logistics cycle at 24 while the economy cycle is 48,
     // so the treasury gate's hasWork-only branch fires mid-cycle.
     const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
-    let sawOffPulseAccrual = false;
+    let sawMidCycleAccrual = false;
     for (let tick = 1; tick <= 47; tick++) {
       const result = await runWorldTick(world, { cadence });
       world = result.world;
       if (result.events.processors?.includes("treasury")) {
-        sawOffPulseAccrual = true;
+        sawMidCycleAccrual = true;
         // Accrual must never settle ahead of the cycle boundary.
         for (const t of world.treasuries) expect(t.lastSettlement, t.factionId).toBeNull();
       }
     }
-    expect(sawOffPulseAccrual).toBe(true);
+    expect(sawMidCycleAccrual).toBe(true);
     const accrued = world.treasuries.reduce(
       (acc, t) => acc + t.pendingWork.construction + t.pendingWork.logistics, 0);
     expect(accrued).toBeGreaterThan(0);
     expect(Number.isFinite(accrued)).toBe(true);
 
-    const boundary = await runWorldTick(world, { cadence }); // tick 48 — the cycle pulse
+    const boundary = await runWorldTick(world, { cadence }); // tick 48 — the cycle start
     world = boundary.world;
     expect(boundary.events.processors).toContain("treasury");
     for (const t of world.treasuries) {
@@ -108,7 +108,7 @@ describe("treasury over the live tick", () => {
   });
 
   it("a zero-funded construction band performs no construction work (the queue waits)", async () => {
-    // Divergent cadences so construction pulses mid-cycle and its work lands in
+    // Divergent cadences so construction resolves mid-cycle and its work lands in
     // pendingWork (observable before settlement clears it).
     const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
@@ -125,13 +125,13 @@ describe("treasury over the live tick", () => {
     }
     const starved = world.treasuries.find((t) => t.factionId === starvedId)!;
     expect(starved.pendingWork.construction).toBe(0);
-    // The gate is per-faction: fully-funded factions still worked this pulse.
+    // The gate is per-faction: fully-funded factions still worked this cycle.
     const others = world.treasuries.filter((t) => t.factionId !== starvedId);
     expect(others.reduce((acc, t) => acc + t.pendingWork.construction, 0)).toBeGreaterThan(0);
   });
 
   it("a zero-funded logistics band hauls nothing while a funded twin hauls", async () => {
-    // Same divergent cadences: logistics pulses at 24, mid-cycle, so its work
+    // Same divergent cadences: logistics resolves at 24, mid-cycle, so its work
     // lands in pendingWork (observable before settlement clears it).
     const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
@@ -149,7 +149,7 @@ describe("treasury over the live tick", () => {
       const result = await runWorldTick(world, { cadence });
       world = result.world;
     }
-    // The rig works: the identically-rigged funded faction hauled this pulse...
+    // The rig works: the identically-rigged funded faction hauled this cycle...
     const funded = world.treasuries.find((t) => t.factionId === fundedId)!;
     expect(funded.pendingWork.logistics).toBeGreaterThan(0);
     // ...so the starved faction's zero is the funding gate, not a dead rig.
@@ -178,7 +178,7 @@ describe("treasury over the live tick", () => {
     const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
     const control = await run(null);
     const starved = await run(control.factions[0].id);
-    // The malus reached the economy pulse: the starved homeworld produced less...
+    // The malus reached the economy cycle: the starved homeworld produced less...
     expect(sum(homeStocks(starved, 0))).toBeLessThan(sum(homeStocks(control, 0)));
     // ...while an unstarved faction's homeworld is bit-identical (per-system map).
     expect(homeStocks(starved, 1)).toEqual(homeStocks(control, 1));

@@ -12,7 +12,7 @@ function label(ticks: number): string {
 
 /**
  * Compact "next update in N ticks" countdown for the system panel header. Under
- * the cycle resolution pulse the whole galaxy — every system's economy,
+ * the cycle resolution the whole galaxy — every system's economy,
  * population and infrastructure plus its faction's logistics and build — resolves
  * together on the cycle boundary, so it is one countdown. Pure clock math off the
  * live tick; no refetch.
@@ -22,7 +22,7 @@ export function SystemCadenceCountdown({ systemId }: { systemId: string }) {
   const { currentTick } = useTickContext();
   if (!cadence) return null;
 
-  const next = ticksUntilShard(cadence.pulseGroup, currentTick, CYCLE_LENGTH);
+  const next = ticksUntilShard(cadence.resolutionGroup, currentTick, CYCLE_LENGTH);
 
   return (
     <div className="hidden items-center gap-2.5 font-mono text-xs text-text-tertiary sm:flex">

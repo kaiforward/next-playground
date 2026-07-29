@@ -227,7 +227,7 @@ describe("summarizeConstructionPool", () => {
     expect(s.centreShare).toBeCloseTo(s.poolCentres / (s.poolBase + s.poolCentres));
     expect(s.centreLevels).toBe(1);
     expect(s.queueRemainingWork).toBe(30);
-    expect(s.queueEtaPulses).toBeCloseTo(30 / (s.poolBase + s.poolCentres));
+    expect(s.queueEtaCycles).toBeCloseTo(30 / (s.poolBase + s.poolCentres));
   });
 
   it("reports a null ETA when nothing funds the queue", () => {
@@ -235,7 +235,7 @@ describe("summarizeConstructionPool", () => {
       { kind: "build", id: "p1", origin: "auto", factionId: "f1", systemId: "x", buildingType: "metals",
         levels: 1, workTotal: 20, workDone: 0 },
     ]);
-    expect(s.queueEtaPulses).toBeNull();
+    expect(s.queueEtaCycles).toBeNull();
     expect(s.queueRemainingWork).toBe(20);
   });
 
@@ -253,21 +253,21 @@ describe("summarizeBuildBursts", () => {
     return { tick, goodId, levels };
   }
 
-  it("tracks each good's worst single-pulse commitment and the tick it occurred", () => {
+  it("tracks each good's worst single-cycle commitment and the tick it occurred", () => {
     const records: BuildCommitmentRecord[] = [
       rec(24, "food", 3),
       rec(48, "food", 7), // food's worst
       rec(72, "food", 5),
-      rec(24, "metals", 10), // metals' (only, and worst) pulse
+      rec(24, "metals", 10), // metals' (only, and worst) cycle
     ];
     const summary = summarizeBuildBursts(records);
     const food = summary.byGood.find((g) => g.goodId === "food");
     const metals = summary.byGood.find((g) => g.goodId === "metals");
-    expect(food).toEqual({ goodId: "food", maxLevelsPerPulse: 7, tick: 48 });
-    expect(metals).toEqual({ goodId: "metals", maxLevelsPerPulse: 10, tick: 24 });
+    expect(food).toEqual({ goodId: "food", maxLevelsPerCycle: 7, tick: 48 });
+    expect(metals).toEqual({ goodId: "metals", maxLevelsPerCycle: 10, tick: 24 });
   });
 
-  it("sorts byGood descending by maxLevelsPerPulse, breaking ties alphabetically by goodId", () => {
+  it("sorts byGood descending by maxLevelsPerCycle, breaking ties alphabetically by goodId", () => {
     const records: BuildCommitmentRecord[] = [
       rec(24, "food", 5),
       rec(24, "metals", 5), // tied with food — alphabetical tiebreak
@@ -299,18 +299,18 @@ describe("summarizeBuildBursts", () => {
 
   it("keeps the first-seen tick's max, not the LAST tick a good was committed", () => {
     // The max is 7 at tick 24; later ticks propose fewer levels, so the tick pinned must stay 24 —
-    // proving the summary tracks the pulse the maximum happened at, not just the final observation.
+    // proving the summary tracks the cycle the maximum happened at, not just the final observation.
     const records: BuildCommitmentRecord[] = [rec(24, "food", 7), rec(48, "food", 2), rec(72, "food", 1)];
     const summary = summarizeBuildBursts(records);
-    expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerPulse: 7, tick: 24 }]);
+    expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerCycle: 7, tick: 24 }]);
   });
 
   it("keeps the first-seen tick on an equal-maxima tie (strict >, not >=)", () => {
-    // Two pulses commit the SAME max levels; the strict `>` means the first-seen tick (24) must be pinned,
-    // not overwritten by the later equal pulse (48). A `>=` regression would pin 48 instead.
+    // Two cycles commit the SAME max levels; the strict `>` means the first-seen tick (24) must be pinned,
+    // not overwritten by the later equal cycle (48). A `>=` regression would pin 48 instead.
     const records: BuildCommitmentRecord[] = [rec(24, "food", 5), rec(48, "food", 5)];
     const summary = summarizeBuildBursts(records);
-    expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerPulse: 5, tick: 24 }]);
+    expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerCycle: 5, tick: 24 }]);
   });
 });
 
@@ -343,13 +343,13 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(tracker.get("c1")?.foundedTick).toBe(12);
   });
 
-  it("reads at the first pulse strictly after founding, never the founding pulse itself", () => {
+  it("reads at the first cycle strictly after founding, never the founding cycle itself", () => {
     const tracker = new Map<string, FoundedColonyRecord>();
     const systems = [sys("c1", "developed")];
     const markets = [mkt("c1", "food", 1), mkt("c1", "water", 1)];
     trackFoundedColonies(systems, 24, new Set(), tracker);
 
-    // Founded ON a pulse tick: that same pulse assessed a system that did not exist for the cycle.
+    // Founded ON a cycle-start tick: that same cycle assessed a system that did not exist for the cycle.
     expect(hasColonyAwaitingSample(tracker, 24)).toBe(false);
     sampleFoundedColonies(systems, markets, 24, tracker);
     expect(tracker.get("c1")?.openingSatisfaction).toBeNull();
@@ -382,7 +382,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       .toBeGreaterThan(noLuxuries.get("c1")!.openingDissatisfaction!);
   });
 
-  it("keeps the opening reading, ignoring later pulses", () => {
+  it("keeps the opening reading, ignoring later cycles", () => {
     const tracker = new Map<string, FoundedColonyRecord>();
     const systems = [sys("c1", "developed")];
     trackFoundedColonies(systems, 24, new Set(), tracker);
@@ -401,7 +401,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
 
     const summary = summarizeFoundingStock(tracker);
     expect(summary.foundedCount).toBe(3);
-    expect(summary.sampledCount).toBe(2);       // 'c' never reached a pulse — not a zero in the mean
+    expect(summary.sampledCount).toBe(2);       // 'c' never reached a cycle — not a zero in the mean
     expect(summary.meanOpeningSatisfaction).toBeCloseTo(0.5, 6);
     expect(summary.meanOpeningDissatisfaction).toBeCloseTo(0.41, 6);
     expect(summary.openingDeprivedCount).toBe(1);

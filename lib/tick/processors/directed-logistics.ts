@@ -1,5 +1,5 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
+import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import {
@@ -33,7 +33,7 @@ export interface DirectedLogisticsProcessorParams {
 
 /**
  * Build the engine's per-system state from raw rows: generation + per-good band + total demand.
- * Generation is per-pulse income and scales by the catch-up factor and funding; the per-good gap-fills
+ * Generation is per-cycle income and scales by the catch-up factor and funding; the per-good gap-fills
  * deliberately do NOT (see the processor doc below).
  */
 function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: number): SystemLogisticsState {
@@ -46,8 +46,8 @@ function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: numb
 }
 
 /**
- * Pure processor body. Cycle resolution pulse: on the boundary tick
- * (`tick % interval === 0`) every faction is matched at once via `pulseShard`;
+ * Pure processor body. Cycle resolution: on the boundary tick
+ * (`tick % interval === 0`) every faction is matched at once via `cycleStartShard`;
  * every other tick is a no-op. Matched volume is moved silently (stock deltas +
  * logistics flow rows).
  *
@@ -59,7 +59,7 @@ function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: numb
  *    donors / cheap re-export targets. The anchor (40 economy-runs of cover) already
  *    vastly exceeds one cycle's draw, so a single fill-to-anchor over-provisions on its own.
  *  - The haul *budget* IS scaled (`generation × catchUp` in `toLogisticsState`). It is
- *    per-pulse income (Σ pop × generation, exhaustion = deliberate under-serve); paid
+ *    per-cycle income (Σ pop × generation, exhaustion = deliberate under-serve); paid
  *    unscaled but more often, it would silently inflate wall-clock haul capacity exactly
  *    in the budget-bound under-serve regime the mechanic is designed around.
  */
@@ -71,11 +71,11 @@ export async function runDirectedLogisticsProcessor(
   const factionKeys = await world.getFactionShardKeys();
   if (factionKeys.length === 0) return {};
 
-  const { start, end } = pulseShard(factionKeys.length, ctx.tick, params.interval);
+  const { start, end } = cycleStartShard(factionKeys.length, ctx.tick, params.interval);
   const dueKeys = factionKeys.slice(start, end);
   if (dueKeys.length === 0) return {};
 
-  // Per-pulse haul budget is reference-denominated; scale it so wall-clock haul capacity is
+  // Per-cycle haul budget is reference-denominated; scale it so wall-clock haul capacity is
   // interval-invariant. Deliveries (level-fills toward the anchor) are not scaled.
   const catchUp = catchUpFactor(params.interval);
 
@@ -145,7 +145,7 @@ export async function runDirectedLogisticsProcessor(
     const fromCur = updates.get(from.id) ?? from.stock;
     const toCur = updates.get(to.id) ?? to.stock;
     // The matcher already applies the donor's policy reserve (strategic exporters may
-    // draw below their anchor). This is only physical belt-and-braces against same-pulse
+    // draw below their anchor). This is only physical belt-and-braces against same-cycle
     // concurrent writes, so its floor remains zero.
     const moved = Math.min(
       qty,
