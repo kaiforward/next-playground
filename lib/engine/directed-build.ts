@@ -14,7 +14,7 @@ import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/developmen
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { clamp } from "@/lib/utils/math";
-import { dissatisfaction } from "@/lib/engine/population";
+import { hasSurvivalShortfall } from "@/lib/engine/population";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import {
   BUILDING_TYPES, OUTPUT_PER_UNIT, effectiveSpaceCost, HOUSING_TYPE, POP_CENTRE_DENSITY,
@@ -39,9 +39,9 @@ export interface BuildGoodState {
   targetStock: number;
   /** Total local demand rate (civilian + industrial); severity weight + the self-supply gate (vs production). */
   demand: number;
-  /** Civilian-only demand rate — the fed-gate's weight (see supplyDissatisfaction). Optional for
-   *  engine-test fixtures, which then read as having nobody to feed (D = 0, i.e. fed) exactly as a
-   *  missing `satisfaction` reads as fully delivered; the tick path always supplies it via
+  /** Civilian-only demand rate — what the fed gate reads to know whether anyone here wants this good.
+   *  Optional for engine-test fixtures, which then read as having nobody to feed (i.e. fed) exactly as
+   *  a missing `satisfaction` reads as fully delivered; the tick path always supplies it via
    *  toGoodMarketStates. */
   civilianDemand?: number;
   /**
@@ -119,31 +119,28 @@ export function hopRouteCost(
 }
 
 /**
- * Civilian-only, necessity-weighted dissatisfaction D in [0,1] for one system — the input to the
- * housing "fed" gate. Reuses the population engine's fold over the economy cycle's persisted per-good
- * satisfaction (delivered ÷ demanded — the same measure the needs display reads), so a
- * deliberately-at-comfort exporter with full delivery reads as satisfied. Weighted by CIVILIAN demand
- * alone: the gate means exactly one thing, "are the people here fed?", and industrial-input
- * starvation is not a reason to refuse shelter. Missing satisfaction ⇒ 1; missing civilian demand ⇒ 0.
+ * Fed gate: a system grows housing only while its people are actually fed — no survival good it
+ * demands is delivered below SHORTAGE_SATISFACTION. Reads the economy cycle's persisted per-good
+ * satisfaction (delivered ÷ demanded, the same measure the needs display reads) against CIVILIAN
+ * demand alone, so a deliberately-at-comfort exporter reads as fed and industrial-input starvation is
+ * not a reason to refuse shelter. Missing satisfaction ⇒ 1; missing civilian demand ⇒ nobody to feed.
+ *
+ * Deliberately the survival test and NOT the whole basket's necessity-weighted fold. Medicine and
+ * consumer goods are delivered almost nowhere, so every inhabited world carries an ambient basket
+ * deficit that has nothing to do with feeding anyone; a fold-wide cut therefore refuses shelter over
+ * a medicine shortage, and refuses it hardest on the small colony whose only route out is the
+ * workforce that housing would let it hold. Unrest is not a gate either, for the same reason:
+ * crowding is itself an unrest source, so refusing relief housing on a restive world would hold the
+ * valve shut on exactly the world that needs it.
  */
-export function supplyDissatisfaction(goods: BuildGoodState[]): number {
-  return dissatisfaction(
-    goods.map((g) => ({
+export function fed(sys: BuildSystemState): boolean {
+  return !hasSurvivalShortfall(
+    sys.goods.map((g) => ({
       goodId: g.goodId,
       satisfaction: clamp(g.satisfaction ?? 1, 0, 1),
       demanded: Math.max(0, g.civilianDemand ?? 0),
     })),
   );
-}
-
-/**
- * Fed gate: a system grows housing only while it is well-supplied (D ≤ D_SETTLE) — a starving
- * world stands up nothing until its supply recovers. Unrest is deliberately NOT a gate: crowding
- * is itself an unrest source, so refusing to build relief housing on a restive world would hold
- * the valve shut on exactly the world that needs it.
- */
-export function fed(sys: BuildSystemState): boolean {
-  return supplyDissatisfaction(sys.goods) <= DIRECTED_BUILD.D_SETTLE;
 }
 
 /**

@@ -11,12 +11,6 @@ export const DIRECTED_BUILD = {
   /** Per-unit route cost of a system serving ITSELF — the cheapest positive route, so self-supply
    *  outranks export in the planner's served ÷ cost scoring. Must be 0 < SELF_COST < HOP_WEIGHT. */
   SELF_COST: 0.5,
-  /** "Fed" gate: grow housing only where CIVILIAN, necessity-weighted supply-dissatisfaction D ≤ this
-   *  (0…1). Cut above the ambient barren-galaxy deficit (≈0.14 under GOOD_NECESSITY, which every
-   *  import-short world carries and which must not block housing) and below D_SHORTAGE_CUT, so a
-   *  system the simulation calls starving never stands up new housing. First cut; the simulator owns
-   *  the final. */
-  D_SETTLE: 0.20,
   /** Relief trigger: autonomic housing builds once occupancy r = pop/popCap rises past this. */
   RELIEF_TRIGGER: 0.95,
   /** Relief sizing: build enough whole levels to return r to ≈ this. Multi-level relief must land

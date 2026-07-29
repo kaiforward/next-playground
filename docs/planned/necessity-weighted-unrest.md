@@ -343,7 +343,8 @@ cleared the bar only because its basket share is 2.4 points higher. The Shortage
   becomes **civilian-only and necessity-weighted**, meaning exactly one thing: *are the people here
   fed?* Industrial-input starvation stops blocking housing, which is correct — industry is a route out
   of a famine, not a reason to refuse shelter, and `fed()` gates housing alone (it has one caller and
-  has never gated industry). `D_SETTLE` is re-cut against the new distribution.
+  has never gated industry). The gate reads the survival floor rather than a cut on the fold: a
+  basket-wide cut carries the ambient tier-1 deficit and refuses shelter over a medicine shortage.
 - **`POPULATION_PARAMS`' symmetric growth/decline rates**, whose docstring justifies the symmetry
   *in terms of* "an unavoidable D ≈ 0.4". That premise is what this pass deletes; the docstring is
   rewritten with the change, not blindly preserved.

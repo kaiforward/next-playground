@@ -15,9 +15,23 @@ import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { unrestSlope } from "@/lib/engine/population";
-import { sizeColonyEstablish } from "@/lib/engine/directed-build";
+import { unrestSlope, dissatisfaction, hasSurvivalShortfall, type GoodSatisfaction } from "@/lib/engine/population";
+import { sizeColonyEstablish, fed, type BuildSystemState } from "@/lib/engine/directed-build";
 import { housingUsed, idleLevels } from "@/lib/engine/infrastructure-decay";
+import { emptyResourceVector } from "@/lib/engine/resources";
+
+/** A minimal buildable system carrying just the market readings the fed gate looks at. */
+function sysWithGoods(readings: GoodSatisfaction[]): BuildSystemState {
+  return {
+    systemId: "s1", factionId: "f1", control: "developed", population: 20, unrest: 0,
+    buildings: {}, slotCap: emptyResourceVector(),
+    generalSpace: 10, habitableSpace: 10,
+    goods: readings.map((r) => ({
+      goodId: r.goodId, stock: 0, targetStock: 0, demand: r.demanded, civilianDemand: r.demanded,
+      capacityProduction: 0, satisfaction: r.satisfaction,
+    })),
+  };
+}
 
 describe("band constant dependencies", () => {
   it("starts logistics replenishment well before emergency rationing", () => {
@@ -169,9 +183,27 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
     expect(unrestSlope(0.05, true, UNREST_PARAMS)).toBe(UNREST_PARAMS.slopeShortage);
   });
 
-  it("keeps the housing fed-gate below the shortage cut", () => {
-    // A system the simulation calls starving must never be standing up new housing.
-    expect(DIRECTED_BUILD.D_SETTLE).toBeLessThan(D_SHORTAGE_CUT);
+  it("refuses housing on exactly the systems the survival floor calls starving", () => {
+    // The fed gate reads the survival floor itself, so the two cannot drift: a world below the
+    // shortage line on a staple never stands up new housing.
+    const starving = SURVIVAL_GOODS.map((goodId) => ({
+      goodId, satisfaction: SHORTAGE_SATISFACTION - 0.01, demanded: 1,
+    }));
+    expect(hasSurvivalShortfall(starving)).toBe(true);
+    expect(fed(sysWithGoods(starving))).toBe(false);
+
+    // The ambient barren-galaxy basket: staples fully delivered, an unmakeable tier-1 good at zero.
+    // Its necessity-weighted fold clears the shortage cut yet exceeds a 0.20 basket-wide gate — the
+    // band in which a fed world used to be refused its own housing.
+    const ambient = [
+      ...SURVIVAL_GOODS.map((goodId) => ({ goodId, satisfaction: 1, demanded: 1 })),
+      { goodId: "medicine", satisfaction: 0, demanded: 0.7 },
+    ];
+    const ambientD = dissatisfaction(ambient);
+    expect(ambientD).toBeGreaterThan(0.2);
+    expect(ambientD).toBeLessThan(D_SHORTAGE_CUT);
+    expect(hasSurvivalShortfall(ambient)).toBe(false);
+    expect(fed(sysWithGoods(ambient))).toBe(true);
   });
 });
 

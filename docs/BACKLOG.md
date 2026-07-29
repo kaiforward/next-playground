@@ -83,7 +83,7 @@ Well-defined, can start now.
   per-system `unrest` copy that nothing reads. `BuildSystemState.unrest`
   (`lib/engine/directed-build.ts`) and `SystemBuildRow.unrest` (`lib/tick/world/directed-build-world.ts`)
   went dead when the housing relief valve replaced the settle-margin pacer: the valve is gated on
-  supply alone (`fed()` reads only `supplyDissatisfaction(sys.goods)`), so the old calm gate that
+  supply alone (`fed()` reads only its goods' survival satisfaction), so the old calm gate that
   consumed unrest is gone. `fed()`'s docstring already records that unrest is deliberately not a gate —
   the field is simply the leftover input. Verified dead three times independently (two task reviews
   plus a cross-layer sweep): the only occurrences in the whole build path are the two declarations,
@@ -105,27 +105,40 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
-- **[M] Colony bootstrap deadlock: the housing fed-gate locks against `popCap`** — found measuring the
-  necessity-unrest slice (3000 ticks, seed 42, 600 systems): 32 of 573 settled systems end striking, and
-  the differentiator is neither endowment (yield 7.59 striking vs 7.78 calm) nor remoteness (3.91 vs 3.72
-  hops, degree 6.19 vs 6.20) nor overcrowding (34.4% vs 34.6% over cap). It is a self-reinforcing lock:
-  a colony opens deprived and settles at D ≈ 0.25–0.33; `DIRECTED_BUILD.D_SETTLE` is 0.20, so `fed()`
-  never opens; no housing means `popCap` stays at the seed 20, which means no labour to build the
-  industry that would lower D. Unrest then integrates to `floor + slopeShortage × D` ≈ 0.80 and crosses
-  the strike line. Calm systems' median D is 0.12 and strikers' is 0.29 — the gate sits between them, so
-  the outcome turns on which side of a 0.20 line a colony lands, not on where it is or what it sits on.
-  Escapes are real but fragile: one system dipped to D 0.199, snowballed 20 → 140 pop / 3 → 15 buildings,
-  then hit its new cap, went back over the gate and is sliding back in; another escaped and was
-  recaptured by a survival shortfall, decaying 12 → 8 buildings.
-  **`fed()`'s own docstring already makes the argument against this**: "Unrest is deliberately NOT a gate:
-  crowding is itself an unrest source, so refusing to build relief housing on a restive world would hold
-  the valve shut on exactly the world that needs it." The same holds for supply — refusing housing on a
-  supply-short world holds the valve shut on exactly the world that needs labour to fix its supply.
-  A `D_SETTLE` nudge is not the fix (it only moves which colonies land unlucky); the shape wanted is
-  structural — gate on *trend* rather than level, or exempt the first housing level so a colony can always
-  reach viable size once. Related but distinct: colonies still *open* deprived (opening D 0.561 vs the
-  0.25 cut), which is founding-manifest sizing. Booked from PR #203; **pick up after that branch's
-  review**, not during it.
+- **[M] Manufactured goods never reach the worlds that cannot make them** — the galaxy produces MORE
+  than it consumes of every good the deprived worlds lack, and still delivers them almost none of it
+  (3000 ticks, seed 42, 600 systems). Medicine: 234 levels on 85 of 573 settled systems, 84.0K produced
+  against 79.5K demanded — yet median civilian satisfaction is **0.000** and market cover **0.00x**.
+  Same shape for consumer goods (173.0K vs 165.1K), gas (463.8K vs 427.4K), textiles (198.3K vs 188.5K),
+  chemicals, biomass. Every good clears its own demand by only 5–8%, which is `PROVISION_MARGIN` (0.10):
+  the planner sizes each world's capacity to its OWN demand, so nobody accumulates a real export surplus.
+  **Three explanations are already measured dead** — check before re-proposing any of them. It is not
+  reach (the stuck worlds have a median of **24 developed systems within the 4-hop cap**, none isolated,
+  and 0 of 23 lack a reachable supplier for something they need; the only goods with no reachable spare
+  are weapons systems and luxuries). It is not missing industry (see the levels above). And it is not the
+  export gate: `surplusDrawable` puts any producer with `production > demand` on the exporter path, which
+  ships down to `STRATEGIC_EXPORT_RESERVE_FRAC` (0.75) of its anchor and never consults `SURPLUS_MARGIN`
+  (1.4) at all — so matching `SURPLUS_MARGIN` to `PROVISION_MARGIN` would change nothing on the path
+  producers actually take. Logistics itself is emphatically alive (88.9K transfers, 32.4M units, 572 of
+  573 systems participating, 25 of 26 goods moved) but the volume is bulk tier-0: gas 5.3M, water 3.3M,
+  ore 3.0M, food 2.6M, fuel 2.4M. **Open question:** whether producers' stock ever accumulates (cover
+  0.00x suggests it is consumed on arrival) or whether the per-cycle logistics work budget is spent on
+  bulk staples before the small high-value goods are reached. This is the ambient deficit every other
+  band constant was cut against, so it is upstream of unrest tuning, not downstream.
+- **[M] Struck worlds can neither grow out of it nor die** — 23 of 573 settled systems (1,343 people,
+  0.4% of the galaxy) sit striking indefinitely: median D 0.486, unrest 0.982, pop 39.5 at a popCap of
+  40, and **zero** of them declining over the last 500 ticks. Growth carries `(1 − D)` and decline
+  carries unrest, so at high D the two terms nearly cancel and the world parks there. About half are
+  short of food or water with no local deposit (12.5% hold an arable slot vs 74% of healthy worlds), and
+  the other half are fed but get no medicine/gas/textiles — the item above. **Half of them also have no
+  habitable land left**, which is a real physical limit no rule change should override. Neither
+  remoteness nor overcrowding is the cause (measured: 3.91 vs 3.72 hops to a homeworld, degree 6.19 vs
+  6.20; 34.4% vs 34.6% over popCap — and `CROWDING.PRESSURE_MAX` is 0.05, so overcrowding cannot reach
+  0.82 unrest structurally). Two shapes worth weighing: let a chronically-struck world actually die
+  (break the growth/decline cancellation), or stop founding colonies that can never be supplied —
+  colonies still *open* deprived (opening satisfaction 0.18, dissatisfaction 0.637; 553 of 553 opened
+  below the 0.50 cut), which is founding-manifest sizing rather than the gate. Do the item above first:
+  it is roughly half the cause and may shrink this cohort on its own.
 - **Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
   real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
   is currently 1 for every good and `GOODS.priceFloor`/`priceCeiling` is a pure tier lookup with zero

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, supplyDissatisfaction, fed, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, fed, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
@@ -12,6 +12,7 @@ import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { ResourceVector } from "@/lib/types/game";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
+import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 
 /** ore's total per-unit head count (labour.unskilled + skill1 + skill2) — shared across fixtures. */
 const oreLabour = labourTotal(BUILDING_TYPES.ore!.labour!);
@@ -631,87 +632,57 @@ describe("planFactionBuilds performance", () => {
   });
 });
 
-describe("supplyDissatisfaction", () => {
-  it("is ~0 when every demanded good is fully delivered", () => {
-    const d = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0 },
-      { goodId: "water", stock: 30, targetStock: 20, demand: 8, civilianDemand: 8, capacityProduction: 0 },
-    ]);
-    expect(d).toBeCloseTo(0);
+describe("fed", () => {
+  // civilianDemand tells the gate whether anyone here wants the good, so it must be present for
+  // these to exercise the genuine branches — omitting it reads as "nobody to feed", which is fed.
+  const good = (partial: Partial<BuildGoodState> & { goodId: string }): BuildGoodState => ({
+    stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, ...partial,
+  });
+  const fedGoods = [good({ goodId: "food", satisfaction: 1 }), good({ goodId: "water", satisfaction: 1 })];
+
+  it("is true when every survival good is delivered", () => {
+    expect(fed(sysWith({ goods: fedGoods }))).toBe(true);
   });
 
-  it("is high when a survival good is undelivered", () => {
-    const d = supplyDissatisfaction([
-      { goodId: "food", stock: 1, targetStock: 20, demand: 100, civilianDemand: 100, capacityProduction: 0, satisfaction: 0 },
-      { goodId: "luxuries", stock: 10, targetStock: 10, demand: 1, civilianDemand: 1, capacityProduction: 0 },
-    ]);
-    expect(d).toBeGreaterThan(0.5);
+  it("is false when a demanded survival good falls below the shortage line", () => {
+    for (const goodId of ["food", "water"]) {
+      const starved = [...fedGoods.filter((g) => g.goodId !== goodId), good({ goodId, satisfaction: SHORTAGE_SATISFACTION - 0.01 })];
+      expect(fed(sysWith({ goods: starved })), goodId).toBe(false);
+    }
+  });
+
+  it("is true exactly at the shortage line — the boundary is still rationing, not famine", () => {
+    const rationed = [good({ goodId: "food", satisfaction: SHORTAGE_SATISFACTION }), good({ goodId: "water", satisfaction: 1 })];
+    expect(fed(sysWith({ goods: rationed }))).toBe(true);
+  });
+
+  it("is true when the shortage is in a non-survival good — a medicine gap is not a reason to refuse shelter", () => {
+    // The ambient barren-galaxy basket: staples arrive, the unmakeable tier-1 goods never do. A
+    // basket-wide gate refused housing here, which is what locked a fed colony at its seed size.
+    const ambient = [
+      ...fedGoods,
+      good({ goodId: "medicine", satisfaction: 0 }),
+      good({ goodId: "consumer_goods", satisfaction: 0 }),
+      good({ goodId: "textiles", satisfaction: 0 }),
+    ];
+    expect(fed(sysWith({ goods: ambient }))).toBe(true);
   });
 
   it("ignores industrial input starvation — the gate asks whether the PEOPLE are fed", () => {
     // A refinery world whose ore feed is dry but whose residents eat. Housing must not be blocked:
-    // industry is a route out of a famine, not a reason to refuse shelter.
-    const d = supplyDissatisfaction([
-      { goodId: "ore", stock: 0, targetStock: 100, demand: 500, civilianDemand: 0, capacityProduction: 0, satisfaction: 0 },
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 1 },
-    ]);
-    expect(d).toBe(0);
+    // industry is a route out of a famine, not a reason to refuse shelter. Water carries no civilian
+    // demand here, so the survival check has nobody to feed on it.
+    const goods = [
+      good({ goodId: "ore", stock: 0, targetStock: 100, demand: 500, civilianDemand: 0, satisfaction: 0 }),
+      good({ goodId: "water", civilianDemand: 0, satisfaction: 0 }),
+      good({ goodId: "food", satisfaction: 1 }),
+    ];
+    expect(fed(sysWith({ goods }))).toBe(true);
   });
 
-  it("returns 0 when no civilian demand is present", () => {
-    expect(supplyDissatisfaction([])).toBe(0);
-    expect(supplyDissatisfaction([
-      { goodId: "ore", stock: 0, targetStock: 0, demand: 0, civilianDemand: 0, capacityProduction: 0 },
-    ])).toBe(0);
-  });
-});
-
-describe("supplyDissatisfaction — delivered flow", () => {
-  it("reads a fully-delivering exporter parked at comfort as satisfied (D = 0)", () => {
-    // Stock sits at 75% of its price anchor — the old stock/target proxy read this as 25%
-    // unsatisfied — but the persisted flow says every unit demanded was actually delivered.
-    const d = supplyDissatisfaction([
-      { goodId: "food", stock: 15, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 1 },
-    ]);
-    expect(d).toBe(0);
-  });
-
-  it("uses the persisted flow when present and 1 when missing", () => {
-    const starved = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 0 },
-    ]);
-    const missing = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0 },
-    ]);
-    expect(starved).toBeCloseTo(1, 5);
-    expect(missing).toBe(0);
-  });
-
-  it("still folds convexly by weighted share", () => {
-    // food civilian demand 30 (share 0.75, fully satisfied) vs water 10 (share 0.25, half-satisfied)
-    // — equal necessity, so the shares are the demand shares → D = 0.25 × (1 − 0.5)^2 = 0.0625.
-    const d = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 30, civilianDemand: 30, capacityProduction: 0, satisfaction: 1 },
-      { goodId: "water", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 0.5 },
-    ]);
-    expect(d).toBeCloseTo(0.25 * 0.25, 5);
-  });
-});
-
-describe("fed", () => {
-  // civilianDemand carries the fold's weight, so it must be present for these to exercise the
-  // genuine well-supplied branch — omitting it zeroes the weight and D short-circuits to 0 for
-  // "nobody to feed" rather than "everyone is fed".
-  const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 1 }];
-
-  it("is true for a well-supplied system", () => {
-    expect(fed(sysWith({ goods: fedGoods }))).toBe(true);
-  });
-
-  it("is false when the system is starved (high supply dissatisfaction)", () => {
-    // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
-    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, civilianDemand: 100, capacityProduction: 0, satisfaction: 0 }];
-    expect(fed(sysWith({ goods: starved }))).toBe(false);
+  it("is true with no markets at all, and reads a missing satisfaction as delivered", () => {
+    expect(fed(sysWith({ goods: [] }))).toBe(true);
+    expect(fed(sysWith({ goods: [good({ goodId: "food" })] }))).toBe(true);
   });
 
   it("is true at maximum unrest — supply is the only gate on housing", () => {

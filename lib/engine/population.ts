@@ -83,8 +83,12 @@ export interface SupplyState {
   survivalShortfall: boolean;
 }
 
-/** Is a demanded survival good below the shortage line? */
-function hasSurvivalShortfall(goods: GoodSatisfaction[]): boolean {
+/**
+ * Is a demanded survival good below the shortage line? The one starvation test — the supply-regime
+ * fold and the build planner's housing gate both read it, so "this world cannot feed its people"
+ * means the same thing on both sides. A good nobody here demands is not scored.
+ */
+export function hasSurvivalShortfall(goods: GoodSatisfaction[]): boolean {
   for (const g of goods) {
     if (g.demanded <= 0 || !SURVIVAL_GOODS.includes(g.goodId)) continue;
     if (clamp(g.satisfaction, 0, 1) < SHORTAGE_SATISFACTION) return true;
