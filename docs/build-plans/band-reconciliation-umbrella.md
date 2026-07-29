@@ -146,9 +146,9 @@ retune needed. The unrest/tax half of §8 is parked with items 1–2, having not
 - **Interim incoherence (until PR6):** the panels still speak percentages, not regimes, and still
   name Strike at the presentation boundary rather than 0.65.
 
-### Necessity-weighted unrest — the parked unrest lever (before PR6)
+### Necessity-weighted unrest — SHIPPED (before PR6)
 
-`docs/planned/necessity-weighted-unrest.md`. Necessity becomes its own authored per-good table
+Spec `docs/planned/necessity-weighted-unrest.md`; plan `docs/build-plans/band-reconciliation-necessity-unrest.md`. Shipped as two PRs on the shared branch in a forced order: **PR A** deleted `GOVERNMENT_TYPES[…].consumptionBoosts` and unthreaded `governmentType` from the civilian demand chain, then **PR B** built the fold on top — the spec's measured demand shares are computed after the boost is gone, so building the fold first would have calibrated it against a basket about to move. Necessity becomes its own authored per-good table
 (`GOOD_NECESSITY`) weighting each good's demand share in the dissatisfaction fold. It replaces PR5
 Task 1's summed-demand-share fold — the weight is what that fold was missing — and **lands PR5 Task 2's
 regime ceilings with it as a co-requirement**: no single ceiling can hold sustained Rationing below
@@ -194,16 +194,24 @@ label Needs as the latest economy assessment. The regime re-base retires the leg
 cutoff, so any active rationing is named consistently.
 
 - Consumes from PR5: the collapse/colony behaviour the panels describe, **and** the settled
-  regime/unrest constants the chips name. PR5 parked that fold, so those constants are NOT settled
-  yet — the necessity-weighting slice below must land first. Building the panels against the shipped
-  worst-good regime would mean naming states the simulation is about to redefine, which is the reason
-  presentation was split out of PR5 in the first place.
+  regime/unrest constants the chips name. PR5 parked that fold; the necessity-weighting slice below
+  settled it, so the constants the chips name are now fixed.
+- **Inherited from the necessity slice:** check the five-band stability ramp (`lib/utils/stability.ts`,
+  stops at 0.2/0.4/0.6/0.8) against the measured post-fold unrest distribution, which is a usable
+  spread rather than the degenerate one a lower ambient level might have implied — over 573 settled
+  systems at 3000 ticks: 22% below 0.2, 41% in [0.2, 0.4), and the remaining ~37% spread across the
+  top three bands (only 5.6% at or above the 0.65 strike line). The bands need confirming against a
+  second seed, not obviously re-cutting. Also inherited: the per-good chip bands (stock-cover based, a
+  different labelling from the system regime this slice settles), and any label steadiness those chips
+  need, which is a display concern with display tools — no persisted regime state ships.
+- **Docs fold additions:** `docs/active/gameplay/economy.md` and `player-seat-purse.md` describe the
+  unrest spine; the fold is now necessity-weighted with named ceilings and a survival floor.
 
 ## Cross-PR interfaces (locked here so plans don't drift)
 
 | Interface | Producer | Consumers | Shape |
 | --- | --- | --- | --- |
-| `RATION_COVER` | PR1, `lib/constants/economy.ts` (`ECONOMY_CONSTANTS.RATION_COVER = 2`) | PR1 civilian/input draws, PR3 backstop, PR6 regimes | demand cycles |
+| `RATION_COVER` | PR1, `lib/constants/economy.ts` (`ECONOMY_CONSTANTS.RATION_COVER = 2`) | PR1 civilian/input draws, PR3 backstop, PR6 regimes | demand months |
 | `consumptionFactor(stock, rationStock)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, PR6 classifier | pure fn → [0,1] |
 | initial/export reserve policy | PR1 seed / PR3 logistics | world-gen and structural exporters | separate from rationing; initially 0.75 × T |
 | `productionCeiling(stock, targetStock, holdCover)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, **PR2 selling factor**, PR6 Glut | pure fn → [0,1] |

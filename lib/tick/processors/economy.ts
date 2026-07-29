@@ -20,9 +20,9 @@ import type {
 import {
   dissatisfaction,
   strikeMultiplier,
-  supplyRegime,
+  foldSupplyState,
   type GoodSatisfaction,
-  type SupplyRegime,
+  type SupplyState,
 } from "@/lib/engine/population";
 import { pulseShard, isPulseTick, catchUpFactor } from "@/lib/tick/shard";
 
@@ -198,7 +198,7 @@ export async function runEconomyProcessor(
     if (consumptionRate != null && consumptionRate > 0) {
       const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
       const arr = goodsBySystem.get(m.systemId) ?? [];
-      arr.push({ satisfaction: satisfactionByIndex[i], demanded });
+      arr.push({ goodId: m.goodId, satisfaction: satisfactionByIndex[i], demanded });
       goodsBySystem.set(m.systemId, arr);
     }
     if (m.baseProductionRate !== undefined) {
@@ -218,18 +218,19 @@ export async function runEconomyProcessor(
       realizedProductionBySystem.set(m.systemId, bySystem);
     }
   });
-  // Two folds of the same per-good satisfactions: D is the magnitude of the shortfall,
-  // the regime is its rate class. A system with no consuming markets reads supplied.
+  // Two folds of the same per-good satisfactions: D is the magnitude of the shortfall, the supply
+  // state is its class. A system with no consuming markets reads supplied.
   const dissatisfactionBySystem = new Map<string, number>();
-  const supplyRegimeBySystem = new Map<string, SupplyRegime>();
+  const supplyStateBySystem = new Map<string, SupplyState>();
   for (const sysId of systemIds) {
     const goods = goodsBySystem.get(sysId) ?? [];
-    dissatisfactionBySystem.set(sysId, dissatisfaction(goods));
-    supplyRegimeBySystem.set(sysId, supplyRegime(goods));
+    const d = dissatisfaction(goods);
+    dissatisfactionBySystem.set(sysId, d);
+    supplyStateBySystem.set(sysId, foldSupplyState(goods, d));
   }
   const economySignals: EconomySignals = {
     dissatisfactionBySystem,
-    supplyRegimeBySystem,
+    supplyStateBySystem,
     sellingFactorBySystem,
     realizedProductionBySystem,
   };

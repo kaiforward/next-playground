@@ -7,7 +7,7 @@ import type { WorldMarket } from "@/lib/world/types";
 import { civilianDemandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
-import type { SupplyRegime } from "@/lib/engine/population";
+import type { SupplyRegime, SupplyState } from "@/lib/engine/population";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { CROWDING } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
@@ -21,7 +21,7 @@ const BRAKE_END = 1.15;
 const POP_SHAPE = { crowdBrakeEnd: BRAKE_END, overshootDeathUnrestGate: 0.65 };
 
 const PARAMS = {
-  unrest: { gainRationing: 0.1, gainShortage: 0.2, decay: 0.05, recoveryDecay: 0.1 },
+  unrest: { slopeRationing: 2, slopeShortage: 4, decay: 0.05, recoveryDecay: 0.1 },
   population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
   interval: 24,
 };
@@ -30,15 +30,16 @@ const PARAMS = {
 // with explicit Euler, whose split residue between one full step and two half steps is
 // ≈ 0.25·decay from a zero start — an integrator artifact, not a scaling error. Keeping
 // every relaxation rate small holds that residue well under the 1% first-order bar the
-// scaling must meet, whichever regime selects it.
+// scaling must meet, whichever regime selects it. One slope for both regimes: this fixture
+// measures the time step, not the D-selected slope.
 const INVARIANCE_PARAMS = {
-  unrest: { gainRationing: 0.06, gainShortage: 0.06, decay: 0.02, recoveryDecay: 0.02 },
+  unrest: { slopeRationing: 3, slopeShortage: 3, decay: 0.02, recoveryDecay: 0.02 },
   population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
 };
 
-// Unrest fixture for the floor/regime suites: four pairwise-distinct rates, so an assertion
+// Unrest fixture for the floor/regime suites: four pairwise-distinct numbers, so an assertion
 // naming the wrong one cannot pass by coincidence.
-const RATES = { gainRationing: 0.05, gainShortage: 0.11, decay: 0.06, recoveryDecay: 0.12 };
+const RATES = { slopeRationing: 1.5, slopeShortage: 3, decay: 0.06, recoveryDecay: 0.12 };
 // Frozen population, so a run's only observable is the unrest integrator.
 const FROZEN_POP = { growthRate: 0, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE };
 
@@ -60,13 +61,16 @@ function market(systemId: string, goodId: string): WorldMarket {
   return { systemId, goodId, stock: 100, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
 function ctxWithD(d: Map<string, number>, regimes: Map<string, SupplyRegime> = new Map()): TickContext {
+  const states = new Map<string, SupplyState>(
+    [...regimes].map(([systemId, regime]) => [systemId, { regime, survivalShortfall: false }]),
+  );
   return {
     tick: 0,
     results: new Map([
       ["economy", {
         economySignals: {
           dissatisfactionBySystem: d,
-          supplyRegimeBySystem: regimes,
+          supplyStateBySystem: states,
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: new Map(),
         },
@@ -93,7 +97,7 @@ describe("population processor", () => {
     // Hand-derived from the start state (pop 500, cap 1000, unrest 0) under D=1 in shortage,
     // so these are an independent oracle rather than the processor's own output read back:
     //   floor  = 0 (untaxed, under the housing cap)
-    //   unrest = floor + (1−decay)·(0 − floor) + gainShortage·1 = 0.2
+    //   unrest = floor + (1−decay)·(0 − floor) + slopeShortage·decay·1 = 4·0.05 = 0.2
     //   Δpop   = growth·(1−D)=0 − decline·pop·unrest = −(0.02·500·0.2) = −2.0 → pop 498
     expect(a.unrest).toBeCloseTo(0.2, 6);
     expect(a.population).toBeCloseTo(498, 6);
@@ -214,8 +218,8 @@ describe("population processor", () => {
   it("enters per-system tax pressure as the unrest floor, not as a gain", async () => {
     // d = 0, unrest starts 0, interval 24 (catchUp 1), calm and supplied: the run relaxes
     // toward the floor, so unrest moves recoveryDecay of the way to the tax pressure. A
-    // gain term would instead have integrated gainRationing × pressure — a different number
-    // that then decays back to zero rather than holding.
+    // gain term would instead have integrated slopeRationing × decay × pressure — a different
+    // number that then decays back to zero rather than holding.
     const pressure = TAX_LEVEL_UNREST_PRESSURE.very_high;
     const world = new InMemoryPopulationWorld({
       systems: [
@@ -366,12 +370,16 @@ describe("population processor", () => {
     expect(unrestOf(world, "short")).toBeGreaterThan(unrestOf(world, "unlisted"));
   });
 
-  it("scales both gains and both relaxation rates by the catch-up factor", async () => {
-    // Interval 48 is two reference months, so one run must move exactly twice as far as one
-    // run at the reference interval — for each of the four rates. Gains are read from a
-    // zero start (no relaxation term) and relaxation from a raised start (no gain term).
+  it("scales the relaxation rates — and hence the derived gains — by the catch-up factor", async () => {
+    // Interval 48 is two reference months, so one run must move exactly twice as far as one run at
+    // the reference interval. Only the relaxation rates are scaled; the gain is slope × rate, so it
+    // rides along while the slopes stay dimensionless exchange rates. Gains are read from a zero start (no
+    // relaxation term) and relaxation from a raised start (D = 0, so no gain term). Which slope
+    // applies is selected by D, not by the regime label: D_LOW sits below the shortage cut and D_HIGH
+    // above the top of the blend band.
     const start = 0.5;
-    const d = 0.5;
+    const D_LOW = 0.1;
+    const D_HIGH = 0.5;
     const runAt = async (interval: number) => {
       const world = new InMemoryPopulationWorld({
         systems: [
@@ -389,7 +397,7 @@ describe("population processor", () => {
         ["relax-supplied", "supplied"],
       ]);
       const dissatisfaction = new Map([
-        ["gain-rationing", d], ["gain-shortage", d], ["relax-rationing", 0], ["relax-supplied", 0],
+        ["gain-rationing", D_LOW], ["gain-shortage", D_HIGH], ["relax-rationing", 0], ["relax-supplied", 0],
       ]);
       await runPopulationProcessor(world, ctxWithD(dissatisfaction, regimes), {
         unrest: RATES, population: FROZEN_POP, interval,
@@ -399,13 +407,33 @@ describe("population processor", () => {
     const ref = await runAt(24);
     const double = await runAt(48);
 
-    expect(unrestOf(ref, "gain-rationing")).toBeCloseTo(RATES.gainRationing * d, 9);
-    expect(unrestOf(double, "gain-rationing")).toBeCloseTo(2 * RATES.gainRationing * d, 9);
-    expect(unrestOf(ref, "gain-shortage")).toBeCloseTo(RATES.gainShortage * d, 9);
-    expect(unrestOf(double, "gain-shortage")).toBeCloseTo(2 * RATES.gainShortage * d, 9);
+    const rationingGain = RATES.slopeRationing * RATES.decay * D_LOW;
+    const shortageGain = RATES.slopeShortage * RATES.decay * D_HIGH;
+    expect(unrestOf(ref, "gain-rationing")).toBeCloseTo(rationingGain, 9);
+    expect(unrestOf(double, "gain-rationing")).toBeCloseTo(2 * rationingGain, 9);
+    expect(unrestOf(ref, "gain-shortage")).toBeCloseTo(shortageGain, 9);
+    expect(unrestOf(double, "gain-shortage")).toBeCloseTo(2 * shortageGain, 9);
     expect(unrestOf(ref, "relax-rationing")).toBeCloseTo(start * (1 - RATES.decay), 9);
     expect(unrestOf(double, "relax-rationing")).toBeCloseTo(start * (1 - 2 * RATES.decay), 9);
     expect(unrestOf(ref, "relax-supplied")).toBeCloseTo(start * (1 - RATES.recoveryDecay), 9);
     expect(unrestOf(double, "relax-supplied")).toBeCloseTo(start * (1 - 2 * RATES.recoveryDecay), 9);
+  });
+
+  it("settles unrest at the same level whatever the interval", async () => {
+    // The reparameterisation's payoff at the processor: equilibrium is floor + slope × D, with no
+    // rate in it, so a shard running at a different interval settles in the same place rather than
+    // merely approaching it at a scaled speed.
+    const d = 0.1;
+    const settleAt = async (interval: number) => {
+      const world = new InMemoryPopulationWorld({ systems: [sys("a", 100, 1000, 0)], markets: [] });
+      const ctx = ctxWithD(new Map([["a", d]]), new Map([["a", "rationing"]]));
+      for (let i = 0; i < 400; i++) {
+        await runPopulationProcessor(world, ctx, { unrest: RATES, population: FROZEN_POP, interval });
+      }
+      return unrestOf(world, "a");
+    };
+    const expected = RATES.slopeRationing * d;
+    expect(await settleAt(24)).toBeCloseTo(expected, 6);
+    expect(await settleAt(48)).toBeCloseTo(expected, 6);
   });
 });

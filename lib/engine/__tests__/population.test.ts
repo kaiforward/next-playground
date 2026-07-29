@@ -6,53 +6,117 @@ import {
   populationDelta,
   crowdFactor,
   crowdingPressure,
-  supplyRegime,
+  foldSupplyState,
+  unrestSlope,
   type UnrestParams,
   type PopulationParams,
+  type SupplyRegime,
+  type SupplyState,
 } from "../population";
-import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT } from "@/lib/constants/economy";
 
-describe("dissatisfaction (convex, demand-weighted)", () => {
+describe("dissatisfaction (convex, necessity-weighted)", () => {
   it("is 0 when fully satisfied and 0 when nothing is demanded", () => {
-    expect(dissatisfaction([{ satisfaction: 1, demanded: 10 }, { satisfaction: 1, demanded: 2 }])).toBeCloseTo(0, 6);
+    expect(dissatisfaction([
+      { goodId: "food", satisfaction: 1, demanded: 10 },
+      { goodId: "luxuries", satisfaction: 1, demanded: 2 },
+    ])).toBeCloseTo(0, 6);
     expect(dissatisfaction([])).toBe(0);
-    expect(dissatisfaction([{ satisfaction: 0, demanded: 0 }])).toBe(0);
+    expect(dissatisfaction([{ goodId: "food", satisfaction: 0, demanded: 0 }])).toBe(0);
   });
-  it("weights a high-demand good's deficit far above a low-demand good's (~demand share)", () => {
-    const foodCut = dissatisfaction([{ satisfaction: 0, demanded: 18 }, { satisfaction: 1, demanded: 2 }]);
-    const luxCut = dissatisfaction([{ satisfaction: 1, demanded: 18 }, { satisfaction: 0, demanded: 2 }]);
-    expect(foodCut).toBeGreaterThan(luxCut * 5);
+
+  it("ranks by necessity, not by how much is bought", () => {
+    // Equal demand, opposite necessity: the medicine shortfall must dominate the luxuries one even
+    // though the basket wants exactly as much of each. Demand-share alone cannot express this.
+    const medicineCut = dissatisfaction([
+      { goodId: "medicine", satisfaction: 0, demanded: 10 },
+      { goodId: "luxuries", satisfaction: 1, demanded: 10 },
+    ]);
+    const luxCut = dissatisfaction([
+      { goodId: "medicine", satisfaction: 1, demanded: 10 },
+      { goodId: "luxuries", satisfaction: 0, demanded: 10 },
+    ]);
+    expect(medicineCut).toBeGreaterThan(luxCut * 5);
   });
-  it("convexity: one deep shortage dominates broad shallow tightness", () => {
-    const deep = dissatisfaction([{ satisfaction: 0, demanded: 10 }, { satisfaction: 1, demanded: 90 }]);
-    const shallow = dissatisfaction([{ satisfaction: 0.9, demanded: 100 }]);
+
+  it("still weights by how much is wanted, at equal necessity", () => {
+    const deep = dissatisfaction([
+      { goodId: "water", satisfaction: 0, demanded: 90 },
+      { goodId: "food", satisfaction: 1, demanded: 10 },
+    ]);
+    const shallow = dissatisfaction([
+      { goodId: "water", satisfaction: 1, demanded: 90 },
+      { goodId: "food", satisfaction: 0, demanded: 10 },
+    ]);
     expect(deep).toBeGreaterThan(shallow);
+  });
+
+  it("convexity: one deep shortage dominates broad shallow tightness", () => {
+    const deep = dissatisfaction([
+      { goodId: "water", satisfaction: 0, demanded: 10 },
+      { goodId: "water", satisfaction: 1, demanded: 90 },
+    ]);
+    const shallow = dissatisfaction([{ goodId: "water", satisfaction: 0.9, demanded: 100 }]);
+    expect(deep).toBeGreaterThan(shallow);
+  });
+
+  it("ignores a good with no authored necessity rather than guessing one", () => {
+    // Totality is enforced by a constants test; at runtime an unknown id must not invent a weight.
+    expect(dissatisfaction([
+      { goodId: "not_a_good", satisfaction: 0, demanded: 100 },
+      { goodId: "water", satisfaction: 1, demanded: 10 },
+    ])).toBe(0);
   });
 });
 
-describe("supplyRegime (worst-demanded-good fold)", () => {
-  it("is supplied when every demanded good is fully satisfied", () => {
-    expect(supplyRegime([{ satisfaction: 1, demanded: 10 }, { satisfaction: 1, demanded: 2 }])).toBe("supplied");
+describe("foldSupplyState (D cut + survival floor)", () => {
+  const full = (goodId: string, demanded: number) => ({ goodId, satisfaction: 1, demanded });
+
+  it("is supplied only at D exactly 0", () => {
+    const goods = [full("water", 10), full("luxuries", 2)];
+    expect(foldSupplyState(goods, dissatisfaction(goods)).regime).toBe("supplied");
+    expect(foldSupplyState([], 0).regime).toBe("supplied");
   });
-  it("is supplied when nothing is demanded (empty or zero-demand)", () => {
-    expect(supplyRegime([])).toBe("supplied");
-    expect(supplyRegime([{ satisfaction: 0, demanded: 0 }])).toBe("supplied");
+
+  it("is rationing for any positive D below the cut", () => {
+    const goods = [{ goodId: "luxuries", satisfaction: 0, demanded: 2 }, full("water", 100)];
+    const state = foldSupplyState(goods, dissatisfaction(goods));
+    expect(state.regime).toBe("rationing");
+    expect(state.survivalShortfall).toBe(false);
   });
-  it("ignores zero-demand goods when folding", () => {
-    // A starving zero-demand good must not force a regime — only demanded goods count.
-    expect(supplyRegime([{ satisfaction: 0, demanded: 0 }, { satisfaction: 1, demanded: 5 }])).toBe("supplied");
-    expect(supplyRegime([{ satisfaction: 0, demanded: 0 }, { satisfaction: 0.8, demanded: 5 }])).toBe("rationing");
+
+  it("is shortage at or above the cut", () => {
+    expect(foldSupplyState([full("ore", 10)], D_SHORTAGE_CUT).regime).toBe("shortage");
+    expect(foldSupplyState([full("ore", 10)], D_SHORTAGE_CUT - 1e-9).regime).toBe("rationing");
   });
-  it("is rationing when any demanded good is short of full but none below the shortage line", () => {
-    expect(supplyRegime([{ satisfaction: 0.8, demanded: 10 }, { satisfaction: 1, demanded: 2 }])).toBe("rationing");
+
+  it("selects shortage from the survival floor even when D is far below the cut", () => {
+    // Water at half rations folds to ~0.09 — nowhere near any workable cut, yet the population is
+    // genuinely on half rations. This is the case the floor exists for.
+    const goods = [
+      { goodId: "water", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 100 },
+      full("ore", 400),
+    ];
+    const d = dissatisfaction(goods);
+    expect(d).toBeLessThan(D_SHORTAGE_CUT);
+    const state = foldSupplyState(goods, d);
+    expect(state.regime).toBe("shortage");
+    expect(state.survivalShortfall).toBe(true);
   });
-  it("is shortage when any demanded good is below the shortage line", () => {
-    expect(supplyRegime([{ satisfaction: 0.4, demanded: 10 }, { satisfaction: 1, demanded: 2 }])).toBe("shortage");
+
+  it("treats exactly the shortage satisfaction line as not a survival shortfall (strict <)", () => {
+    const goods = [{ goodId: "food", satisfaction: SHORTAGE_SATISFACTION, demanded: 100 }];
+    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
   });
-  it("treats exactly the shortage line as rationing, not shortage (strict <)", () => {
-    // satisfaction === SHORTAGE_SATISFACTION is short of full but not below the line.
-    expect(supplyRegime([{ satisfaction: SHORTAGE_SATISFACTION, demanded: 10 }])).toBe("rationing");
-    expect(supplyRegime([{ satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 10 }])).toBe("shortage");
+
+  it("ignores a zero-demand survival good", () => {
+    const goods = [{ goodId: "water", satisfaction: 0, demanded: 0 }, full("ore", 5)];
+    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
+  });
+
+  it("does not let a non-survival good trip the floor at any depth", () => {
+    const goods = [{ goodId: "luxuries", satisfaction: 0, demanded: 5 }, full("water", 5)];
+    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
   });
 });
 
@@ -124,83 +188,127 @@ describe("crowdingPressure (standing unrest floor from overcrowding)", () => {
 });
 
 describe("accumulateUnrest (floor-relaxation integrator)", () => {
-  const params: UnrestParams = { gainRationing: 0.06, gainShortage: 0.12, decay: 0.06, recoveryDecay: 0.12 };
+  const params: UnrestParams = { slopeRationing: 1.8, slopeShortage: 2.5, decay: 0.06, recoveryDecay: 0.12 };
+  const state = (regime: SupplyRegime, survivalShortfall = false): SupplyState => ({ regime, survivalShortfall });
+  const SUPPLIED = state("supplied");
+  const RATIONING = state("rationing");
+  const SHORTAGE = state("shortage");
 
   it("settles exactly at the floor from above and below at D = 0, regardless of decay rate", () => {
     // From above, relaxing under both the fast (supplied) and slow (rationing) rates.
     let above = 0.9;
-    for (let i = 0; i < 2000; i++) above = accumulateUnrest(above, 0, 0.2, "supplied", params);
+    for (let i = 0; i < 2000; i++) above = accumulateUnrest(above, 0, 0.2, SUPPLIED, params);
     expect(above).toBeCloseTo(0.2, 6);
     let aboveSlow = 0.9;
-    for (let i = 0; i < 2000; i++) aboveSlow = accumulateUnrest(aboveSlow, 0, 0.2, "rationing", params);
+    for (let i = 0; i < 2000; i++) aboveSlow = accumulateUnrest(aboveSlow, 0, 0.2, RATIONING, params);
     expect(aboveSlow).toBeCloseTo(0.2, 6);
     // From below (a highly taxed but well-fed colony rising toward its floor).
     let below = 0.05;
-    for (let i = 0; i < 2000; i++) below = accumulateUnrest(below, 0, 0.3, "supplied", params);
+    for (let i = 0; i < 2000; i++) below = accumulateUnrest(below, 0, 0.3, SUPPLIED, params);
     expect(below).toBeCloseTo(0.3, 6);
+  });
+
+  it("settles at floor + slope x D under sustained dissatisfaction", () => {
+    // The reparameterisation's whole point: the slope is settled unrest per unit of D above the
+    // floor, so the settled value is readable straight off the constants rather than implied by a
+    // gain/decay ratio. Two D's, one either side of the shortage cut. Both sums stay under 1, so
+    // the state's own clamp is not in play here — that boundary is pinned separately below.
+    for (const [d, floor] of [[0.1, 0.2], [0.3, 0]] as const) {
+      let u = 0;
+      for (let i = 0; i < 500; i++) u = accumulateUnrest(u, d, floor, RATIONING, params);
+      expect(floor + unrestSlope(d, false, params) * d, `D=${d}`).toBeLessThan(1);
+      expect(u, `D=${d}`).toBeCloseTo(floor + unrestSlope(d, false, params) * d, 6);
+    }
+  });
+
+  it("saturates at 1 when floor + slope x D would exceed the state's own range", () => {
+    // The slopes exceed 1 by design — D is small (mean ~0.15), so a slope of 1 could never lift
+    // famine over the strike threshold. That means `floor + slope × D` can ask for more than unrest
+    // can hold, and equilibrium is min(1, …) rather than the raw sum. This is the corner where it
+    // bites: the highest standing floor (very-high tax + full crowding) under a total water failure.
+    const floor = 0.23;
+    const d = 0.37;
+    expect(floor + unrestSlope(d, true, params) * d).toBeGreaterThan(1); // the raw sum overflows
+    let u = 0;
+    for (let i = 0; i < 500; i++) u = accumulateUnrest(u, d, floor, state("shortage", true), params);
+    expect(u).toBe(1);
+  });
+
+  it("reaches the same equilibrium at any relaxation rate", () => {
+    // gain = slope x decay, so the rate sets only how fast equilibrium arrives, never where it is —
+    // which is what makes the settled level invariant to the tick's catch-up factor.
+    const slow: UnrestParams = { ...params, decay: 0.06 };
+    const fast: UnrestParams = { ...params, decay: 0.5 };
+    const settle = (p: UnrestParams) => {
+      let u = 0;
+      for (let i = 0; i < 500; i++) u = accumulateUnrest(u, 0.3, 0.1, RATIONING, p);
+      return u;
+    };
+    expect(settle(fast)).toBeCloseTo(settle(slow), 6);
   });
 
   it("relaxes supplied excess at recoveryDecay and rationing excess at decay (geometric over two steps)", () => {
     const floor = 0.2;
     const start = 0.6;
     // Supplied: excess shrinks by (1 - recoveryDecay) each step.
-    const s1 = accumulateUnrest(start, 0, floor, "supplied", params);
-    const s2 = accumulateUnrest(s1, 0, floor, "supplied", params);
+    const s1 = accumulateUnrest(start, 0, floor, SUPPLIED, params);
+    const s2 = accumulateUnrest(s1, 0, floor, SUPPLIED, params);
     expect((s2 - floor) / (start - floor)).toBeCloseTo((1 - params.recoveryDecay) ** 2, 6);
     // Rationing: excess shrinks by the slower (1 - decay) each step.
-    const r1 = accumulateUnrest(start, 0, floor, "rationing", params);
-    const r2 = accumulateUnrest(r1, 0, floor, "rationing", params);
+    const r1 = accumulateUnrest(start, 0, floor, RATIONING, params);
+    const r2 = accumulateUnrest(r1, 0, floor, RATIONING, params);
     expect((r2 - floor) / (start - floor)).toBeCloseTo((1 - params.decay) ** 2, 6);
     // Supplied recovers faster than rationing over the same excess.
     expect(s2).toBeLessThan(r2);
   });
 
-  it("accumulates faster under shortage than under shallow rationing at equal D", () => {
-    const rationing = accumulateUnrest(0.2, 0.5, 0.2, "rationing", params);
-    const shortage = accumulateUnrest(0.2, 0.5, 0.2, "shortage", params);
-    expect(shortage).toBeGreaterThan(rationing);
+  it("accumulates faster under a survival shortfall than at the same D without one", () => {
+    // The regime label no longer selects the magnitude — D and the survival bit do. Famine at a D
+    // the fold alone would call mild must still respond like famine.
+    const d = 0.1;
+    const ordinary = accumulateUnrest(0.2, d, 0.2, RATIONING, params);
+    const famine = accumulateUnrest(0.2, d, 0.2, state("shortage", true), params);
+    expect(famine).toBeGreaterThan(ordinary);
   });
 
-  it("is monotonic across the regime boundary — worse regime at equal D never lowers next unrest", () => {
-    const u = 0.5;
+  it("is monotonic in both slope selectors — a worse reading never lowers settled unrest", () => {
+    // Equilibrium, not one step: the regime label picks only the approach rate, so comparing single
+    // steps across labels compares speeds rather than severities.
     const floor = 0.2;
-    const d = 0.5;
-    const supplied = accumulateUnrest(u, d, floor, "supplied", params);
-    const rationing = accumulateUnrest(u, d, floor, "rationing", params);
-    const shortage = accumulateUnrest(u, d, floor, "shortage", params);
-    expect(rationing).toBeGreaterThanOrEqual(supplied);
-    expect(shortage).toBeGreaterThanOrEqual(rationing);
+    const eq = (d: number, survivalShortfall: boolean) => floor + unrestSlope(d, survivalShortfall, params) * d;
+    for (const d of [0, 0.05, 0.14, 0.25, 0.28, 0.32, 0.5, 1]) {
+      expect(eq(d, true), `D=${d}`).toBeGreaterThanOrEqual(eq(d, false));
+    }
+    const ds = [0, 0.05, 0.14, 0.25, 0.28, 0.32, 0.5, 1];
+    for (let i = 1; i < ds.length; i++) {
+      expect(eq(ds[i], false), `D=${ds[i]}`).toBeGreaterThan(eq(ds[i - 1], false));
+    }
   });
 
   it("keeps one full-shortage pulse from floor 0.23 below the 0.65 strike threshold", () => {
-    // catchUpFactor = 2 is applied by the processor; the engine receives pre-scaled gains.
-    const scaled: UnrestParams = {
-      gainRationing: 0.06 * 2,
-      gainShortage: 0.12 * 2,
-      decay: 0.06 * 2,
-      recoveryDecay: 0.12 * 2,
-    };
-    const next = accumulateUnrest(0.23, 1, 0.23, "shortage", scaled);
+    // catchUpFactor = 2 is applied by the processor; the engine receives pre-scaled relaxation rates.
+    const scaled: UnrestParams = { ...params, decay: 0.06 * 2, recoveryDecay: 0.12 * 2 };
+    const next = accumulateUnrest(0.23, 1, 0.23, SHORTAGE, scaled);
     expect(next).toBeGreaterThan(0.23); // it rose
     expect(next).toBeLessThan(0.65); // but is recoverable, not an instant strike
   });
 
   it("clamps output to [0,1]", () => {
-    const big: UnrestParams = { gainRationing: 5, gainShortage: 5, decay: 0.06, recoveryDecay: 0.12 };
-    expect(accumulateUnrest(1, 1, 0.9, "shortage", big)).toBe(1);
-    expect(accumulateUnrest(0, 0, 0, "supplied", params)).toBe(0);
+    const big: UnrestParams = { ...params, slopeRationing: 50, slopeShortage: 50 };
+    expect(accumulateUnrest(1, 1, 0.9, SHORTAGE, big)).toBe(1);
+    expect(accumulateUnrest(0, 0, 0, SUPPLIED, params)).toBe(0);
   });
 
   it("clamps k so a catch-up-scaled decay can never overshoot below the floor", () => {
     // A large catch-up can scale the decay past 1; without clamping k the relaxation
     // term would flip sign and push unrest below its standing floor.
-    const overScaled: UnrestParams = { gainRationing: 0, gainShortage: 0, decay: 1.5, recoveryDecay: 1.5 };
-    const next = accumulateUnrest(0.5, 0, 0.2, "supplied", overScaled);
+    const overScaled: UnrestParams = { ...params, decay: 1.5, recoveryDecay: 1.5 };
+    const next = accumulateUnrest(0.5, 0, 0.2, SUPPLIED, overScaled);
     expect(next).toBe(0.2); // k clamps to 1 -> lands exactly on the floor, no overshoot
     expect(next).toBeGreaterThanOrEqual(0.2);
     // A realistic catch-up = 2 relaxes toward the floor from above without crossing it.
-    const scaled: UnrestParams = { gainRationing: 0, gainShortage: 0, decay: 0.06 * 2, recoveryDecay: 0.12 * 2 };
-    const step = accumulateUnrest(0.5, 0, 0.2, "supplied", scaled);
+    const scaled: UnrestParams = { ...params, decay: 0.06 * 2, recoveryDecay: 0.12 * 2 };
+    const step = accumulateUnrest(0.5, 0, 0.2, SUPPLIED, scaled);
     expect(step).toBeGreaterThan(0.2);
     expect(step).toBeLessThan(0.5);
   });

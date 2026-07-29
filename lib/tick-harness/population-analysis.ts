@@ -1,5 +1,9 @@
 import type { TickSystem } from "@/lib/tick/rows";
-import { crowdFactor } from "@/lib/engine/population";
+import { crowdFactor, dissatisfaction, foldSupplyState } from "@/lib/engine/population";
+import { goodSatisfactionsBySystem } from "@/lib/tick-harness/good-satisfaction";
+import { aggregateModifiers, buildModifiersForPhase, type ModifierRow } from "@/lib/engine/events";
+import { EVENT_DEFINITIONS, MODIFIER_CAPS } from "@/lib/constants/events";
+import type { WorldEvent, WorldMarket } from "@/lib/world/types";
 
 export interface InfrastructureSummary {
   /** Total building count across all systems at tick 0. */
@@ -175,5 +179,100 @@ export function summarizePopulation(
     strikingShare: settled.length > 0 ? strikingCount / settled.length : 0,
     strandedCount,
     strandedPopulation,
+  };
+}
+
+/** Active economy-domain modifier rows, rebuilt from the final world's persisted events. */
+function economyModifiers(events: ReadonlyArray<WorldEvent>): ModifierRow[] {
+  const out: ModifierRow[] = [];
+  for (const e of events) {
+    const phase = EVENT_DEFINITIONS[e.type]?.phases.find((p) => p.name === e.phase);
+    if (!phase) continue;
+    for (const mod of buildModifiersForPhase(phase, e.systemId, e.regionId, e.severity)) {
+      if (mod.domain === "economy") out.push(mod);
+    }
+  }
+  return out;
+}
+
+/**
+ * Per-system consumption-rate multipliers from active events, matching what the economy processor
+ * applies to `demanded`. Returns undefined when nothing is active, so the common case costs nothing.
+ */
+function consumptionMultBySystem(
+  systems: TickSystem[],
+  events: ReadonlyArray<WorldEvent>,
+): Map<string, ModifierRow[]> | undefined {
+  const mods = economyModifiers(events);
+  if (mods.length === 0) return undefined;
+  const bySystem = new Map<string, ModifierRow[]>();
+  for (const s of systems) {
+    const own = mods.filter(
+      (m) =>
+        (m.targetType === "system" && m.targetId === s.id) ||
+        (m.targetType === "region" && m.targetId === s.regionId),
+    );
+    if (own.length > 0) bySystem.set(s.id, own);
+  }
+  return bySystem.size > 0 ? bySystem : undefined;
+}
+
+/**
+ * Per-system share of each supply regime at the end of the run — the permanent instrument for the
+ * unrest fold. Recomputed from the final world's persisted per-good satisfaction against each
+ * system's own civilian demand, including any active event consumption modifiers, so it folds the
+ * same `demanded` the economy pulse did rather than a parallel one. Pass the final world's `events`
+ * to keep that true — omitting them silently drops the modifier term. Settled systems only: an
+ * unclaimed rock has no market and no opinion.
+ *
+ * The modifier term is inert today: no shipped event definition carries a `consumption_rate`
+ * rate_multiplier (only `production_rate` and `target_stock`), so every consumptionMult resolves to
+ * 1. It is threaded anyway because the alternative is a reading that silently diverges from the tick
+ * the day one is added — and rebuilding it from the persisted events, rather than storing it, is
+ * what keeps the two from drifting.
+ */
+export interface SupplyRegimeSummary {
+  counted: number;
+  supplied: number;
+  rationing: number;
+  shortage: number;
+  suppliedShare: number;
+  rationingShare: number;
+  shortageShare: number;
+  /** Mean D over counted systems — the magnitude behind the labels. */
+  meanDissatisfaction: number;
+}
+
+export function summarizeSupplyRegimes(
+  systems: TickSystem[],
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
+  events: ReadonlyArray<WorldEvent> = [],
+): SupplyRegimeSummary {
+  const settledSystems = systems.filter(isSettled);
+  const settled = new Map(settledSystems.map((s) => [s.id, s]));
+  const modsBySystem = consumptionMultBySystem(settledSystems, events);
+  const goodsBySystem = goodSatisfactionsBySystem(settled, markets, (systemId, goodId) => {
+    const mods = modsBySystem?.get(systemId);
+    return mods ? aggregateModifiers(mods, goodId, MODIFIER_CAPS).consumptionMult : 1;
+  });
+
+  let supplied = 0, rationing = 0, shortage = 0, dSum = 0;
+  for (const systemId of settled.keys()) {
+    const goods = goodsBySystem.get(systemId) ?? [];
+    const d = dissatisfaction(goods);
+    dSum += d;
+    const regime = foldSupplyState(goods, d).regime;
+    if (regime === "supplied") supplied++;
+    else if (regime === "rationing") rationing++;
+    else shortage++;
+  }
+  const counted = settled.size;
+  const share = (n: number) => (counted > 0 ? n / counted : 0);
+  return {
+    counted, supplied, rationing, shortage,
+    suppliedShare: share(supplied),
+    rationingShare: share(rationing),
+    shortageShare: share(shortage),
+    meanDissatisfaction: counted > 0 ? dSum / counted : 0,
   };
 }

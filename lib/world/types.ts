@@ -81,7 +81,7 @@ export interface WorldSystem {
   population: number;
   /** Maximum sustainable population. */
   popCap: number;
-  /** 0…1 — integral of demand-weighted dissatisfaction. */
+  /** 0…1 — integral of necessity-weighted dissatisfaction. */
   unrest: number;
   /** Fractional unrest-collapse accumulator; whole levels tear down as it crosses integers, and it
    *  resets whenever unrest falls back to the decay threshold. Absent ⇒ 0, so world-gen and older
@@ -220,7 +220,7 @@ export interface WorldMarket {
   /** Stored pricing-anchor multiplier (1 = none). */
   anchorMult: number;
   /**
-   * Total days-of-supply demand denominator: civilian consumption **plus** industrial input draw.
+   * Total cycles-of-supply demand denominator: civilian consumption **plus** industrial input draw.
    * This is the pricing anchor (targetStock = TARGET_COVER × demandRate) and the directed-logistics
    * deficit anchor — NOT the civilian-only want the Population panel's needs ledger renders (that is
    * `consumptionRate`, unfloored). Recomputed each economy pulse by the population processor via

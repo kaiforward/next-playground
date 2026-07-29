@@ -158,7 +158,7 @@ export interface PopNeedData {
   delivered: number;
   /** delivered ÷ want, in [0,1] — the consume gate at current stock; 1 = fully met. */
   satisfaction: number;
-  /** demandShare × (1 − satisfaction)² — this good's contribution to the system's dissatisfaction/unrest. */
+  /** necessity-weighted demandShare × (1 − satisfaction)² — this good's contribution to the system's unrest. */
   pressure: number;
   /** want's composition — base + technicians + engineers. */
   breakdown: ConsumptionBreakdown;

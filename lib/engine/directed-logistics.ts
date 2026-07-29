@@ -17,13 +17,13 @@ export interface MarketClassification {
 }
 
 /**
- * Classify one good's market against its days-of-supply anchor. Deficit ⇔
+ * Classify one good's market against its cycles-of-supply anchor. Deficit ⇔
  * stock < targetStock × DEFICIT_FRACTION; surplus ⇔ stock ≥ targetStock ×
  * SURPLUS_MARGIN; the dead-band between is balanced. Shared by the logistics
  * matcher and the build planner so both read one definition.
  */
 export function classifyMarketState(stock: number, targetStock: number): MarketClassification {
-  // A zero/negative demand anchor means no days-of-supply target — never a drawable surplus; treat as balanced.
+  // A zero/negative demand anchor means no cycles-of-supply target — never a drawable surplus; treat as balanced.
   if (targetStock <= 0) {
     return { kind: "balanced", shortfall: 0, drawable: 0 };
   }
@@ -77,10 +77,14 @@ export function systemLogisticsGeneration(population: number): number {
 export interface GoodMarketState {
   goodId: string;
   stock: number;
-  /** Days-of-supply price anchor (TARGET_COVER × demandRate). Deficit ⇔ stock < targetStock × DEFICIT_FRACTION; surplus ⇔ stock ≥ targetStock × SURPLUS_MARGIN. Both converge toward targetStock. */
+  /** Cycles-of-supply price anchor (TARGET_COVER × demandRate). Deficit ⇔ stock < targetStock × DEFICIT_FRACTION; surplus ⇔ stock ≥ targetStock × SURPLUS_MARGIN. Both converge toward targetStock. */
   targetStock: number;
   /** Total local demand rate (civilian + industrial). Severity weight + the self-supply gate (vs production). */
   demand: number;
+  /** The civilian half of `demand` alone (per-capita baseline + skilled baskets, no industrial input
+   *  draw). The housing fed-gate folds this: necessity is authored on the civilian axis, so weighting
+   *  a refinery's ore draw with it would collapse D however starved its factories are. */
+  civilianDemand: number;
   /** Realized production rate from the last economy assessment. A system that self-supplies (production >= demand) is never a deficit sink. */
   production: number;
   /** Current building capacity, retained separately for construction target sizing. */
@@ -168,7 +172,7 @@ export function matchFactionTransfers(
       const c = classifyMarketState(g.stock, g.targetStock);
       // Self-supply gate: a system that produces at least its own demand is never a deficit
       // sink for that good (it refills from its own output), even when standing stock dips below
-      // the days-of-supply anchor. Without this, high-throughput producers — which hold little
+      // the cycles-of-supply anchor. Without this, high-throughput producers — which hold little
       // inventory relative to their demand rate — read as deficits and get shipped a good they
       // already make, piling stock to the ceiling and decaying their own producers.
       if (c.kind === "deficit" && c.shortfall > 0 && g.production < g.demand) {

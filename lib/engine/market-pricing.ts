@@ -87,7 +87,7 @@ export function marketBandForRow(
 
 /**
  * Build a MarketCurve for a good from its DB/definition fields. The reference
- * stock (where mid === basePrice) is the per-system days-of-supply anchor:
+ * stock (where mid === basePrice) is the per-system cycles-of-supply anchor:
  * `TARGET_COVER × demandRate × anchorMult`. `demandRate` is the market's stored
  * local demand rate (civilian demand — per-capita baseline + skilled baskets —
  * floored); `anchorMult` (default 1) carries active anchor_shift events. See

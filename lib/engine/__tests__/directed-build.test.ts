@@ -502,7 +502,7 @@ describe("planFactionBuilds — relief housing", () => {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, civilianDemand: 100, capacityProduction: 0, satisfaction: 0 }],
     };
     expect(countFor(planFactionBuilds([starved], () => 1, DEV_REFS), "A", "housing")).toBe(0);
   });
@@ -632,63 +632,77 @@ describe("planFactionBuilds performance", () => {
 });
 
 describe("supplyDissatisfaction", () => {
-  it("is ~0 when every demanded good sits at or above target", () => {
+  it("is ~0 when every demanded good is fully delivered", () => {
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0},
-      { goodId: "water", stock: 30, targetStock: 20, demand: 8, capacityProduction: 0},
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0 },
+      { goodId: "water", stock: 30, targetStock: 20, demand: 8, civilianDemand: 8, capacityProduction: 0 },
     ]);
     expect(d).toBeCloseTo(0);
   });
 
-  it("is high when a heavily-demanded good is far below target", () => {
-    // satisfaction 0 models the unfed flow the fed-proxy now reads (low stock alone no longer counts).
+  it("is high when a survival good is undelivered", () => {
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 },
-      { goodId: "luxuries", stock: 10, targetStock: 10, demand: 1, capacityProduction: 0},
+      { goodId: "food", stock: 1, targetStock: 20, demand: 100, civilianDemand: 100, capacityProduction: 0, satisfaction: 0 },
+      { goodId: "luxuries", stock: 10, targetStock: 10, demand: 1, civilianDemand: 1, capacityProduction: 0 },
     ]);
     expect(d).toBeGreaterThan(0.5);
   });
 
-  it("returns 0 when nothing is demanded", () => {
+  it("ignores industrial input starvation — the gate asks whether the PEOPLE are fed", () => {
+    // A refinery world whose ore feed is dry but whose residents eat. Housing must not be blocked:
+    // industry is a route out of a famine, not a reason to refuse shelter.
+    const d = supplyDissatisfaction([
+      { goodId: "ore", stock: 0, targetStock: 100, demand: 500, civilianDemand: 0, capacityProduction: 0, satisfaction: 0 },
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 1 },
+    ]);
+    expect(d).toBe(0);
+  });
+
+  it("returns 0 when no civilian demand is present", () => {
     expect(supplyDissatisfaction([])).toBe(0);
-    expect(supplyDissatisfaction([{ goodId: "ore", stock: 0, targetStock: 0, demand: 0, capacityProduction: 0}])).toBe(0);
+    expect(supplyDissatisfaction([
+      { goodId: "ore", stock: 0, targetStock: 0, demand: 0, civilianDemand: 0, capacityProduction: 0 },
+    ])).toBe(0);
   });
 });
 
 describe("supplyDissatisfaction — delivered flow", () => {
   it("reads a fully-delivering exporter parked at comfort as satisfied (D = 0)", () => {
-    // Stock sits at 75% of its days-of-supply anchor — the old stock/target proxy read this as
-    // 25% unsatisfied — but the persisted flow says every unit demanded was actually delivered.
+    // Stock sits at 75% of its price anchor — the old stock/target proxy read this as 25%
+    // unsatisfied — but the persisted flow says every unit demanded was actually delivered.
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 15, targetStock: 20, demand: 10, capacityProduction: 0, satisfaction: 1 },
+      { goodId: "food", stock: 15, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 1 },
     ]);
     expect(d).toBe(0);
   });
 
   it("uses the persisted flow when present and 1 when missing", () => {
     const starved = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0, satisfaction: 0 },
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 0 },
     ]);
     const missing = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0},
+      { goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0 },
     ]);
     expect(starved).toBeCloseTo(1, 5);
     expect(missing).toBe(0);
   });
 
-  it("still folds convexly by demand share", () => {
-    // food demand 30 (share 0.75, fully satisfied) vs water demand 10 (share 0.25, half-satisfied)
-    // → D = 0.25 × (1 − 0.5)^2 = 0.0625.
+  it("still folds convexly by weighted share", () => {
+    // food civilian demand 30 (share 0.75, fully satisfied) vs water 10 (share 0.25, half-satisfied)
+    // — equal necessity, so the shares are the demand shares → D = 0.25 × (1 − 0.5)^2 = 0.0625.
     const d = supplyDissatisfaction([
-      { goodId: "food", stock: 20, targetStock: 20, demand: 30, capacityProduction: 0, satisfaction: 1 },
-      { goodId: "water", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0, satisfaction: 0.5 },
+      { goodId: "food", stock: 20, targetStock: 20, demand: 30, civilianDemand: 30, capacityProduction: 0, satisfaction: 1 },
+      { goodId: "water", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 0.5 },
     ]);
     expect(d).toBeCloseTo(0.25 * 0.25, 5);
   });
 });
 
 describe("fed", () => {
-  const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10, capacityProduction: 0}];
+  // civilianDemand carries the fold's weight, so it must be present for these to exercise the
+  // genuine well-supplied branch — omitting it zeroes the weight and D short-circuits to 0 for
+  // "nobody to feed" rather than "everyone is fed".
+  const fedGoods = [{ goodId: "food", stock: 20, targetStock: 20, demand: 10, civilianDemand: 10, capacityProduction: 0, satisfaction: 1 }];
 
   it("is true for a well-supplied system", () => {
     expect(fed(sysWith({ goods: fedGoods }))).toBe(true);
@@ -696,7 +710,7 @@ describe("fed", () => {
 
   it("is false when the system is starved (high supply dissatisfaction)", () => {
     // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
-    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 }];
+    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, civilianDemand: 100, capacityProduction: 0, satisfaction: 0 }];
     expect(fed(sysWith({ goods: starved }))).toBe(false);
   });
 
@@ -724,7 +738,7 @@ describe("habitableHousingHeadroom", () => {
 });
 
 describe("plannedHousingUnits", () => {
-  const fedGoods: BuildGoodState[] = [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0 }];
+  const fedGoods: BuildGoodState[] = [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, civilianDemand: 5, capacityProduction: 0, satisfaction: 1 }];
 
   /** Occupancy r = pop ÷ popCap the site would sit at after committing `units` housing levels.
    *  popCap comes from the engine's own housingPopCap so the helper can never model a different
@@ -792,7 +806,7 @@ describe("plannedHousingUnits", () => {
 
   it("returns 0 when the system is not fed", () => {
     // Crowded well past the trigger but starving: supply is the one gate relief still waits on.
-    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, capacityProduction: 0, satisfaction: 0 }];
+    const starved = [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, civilianDemand: 100, capacityProduction: 0, satisfaction: 0 }];
     expect(plannedHousingUnits(sysWith({
       population: 200, buildings: { housing: 5 }, generalSpace: 100, habitableSpace: 100, goods: starved,
     }))).toBe(0);

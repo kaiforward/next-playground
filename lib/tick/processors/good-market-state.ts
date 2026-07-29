@@ -2,7 +2,7 @@
  * Shared per-system market-state derivation for the directed-logistics matcher and
  * the directed-build planner. Given one system's buildings/population/yields and its
  * market rows, produce the engine's GoodMarketState[]: per good, current stock, the
- * days-of-supply price anchor (targetStock), and total demand (civilian consumption +
+ * cycles-of-supply price anchor (targetStock), and total demand (civilian consumption +
  * industrial input draw). One definition so both processors read markets identically.
  */
 import type { ResourceVector } from "@/lib/types/game";
@@ -35,6 +35,7 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
       stock: m.stock,
       targetStock: band.targetStock,
       demand: civ + industrial,
+      civilianDemand: civ,
       // An explicit zero is a completed assessment and must remain a sink. Capacity is
       // only a legacy-save fallback while the persisted rate is genuinely absent.
       production: m.realizedProductionRate ?? (prodByKey.get(m.goodId) ?? 0),

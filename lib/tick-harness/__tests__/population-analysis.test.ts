@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { detectPingPong, summarizeInfrastructure, summarizePopulation } from "../population-analysis";
+import { detectPingPong, summarizeInfrastructure, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
+import { D_SHORTAGE_CUT } from "@/lib/constants/economy";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
+import type { WorldEvent } from "@/lib/world/types";
 
 /**
  * Characterization tests for detectPingPong. If any of these fail the
@@ -201,5 +203,74 @@ describe("summarizePopulation — striking share and stranded population", () =>
     const summary = summarizePopulation(systems, 1300, 0.65, BRAKE_END);
     expect(summary.strandedCount).toBe(0);
     expect(summary.strandedPopulation).toBe(0);
+  });
+});
+
+describe("summarizeSupplyRegimes", () => {
+  const mkt = (systemId: string, goodId: string, satisfaction: number) => ({ systemId, goodId, satisfaction });
+
+  it("classifies settled systems and reports shares that sum to 1", () => {
+    const systems = [popSys("fed", 100, 1000), popSys("thirsty", 100, 1000)];
+    const summary = summarizeSupplyRegimes(systems, [
+      mkt("fed", "water", 1), mkt("fed", "food", 1),
+      mkt("thirsty", "water", 0), mkt("thirsty", "food", 1),
+    ]);
+    expect(summary.counted).toBe(2);
+    expect(summary.supplied).toBe(1);
+    expect(summary.shortage).toBe(1);
+    expect(summary.suppliedShare + summary.rationingShare + summary.shortageShare).toBeCloseTo(1, 10);
+  });
+
+  it("buckets a mildly-short system as rationing, not supplied or shortage", () => {
+    // The bucket the other fixtures never produce. Water at 0.9 is above the survival line, and the
+    // squared gap folds to D ≈ 0.005 — non-zero, so not supplied; far under the cut, so not shortage.
+    // Without this, a summarizer that mis-routed the rationing branch would still pass the suite.
+    const systems = [popSys("peckish", 100, 1000)];
+    const summary = summarizeSupplyRegimes(systems, [
+      mkt("peckish", "water", 0.9), mkt("peckish", "food", 1),
+    ]);
+    expect(summary.rationing).toBe(1);
+    expect(summary.supplied).toBe(0);
+    expect(summary.shortage).toBe(0);
+    expect(summary.meanDissatisfaction).toBeGreaterThan(0);
+    expect(summary.meanDissatisfaction).toBeLessThan(D_SHORTAGE_CUT);
+  });
+
+  it("reaches shortage through the D cut, not only the survival shortcut", () => {
+    // Both survival goods sit ABOVE SHORTAGE_SATISFACTION (0.55 > 0.5), so hasSurvivalShortfall is
+    // false and the shortcut cannot fire — a deeply-missing low-necessity good carries D over the cut
+    // on its own. The "thirsty" fixture above takes the shortcut, so without this case the cut branch
+    // is never the thing under test.
+    const systems = [popSys("squeezed", 100, 1000)];
+    const summary = summarizeSupplyRegimes(systems, [
+      mkt("squeezed", "water", 0.55), mkt("squeezed", "food", 0.55), mkt("squeezed", "gas", 0),
+    ]);
+    expect(summary.shortage).toBe(1);
+    expect(summary.meanDissatisfaction).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);
+  });
+
+  it("folds active events without disturbing the reading when none touches consumption", () => {
+    // The instrument rebuilds consumption modifiers from the persisted events so it cannot drift from
+    // the tick. No shipped event carries a consumption_rate multiplier today, so an active event must
+    // leave the classification exactly where it was — this pins that the wiring is inert, not lossy.
+    const systems = [popSys("fed", 100, 1000), popSys("thirsty", 100, 1000)];
+    const markets = [
+      mkt("fed", "water", 1), mkt("fed", "food", 1),
+      mkt("thirsty", "water", 0), mkt("thirsty", "food", 1),
+    ];
+    const event: WorldEvent = {
+      id: "e1", type: "inner_system_conflict", phase: "tensions",
+      systemId: "thirsty", regionId: "r1", startTick: 0, phaseStartTick: 0, phaseDuration: 10,
+      severity: 1, sourceEventId: null, metadata: null,
+    };
+    expect(summarizeSupplyRegimes(systems, markets, [event]))
+      .toEqual(summarizeSupplyRegimes(systems, markets));
+  });
+
+  it("counts only settled systems and never reports NaN for an empty galaxy", () => {
+    const summary = summarizeSupplyRegimes([], []);
+    expect(summary.counted).toBe(0);
+    expect(Number.isFinite(summary.suppliedShare)).toBe(true);
+    expect(summary.meanDissatisfaction).toBe(0);
   });
 });

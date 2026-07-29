@@ -4,6 +4,7 @@ import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { consumptionRate } from "@/lib/engine/physical-economy";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
 function foodMarket(stock: number, demandRate: number): MarketRowForLogistics {
@@ -30,6 +31,24 @@ describe("toGoodMarketStates", () => {
       consumptionRate("food", { population: 100, technicians: 0, engineers: 0 }),
       10,
     );
+  });
+
+  it("reports civilian demand separately from the civilian + industrial total", () => {
+    // The housing fed-gate folds civilianDemand ALONE, so the two fields must be distinguishable.
+    // A no-buildings fixture cannot check that — with zero industrial draw they are simply equal, so
+    // swapping `civ` for `industrial` here would still satisfy the order-independent `demand` sum.
+    // A smelter drawing ore as a recipe input separates them.
+    const ore: MarketRowForLogistics = {
+      id: "A|ore", goodId: "ore", stock: 10, anchorMult: 1, demandRate: 5, storageCapacity: 0,
+    };
+    const buildings = { metals: 3, vocational_school: 1 };
+    const out = toGoodMarketStates({
+      buildings, population: 100, yields: unitResourceVector(), markets: [ore],
+    });
+    const basis = computeSystemLabourSnapshot(buildings, 100).basis;
+    expect(out[0].civilianDemand).toBeCloseTo(consumptionRate("ore", basis), 10);
+    // The smelter's ore draw rides on top, so the total is strictly the larger of the two.
+    expect(out[0].demand).toBeGreaterThan(out[0].civilianDemand);
   });
 
   it("returns one entry per market row", () => {

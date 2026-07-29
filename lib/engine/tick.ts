@@ -20,7 +20,7 @@ export interface MarketTickEntry {
   /** Price-saturation point (price hits its ceiling here). Not a draw floor. */
   minStock: number;
   /**
-   * Days-of-supply anchor (price === basePrice). The produce throttle saturates at
+   * Cycles-of-supply anchor (price === basePrice). The produce throttle saturates at
    * holdCover × targetStock; current access is independently demand-rate based.
    */
   targetStock: number;
@@ -129,7 +129,7 @@ export interface TickEntryInput {
   /** Stock floor for this market entry — resolved upstream from the pricing-band. */
   minStock: number;
   /**
-   * Days-of-supply anchor (price === basePrice) — resolved upstream from the pricing-band.
+   * Cycles-of-supply anchor (price === basePrice) — resolved upstream from the pricing-band.
    * The production throttle saturates at holdCover × targetStock (operating ceiling).
    */
   targetStock: number;

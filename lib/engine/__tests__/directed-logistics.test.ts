@@ -62,14 +62,21 @@ function sys(
   systemId: string,
   generation: number,
   good: {
-    goodId: string; stock: number; targetStock: number; demand: number; production?: number;
-    capacityProduction?: number; productionSuppressed?: boolean;
+    goodId: string; stock: number; targetStock: number; demand: number; civilianDemand?: number;
+    production?: number; capacityProduction?: number; productionSuppressed?: boolean;
   },
 ): SystemLogisticsState {
   const production = good.production ?? 0;
   return {
     systemId, factionId: "f1", generation,
-    goods: [{ ...good, production, capacityProduction: good.capacityProduction ?? production }],
+    goods: [{
+      ...good,
+      production,
+      capacityProduction: good.capacityProduction ?? production,
+      // The matcher never reads it (only the build planner's fed-gate does); these fixtures are
+      // pure consumers, so all of their demand is civilian.
+      civilianDemand: good.civilianDemand ?? good.demand,
+    }],
   };
 }
 
@@ -270,7 +277,7 @@ describe("matchFactionTransfers", () => {
 describe("surplusDrawable", () => {
   const margin = DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 1.4
 
-  it("returns 0 for a zero/negative demand anchor (no days-of-supply target), even for a producer", () => {
+  it("returns 0 for a zero/negative demand anchor (no cycles-of-supply target), even for a producer", () => {
     expect(surplusDrawable(50, 0, 5, 30)).toBe(0);
     expect(surplusDrawable(50, -10, 5, 30)).toBe(0);
   });

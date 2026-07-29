@@ -23,7 +23,7 @@ import type { ResourceVector } from "@/lib/types/game";
 export const DEFAULT_ELASTICITY = 1;
 
 /**
- * Days of cover (stock ÷ local demand rate) at which a good's mid price equals
+ * Cycles of cover (stock ÷ local demand rate) at which a good's mid price equals
  * its basePrice. The single global reference that replaces the per-good anchor
  * table — per-good market depth now emerges from per-good demand rates.
  *
@@ -35,7 +35,7 @@ export const DEFAULT_ELASTICITY = 1;
  * (see physical-economy.ts); this stays the whole-roster knob.
  */
 /**
- * Floor on the days-of-supply denominator so a near-empty system yields a finite
+ * Floor on the cycles-of-supply denominator so a near-empty system yields a finite
  * cover instead of a divide-by-zero / zero reference. First-draft value; tuned via `npm run simulate`.
  */
 export const MIN_DEMAND = scaleValue(0.05);
@@ -52,7 +52,7 @@ export const SEED_COVER_MAX = 1.5;
 export const INITIAL_RESERVE_ANCHOR_FRAC = 0.75;
 
 /**
- * Days-of-supply demand denominator for one good: max(civilian consumption,
+ * Cycles-of-supply demand denominator for one good: max(civilian consumption,
  * MIN_DEMAND). Civilian-only (base per-capita + skilled baskets — see
  * consumptionRate); the population processor recomputes it as population and
  * the labour allocation move.
@@ -62,7 +62,7 @@ export function civilianDemandRateForGood(goodId: string, basis: CivilianDemandB
 }
 
 /**
- * Total days-of-supply demand denominator: civilian (demand basis) + industrial
+ * Total cycles-of-supply demand denominator: civilian (demand basis) + industrial
  * (production-input draw). The industrial term is capacity-based and stable —
  * it depends on the industrial base and labour ratio, not on this tick's stock.
  * The labour state is skill-gated exactly like the tick's actual production — a

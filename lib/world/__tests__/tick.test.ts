@@ -380,7 +380,7 @@ describe("runWorldTick — per-stage wiring", () => {
       ...base,
       systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
       // B loses its water extractors AND starts empty of water → a persistent water deficit (it can't
-      // self-refill, so it stays below its days-of-supply anchor and must import).
+      // self-refill, so it stays below its cycles-of-supply anchor and must import).
       buildings: base.buildings.filter((bl) => !(bl.systemId === b && bl.buildingType === "water")),
       // A holds a large water reserve → a surplus donor above its anchor.
       markets: base.markets.map((m) => {
@@ -865,13 +865,15 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     );
     const shortagePulse = await runTicks(drained, 1, POPULATION_CADENCE);
 
-    // Premise: every demanded good delivered nothing, so D folds to exactly 1 and the worst-good
-    // fold reads Shortage — both independent of the demand weights.
+    // Premise: every demanded good delivered nothing, so D folds to exactly 1 and the supply state
+    // reads Shortage — both independent of the necessity weights.
     expectDemandedSatisfaction(shortagePulse, systemId, 0);
     // The system entered on its floor, so the relaxation term is zero and the whole rise is the
-    // shortage gain integrating D = 1.
+    // shortage gain integrating D = 1. Gain is slope x relaxation rate, derived here rather than
+    // named, so the assertion follows a slope retune instead of going stale against one.
+    const shortageGain = UNREST_PARAMS.slopeShortage * UNREST_PARAMS.decay;
     const shortageUnrest = fixtureSystem(shortagePulse, systemId).unrest;
-    expect(shortageUnrest).toBeCloseTo(TAX_FLOOR + UNREST_PARAMS.gainShortage, 12);
+    expect(shortageUnrest).toBeCloseTo(TAX_FLOOR + shortageGain, 12);
     // One bad pulse from the floor is recoverable — it does not reach the strike regime.
     expect(shortageUnrest).toBeLessThan(STRIKE_PARAMS.threshold);
 
@@ -887,7 +889,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     }
 
     // The stored excess above the floor decays geometrically at the Supplied relaxation rate.
-    const excess = UNREST_PARAMS.gainShortage;
+    const excess = shortageGain;
     const retained = 1 - UNREST_PARAMS.recoveryDecay;
     unrestByPulse.forEach((unrest, index) => {
       expect(unrest).toBeCloseTo(TAX_FLOOR + excess * retained ** (index + 1), 12);

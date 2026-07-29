@@ -3,16 +3,30 @@ import type { MigrationFlowParams } from "@/lib/engine/migration";
 import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
 
 /**
- * Unrest integration. Rates are per *population-processor run* — i.e. per economy-shard
- * update (every `MONTH_LENGTH` ticks, 24), not per game tick. Unrest relaxes toward a
- * standing-pressure floor (tax + crowding) and integrates dissatisfaction on top:
- * Shortage accumulates twice as fast as Rationing, and Supplied recovers twice as fast
- * as either accumulates, so a relieved system sheds unrest quickly while a chronically
- * short one climbs. Calibrated against the simulator.
+ * Unrest integration. Rates are per *population-processor run* — i.e. per economy-shard update
+ * (every `MONTH_LENGTH` ticks, 24), not per game tick. Unrest relaxes toward a standing-pressure
+ * floor (tax + crowding) and integrates dissatisfaction on top, settling at
+ * `min(1, floor + slope × D)`, independent of the relaxation rate (and therefore of the catch-up
+ * factor). Supplied recovers twice as fast as either regime accumulates, so a relieved system sheds
+ * unrest quickly while a chronically short one climbs.
+ *
+ * Each slope is an EXCHANGE RATE, not a cap: how much settled unrest one unit of D buys. It exceeds
+ * 1 because D itself is small — measured mean D is ~0.15 and a total water failure only reaches
+ * ~0.37, so a slope of 1 could never lift famine over the strike threshold. The slope equals settled
+ * unrest only at D = 1 (every good wholly undelivered), which does not occur; read 2.5 as "famine
+ * bites 2.5× as hard per unit of shortage", never as a reachable unrest value. Unrest is a [0,1]
+ * state and `accumulateUnrest` clamps to it, so the sum saturates in the extreme corner — highest
+ * tax plus full crowding plus a total food failure asks for ~1.16 and gets 1.0.
+ *
+ * Both slopes are load-bearing and no single number replaces them: sustained Rationing must stay
+ * below the collapse threshold at the highest tax, while a total food failure must cross it at zero
+ * tax. Those two bounds do not overlap — famine genuinely needs a steeper response than ordinary
+ * scarcity, not merely a larger D. Both are asserted from the shared constants in
+ * lib/constants/__tests__/band-constants.test.ts. First cuts; the simulator owns the finals.
  */
 export const UNREST_PARAMS: UnrestParams = {
-  gainRationing: 0.06,
-  gainShortage: 0.12,
+  slopeRationing: 1.8,
+  slopeShortage: 2.5,
   decay: 0.06,
   recoveryDecay: 0.12,
 };
@@ -34,16 +48,15 @@ export const CROWDING = { BRAKE_END: 1.15, PRESSURE_MAX: 0.05 } as const;
 export const STRIKE_PARAMS: StrikeParams = { threshold: 0.65, floorMultiplier: 0.25 };
 
 /**
- * Growth/decline rates (per population-processor run, one per economy-shard update).
- * Growth runs at full rate until the housing cap, then the crowd brake ramps it to zero by
- * `crowdBrakeEnd`; decline scales with unrest. Symmetric growth/decline rates: in the
- * barren-but-alive galaxy most systems carry a chronic low-grade higher-tier deficit (mining
- * worlds can't source consumer_goods/luxuries/medicine locally and the static economy can't
- * build its way out) — an asymmetric decline turned that unavoidable D≈0.4 into a steady
- * galaxy-wide drain. Equal rates let such systems hold steady while genuinely high-unrest
- * ones still decline. The overshoot-death sink fires only in the strike regime
- * (`overshootDeathUnrestGate`), so a calm over-capacity system displaces via migration, not
- * death. Calibrated against the simulator.
+ * Growth/decline rates (per population-processor run, one per economy-shard update). Growth runs at
+ * full rate until the housing cap, then the crowd brake ramps it to zero by `crowdBrakeEnd`; decline
+ * scales with unrest. Symmetric growth/decline rates: growth carries a (1 − D) factor and decline
+ * carries unrest, so the two are already asymmetric in what they read — an asymmetric *rate* on top
+ * of that would drain systems whose only fault is a low-necessity shortfall. With the fold weighted
+ * by necessity the ambient barren-galaxy deficit folds to ≈0.14 rather than ≈0.4, so a chronically
+ * import-short mining world grows while a genuinely deprived one declines. The overshoot-death sink
+ * fires only in the strike regime (`overshootDeathUnrestGate`), so a calm over-capacity system
+ * displaces via migration, not death. Calibrated against the simulator.
  */
 export const POPULATION_PARAMS: PopulationParams = {
   growthRate: 0.015,

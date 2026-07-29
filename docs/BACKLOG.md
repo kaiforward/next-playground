@@ -10,6 +10,20 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
+- **[M] Finish the cycles vocabulary sweep — "month" is still the reference time unit in code** — the
+  in-fiction unit is the **cycle**: the timescale is deliberately unfixed (it is space), so months and
+  days are both wrong. The necessity-unrest slice converted the supply/cover vocabulary
+  ("days-of-supply" → "months-of-supply" → **cycles-of-supply**, plus `TARGET_COVER`/`HOLD_COVER`/
+  `RATION_COVER` and the `/cyc` unit labels), but stopped at prose. "Month" remains the codebase's name
+  for the reference time unit in ~390 further sites, and the rest is not a docstring pass:
+  - `WorldBuilding.idleMonths` is a **persisted World field** → renaming needs a `SAVE_FORMAT_VERSION` bump.
+  - `cadence.month` is in the **experiment YAML schema** (`lib/tick-harness/experiment.ts`) → renaming
+    breaks every committed config under `experiments/`.
+  - `MONTH_LENGTH` (~50 refs), `DecayParams.idleBufferMonths`, `TREASURY.HEADS_TAX_PER_MONTH` /
+    `headsTaxPerMonth`, and the pervasive "reference month(s)" unit prose (~40 sites).
+  Do it as one mechanical PR (`tsc` verifies the identifier half) with the save bump and a note that old
+  experiment configs need their `cadence.month` key renamed. User-facing `/cyc` copy in `components/`
+  already uses the right word and needs no change.
 - **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips deliberately ship with
   figures plus the single sentence "Higher-pressure needs create more unrest." (a needs-visibility build
   decision: final wording waits for a dedicated nested-tooltip pass). When that pass happens, also
@@ -104,6 +118,35 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
+- **[M] Colony bootstrap deadlock: the housing fed-gate locks against `popCap`** — found measuring the
+  necessity-unrest slice (3000 ticks, seed 42, 600 systems): 32 of 573 settled systems end striking, and
+  the differentiator is neither endowment (yield 7.59 striking vs 7.78 calm) nor remoteness (3.91 vs 3.72
+  hops, degree 6.19 vs 6.20) nor overcrowding (34.4% vs 34.6% over cap). It is a self-reinforcing lock:
+  a colony opens deprived and settles at D ≈ 0.25–0.33; `DIRECTED_BUILD.D_SETTLE` is 0.20, so `fed()`
+  never opens; no housing means `popCap` stays at the seed 20, which means no labour to build the
+  industry that would lower D. Unrest then integrates to `floor + slopeShortage × D` ≈ 0.80 and crosses
+  the strike line. Calm systems' median D is 0.12 and strikers' is 0.29 — the gate sits between them, so
+  the outcome turns on which side of a 0.20 line a colony lands, not on where it is or what it sits on.
+  Escapes are real but fragile: one system dipped to D 0.199, snowballed 20 → 140 pop / 3 → 15 buildings,
+  then hit its new cap, went back over the gate and is sliding back in; another escaped and was
+  recaptured by a survival shortfall, decaying 12 → 8 buildings.
+  **`fed()`'s own docstring already makes the argument against this**: "Unrest is deliberately NOT a gate:
+  crowding is itself an unrest source, so refusing to build relief housing on a restive world would hold
+  the valve shut on exactly the world that needs it." The same holds for supply — refusing housing on a
+  supply-short world holds the valve shut on exactly the world that needs labour to fix its supply.
+  A `D_SETTLE` nudge is not the fix (it only moves which colonies land unlucky); the shape wanted is
+  structural — gate on *trend* rather than level, or exempt the first housing level so a colony can always
+  reach viable size once. Related but distinct: colonies still *open* deprived (opening D 0.561 vs the
+  0.25 cut), which is founding-manifest sizing. Booked from PR #203; **pick up after that branch's
+  review**, not during it.
+- **Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
+  real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
+  is currently 1 for every good and `GOODS.priceFloor`/`priceCeiling` is a pure tier lookup with zero
+  per-good variation. Booked from `docs/planned/necessity-weighted-unrest.md`.
+- **Government layer revisit** — `GOVERNMENT_TYPES` carries only event weights and a danger baseline
+  since the flat `consumptionBoosts` term was deleted; decide what, if anything, replaces it as an
+  economic axis. Governments are economically inert until then. Booked from
+  `docs/planned/necessity-weighted-unrest.md`.
 - **[M] Faction-screen colonise verb with map-based target selection** — deferred from the Slice 2
   control-surface design pass (2026-07-18). The faction construction command card gets a colonise
   action that enters a **map target-selection mode** (eligible systems highlighted, click to direct
