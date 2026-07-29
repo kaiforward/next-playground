@@ -4,7 +4,7 @@ import type { SystemCadence } from "@/lib/types/api";
 
 /**
  * The system's single "next update" cadence group. Under the cycle resolution
- * cycle the whole galaxy resolves together on `tick % CYCLE_LENGTH === 0`, so the
+ * the whole galaxy resolves together on `tick % CYCLE_LENGTH === 0`, so the
  * group is uniformly 0; the client pairs it with the live tick via
  * `ticksUntilShard(resolutionGroup, tick, CYCLE_LENGTH)` to render the countdown.
  */

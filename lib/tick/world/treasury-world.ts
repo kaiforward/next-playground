@@ -20,7 +20,7 @@ export interface TreasuryWorld {
 
 /** Per-tick params sourced by `runWorldTick`. */
 export interface TreasuryProcessorParams {
-  /** Settlement cadence — the cycle start. */
+  /** Settlement cadence — the economy cycle length in ticks (settles on its cycle start). */
   interval: number;
   /** ECONOMY_SCALE, for normalising S-scaled tax bases at collection. */
   economyScale: number;

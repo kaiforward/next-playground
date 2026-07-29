@@ -84,7 +84,7 @@ export function buildLogisticsRows(
     const totalConsumption = consumption + inputDemand;
     const a = flowsByGood.get(goodId) ?? EMPTY_AGG;
 
-    // Window sums → per-cycle rates (matches production/consumption units).
+    // Window sums → per-REFERENCE_INTERVAL rates (matches the production/consumption units).
     const importLogistics = a.importLogistics / norm;
     const exportLogistics = a.exportLogistics / norm;
 

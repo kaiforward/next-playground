@@ -125,7 +125,7 @@ export type SystemLogisticsData =
  * counts down off the live tick.
  */
 export interface SystemCadence {
-  /** Group in [0, CYCLE_LENGTH): when the whole galaxy resolves. Always 0 under the cycle start; kept so the client counts down with ticksUntilShard(resolutionGroup, tick, CYCLE_LENGTH). */
+  /** Group in [0, CYCLE_LENGTH): when the whole galaxy resolves. Always 0 under the cycle resolution; kept so the client counts down with ticksUntilShard(resolutionGroup, tick, CYCLE_LENGTH). */
   resolutionGroup: number;
 }
 export type SystemCadenceResponse = ApiResponse<SystemCadence>;
