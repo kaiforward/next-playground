@@ -101,7 +101,7 @@ A system's **total population capacity** and **total resource availability** are
 The world is **seeded partially developed, varied by habitability** — not empty, not maxed:
 
 - **Maxed** would leave no growth headroom (the development engine is invisible; factions have nothing to build).
-- **Empty** would mean a slow, boring bootstrap and an inconsistent experience for players joining a cycles-old galaxy.
+- **Empty** would mean a slow, boring bootstrap and an inconsistent experience for players joining a months-old galaxy.
 - **Partial, varied** → the economy is immediately rich enough to *play in*, still *visibly* evolving (boomtowns/ghost towns have headroom both ways), and produces **instant economic geography** — a developed core vs a raw frontier — which is the regional-specialization payoff *and* gives factions a turn-1 agenda (develop the frontier).
 
 Seed *below* carrying capacity but at a *locally sustainable* level, so there's no violent settling crash on launch. The simulator's remit therefore extends from "find equilibrium" to "find a **seedable, stable-but-growing** start state."
@@ -167,7 +167,7 @@ Growth is held in check by carrying capacity, build space, two opportunity costs
 
 ## 6. Pricing — cycles-of-supply, no global anchor
 
-Price stops being pinned to a per-good global constant. It emerges from **inventory cover**: how many ticks of supply the warehouse holds relative to *local* demand.
+Price stops being pinned to a per-good global constant. It emerges from **inventory cover**: how many cycles of supply the warehouse holds relative to *local* demand.
 
 ```
 cover  = stock / local_demand_rate

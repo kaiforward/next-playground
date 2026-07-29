@@ -138,7 +138,7 @@ orthogonal to that — it changes how much the *shortfall* counts, not how much 
 and the distinction decides where every threshold in this document sits. Delivery is **full** while
 stock covers at least `RATION_COVER` (2) pulses of demand; below that it ramps as `√(stock / rationStock)`.
 The pricing anchor is `TARGET_COVER` (40) pulses. Because an economy pulse is one cycle, **cover is
-measured in cycles, not days** — the "cycles-of-supply" wording in the shipped docstrings is legacy and
+measured in cycles, not days** — the "days-of-supply" wording in the shipped docstrings is legacy and
 should be corrected where it appears.
 
 | Stock (cycles of demand) | Satisfaction | State |

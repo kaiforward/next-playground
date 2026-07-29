@@ -109,7 +109,7 @@ Laffer curve using existing machinery. AI factions get **government**-flavoured 
 
 ## Budget bands (spending)
 
-Three bands, each an EU5-style 0–100% funding slider against that band's *bill* — the cycle
+Three bands, each an EU5-style 0–100% funding slider against that band's *bill* — the per-cycle
 price tag of running that band's activity at 100%. **Bills charge work performed, not standing
 capacity**: construction's bill scales with the pool actually absorbed by the build queue (an
 empty queue costs nothing that cycle — the pool primitive is essentially the whole non-skilled

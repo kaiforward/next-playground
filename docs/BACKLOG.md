@@ -53,7 +53,18 @@ Well-defined, can start now.
   (compare `funded` against them) — a `WorldTreasurySettlement` field, i.e. a save-format bump, which
   is why this didn't fold into the merge. Touches `FundingSlider` (drop the dual label), the
   treasury processor (snapshot the sliders), and the construction-card readout (same shorted rule).
-- **[S] Improve UI for dev cheat panel** — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
+- **[S] `cyclesInWindow` divides by `LOGISTICS_INTERVAL` but claims a per-economy-cycle rate** —
+  `buildLogisticsRows`' docstring (`lib/engine/logistics.ts:41-44`) says the parameter normalises
+  window-summed imports/exports into a **per-economy-cycle** rate so the External column shares units
+  with Internal production/consumption. Its one caller computes it as
+  `FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL` (`lib/services/trade-flow.ts`). Those agree only because
+  `CYCLE_LENGTH` and `LOGISTICS_INTERVAL` are both 24 as shipped — and `tick-cadence.ts` explicitly
+  documents `LOGISTICS_INTERVAL` as "Independent of `CYCLE_LENGTH` — relative pacing knob". Tune
+  either one and the logistics panel's External column silently stops sharing units with Internal,
+  with no error. Decide which unit the column actually wants (economy cycle, to match Internal; or
+  logistics pulse, to match the batch cadence), then make the name, the docstring and the divisor
+  agree. Surfaced by the cycles-vocabulary review — the sweep made "cycle" a reserved term, which is
+  what exposed the two senses sitting four lines apart. Pre-existing; not introduced by that PR. — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
 - **[S] Colony seed-source tie-break differs between the player verb and the planner on an exact hop
   tie** — the player's direct-colony verb (`findSeedSource`, `lib/services/colony-eligibility.ts`) picks

@@ -73,7 +73,7 @@ export function isPulseTick(tick: number, interval: number): boolean {
  * counterpart to {@link shardRange}'s rolling slice. Processors that resolve the
  * entire galaxy at once on the cycle boundary (economy, migration,
  * directed-logistics, directed-build) use this; trade-flow keeps `shardRange`
- * for daily diffusion. Half-open [start, end).
+ * for per-tick diffusion. Half-open [start, end).
  */
 export function pulseShard(total: number, tick: number, interval: number): ShardWindow {
   if (total <= 0) return { start: 0, end: 0 };

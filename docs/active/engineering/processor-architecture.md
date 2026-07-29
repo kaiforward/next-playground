@@ -100,7 +100,7 @@ A row type earns a `Tick*` shape only by differing from its `World` row. Markets
 
 ## Cadence and interval awareness
 
-Most processors resolve on a coarse **pulse** rather than every tick — the economy cluster cycle, construction and logistics on their own intervals. The pulse interval is a real knob: `catchUpFactor(interval) = interval / REFERENCE_INTERVAL` (`lib/tick/shard.ts`) lets a body apply "elapsed-ticks worth" per run, so tuning an interval changes granularity, not wall-clock rate. `REFERENCE_INTERVAL` (24) is the calibration anchor and is **not** a knob — it is the divisor that makes the reference cadence `catchUp = 1` and behaviour-identical.
+Most processors resolve on a coarse **pulse** rather than every tick — the economy cluster each cycle, construction and logistics on their own intervals. The pulse interval is a real knob: `catchUpFactor(interval) = interval / REFERENCE_INTERVAL` (`lib/tick/shard.ts`) lets a body apply "elapsed-ticks worth" per run, so tuning an interval changes granularity, not wall-clock rate. `REFERENCE_INTERVAL` (24) is the calibration anchor and is **not** a knob — it is the divisor that makes the reference cadence `catchUp = 1` and behaviour-identical.
 
 Every pulse-riding quantity is one of four shapes, and the shape dictates the treatment:
 
