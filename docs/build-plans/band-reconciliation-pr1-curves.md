@@ -567,14 +567,14 @@ In `lib/tick/processors/__tests__/economy.test.ts` (its `simParams` fixture at l
 ```ts
 describe("satisfaction — measured flow, persisted", () => {
   it("persists satisfaction 1 for a consumer fully served above the comfort knee", async () => {
-    // consumer market with stock deep above comfort → after the pulse the
+    // consumer market with stock deep above comfort → after the cycle the
     // adapter's market row carries satisfaction === 1
   });
   it("persists the rationed delivered fraction below the knee", async () => {
     // stock at 0.25 × comfort → satisfaction ≈ sqrt(0.25) = 0.5 (delivered ÷ demanded)
   });
   it("is flow-measured, not a post-tick stock read (boundary bias)", async () => {
-    // stock just above comfort but small enough that a full month's draw ends below
+    // stock just above comfort but small enough that a full cycle's draw ends below
     // the knee → satisfaction still 1 (full delivery happened)
   });
   it("persists 1 for pure producers", async () => {});
@@ -586,7 +586,7 @@ describe("satisfaction — measured flow, persisted", () => {
 ```
 
 Build these on the file's existing world/adapter fixtures (it already constructs
-`InMemoryEconomyWorld` with market rows and runs `runEconomyProcessor` on a pulse tick). Assert
+`InMemoryEconomyWorld` with market rows and runs `runEconomyProcessor` on a cycle tick). Assert
 via the adapter's public `markets` field.
 
 - [ ] **Step 2: Run to verify failure**
@@ -605,7 +605,7 @@ export interface MarketUpdate {
   stock: number;
   /** Active pricing-anchor multiplier from event modifiers (1 = none). */
   anchorMult: number;
-  /** Consumption satisfaction actually applied this pulse (delivered ÷ demanded; 1 for non-consumers). */
+  /** Consumption satisfaction actually applied this cycle (delivered ÷ demanded; 1 for non-consumers). */
   satisfaction: number;
 }
 ```
@@ -614,7 +614,7 @@ export interface MarketUpdate {
 
 ```ts
   /**
-   * Consumption satisfaction the last economy pulse actually applied for this
+   * Consumption satisfaction the last economy cycle actually applied for this
    * good (civilian delivered ÷ demanded, ∈ [0,1]; 1 = fully served). The
    * measured-once flow the needs display, the planner fed-proxy, and the regime
    * classification all read — never recomputed from stock. Optional:
@@ -647,8 +647,8 @@ In `lib/tick/processors/economy.ts`, replace lines 140-191 (from the `marketUpda
 the `economySignals` assembly):
 
 ```ts
-  // Satisfaction is the FLOW actually applied this pulse (delivered ÷ demanded),
-  // never a post-tick stock recompute — a month that starts above the comfort
+  // Satisfaction is the FLOW actually applied this cycle (delivered ÷ demanded),
+  // never a post-tick stock recompute — a cycle that starts above the comfort
   // knee delivers in full even when it ends just below it. Non-consumers read 1.
   const satisfactionByIndex = markets.map((_, i) => {
     const consumptionRate = tickEntries[i].consumptionRate;
@@ -742,7 +742,7 @@ stock and the fixture row has no band fields).
 
 Rewrite `lib/engine/pop-needs.ts`:
 
-- Module doc: the read-side projection now *reads* the economy pulse's persisted per-good
+- Module doc: the read-side projection now *reads* the economy cycle's persisted per-good
   satisfaction (delivered ÷ demanded) instead of recomputing a stock position — the display and
   the sim cannot diverge, and the post-tick boundary bias is gone. Note: the stored measure is
   taken against total civilian demand including the government boost; rationing is pro-rata, so
@@ -755,7 +755,7 @@ Rewrite `lib/engine/pop-needs.ts`:
 /** The market-row fields the needs read consumes. */
 export interface PopNeedsMarketRow {
   goodId: string;
-  /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1). */
+  /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1). */
   satisfaction?: number;
 }
 ```
@@ -767,7 +767,7 @@ export interface PopNeedsMarketRow {
       const satisfaction = row ? Math.max(0, Math.min(1, row.satisfaction ?? 1)) : 0;
 ```
 
-  (`PopNeed.satisfaction` doc: `/** [0,1] — the delivered fraction the last economy pulse applied; 1 = fully met. */`)
+  (`PopNeed.satisfaction` doc: `/** [0,1] — the delivered fraction the last economy cycle applied; 1 = fully met. */`)
 
 - [ ] **Step 4: Run tests** — `npx vitest run` on the pop-needs test file + `npx tsc --noEmit`
 (callers pass `WorldMarket[]`, structurally fine). Expected: PASS.
@@ -828,7 +828,7 @@ describe("supplyDissatisfaction — delivered flow", () => {
 `lib/tick/world/directed-logistics-world.ts` — `MarketRowForLogistics` gains:
 
 ```ts
-  /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1). */
+  /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1). */
   satisfaction?: number;
 ```
 
@@ -847,7 +847,7 @@ becomes:
 /**
  * Delivered-flow dissatisfaction D in [0,1] for one system — the "fed" half of
  * the settle gate. Reuses the population engine's demand-weighted convex fold
- * over the economy pulse's persisted per-good satisfaction (delivered ÷
+ * over the economy cycle's persisted per-good satisfaction (delivered ÷
  * demanded — the same measure the needs display reads), so a
  * deliberately-at-comfort exporter with full delivery reads as satisfied.
  * Missing satisfaction (engine-test fixtures, pre-change saves) ⇒ 1.
@@ -941,7 +941,7 @@ type (line 90) and its assignment (line 98); the transfer apply (line 133) becom
 
 (The matcher's `surplusDrawable` never plans a draw below the donor's anchor
 (`directed-logistics.ts:50-56`) — this clamp is only the physical belt-and-braces against
-same-pulse concurrent writes, so its floor is 0, not the retired reserve.)
+same-cycle concurrent writes, so its floor is 0, not the retired reserve.)
 
 `lib/constants/market-economy.ts` — `getInitialStock` return (line 125):
 

@@ -40,15 +40,15 @@ Harness: stock-pin metric re-bases to true floor pins (stock ≈ 0).
 ### PR2 — Selling/decay signal + housing vacancy + idle buffer (§1 selling bullet, §5)
 
 The decay side of the same reconciliation. The producer decay/Glut signal becomes the **isolated
-ceiling term**: the economy pulse emits `sellingFactor` per (system, good) = the §1 production-knee
-throttle alone (the `productionCeiling` primitive PR1 lands, evaluated at the pulse's stock) —
+ceiling term**: the economy cycle emits `sellingFactor` per (system, good) = the §1 production-knee
+throttle alone (the `productionCeiling` primitive PR1 lands, evaluated at the cycle's stock) —
 never realized/suppressed/input-gated output. Decay `used = count × min(effectiveFulfilment,
 sellingFactor + USED_SLACK)`; `UtilizationContext.outputUptake` becomes the selling-factor accessor
 at both call sites (decay engine + `buildIndustryReadout`), the old full-band `outputUptake` and
 the last `selfLimitingFactor` call sites are deleted. Funding-bound exclusion: the directed-logistics
 matcher gains an observable "wanted-but-unfunded" output (today budget exhaustion is a silent
 `break` at `directed-logistics.ts:139`) so a funding-limited exporter reads used, not glut. Housing
-decay gains `VACANCY_SLACK` (0.10): `used = min(count, occupancy × 1.10)`. `idleBufferMonths` 6 → 12.
+decay gains `VACANCY_SLACK` (0.10): `used = min(count, occupancy × 1.10)`. `idleBufferCycles` 6 → 12.
 Invariant asserted in tests: the selling factor contains no labour/input/strike/maintenance/event
 term (the purse flow-only guarantee, `treasury.ts:128-136`).
 
@@ -63,25 +63,25 @@ Plan: `band-reconciliation-pr3-planner-logistics.md`.
 
 Realized-aware classification: `toGoodMarketStates`' `production` figure applies the suppression
 multipliers and input gates (the tick already emits `realizedProductionBySystem`; thread it — and
-last-pulse persistence for off-month pulses — into the planner rows/ctx, which today get a bare
+last-cycle persistence for mid-cycle reads — into the planner rows/ctx, which today get a bare
 `{ tick }` at `lib/world/tick.ts:774/860`). Gov consumption boost folds at the shared
 civilian-demand chokepoint (`consumptionRate`/`capacityGoodRates`) so band, planner demand, and
 cover chip all see it — superseded: the necessity slice deletes the boost outright, so the
 chokepoint no longer threads a government type. `PROVISION_MARGIN` (0.10–0.15) on capacity
-targets; feedback backstop (rationing ≥ 2 pulses ⇒ structural, with funding-bound and suppression
-exclusions); response pacing (2-pulse proposal persistence + `BUILD_RATE_CAP` ≈ 0.4); structural
+targets; feedback backstop (rationing ≥ 2 cycles ⇒ structural, with funding-bound and suppression
+exclusions); response pacing (2-cycle proposal persistence + `BUILD_RATE_CAP` ≈ 0.4); structural
 exporters drawable to a separate strategic export-reserve floor (non-producers keep the anchor floor). New per-(system, good)
 squeeze/proposal counters persist on `WorldMarket` (missing ⇒ 0), mirroring PR1's satisfaction
-field. Harness: burst-build metric (max levels committed per good per pulse — runner-loop
+field. Harness: burst-build metric (max levels committed per good per cycle — runner-loop
 instrumentation, not final-world).
 
 Timing contract: directed logistics remains after economy/population in the tick. Imports arriving
-on a logistics pulse change stock immediately but affect satisfaction/unrest at the next economy
+on a logistics cycle change stock immediately but affect satisfaction/unrest at the next economy
 assessment, never retroactively. Add an end-to-end ordering test; PR6 labels Needs as the latest
-assessment so this deliberate one-pulse lag is visible rather than looking stale.
+assessment so this deliberate one-cycle lag is visible rather than looking stale.
 
 - **Status: shipped** — PR #199 (`d797c1b`).
-- Consumes from PR1: persisted `satisfaction` (squeeze = satisfaction < 1 for the pulse),
+- Consumes from PR1: persisted `satisfaction` (squeeze = satisfaction < 1 for the cycle),
   `RATION_COVER`; from PR2: the funding-bound signal (shared exclusion logic). Structural
   exporters retain a separate strategic export-reserve floor; they are never drawn to two cycles.
 - **Superseded by PR5:** the backstop's suppression exclusion lands here system-wide, which locks
@@ -101,7 +101,7 @@ healthy; pathology = r pinned at brake with relief blocked); migration-throughpu
 Unrest integration becomes regime-sensitive while keeping goods and tax pressure separate:
 Supplied systems recover faster toward their tax-supported equilibrium, Rationing accumulates
 gradually, and Shortage accumulates faster. Preserve monotonicity, the tax equilibrium, and the
-one-bad-pulse-is-recoverable rule. Add an end-to-end recovery test where Needs becomes Supplied
+one-bad-cycle-is-recoverable rule. Add an end-to-end recovery test where Needs becomes Supplied
 immediately but stored unrest then declines at the calibrated recovery rate.
 
 - **Status: shipped** to `feat/band-reconciliation` at `1789c9a` (2026-07-27).
@@ -211,15 +211,15 @@ cutoff, so any active rationing is named consistently.
 
 | Interface | Producer | Consumers | Shape |
 | --- | --- | --- | --- |
-| `RATION_COVER` | PR1, `lib/constants/economy.ts` (`ECONOMY_CONSTANTS.RATION_COVER = 2`) | PR1 civilian/input draws, PR3 backstop, PR6 regimes | demand months |
+| `RATION_COVER` | PR1, `lib/constants/economy.ts` (`ECONOMY_CONSTANTS.RATION_COVER = 2`) | PR1 civilian/input draws, PR3 backstop, PR6 regimes | demand cycles |
 | `consumptionFactor(stock, rationStock)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, PR6 classifier | pure fn → [0,1] |
 | initial/export reserve policy | PR1 seed / PR3 logistics | world-gen and structural exporters | separate from rationing; initially 0.75 × T |
 | `productionCeiling(stock, targetStock, holdCover)` | PR1, `lib/engine/tick.ts` | supply-chain, flat tick, **PR2 selling factor**, PR6 Glut | pure fn → [0,1] |
-| `WorldMarket.satisfaction?: number` | PR1 economy pulse (missing ⇒ 1) | pop-needs read, fed-proxy, PR3 squeeze counters, PR6 chips | optional field, no save-version bump |
+| `WorldMarket.satisfaction?: number` | PR1 economy cycle (missing ⇒ 1) | pop-needs read, fed-proxy, PR3 squeeze counters, PR6 chips | optional field, no save-version bump |
 | `SimulatedMarketEntry.delivered` | PR1 supply-chain | economy processor satisfaction measure | `number` per entry |
-| `sellingFactorBySystem` signal | PR2 economy pulse | decay processor, `buildIndustryReadout` (recomputable read-side — stock+band only) | `Map<systemId, Map<goodId, number>>` |
+| `sellingFactorBySystem` signal | PR2 economy cycle | decay processor, `buildIndustryReadout` (recomputable read-side — stock+band only) | `Map<systemId, Map<goodId, number>>` |
 | funding-bound signal (unmet funded deficits) | PR2 logistics matcher | PR2 decay exclusion, PR3 backstop exclusion | shape decided in PR2 plan |
-| `WorldMarket` squeeze/proposal counters | PR3 economy/build pulses (missing ⇒ 0) | PR3 backstop + pacing | optional fields |
+| `WorldMarket` squeeze/proposal counters | PR3 economy/build cycles (missing ⇒ 0) | PR3 backstop + pacing | optional fields |
 | realized/suppressed production for planners | PR3 (`realizedProductionBySystem` + persistence) | `toGoodMarketStates`, matcher, backstop | threaded via planner rows/ctx |
 
 ## Validation strategy

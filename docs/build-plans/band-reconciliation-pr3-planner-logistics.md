@@ -15,8 +15,8 @@
 - Draw only current structural exporters below the anchor, to a separate 0.75 × T reserve.
 - Target 110% of demand, require two post-net construction assessments, cap each response at 40% of
   its remaining gap, and count in-flight work before proposing more.
-- Add the two-pulse rationing feedback backstop with funding-bound and suppression exclusions.
-- Add exact per-pulse production-level commitment instrumentation and an end-to-end ordering test.
+- Add the two-cycle rationing feedback backstop with funding-bound and suppression exclusions.
+- Add exact per-cycle production-level commitment instrumentation and an end-to-end ordering test.
 
 PR3 does **not** change population/unrest/housing/colony mechanics, regime UI, needs severity,
 `computeCoverLevels`, final calibration, or docs lifecycle. Those remain PR4/PR5.
@@ -76,27 +76,27 @@ multiplier. The needs tooltip adds a Government row so visible parts still sum t
 realizedProductionRate?: number;
 /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
 productionSuppressed?: boolean;
-/** Reference-months a rationed economy assessment has persisted — a catchUp-advanced finite value in [0,2] (2 = two reference months); missing => 0. */
-squeezePulses?: number;
-/** Reference-months a structural construction assessment has persisted — a catchUp-advanced finite value in [0,2] (2 = two reference months); missing => 0. */
-proposalPulses?: number;
+/** Reference-cycles a rationed economy assessment has persisted — a catchUp-advanced finite value in [0,2] (2 = two reference cycles); missing => 0. */
+squeezeCycles?: number;
+/** Reference-cycles a structural construction assessment has persisted — a catchUp-advanced finite value in [0,2] (2 = two reference cycles); missing => 0. */
+proposalCycles?: number;
 ```
 
 Do not bump `SAVE_FORMAT_VERSION`. Persisted rate is
 `simulated[i].realized / catchUpFactor(economyInterval)`, finite and non-negative.
-`EconomySignals.realizedProductionBySystem` stays the actual pulse quantity used by treasury.
+`EconomySignals.realizedProductionBySystem` stays the actual cycle quantity used by treasury.
 
 `productionSuppressed` is exactly `strikeMultiplier × maintenanceMalus < 1`; event production
 multipliers are not suppression exclusions.
 
 ### 3. Counter clocks are distinct
 
-- Economy assessment: `satisfaction < 1` advances `squeezePulses` by the economy interval's
-  catchUpFactor, full satisfaction resets, clamped to a finite [0,2] (2 = two reference months).
-- Construction assessment: positive **post-net** residual advances `proposalPulses` by the construction
-  interval's catchUpFactor, zero resets, clamped to a finite [0,2] (2 = two reference months).
+- Economy assessment: `satisfaction < 1` advances `squeezeCycles` by the economy interval's
+  catchUpFactor, full satisfaction resets, clamped to a finite [0,2] (2 = two reference cycles).
+- Construction assessment: positive **post-net** residual advances `proposalCycles` by the construction
+  interval's catchUpFactor, zero resets, clamped to a finite [0,2] (2 = two reference cycles).
 - Build automation off still advances proposal counters; it gates proposal emission only.
-- Off-pulse readers do not advance either clock. A stale assessment is never counted twice.
+- Mid-cycle readers do not advance either clock. A stale assessment is never counted twice.
 
 ### 4. Shared state separates actual production from capacity
 
@@ -106,7 +106,7 @@ multipliers are not suppression exclusions.
 - `capacityProduction`: `capacityGoodRates` output for target sizing/committed work.
 
 It also threads suppression, satisfaction, both counters, and `logisticsFundingBound`. Logistics reads
-actual production; build reads both. Never use treasury's pulse quantity as a rate.
+actual production; build reads both. Never use treasury's cycle quantity as a rate.
 
 ### 5. Planner policy order is fixed
 
@@ -118,7 +118,7 @@ For each developed `(system, good)`:
 3. If suppressed: emit no local gap; capacity above demand counts as latent spare when netting other
    systems, preventing strike/maintenance replacement builds.
 4. Else `capacityGap = max(0, 1.10 × demand - capacityProduction)`.
-5. If `squeezePulses >= 2` and neither funding-bound nor suppressed:
+5. If `squeezeCycles >= 2` and neither funding-bound nor suppressed:
    `feedbackGap = demand × (1 - satisfaction)`; otherwise 0.
 6. Gross gap is `max(capacityGap, feedbackGap)`, never their sum.
 7. Net reachable actual/latent exporter spare through the existing faction-wide algorithm.
@@ -126,7 +126,7 @@ For each developed `(system, good)`:
 9. Pass `0.40 × residual` to placement. Whole-level rounding may produce one level but may not restore
    the uncapped residual.
 
-Add exact constants: `PROVISION_MARGIN = 0.10`, `PERSISTENCE_PULSES = 2`,
+Add exact constants: `PROVISION_MARGIN = 0.10`, `PERSISTENCE_CYCLES = 2`,
 `BUILD_RATE_CAP = 0.40`. Speculative basics and housing remain unchanged.
 
 ### 6. Proposal planning returns decisions and persistence writes
@@ -135,7 +135,7 @@ Add exact constants: `PROVISION_MARGIN = 0.10`, `PERSISTENCE_PULSES = 2`,
 interface ProposalPersistenceUpdate {
   systemId: string;
   goodId: string;
-  proposalPulses: number;
+  proposalCycles: number;
 }
 
 interface FactionBuildPlan {
@@ -163,8 +163,8 @@ Keep the initial seed reserve separate. Assert
 
 ### 8. Persisted markets are the only cadence fallback
 
-Do not pass economy `ctx.results` to logistics/build. Coincident pulses see economy's freshly persisted
-fields; off-month pulses see the last assessment; old saves use documented defaults. One path avoids
+Do not pass economy `ctx.results` to logistics/build. Coincident cycles see economy's freshly persisted
+fields; mid-cycle cycles see the last assessment; old saves use documented defaults. One path avoids
 same-tick/fallback divergence.
 
 ### 9. Timing stays economy → population → logistics → build
@@ -177,7 +177,7 @@ or squeeze. Imports affect those at the next economy assessment. Do not reorder 
 - Pure engine, deterministic tick, finite JSON world state.
 - No forbidden `as`, postfix `!` outside test idiom, or `unknown`.
 - Clamp persisted rates/counters at adapter boundaries; the persistence counters are catchUp-advanced
-  finite values in `[0,2]` (2 = two reference months of persistence), not integer assessment counts.
+  finite values in `[0,2]` (2 = two reference cycles of persistence), not integer assessment counts.
 - Developed systems only; controlled/unclaimed markets remain inert.
 - Government boost is applied once; event consumption multiplier remains separate.
 - PR2 funding marker and isolated selling/decay signal keep their semantics.
@@ -289,7 +289,7 @@ git commit -m "feat(logistics): classify realized supply with exporter reserves"
 - [ ] Refactor effective states from buildings + open projects. Preserve realized standing output, add
   non-negative committed delta, follow locked policy order, return `FactionBuildPlan`, and keep one
   placement implementation.
-- [ ] Existing placement/ROI fixtures start `proposalPulses: 1` and read `plan.proposals`; dedicated
+- [ ] Existing placement/ROI fixtures start `proposalCycles: 1` and read `plan.proposals`; dedicated
   tests own counter behavior. Do not weaken labour/space/gate/colony/ROI assertions.
 - [ ] Verify/commit:
 
@@ -308,16 +308,16 @@ git commit -m "feat(construction): pace persistent structural deficits"
 
 **Test:** directed-build processor, world tick, save.
 
-- [ ] Tests: due developed rows write increment/reset; off-pulse none; counters advance with player
+- [ ] Tests: due developed rows write increment/reset; mid-cycle none; counters advance with player
   build automation off but proposals do not; colony automation independent; fresh same-tick
   funding-bound blocks feedback; persisted suppression blocks construction-only feedback;
   committed/manual work continues funding.
-- [ ] Add `{ id, proposalPulses }` update and `applyProposalPersistenceUpdates`; memory adapter captures
+- [ ] Add `{ id, proposalCycles }` update and `applyProposalPersistenceUpdates`; memory adapter captures
   `Map<marketId, number>` with integer `[0,2]` clamp.
 - [ ] Plan every due faction, translate natural system/good updates using existing composite id, discard
   proposals only after assessment when automation is off, and leave colony/centre/order/funding intact.
   Persist counters independent of ROI/funding outcome.
-- [ ] Add narrow `applyBuildMarketUpdates` after directed build; change only `proposalPulses` and
+- [ ] Add narrow `applyBuildMarketUpdates` after directed build; change only `proposalCycles` and
   preserve same-tick patched logistics/economy fields.
 - [ ] Divergent-cadence world test: construction-only advances proposal only; economy-only advances
   squeeze only; stale reads do not advance the other clock; result saves.
@@ -327,7 +327,7 @@ git commit -m "feat(construction): pace persistent structural deficits"
 npx vitest run lib/tick/processors/__tests__/directed-build.test.ts lib/tick/processors/__tests__/directed-logistics.test.ts lib/world/__tests__/tick.test.ts lib/world/__tests__/save.test.ts
 npx tsc --noEmit
 git add lib
-git commit -m "feat(construction): persist proposal pressure across pulses"
+git commit -m "feat(construction): persist proposal pressure across cycles"
 ```
 
 ---
@@ -336,9 +336,9 @@ git commit -m "feat(construction): persist proposal pressure across pulses"
 
 **Modify/Test:** `lib/world/__tests__/tick.test.ts`; focused logistics test only if helper needed.
 
-- [ ] Coincident-pulse fixture: two developed same-faction systems; recipient below ration cover with
+- [ ] Coincident-cycle fixture: two developed same-faction systems; recipient below ration cover with
   demand above realized production; donor has realized spare/stock/funding/route. After tick, flow and
-  stock change, but satisfaction/squeeze/unrest describe pre-import assessment. At next economy pulse,
+  stock change, but satisfaction/squeeze/unrest describe pre-import assessment. At next economy cycle,
   satisfaction becomes supplied and squeeze resets. Assert direction, not PR4 recovery magnitude.
 - [ ] Non-coincident fixture: logistics-only changes stock but retains assessment until economy.
 - [ ] Verify and commit `test(economy): lock logistics assessment ordering`.
@@ -353,12 +353,12 @@ experiment, `scripts/simulate.ts`.
 **Test:** directed-build processor, build-analysis, experiment.
 
 - [ ] Tests count new autonomic production-good levels by good; exclude housing/gates/centres/colonies/
-  old work; include same-pulse completion; store per-good maxima/global worst good+tick; empty zero/null;
+  old work; include same-cycle completion; store per-good maxima/global worst good+tick; empty zero/null;
   experiment JSON includes summary.
 - [ ] Add optional `buildCommitmentsByGood: Map<string, number>` to `TickProcessorResult`; populate from
   new autonomic proposal items filtered by `GOODS[buildingType]`. Count proposal levels, not final queue.
 - [ ] Expose it under separate `runWorldTick().instrumentation`, never `TickBroadcastRaw`/SSE/world.
-- [ ] Harness adds deterministic descending `byGood { goodId, maxLevelsPerPulse, tick }`, global max,
+- [ ] Harness adds deterministic descending `byGood { goodId, maxLevelsPerCycle, tick }`, global max,
   worst good/tick to results, saved experiment, and console build-loop section.
 - [ ] Verify/commit:
 
@@ -366,7 +366,7 @@ experiment, `scripts/simulate.ts`.
 npx vitest run lib/tick/processors/__tests__/directed-build.test.ts lib/tick-harness/__tests__/build-analysis.test.ts lib/tick-harness/__tests__/experiment.test.ts
 npx tsc --noEmit
 git add lib scripts/simulate.ts
-git commit -m "feat(sim): report per-pulse construction bursts"
+git commit -m "feat(sim): report per-cycle construction bursts"
 ```
 
 ---
@@ -384,10 +384,10 @@ Every live helper gets government; no late addition; event multiplier remains; r
 - [ ] Search carrier/classification paths:
 
 ```bash
-rg -n "realizedProductionRate|productionSuppressed|squeezePulses|proposalPulses|realizedProductionBySystem|production: prodByKey|surplusDrawable\(" lib
+rg -n "realizedProductionRate|productionSuppressed|squeezeCycles|proposalCycles|realizedProductionBySystem|production: prodByKey|surplusDrawable\(" lib
 ```
 
-Treasury uses pulse quantity; planners use persisted rate; fallback is missing-only; counters saturate;
+Treasury uses cycle quantity; planners use persisted rate; fallback is missing-only; counters saturate;
 one market derivation remains.
 
 - [ ] Run focused suite, scale bridge, full suite, typecheck:
@@ -448,9 +448,9 @@ git push -u origin feat/band-reconciliation-pr3-planner-logistics
 gh pr create --base feat/band-reconciliation --title "feat(economy): PR3 — realized-aware agency" --body "<shared demand + persisted units/defaults + clocks + reserve + timing + sim/burst + interim notes>"
 ```
 
-PR body explicitly records: shared government chokepoint; normalized persisted rate vs treasury pulse
+PR body explicitly records: shared government chokepoint; normalized persisted rate vs treasury cycle
 quantity; optional defaults/no save bump; separate reserve/funding marker; in-flight accounting,
-two-pulse persistence, 40% cap; causal lag test; sim readout and PR4/PR5 interim symptoms.
+two-cycle persistence, 40% cap; causal lag test; sim readout and PR4/PR5 interim symptoms.
 
 - [ ] Run `/uber-review` on checked-out PR head, fix in-scope findings, rerun gates, and
   squash/fast-forward into `feat/band-reconciliation`. Do not merge shared to main before PR5.
@@ -467,7 +467,7 @@ two-pulse persistence, 40% cap; causal lag test; sim readout and PR4/PR5 interim
 - [ ] Cap occurs before whole rounding and cannot be undone.
 - [ ] Export/initial reserves are distinct constants.
 - [ ] Timing tests cover coincident/divergent cadences.
-- [ ] Burst instrumentation is transient, same-pulse exact, JSON-reported, not SSE.
+- [ ] Burst instrumentation is transient, same-cycle exact, JSON-reported, not SSE.
 - [ ] PR4/PR5 work remains excluded.
 
 ## Spec-to-task traceability
@@ -476,7 +476,7 @@ two-pulse persistence, 40% cap; causal lag test; sim readout and PR4/PR5 interim
 - §2 government chokepoint → Task 1.
 - §2 margin/backstop/pacing → Tasks 4–5.
 - §2 strategic reserve → Task 3.
-- §2 off-month fallback → Tasks 2–3 + Task 5 cadence test.
+- §2 mid-cycle fallback → Tasks 2–3 + Task 5 cadence test.
 - §2 timing → Task 6.
 - Umbrella burst metric → Task 7.
 - PR2 funding marker → Tasks 3–5 unchanged.

@@ -37,7 +37,7 @@ that is individually defensible and collectively fatal:
    `floor + 2D` under Shortage. At the normal tax floor (0.05), **D ≈ 0.35 settles a system above
    the 0.75 collapse threshold** — below the chronic deficit the galaxy design takes for granted.
 3. The unrest-collapse channel (`lib/engine/infrastructure-decay.ts:119-123`) sheds one whole level
-   **per building type per run** with no severity ramp, so a ten-type world loses ten levels a month
+   **per building type per run** with no severity ramp, so a ten-type world loses ten levels a cycle
    the instant it crosses θ, and 0.76 unrest is indistinguishable from 1.00.
 4. Housing is torn down with everything else. `popCap = 0` with residents present is
    near-absorbing: `crowdFactor` reads fully crowded so growth is exactly zero, overshoot-death
@@ -83,7 +83,7 @@ median price/base, and floor-pinned share should all move toward the §8 targets
 - **Luxuries weighted higher for engineers.** The engineer basket already carries luxuries at 50×
   the ordinary per-capita rate; whether that weight is *high enough* is a demand-tuning question,
   revisited once the galaxy is not starving.
-- **`idleBufferMonths` as a lever** if the tighter colony opening absorption proves too slow.
+- **`idleBufferCycles` as a lever** if the tighter colony opening absorption proves too slow.
 
 ## Branch and review contract
 
@@ -155,7 +155,7 @@ derives `gain = ceiling × k` internally, where `k` is the already-selected rela
 
 - Equilibrium becomes `floor + ceiling × D` by construction, for any `decay`.
 - `floor` remains the exact equilibrium at D = 0 — tax semantics untouched.
-- Monotonicity and one-bad-pulse recoverability are preserved (same integrator).
+- Monotonicity and one-bad-cycle recoverability are preserved (same integrator).
 - Ordering invariant: `ceilingShortage > ceilingRationing`, asserted in a test.
 
 Initial cuts: `ceilingRationing = 0.45`, `ceilingShortage = 0.90`; `decay` and `recoveryDecay`
@@ -181,7 +181,7 @@ scales the derived gains, not the ceilings; `k` stays clamped to [0,1] after sca
 
 ### 3. Proportionate unrest-collapse channel (`lib/engine/infrastructure-decay.ts`)
 
-The **idle channel is untouched** — same whole-level trigger, same `idleBufferMonths`, same
+The **idle channel is untouched** — same whole-level trigger, same `idleBufferCycles`, same
 per-type countdown. Only the catastrophic channel changes.
 
 - **Storage shape changes**: per-type `buildingCollapseDebt: Record<string, number>` retires in
@@ -249,7 +249,7 @@ headroom level.
   demand get nothing; no vital-goods list.
 - **Source and conservation**: drawn from the founding system's markets, capped by
   `surplusDrawable(...)` at the source so provisioning a colony can never ration its founder, and
-  capped again by a running per-source balance across the pulse so two establishments sharing a
+  capped again by a running per-source balance across the cycle so two establishments sharing a
   source draw from the same shrinking balance — exactly the `available` pattern
   `applyDevelopments` already uses for seed population (`lib/world/tick.ts:465-477`). A source that
   holds none of a good sends none.
@@ -258,8 +258,8 @@ headroom level.
   `SystemBuildRow.goods` carries the source's stock/demand/production; **not** in the pure planner
   helper, which has no market write path.
 - **Application**: a new pure `applyFoundingStock(markets, developments)` in `lib/world/tick.ts`,
-  applied in the same monthly block as `applyDevelopments`, alongside the existing
-  `applyBuildMarketUpdates(markets, dbWorld.proposalPulseUpdates)` call at `tick.ts:998`. Source
+  applied in the same cycle block as `applyDevelopments`, alongside the existing
+  `applyBuildMarketUpdates(markets, dbWorld.proposalCycleUpdates)` call at `tick.ts:998`. Source
   stock decreases and target stock increases by the same quantity in one pass — conservation is
   asserted in a test, including the shared-source case.
 - **Honest scoping note**: at the shipped 2-pop seed the endowment is a fraction of a percent of a
@@ -353,7 +353,7 @@ disk and ride this first commit — they are the design this plan implements, no
   equilibrium equals `floor + ceiling × D` for both regimes at several `decay` values; `floor` is the
   exact equilibrium at D = 0 for every tax level; ordering `ceilingShortage > ceilingRationing`;
   **both** containment assertions from the constants (strike-safe at normal tax, collapse-safe at
-  every tax); monotonicity in D; one bad pulse recoverable.
+  every tax); monotonicity in D; one bad cycle recoverable.
 
 **Commit:** `feat(population): demand-weighted unrest regime and per-regime unrest ceilings`
 
@@ -434,7 +434,7 @@ disk and ride this first commit — they are the design this plan implements, no
   from the source's `SystemBuildRow.goods`, honouring `surplusDrawable` and the running per-source
   balance (Locked Decision 6).
 - [ ] Add `applyFoundingStock(markets, developments)` in `lib/world/tick.ts` and wire it into the
-  monthly block beside `applyDevelopments`.
+  cycle block beside `applyDevelopments`.
 - [ ] Tests: conservation (source loss equals target gain, per good); two colonies sharing one
   source draw from a single shrinking balance; a source holding nothing sends nothing and the
   colony still lands; the manifest never draws a source below its own drawable floor; the manifest
@@ -507,7 +507,7 @@ disk and ride this first commit — they are the design this plan implements, no
 - [ ] `capacityGap` is unconditional; a zero-capacity system is always buildable; exporter spare is
   realized, never latent; `surplusDrawable`'s separate meaning is preserved and pinned by a test.
 - [ ] Founding stock is conserved from the source, floored by `surplusDrawable`, shares one balance
-  per source per pulse, and carries no expansion-pacing claim.
+  per source per cycle, and carries no expansion-pacing claim.
 - [ ] All new functions are total; no `Infinity`/`NaN` can enter world state; no `as`/`unknown`.
 - [ ] No UI changes; PR6 scope (chips, `needSeverity`, `computeCoverLevels`, `RATION_EXIT_EPS`,
   regime-share metric, docs fold) untouched.
