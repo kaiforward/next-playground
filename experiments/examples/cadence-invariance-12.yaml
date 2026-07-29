@@ -8,6 +8,6 @@ seed: 42
 ticks: 1500
 systemCount: 600
 cadence:
-  month: 12
+  cycle: 12
   construction: 12
   logistics: 12

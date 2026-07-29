@@ -4,10 +4,10 @@
  * A centre serves no market demand, so it carries no invented value: a construction point is worth
  * the best work the pool can't yet fund. Per faction per pulse, the backlog (in-flight projects +
  * this pulse's ordered proposals) is walked in funding order against the work the pool drains within
- * BACKLOG_WINDOW reference months; the best ROI beyond that frontier prices at most ONE centre
+ * BACKLOG_WINDOW reference cycles; the best ROI beyond that frontier prices at most ONE centre
  * proposal, which then competes on the ordinary ROI ordering. Emergent, self-limiting: a deep
  * valuable backlog funds a centre; a draining queue or junk backlog never does; a landed centre
- * grows the pool and pushes the frontier out. All quantities here are reference-month units — the
+ * grows the pool and pushes the frontier out. All quantities here are reference-cycle units — the
  * caller passes the UNSCALED pool (catchUp scaling is a funding concern, not a valuation one).
  */
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -19,11 +19,11 @@ import { BUILDING_TYPES, CONSTRUCTION_CENTRE_TYPE, effectiveSpaceCost } from "@/
 import { workCostPerLevel } from "@/lib/constants/construction";
 
 export interface CentreValuationParams {
-  /** Points one fully-staffed centre level yields per reference month (CONSTRUCTION.POINTS_PER_LEVEL). */
+  /** Points one fully-staffed centre level yields per reference cycle (CONSTRUCTION.POINTS_PER_LEVEL). */
   pointsPerLevel: number;
-  /** Reference months of output the centre's value amortises (CONSTRUCTION.PAYBACK_HORIZON). */
+  /** Reference cycles of output the centre's value amortises (CONSTRUCTION.PAYBACK_HORIZON). */
   paybackHorizon: number;
-  /** Reference months of pool drain that define the funding frontier (CONSTRUCTION.BACKLOG_WINDOW). */
+  /** Reference cycles of pool drain that define the funding frontier (CONSTRUCTION.BACKLOG_WINDOW). */
   backlogWindow: number;
 }
 
@@ -37,7 +37,7 @@ function queuedSpace(buildingType: string, levels: number): number {
  * Price and site at most one Construction Centre proposal for a faction this pulse, or null when the
  * backlog drains inside the window, a centre is already in flight, or no developed system can host
  * one. `ordered` is this pulse's proposals in funding order; `pool` is the faction's unscaled
- * reference-month construction pool.
+ * reference-cycle construction pool.
  */
 export function planCentreProposal(
   factionId: string,

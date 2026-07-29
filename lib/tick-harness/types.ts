@@ -136,7 +136,7 @@ export interface LogisticsGoodActivity {
 export interface LogisticsActivitySummary {
   /** Flow events recorded across the whole run. 0 in a populated galaxy means the matcher never fired. */
   transferCount: number;
-  /** Ticks carrying at least one transfer — logistics resolves on the monthly pulse, so a healthy run is rhythmic. */
+  /** Ticks carrying at least one transfer — logistics resolves on the cycle pulse, so a healthy run is rhythmic. */
   activeTicks: number;
   /** Total quantity moved across the run. */
   totalQuantity: number;
@@ -193,7 +193,7 @@ export interface MigrationThroughputSummary {
   totalColonists: number;
   /** Total people moved by edge diffusion across the run. */
   totalDiffusion: number;
-  /** Monthly pulses that resolved migration — the per-pulse mean's denominator. */
+  /** Cycle pulses that resolved migration — the per-pulse mean's denominator. */
   pulseCount: number;
   /** (totalColonists + totalDiffusion) / pulseCount; 0 when pulseCount is 0 (never NaN). */
   meanPerPulse: number;
@@ -202,7 +202,7 @@ export interface MigrationThroughputSummary {
 // ── Colony founding stock ───────────────────────────────────────
 
 /**
- * How well fed colonies founded during the run were at their first assessed month. A colony used to
+ * How well fed colonies founded during the run were at their first assessed cycle. A colony used to
  * open holding nothing on every good; the founding-stock endowment ships it a slice of its founder's
  * warehouses. Measured at founding because a handful of new systems cannot move any galaxy-wide
  * average — `medianCover` medians over every market and would read green through this entirely.
@@ -269,7 +269,7 @@ export interface HarnessResults {
   populationSnapshots: Array<Map<string, number>>;
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
   migrationThroughput: MigrationThroughputSummary;
-  /** How well provisioned colonies founded during the run were at their first assessed month. */
+  /** How well provisioned colonies founded during the run were at their first assessed cycle. */
   foundingStock: FoundingStockSummary;
   /** Faction-treasury health at simulation end — balances, income mix, funded fractions, shortfalls. */
   treasurySummary: TreasurySummary;

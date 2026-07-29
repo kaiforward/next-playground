@@ -119,13 +119,13 @@ export type SystemLogisticsData =
 // ── System cadence (header "next update" countdown) ──────────────────────────
 /**
  * The system's single "next update" cadence group for the header countdown.
- * Under the monthly resolution pulse the whole galaxy resolves together on
- * `tick % MONTH_LENGTH === 0`, so this is uniformly 0; the value never changes
+ * Under the cycle resolution pulse the whole galaxy resolves together on
+ * `tick % CYCLE_LENGTH === 0`, so this is uniformly 0; the value never changes
  * for a given universe, so the client fetches once (staleTime Infinity) and
  * counts down off the live tick.
  */
 export interface SystemCadence {
-  /** Group in [0, MONTH_LENGTH): when the whole galaxy resolves. Always 0 under the monthly pulse; kept so the client counts down with ticksUntilShard(pulseGroup, tick, MONTH_LENGTH). */
+  /** Group in [0, CYCLE_LENGTH): when the whole galaxy resolves. Always 0 under the cycle pulse; kept so the client counts down with ticksUntilShard(pulseGroup, tick, CYCLE_LENGTH). */
   pulseGroup: number;
 }
 export type SystemCadenceResponse = ApiResponse<SystemCadence>;

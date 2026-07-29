@@ -68,7 +68,7 @@ function FactionOverviewContent({ factionId }: { factionId: string }) {
           label="Treasury"
           dotColor="var(--color-accent)"
           value={formatUnitsShort(treasury.balance)}
-          hint={`net ${treasury.net < 0 ? "−" : "+"}${formatUnitsShort(Math.abs(treasury.net))} / month`}
+          hint={`net ${treasury.net < 0 ? "−" : "+"}${formatUnitsShort(Math.abs(treasury.net))} / cycle`}
         />
         <GhostVitalTile
           label="Future vitals"

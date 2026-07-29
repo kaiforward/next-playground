@@ -12,7 +12,7 @@ function sys(id: string, over: Partial<TickSystem>): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 100, popCap: 200,
-    unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, buildingIdleMonths: {}, collapseDebt: 0, yields: unitResourceVector(),
+    unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, buildingIdleCycles: {}, collapseDebt: 0, yields: unitResourceVector(),
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     ...over,
   };
@@ -23,7 +23,7 @@ function ctxWith(signals: EconomySignals): TickContext {
 }
 
 // Buffer 1 → a level idle for a single run sheds immediately, which keeps these unit assertions crisp.
-const DECAY = { idleBufferMonths: 1, unrestThreshold: 0.75 };
+const DECAY = { idleBufferCycles: 1, unrestThreshold: 0.75 };
 
 describe("infrastructure-decay processor", () => {
   it("no-ops when there are no economy signals", async () => {
@@ -141,7 +141,7 @@ describe("infrastructure-decay processor", () => {
       realizedProductionBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), {
-      decay: { idleBufferMonths: 2, unrestThreshold: 0.75 },
+      decay: { idleBufferCycles: 2, unrestThreshold: 0.75 },
       interval: 24,
       bufferScaleBySystem: new Map([["s-starved", 0.5]]),
     });

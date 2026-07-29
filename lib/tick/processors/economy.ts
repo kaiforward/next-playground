@@ -45,7 +45,7 @@ export function economyOffPulsePayload(tick: number, interval: number): Partial<
  * Per-run knobs the body must not hard-code (the production cover, modifier
  * caps, the strike regime) come in via `params`.
  *
- * Monthly resolution pulse: on the boundary tick (`tick % interval === 0`) the
+ * Cycle resolution pulse: on the boundary tick (`tick % interval === 0`) the
  * whole system list resolves at once via `pulseShard`; every other tick is a
  * no-op (empty window → no `economySignals`, so infrastructure-decay and
  * population skip too). Per-resolution production/consumption are scaled by
@@ -155,7 +155,7 @@ export async function runEconomyProcessor(
   const simulated = simulateCoupledEconomyTick(tickEntries, entrySystemIds, simParams);
 
   // Satisfaction is the FLOW actually applied this pulse (delivered ÷ demanded),
-  // never a post-tick stock recompute — a month that starts above the comfort
+  // never a post-tick stock recompute — a cycle that starts above the comfort
   // knee delivers in full even when it ends just below it. Non-consumers read 1.
   const satisfactionByIndex = markets.map((_, i) => {
     const consumptionRate = tickEntries[i].consumptionRate;
@@ -168,7 +168,7 @@ export async function runEconomyProcessor(
   // aggregated the system's modifiers, so there's no second aggregation pass.
   const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
     const realizedProductionRate = simulated[i].realized / catchUp;
-    // Advance by this pulse's reference-time (catchUpFactor), not a flat +1, so "two reference months
+    // Advance by this pulse's reference-time (catchUpFactor), not a flat +1, so "two reference cycles
     // rationed" is the same wall-clock latency at any economy cadence. Fractional, finite, clamped [0,2].
     const squeezePulses = satisfactionByIndex[i] < 1
       ? Math.min(2, Math.max(0, m.squeezePulses ?? 0) + catchUp)

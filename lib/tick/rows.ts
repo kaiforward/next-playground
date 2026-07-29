@@ -39,7 +39,7 @@ export interface TickSystem {
   /** Seeded industrial base — buildingType → whole-integer level count. */
   buildings: Record<string, number>;
   /** Per-buildingType sustained-idle countdown (parallel to `buildings`); the decay buffer's state. */
-  buildingIdleMonths: Record<string, number>;
+  buildingIdleCycles: Record<string, number>;
   /** The system's fractional unrest-collapse accumulator; the catastrophic decay channel's state. */
   collapseDebt: number;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */

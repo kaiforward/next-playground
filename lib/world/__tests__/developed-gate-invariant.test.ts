@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { runWorldTick } from "@/lib/world/tick";
-import { MONTH_LENGTH } from "@/lib/constants/tick-cadence";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 
 async function advance(world: World, ticks: number): Promise<World> {
@@ -19,7 +19,7 @@ describe("developed-gate invariant: only developed systems are economically acti
     for (const m of seed.markets) seedStock.set(marketKey(m.systemId, m.goodId), m.stock);
 
     // Advance far enough that both claims (controlled) and developments (developed) fire.
-    const world = await advance(seed, MONTH_LENGTH * 4);
+    const world = await advance(seed, CYCLE_LENGTH * 4);
 
     // Sanity: the run actually produced controlled (non-developed, owned) systems — otherwise
     // the migration-leak path this test guards would be exercised vacuously.

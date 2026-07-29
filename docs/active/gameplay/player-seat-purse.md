@@ -16,7 +16,7 @@ scaled by a five-step **tax level** whose cost is unrest. It drains through thre
 **construction**. Money is *fuel*, not capacity: the physical pools (eligible heads + Construction
 Centres, the logistics work-budget) remain the ceilings, and a band's funding level sets what
 fraction of that physical throughput actually runs. Wealth can never buy past the physical ceiling
-— only up to it. The treasury settles **once per month** (collect, then pay in a fixed priority
+— only up to it. The treasury settles **once per cycle** (collect, then pay in a fixed priority
 ladder: maintenance → logistics → construction); when income falls short, growth stalls before
 stock rots, and there is no debt.
 
@@ -109,10 +109,10 @@ Laffer curve using existing machinery. AI factions get **government**-flavoured 
 
 ## Budget bands (spending)
 
-Three bands, each an EU5-style 0–100% funding slider against that band's *bill* — the monthly
+Three bands, each an EU5-style 0–100% funding slider against that band's *bill* — the cycle
 price tag of running that band's activity at 100%. **Bills charge work performed, not standing
 capacity**: construction's bill scales with the pool actually absorbed by the build queue (an
-empty queue costs nothing that month — the pool primitive is essentially the whole non-skilled
+empty queue costs nothing that cycle — the pool primitive is essentially the whole non-skilled
 population, so billing standing capacity would charge near-population wages for idle potential);
 logistics' bill scales with the work-budget actually consumed by transfers. The standing-cost job
 belongs to maintenance, which scales with built stock. Bills accrue catchUp-scaled (interval
@@ -158,21 +158,21 @@ which is what makes the slider a *usable* budget lever rather than a self-harm d
 
 ## Settlement (cadence, ladder, deficit)
 
-The month pulse (`MONTH_LENGTH`), the construction pulse (`CONSTRUCTION_INTERVAL`), and the
+The cycle pulse (`CYCLE_LENGTH`), the construction pulse (`CONSTRUCTION_INTERVAL`), and the
 logistics pulse (`LOGISTICS_INTERVAL`) are three independent knobs (all 24 ticks today). The
-treasury does not follow the bands' pulses: it settles **once per month**, in one resolution —
+treasury does not follow the bands' pulses: it settles **once per cycle**, in one resolution —
 otherwise an off-cycle band pulse could drain the treasury out of ladder order under a future
 cadence retune.
 
-- **Collect, then spend, within the same settlement.** Income (both lines, from the month just
+- **Collect, then spend, within the same settlement.** Income (both lines, from the cycle just
   produced) enters first; bills are then paid in the fixed priority ladder **maintenance →
   logistics → construction**. Flow-vs-stock decides the order: construction stalling is fully
   recoverable (the queue waits), unpaid maintenance compounds. The ladder is fixed, not
   player-orderable — sliders set priorities in normal times; the ladder is only the emergency
   order, and it gives AI factions sane crisis behaviour for free.
-- **Funded fractions latch for the following month.** Each band's paid-fraction from this
-  settlement is what its pulse(s) use next month. This is a deliberate one-month lag (the malus
-  applied during a month uses last settlement's funding) — the same funding-off-month-start shape
+- **Funded fractions latch for the following cycle.** Each band's paid-fraction from this
+  settlement is what its pulse(s) use next cycle. This is a deliberate one-cycle lag (the malus
+  applied during a cycle uses last settlement's funding) — the same funding-off-cycle-start shape
   already analysed and accepted for construction; the lever for responsiveness, if ever needed, is
   a finer economy cadence, not settlement reordering.
 - **The paid fraction is the effective funding level** — a band shorted by the ladder behaves
@@ -189,7 +189,7 @@ cadence retune.
 ## Initial state
 
 Treasuries start at **zero** — no seeded windfall (no magic numbers). Collect-then-spend means
-month one's income pays month one's bills, so a solvent start is a *calibration outcome* (tax
+cycle one's income pays cycle one's bills, so a solvent start is a *calibration outcome* (tax
 rates vs bill rates), not a handout. The harness watches early-game solvency explicitly — the
 opening eras (including the pre-logistics warm-up) must not stall by bookkeeping accident; if they
 do, tune rates. If calibration shows minimal starting help is genuinely warranted, the balance is
@@ -227,7 +227,7 @@ calibration harness, across the full faction roster (majors + minors). Per-facti
 ## UI surfaces
 
 - **Faction panel — treasury card** (`components/factions/treasury-card.tsx`): single-column
-  ledger — balance + net/month at top, itemised income (heads line, production line), itemised
+  ledger — balance + net/cycle at top, itemised income (heads line, production line), itemised
   expenses with a **collapsible maintenance by-type breakdown (default collapsed)**, then the
   three band-funding rows and the 5-segment tax-level stepper. Ledger expense amounts are money
   actually **paid** last settlement; the maintenance breakdown itemises the **bill's** composition

@@ -69,9 +69,9 @@ export function isPulseTick(tick: number, interval: number): boolean {
 
 /**
  * Pulse coverage: the whole item list on the resolution-pulse tick
- * (`tick % interval === 0`), empty on every other tick — the monthly-pulse
+ * (`tick % interval === 0`), empty on every other tick — the cycle-pulse
  * counterpart to {@link shardRange}'s rolling slice. Processors that resolve the
- * entire galaxy at once on the month boundary (economy, migration,
+ * entire galaxy at once on the cycle boundary (economy, migration,
  * directed-logistics, directed-build) use this; trade-flow keeps `shardRange`
  * for daily diffusion. Half-open [start, end).
  */

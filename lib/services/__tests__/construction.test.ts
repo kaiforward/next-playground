@@ -66,8 +66,8 @@ describe("getFactionConstruction", () => {
       ...world,
       buildings: [
         ...withoutTarget,
-        { systemId: dev.id, buildingType: CONSTRUCTION_CENTRE_TYPE, count: 1, idleMonths: 0 },
-        { systemId: dev.id, buildingType: VOCATIONAL_SCHOOL_TYPE, count: 1, idleMonths: 0 },
+        { systemId: dev.id, buildingType: CONSTRUCTION_CENTRE_TYPE, count: 1, idleCycles: 0 },
+        { systemId: dev.id, buildingType: VOCATIONAL_SCHOOL_TYPE, count: 1, idleCycles: 0 },
       ],
     });
 

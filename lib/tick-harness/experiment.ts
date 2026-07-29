@@ -16,7 +16,7 @@ import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 // ── Zod schema ───────────────────────────────────────────────────
 
 const CadenceSchema = z.object({
-  month: z.number().int().min(1),
+  cycle: z.number().int().min(1),
   construction: z.number().int().min(1),
   logistics: z.number().int().min(1),
 });

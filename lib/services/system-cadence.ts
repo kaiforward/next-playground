@@ -3,10 +3,10 @@ import { ServiceError } from "./errors";
 import type { SystemCadence } from "@/lib/types/api";
 
 /**
- * The system's single "next update" cadence group. Under the monthly resolution
- * pulse the whole galaxy resolves together on `tick % MONTH_LENGTH === 0`, so the
+ * The system's single "next update" cadence group. Under the cycle resolution
+ * pulse the whole galaxy resolves together on `tick % CYCLE_LENGTH === 0`, so the
  * group is uniformly 0; the client pairs it with the live tick via
- * `ticksUntilShard(pulseGroup, tick, MONTH_LENGTH)` to render the countdown.
+ * `ticksUntilShard(pulseGroup, tick, CYCLE_LENGTH)` to render the countdown.
  */
 export function getSystemCadence(systemId: string): SystemCadence {
   const world = getWorld();

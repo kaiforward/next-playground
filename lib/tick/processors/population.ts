@@ -28,7 +28,7 @@ export async function runPopulationProcessor(
   const systemIds = [...signals.dissatisfactionBySystem.keys()];
   const states = await world.getPopulationState(systemIds);
 
-  // Rates are reference-denominated; one run applies catchUpFactor(interval) reference-months of
+  // Rates are reference-denominated; one run applies catchUpFactor(interval) reference-cycles of
   // change. Only the relaxation rates rescale the time step — the slopes are dimensionless exchange rates
   // on the equilibrium, and the gain is derived from the (scaled, clamped) rate inside
   // accumulateUnrest, so equilibrium is catch-up invariant by construction.

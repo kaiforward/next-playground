@@ -6,7 +6,7 @@
 
 ## Headline
 
-The economy equilibrates with stock floating up to the **storage ceiling** (~2× the days-of-supply
+The economy equilibrates with stock floating up to the **storage ceiling** (~2× the cycles-of-supply
 anchor) instead of resting at the **anchor**, because both self-limiting factors — the production
 throttle *and* pop satisfaction — are measured against `maxStock` (the storage ceiling) rather than
 `targetStock` (the demand anchor). Two bugs fall out of that one fact:
@@ -16,13 +16,13 @@ throttle *and* pop satisfaction — are measured against `maxStock` (the storage
    into 0.63×–0.71× — *zero* geographic price variation. Tier-0 raws sit dead on the 0.50× floor at
    93–98% of markets. There is nothing to arbitrage.
 2. **Abundance can't buy contentment.** Satisfaction (`sqrt((stock−min)/(max−min))`) only reaches 1.0 at
-   the storage ceiling, so a system sitting exactly at its days-of-supply anchor reads only ~0.58
+   the storage ceiling, so a system sitting exactly at its cycles-of-supply anchor reads only ~0.58
    satisfied; since equilibrium unrest ≈ dissatisfaction, **unrest floors at ~0.13–0.3 no matter how
    well-supplied a system is** (audit: mean satisfaction 0.65, mean unrest 0.13).
 
 This phase reframes **both** self-limiting factors to be **anchor-relative**: a producer holds roughly
-its days-of-supply and then idles excess capacity (instead of filling the warehouse), and a population is
-fully content once its days-of-supply is met (instead of needing the warehouse full). Then we pick the
+its cycles-of-supply and then idles excess capacity (instead of filling the warehouse), and a population is
+fully content once its cycles-of-supply is met (instead of needing the warehouse full). Then we pick the
 real `ECONOMY_SCALE = S` on the settled economy, and add a price-dispersion metric to the simulator so
 the change can be iterated in-memory.
 
@@ -92,7 +92,7 @@ The consume-side self-limiting factor saturates at the **anchor**:
 `satisfaction = sqrt(clamp((stock − minStock) / (targetStock − minStock), 0, 1))` → reaches 1.0 once
 `stock ≥ targetStock` and stays there.
 
-- **Effect:** a system with its days-of-supply met reads fully content; unrest is no longer floored by an
+- **Effect:** a system with its cycles-of-supply met reads fully content; unrest is no longer floored by an
   abundance the model refuses to credit. Pops don't need a full warehouse to be calm — just to not be
   running dry.
 - This is the §13 SP4-booked "satisfaction should saturate at the anchor, not the storage ceiling" item,
@@ -100,7 +100,7 @@ The consume-side self-limiting factor saturates at the **anchor**:
   anchor, not the ceiling."
 
 `HOLD_COVER` (produce) and the satisfaction cover (=1.0, saturate at anchor) are separate knobs: a
-producer holds a little *above* days-of-supply before idling; a population is content *at* days-of-supply.
+producer holds a little *above* cycles-of-supply before idling; a population is content *at* cycles-of-supply.
 
 ### 3. Pick `S` (`ECONOMY_SCALE`) — last, on the settled economy
 

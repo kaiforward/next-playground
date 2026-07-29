@@ -50,7 +50,7 @@ function foodMarket(systemId: string, stock: number, proposalPulses?: number): M
 
 // Reference interval → catchUpFactor 1, so the shipped-magnitude assertions below are unscaled.
 const INTERVAL = REFERENCE_INTERVAL;
-const DUE_TICK = 0;      // monthly pulse: every faction plans on ticks where tick % interval === 0
+const DUE_TICK = 0;      // cycle pulse: every faction plans on ticks where tick % interval === 0
 const NOT_DUE_TICK = 1;  // off-boundary tick: pulseShard window is empty, no faction is due
 
 function builderSlots(n: number) {
@@ -162,7 +162,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     expect(result.workPerformedByFaction?.size ?? 0).toBe(0);
   });
 
-  it("commits and funds nothing on an off-boundary tick (monthly pulse)", async () => {
+  it("commits and funds nothing on an off-boundary tick (cycle pulse)", async () => {
     const w = new MemoryDirectedBuildWorld(scenario(0, 0));
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
     expect(w.buildingUpdates).toHaveLength(0);
@@ -318,7 +318,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
   });
 
   it("advances the clock by the interval's reference-time (catchUpFactor), not a flat step", async () => {
-    // A finer cadence advances the clock a fraction of a reference month per pulse; a coarser one
+    // A finer cadence advances the clock a fraction of a reference cycle per pulse; a coarser one
     // advances more (and can saturate in one assessment) — so the persistence latency is the same
     // wall-clock span at any construction cadence. Both ticks are a pulse boundary for their interval.
     const fine = new MemoryDirectedBuildWorld([sink("A", 100, 0)]);
@@ -1005,7 +1005,7 @@ describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommit
     expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);
   });
 
-  it("reports no build commitments on an off-boundary tick (monthly pulse)", async () => {
+  it("reports no build commitments on an off-boundary tick (cycle pulse)", async () => {
     const w = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodPulses: 1 }));
     const result = await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction() });
     expect(result.buildCommitmentsByGood?.size ?? 0).toBe(0);

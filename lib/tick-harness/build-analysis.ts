@@ -65,7 +65,7 @@ export interface ClassBuildStats {
   depositsIdle: number;
 }
 
-/** A colony founded during the run, with the state of its first fully assessed month. */
+/** A colony founded during the run, with the state of its first fully assessed cycle. */
 export interface FoundedColonyRecord {
   systemId: string;
   foundedTick: number;
@@ -88,7 +88,7 @@ export type FoundedColonySystem =
  * systems is invisible to any galaxy-wide average, so it has to be caught as it happens.
  *
  * Detection only; the reading itself is `sampleFoundedColonies` at the first economy pulse STRICTLY
- * after the founding tick, so it covers a whole assessed month of the colony's life rather than
+ * after the founding tick, so it covers a whole assessed cycle of the colony's life rather than
  * however much of one remained when it landed.
  */
 export function trackFoundedColonies(
@@ -338,7 +338,7 @@ export interface BuildCommitmentRecord {
 
 /**
  * Ticks below which a quiet burst section reads as construction warm-up, not a broken directed-build wire.
- * A structural deficit becomes a fundable proposal only after it survives the two-reference-month
+ * A structural deficit becomes a fundable proposal only after it survives the two-reference-cycle
  * persistence window (`DIRECTED_BUILD.PERSISTENCE_PULSES`), and the first construction pulse lands at
  * `CONSTRUCTION_INTERVAL` — so nothing autonomic can commit before roughly interval × (1 + persistence)
  * ticks. This is the cadence floor; colony-driven bursts lag further, behind colonisation. A legibility

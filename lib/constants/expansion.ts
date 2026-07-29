@@ -1,6 +1,6 @@
 /**
  * Emergent-civ expansion tuning — the control (claim) and develop tiers of the three-state
- * ownership model. Each monthly pulse a faction claims one in-reach unclaimed system as
+ * ownership model. Each cycle pulse a faction claims one in-reach unclaimed system as
  * `controlled`, then may develop one of its controlled systems to `developed` (seeding a small
  * conserved colony population). Magnitudes are a coarse first-cut (simulator-validated for coherent
  * growth, not tuned — later phases move the calibration target). Scores are ABSOLUTE (not
@@ -15,7 +15,7 @@ export const EXPANSION = {
   /** Unclaimed systems within this many jumps of a faction's territory (any owned tier) are claim
    * candidates — leapfrog allowed, bounded for performance. Must be ≤ the tick's hop-BFS radius. */
   REACH_JUMPS: 3,
-  /** Systems a faction claims per monthly pulse — small, so the map fills gradually. */
+  /** Systems a faction claims per cycle pulse — small, so the map fills gradually. */
   MAX_CLAIMS_PER_PULSE: 1,
   /** Minimum claim score; below it a candidate isn't worth claiming. Permissive — excludes only
    * zero-substrate systems. */

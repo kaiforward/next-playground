@@ -38,7 +38,7 @@ describe("summarizeLogistics", () => {
   });
 
   it("counts ticks that carried a transfer, not transfers", () => {
-    // Logistics resolves on a monthly pulse, so a healthy run shows a recurring
+    // Logistics resolves on a cycle pulse, so a healthy run shows a recurring
     // rhythm. Three flows across two ticks is two active ticks.
     const summary = summarizeLogistics([
       flow(24, "a", "b", "water", 5),

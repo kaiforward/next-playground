@@ -12,7 +12,7 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 ### Tier 0 — Raw Materials (8)
 
-Deep, liquid markets, thin per-unit margin. High population-driven demand gives them the deepest days-of-supply cover, so large trades barely move price. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these. Each tier-0 good is **extracted** from a body resource deposit (no recipe) — Water/Gas/Ore/Minerals/Biomass/Radioactives map 1:1 to their resource; Food and Textiles both come from the `arable` resource.
+Deep, liquid markets, thin per-unit margin. High population-driven demand gives them the deepest cycles-of-supply cover, so large trades barely move price. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these. Each tier-0 good is **extracted** from a body resource deposit (no recipe) — Water/Gas/Ore/Minerals/Biomass/Radioactives map 1:1 to their resource; Food and Textiles both come from the `arable` resource.
 
 | Good | Base Price | Volatility | Price Range |
 |---|---|---|---|
@@ -59,7 +59,7 @@ Thin, scarce markets, high per-unit price swing. Lowest per-capita demand → sh
 
 \* **Military-tagged** dual-use goods. They trade on the open market with ordinary civilian demand today; a strategic war-demand channel (and the tier-3 non-market military *assets* they feed) is planned for the faction-agency and war layers. **Bottleneck goods** — Components (5 downstream recipes), Metals (near-universal), Alloys, and Electronics — sit on the most chains, so a shortage in one cascades widest.
 
-### Per-System Pricing Reference (Days of Supply)
+### Per-System Pricing Reference (Cycles of Supply)
 
 There is no per-good anchor table. The stock level at which a good's mid price equals its base price — its **reference** — is computed per `(station, good)` from local demand:
 
@@ -68,7 +68,7 @@ demandRate = max( perCapitaNeed(good) × population  +  Σ production-input draw
 reference  = TARGET_COVER × demandRate × anchorMult
 ```
 
-`TARGET_COVER` (40) is the **days of supply** — how many ticks of local demand a market holds when it prices exactly at base. `demandRate` is the system's **total** physical demand rate for the good — civilian consumption (`perCapitaNeed × population`) **plus** the production-input draw of every local building that consumes the good as a recipe input (see [Supply Chain & Input-Gating](#supply-chain--input-gating)) — floored at `MIN_DEMAND` so a near-empty system still yields a finite reference. Including the input term is what makes an input-heavy good price honestly: a refinery world's Ore reads *scarce* when its Smelters' draw outruns supply (pulling Ore in via trade), rather than cheap just because the world burns a lot of it. `anchorMult` (default 1) carries active event anchor shifts (see [Event-Driven Anchor Shifts](#event-driven-anchor-shifts)). Stock above the reference reads cheap (surplus); below reads expensive (shortage).
+`TARGET_COVER` (40) is the **cycles of supply** — how many ticks of local demand a market holds when it prices exactly at base. `demandRate` is the system's **total** physical demand rate for the good — civilian consumption (`perCapitaNeed × population`) **plus** the production-input draw of every local building that consumes the good as a recipe input (see [Supply Chain & Input-Gating](#supply-chain--input-gating)) — floored at `MIN_DEMAND` so a near-empty system still yields a finite reference. Including the input term is what makes an input-heavy good price honestly: a refinery world's Ore reads *scarce* when its Smelters' draw outruns supply (pulling Ore in via trade), rather than cheap just because the world burns a lot of it. `anchorMult` (default 1) carries active event anchor shifts (see [Event-Driven Anchor Shifts](#event-driven-anchor-shifts)). Stock above the reference reads cheap (surplus); below reads expensive (shortage).
 
 The reference's *magnitude* sets the market's **depth**, and that depth now emerges from each system's own demand rather than a hand-tuned per-good number: high-demand staples get a high reference (deep, liquid market — large trades barely move price), low-demand advanced goods get a low reference (thin market — a small trade swings price hard). This is why the same price formula gives staples flat prices and advanced goods volatile ones.
 
@@ -135,7 +135,7 @@ Inputs come from *local* stock, which directed logistics refills from same-facti
 
 ### Market Seeding
 
-At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's days-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. Net balance is computed from the capacity-driven production rates above and population-scaled consumption. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the market's own **per-market band** (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) — so a heavy producer with deep storage seeds genuinely deep and cheap. Import dependence falls directly out of the substrate and the seeded industrial base.
+At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's cycles-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. Net balance is computed from the capacity-driven production rates above and population-scaled consumption. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the market's own **per-market band** (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) — so a heavy producer with deep storage seeds genuinely deep and cheap. Import dependence falls directly out of the substrate and the seeded industrial base.
 
 ---
 
@@ -172,7 +172,7 @@ reference = TARGET_COVER × demandRate × anchorMult
 mid       = clamp( basePrice × (reference / stock) ^ k ,  floor, ceiling )
 ```
 `mid` is the price — a derived spot readout of the current stock, not a trading engine.
-- `reference` — the per-system days-of-supply level where mid = base (see [Per-System Pricing Reference](#per-system-pricing-reference-days-of-supply)).
+- `reference` — the per-system cycles-of-supply level where mid = base (see [Per-System Pricing Reference](#per-system-pricing-reference-cycles-of-supply)).
 - `stock = reference` → mid = basePrice. Above → cheaper, below → more expensive. If stock ≤ 0, price hits the ceiling.
 - `k` — elasticity exponent (steepness of the curve). Default **1** (reproduces the legacy hyperbola); higher `k` makes price react more sharply to the same stock gap.
 - `floor` / `ceiling` — per-good price multipliers on base price.
@@ -192,7 +192,7 @@ maxStock    = targetStock / priceFloor ^ (1/k)              // demand headroom �
 - **Demand-derived floor & anchor.** `minStock` is a *reserve*, not zero — the scarcity floor below which price ceilings out; directed logistics treats stock above the reserve (`stock − minStock`) as movable surplus. As stock falls toward the reserve, price climbs to the ceiling and the market holds its last reserve. Both `minStock` and `targetStock` scale with population, so the price point and the scarcity threshold track local demand.
 - **Infrastructure-derived ceiling.** `maxStock` is a demand-headroom term (which alone guarantees every market spans its *entire* price curve, so pricing never runs clipped) **plus the sum of storage its buildings provide** (`facilityStorageForGood`, `lib/engine/industry.ts`): extractors and factories store what they handle, population centres hold nominal retail stock (generous on consumer-facing goods). This is what makes a low-population **mega-mine cheap *and* liquid** — huge ore storage lets ore pile high (→ price floors → cheap) against a tiny demand reserve (→ nearly all of it buyable). The storage sum is denormalised onto `WorldMarket.storageCapacity` at seed (recomputed on build-out in SP5), so the band derives from the market row alone.
 
-This restores the cover model's intended invariant — **same days-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 days of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term.
+This restores the cover model's intended invariant — **same cycles-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 cycles of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term.
 
 ### Per-Tick Simulation (runs once per economy-shard update)
 The economy processor groups the shard's markets **by system** and runs the coupled cascade on each (`simulateCoupledEconomyTick`). Within a system goods are processed in recipe-topological order so a fresh input feeds its consumer the same tick; each good's stock is updated:
@@ -307,7 +307,7 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                recipes) -> per-good production rates
                                (capacity-driven, input-gated, tier-0 × yield);
                                civilian + production-input consumption rates;
-                               demand rate -> days-of-supply pricing reference;
+                               demand rate -> cycles-of-supply pricing reference;
                                net balance + facility storage -> per-market band
                                -> seed stock + import dependence
 2  Tick evolution (each tick)  input-gated self-limiting production (the

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { runWorldTick } from "@/lib/world/tick";
-import { MONTH_LENGTH } from "@/lib/constants/tick-cadence";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 import type { World } from "@/lib/world/types";
 import { createSystemMarkets } from "@/lib/world/markets";
@@ -50,10 +50,10 @@ function rigLogisticsPair(world: World, factionId: string): World {
 }
 
 describe("treasury over the live tick", () => {
-  it("settles every faction on the month pulse with finite, non-negative state", async () => {
+  it("settles every faction on the cycle pulse with finite, non-negative state", async () => {
     let world = generateWorld({ systemCount: 40, seed: 11 });
     let sawTreasuryRun = false;
-    for (let i = 0; i < MONTH_LENGTH; i++) {
+    for (let i = 0; i < CYCLE_LENGTH; i++) {
       const result = await runWorldTick(world);
       world = result.world;
       if (result.events.processors?.includes("treasury")) sawTreasuryRun = true;
@@ -77,10 +77,10 @@ describe("treasury over the live tick", () => {
     expect(totalIncome).toBeGreaterThan(0);
   });
 
-  it("accrues band-pulse work off the month pulse without settling, then bills it at the boundary", async () => {
-    // Divergent cadences: construction/logistics pulse at 24 while the month is 48,
-    // so the treasury gate's hasWork-only branch fires mid-month.
-    const cadence = { month: 48, construction: 24, logistics: 24 };
+  it("accrues band-pulse work off the cycle pulse without settling, then bills it at the boundary", async () => {
+    // Divergent cadences: construction/logistics pulse at 24 while the cycle is 48,
+    // so the treasury gate's hasWork-only branch fires mid-cycle.
+    const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
     let sawOffPulseAccrual = false;
     for (let tick = 1; tick <= 47; tick++) {
@@ -88,7 +88,7 @@ describe("treasury over the live tick", () => {
       world = result.world;
       if (result.events.processors?.includes("treasury")) {
         sawOffPulseAccrual = true;
-        // Accrual must never settle ahead of the month boundary.
+        // Accrual must never settle ahead of the cycle boundary.
         for (const t of world.treasuries) expect(t.lastSettlement, t.factionId).toBeNull();
       }
     }
@@ -98,7 +98,7 @@ describe("treasury over the live tick", () => {
     expect(accrued).toBeGreaterThan(0);
     expect(Number.isFinite(accrued)).toBe(true);
 
-    const boundary = await runWorldTick(world, { cadence }); // tick 48 — the month pulse
+    const boundary = await runWorldTick(world, { cadence }); // tick 48 — the cycle pulse
     world = boundary.world;
     expect(boundary.events.processors).toContain("treasury");
     for (const t of world.treasuries) {
@@ -108,9 +108,9 @@ describe("treasury over the live tick", () => {
   });
 
   it("a zero-funded construction band performs no construction work (the queue waits)", async () => {
-    // Divergent cadences so construction pulses mid-month and its work lands in
+    // Divergent cadences so construction pulses mid-cycle and its work lands in
     // pendingWork (observable before settlement clears it).
-    const cadence = { month: 48, construction: 24, logistics: 24 };
+    const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
     const starvedId = world.factions[0].id;
     world = {
@@ -131,9 +131,9 @@ describe("treasury over the live tick", () => {
   });
 
   it("a zero-funded logistics band hauls nothing while a funded twin hauls", async () => {
-    // Same divergent cadences: logistics pulses at 24, mid-month, so its work
+    // Same divergent cadences: logistics pulses at 24, mid-cycle, so its work
     // lands in pendingWork (observable before settlement clears it).
-    const cadence = { month: 48, construction: 24, logistics: 24 };
+    const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
     const starvedId = world.factions[0].id;
     const fundedId = world.factions[1].id;
@@ -166,7 +166,7 @@ describe("treasury over the live tick", () => {
           t.factionId === starvedId ? { ...t, funded: { ...t.funded, maintenance: 0 } } : t,
         ),
       };
-      for (let tick = 1; tick <= MONTH_LENGTH; tick++) {
+      for (let tick = 1; tick <= CYCLE_LENGTH; tick++) {
         world = (await runWorldTick(world)).world;
       }
       return world;
@@ -196,7 +196,7 @@ describe("treasury over the live tick", () => {
         return t;
       }),
     };
-    for (let tick = 1; tick <= MONTH_LENGTH * 2; tick++) {
+    for (let tick = 1; tick <= CYCLE_LENGTH * 2; tick++) {
       world = (await runWorldTick(world)).world;
     }
     const homeUnrest = (factionId: string) => {

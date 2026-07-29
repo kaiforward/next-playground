@@ -9,7 +9,7 @@ import type {
 
 /**
  * Pure processor body — a twin for people of the population resolution. A
- * monthly-pulse pass over the faction-bounded open edges: the whole edge set
+ * cycle-pulse pass over the faction-bounded open edges: the whole edge set
  * resolves on the boundary tick (`tick % interval === 0`), empty otherwise.
  * Population flows toward the more attractive (calmer, roomier) endpoint,
  * distance-attenuated, conserved. Deltas compose across edges within the tick so
@@ -31,7 +31,7 @@ export async function runMigrationProcessor(
   if (slice.length === 0) return {};
   const catchUp = catchUpFactor(params.interval);
 
-  // Colonist delivery (targeted, equalising) — runs on the same monthly pulse as the edge sweep, BEFORE
+  // Colonist delivery (targeted, equalising) — runs on the same cycle pulse as the edge sweep, BEFORE
   // diffusion, so diffusion balances the post-delivery state and colony delivery is the primary flow.
   // Faction pools of drawable spare are water-filled to raise the emptiest colonies (reaches the frontier
   // that gradient diffusion never could). Applied first so getNodesForSystems below reads the updated pop.

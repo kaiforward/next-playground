@@ -52,7 +52,7 @@ function makeSystem(
     popCap: 1000,
     unrest: 0,
     buildings: {},
-    buildingIdleMonths: {},
+    buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: emptyResourceVector(),

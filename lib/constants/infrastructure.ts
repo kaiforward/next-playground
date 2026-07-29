@@ -1,9 +1,10 @@
 import type { DecayParams } from "@/lib/engine/infrastructure-decay";
 
 /**
- * Autonomic infrastructure decay (per economy-shard run, every MONTH_LENGTH ticks ≈ one
- * month). Capacity is a whole-level ratchet — decay only sheds levels, and slowly:
- *  - idleBufferMonths: a level must sit idle this many runs before the marginal idle level tears down.
+ * Autonomic infrastructure decay (per economy-shard run, i.e. once per cycle —
+ * every CYCLE_LENGTH ticks). Capacity is a whole-level ratchet — decay only sheds
+ * levels, and slowly:
+ *  - idleBufferCycles: a level must sit idle this many runs before the marginal idle level tears down.
  *    The buffer makes a brief labour/supply dip cost nothing (the countdown resets on refill) — the
  *    hysteresis that keeps infrastructure "stickier" than population.
  *  - unrestThreshold: the catastrophic channel — strictly above θ_decay a whole level tears down even
@@ -17,7 +18,7 @@ import type { DecayParams } from "@/lib/engine/infrastructure-decay";
  * The buffer is deliberately long enough to absorb temporary labour and market shocks.
  */
 export const INFRASTRUCTURE_DECAY_PARAMS: DecayParams = {
-  idleBufferMonths: 12,
+  idleBufferCycles: 12,
   unrestThreshold: 0.75,
 };
 

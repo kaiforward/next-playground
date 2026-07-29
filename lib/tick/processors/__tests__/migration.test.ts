@@ -16,7 +16,7 @@ const PARAMS = {
   delivery: NO_DELIVERY,
 };
 
-// Migration is now a monthly pulse: all edges process on ticks where tick % interval === 0.
+// Migration is now a cycle pulse: all edges process on ticks where tick % interval === 0.
 const EDGE_TICK = 0;
 
 // A tier-0 production building demands 10 heads/unit (labourTotal), so `{ food: 100 }` opens
@@ -27,7 +27,7 @@ function sys(id: string, factionId: string | null, population: number, popCap: n
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId,
     control: factionId ? "developed" : "unclaimed", governmentType: "federation",
-    population, popCap, unrest, buildings, buildingIdleMonths: {}, collapseDebt: 0,
+    population, popCap, unrest, buildings, buildingIdleCycles: {}, collapseDebt: 0,
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
@@ -81,7 +81,7 @@ describe("migration processor", () => {
     expect(moved2).toBeCloseTo(2 * moved1, 5);
   });
 
-  it("moves nothing on an off-boundary tick (monthly pulse)", async () => {
+  it("moves nothing on an off-boundary tick (cycle pulse)", async () => {
     const world = new InMemoryMigrationWorld(
       { systems: [sys("a", "f1", 1000, 2000, 0.5), sys("b", "f1", 100, 2000, 0)] },
       [conn("a", "b")],
@@ -108,9 +108,9 @@ describe("migration processor", () => {
     expect(world.systems.reduce((s, x) => s + x.population, 0)).toBeCloseTo(before, 5);   // conserved
   });
 
-  it("skips colonist delivery on an off-boundary tick (delivery is monthly-gated)", async () => {
+  it("skips colonist delivery on an off-boundary tick (delivery is cycle-gated)", async () => {
     // Same source + empty colony and the real delivery params that DO move people on a pulse boundary (the
-    // case above), but run on an off-boundary tick: the monthly-pulse gate must skip the whole processor,
+    // case above), but run on an off-boundary tick: the cycle-pulse gate must skip the whole processor,
     // so delivery moves nobody. Guards the delivery pass from drifting above the pulse guard (a 24× rate).
     const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
     const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);

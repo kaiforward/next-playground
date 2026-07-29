@@ -41,7 +41,7 @@ function devSys(
     popCap: opts.popCap ?? 1000,
     unrest: 0,
     buildings: opts.buildings ?? {},
-    buildingIdleMonths: {},
+    buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
     slotCap: opts.slotCap ?? emptyResourceVector(),
@@ -349,7 +349,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     const markets = [mkt("c1", "food", 1), mkt("c1", "water", 1)];
     trackFoundedColonies(systems, 24, new Set(), tracker);
 
-    // Founded ON a pulse tick: that same pulse assessed a system that did not exist for the month.
+    // Founded ON a pulse tick: that same pulse assessed a system that did not exist for the cycle.
     expect(hasColonyAwaitingSample(tracker, 24)).toBe(false);
     sampleFoundedColonies(systems, markets, 24, tracker);
     expect(tracker.get("c1")?.openingSatisfaction).toBeNull();

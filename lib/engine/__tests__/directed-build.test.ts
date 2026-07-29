@@ -1366,7 +1366,7 @@ describe("planFactionProposals: persistent structural policy", () => {
 
   it("advances the proposal clock by the per-assessment reference-time (fractional cadences)", () => {
     // A finer-than-reference cadence (advance 0.5): four persistent assessments to reach the
-    // two-reference-month threshold, and no proposal emits until the counter actually reaches it.
+    // two-reference-cycle threshold, and no proposal emits until the counter actually reaches it.
     let pulses = 0;
     for (const expected of [0.5, 1.0, 1.5, 2.0]) {
       const plan = planFactionProposals([policySystem(policyGood({ proposalPulses: pulses }))], () => 1, [], DEV_REFS, 0.5);

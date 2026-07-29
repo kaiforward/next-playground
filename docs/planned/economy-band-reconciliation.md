@@ -7,7 +7,7 @@
 ## Headline
 
 The economy's throttle curves gain **knees**: consumption delivers in full until stock reaches an
-explicit emergency ration threshold, production runs at full rate up to the days-of-supply anchor, and the decay signal reads
+explicit emergency ration threshold, production runs at full rate up to the cycles-of-supply anchor, and the decay signal reads
 healthy capacity as fully used. The resting state of a healthy system becomes **pops fully fed,
 factories running, price ≈ base** — instead of today's structural ~80%-of-anchor equilibrium where
 every system is permanently rationed ~17%, every producer reads ~90% "worked", and prices lean 24%
@@ -68,7 +68,7 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   (JSON-serializable; missing ⇒ 1); dissatisfaction, the needs UI, the regime chips, and the §2
   squeeze counters all read that stored value — never a stock recompute (the read services and
   planners have no other path to the flow; see §2's plumbing note). This kills the
-  boundary bias of post-tick stock reads (a month that starts above the ration threshold delivers
+  boundary bias of post-tick stock reads (a cycle that starts above the ration threshold delivers
   in full but may end below it) and retires the two secondary computation sites that would otherwise contradict the sim:
   the pop-needs display projection (`lib/engine/pop-needs.ts`) and the build planner's linear
   `stock/target` fed-proxy (`supplyDissatisfaction`), both re-based on the same measure — the
@@ -82,7 +82,7 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   price sits between base and ~1.33× scaling with how hard logistics draws it (§2's
   strategic-export-reserve draw) — hot demand makes exporters dearer, which is signal, not noise; and
   `[rationStock, T]` is a curve-side dead zone (both flanks flat), so a dented self-supplier recovers
-  on the provisioning margin's timescale (~0.25%-of-T/month at margin 0.1) with price elevated
+  on the provisioning margin's timescale (~0.25%-of-T/cycle at margin 0.1) with price elevated
   meanwhile — accepted: price doubles as a shock-age gauge; the margin is sized against recovery
   time in calibration and the harness watches shock-recovery tails (§8).
 - **Selling/decay signal is the ISOLATED ceiling term — not realized output, and not the old
@@ -95,7 +95,7 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   suppression, the maintenance output malus, and event production multipliers, and each would
   leak non-glut suppression into demolition: an insolvent faction's fully-staffed producers would
   shed levels (violating the purse's load-bearing flow-only guarantee — the malus scales output,
-  never the idle signal), a multi-month strike or event episode would convert into permanent
+  never the idle signal), a multi-cycle strike or event episode would convert into permanent
   capacity loss, and an input-starved factory would read as glut while its stock visibly drains
   (turning the supply-chain cascade from throttle into teardown). Asserted in tests (§7). Why not
   the old storage-band read: it is structurally broken for exporters — the band is scaled by
@@ -134,7 +134,7 @@ recalibration.
   malus — so the logistics matcher's self-supply gate (`production < demand`,
   `directed-logistics.ts`) refuses forever to ship to an input-starved factory system whose
   *capacity* covers demand while its *realized* output is ~0, and `surplusDrawable` happily drains
-  a striking exporter's buffer in the very month its output collapsed. Fix: the classification
+  a striking exporter's buffer in the very cycle its output collapsed. Fix: the classification
   `production` figure applies the suppression multipliers and input gates (the tick already emits
   `realizedProductionBySystem`); a suppressed exporter is not drawable below its anchor; an
   input-starved system *is* a deficit sink. Without this, §4's deeper draws make the existing
@@ -148,7 +148,7 @@ recalibration.
   funded haul budget — a treasury/logistics-funding problem; building local capacity there would
   switch the importer off its exporter, glut the exporter, and relocate the see-saw to the funding
   boundary), and squeezes explained by **suppression** (strike / maintenance malus — an
-  unrest/treasury problem; a multi-month strike outlasts any persistence filter and would
+  unrest/treasury problem; a multi-cycle strike outlasts any persistence filter and would
   otherwise mint permanent capacity that gluts when the strike ends). What remains — genuine
   capacity shortfalls, yield drift, event damage — builds.
 - **The suppression exclusion is scoped to the shortfall suppression actually explains, per
@@ -169,7 +169,7 @@ recalibration.
   at the importers that need it.
 - **Response pacing** (kills the burst-build): a residual must persist 2 consecutive pulses before
   it is proposable, and each pulse proposes at most `BUILD_RATE_CAP` (~⅓–½, calibrated) of a good's
-  outstanding gap — the correction ramps over 2–3 months. Distance-weighting the spare pool is a
+  outstanding gap — the correction ramps over 2–3 cycles. Distance-weighting the spare pool is a
   noted possible refinement, deliberately not in this pass.
 - **New stored state + plumbing (the new signals need carriers — none exists today)**: the
   squeeze-persistence and proposal-persistence counters AND §1's per-pulse satisfaction are
@@ -178,9 +178,9 @@ recalibration.
   classification additionally needs realized/suppressed production threaded to the planners:
   today `runWorldTick` hands directed-logistics and directed-build a bare `{ tick }` ctx (no
   `economySignals`), and their row types carry no unrest or maintenance malus to re-derive
-  suppression locally — extend the planner rows (or ctx.results) explicitly. Off-month-pulse
+  suppression locally — extend the planner rows (or ctx.results) explicitly. Off-cycle-pulse
   fallback: when the logistics/construction pulse lands where `economySignals` is undefined, the
-  planners read the last persisted month-pulse values.
+  planners read the last persisted cycle-pulse values.
 - **The government consumption boost folds into `demandRate`** (superseded — the necessity slice
   deletes the boost, see below): today it is added to the drain
   *after* the band is built, so on low-civilian-demand goods (weapons/fuel at militarist systems)
@@ -344,7 +344,7 @@ recalibration.
   emergency ration threshold; new markets must not seed at only two cycles.
 - **Colonies founded in play get the same courtesy, paid for by their founder.** World-gen seeds its
   starting markets with a reserve; `colony_establish` seeds nothing, so a landed colony opens at
-  stock 0 on every good — maximum shortage on its first assessment, months before its first
+  stock 0 on every good — maximum shortage on its first assessment, cycles before its first
   extractor can finish or a route can reach it. It accumulates unrest the whole time and, under the
   shipped constants, is destroyed before the question "is this colony viable?" is ever asked. The
   establishment therefore carries a **founding stock endowment**: cover on the goods the seed
@@ -370,12 +370,12 @@ recalibration.
 - **Crisis becomes real and only real**: true empty (satisfaction 0, unrest climbing into
   strike/collapse) is reachable only in genuine catastrophe, never as a market's resting state.
 - **Designed later promotion** (not built now): with purse Stage 2–3 monetisation, a *legible*
-  EU5-style reserve — a visible, policy-set stockpile (N days held back, crisis release /
+  EU5-style reserve — a visible, policy-set stockpile (N cycles held back, crisis release /
   requisition, war stores) rationed by access.
 
 ## 5. Infrastructure decay — gardener, not treadmill
 
-- **Idle buffer 6 → 12 reference-months.** Idle now means genuinely unneeded, so the buffer's only
+- **Idle buffer 6 → 12 reference-cycles.** Idle now means genuinely unneeded, so the buffer's only
   jobs are how long over-capacity lingers and how long a dead colony's infrastructure survives.
 - **Big-stack bias is cured by honest signals, not new machinery** — the whole-level trigger,
   one-level-per-buffer pacing, academy/complex utilisation reads, and single-level overshoot
@@ -387,7 +387,7 @@ recalibration.
   realized, suppressed, or input-gated output** — the purse's flow-only guarantee (the malus
   scales output *after* utilisation is measured) extends to strike and event suppression, and the
   §1 funding-bound exclusion keeps a treasury dip from pruning demand-backed exporters. Stored
-  idle-month counters survive saves harmlessly (healthy systems zero them on the first
+  idle-cycle counters survive saves harmlessly (healthy systems zero them on the first
   post-change run).
 - **Housing is headroom, not waste — the idle channel can't tell them apart.** An idle production
   building is exactly the waste decay exists to prune; empty housing is capacity built deliberately
@@ -420,7 +420,7 @@ recalibration.
   failed system — but three properties change:
   - **One level per run for the system, not one per building type.** The shipped channel iterates
     building types and sheds a level from each, so teardown speed scales with how *varied* a
-    system's built base is: a ten-type world loses ten levels a month for the same unrest that costs
+    system's built base is: a ten-type world loses ten levels a cycle for the same unrest that costs
     a one-type world a single level. Collapse must not punish development. The level is shed from
     the least-used eligible type first (deterministic tie-break), so collapse eats the least-needed
     thing first.
@@ -443,7 +443,7 @@ Content contract only; concrete layout gets the house collaborative wireframe pa
   both produced and consumed locally: an access failure wins, while a Supplied good with
   producer-side Glut shows **Glut** (the actionable state); Rationing/Shortage exclude Glut by construction (low
   stock ⇒ full-rate production).
-- **Days of cover is the primary unit** (stock ÷ demand rate, against reserve anchor 40 / ration 2); raw
+- **Cycles of cover is the primary unit** (stock ÷ demand rate, against reserve anchor 40 / ration 2); raw
   units demote to tooltips.
 - **The Industry roster's "Worked" column splits**: a *Staffed* figure (pure labour, per grade) and
   a *state chip* naming the condition (producing / glut-idling / input-short on *which* input /
@@ -466,7 +466,7 @@ Content contract only; concrete layout gets the house collaborative wireframe pa
 - **Stability explains causes and memory**: the Population surface separates current goods
   pressure from current tax pressure and shows whether stored unrest is rising, stable, or
   recovering. A coarse recovery indication is sufficient; an exact historical chart or precise
-  “N months” forecast is optional backlog polish. Needs is labelled as the latest economy
+  “N cycles” forecast is optional backlog polish. Needs is labelled as the latest economy
   assessment, including the deliberate §2 logistics-to-assessment lag.
 - **Collapsed-housing diagnostics remain visible**: `popCap <= 0` must not replace the Population
   panel with a generic Uninhabited state while population or unrest remains. The stranded
@@ -492,7 +492,7 @@ Content contract only; concrete layout gets the house collaborative wireframe pa
 | `PROVISION_MARGIN` | 0.10–0.15 | Planner capacity margin over demand |
 | squeeze persistence | 2 pulses | Feedback-backstop + proposal persistence window |
 | `BUILD_RATE_CAP` | ~0.4 | Max fraction of a good's gap proposed per pulse |
-| `idleBufferMonths` | 12 (was 6) | Sustained-idle buffer |
+| `idleBufferCycles` | 12 (was 6) | Sustained-idle buffer |
 | housing pressure trigger / target | 0.95 / 0.92 | Autonomic housing relief band (target inside the vacancy slack) |
 | `RATION_EXIT_EPS` | calibrated with the presentation pass | Regime-chip enter/exit hysteresis around rationing |
 | overshoot-death gate | strike threshold (0.65) | Unrest above which the overshoot-death term fires (collapse regime only) |
@@ -534,7 +534,7 @@ flow-only invariant, §1/§5).
   system in collapse never reaches `popCap = 0` while it holds population; a system with zero
   capacity in a good receives build proposals for it regardless of its unrest; a striking system
   contributes only its realized output to exporter spare; and a colony founded into a supplied
-  region survives its opening months without entering the collapse regime while one founded beyond
+  region survives its opening cycles without entering the collapse regime while one founded beyond
   logistics reach still fails. Track the **striking share** and the **stranded-population count**
   (population with `popCap ≈ 0`) as headline health metrics — both were the loudest signal that the
   shipped constants were compounding rather than correcting.

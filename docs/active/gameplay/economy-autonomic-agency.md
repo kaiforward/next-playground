@@ -62,7 +62,7 @@ diffusion. It shares the intra-faction edge substrate with population migration 
 Both act only on **developed** systems: migration's open edges are gated to developed-both endpoints and
 directed logistics only routes between developed participants, so an unclaimed or controlled system neither
 sends nor receives goods or population (its seeded market is frozen). Logistics draws only from
-market stock **above** a donor's own days-of-supply anchor, so a donor is never pulled below its comfort
+market stock **above** a donor's own cycles-of-supply anchor, so a donor is never pulled below its comfort
 target and locals keep their supply (the v1 form of civilian crowd-out — emergent, target-protected).
 
 ---
@@ -70,7 +70,7 @@ target and locals keep their supply (the v1 form of civilian crowd-out — emerg
 ## The shared reading: market state per good
 
 Both halves read the same per-system, per-good numbers — stock, `production`, `demand` (civilian
-consumption + industrial input draw), and the **days-of-supply price anchor** (`targetStock = TARGET_COVER
+consumption + industrial input draw), and the **cycles-of-supply price anchor** (`targetStock = TARGET_COVER
 × demandRate`, the same number the supply/demand UI shows) — but they ask **different questions of them**,
 because they do different jobs. **Logistics moves the running-balance stock**, so it classifies against the
 stock anchor; **build sizes sustainable capacity**, so it reads the per-tick flow (`production` vs
@@ -175,7 +175,7 @@ growing. Three mechanisms, in causal order:
    (`population − labourDemand`) *and* a **structural rate deficit** — a good whose local `production <
    demand` (the per-tick flow) with no reachable **rate exporter** (a system producing more than it
    consumes) to serve it, inputs available. Capacity is sized to **close the rate**, not to fill a
-   days-of-supply stock target: the planner builds enough to meet the flow, and extraction grows
+   cycles-of-supply stock target: the planner builds enough to meet the flow, and extraction grows
    tier-by-tier as each new factory's input draw appears as the tier below's rate deficit. A full stock
    buffer does not cancel the shortfall — the buffer is a passive shock-absorber (it emerges from lumpy
    capacity overshoot), never a build goal; a neighbour merely *holding* stock is not a reason to forgo a
@@ -216,7 +216,7 @@ its own staffing (an unstaffable centre sheds levels via ordinary idle-decay lik
 serves no market demand, so it carries no invented value — instead **a construction point is worth the
 best work the pool can't yet fund**: per faction per pulse, `planCentreProposal`
 (`lib/engine/construction-centre.ts`) walks the backlog (in-flight projects + this pulse's ordered
-proposals) against what the pool drains within `CONSTRUCTION.BACKLOG_WINDOW` reference months; the best
+proposals) against what the pool drains within `CONSTRUCTION.BACKLOG_WINDOW` reference cycles; the best
 ROI beyond that frontier prices at most one centre proposal (`value = POINTS_PER_LEVEL × r ×
 PAYBACK_HORIZON`), sited at the developed system with the most spare labour and space. It then competes
 in the ordinary ROI ordering like any other proposal. Emergent and self-limiting: a deep backlog of
@@ -242,7 +242,7 @@ by this slice.
 ## Cadence
 
 Both halves run on a slow **resolution pulse** — `LOGISTICS_INTERVAL` and `CONSTRUCTION_INTERVAL` (24 ticks
-each, independently tunable from the economy's `MONTH_LENGTH`) — a big, predictable current, per the
+each, independently tunable from the economy's `CYCLE_LENGTH`) — a big, predictable current, per the
 "nothing vanishes while you watch" legibility requirement. `pulseShard` resolves **every faction together**
 on the boundary tick (`tick % interval === 0`); each processor scales its per-pulse budget by
 `catchUpFactor(interval)`, so the wall-clock rate is invariant to the interval at any universe scale. Two
@@ -250,7 +250,7 @@ processors join the tick pipeline:
 
 - **`directedLogistics`** (`dependsOn: economy`) — classify markets, match surplus→deficit, apply silent
   stock deltas + `logistics` flow rows.
-- **`directedBuild`** (`dependsOn: directed-logistics`) — on the same monthly pulse, before its build
+- **`directedBuild`** (`dependsOn: directed-logistics`) — on the same cycle pulse, before its build
   step, each faction runs one **claim** and one **develop** step to grow its territory (see the
   [faction-system](./faction-system.md#territorial-expansion-claim-and-develop) control-flag model):
   claim scores in-reach unclaimed systems (substrate × proximity, absolute so factions compare
@@ -296,7 +296,7 @@ shared deficit/surplus/self-supply classification; greedy surplus→deficit matc
 + `logistics` flow rows; proactive housing (fed-and-calm, paced ahead of population, capped at habitable
 land); rate-deficit-driven, labour-gated industry builds (whole-level spare-labour gate; the planner
 proposes toward the physical ceilings, and the per-faction construction throughput pool alone paces the
-committed queue); both processors on their monthly resolution pulse.
+committed queue); both processors on their cycle resolution pulse.
 
 **Deferred (explicitly out):**
 - **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy

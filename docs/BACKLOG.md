@@ -10,20 +10,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
-- **[M] Finish the cycles vocabulary sweep — "month" is still the reference time unit in code** — the
-  in-fiction unit is the **cycle**: the timescale is deliberately unfixed (it is space), so months and
-  days are both wrong. The necessity-unrest slice converted the supply/cover vocabulary
-  ("days-of-supply" → "months-of-supply" → **cycles-of-supply**, plus `TARGET_COVER`/`HOLD_COVER`/
-  `RATION_COVER` and the `/cyc` unit labels), but stopped at prose. "Month" remains the codebase's name
-  for the reference time unit in ~390 further sites, and the rest is not a docstring pass:
-  - `WorldBuilding.idleMonths` is a **persisted World field** → renaming needs a `SAVE_FORMAT_VERSION` bump.
-  - `cadence.month` is in the **experiment YAML schema** (`lib/tick-harness/experiment.ts`) → renaming
-    breaks every committed config under `experiments/`.
-  - `MONTH_LENGTH` (~50 refs), `DecayParams.idleBufferMonths`, `TREASURY.HEADS_TAX_PER_MONTH` /
-    `headsTaxPerMonth`, and the pervasive "reference month(s)" unit prose (~40 sites).
-  Do it as one mechanical PR (`tsc` verifies the identifier half) with the save bump and a note that old
-  experiment configs need their `cadence.month` key renamed. User-facing `/cyc` copy in `components/`
-  already uses the right word and needs no change.
 - **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips deliberately ship with
   figures plus the single sentence "Higher-pressure needs create more unrest." (a needs-visibility build
   decision: final wording waits for a dedicated nested-tooltip pass). When that pass happens, also
@@ -58,8 +44,8 @@ Well-defined, can start now.
 - **[S] Funding sliders: EU5-style immediate number + shorted-only exception display** — decided
   2026-07-20 at purse Plan 3 merge. Today each band row shows "set X% · runs Y% — shorted", where
   `runs` is last settlement's latched paid fraction. Two problems: the steady state duplicates the
-  same number twice, and the display **conflates the one-month latch lag with genuine insolvency** —
-  raising a slider mid-month shows "— shorted" for the rest of the month even though nothing was
+  same number twice, and the display **conflates the one-cycle latch lag with genuine insolvency** —
+  raising a slider mid-cycle shows "— shorted" for the rest of the cycle even though nothing was
   shorted (last settlement simply ran the old setting). Change to the Paradox convention: show the
   set value only, updating immediately (next-cycle effect implicit), and surface the amber
   "— shorted" **only when the last settlement genuinely could not pay what was asked**. Detecting
@@ -159,7 +145,7 @@ Direction is clear, approach needs a design doc before implementation.
   remaining cost there other than events (67.5%). **Gating cannot touch it**: ship-arrivals and events
   both genuinely run every tick and both consume `TickSystem` rows, so the join has to happen. The
   lever is to *narrow* it, not skip it — it walks every building row in the galaxy to build the count
-  and idle-months rosters, then maps every system, and off-pulse the only consumers are ship-arrivals
+  and idle-cycles rosters, then maps every system, and off-pulse the only consumers are ship-arrivals
   (ids/names) and events (ids, names, control, region). Worth checking what those two actually read
   before assuming the full row is needed; a cheaper off-pulse projection, or moving the roster join
   behind what needs it, is the likely shape. Fold into the events re-point only if that pass changes
@@ -167,7 +153,7 @@ Direction is clear, approach needs a design doc before implementation.
 - **[M] Tick perf: the events processor scales worst in the tick — and is now two-thirds of it** — it
   costs 1.3ms/tick at 600 systems and ~9-10ms at 2,400: **~7× the cost for 4× the systems**, the worst
   scaling curve of any stage. Two shipped changes have hollowed out everything around it without
-  touching it — deleting the market World↔Tick round-trip, then gating the monthly-pulse stages' setup
+  touching it — deleting the market World↔Tick round-trip, then gating the cycle-pulse stages' setup
   — so its share has gone **19.4% → ~40% → 67.5% of an off-pulse tick**. It legitimately runs every
   tick (phase progression, plus a spawn every `EVENT_SPAWN_INTERVAL`), so neither lever touched it;
   the cost is the processor itself. Off-pulse it now essentially *is* the tick: events 67.5%,

@@ -6,7 +6,7 @@ import type {
   InfrastructureWorld,
   InfrastructureProcessorParams,
   BuildingCountUpdate,
-  IdleMonthsUpdate,
+  IdleCyclesUpdate,
   CollapseDebtUpdate,
   PopCapUpdate,
 } from "@/lib/tick/world/infrastructure-world";
@@ -31,11 +31,11 @@ export async function runInfrastructureDecayProcessor(
   const states = await world.getInfrastructureState(systemIds);
 
   // Decay counters are reference-denominated; one run accrues catchUpFactor(interval)
-  // reference-months of idle countdown and collapse debt.
+  // reference-cycles of idle countdown and collapse debt.
   const catchUp = catchUpFactor(params.interval);
 
   const countUpdates: BuildingCountUpdate[] = [];
-  const idleUpdates: IdleMonthsUpdate[] = [];
+  const idleUpdates: IdleCyclesUpdate[] = [];
   const debtUpdates: CollapseDebtUpdate[] = [];
   const popCapUpdates: PopCapUpdate[] = [];
   for (const s of states) {
@@ -47,11 +47,11 @@ export async function runInfrastructureDecayProcessor(
     const decayParams =
       bufferScale === 1
         ? params.decay
-        : { ...params.decay, idleBufferMonths: params.decay.idleBufferMonths * bufferScale };
+        : { ...params.decay, idleBufferCycles: params.decay.idleBufferCycles * bufferScale };
     const result = computeSystemDecay(
       {
         buildings: s.buildings,
-        buildingIdleMonths: s.buildingIdleMonths,
+        buildingIdleCycles: s.buildingIdleCycles,
         collapseDebt: s.collapseDebt,
         population: s.population,
         unrest: s.unrest,
@@ -64,8 +64,8 @@ export async function runInfrastructureDecayProcessor(
     for (const [buildingType, count] of Object.entries(result.newCounts)) {
       countUpdates.push({ systemId: s.systemId, buildingType, count });
     }
-    for (const [buildingType, idleMonths] of Object.entries(result.newIdleMonths)) {
-      idleUpdates.push({ systemId: s.systemId, buildingType, idleMonths });
+    for (const [buildingType, idleCycles] of Object.entries(result.newIdleCycles)) {
+      idleUpdates.push({ systemId: s.systemId, buildingType, idleCycles });
     }
     if (result.collapseDebt !== s.collapseDebt) {
       debtUpdates.push({ systemId: s.systemId, collapseDebt: result.collapseDebt });
@@ -76,7 +76,7 @@ export async function runInfrastructureDecayProcessor(
   }
 
   await world.applyBuildingDecays(countUpdates);
-  await world.applyIdleMonths(idleUpdates);
+  await world.applyIdleCycles(idleUpdates);
   await world.applyCollapseDebts(debtUpdates);
   await world.applyPopCapUpdates(popCapUpdates);
   return {};

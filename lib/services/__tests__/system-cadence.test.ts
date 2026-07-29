@@ -63,7 +63,7 @@ function makeTickSystem(id: string, factionId: string | null): TickSystem {
     popCap: 200,
     unrest: 0,
     buildings: {},
-    buildingIdleMonths: {},
+    buildingIdleCycles: {},
     collapseDebt: 0,
     yields: emptyResourceVector(),
     slotCap: emptyResourceVector(),
@@ -87,8 +87,8 @@ afterEach(() => {
   clearWorld();
 });
 
-describe("getSystemCadence — monthly pulse", () => {
-  it("returns pulseGroup 0 for every system (all resolve on the monthly boundary)", () => {
+describe("getSystemCadence — cycle pulse", () => {
+  it("returns pulseGroup 0 for every system (all resolve on the cycle boundary)", () => {
     const ids = ["zulu", "alpha", "mike", "bravo", "yankee"];
     const systems = ids.map((id) => makeSystem(id, null));
     setWorld(buildWorld(systems));

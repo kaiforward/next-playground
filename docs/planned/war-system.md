@@ -157,7 +157,7 @@ Wars are persistent features of the game landscape, not quick skirmishes. Player
 | Border skirmish (pre-war) | 1-3 days | 1-3 border systems. No formal war, just localized events and tension |
 | Small war | 1-2 weeks | A few systems contested. Limited stakes, between smaller factions or limited objectives |
 | Major war | 2-4 weeks | Significant territory at stake. Multiple contested systems, full economic mobilization |
-| Existential war (homeworld threatened) | 1 month+ | Highest stakes. Both sides fully committed. Only happens when a faction is already weakened |
+| Existential war (homeworld threatened) | 1 cycle+ | Highest stakes. Both sides fully committed. Only happens when a faction is already weakened |
 
 Duration is driven by war exhaustion accumulation rate, which scales with:
 - War intensity (how many systems are contested)

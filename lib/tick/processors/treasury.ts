@@ -20,14 +20,14 @@ import type { TreasuryWorld, TreasuryProcessorParams } from "@/lib/tick/world/tr
 const EMPTY_REALIZED: ReadonlyMap<string, ReadonlyMap<string, number>> = new Map();
 
 /**
- * Monthly treasury settlement: collect both tax lines from the month just
+ * Per-cycle treasury settlement: collect both tax lines from the cycle just
  * produced, then pay bills in the fixed ladder maintenance → logistics →
  * construction; the paid fraction per band latches as that band's effective
- * funding for the following month. Off the month pulse the body only accrues
+ * funding for the following cycle. Off the cycle pulse the body only accrues
  * work performed by band pulses (bills charge work performed, not standing
  * capacity — the standing-cost job belongs to maintenance).
  *
- * Heads tax and maintenance are monthly rates → scaled by catchUpFactor here;
+ * Heads tax and maintenance are per-cycle rates → scaled by catchUpFactor here;
  * realized production and work quantities arrive already catchUp-scaled from
  * their own pulses and are never rescaled. Logistics work is S-scaled and is
  * normalised by economyScale at accrual; realized production at collection.
@@ -98,7 +98,7 @@ export async function runTreasuryProcessor(
     for (const s of systems) {
       const alloc = computeSystemLabourSnapshot(s.buildings, s.population).basis;
       const heads =
-        headsTaxIncome(alloc, params.rates.headsWeights, params.rates.headsTaxPerMonth, rateMult) *
+        headsTaxIncome(alloc, params.rates.headsWeights, params.rates.headsTaxPerCycle, rateMult) *
         catchUp;
       const production = productionTaxIncome(
         realizedBySystem.get(s.systemId) ?? new Map<string, number>(),

@@ -152,7 +152,7 @@ export interface WorldBuilding {
   /** Whole-integer level count. Grows only via landed construction projects; sheds whole levels via decay. */
   count: number;
   /** Sustained-idle countdown for this (system, type): counts up while ≥1 whole level sits idle, resets on refill, sheds one level at the decay buffer. */
-  idleMonths: number;
+  idleCycles: number;
 }
 
 /** Fields every committed construction project shares — funded by `factionId`'s per-pulse pool. */
@@ -242,11 +242,11 @@ export interface WorldMarket {
   realizedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers are deliberately excluded. Missing reads as false. */
   productionSuppressed?: boolean;
-  /** Reference-months a rationed economy assessment has persisted — a finite value in [0,2], advanced
-   *  per assessment by the economy interval's catchUpFactor (2 = two reference months). Missing reads as 0. */
+  /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2], advanced
+   *  per assessment by the economy interval's catchUpFactor (2 = two reference cycles). Missing reads as 0. */
   squeezePulses?: number;
-  /** Reference-months a structural construction assessment has persisted — a finite value in [0,2],
-   *  advanced per assessment by the construction interval's catchUpFactor (2 = two reference months).
+  /** Reference-cycles a structural construction assessment has persisted — a finite value in [0,2],
+   *  advanced per assessment by the construction interval's catchUpFactor (2 = two reference cycles).
    *  Missing reads as 0. */
   proposalPulses?: number;
   /**
@@ -311,7 +311,7 @@ export interface TreasuryIncomeBySystem {
 /** World-facing name for the engine's maintenance line item — one shape, no drift. */
 export type TreasuryMaintenanceLine = MaintenanceBillLine;
 
-/** The last monthly settlement's itemised snapshot — persisted so UI reads never recompute transients. */
+/** The last cycle settlement's itemised snapshot — persisted so UI reads never recompute transients. */
 export interface WorldTreasurySettlement {
   tick: number;
   headsIncome: number;
