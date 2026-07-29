@@ -220,7 +220,7 @@ export interface WorldMarket {
   /** Stored pricing-anchor multiplier (1 = none). */
   anchorMult: number;
   /**
-   * Total months-of-supply demand denominator: civilian consumption **plus** industrial input draw.
+   * Total cycles-of-supply demand denominator: civilian consumption **plus** industrial input draw.
    * This is the pricing anchor (targetStock = TARGET_COVER × demandRate) and the directed-logistics
    * deficit anchor — NOT the civilian-only want the Population panel's needs ledger renders (that is
    * `consumptionRate`, unfloored). Recomputed each economy pulse by the population processor via

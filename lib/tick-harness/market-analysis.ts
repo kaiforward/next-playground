@@ -98,7 +98,7 @@ function computePriceDispersion(
 
 /**
  * For each good, compute the average distance of stock from each market's
- * per-system months-of-supply reference (TARGET_COVER × demandRate × anchorMult)
+ * per-system cycles-of-supply reference (TARGET_COVER × demandRate × anchorMult)
  * across all systems. Positive drift = above reference (cheap), negative = below
  * (expensive). The further from zero, the more stock has drifted from the level
  * where the good prices at base.

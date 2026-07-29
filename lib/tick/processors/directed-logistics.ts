@@ -53,11 +53,11 @@ function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: numb
  *
  * Catch-up scaling is split down the middle of the mechanic:
  *  - Deliveries are NOT scaled. A transfer is an absolute *level-fill* toward the
- *    months-of-supply anchor (shortfall = targetStock − stock). Multiplying a gap-fill
+ *    cycles-of-supply anchor (shortfall = targetStock − stock). Multiplying a gap-fill
  *    by the interval ratio overshoots the anchor — it pushes recipients past the
  *    surplus margin (≈2× anchor), wasting hauls and flipping fresh recipients into
  *    donors / cheap re-export targets. The anchor (40 economy-runs of cover) already
- *    vastly exceeds one month's draw, so a single fill-to-anchor over-provisions on its own.
+ *    vastly exceeds one cycle's draw, so a single fill-to-anchor over-provisions on its own.
  *  - The haul *budget* IS scaled (`generation × catchUp` in `toLogisticsState`). It is
  *    per-pulse income (Σ pop × generation, exhaustion = deliberate under-serve); paid
  *    unscaled but more often, it would silently inflate wall-clock haul capacity exactly

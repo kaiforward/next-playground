@@ -277,7 +277,7 @@ describe("matchFactionTransfers", () => {
 describe("surplusDrawable", () => {
   const margin = DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 1.4
 
-  it("returns 0 for a zero/negative demand anchor (no months-of-supply target), even for a producer", () => {
+  it("returns 0 for a zero/negative demand anchor (no cycles-of-supply target), even for a producer", () => {
     expect(surplusDrawable(50, 0, 5, 30)).toBe(0);
     expect(surplusDrawable(50, -10, 5, 30)).toBe(0);
   });

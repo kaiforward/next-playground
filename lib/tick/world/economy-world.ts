@@ -33,7 +33,7 @@ export interface MarketView {
   /** Base consumption rate for this good, if any. */
   baseConsumptionRate?: number;
   /** Stored local demand rate, read from `WorldMarket.demandRate`: civilian + industrial draw, the
-   *  months-of-supply pricing denominator (see that field's doc — not the civilian-only footprint). */
+   *  cycles-of-supply pricing denominator (see that field's doc — not the civilian-only footprint). */
   demandRate: number;
   /** Built infrastructure storage capacity from the station market row. */
   storageCapacity: number;

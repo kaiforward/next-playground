@@ -7,11 +7,11 @@ import { scaleValue } from "@/lib/constants/economy-scale";
 export const DIRECTED_LOGISTICS = {
   /** Work-budget a system contributes per cycle = population × this. Free in v1 (no treasury). */
   GENERATION_PER_POP: scaleValue(0.5),
-  /** A good is a surplus when stock ≥ targetStock × this (held above its months-of-supply anchor). Margin > 1 leaves a deliberate residual (negative space). */
+  /** A good is a surplus when stock ≥ targetStock × this (held above its cycles-of-supply anchor). Margin > 1 leaves a deliberate residual (negative space). */
   SURPLUS_MARGIN: 1.4,
   /** Structural exporters may draw down to this fraction of their own anchor. This is distinct from the initial market seed reserve. */
   STRATEGIC_EXPORT_RESERVE_FRAC: 0.75,
-  /** A good is a deficit when stock < targetStock × this (below its months-of-supply anchor). < 1 leaves a comfortable dead-band above it (with SURPLUS_MARGIN) — the residual / negative space. */
+  /** A good is a deficit when stock < targetStock × this (below its cycles-of-supply anchor). < 1 leaves a comfortable dead-band above it (with SURPLUS_MARGIN) — the residual / negative space. */
   DEFICIT_FRACTION: 0.8,
   /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */
   MAX_HOPS: 4,

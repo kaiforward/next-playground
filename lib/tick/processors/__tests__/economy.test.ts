@@ -703,7 +703,7 @@ describe("maintenance output malus", () => {
 
 describe("satisfaction — measured flow, persisted", () => {
   // The emergency threshold is rationCover × demandRate (2 × 1 = 2),
-  // independent of the 40-month price anchor.
+  // independent of the 40-cycle price anchor.
   const rationStock = ECON_PARAMS.simParams.rationCover;
   const satOf = (world: InMemoryEconomyWorld, systemId: string, goodId = "food") =>
     world.markets.find((m) => m.systemId === systemId && m.goodId === goodId)!.satisfaction;

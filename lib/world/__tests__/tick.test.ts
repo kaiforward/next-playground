@@ -380,7 +380,7 @@ describe("runWorldTick — per-stage wiring", () => {
       ...base,
       systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
       // B loses its water extractors AND starts empty of water → a persistent water deficit (it can't
-      // self-refill, so it stays below its months-of-supply anchor and must import).
+      // self-refill, so it stays below its cycles-of-supply anchor and must import).
       buildings: base.buildings.filter((bl) => !(bl.systemId === b && bl.buildingType === "water")),
       // A holds a large water reserve → a surplus donor above its anchor.
       markets: base.markets.map((m) => {
