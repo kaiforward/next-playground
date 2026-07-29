@@ -1103,7 +1103,7 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
     // granted a full want, minting stock the founder never had.
     const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
     const exportRate = homeDemand * 2;
-    const stock = TARGET_COVER * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC + foundingWant("food") * 1.5;
+    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + foundingWant("food") * 1.5;
     const w = new MemoryDirectedBuildWorld([stockedHome({ food: stock }, { food: exportRate })]);
     await developColony(w, [colonyCand("c1"), colonyCand("c2")]);
 

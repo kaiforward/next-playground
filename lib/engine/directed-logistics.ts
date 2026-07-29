@@ -38,11 +38,16 @@ export function classifyMarketState(stock: number, targetStock: number): MarketC
 
 /**
  * Drawable directed-logistics surplus for one (system, good). A structural exporter
- * (production > demand) may ship down to its strategic reserve; every other donor
- * must clear SURPLUS_MARGIN and stops at its own anchor. Realized production keeps
+ * (production > demand) may ship down to EXPORT_RESERVE_COVER cycles of its own demand; every other
+ * donor must clear SURPLUS_MARGIN and stops at its own anchor. Realized production keeps
  * suppressed or input-starved former exporters on the ordinary-donor path.
  * One definition, shared by the logistics matcher and the build planner so both read
  * "surplus" alike.
+ *
+ * The exporter's reserve is denominated in cycles of demand, not as a fraction of `targetStock`: the
+ * anchor is a price-curve reference (TARGET_COVER = 40 cycles), and borrowing it as a shipping
+ * threshold set the bar at 30 cycles — which a producer built to demand + PROVISION_MARGIN reaches
+ * only to be drained straight back to it, so it exported its thin margin and nothing more.
  *
  * `productionSuppressed` here is NOT the same test the build planner's structural
  * assessment makes, and the two must not be collapsed into one. This is a DRAWDOWN
@@ -60,7 +65,7 @@ export function surplusDrawable(
   productionSuppressed = false,
 ): number {
   if (targetStock <= 0) return 0;
-  const exporterReserve = targetStock * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC;
+  const exporterReserve = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * Math.max(0, demand);
   if (production > demand && !productionSuppressed) return Math.max(0, stock - exporterReserve);
 
   const aboveAnchor = stock - targetStock;

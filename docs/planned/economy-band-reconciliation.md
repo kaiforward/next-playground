@@ -483,7 +483,8 @@ Content contract only; concrete layout gets the house collaborative wireframe pa
 | Constant | Initial | Meaning |
 | --- | --- | --- |
 | `RATION_COVER` | 2 cycles | Emergency threshold below which current delivery is rationed |
-| initial/export reserve floor | 0.75 × T | Strategic reserve policy, separate from access |
+| initial seed reserve floor | 0.75 × T | World-gen strategic reserve policy, separate from access |
+| `EXPORT_RESERVE_COVER` | 10 cycles | What a structural exporter keeps before shipping the rest — cycles of its own demand, deliberately not a fraction of the pricing anchor |
 | production knee | 1.0 × T | Full rate to the anchor; ramp ends at HOLD_COVER (1.3, unchanged) |
 | `USED_SLACK` | 0.15 | Producer decay-signal slack on the throttle |
 | `VACANCY_SLACK` | 0.10 | Housing decay-signal vacancy allowance |

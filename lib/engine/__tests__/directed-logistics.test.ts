@@ -274,6 +274,9 @@ describe("matchFactionTransfers", () => {
 // The two-path rule (clears-margin OR structural-producer-above-anchor) and its guards are
 // pinned here so a boundary mutation — e.g. the structural-producer `>` softening to `>=`, or a
 // dropped zero-anchor guard — fails a test rather than silently regressing directed logistics.
+/** What a structural exporter holds back: EXPORT_RESERVE_COVER cycles of its own demand. */
+const exporterReserve = (demand: number) => DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * demand;
+
 describe("surplusDrawable", () => {
   const margin = DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 1.4
 
@@ -293,8 +296,9 @@ describe("surplusDrawable", () => {
   });
 
   it("path (b): a structural producer above its anchor donates even below the 1.4× margin", () => {
-    // stock 110 = 1.1× anchor (below 140), production 30 > demand 5 → drawable 110 − 75 = 35.
-    expect(surplusDrawable(110, 100, 5, 30)).toBe(35);
+    // stock 110 = 1.1× anchor (below 140), production 30 > demand 5 → drawable is everything above
+    // the exporter's own reserve (EXPORT_RESERVE_COVER cycles of demand 5).
+    expect(surplusDrawable(110, 100, 5, 30)).toBe(110 - exporterReserve(5));
   });
 
   it("excludes a non-producer sitting in the 1.0–1.4× band (no re-export churn)", () => {
@@ -306,26 +310,37 @@ describe("surplusDrawable", () => {
     // Pins the strict `production > demand`: equal production must NOT qualify as path (b).
     expect(surplusDrawable(110, 100, 5, 5)).toBe(0);
     // A hair above demand DOES qualify — confirms the boundary sits exactly at equality.
-    expect(surplusDrawable(110, 100, 5, 5.01)).toBe(35);
+    expect(surplusDrawable(110, 100, 5, 5.01)).toBe(110 - exporterReserve(5));
   });
 });
 
 describe("strategic exporter reserve", () => {
-  it("draws a structural exporter at 0.90 targetStock down to the 0.75 reserve", () => {
+  it("draws a structural exporter below its anchor down to its own reserve, keeping exactly the reserve", () => {
     const target = 100;
-    const drawable = surplusDrawable(target * 0.9, target, 5, 30);
-    expect(drawable).toBeCloseTo(target * (0.9 - DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC));
-    expect(target * 0.9 - drawable).toBeCloseTo(target * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC);
+    const demand = 5;
+    const stock = target * 0.9;
+    const drawable = surplusDrawable(stock, target, demand, 30);
+    expect(drawable).toBeCloseTo(stock - exporterReserve(demand));
+    expect(stock - drawable).toBeCloseTo(exporterReserve(demand));
+  });
+
+  it("sizes the reserve off demand, not the pricing anchor — a shifted anchor does not move it", () => {
+    // The anchor carries anchor_shift events; warehouse policy must not ride them. Same demand and
+    // stock, anchor doubled: the exporter keeps the same reserve and ships the same quantity.
+    const demand = 5;
+    const stock = 200;
+    expect(surplusDrawable(stock, 100, demand, 30)).toBeCloseTo(stock - exporterReserve(demand));
+    expect(surplusDrawable(stock, 200, demand, 30)).toBeCloseTo(stock - exporterReserve(demand));
   });
 
   it("draws a producer below the anchor down to the reserve floor, where a non-producer draws nothing", () => {
     const target = 100;
-    const reserve = target * DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC; // 75
-    const stock = 80; // sits between the 0.75 reserve floor and the anchor (1.0× target)
+    const demand = 5;
+    const stock = exporterReserve(demand) + 30; // between the reserve floor and the anchor
     // A producer above demand deep-draws below the anchor down to the reserve — it stops AT the reserve, not the anchor.
-    expect(surplusDrawable(stock, target, 5, 30)).toBeCloseTo(stock - reserve); // 5
+    expect(surplusDrawable(stock, target, demand, 30)).toBeCloseTo(30);
     // The same sub-anchor stock with no production draws nothing — the non-producer path needs stock > anchor.
-    expect(surplusDrawable(stock, target, 5, 0)).toBe(0);
+    expect(surplusDrawable(stock, target, demand, 0)).toBe(0);
   });
 
   it("does not deep-draw an input-starved former exporter despite its capacity", () => {
@@ -375,8 +390,11 @@ describe("strategic exporter reserve", () => {
   });
 
   it("keeps the strategic reserve safely above ration cover", () => {
-    expect(DIRECTED_LOGISTICS.STRATEGIC_EXPORT_RESERVE_FRAC * TARGET_COVER).toBeGreaterThan(
-      ECONOMY_CONSTANTS.RATION_COVER,
-    );
+    // Both are cycles of cover, so they compare directly — exporting must never ration the exporter.
+    expect(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER).toBeGreaterThan(ECONOMY_CONSTANTS.RATION_COVER);
+  });
+
+  it("keeps the reserve below the pricing anchor, so an exporter is never held above its own anchor", () => {
+    expect(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER).toBeLessThan(TARGET_COVER);
   });
 });

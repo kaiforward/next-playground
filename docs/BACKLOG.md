@@ -105,40 +105,29 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
-- **[M] Manufactured goods never reach the worlds that cannot make them** — the galaxy produces MORE
-  than it consumes of every good the deprived worlds lack, and still delivers them almost none of it
-  (3000 ticks, seed 42, 600 systems). Medicine: 234 levels on 85 of 573 settled systems, 84.0K produced
-  against 79.5K demanded — yet median civilian satisfaction is **0.000** and market cover **0.00x**.
-  Same shape for consumer goods (173.0K vs 165.1K), gas (463.8K vs 427.4K), textiles (198.3K vs 188.5K),
-  chemicals, biomass. Every good clears its own demand by only 5–8%, which is `PROVISION_MARGIN` (0.10):
-  the planner sizes each world's capacity to its OWN demand, so nobody accumulates a real export surplus.
-  **Three explanations are already measured dead** — check before re-proposing any of them. It is not
-  reach (the stuck worlds have a median of **24 developed systems within the 4-hop cap**, none isolated,
-  and 0 of 23 lack a reachable supplier for something they need; the only goods with no reachable spare
-  are weapons systems and luxuries). It is not missing industry (see the levels above). And it is not the
-  export gate: `surplusDrawable` puts any producer with `production > demand` on the exporter path, which
-  ships down to `STRATEGIC_EXPORT_RESERVE_FRAC` (0.75) of its anchor and never consults `SURPLUS_MARGIN`
-  (1.4) at all — so matching `SURPLUS_MARGIN` to `PROVISION_MARGIN` would change nothing on the path
-  producers actually take. Logistics itself is emphatically alive (88.9K transfers, 32.4M units, 572 of
-  573 systems participating, 25 of 26 goods moved) but the volume is bulk tier-0: gas 5.3M, water 3.3M,
-  ore 3.0M, food 2.6M, fuel 2.4M. **Open question:** whether producers' stock ever accumulates (cover
-  0.00x suggests it is consumed on arrival) or whether the per-cycle logistics work budget is spent on
-  bulk staples before the small high-value goods are reached. This is the ambient deficit every other
-  band constant was cut against, so it is upstream of unrest tuning, not downstream.
-- **[M] Struck worlds can neither grow out of it nor die** — 23 of 573 settled systems (1,343 people,
-  0.4% of the galaxy) sit striking indefinitely: median D 0.486, unrest 0.982, pop 39.5 at a popCap of
-  40, and **zero** of them declining over the last 500 ticks. Growth carries `(1 − D)` and decline
-  carries unrest, so at high D the two terms nearly cancel and the world parks there. About half are
-  short of food or water with no local deposit (12.5% hold an arable slot vs 74% of healthy worlds), and
-  the other half are fed but get no medicine/gas/textiles — the item above. **Half of them also have no
-  habitable land left**, which is a real physical limit no rule change should override. Neither
-  remoteness nor overcrowding is the cause (measured: 3.91 vs 3.72 hops to a homeworld, degree 6.19 vs
-  6.20; 34.4% vs 34.6% over popCap — and `CROWDING.PRESSURE_MAX` is 0.05, so overcrowding cannot reach
-  0.82 unrest structurally). Two shapes worth weighing: let a chronically-struck world actually die
-  (break the growth/decline cancellation), or stop founding colonies that can never be supplied —
-  colonies still *open* deprived (opening satisfaction 0.18, dissatisfaction 0.637; 553 of 553 opened
-  below the 0.50 cut), which is founding-manifest sizing rather than the gate. Do the item above first:
-  it is roughly half the cause and may shrink this cohort on its own.
+- **[M] Re-cut the unrest band against a supplied galaxy** — every band constant was calibrated
+  against an ambient deficit that no longer exists. `D_SHORTAGE_CUT` (0.25) was cut explicitly against
+  "the ambient barren-galaxy deficit ≈0.14 (every tier-1 and tier-2 good empty)", and the unrest slopes,
+  strike threshold and necessity weights were all tuned in that galaxy. With distribution fixed, calm
+  worlds' median D fell **0.114 → 0.022** and galaxy mean D **0.148 → 0.080**, so the whole band now
+  sits far above where worlds actually live: only 21 of 573 systems strike and mean unrest is 0.199, i.e.
+  unrest has become a weak signal rather than a graded one. Re-derive the cut and the slopes from the new
+  distribution rather than nudging them — `lib/constants/__tests__/band-constants.test.ts` asserts the
+  separations that must survive (sustained Rationing never collapses at any tax; a total food or water
+  failure always does).
+- **[M] Struck worlds can neither grow out of it nor die** — 11 of 573 settled systems (499 people)
+  sit striking indefinitely, with **zero** of them declining over the last 500 ticks. Growth carries
+  `(1 − D)` and decline carries unrest, so at high D the two terms nearly cancel and the world parks
+  there. **81.8% of the residual cohort is survival-short**: deposit-less rocks that cannot feed
+  themselves (12.5% hold an arable slot against 74% of healthy worlds) — a real physical limit rather
+  than a rule problem. Roughly half also have no habitable land left. Neither remoteness nor
+  overcrowding is the cause (measured: 3.91 vs 3.72 hops to a homeworld, degree 6.19 vs 6.20; 34.4% vs
+  34.6% over popCap — and `CROWDING.PRESSURE_MAX` is 0.05, so overcrowding cannot reach 0.82 unrest
+  structurally), and it is no longer a distribution problem either (that shipped; the cohort halved from
+  23/1,343 people and its basket-short half went with it). Two shapes worth weighing: let a
+  chronically-struck world actually die (break the growth/decline cancellation), or stop founding
+  colonies that can never be supplied. Colonies opening deprived has largely resolved itself — 553/553
+  down to 373/553, opening satisfaction 0.18 → 0.42 — because the founding manifest now arrives supplied.
 - **Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
   real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
   is currently 1 for every good and `GOODS.priceFloor`/`priceCeiling` is a pure tier lookup with zero
