@@ -20,7 +20,7 @@ export interface GhostRow {
   levels: number;
   origin: "auto" | "player";
   progress: number;
-  etaPulses: number | null;
+  etaCycles: number | null;
   /** deposit ghosts carry the resource their extractor sits on. */
   resource?: string;
 }
@@ -52,7 +52,7 @@ export function classifyGhosts(rows: ConstructionProjectRow[]): Map<GhostGroup, 
       levels: row.levels,
       origin: row.origin,
       progress: row.progress,
-      etaPulses: row.etaPulses,
+      etaCycles: row.etaCycles,
       resource: placed.resource,
     });
     out.set(placed.group, list);

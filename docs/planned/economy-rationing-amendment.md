@@ -23,10 +23,10 @@ the final two cycles of aggregate local demand and ramps toward zero delivery at
   `sqrt(stock / rationStock)` ration factor, capped so a draw can never make stock negative.
 - At empty stock, delivery is zero. A non-positive ration threshold delivers freely when stock
   exists and delivers zero at empty.
-- Satisfaction remains the economy pulse's authoritative measured flow:
+- Satisfaction remains the economy cycle's authoritative measured flow:
   `civilian delivered / civilian demanded`. The persisted value continues to feed unrest,
   population needs, and the build planner's fed check.
-- The opening-stock measurement rule is unchanged: a pulse beginning at or above the ration
+- The opening-stock measurement rule is unchanged: a cycle beginning at or above the ration
   threshold records full satisfaction even if that full draw leaves closing stock below it.
 
 ## Separation of policies
@@ -36,7 +36,7 @@ industrial demand. It is the authority for demand-cycle cover until the next cyc
 
 Pricing anchor shifts change `targetStock`, price, and reserve policy; they do not change
 `rationStock` or physical access at fixed stock and demand. Temporary consumption multipliers
-change the requested flow but not the stored threshold within that pulse.
+change the requested flow but not the stored threshold within that cycle.
 
 Initial market stock remains a separate strategic policy. New markets retain the existing
 `0.75 × targetStock` minimum initial reserve; they are not seeded at two cycles. PR3's structural
@@ -59,7 +59,7 @@ population dissatisfaction or unrest.
 ## Follow-on ownership
 
 - PR3 preserves and tests the tick's assessment ordering: logistics arriving after economy and
-  population affects satisfaction at the next economy pulse.
+  population affects satisfaction at the next economy cycle.
 - PR4 separates goods pressure from tax pressure and calibrates regime-sensitive unrest:
   faster recovery while Supplied, gradual accumulation while Rationing, stronger accumulation
   during Shortage, without changing the intended tax equilibrium.

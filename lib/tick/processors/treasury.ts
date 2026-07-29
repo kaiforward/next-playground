@@ -1,5 +1,5 @@
 import type { TickContext, TickProcessorResult } from "../types";
-import { isPulseTick, catchUpFactor } from "@/lib/tick/shard";
+import { isCycleStart, catchUpFactor } from "@/lib/tick/shard";
 import {
   headsTaxIncome,
   productionTaxIncome,
@@ -23,13 +23,13 @@ const EMPTY_REALIZED: ReadonlyMap<string, ReadonlyMap<string, number>> = new Map
  * Per-cycle treasury settlement: collect both tax lines from the cycle just
  * produced, then pay bills in the fixed ladder maintenance → logistics →
  * construction; the paid fraction per band latches as that band's effective
- * funding for the following cycle. Off the cycle pulse the body only accrues
- * work performed by band pulses (bills charge work performed, not standing
+ * funding for the following cycle. Off the cycle start the body only accrues
+ * work performed by band cycles (bills charge work performed, not standing
  * capacity — the standing-cost job belongs to maintenance).
  *
  * Heads tax and maintenance are per-cycle rates → scaled by catchUpFactor here;
  * realized production and work quantities arrive already catchUp-scaled from
- * their own pulses and are never rescaled. Logistics work is S-scaled and is
+ * their own cycles and are never rescaled. Logistics work is S-scaled and is
  * normalised by economyScale at accrual; realized production at collection.
  */
 export async function runTreasuryProcessor(
@@ -40,7 +40,7 @@ export async function runTreasuryProcessor(
   const treasuries = await world.getTreasuries();
   if (treasuries.length === 0) return {};
 
-  const settles = isPulseTick(ctx.tick, params.interval);
+  const settles = isCycleStart(ctx.tick, params.interval);
   const hasWork =
     params.constructionWorkByFaction.size > 0 || params.logisticsWorkByFaction.size > 0;
   if (!settles && !hasWork) return {};
@@ -64,7 +64,7 @@ export async function runTreasuryProcessor(
   const updates: WorldFactionTreasury[] = [];
   for (const t of treasuries) {
     // Work signals cross a processor boundary — coerce here so neither the
-    // off-pulse pendingWork write nor the on-pulse bills → lastSettlement path
+    // mid-cycle pendingWork write nor the cycle-start bills → lastSettlement path
     // can carry a non-finite value into persisted state (settleLadder sanitises
     // internally but never returns a sanitised bill).
     const pendingConstruction = safeMoney(

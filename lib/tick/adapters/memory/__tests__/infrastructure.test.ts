@@ -68,7 +68,7 @@ describe("InMemoryInfrastructureWorld", () => {
 
   it("clears the debt to 0 when the regime lapses, rather than skipping the write", async () => {
     // Dropping back below θ_decay must actually erase the armed debt: a skipped write would
-    // leave a system one bad pulse away from a teardown it already recovered from.
+    // leave a system one bad cycle away from a teardown it already recovered from.
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { ore: 3 }, {}, 0.8)] });
     await world.applyCollapseDebts([{ systemId: "s1", collapseDebt: 0 }]);
     expect(world.systems.find((s) => s.id === "s1")!.collapseDebt).toBe(0);

@@ -4,13 +4,13 @@ import type { SystemCadence } from "@/lib/types/api";
 
 /**
  * The system's single "next update" cadence group. Under the cycle resolution
- * pulse the whole galaxy resolves together on `tick % CYCLE_LENGTH === 0`, so the
+ * the whole galaxy resolves together on `tick % CYCLE_LENGTH === 0`, so the
  * group is uniformly 0; the client pairs it with the live tick via
- * `ticksUntilShard(pulseGroup, tick, CYCLE_LENGTH)` to render the countdown.
+ * `ticksUntilShard(resolutionGroup, tick, CYCLE_LENGTH)` to render the countdown.
  */
 export function getSystemCadence(systemId: string): SystemCadence {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) throw new ServiceError("System not found.", 404);
-  return { pulseGroup: 0 };
+  return { resolutionGroup: 0 };
 }

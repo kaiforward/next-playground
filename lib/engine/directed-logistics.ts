@@ -89,16 +89,16 @@ export interface GoodMarketState {
   production: number;
   /** Current building capacity, retained separately for construction target sizing. */
   capacityProduction: number;
-  /** Persisted consumption satisfaction from the last economy pulse (missing ⇒ 1) — the build planner's fed-proxy input; the matcher itself does not read it. */
+  /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1) — the build planner's fed-proxy input; the matcher itself does not read it. */
   satisfaction?: number;
   /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
   productionSuppressed?: boolean;
   /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced per
    *  assessment by the economy interval's catchUpFactor. */
-  squeezePulses?: number;
+  squeezeCycles?: number;
   /** Reference-cycles a structural construction assessment has persisted — a finite value in [0,2]
    *  advanced per assessment by the construction interval's catchUpFactor. */
-  proposalPulses?: number;
+  proposalCycles?: number;
   /** A reachable logistics match was constrained by the faction's funded haul work. */
   logisticsFundingBound?: boolean;
 }

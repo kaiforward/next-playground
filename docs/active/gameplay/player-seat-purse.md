@@ -61,8 +61,8 @@ Responsive and industrial: an input-starved factory produces less and taxes less
 tracks what the economy actually *does* — richer than heads alone.
 
 - **The slice's one real economy touch:** the economy sim exports realized output per
-  (system, good) per pulse, and the treasury persists the last settlement's snapshot (the
-  itemised UI line needs it between pulses anyway). Realized — not *capacity* (no input gate) —
+  (system, good) per cycle, and the treasury persists the last settlement's snapshot (the
+  itemised UI line needs it between cycles anyway). Realized — not *capacity* (no input gate) —
   because capacity would not sag under starvation and would re-create the famine-windfall
   perversity this design exists to avoid.
 - **Reference-value calibration must be value-added-aware**: taxing every good at full reference
@@ -158,11 +158,11 @@ which is what makes the slider a *usable* budget lever rather than a self-harm d
 
 ## Settlement (cadence, ladder, deficit)
 
-The cycle pulse (`CYCLE_LENGTH`), the construction pulse (`CONSTRUCTION_INTERVAL`), and the
-logistics pulse (`LOGISTICS_INTERVAL`) are three independent knobs (all 24 ticks today). The
-treasury does not follow the bands' pulses: it settles **once per cycle**, in one resolution —
-otherwise an off-cycle band pulse could drain the treasury out of ladder order under a future
-cadence retune.
+The economy cycle (`CYCLE_LENGTH`), the construction cycle (`CONSTRUCTION_INTERVAL`), and the
+logistics cycle (`LOGISTICS_INTERVAL`) are three independent knobs (all 24 ticks today). The
+treasury does not follow the bands' cycles: it settles **once per economy cycle**, in one
+resolution — otherwise a band resolving mid-cycle could drain the treasury out of ladder order
+under a future cadence retune.
 
 - **Collect, then spend, within the same settlement.** Income (both lines, from the cycle just
   produced) enters first; bills are then paid in the fixed priority ladder **maintenance →
@@ -171,7 +171,7 @@ cadence retune.
   player-orderable — sliders set priorities in normal times; the ladder is only the emergency
   order, and it gives AI factions sane crisis behaviour for free.
 - **Funded fractions latch for the following cycle.** Each band's paid-fraction from this
-  settlement is what its pulse(s) use next cycle. This is a deliberate one-cycle lag (the malus
+  settlement is what its cycle(s) use next cycle. This is a deliberate one-cycle lag (the malus
   applied during a cycle uses last settlement's funding) — the same funding-off-cycle-start shape
   already analysed and accepted for construction; the lever for responsiveness, if ever needed, is
   a finer economy cadence, not settlement reordering.

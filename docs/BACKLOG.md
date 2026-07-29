@@ -10,40 +10,6 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 Well-defined, can start now.
 
-- **[M] Retire "pulse": rename the unit sense to "cycle", and settle a clearer name for the event
-  sense** — both halves ship in ONE PR (they are the same naming problem and touch overlapping files;
-  the two *concepts* stay distinct, the work does not split). A **cycle** is the
-  resolution period (`CYCLE_LENGTH` = 24 ticks); anything counting those periods must say *cycle*, and
-  where the economy's and logistics' periods need distinguishing the fix is a qualifier
-  (`economyCycles` / `logisticsCycles`), never a second noun. Today "pulse" doubles as a synonym for the
-  period, so e.g. `necessity-weighted-unrest.md` says "`RATION_COVER` (2) **pulses** of demand" and
-  "`TARGET_COVER` (40) **pulses**" two lines after establishing cover is measured in *cycles*.
-  **Scope — the unit sense, ~400 of ~1,140 total "pulse" occurrences.** Identifiers:
-  `squeezePulses`, `proposalPulses`, `proposalPulseUpdates`, `etaPulses`, `forecastEtaPulses`,
-  `forecastIndependentEtaPulses`, `queueEtaPulses`, `foodPulses`, `orePulses`, `maxPulses`,
-  `nextPulses`, `maxLevelsPerPulse`, `maxClaimsPerPulse`, `meanPerPulse`, `nextPulseGain(s)`,
-  `pulseCount`, `migrationPulseCount`, `excessByPulse`, `unrestByPulse`, `shortagePulse`,
-  `protectedPulse`, `landedAtPulse`, `landingPulse`, `landedPulse`, `ordinaryPulse` — plus the bare
-  "pulses" unit prose.
-  **`squeezePulses` and `proposalPulses` are persisted `WorldMarket` fields** → needs a
-  `SAVE_FORMAT_VERSION` bump. Cheap while the work sits on a shared branch: `main` only ever observes
-  the final number at merge, so intermediate bumps cost nothing.
-  **The event sense (~80 occurrences) keeps its own word — but probably not "pulse".** `isPulseTick`,
-  `pulseShard`, `pulseGroup`, `economyOffPulsePayload`, `sawOffPulseAccrual` name the *instant*, not the
-  period: it is the **first tick of the cycle**, on which economy/logistics/build all resolve. That is a
-  genuinely different concept from the 24-tick period, so it keeps a distinct name — the two must not
-  collapse into one word.
-  **Decide the replacement first (step 1 of the PR), because it sets ~80 renames.** "Pulse" is the right
-  *concept* but a weak *word*: it conveys a periodic beat, and the name alone never says "first tick of
-  the cycle". Candidates: `isCycleStart` (maximally literal — it is exactly what
-  `tick % CYCLE_LENGTH === 0` tests, and it answers the objection head-on) or `isResolutionTick` (names
-  the function; "resolution" is already the codebase's verb — "the whole galaxy resolves together").
-  They can also coexist, which may be the real answer: the tick is the **cycle start**, and what happens
-  on it is the **resolution** — two words for two genuinely different things (when vs what) instead of
-  one word doing both jobs badly.
-  Booked from the cycles-vocabulary sweep review (PR #204), which established "cycle" as the reserved
-  term and so exposed the overload. Same care as that sweep: a quoted citation of superseded wording
-  must stay quoted, and a blanket replace will hit real-world durations and adverbs that need re-flowing.
 - **[S] Needs-tooltip language pass** — the needs-ledger / pop-short tooltips deliberately ship with
   figures plus the single sentence "Higher-pressure needs create more unrest." (a needs-visibility build
   decision: final wording waits for a dedicated nested-tooltip pass). When that pass happens, also
@@ -87,19 +53,8 @@ Well-defined, can start now.
   (compare `funded` against them) — a `WorldTreasurySettlement` field, i.e. a save-format bump, which
   is why this didn't fold into the merge. Touches `FundingSlider` (drop the dual label), the
   treasury processor (snapshot the sliders), and the construction-card readout (same shorted rule).
-- **[S] `cyclesInWindow` divides by `LOGISTICS_INTERVAL` but claims a per-economy-cycle rate** —
-  `buildLogisticsRows`' docstring (`lib/engine/logistics.ts:41-44`) says the parameter normalises
-  window-summed imports/exports into a **per-economy-cycle** rate so the External column shares units
-  with Internal production/consumption. Its one caller computes it as
-  `FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL` (`lib/services/trade-flow.ts`). Those agree only because
-  `CYCLE_LENGTH` and `LOGISTICS_INTERVAL` are both 24 as shipped — and `tick-cadence.ts` explicitly
-  documents `LOGISTICS_INTERVAL` as "Independent of `CYCLE_LENGTH` — relative pacing knob". Tune
-  either one and the logistics panel's External column silently stops sharing units with Internal,
-  with no error. Decide which the column actually wants — the **economy cycle**, to match Internal, or
-  the **logistics cycle**, to match the batch cadence — then make the name, the docstring and the
-  divisor agree, naming it `economyCyclesInWindow` / `logisticsCyclesInWindow` accordingly. Surfaced by
-  the cycles-vocabulary review — the sweep made "cycle" a reserved term, which is what exposed the two
-  senses sitting four lines apart. Pre-existing; not introduced by that PR. — Other floating elements including the sidebar on the map get in the way of the dev cheat panel button. Move it to the header.
+- **[S] Move the dev cheat-panel button to the header** — other floating elements, including the map
+  sidebar, get in the way of it where it currently sits.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
 - **[S] Colony seed-source tie-break differs between the player verb and the planner on an exact hop
   tie** — the player's direct-colony verb (`findSeedSource`, `lib/services/colony-eligibility.ts`) picks
@@ -135,7 +90,7 @@ Well-defined, can start now.
   `unrest: row.unrest` in `toBuildState` (`lib/tick/processors/directed-build.ts`), and the row
   construction in `lib/world/tick.ts`. Dead data that later readers will assume is load-bearing.
   **Caveat that matters:** the *system's* `unrest` in world state is untouched and still written every
-  pulse by the population processor (`lib/tick/adapters/memory/population.ts`) — only the build-path
+  cycle by the population processor (`lib/tick/adapters/memory/population.ts`) — only the build-path
   row copy is dead. Do not let a grep for `unrest` sweep the live one out with it.
   **Blast radius: 4 production sites + 87 fixture sites** across three test files —
   `lib/engine/__tests__/directed-build.test.ts` (66), `lib/tick/processors/__tests__/directed-build.test.ts`
@@ -186,23 +141,23 @@ Direction is clear, approach needs a design doc before implementation.
   a controlled system's Overview (see [player-seat.md](./active/gameplay/player-seat.md)). Needs a
   short design pass for the map selection-mode interaction before building.
 
-- **[M] Tick perf: `toTickSystems` is the whole off-pulse tick outside events** — it costs 2.5ms/tick
-  at 2,400 systems, **19.0% of an off-pulse tick** and, since boundary-gating shipped, the only
+- **[M] Tick perf: `toTickSystems` is the whole mid-cycle tick outside events** — it costs 2.5ms/tick
+  at 2,400 systems, **19.0% of a mid-cycle tick** and, since boundary-gating shipped, the only
   remaining cost there other than events (67.5%). **Gating cannot touch it**: ship-arrivals and events
   both genuinely run every tick and both consume `TickSystem` rows, so the join has to happen. The
   lever is to *narrow* it, not skip it — it walks every building row in the galaxy to build the count
-  and idle-cycles rosters, then maps every system, and off-pulse the only consumers are ship-arrivals
+  and idle-cycles rosters, then maps every system, and mid-cycle the only consumers are ship-arrivals
   (ids/names) and events (ids, names, control, region). Worth checking what those two actually read
-  before assuming the full row is needed; a cheaper off-pulse projection, or moving the roster join
+  before assuming the full row is needed; a cheaper mid-cycle projection, or moving the roster join
   behind what needs it, is the likely shape. Fold into the events re-point only if that pass changes
   what events reads from a system — otherwise it stands alone.
 - **[M] Tick perf: the events processor scales worst in the tick — and is now two-thirds of it** — it
   costs 1.3ms/tick at 600 systems and ~9-10ms at 2,400: **~7× the cost for 4× the systems**, the worst
   scaling curve of any stage. Two shipped changes have hollowed out everything around it without
-  touching it — deleting the market World↔Tick round-trip, then gating the cycle-pulse stages' setup
-  — so its share has gone **19.4% → ~40% → 67.5% of an off-pulse tick**. It legitimately runs every
+  touching it — deleting the market World↔Tick round-trip, then gating the cycle-start stages' setup
+  — so its share has gone **19.4% → ~40% → 67.5% of a mid-cycle tick**. It legitimately runs every
   tick (phase progression, plus a spawn every `EVENT_SPAWN_INTERVAL`), so neither lever touched it;
-  the cost is the processor itself. Off-pulse it now essentially *is* the tick: events 67.5%,
+  the cost is the processor itself. Mid-cycle it now essentially *is* the tick: events 67.5%,
   `toTickSystems` 19.0% (its own entry above), relations 7.8%, everything else <4%. At 10,000+ systems
   this is the wall. **Fold it into the events re-point** (pivot Phase 5,
   [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §4 "Re-point") rather than fixing it
@@ -219,8 +174,8 @@ Direction is clear, approach needs a design doc before implementation.
   adapter is the first stage to touch it, so its copy is what stops a later stage mutating rows the
   previous world still holds (see the `let markets` comment in `lib/world/tick.ts`). It cannot be
   gated away for the same reason the events stage cannot — it runs every tick by design.
-  Boundary-gating already removed the *second* copy (economy's, which off-pulse was a redundant copy
-  of rows events had just de-aliased); population's is pulse-only. So this is now the one remaining
+  Boundary-gating already removed the *second* copy (economy's, which mid-cycle was a redundant copy
+  of rows events had just de-aliased); population's is cycle-start-only. So this is now the one remaining
   per-tick full-market pass, and retiring it needs an actual ownership model — copy-on-write rows, or
   a dirty flag the events stage sets when it shocks a market — not another gate. Real correctness risk
   (aliasing the previous world corrupts a save), so it needs a design pass.

@@ -19,7 +19,7 @@ export interface HarnessConfig {
   systemCount: number;
   seed: number;
   tickCount: number;
-  /** Optional per-run pulse-cadence override; absent ⇒ the live-loop constants. */
+  /** Optional per-run cycle-cadence override; absent ⇒ the live-loop constants. */
   cadence?: TickCadence;
 }
 
@@ -136,7 +136,7 @@ export interface LogisticsGoodActivity {
 export interface LogisticsActivitySummary {
   /** Flow events recorded across the whole run. 0 in a populated galaxy means the matcher never fired. */
   transferCount: number;
-  /** Ticks carrying at least one transfer — logistics resolves on the cycle pulse, so a healthy run is rhythmic. */
+  /** Ticks carrying at least one transfer — logistics resolves on the cycle start, so a healthy run is rhythmic. */
   activeTicks: number;
   /** Total quantity moved across the run. */
   totalQuantity: number;
@@ -150,25 +150,25 @@ export interface LogisticsActivitySummary {
 
 // ── Construction burst pacing ───────────────────────────────────
 
-/** One good's worst-case single-pulse directed-build commitment across a run. */
+/** One good's worst-case single-cycle directed-build commitment across a run. */
 export interface BuildBurstEntry {
   goodId: string;
-  /** The largest count of new autonomic levels this good was ever committed in one pulse. */
-  maxLevelsPerPulse: number;
+  /** The largest count of new autonomic levels this good was ever committed in one cycle. */
+  maxLevelsPerCycle: number;
   /** The tick at which that maximum occurred. */
   tick: number;
 }
 
 /**
  * Whole-run directed-build burst pacing — the instrument proving the construction rate cap
- * (`DIRECTED_BUILD.BUILD_RATE_CAP`) actually bounds per-pulse proposal velocity. Aggregate market/
- * queue health can look fine while one good's new-proposal levels spike in a single pulse (a
+ * (`DIRECTED_BUILD.BUILD_RATE_CAP`) actually bounds per-cycle proposal velocity. Aggregate market/
+ * queue health can look fine while one good's new-proposal levels spike in a single cycle (a
  * planner burst rather than a smooth ramp); this measures that spike directly, per good and
  * galaxy-wide, rather than reading it off the final world (the burst is gone by then — only the
  * queue's end state survives).
  */
 export interface BuildBurstSummary {
-  /** Per-good worst-case burst, descending by maxLevelsPerPulse (goodId ascending breaks ties). */
+  /** Per-good worst-case burst, descending by maxLevelsPerCycle (goodId ascending breaks ties). */
   byGood: BuildBurstEntry[];
   /** The single worst burst across every good this run — the headline number. 0 when nothing was committed. */
   globalMax: number;
@@ -193,10 +193,10 @@ export interface MigrationThroughputSummary {
   totalColonists: number;
   /** Total people moved by edge diffusion across the run. */
   totalDiffusion: number;
-  /** Cycle pulses that resolved migration — the per-pulse mean's denominator. */
-  pulseCount: number;
-  /** (totalColonists + totalDiffusion) / pulseCount; 0 when pulseCount is 0 (never NaN). */
-  meanPerPulse: number;
+  /** Cycle starts that resolved migration — the per-cycle mean's denominator. */
+  cycleCount: number;
+  /** (totalColonists + totalDiffusion) / cycleCount; 0 when cycleCount is 0 (never NaN). */
+  meanPerCycle: number;
 }
 
 // ── Colony founding stock ───────────────────────────────────────
@@ -210,9 +210,9 @@ export interface MigrationThroughputSummary {
 export interface FoundingStockSummary {
   /** Systems that became `developed` after tick 0 — colonies founded in play. */
   foundedCount: number;
-  /** Those that reached their first post-founding economy pulse before the run ended. */
+  /** Those that reached their first post-founding economy cycle before the run ended. */
   sampledCount: number;
-  /** Mean, over sampled colonies, of DEMAND-WEIGHTED satisfaction at that pulse — a good counts for
+  /** Mean, over sampled colonies, of DEMAND-WEIGHTED satisfaction at that cycle — a good counts for
    *  what the colony actually needs of it, so no water weighs far heavier than no reactor cores.
    *  Should sit near 1; near 0 is a colony arriving genuinely unprovisioned. */
   meanOpeningSatisfaction: number;
@@ -251,7 +251,7 @@ export interface HarnessResults {
   eventImpacts: EventImpact[];
   /** Whole-run directed-logistics activity — did goods actually move. */
   logisticsActivity: LogisticsActivitySummary;
-  /** Whole-run directed-build burst pacing — the construction rate cap's per-pulse worst case. */
+  /** Whole-run directed-build burst pacing — the construction rate cap's per-cycle worst case. */
   buildBurstSummary: BuildBurstSummary;
   /** Region overview for understanding the generated universe. */
   regionOverview: RegionOverviewEntry[];

@@ -3,15 +3,17 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 
-// Imports/exports are summed over the flow window then normalised to a per-logistics-cycle
-// rate (so they share units with production/consumption). Expected values follow suit.
-const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL;
-const perCycle = (windowTotal: number): number => windowTotal / cyclesInWindow;
+// Imports/exports are summed over the flow window then normalised to a
+// per-REFERENCE_INTERVAL rate (so they share units with production/consumption, which are
+// reference-denominated). Deriving the divisor from a cadence knob instead would agree only
+// while that knob equals REFERENCE_INTERVAL — see buildLogisticsRows' docstring.
+const referenceCyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / REFERENCE_INTERVAL;
+const perCycle = (windowTotal: number): number => windowTotal / referenceCyclesInWindow;
 
 let world: World;
 let system: WorldSystem; // focal

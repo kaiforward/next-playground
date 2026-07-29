@@ -1,7 +1,7 @@
 # Interval-invariance ship gate — all three knobs at half interval.
 # Its report's wall-clock rates must match cadence-invariance-24.yaml's: same
 # population trajectory, buildings total, and goods hauled per year. Distributions
-# differ (different pulse ticks, different RNG draws, fundQueue redistribution) —
+# differ (different cycle-start ticks, different RNG draws, fundQueue redistribution) —
 # rates do not. Divergence beyond the CI test's tolerance is a scaling bug.
 label: cadence-invariance-12
 seed: 42

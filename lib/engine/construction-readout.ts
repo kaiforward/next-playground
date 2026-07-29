@@ -6,7 +6,7 @@
  */
 import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
 import {
-  factionConstructionPool, forecastEtaPulses, fundQueue, type ConstructionPoolRates,
+  factionConstructionPool, forecastEtaCycles, fundQueue, type ConstructionPoolRates,
 } from "@/lib/engine/construction";
 import { GOODS } from "@/lib/constants/goods";
 import {
@@ -33,11 +33,11 @@ interface ConstructionRowBase {
   progress: number;
   workDone: number;
   workTotal: number;
-  /** Coarse ≈pulses to completion at the current rate; null = stalled. */
-  etaPulses: number | null;
-  /** Construction points this project will absorb on the next funded pulse (0 = starved/"waiting"). Exact for the
-   *  immediate next pulse (fundQueue is deterministic); reused for the projected-fill segment + per-row rate. */
-  nextPulseGain: number;
+  /** Coarse ≈cycles to completion at the current rate; null = stalled. */
+  etaCycles: number | null;
+  /** Construction points this project will absorb on the next funded cycle (0 = starved/"waiting"). Exact for the
+   *  immediate next cycle (fundQueue is deterministic); reused for the projected-fill segment + per-row rate. */
+  nextCycleGain: number;
 }
 
 export interface ConstructionProjectBuildRow extends ConstructionRowBase {
@@ -62,7 +62,7 @@ export interface ConstructionProjectColonyRow extends ConstructionRowBase {
 export type ConstructionProjectRow = ConstructionProjectBuildRow | ConstructionProjectColonyRow;
 
 export interface FactionConstructionReadout {
-  /** Total per-pulse funding rate (base + centres) — the value the ETA forecast runs on. */
+  /** Total per-cycle funding rate (base + centres) — the value the ETA forecast runs on. */
   pool: number;
   /** Eligible-heads component of the pool (population not employed in skilled work). */
   poolBase: number;
@@ -104,19 +104,19 @@ function progressOf(p: WorldConstructionProject): number {
 
 /** Soonest-ETA first; stalled (null) last; ties by system name — a total, deterministic order. */
 function byEta(a: ConstructionRowBase, b: ConstructionRowBase): number {
-  const ae = a.etaPulses ?? Number.POSITIVE_INFINITY;
-  const be = b.etaPulses ?? Number.POSITIVE_INFINITY;
+  const ae = a.etaCycles ?? Number.POSITIVE_INFINITY;
+  const be = b.etaCycles ?? Number.POSITIVE_INFINITY;
   if (ae !== be) return ae - be;
   return a.systemName.localeCompare(b.systemName);
 }
 
 /**
- * Per-project construction points absorbed on the NEXT funded pulse, index-aligned to `projects` — one
+ * Per-project construction points absorbed on the NEXT funded cycle, index-aligned to `projects` — one
  * `fundQueue` step at the current pool + cap. A front project gets its full cap; a project the pool can't reach
- * this pulse gets 0 ("waiting"); a near-complete project gets just its remaining work. The exact same first step
+ * this cycle gets 0 ("waiting"); a near-complete project gets just its remaining work. The exact same first step
  * the ETA forecast runs, surfaced for display.
  */
-export function nextPulseGains(
+export function nextCycleGains(
   projects: WorldConstructionProject[],
   pool: number,
   cap: number,
@@ -144,8 +144,8 @@ export function computeFactionConstruction(
   const nameById = new Map(systems.map((s) => [s.id, s.name]));
   const poolParts = factionConstructionPool(systems, rates);
   const pool = poolParts.total;
-  const etas = forecastEtaPulses(projects, pool, cap);
-  const gains = nextPulseGains(projects, pool, cap);
+  const etas = forecastEtaCycles(projects, pool, cap);
+  const gains = nextCycleGains(projects, pool, cap);
 
   const all: ConstructionProjectRow[] = [];
   const expansion: ConstructionProjectColonyRow[] = [];
@@ -160,8 +160,8 @@ export function computeFactionConstruction(
       progress: progressOf(p),
       workDone: p.workDone,
       workTotal: p.workTotal,
-      etaPulses: etas[i],
-      nextPulseGain: gains[i],
+      etaCycles: etas[i],
+      nextCycleGain: gains[i],
     };
     if (p.kind === "colony_establish") {
       const row: ConstructionProjectColonyRow = {

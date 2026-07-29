@@ -50,8 +50,8 @@ export async function runPopulationProcessor(
     // unrest up rather than being shed like a supply shock, while the growth/decline
     // delta keeps raw d.
     const taxPressure = params.taxPressureBySystem?.get(s.systemId) ?? 0;
-    // Crowding reads the population as this pulse STARTED — the floor is a level, so it is measured
-    // at pulse start. A system that crosses r = 1 during this pulse therefore carries no crowding
+    // Crowding reads the population as this cycle STARTED — the floor is a level, so it is measured
+    // at cycle start. A system that crosses r = 1 during this cycle therefore carries no crowding
     // pressure until the next one.
     // The ramp end (crowdBrakeEnd) threads through params because it's a boundary shared with the
     // growth brake; the ramp height (PRESSURE_MAX) has no other consumer, so it stays a module-scope
@@ -59,8 +59,8 @@ export async function runPopulationProcessor(
     const crowd = crowdingPressure(s.population, s.popCap, params.population.crowdBrakeEnd, CROWDING.PRESSURE_MAX);
     const floor = clamp(taxPressure + crowd, 0, 1);
     const unrest = accumulateUnrest(s.unrest, d, floor, supply, scaledUnrest);
-    // The delta reads the unrest this pulse just produced, so unrest resolves forward within the
-    // pulse while crowding lags it by one.
+    // The delta reads the unrest this cycle just produced, so unrest resolves forward within the
+    // cycle while crowding lags it by one.
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
     popUpdates.push({ systemId: s.systemId, population, unrest });
     demandPops.push({ systemId: s.systemId, population });

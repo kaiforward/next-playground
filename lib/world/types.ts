@@ -155,7 +155,7 @@ export interface WorldBuilding {
   idleCycles: number;
 }
 
-/** Fields every committed construction project shares — funded by `factionId`'s per-pulse pool. */
+/** Fields every committed construction project shares — funded by `factionId`'s per-cycle pool. */
 interface WorldConstructionProjectBase {
   id: string;
   factionId: string;
@@ -223,15 +223,15 @@ export interface WorldMarket {
    * Total cycles-of-supply demand denominator: civilian consumption **plus** industrial input draw.
    * This is the pricing anchor (targetStock = TARGET_COVER × demandRate) and the directed-logistics
    * deficit anchor — NOT the civilian-only want the Population panel's needs ledger renders (that is
-   * `consumptionRate`, unfloored). Recomputed each economy pulse by the population processor via
+   * `consumptionRate`, unfloored). Recomputed each economy cycle by the population processor via
    * `totalDemandRateForGood`; seeded civilian-only at world-gen and overwritten with the
-   * civilian+industrial total on the first pulse.
+   * civilian+industrial total on the first cycle.
    */
   demandRate: number;
   /** Infrastructure storage capacity for this good from the system's built buildings. */
   storageCapacity: number;
   /**
-   * Consumption satisfaction the last economy pulse actually applied for this
+   * Consumption satisfaction the last economy cycle actually applied for this
    * good (civilian delivered ÷ demanded, ∈ [0,1]; 1 = fully served). The
    * measured-once flow the needs display, the planner fed-proxy, and the regime
    * classification all read — never recomputed from stock. Optional:
@@ -244,11 +244,11 @@ export interface WorldMarket {
   productionSuppressed?: boolean;
   /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2], advanced
    *  per assessment by the economy interval's catchUpFactor (2 = two reference cycles). Missing reads as 0. */
-  squeezePulses?: number;
+  squeezeCycles?: number;
   /** Reference-cycles a structural construction assessment has persisted — a finite value in [0,2],
    *  advanced per assessment by the construction interval's catchUpFactor (2 = two reference cycles).
    *  Missing reads as 0. */
-  proposalPulses?: number;
+  proposalCycles?: number;
   /**
    * The latest logistics assessment found this row at one endpoint of a reachable
    * wanted-but-unfunded match. Source-side: demand-backed export capacity must not

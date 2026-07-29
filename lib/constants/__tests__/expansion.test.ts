@@ -11,8 +11,8 @@ describe("EXPANSION constants", () => {
     );
   });
 
-  it("keeps claims gradual (small per-pulse cap, permissive positive floor)", () => {
-    expect(EXPANSION.MAX_CLAIMS_PER_PULSE).toBeGreaterThanOrEqual(1);
+  it("keeps claims gradual (small per-cycle cap, permissive positive floor)", () => {
+    expect(EXPANSION.MAX_CLAIMS_PER_CYCLE).toBeGreaterThanOrEqual(1);
     expect(EXPANSION.SCORE_FLOOR).toBeGreaterThan(0);
   });
 

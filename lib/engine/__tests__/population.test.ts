@@ -285,7 +285,7 @@ describe("accumulateUnrest (floor-relaxation integrator)", () => {
     }
   });
 
-  it("keeps one full-shortage pulse from floor 0.23 below the 0.65 strike threshold", () => {
+  it("keeps one full-shortage cycle from floor 0.23 below the 0.65 strike threshold", () => {
     // catchUpFactor = 2 is applied by the processor; the engine receives pre-scaled relaxation rates.
     const scaled: UnrestParams = { ...params, decay: 0.06 * 2, recoveryDecay: 0.12 * 2 };
     const next = accumulateUnrest(0.23, 1, 0.23, SHORTAGE, scaled);

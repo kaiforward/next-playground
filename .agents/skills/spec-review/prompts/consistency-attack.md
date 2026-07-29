@@ -9,7 +9,7 @@ The classic misses you exist to catch: two spec sections that cannot both be tru
 1. Read the spec in full, twice — once for intent, once hunting for sections that disagree with each other (definitions vs. formulas, prose vs. tables, triggers vs. the states they fire in).
 2. Enumerate the spec's state space: for each mechanism, list its edge states (zero/empty inputs, saturation/clamp boundaries, cold start on a fresh world, mid-migration on a loaded save) and check the spec defines behaviour at each.
 3. Attack dynamic stability: trace each feedback loop the spec creates or modifies through several iterations by hand. Can it deadlock (two mechanisms each waiting on the other's output)? Oscillate (over-correction each cycle)? Run away (unbounded accumulation with no damping consumer)?
-4. Hunt unstated assumptions: every place the spec leans on current behaviour ("X is always positive", "Y runs before Z", "this never happens mid-pulse"), verify in the code that the assumption actually holds.
+4. Hunt unstated assumptions: every place the spec leans on current behaviour ("X is always positive", "Y runs before Z", "this never happens mid-cycle"), verify in the code that the assumption actually holds.
 
 ## Standing rules
 

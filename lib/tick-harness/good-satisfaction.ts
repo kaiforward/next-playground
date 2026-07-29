@@ -13,7 +13,7 @@ export interface DemandBasisSystem {
  * Assemble each system's consumed-goods readings from the persisted market rows — the input both
  * harness folds hand to `dissatisfaction`. A good the system does not consume is skipped rather than
  * scored, so a seed colony holding no reactor cores is not read as deprived of them; a market row
- * with no persisted satisfaction reads as fully served, matching the economy pulse's own default.
+ * with no persisted satisfaction reads as fully served, matching the economy cycle's own default.
  *
  * The labour basis is resolved once per system, not once per market row: at ~25 goods a system it is
  * the same snapshot every time, and computing it per row was measurably the more expensive of the two

@@ -59,12 +59,12 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 9 (cycles vocabulary)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(9);
+  it("is at save format version 10 (squeeze/proposal counters renamed to cycles)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(10);
   });
 
-  it("rejects a prior-version (v8) save — saves break on the shape bump", () => {
-    const json = JSON.stringify({ formatVersion: 8, world });
+  it("rejects a prior-version (v9) save — saves break on the shape bump", () => {
+    const json = JSON.stringify({ formatVersion: 9, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
@@ -146,8 +146,8 @@ describe("serializeWorld / deserializeWorld", () => {
               ...market,
               realizedProductionRate: 0,
               productionSuppressed: true,
-              squeezePulses: 2,
-              proposalPulses: 1,
+              squeezeCycles: 2,
+              proposalCycles: 1,
             }
           : market,
       ),
@@ -158,8 +158,8 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.world.markets[0]).toMatchObject({
       realizedProductionRate: 0,
       productionSuppressed: true,
-      squeezePulses: 2,
-      proposalPulses: 1,
+      squeezeCycles: 2,
+      proposalCycles: 1,
     });
   });
 
@@ -168,29 +168,29 @@ describe("serializeWorld / deserializeWorld", () => {
     const fractional: World = {
       ...world,
       markets: world.markets.map((market, index) =>
-        index === 0 ? { ...market, squeezePulses: 1.5, proposalPulses: 0.5 } : market,
+        index === 0 ? { ...market, squeezeCycles: 1.5, proposalCycles: 0.5 } : market,
       ),
     };
     const result = deserializeWorld(serializeWorld(fractional));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.world.markets[0].squeezePulses).toBe(1.5);
-    expect(result.world.markets[0].proposalPulses).toBe(0.5);
+    expect(result.world.markets[0].squeezeCycles).toBe(1.5);
+    expect(result.world.markets[0].proposalCycles).toBe(0.5);
   });
 
   it("keeps new optional assessment values omitted in an old-shaped save", () => {
     const world = generateWorld({ systemCount: 60, seed: 7 });
     const oldShaped: World = {
       ...world,
-      markets: world.markets.map(({ realizedProductionRate, productionSuppressed, squeezePulses, proposalPulses, ...market }) => market),
+      markets: world.markets.map(({ realizedProductionRate, productionSuppressed, squeezeCycles, proposalCycles, ...market }) => market),
     };
     const result = deserializeWorld(serializeWorld(oldShaped));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world.markets[0].realizedProductionRate).toBeUndefined();
     expect(result.world.markets[0].productionSuppressed).toBeUndefined();
-    expect(result.world.markets[0].squeezePulses).toBeUndefined();
-    expect(result.world.markets[0].proposalPulses).toBeUndefined();
+    expect(result.world.markets[0].squeezeCycles).toBeUndefined();
+    expect(result.world.markets[0].proposalCycles).toBeUndefined();
   });
 
 });
@@ -249,7 +249,7 @@ describe("save compatibility — collapseDebt moved from building rows to system
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // Past a cycle boundary, so the economy/population/decay pulse actually resolves.
+    // Past a cycle boundary, so the economy/population/decay cycle actually resolves.
     let world: World = result.world;
     for (let tick = 1; tick <= CYCLE_LENGTH + 1; tick++) {
       world = (await runWorldTick(world)).world;

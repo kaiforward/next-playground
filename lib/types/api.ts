@@ -119,14 +119,14 @@ export type SystemLogisticsData =
 // ── System cadence (header "next update" countdown) ──────────────────────────
 /**
  * The system's single "next update" cadence group for the header countdown.
- * Under the cycle resolution pulse the whole galaxy resolves together on
+ * Under the cycle resolution the whole galaxy resolves together on
  * `tick % CYCLE_LENGTH === 0`, so this is uniformly 0; the value never changes
  * for a given universe, so the client fetches once (staleTime Infinity) and
  * counts down off the live tick.
  */
 export interface SystemCadence {
-  /** Group in [0, CYCLE_LENGTH): when the whole galaxy resolves. Always 0 under the cycle pulse; kept so the client counts down with ticksUntilShard(pulseGroup, tick, CYCLE_LENGTH). */
-  pulseGroup: number;
+  /** Group in [0, CYCLE_LENGTH): when the whole galaxy resolves. Always 0 under the cycle resolution; kept so the client counts down with ticksUntilShard(resolutionGroup, tick, CYCLE_LENGTH). */
+  resolutionGroup: number;
 }
 export type SystemCadenceResponse = ApiResponse<SystemCadence>;
 export type SystemLogisticsResponse = ApiResponse<SystemLogisticsData>;
@@ -312,8 +312,8 @@ import type { ColonyBlockReason } from "@/lib/types/colonisation";
 /** One dialog/quick-add option: engine feasibility + display label + queue-aware ETA. */
 export interface BuildOptionData extends BuildOption {
   label: string;
-  /** ≈pulses until a 1-level order placed NOW would land (player queue position); null = stalled pool. */
-  etaPulses: number | null;
+  /** ≈cycles until a 1-level order placed NOW would land (player queue position); null = stalled pool. */
+  etaCycles: number | null;
 }
 /** Per-system verb surface: which construction verb applies here and its feasibility. */
 export type SystemBuildOptionsData =

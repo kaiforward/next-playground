@@ -239,7 +239,7 @@ describe("population processor", () => {
   });
 
   it("settles a calm, supplied, taxed system at exactly its tax pressure", async () => {
-    // The floor is the equilibrium: however many pulses run, a system with no
+    // The floor is the equilibrium: however many cycles run, a system with no
     // dissatisfaction converges on its standing pressure and stops there.
     const pressure = TAX_LEVEL_UNREST_PRESSURE.very_high;
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 100, 1000, 0)], markets: [] });
@@ -250,7 +250,7 @@ describe("population processor", () => {
       interval: 24,
       taxPressureBySystem: new Map([["a", pressure]]),
     };
-    for (let pulse = 0; pulse < 120; pulse++) await runPopulationProcessor(world, ctx, params);
+    for (let cycle = 0; cycle < 120; cycle++) await runPopulationProcessor(world, ctx, params);
     expect(unrestOf(world, "a")).toBeCloseTo(pressure, 6);
     expect(unrestOf(world, "a")).toBeLessThan(pressure); // approached from below, never overshot
   });

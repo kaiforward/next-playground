@@ -1,7 +1,7 @@
 import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem, flowEventsBySystem, systemNameById } from "@/lib/services/world-index";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -91,11 +91,13 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
 
   const flowsByGood = aggregateLogisticsFlows(flows, systemId, resolveName);
   // Imports/exports are summed over the FLOW_HISTORY_TICKS window; normalise to a
-  // per-logistics-cycle rate so they share units with the production/consumption rates.
-  // Flow events are written only by directed-logistics, so the window holds one batch
-  // per LOGISTICS_INTERVAL — i.e. one per logistics cycle, not one per economy cycle.
-  const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL;
-  const model = buildLogisticsRows(prodCon, flowsByGood, cyclesInWindow, inputDemandByGood);
+  // per-REFERENCE_INTERVAL rate so they share units with the production/consumption
+  // rates, which are raw `capacityGoodRates` values the economy applies scaled by
+  // catchUpFactor — i.e. one raw rate per reference interval whatever CYCLE_LENGTH is.
+  // Dividing by the logistics (or economy) cycle count instead is correct only while
+  // that cadence equals REFERENCE_INTERVAL. See buildLogisticsRows' docstring.
+  const referenceCyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / REFERENCE_INTERVAL;
+  const model = buildLogisticsRows(prodCon, flowsByGood, referenceCyclesInWindow, inputDemandByGood);
 
   return {
     visibility: "visible",

@@ -221,7 +221,7 @@ function consumptionMultBySystem(
  * Per-system share of each supply regime at the end of the run — the permanent instrument for the
  * unrest fold. Recomputed from the final world's persisted per-good satisfaction against each
  * system's own civilian demand, including any active event consumption modifiers, so it folds the
- * same `demanded` the economy pulse did rather than a parallel one. Pass the final world's `events`
+ * same `demanded` the economy cycle did rather than a parallel one. Pass the final world's `events`
  * to keep that true — omitting them silently drops the modifier term. Settled systems only: an
  * unclaimed rock has no market and no opinion.
  *

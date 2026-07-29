@@ -20,7 +20,7 @@ describe("getSystemBuildOptions", () => {
     const f = w.factions.find((x) => x.id === w.player?.controlledFactionId)!;
     const home = w.systems.find((s) => s.id === f.homeworldId)!;
     // Deterministically exhaust ore deposit slots regardless of what world-gen rolled, so there's
-    // always a zero-maxLevels / null-etaPulses option to assert against.
+    // always a zero-maxLevels / null-etaCycles option to assert against.
     home.slotOre = 0;
 
     const data = getSystemBuildOptions(f.homeworldId);
@@ -31,25 +31,25 @@ describe("getSystemBuildOptions", () => {
     expect(housing.label).toBe("Housing");
     expect(housing.workPerLevel).toBeGreaterThan(0);
     expect(housing.maxLevels).toBeGreaterThan(0);
-    expect(housing.etaPulses).not.toBeNull();
-    if (housing.etaPulses === null) return;
-    expect(Number.isFinite(housing.etaPulses)).toBe(true);
-    expect(housing.etaPulses).toBeGreaterThanOrEqual(1);
+    expect(housing.etaCycles).not.toBeNull();
+    if (housing.etaCycles === null) return;
+    expect(Number.isFinite(housing.etaCycles)).toBe(true);
+    expect(housing.etaCycles).toBeGreaterThanOrEqual(1);
 
     const ore = data.options.find((o) => o.buildingType === "ore")!;
     expect(ore.maxLevels).toBe(0);
-    expect(ore.etaPulses).toBeNull();
+    expect(ore.etaCycles).toBeNull();
 
     // Ordering housing now commits work ahead of a fresh hypothetical row for the same type — a
-    // subsequent read's etaPulses for housing can only stay the same or move back, never improve.
+    // subsequent read's etaCycles for housing can only stay the same or move back, never improve.
     const placed = orderBuild({ systemId: f.homeworldId, buildingType: HOUSING_TYPE, levels: 1 });
     expect(placed.ok).toBe(true);
     const after = getSystemBuildOptions(f.homeworldId);
     if (after.mode !== "build") throw new Error("expected build mode after order");
     const afterHousing = after.options.find((o) => o.buildingType === HOUSING_TYPE)!;
-    expect(afterHousing.etaPulses).not.toBeNull();
-    if (afterHousing.etaPulses === null) return;
-    expect(afterHousing.etaPulses).toBeGreaterThanOrEqual(housing.etaPulses);
+    expect(afterHousing.etaCycles).not.toBeNull();
+    if (afterHousing.etaCycles === null) return;
+    expect(afterHousing.etaCycles).toBeGreaterThanOrEqual(housing.etaCycles);
   });
 
   it("returns none for a rival faction's system", () => {

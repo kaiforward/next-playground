@@ -2,8 +2,8 @@
  * Pure Construction Centre valuation — zero DB dependency.
  *
  * A centre serves no market demand, so it carries no invented value: a construction point is worth
- * the best work the pool can't yet fund. Per faction per pulse, the backlog (in-flight projects +
- * this pulse's ordered proposals) is walked in funding order against the work the pool drains within
+ * the best work the pool can't yet fund. Per faction per cycle, the backlog (in-flight projects +
+ * this cycle's ordered proposals) is walked in funding order against the work the pool drains within
  * BACKLOG_WINDOW reference cycles; the best ROI beyond that frontier prices at most ONE centre
  * proposal, which then competes on the ordinary ROI ordering. Emergent, self-limiting: a deep
  * valuable backlog funds a centre; a draining queue or junk backlog never does; a landed centre
@@ -34,9 +34,9 @@ function queuedSpace(buildingType: string, levels: number): number {
 }
 
 /**
- * Price and site at most one Construction Centre proposal for a faction this pulse, or null when the
+ * Price and site at most one Construction Centre proposal for a faction this cycle, or null when the
  * backlog drains inside the window, a centre is already in flight, or no developed system can host
- * one. `ordered` is this pulse's proposals in funding order; `pool` is the faction's unscaled
+ * one. `ordered` is this cycle's proposals in funding order; `pool` is the faction's unscaled
  * reference-cycle construction pool.
  */
 export function planCentreProposal(
@@ -65,7 +65,7 @@ export function planCentreProposal(
   if (bestStarvedRoi <= 0) return null;
 
   // Siting: the developed system with the most spare labour that can physically host the centre,
-  // net of space already committed by the queue and this pulse's proposals. Deterministic: spare
+  // net of space already committed by the queue and this cycle's proposals. Deterministic: spare
   // labour desc → remaining space desc → systemId asc.
   const committedSpace = new Map<string, number>();
   for (const p of openProjects) {

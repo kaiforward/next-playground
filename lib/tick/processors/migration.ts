@@ -1,7 +1,7 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import { migrationFlow, type MigrationNode } from "@/lib/engine/migration";
 import { allocateColonists } from "@/lib/engine/colonist-delivery";
-import { pulseShard, catchUpFactor } from "@/lib/tick/shard";
+import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
 import type {
   MigrationDelta, MigrationProcessorParams, MigrationWorld,
@@ -9,7 +9,7 @@ import type {
 
 /**
  * Pure processor body — a twin for people of the population resolution. A
- * cycle-pulse pass over the faction-bounded open edges: the whole edge set
+ * cycle-start pass over the faction-bounded open edges: the whole edge set
  * resolves on the boundary tick (`tick % interval === 0`), empty otherwise.
  * Population flows toward the more attractive (calmer, roomier) endpoint,
  * distance-attenuated, conserved. Deltas compose across edges within the tick so
@@ -26,12 +26,12 @@ export async function runMigrationProcessor(
   if (edges.length === 0) return {};
 
   const total = edges.length;
-  const { start, end } = pulseShard(total, ctx.tick, params.interval);
+  const { start, end } = cycleStartShard(total, ctx.tick, params.interval);
   const slice: EdgeView[] = edges.slice(start, end);
   if (slice.length === 0) return {};
   const catchUp = catchUpFactor(params.interval);
 
-  // Colonist delivery (targeted, equalising) — runs on the same cycle pulse as the edge sweep, BEFORE
+  // Colonist delivery (targeted, equalising) — runs on the same cycle start as the edge sweep, BEFORE
   // diffusion, so diffusion balances the post-delivery state and colony delivery is the primary flow.
   // Faction pools of drawable spare are water-filled to raise the emptiest colonies (reaches the frontier
   // that gradient diffusion never could). Applied first so getNodesForSystems below reads the updated pop.
@@ -55,7 +55,7 @@ export async function runMigrationProcessor(
   const liveNode = (id: string): MigrationNode | null => {
     const n = nodeById.get(id);
     if (!n) return null;
-    // labourDemand is building-derived (static within a pulse); population keeps its live
+    // labourDemand is building-derived (static within a cycle); population keeps its live
     // intra-tick delta so open jobs shrink correctly as pop arrives across several edges.
     return { unrest: n.unrest, population: n.population + (popDelta.get(id) ?? 0), popCap: n.popCap, labourDemand: n.labourDemand };
   };

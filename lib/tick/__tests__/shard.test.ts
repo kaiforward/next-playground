@@ -1,4 +1,4 @@
-import { shardRange, catchUpFactor, shardGroupForIndex, ticksUntilShard, pulseShard, isPulseTick } from "@/lib/tick/shard";
+import { shardRange, catchUpFactor, shardGroupForIndex, ticksUntilShard, cycleStartShard, isCycleStart } from "@/lib/tick/shard";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 
 it("covers every index exactly once across one interval, no overlap", () => {
@@ -44,52 +44,52 @@ it("shardGroupForIndex inverts shardRange: every index falls in its group's wind
 it("shardGroupForIndex degenerates safely (empty list → group 0)", () => {
   expect(shardGroupForIndex(0, 0, 24)).toBe(0);
 });
-it("isPulseTick: true only on the boundary tick, periodic in tick", () => {
+it("isCycleStart: true only on the boundary tick, periodic in tick", () => {
   const interval = 24;
-  for (const t of [0, 24, 48, 240]) expect(isPulseTick(t, interval)).toBe(true);
-  for (let t = 1; t < interval; t++) expect(isPulseTick(t, interval)).toBe(false);
-  expect(isPulseTick(25, interval)).toBe(false);
+  for (const t of [0, 24, 48, 240]) expect(isCycleStart(t, interval)).toBe(true);
+  for (let t = 1; t < interval; t++) expect(isCycleStart(t, interval)).toBe(false);
+  expect(isCycleStart(25, interval)).toBe(false);
 });
-it("isPulseTick: degenerates safely (interval ≤ 1 → every tick; non-integer floors; negative ticks)", () => {
-  expect(isPulseTick(7, 1)).toBe(true);   // interval 1 → every tick is a pulse
-  expect(isPulseTick(7, 0)).toBe(true);   // clamped to 1
-  expect(isPulseTick(7, -5)).toBe(true);  // clamped to 1
-  expect(isPulseTick(24, 24.9)).toBe(true);  // floors to 24
-  expect(isPulseTick(25, 24.9)).toBe(false);
+it("isCycleStart: degenerates safely (interval ≤ 1 → every tick; non-integer floors; negative ticks)", () => {
+  expect(isCycleStart(7, 1)).toBe(true);   // interval 1 → every tick is a cycle
+  expect(isCycleStart(7, 0)).toBe(true);   // clamped to 1
+  expect(isCycleStart(7, -5)).toBe(true);  // clamped to 1
+  expect(isCycleStart(24, 24.9)).toBe(true);  // floors to 24
+  expect(isCycleStart(25, 24.9)).toBe(false);
   // Negative ticks stay non-negative through the double-modulo, so they agree with
-  // their positive counterparts rather than reporting a spurious pulse.
-  expect(isPulseTick(-24, 24)).toBe(true);
-  expect(isPulseTick(-1, 24)).toBe(false);
+  // their positive counterparts rather than reporting a spurious cycle.
+  expect(isCycleStart(-24, 24)).toBe(true);
+  expect(isCycleStart(-1, 24)).toBe(false);
 });
-it("isPulseTick: is the predicate pulseShard resolves — the two can never disagree", () => {
-  // runWorldTick gates pulse stages' setup on isPulseTick while the bodies bail on
-  // pulseShard; a divergence would silently skip a stage. Pin them to one definition.
+it("isCycleStart: is the predicate cycleStartShard resolves — the two can never disagree", () => {
+  // runWorldTick gates cycle-start stages' setup on isCycleStart while the bodies bail on
+  // cycleStartShard; a divergence would silently skip a stage. Pin them to one definition.
   for (const interval of [1, 3, 24, 24.9]) {
     for (let t = 0; t < 50; t++) {
-      const { start, end } = pulseShard(100, t, interval);
-      expect(start < end).toBe(isPulseTick(t, interval));
+      const { start, end } = cycleStartShard(100, t, interval);
+      expect(start < end).toBe(isCycleStart(t, interval));
     }
   }
 });
-it("pulseShard: whole list on the boundary tick, empty otherwise", () => {
+it("cycleStartShard: whole list on the boundary tick, empty otherwise", () => {
   const total = 100, interval = 24;
-  expect(pulseShard(total, 0, interval)).toEqual({ start: 0, end: total });   // tick 0 → boundary
-  expect(pulseShard(total, 24, interval)).toEqual({ start: 0, end: total });  // 24 % 24 = 0
-  expect(pulseShard(total, 48, interval)).toEqual({ start: 0, end: total });
+  expect(cycleStartShard(total, 0, interval)).toEqual({ start: 0, end: total });   // tick 0 → boundary
+  expect(cycleStartShard(total, 24, interval)).toEqual({ start: 0, end: total });  // 24 % 24 = 0
+  expect(cycleStartShard(total, 48, interval)).toEqual({ start: 0, end: total });
   for (let t = 1; t < interval; t++) {
-    expect(pulseShard(total, t, interval)).toEqual({ start: 0, end: 0 });     // every off-boundary tick empty
+    expect(cycleStartShard(total, t, interval)).toEqual({ start: 0, end: 0 });     // every off-boundary tick empty
   }
 });
-it("pulseShard: degenerates safely (total 0 → empty; interval ≤ 1 → whole list every tick)", () => {
-  expect(pulseShard(0, 0, 24)).toEqual({ start: 0, end: 0 });
-  expect(pulseShard(50, 5, 1)).toEqual({ start: 0, end: 50 }); // interval 1 → every tick is a boundary
-  expect(pulseShard(50, 7, 1)).toEqual({ start: 0, end: 50 });
+it("cycleStartShard: degenerates safely (total 0 → empty; interval ≤ 1 → whole list every tick)", () => {
+  expect(cycleStartShard(0, 0, 24)).toEqual({ start: 0, end: 0 });
+  expect(cycleStartShard(50, 5, 1)).toEqual({ start: 0, end: 50 }); // interval 1 → every tick is a boundary
+  expect(cycleStartShard(50, 7, 1)).toEqual({ start: 0, end: 50 });
 });
-it("pulseShard: covers the whole list exactly once per interval (one boundary per period)", () => {
+it("cycleStartShard: covers the whole list exactly once per interval (one boundary per period)", () => {
   const total = 100, interval = 24;
   let covered = 0;
   for (let t = 0; t < interval; t++) {
-    const { start, end } = pulseShard(total, t, interval);
+    const { start, end } = cycleStartShard(total, t, interval);
     covered += end - start;
   }
   expect(covered).toBe(total); // exactly one full pass per interval

@@ -12,7 +12,7 @@ async function advance(world: World, ticks: number): Promise<World> {
 const marketKey = (systemId: string, goodId: string) => `${systemId}|${goodId}`;
 
 describe("developed-gate invariant: only developed systems are economically active", () => {
-  it("keeps non-developed systems at population 0, with frozen markets and no flow activity, across claim + develop pulses", async () => {
+  it("keeps non-developed systems at population 0, with frozen markets and no flow activity, across claim + develop cycles", async () => {
     const seed = generateWorld({ systemCount: 90, seed: 11 });
     // Snapshot the seeded market stock so we can assert non-developed markets never moved.
     const seedStock = new Map<string, number>();

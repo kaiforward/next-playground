@@ -10,7 +10,7 @@ import {
 import { mulberry32 } from "@/lib/engine/universe-gen";
 
 const WEIGHTS = { habitable: 1.0, diversity: 3.0, proximity: 0.5 };
-const PARAMS: ExpansionParams = { maxClaimsPerPulse: 1, scoreFloor: 0.001, weights: WEIGHTS };
+const PARAMS: ExpansionParams = { maxClaimsPerCycle: 1, scoreFloor: 0.001, weights: WEIGHTS };
 
 function cand(p: Partial<ClaimCandidate> & { systemId: string }): ClaimCandidate {
   return { minHops: 1, habitableSpace: 0, resourceDiversity: 0, ...p };
@@ -36,7 +36,7 @@ describe("scoreClaimCandidate", () => {
 });
 
 describe("proposeFactionClaims", () => {
-  it("proposes the highest-scoring in-reach candidate, capped at maxClaimsPerPulse", () => {
+  it("proposes the highest-scoring in-reach candidate, capped at maxClaimsPerCycle", () => {
     const candidates = [
       cand({ systemId: "poor", habitableSpace: 5 }),
       cand({ systemId: "rich", habitableSpace: 200, resourceDiversity: 5 }),
@@ -52,8 +52,8 @@ describe("proposeFactionClaims", () => {
   it("is deterministic and ranks by (score, systemId) — independent of input order", () => {
     const a = cand({ systemId: "a", habitableSpace: 100 });
     const b = cand({ systemId: "b", habitableSpace: 100 });
-    const forward = proposeFactionClaims("f1", [a, b], { ...PARAMS, maxClaimsPerPulse: 2 });
-    const reverse = proposeFactionClaims("f1", [b, a], { ...PARAMS, maxClaimsPerPulse: 2 });
+    const forward = proposeFactionClaims("f1", [a, b], { ...PARAMS, maxClaimsPerCycle: 2 });
+    const reverse = proposeFactionClaims("f1", [b, a], { ...PARAMS, maxClaimsPerCycle: 2 });
     expect(forward.map((p) => p.systemId)).toEqual(["a", "b"]);
     expect(reverse.map((p) => p.systemId)).toEqual(["a", "b"]);
   });

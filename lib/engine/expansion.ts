@@ -16,7 +16,7 @@ export interface ClaimCandidate {
   resourceDiversity: number;
 }
 
-/** A faction's desire to claim `systemId` this pulse, with its comparable score. */
+/** A faction's desire to claim `systemId` this cycle, with its comparable score. */
 export interface ClaimProposal {
   factionId: string;
   systemId: string;
@@ -37,7 +37,7 @@ export interface ExpansionScoreWeights {
 }
 
 export interface ExpansionParams {
-  maxClaimsPerPulse: number;
+  maxClaimsPerCycle: number;
   scoreFloor: number;
   weights: ExpansionScoreWeights;
 }
@@ -52,8 +52,8 @@ export function scoreClaimCandidate(c: ClaimCandidate, w: ExpansionScoreWeights)
 }
 
 /**
- * A faction's claim proposals for this pulse: its highest-scoring in-reach candidates above the floor,
- * capped at `maxClaimsPerPulse`. Ranked by score descending, systemId ascending — a total order, so
+ * A faction's claim proposals for this cycle: its highest-scoring in-reach candidates above the floor,
+ * capped at `maxClaimsPerCycle`. Ranked by score descending, systemId ascending — a total order, so
  * the result is independent of candidate input order.
  */
 export function proposeFactionClaims(
@@ -65,7 +65,7 @@ export function proposeFactionClaims(
     .map((c) => ({ factionId, systemId: c.systemId, score: scoreClaimCandidate(c, params.weights) }))
     .filter((p) => p.score >= params.scoreFloor)
     .sort((a, b) => b.score - a.score || a.systemId.localeCompare(b.systemId))
-    .slice(0, Math.max(0, params.maxClaimsPerPulse));
+    .slice(0, Math.max(0, params.maxClaimsPerCycle));
 }
 
 /** Score-equality tolerance for the tie-break — floats from the scorer never compare exactly. */

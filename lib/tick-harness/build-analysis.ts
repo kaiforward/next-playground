@@ -69,9 +69,9 @@ export interface ClassBuildStats {
 export interface FoundedColonyRecord {
   systemId: string;
   foundedTick: number;
-  /** Demand-weighted satisfaction at that pulse; null until sampled. */
+  /** Demand-weighted satisfaction at that cycle; null until sampled. */
   openingSatisfaction: number | null;
-  /** The convex fold unrest itself reads (`dissatisfaction`) at that pulse; null until sampled. */
+  /** The convex fold unrest itself reads (`dissatisfaction`) at that cycle; null until sampled. */
   openingDissatisfaction: number | null;
 }
 
@@ -87,7 +87,7 @@ export type FoundedColonySystem =
  * founding-stock endowment exists so a colony does not open starving, and a handful of brand-new
  * systems is invisible to any galaxy-wide average, so it has to be caught as it happens.
  *
- * Detection only; the reading itself is `sampleFoundedColonies` at the first economy pulse STRICTLY
+ * Detection only; the reading itself is `sampleFoundedColonies` at the first economy cycle STRICTLY
  * after the founding tick, so it covers a whole assessed cycle of the colony's life rather than
  * however much of one remained when it landed.
  */
@@ -117,8 +117,8 @@ export function hasColonyAwaitingSample(
 }
 
 /**
- * Take the opening reading for every tracked colony whose first post-founding economy pulse is this
- * tick. Call only on an economy pulse — satisfaction is written by that pulse and is unchanged between.
+ * Take the opening reading for every tracked colony whose first post-founding economy cycle is this
+ * tick. Call only on an economy cycle — satisfaction is written by that cycle and is unchanged between.
  */
 export function sampleFoundedColonies(
   systems: ReadonlyArray<FoundedColonySystem>,
@@ -285,12 +285,12 @@ export interface ConstructionPoolSummary {
   centreProjects: number;
   /** Σ max(0, workTotal − workDone) over all open projects. */
   queueRemainingWork: number;
-  /** Pulses to drain the whole open queue at the current total pool; null when the pool is 0. */
-  queueEtaPulses: number | null;
+  /** Cycles to drain the whole open queue at the current total pool; null when the pool is 0. */
+  queueEtaCycles: number | null;
 }
 
 /**
- * Pool composition (eligible-heads base vs Construction Centre output) and how many pulses the open
+ * Pool composition (eligible-heads base vs Construction Centre output) and how many cycles the open
  * queue takes to drain at that rate. Composition aggregates linearly over developed systems, so one
  * pass over the whole galaxy equals the per-faction sum.
  */
@@ -319,15 +319,15 @@ export function summarizeConstructionPool(
     centreLevels,
     centreProjects,
     queueRemainingWork,
-    queueEtaPulses: pool.total > 0 ? queueRemainingWork / pool.total : null,
+    queueEtaCycles: pool.total > 0 ? queueRemainingWork / pool.total : null,
   };
 }
 
 /**
  * One tick's directed-build commitment for a single good — the flat record the harness
  * accumulates across the whole run. Mirrors `WorldFlowEvent`'s role for `summarizeLogistics`:
- * a pulse's per-good levels are gone the moment the tick returns (never persisted in `World`,
- * per `runWorldTick().instrumentation`'s contract), so the harness must capture each pulse as it
+ * a cycle's per-good levels are gone the moment the tick returns (never persisted in `World`,
+ * per `runWorldTick().instrumentation`'s contract), so the harness must capture each cycle as it
  * happens rather than reading the final world.
  */
 export interface BuildCommitmentRecord {
@@ -339,16 +339,16 @@ export interface BuildCommitmentRecord {
 /**
  * Ticks below which a quiet burst section reads as construction warm-up, not a broken directed-build wire.
  * A structural deficit becomes a fundable proposal only after it survives the two-reference-cycle
- * persistence window (`DIRECTED_BUILD.PERSISTENCE_PULSES`), and the first construction pulse lands at
+ * persistence window (`DIRECTED_BUILD.PERSISTENCE_CYCLES`), and the first construction cycle lands at
  * `CONSTRUCTION_INTERVAL` — so nothing autonomic can commit before roughly interval × (1 + persistence)
  * ticks. This is the cadence floor; colony-driven bursts lag further, behind colonisation. A legibility
  * bound, not a correctness one — below it, low activity means "too early", not "broken" (which the block's
  * own NOTHING-COMMITTED line still flags).
  */
-export const CONSTRUCTION_WARMUP_TICKS = CONSTRUCTION_INTERVAL * (1 + DIRECTED_BUILD.PERSISTENCE_PULSES);
+export const CONSTRUCTION_WARMUP_TICKS = CONSTRUCTION_INTERVAL * (1 + DIRECTED_BUILD.PERSISTENCE_CYCLES);
 
 /**
- * Summarise the worst per-pulse construction burst per good across a run's directed-build
+ * Summarise the worst per-cycle construction burst per good across a run's directed-build
  * commitments — proof that the construction rate cap (`DIRECTED_BUILD.BUILD_RATE_CAP`) actually
  * bounds new-proposal velocity, rather than merely asserting it exists. A silent run (no builds
  * committed) reports zero/null, never NaN or an empty-array crash.
@@ -361,12 +361,12 @@ export function summarizeBuildBursts(records: BuildCommitmentRecord[]): BuildBur
   }
 
   const byGood = [...maxByGood.entries()]
-    .map(([goodId, best]) => ({ goodId, maxLevelsPerPulse: best.levels, tick: best.tick }))
-    .sort((a, b) => b.maxLevelsPerPulse - a.maxLevelsPerPulse || a.goodId.localeCompare(b.goodId));
+    .map(([goodId, best]) => ({ goodId, maxLevelsPerCycle: best.levels, tick: best.tick }))
+    .sort((a, b) => b.maxLevelsPerCycle - a.maxLevelsPerCycle || a.goodId.localeCompare(b.goodId));
 
   if (byGood.length === 0) {
     return { byGood, globalMax: 0, worstGood: null, worstTick: null };
   }
   const worst = byGood[0];
-  return { byGood, globalMax: worst.maxLevelsPerPulse, worstGood: worst.goodId, worstTick: worst.tick };
+  return { byGood, globalMax: worst.maxLevelsPerCycle, worstGood: worst.goodId, worstTick: worst.tick };
 }

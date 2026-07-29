@@ -152,7 +152,7 @@ export function BuildDialog({
                 tone={staffingShort ? "warn" : "ok"}
               />
               <ReadoutRow label="Work" value={String(totalWork)} />
-              <ReadoutRow label="ETA" value={formatEta(option.etaPulses)} />
+              <ReadoutRow label="ETA" value={formatEta(option.etaCycles)} />
             </>
           )}
         </div>

@@ -35,8 +35,8 @@ const reachable: RouteCost = () => 1;
 
 describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
   // The shared assessor's persistence updates are its observable gap output: a good left with an
-  // uncovered residual advances its proposalPulses, a fully-covered good resets to 0. Each sink here
-  // carries one prior assessment (proposalPulses 1), so a surviving residual reads as 2 and a
+  // uncovered residual advances its proposalCycles, a fully-covered good resets to 0. Each sink here
+  // carries one prior assessment (proposalCycles 1), so a surviving residual reads as 2 and a
   // cancelled one as 0 — pinning the flow-aware coverage netting the two planners now share.
   const allReachable: RouteCost = () => 1;
 
@@ -45,7 +45,7 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
     return {
       systemId, factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand, production: 0, capacityProduction: 0, proposalPulses: 1 }],
+      goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand, production: 0, capacityProduction: 0, proposalCycles: 1 }],
     };
   }
 
@@ -60,20 +60,20 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
     };
   }
 
-  function orePulses(plan: ReturnType<typeof planFactionProposals>, systemId: string): number | undefined {
-    return plan.persistenceUpdates.find((u) => u.systemId === systemId && u.goodId === "ore")?.proposalPulses;
+  function oreCycles(plan: ReturnType<typeof planFactionProposals>, systemId: string): number | undefined {
+    return plan.persistenceUpdates.find((u) => u.systemId === systemId && u.goodId === "ore")?.proposalCycles;
   }
 
   it("leaves a residual (persistence advances) when a reachable exporter only partly covers the gap", () => {
     // Sink gap = 1.10 × 10 = 11; exporter spare 3 → coveredFraction 3/11 → residual ~8 > 0 → advances to 2.
     const plan = planFactionProposals([sink("A", 10), exporter("B", 3)], allReachable, [], DEV_REFS);
-    expect(orePulses(plan, "A")).toBe(2);
+    expect(oreCycles(plan, "A")).toBe(2);
   });
 
   it("cancels the gap (persistence resets) when the exporter's spare fully covers it", () => {
     // Exporter spare 16 ≥ the sink's 11 gap → coveredFraction 1 → residual 0 → resets to 0.
     const plan = planFactionProposals([sink("A", 10), exporter("B", 16)], allReachable, [], DEV_REFS);
-    expect(orePulses(plan, "A")).toBe(0);
+    expect(oreCycles(plan, "A")).toBe(0);
   });
 
   it("nets one exporter's spare across competing sinks (no double-coverage)", () => {
@@ -81,15 +81,15 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
     // keeps a residual → both advance. Spare exceeds a single sink's gap, so a per-sink (rather than
     // shared) cancellation would fully cover and reset both — the assertion separates the two models.
     const plan = planFactionProposals([sink("A", 10), sink("C", 10), exporter("B", 14)], allReachable, [], DEV_REFS);
-    expect(orePulses(plan, "A")).toBe(2);
-    expect(orePulses(plan, "C")).toBe(2);
+    expect(oreCycles(plan, "A")).toBe(2);
+    expect(oreCycles(plan, "C")).toBe(2);
   });
 
   it("keeps the gap structural when the only exporter is unreachable", () => {
     // Ample spare, but no route reaches the sink → the gap stays uncovered → persistence advances.
     const noRouteFromExporter: RouteCost = (from) => (from === "B" ? null : 1);
     const plan = planFactionProposals([sink("A", 10), exporter("B", 50)], noRouteFromExporter, [], DEV_REFS);
-    expect(orePulses(plan, "A")).toBe(2);
+    expect(oreCycles(plan, "A")).toBe(2);
   });
 
   it("does not let a draining pile (production ≤ demand) cancel the gap", () => {
@@ -101,7 +101,7 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
       goods: [{ goodId: "ore", stock: 100, targetStock: 50, demand: 4, production: 0, capacityProduction: 8 }],
     };
     const plan = planFactionProposals([sink("A", 10), drainingPile], allReachable, [], DEV_REFS);
-    expect(orePulses(plan, "A")).toBe(2);
+    expect(oreCycles(plan, "A")).toBe(2);
   });
 });
 
@@ -116,7 +116,7 @@ describe("assessStructuralDeficits — isEconomicallyActive gate", () => {
     const developedSink: BuildSystemState = {
       systemId: "D", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand: 10, production: 0, capacityProduction: 0, proposalPulses: 1 }],
+      goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand: 10, production: 0, capacityProduction: 0, proposalCycles: 1 }],
     };
     // An UNCLAIMED exporter with ample ore spare — would fully cancel D's gap if it counted.
     const inactiveExporter: BuildSystemState = {
@@ -128,13 +128,13 @@ describe("assessStructuralDeficits — isEconomicallyActive gate", () => {
     const inactiveSink: BuildSystemState = {
       systemId: "U", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
       slotCap: makeResourceVector({ ore: 10 }), generalSpace: 50, habitableSpace: 0,
-      goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand: 10, production: 0, capacityProduction: 0, proposalPulses: 1 }],
+      goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand: 10, production: 0, capacityProduction: 0, proposalCycles: 1 }],
     };
 
     const plan = planFactionProposals([developedSink, inactiveExporter, inactiveSink], allReachable, [], DEV_REFS);
 
     // The inactive exporter's spare does not count → the developed sink's gap stays uncovered → persistence advances to 2.
-    expect(plan.persistenceUpdates.find((u) => u.systemId === "D" && u.goodId === "ore")?.proposalPulses).toBe(2);
+    expect(plan.persistenceUpdates.find((u) => u.systemId === "D" && u.goodId === "ore")?.proposalCycles).toBe(2);
     // The inactive sink gets NO persistence write and NO proposal.
     expect(plan.persistenceUpdates.some((u) => u.systemId === "U")).toBe(false);
     expect(plan.proposals.some((p) => p.systemId === "U")).toBe(false);
@@ -331,7 +331,7 @@ describe("planFactionBuilds", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
@@ -350,7 +350,7 @@ describe("planFactionBuilds", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
     const surplus: BuildSystemState = {
       systemId: "S", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
@@ -554,7 +554,7 @@ describe("planFactionBuilds — relief housing", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
@@ -907,7 +907,7 @@ function deficitOnly(goodId: string): BuildSystemState {
   return {
     systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-    goods: [{ goodId, stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
+    goods: [{ goodId, stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
   };
 }
 
@@ -1173,7 +1173,7 @@ describe("planFactionProposals", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalPulses: 1 }],
+      goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
@@ -1223,7 +1223,7 @@ describe("planFactionProposals", () => {
     const deficit: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-      goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 10, capacityProduction: 0, proposalPulses: 1 }],
+      goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 10, capacityProduction: 0, proposalCycles: 1 }],
     };
     const builder: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
@@ -1271,7 +1271,7 @@ function policySystem(
 function policyGood(overrides: Partial<BuildGoodState> = {}): BuildGoodState {
   return {
     goodId: "ore", stock: 0, targetStock: 100, demand: 10, production: 0, capacityProduction: 0,
-    proposalPulses: 1, ...overrides,
+    proposalCycles: 1, ...overrides,
   };
 }
 
@@ -1280,22 +1280,22 @@ describe("planFactionProposals: persistent structural policy", () => {
     const plan = planFactionProposals([policySystem(policyGood({ demand: 100, production: 100, capacityProduction: 100 }))], () => 1, [], DEV_REFS);
     const ore = plan.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
     expect(ore?.value).toBeCloseTo(4, 6); // 10 residual x 40%, before whole-level placement
-    expect(plan.persistenceUpdates).toEqual([{ systemId: "P", goodId: "ore", proposalPulses: 2 }]);
+    expect(plan.persistenceUpdates).toEqual([{ systemId: "P", goodId: "ore", proposalCycles: 2 }]);
   });
 
   it("does not grow at 110% capacity and resets recovered persistence", () => {
     const plan = planFactionProposals([policySystem(policyGood({ production: 10, capacityProduction: 11 }))], () => 1, [], DEV_REFS);
     expect(plan.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
-    expect(plan.persistenceUpdates).toEqual([{ systemId: "P", goodId: "ore", proposalPulses: 0 }]);
+    expect(plan.persistenceUpdates).toEqual([{ systemId: "P", goodId: "ore", proposalCycles: 0 }]);
   });
 
   it("uses the larger of capacity and squeeze feedback gaps, excluding funding-bound feedback", () => {
-    const active = planFactionProposals([policySystem(policyGood({ demand: 10, production: 10, capacityProduction: 11, squeezePulses: 2, satisfaction: 0 }))], () => 1, [], DEV_REFS);
+    const active = planFactionProposals([policySystem(policyGood({ demand: 10, production: 10, capacityProduction: 11, squeezeCycles: 2, satisfaction: 0 }))], () => 1, [], DEV_REFS);
     const ore = active.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
     expect(ore?.value).toBeCloseTo(4, 6); // max(0, 10), not 10 + 0
 
-    const fundingBound = planFactionProposals([policySystem(policyGood({ production: 10, capacityProduction: 11, squeezePulses: 2, satisfaction: 0, logisticsFundingBound: true }))], () => 1, [], DEV_REFS);
-    expect(fundingBound.persistenceUpdates[0]?.proposalPulses).toBe(0);
+    const fundingBound = planFactionProposals([policySystem(policyGood({ production: 10, capacityProduction: 11, squeezeCycles: 2, satisfaction: 0, logisticsFundingBound: true }))], () => 1, [], DEV_REFS);
+    expect(fundingBound.persistenceUpdates[0]?.proposalCycles).toBe(0);
   });
 
   it("still finds a structural deficit at a striking system with no capacity in the good", () => {
@@ -1304,20 +1304,20 @@ describe("planFactionProposals: persistent structural policy", () => {
     // would end the shortage. With no capacity, output would be zero at any staffing level, so the
     // gap is structural and a strike explains none of it.
     const plan = planFactionProposals(
-      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 0, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 0, squeezeCycles: 2, satisfaction: 0, productionSuppressed: true }))],
       () => 1, [], DEV_REFS,
     );
     // capacityGap = 1.1 × 10 − 0 = 11, rate-capped to 11 × 0.4.
     const ore = plan.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
     expect(ore?.value).toBeCloseTo(4.4, 6);
-    expect(plan.persistenceUpdates[0]?.proposalPulses).toBe(2);
+    expect(plan.persistenceUpdates[0]?.proposalCycles).toBe(2);
   });
 
   it("proposes only the shortfall a striking system's own capacity does not already cover", () => {
     // Capacity at 60% of demand: the strike explains the 60% that is not being produced right now,
     // but not the 40% the system could never have made — that part is still proposed.
     const short = planFactionProposals(
-      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 6, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 6, squeezeCycles: 2, satisfaction: 0, productionSuppressed: true }))],
       () => 1, [], DEV_REFS,
     );
     const ore = short.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
@@ -1327,57 +1327,57 @@ describe("planFactionProposals: persistent structural policy", () => {
     // feedback IS explained by the strike — so this system proposes nothing at all. Without the
     // feedback exclusion its satisfaction-0 markets would read as a 10-unit gap.
     const covered = planFactionProposals(
-      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 12, squeezePulses: 2, satisfaction: 0, productionSuppressed: true }))],
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 12, squeezeCycles: 2, satisfaction: 0, productionSuppressed: true }))],
       () => 1, [], DEV_REFS,
     );
     expect(covered.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
-    expect(covered.persistenceUpdates[0]?.proposalPulses).toBe(0);
+    expect(covered.persistenceUpdates[0]?.proposalCycles).toBe(0);
   });
 
   it("nets only REALIZED exporter spare before persistence — a striking exporter cancels nothing", () => {
     const sink = policySystem(policyGood(), { systemId: "sink" });
     const actualExporter = policySystem(policyGood({ demand: 0, production: 20, capacityProduction: 20 }), { systemId: "actual", slotCap: emptyResourceVector() });
     const actual = planFactionProposals([sink, actualExporter], () => 1, [], DEV_REFS);
-    expect(actual.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(0);
+    expect(actual.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalCycles).toBe(0);
 
     // Same capacity, but struck and producing nothing. Counting its latent capacity as spare
     // cancelled the sink's gap against supply that never shipped; only realized output counts, so
     // the sink's deficit now survives to persistence.
     const latentExporter = policySystem(policyGood({ demand: 0, production: 0, capacityProduction: 20, productionSuppressed: true }), { systemId: "latent", slotCap: emptyResourceVector() });
     const latent = planFactionProposals([sink, latentExporter], () => 1, [], DEV_REFS);
-    expect(latent.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalPulses).toBe(2);
+    expect(latent.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalCycles).toBe(2);
   });
 
   it("requires two residual assessments, saturates at two, and resets on recovery", () => {
-    const first = planFactionProposals([policySystem(policyGood({ proposalPulses: 0 }))], () => 1, [], DEV_REFS);
+    const first = planFactionProposals([policySystem(policyGood({ proposalCycles: 0 }))], () => 1, [], DEV_REFS);
     expect(first.proposals.filter((proposal) => proposal.role === "industry")).toEqual([]);
-    expect(first.persistenceUpdates[0]?.proposalPulses).toBe(1);
+    expect(first.persistenceUpdates[0]?.proposalCycles).toBe(1);
 
-    const second = planFactionProposals([policySystem(policyGood({ proposalPulses: 1 }))], () => 1, [], DEV_REFS);
+    const second = planFactionProposals([policySystem(policyGood({ proposalCycles: 1 }))], () => 1, [], DEV_REFS);
     expect(second.proposals.some((proposal) => proposal.role === "industry")).toBe(true);
-    expect(second.persistenceUpdates[0]?.proposalPulses).toBe(2);
+    expect(second.persistenceUpdates[0]?.proposalCycles).toBe(2);
 
-    const saturated = planFactionProposals([policySystem(policyGood({ proposalPulses: 2 }))], () => 1, [], DEV_REFS);
-    expect(saturated.persistenceUpdates[0]?.proposalPulses).toBe(2);
+    const saturated = planFactionProposals([policySystem(policyGood({ proposalCycles: 2 }))], () => 1, [], DEV_REFS);
+    expect(saturated.persistenceUpdates[0]?.proposalCycles).toBe(2);
 
-    const recovered = planFactionProposals([policySystem(policyGood({ proposalPulses: 2, production: 10, capacityProduction: 11 }))], () => 1, [], DEV_REFS);
-    expect(recovered.persistenceUpdates[0]?.proposalPulses).toBe(0);
+    const recovered = planFactionProposals([policySystem(policyGood({ proposalCycles: 2, production: 10, capacityProduction: 11 }))], () => 1, [], DEV_REFS);
+    expect(recovered.persistenceUpdates[0]?.proposalCycles).toBe(0);
   });
 
   it("advances the proposal clock by the per-assessment reference-time (fractional cadences)", () => {
     // A finer-than-reference cadence (advance 0.5): four persistent assessments to reach the
     // two-reference-cycle threshold, and no proposal emits until the counter actually reaches it.
-    let pulses = 0;
+    let cycles = 0;
     for (const expected of [0.5, 1.0, 1.5, 2.0]) {
-      const plan = planFactionProposals([policySystem(policyGood({ proposalPulses: pulses }))], () => 1, [], DEV_REFS, 0.5);
-      expect(plan.persistenceUpdates[0]?.proposalPulses).toBeCloseTo(expected, 6);
+      const plan = planFactionProposals([policySystem(policyGood({ proposalCycles: cycles }))], () => 1, [], DEV_REFS, 0.5);
+      expect(plan.persistenceUpdates[0]?.proposalCycles).toBeCloseTo(expected, 6);
       expect(plan.proposals.some((proposal) => proposal.role === "industry")).toBe(expected >= 2);
-      pulses = plan.persistenceUpdates[0]?.proposalPulses ?? 0;
+      cycles = plan.persistenceUpdates[0]?.proposalCycles ?? 0;
     }
 
     // A coarser-than-reference cadence (advance 2): one assessment saturates and is immediately eligible.
-    const coarse = planFactionProposals([policySystem(policyGood({ proposalPulses: 0 }))], () => 1, [], DEV_REFS, 2);
-    expect(coarse.persistenceUpdates[0]?.proposalPulses).toBe(2);
+    const coarse = planFactionProposals([policySystem(policyGood({ proposalCycles: 0 }))], () => 1, [], DEV_REFS, 2);
+    expect(coarse.persistenceUpdates[0]?.proposalCycles).toBe(2);
     expect(coarse.proposals.some((proposal) => proposal.role === "industry")).toBe(true);
   });
 
@@ -1406,14 +1406,14 @@ describe("planFactionProposals: persistent structural policy", () => {
       { kind: "build", id: "auto-metals", origin: "auto", factionId: "f1", systemId: "P", buildingType: "metals", levels: 1, workTotal: 100, workDone: 1 },
     ];
     const inputPlan = planFactionProposals([
-      policySystem(policyGood({ goodId: "ore", demand: 0, production: 0, capacityProduction: 0, proposalPulses: 0 }), {
+      policySystem(policyGood({ goodId: "ore", demand: 0, production: 0, capacityProduction: 0, proposalCycles: 0 }), {
         goods: [
-          policyGood({ goodId: "ore", demand: 0, production: 0, capacityProduction: 0, proposalPulses: 0 }),
-          policyGood({ goodId: "metals", demand: 0, production: 0, capacityProduction: 0, proposalPulses: 0 }),
+          policyGood({ goodId: "ore", demand: 0, production: 0, capacityProduction: 0, proposalCycles: 0 }),
+          policyGood({ goodId: "metals", demand: 0, production: 0, capacityProduction: 0, proposalCycles: 0 }),
         ],
       }),
     ], () => 1, queuedMetals, DEV_REFS);
-    expect(inputPlan.persistenceUpdates.find((update) => update.goodId === "ore")?.proposalPulses).toBe(1);
+    expect(inputPlan.persistenceUpdates.find((update) => update.goodId === "ore")?.proposalCycles).toBe(1);
   });
 });
 describe("planFactionBuilds: develop gate", () => {

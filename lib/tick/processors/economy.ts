@@ -24,18 +24,18 @@ import {
   type GoodSatisfaction,
   type SupplyState,
 } from "@/lib/engine/population";
-import { pulseShard, isPulseTick, catchUpFactor } from "@/lib/tick/shard";
+import { cycleStartShard, isCycleStart, catchUpFactor } from "@/lib/tick/shard";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
 
 /**
  * The broadcast this processor emits on a tick where it resolves nothing.
  *
- * Exported because `runWorldTick` gates this stage's setup off-pulse and so never
+ * Exported because `runWorldTick` gates this stage's setup mid-cycle and so never
  * calls the body — it emits this instead, keeping the per-tick signal identical to
  * an ungated run. One definition so the gated and ungated paths can't diverge.
  */
-export function economyOffPulsePayload(tick: number, interval: number): Partial<GlobalEventMap> {
+export function economyMidCyclePayload(tick: number, interval: number): Partial<GlobalEventMap> {
   const iv = Math.max(1, Math.floor(interval));
   return { economyTick: [{ systemCount: 0, shardIndex: ((tick % iv) + iv) % iv, shardCount: iv }] };
 }
@@ -45,8 +45,8 @@ export function economyOffPulsePayload(tick: number, interval: number): Partial<
  * Per-run knobs the body must not hard-code (the production cover, modifier
  * caps, the strike regime) come in via `params`.
  *
- * Cycle resolution pulse: on the boundary tick (`tick % interval === 0`) the
- * whole system list resolves at once via `pulseShard`; every other tick is a
+ * Cycle resolution: on the boundary tick (`tick % interval === 0`) the
+ * whole system list resolves at once via `cycleStartShard`; every other tick is a
  * no-op (empty window → no `economySignals`, so infrastructure-decay and
  * population skip too). Per-resolution production/consumption are scaled by
  * `catchUpFactor(interval)` so the wall-clock rate is constant and the
@@ -59,20 +59,20 @@ export async function runEconomyProcessor(
 ): Promise<TickProcessorResult> {
   const { interval, simParams, modifierCaps, strikeParams, maintenanceMalusBySystem } = params;
 
-  // Normalize the interval the same way pulseShard does so the reported shard
-  // index/count can't diverge from the actual pulse boundary for a non-integer interval.
+  // Normalize the interval the same way cycleStartShard does so the reported shard
+  // index/count can't diverge from the actual cycle boundary for a non-integer interval.
   const iv = Math.max(1, Math.floor(interval));
   const shardIndex = ((ctx.tick % iv) + iv) % iv;
-  const emptyPayload = economyOffPulsePayload(ctx.tick, interval);
-  // Off-pulse before reading the world: the system list is fetched only for its
-  // length, which pulseShard uses solely to distinguish "empty galaxy" — so off-pulse
+  const emptyPayload = economyMidCyclePayload(ctx.tick, interval);
+  // Mid-cycle before reading the world: the system list is fetched only for its
+  // length, which cycleStartShard uses solely to distinguish "empty galaxy" — so mid-cycle
   // it cost a filter and a sort over every system to reach a foregone conclusion.
-  if (!isPulseTick(ctx.tick, interval)) {
+  if (!isCycleStart(ctx.tick, interval)) {
     return { globalEvents: emptyPayload };
   }
 
   const allSystemIds = await world.getSystemIds();
-  const { start, end } = pulseShard(allSystemIds.length, ctx.tick, interval);
+  const { start, end } = cycleStartShard(allSystemIds.length, ctx.tick, interval);
   if (start >= end) {
     return { globalEvents: emptyPayload };
   }
@@ -154,7 +154,7 @@ export async function runEconomyProcessor(
   const entrySystemIds = markets.map((m) => m.systemId);
   const simulated = simulateCoupledEconomyTick(tickEntries, entrySystemIds, simParams);
 
-  // Satisfaction is the FLOW actually applied this pulse (delivered ÷ demanded),
+  // Satisfaction is the FLOW actually applied this cycle (delivered ÷ demanded),
   // never a post-tick stock recompute — a cycle that starts above the comfort
   // knee delivers in full even when it ends just below it. Non-consumers read 1.
   const satisfactionByIndex = markets.map((_, i) => {
@@ -168,10 +168,10 @@ export async function runEconomyProcessor(
   // aggregated the system's modifiers, so there's no second aggregation pass.
   const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
     const realizedProductionRate = simulated[i].realized / catchUp;
-    // Advance by this pulse's reference-time (catchUpFactor), not a flat +1, so "two reference cycles
+    // Advance by this cycle's reference-time (catchUpFactor), not a flat +1, so "two reference cycles
     // rationed" is the same wall-clock latency at any economy cadence. Fractional, finite, clamped [0,2].
-    const squeezePulses = satisfactionByIndex[i] < 1
-      ? Math.min(2, Math.max(0, m.squeezePulses ?? 0) + catchUp)
+    const squeezeCycles = satisfactionByIndex[i] < 1
+      ? Math.min(2, Math.max(0, m.squeezeCycles ?? 0) + catchUp)
       : 0;
     return {
       id: m.id,
@@ -182,7 +182,7 @@ export async function runEconomyProcessor(
         ? realizedProductionRate
         : 0,
       productionSuppressed: marketSuppressed(m),
-      squeezePulses,
+      squeezeCycles,
     };
   });
 

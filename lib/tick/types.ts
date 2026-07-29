@@ -52,7 +52,7 @@ export interface TickContext {
 export interface EconomySignals {
   /** Per-system convex necessity-weighted dissatisfaction D ∈ [0,1], for systems processed this tick. */
   dissatisfactionBySystem: Map<string, number>;
-  /** Per-system supplied/rationing/shortage reading of this pulse's consumption satisfaction, with
+  /** Per-system supplied/rationing/shortage reading of this cycle's consumption satisfaction, with
    *  the survival-good shortfall bit the unrest slope reads. */
   supplyStateBySystem: Map<string, SupplyState>;
   /**
@@ -61,7 +61,7 @@ export interface EconomySignals {
    * decay; an empty inner map means the system produces nothing.
    */
   sellingFactorBySystem: Map<string, Map<string, number>>;
-  /** Per-system, per-good physical output actually produced this pulse (post
+  /** Per-system, per-good physical output actually produced this cycle (post
    *  input-gate and operating-ceiling) — the production-tax base. Absent system ⇒ produced nothing. */
   realizedProductionBySystem: Map<string, Map<string, number>>;
 }
@@ -72,15 +72,15 @@ export interface TickProcessorResult {
   globalEvents?: Partial<GlobalEventMap>;
   /** Transient cross-processor signals (economy → population). Not broadcast. */
   economySignals?: EconomySignals;
-  /** Work actually performed this pulse per faction (directed-build: construction
+  /** Work actually performed this cycle per faction (directed-build: construction
    *  points absorbed; directed-logistics: work-budget consumed). Transient input
    *  to the treasury settlement — not broadcast, not persisted. */
   workPerformedByFaction?: Map<string, number>;
-  /** New autonomic production-good build levels committed this pulse (directed-build), by
+  /** New autonomic production-good build levels committed this cycle (directed-build), by
    *  good id. Counts proposal levels, not the final funded queue. Calibration instrumentation
    *  only — surfaced via `runWorldTick().instrumentation`, never broadcast or persisted. */
   buildCommitmentsByGood?: Map<string, number>;
-  /** People moved this cycle pulse (colonist delivery + edge diffusion), conserved flows only.
+  /** People moved this cycle start (colonist delivery + edge diffusion), conserved flows only.
    *  Calibration instrumentation — surfaced via runWorldTick().instrumentation, never broadcast. */
   migrationMoved?: { colonists: number; diffusion: number };
 }

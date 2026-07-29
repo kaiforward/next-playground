@@ -90,14 +90,14 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // window every tick, so a run longer than that window can only be totalled by
   // taking each tick's transfers as they happen.
   const logisticsFlows: WorldFlowEvent[] = [];
-  // Whole-run directed-build commitments, one record per (tick, good) this pulse committed new
+  // Whole-run directed-build commitments, one record per (tick, good) this cycle committed new
   // autonomic levels for. Transient instrumentation (`runWorldTick().instrumentation`) — never
   // persisted in `World` — so, like flowEvents, it must be captured as each tick happens.
   const buildCommitments: BuildCommitmentRecord[] = [];
   // Whole-run migration throughput — colonist-delivery and edge-diffusion totals, plus the count
-  // of pulses that resolved (the per-pulse mean's denominator). Transient instrumentation
+  // of cycles that resolved (the per-cycle mean's denominator). Transient instrumentation
   // (`runWorldTick().instrumentation`), so like buildCommitments it is accumulated per tick.
-  let migrationPulseCount = 0;
+  let migrationCycleCount = 0;
   let migrationColonistsTotal = 0;
   let migrationDiffusionTotal = 0;
   const activeEventTracker = new Map<string, ActiveEventRecord>();
@@ -139,14 +139,14 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     }
 
     if (result.instrumentation.migrationMoved) {
-      migrationPulseCount++;
+      migrationCycleCount++;
       migrationColonistsTotal += result.instrumentation.migrationMoved.colonists;
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
     }
 
     trackFoundedColonies(world.systems, world.meta.currentTick, developedAtStart, foundedColonies);
     // The reading needs full tick rows (buildings + government drive the demand weights), so build
-    // them only on the pulse that actually has a colony to read — not every tick of the run.
+    // them only on the cycle that actually has a colony to read — not every tick of the run.
     if (
       cycleLength > 0 && world.meta.currentTick % cycleLength === 0 &&
       hasColonyAwaitingSample(foundedColonies, world.meta.currentTick)
@@ -192,10 +192,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const migrationThroughput: MigrationThroughputSummary = {
     totalColonists: migrationColonistsTotal,
     totalDiffusion: migrationDiffusionTotal,
-    pulseCount: migrationPulseCount,
-    meanPerPulse:
-      migrationPulseCount > 0
-        ? (migrationColonistsTotal + migrationDiffusionTotal) / migrationPulseCount
+    cycleCount: migrationCycleCount,
+    meanPerCycle:
+      migrationCycleCount > 0
+        ? (migrationColonistsTotal + migrationDiffusionTotal) / migrationCycleCount
         : 0,
   };
 

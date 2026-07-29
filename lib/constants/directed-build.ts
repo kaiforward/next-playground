@@ -35,7 +35,7 @@ export const DIRECTED_BUILD = {
   /** Capacity is deliberately held 10% above measured demand before it is structurally complete. */
   PROVISION_MARGIN: 0.10,
   /** Consecutive post-net construction assessments required before a structural build may emit. */
-  PERSISTENCE_PULSES: 2,
+  PERSISTENCE_CYCLES: 2,
   /** Fraction of a persistent structural residual that one assessment may commit. */
   BUILD_RATE_CAP: 0.40,
 } as const;

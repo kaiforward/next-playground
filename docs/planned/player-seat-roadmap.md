@@ -45,7 +45,7 @@ capital/distance-based control, development as an input.
 Claims (the cheap `unclaimed → controlled` border-staking step; develop already carries the
 physical colonisation costs) should cost money — but the interesting price is control-shaped
 (further from the core → dearer to claim and to keep), so it waits for the control design rather
-than shipping as a flat fee. The per-pulse claim cap + reach bound prevent degenerate free grabbing
+than shipping as a flat fee. The per-cycle claim cap + reach bound prevent degenerate free grabbing
 in the meantime.
 
 ### Neglect wear on staffed buildings

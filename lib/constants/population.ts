@@ -93,7 +93,7 @@ export const MIGRATION_PARAMS: MigrationFlowParams = {
 
 /**
  * Targeted colonist delivery — the primary colony population supply (diffusion above is only local
- * balancing). Each pulse every developed system contributes a capped slice of its drawable spare to a
+ * balancing). Each cycle every developed system contributes a capped slice of its drawable spare to a
  * faction pool that is water-filled across the faction's developed systems, raising the emptiest
  * colonies first. `sourceOutflowCap` sits well above the diffusion rate (colony delivery IS the flow),
  * `minSourcePopulation` keeps freshly-seeded stubs from being drained as donors. Coarse first cut —

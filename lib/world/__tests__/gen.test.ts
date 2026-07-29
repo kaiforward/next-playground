@@ -51,8 +51,8 @@ describe("generateWorld", () => {
       expect(Number.isFinite(m.storageCapacity)).toBe(true);
       expect(Number.isFinite(m.demandRate)).toBe(true);
       expect(m.anchorMult).toBe(1);
-      expect(m.squeezePulses).toBe(0);
-      expect(m.proposalPulses).toBe(0);
+      expect(m.squeezeCycles).toBe(0);
+      expect(m.proposalCycles).toBe(0);
       expect(m.realizedProductionRate).toBeUndefined();
       expect(m.productionSuppressed).toBeUndefined();
     }

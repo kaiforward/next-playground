@@ -50,7 +50,7 @@ export function StarMap({
   );
   const { showMapDebug } = useDevOverlay();
   const { visibleSystemIds } = useVisibility();
-  // Live ownership (faction + developed tier) — tick-invalidated on the cycle claim/develop pulse.
+  // Live ownership (faction + developed tier) — tick-invalidated on the claim/develop cycle start.
   // Overlaid onto the static atlas so territory + markers repaint as factions expand (the atlas itself
   // stays staleTime:Infinity — only ownership rides the dynamic path).
   const ownership = useOwnership();
@@ -114,7 +114,7 @@ export function StarMap({
   }, [migrationBySystem, visibleSystemIds]);
 
   // Overlay live ownership (factionId + developed) onto the static atlas. The base atlas is fetched
-  // once (staleTime:Infinity); ownership refetches on the cycle pulse, so a new liveAtlas identity
+  // once (staleTime:Infinity); ownership refetches on the cycle start, so a new liveAtlas identity
   // here is what drives the territory + marker layers to repaint expansion. Falls back to the atlas
   // as-is before ownership has loaded.
   const liveAtlas = useMemo((): AtlasData => {

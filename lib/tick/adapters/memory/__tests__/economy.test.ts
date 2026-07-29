@@ -108,14 +108,14 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       satisfaction: 1,
       realizedProductionRate: Number.NaN,
       productionSuppressed: false,
-      squeezePulses: 4.8,
+      squeezeCycles: 4.8,
     }]);
     expect(world.markets[0].realizedProductionRate).toBe(0);
     expect(world.markets[0].productionSuppressed).toBe(false);
-    expect(world.markets[0].squeezePulses).toBe(2);
-    world.markets[0] = { ...world.markets[0], squeezePulses: -1 };
+    expect(world.markets[0].squeezeCycles).toBe(2);
+    world.markets[0] = { ...world.markets[0], squeezeCycles: -1 };
     const views = await world.getMarketsForSystems(["s1"]);
-    expect(views[0].squeezePulses).toBe(0);
+    expect(views[0].squeezeCycles).toBe(0);
   });
 
   it("preserves a fractional squeeze counter (reference-time, not an integer assessment count)", async () => {
@@ -131,10 +131,10 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       satisfaction: 1,
       realizedProductionRate: 0,
       productionSuppressed: false,
-      squeezePulses: 1.5,
+      squeezeCycles: 1.5,
     }]);
-    expect(world.markets[0].squeezePulses).toBe(1.5); // not floored to 1
+    expect(world.markets[0].squeezeCycles).toBe(1.5); // not floored to 1
     const views = await world.getMarketsForSystems(["s1"]);
-    expect(views[0].squeezePulses).toBe(1.5); // survives the read path too
+    expect(views[0].squeezeCycles).toBe(1.5); // survives the read path too
   });
 });

@@ -67,7 +67,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
         {!s ? (
           <EmptyState
             className="mb-4"
-            message="No settlement yet — the first collection lands on the next cycle pulse."
+            message="No settlement yet — the first collection lands on the next cycle start."
           />
         ) : (
           <>

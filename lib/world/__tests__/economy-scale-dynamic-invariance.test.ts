@@ -18,9 +18,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
  * The invariant breaks the instant any goods-magnitude term is quantised
  * (`Math.round`/`floor` on a goods amount) or left as an unscaled absolute — those
  * are a rounding error at S=100 but a large fraction at S=1, so they diverge only
- * at low scale and compound through every cycle pulse. This broad end-to-end guard
+ * at low scale and compound through every cycle start. This broad end-to-end guard
  * reliably exercises the seed-stock de-rounding (from tick 0) and every per-capita
- * demand term through the cycle economy pulse. There is no longer a flat scaled
+ * demand term through the economy cycle. There is no longer a flat scaled
  * demand term in the civilian path to exercise — the civilian basket is
  * population-proportional throughout — so that specific coverage is gone rather than
  * merely untested. The logistics-transfer term is guarded directly by a focused unit
@@ -69,10 +69,10 @@ afterEach(() => {
 });
 
 describe("ECONOMY_SCALE dynamic invariance", () => {
-  it("per-(system,good) stock is scale-normalised-identical across the first cycle pulse", async () => {
-    const SEED = 745878428; // colonies + a cycle pulse in-window (logistics is covered by a focused test)
+  it("per-(system,good) stock is scale-normalised-identical across the first cycle start", async () => {
+    const SEED = 745878428; // colonies + a cycle start in-window (logistics is covered by a focused test)
     const SYSTEM_COUNT = 60;
-    const TICKS = 30; // past the first economy pulse (tick 24), where per-capita demand first bites
+    const TICKS = 30; // past the first economy cycle (tick 24), where per-capita demand first bites
     const TOL = 1e-6; // pure FP is ~1e-15 here; a quantised/absolute term diverges ~1e-3+
 
     const s1 = await runAtScale("1", SEED, SYSTEM_COUNT, TICKS);

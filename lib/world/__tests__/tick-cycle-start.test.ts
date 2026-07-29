@@ -15,7 +15,7 @@ function economyTickEntry(broadcast: TickBroadcastRaw): EconomyTickPayload {
   return entry;
 }
 
-describe("runWorldTick: cycle pulse", () => {
+describe("runWorldTick: cycle start", () => {
   it("changes population only on the cycle boundary tick", async () => {
     let world = generateWorld({ systemCount: 40, seed: 7 });
     const startPop = totalPopulation(world);
@@ -35,14 +35,14 @@ describe("runWorldTick: cycle pulse", () => {
     expect(world.meta.currentTick).toBe(CYCLE_LENGTH);
     // At least one system's population moves. A per-system check (not an aggregate
     // delta) so a chance growth/decline cancellation across systems can't mask the
-    // pulse firing.
+    // cycle start firing.
     const moved = world.systems.some((s) => Math.abs(s.population - (before.get(s.id) ?? 0)) > 1e-6);
     expect(moved).toBe(true);
   });
 
-  it("broadcasts economyTick on every tick, pulse or not, with the resolving tick the only one reporting systems", async () => {
-    // The pulse gate skips the economy stage off-pulse, so runWorldTick emits the
-    // off-pulse payload in its place. That signal must not go missing: the client
+  it("broadcasts economyTick on every tick, cycle or not, with the resolving tick the only one reporting systems", async () => {
+    // The cycle-start gate skips the economy stage mid-cycle, so runWorldTick emits the
+    // mid-cycle payload in its place. That signal must not go missing: the client
     // (useTickInvalidation) refetches market/population/ownership data on every
     // economyTick, so a gate that swallowed it would leave the UI stale for a cycle
     // rather than fail loudly. systemCount is what distinguishes a resolving tick.
@@ -67,12 +67,12 @@ describe("runWorldTick: cycle pulse", () => {
     for (const m of world.markets) expect(Number.isFinite(m.stock)).toBe(true);
   });
 
-  it("cadence override moves the pulse boundary", async () => {
+  it("cadence override moves the cycle boundary", async () => {
     const world = generateWorld({ systemCount: 40, seed: 7 });
     const cadence = { cycle: 2, construction: 2, logistics: 2 };
 
-    // Tick 1 is off-pulse under cycle=2 (1 % 2 !== 0): the economy did not resolve,
-    // so the off-pulse payload reports the shifted period and no resolving systems.
+    // Tick 1 is mid-cycle under cycle=2 (1 % 2 !== 0): the economy did not resolve,
+    // so the mid-cycle payload reports the shifted period and no resolving systems.
     const r1 = await runWorldTick(world, { cadence });
     expect(r1.world.meta.currentTick).toBe(1);
     const e1 = economyTickEntry(r1.events);

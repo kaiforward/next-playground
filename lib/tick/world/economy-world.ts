@@ -38,7 +38,7 @@ export interface MarketView {
   /** Built infrastructure storage capacity from the station market row. */
   storageCapacity: number;
   /** Reference-cycles the previous rationed economy streak had persisted (finite, [0,2]); missing reads as 0. */
-  squeezePulses?: number;
+  squeezeCycles?: number;
 }
 
 /** Result of one market simulation step — written back via applyMarketUpdates. */
@@ -47,7 +47,7 @@ export interface MarketUpdate {
   stock: number;
   /** Active pricing-anchor multiplier from event modifiers (1 = none). */
   anchorMult: number;
-  /** Consumption satisfaction actually applied this pulse (delivered ÷ demanded; 1 for non-consumers). */
+  /** Consumption satisfaction actually applied this cycle (delivered ÷ demanded; 1 for non-consumers). */
   satisfaction: number;
   /** Realized output normalized to the reference economy interval. */
   realizedProductionRate: number;
@@ -55,7 +55,7 @@ export interface MarketUpdate {
   productionSuppressed: boolean;
   /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced per
    *  assessment by the economy interval's catchUpFactor (2 = two reference cycles). */
-  squeezePulses: number;
+  squeezeCycles: number;
 }
 
 export interface EconomyWorld {

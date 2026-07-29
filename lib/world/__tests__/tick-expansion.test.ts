@@ -13,7 +13,7 @@ async function advance(world: World, ticks: number): Promise<World> {
 }
 
 describe("runWorldTick: expansion (claim + develop)", () => {
-  it("grows owned-system count and produces controlled + developed systems across pulses", async () => {
+  it("grows owned-system count and produces controlled + developed systems across cycles", async () => {
     let world = generateWorld({ systemCount: 90, seed: 11 });
     const startOwned = ownedCount(world);
     expect(startOwned).toBe(world.factions.length); // one developed homeworld each
@@ -43,17 +43,17 @@ describe("runWorldTick: expansion (claim + develop)", () => {
     }
   });
 
-  it("is deterministic — same seed produces the same ownership after several pulses", async () => {
+  it("is deterministic — same seed produces the same ownership after several cycles", async () => {
     const a = await advance(generateWorld({ systemCount: 90, seed: 11 }), CYCLE_LENGTH * 3);
     const b = await advance(generateWorld({ systemCount: 90, seed: 11 }), CYCLE_LENGTH * 3);
     const own = (w: World) => w.systems.map((s) => `${s.id}:${s.control}:${s.factionId ?? "-"}`).sort();
     expect(own(a)).toEqual(own(b));
   });
 
-  it("keeps population finite and non-negative across develop pulses", async () => {
+  it("keeps population finite and non-negative across develop cycles", async () => {
     const before = generateWorld({ systemCount: 90, seed: 11 });
     const total = (w: World) => w.systems.reduce((n, s) => n + s.population, 0);
-    // The economy grows/shrinks pop tick to tick, so this only checks the pulse stays sane (no NaN,
+    // The economy grows/shrinks pop tick to tick, so this only checks the cycle stays sane (no NaN,
     // no negative population) — the develop transfer's conservation itself is unit-tested directly
     // against `applyDevelopments` in apply-developments.test.ts.
     const after = await advance(before, CYCLE_LENGTH * 2);
@@ -61,7 +61,7 @@ describe("runWorldTick: expansion (claim + develop)", () => {
     for (const s of after.systems) expect(s.population).toBeGreaterThanOrEqual(0);
   });
 
-  it("produces no NaN/Infinity in population or stock across the pulses", async () => {
+  it("produces no NaN/Infinity in population or stock across the cycles", async () => {
     const world = await advance(generateWorld({ systemCount: 90, seed: 11 }), CYCLE_LENGTH * 2 + 1);
     for (const s of world.systems) expect(Number.isFinite(s.population)).toBe(true);
     for (const m of world.markets) expect(Number.isFinite(m.stock)).toBe(true);

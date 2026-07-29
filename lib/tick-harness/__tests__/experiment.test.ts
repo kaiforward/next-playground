@@ -126,7 +126,7 @@ describe("ExperimentConfig", () => {
         initialPopulationTotal: 0,
         initialBuildingTotal: 0,
         populationSnapshots: [],
-        migrationThroughput: { totalColonists: 0, totalDiffusion: 0, pulseCount: 0, meanPerPulse: 0 },
+        migrationThroughput: { totalColonists: 0, totalDiffusion: 0, cycleCount: 0, meanPerCycle: 0 },
         foundingStock: {
           foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
           meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
@@ -144,7 +144,7 @@ describe("ExperimentConfig", () => {
     it("includes the build-burst summary in the saved experiment JSON", () => {
       const results = minimalResults();
       results.buildBurstSummary = {
-        byGood: [{ goodId: "food", maxLevelsPerPulse: 7, tick: 48 }],
+        byGood: [{ goodId: "food", maxLevelsPerCycle: 7, tick: 48 }],
         globalMax: 7,
         worstGood: "food",
         worstTick: 48,
@@ -160,14 +160,14 @@ describe("ExperimentConfig", () => {
 
     it("includes the migration-throughput summary in the saved experiment JSON", () => {
       const results = minimalResults();
-      results.migrationThroughput = { totalColonists: 120, totalDiffusion: 30, pulseCount: 3, meanPerPulse: 50 };
+      results.migrationThroughput = { totalColonists: 120, totalDiffusion: 30, cycleCount: 3, meanPerCycle: 50 };
       const saved = buildExperimentResult(results);
       expect(saved.migrationThroughput).toEqual(results.migrationThroughput);
     });
 
     it("reports the zero shape for a run with no migration activity", () => {
       const saved = buildExperimentResult(minimalResults());
-      expect(saved.migrationThroughput).toEqual({ totalColonists: 0, totalDiffusion: 0, pulseCount: 0, meanPerPulse: 0 });
+      expect(saved.migrationThroughput).toEqual({ totalColonists: 0, totalDiffusion: 0, cycleCount: 0, meanPerCycle: 0 });
     });
   });
 });

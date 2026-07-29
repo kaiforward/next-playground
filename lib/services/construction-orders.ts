@@ -5,7 +5,7 @@
  *
  * Concurrency: `runWorldTick` awaits only in-memory adapters, so the event loop never reaches an
  * HTTP handler mid-tick — these synchronous mutations are strictly ordered between ticks and the
- * open set they append to is exactly what the next directed-build pulse funds.
+ * open set they append to is exactly what the next directed-build cycle funds.
  */
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
 import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject } from "@/lib/world/types";

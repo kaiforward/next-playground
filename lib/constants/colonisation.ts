@@ -9,7 +9,7 @@ export const COLONISATION = {
   /**
    * Base settle work for a colony-establish project, BEFORE the bundled seed-housing's build cost is
    * added on top (establishWork = COLONY_ESTABLISH_WORK + housingLevels × housing level-work). The
-   * establish cost is paid in the currency of forgone building and spreads over pulses — that spread
+   * establish cost is paid in the currency of forgone building and spreads over cycles — that spread
    * IS the establish time. A temporary construction stand-in until a treasury prices expansion.
    */
   COLONY_ESTABLISH_WORK: 60,
@@ -36,7 +36,7 @@ export const COLONISATION = {
    * Anti-sprawl founding gate: the drawable settler supply (idle spare labour + the employed leak,
    * summed over a faction's developed systems) required PER hungry colony before the faction may open
    * another. `budget = floor(releasable / MIN_SETTLER_SUPPLY) − hungryColonies` bounds new establishes
-   * per pulse, so a faction fills the colonies it has before founding more it can't populate. Coarse
+   * per cycle, so a faction fills the colonies it has before founding more it can't populate. Coarse
    * first-cut — tuned against the simulator (colonies should populate broadly without dying empty).
    */
   MIN_SETTLER_SUPPLY: 5,
@@ -44,7 +44,7 @@ export const COLONISATION = {
    * Share of a full cycles-of-supply cover (`TARGET_COVER`) that a landed colony's founding endowment
    * aims at, per good the seed population actually consumes. A colony used to open holding nothing, at
    * satisfaction 0 on every good, and began climbing out of a shortage it need never have been in — so
-   * it read as deprived from its first pulse. The endowment is DRAWN from the founding system's own
+   * it read as deprived from its first cycle. The endowment is DRAWN from the founding system's own
    * warehouses and conserved: what the colony gains, the founder loses, capped so provisioning a
    * colony can never ration its founder.
    *

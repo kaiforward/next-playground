@@ -38,7 +38,7 @@ consumption by `√` over `[minStock, T]` cross at ~80–84% of the anchor `T`, 
 - the planner's structural-deficit test compared full-staffed *capacity* to demand, while realized
   output was throttled ~21% below capacity — "capacity covers demand" blocked building forever
   while pops rationed; when a good's galaxy-wide spare vanished, `coveredFraction` flipped every
-  deficit structural in one pulse (observed 60-level burst builds), which glutted, idled, decayed,
+  deficit structural in one cycle (observed 60-level burst builds), which glutted, idled, decayed,
   and repeated.
 
 The gentle everywhere-active `√` ramps were a deliberate trading-game design: the permanent
@@ -63,8 +63,8 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   to 0 at **stock = 0** — not at the floor (§4). Healthy systems have satisfaction exactly 1 and
   contribute zero structural dissatisfaction.
 - **Satisfaction is a flow, measured once — and persisted so its readers exist**: satisfaction :=
-  the consumption factor actually applied this pulse (delivered ÷ demanded), not a re-derived
-  stock position. The economy pulse persists it per (system, good) to `World`
+  the consumption factor actually applied this cycle (delivered ÷ demanded), not a re-derived
+  stock position. The economy cycle persists it per (system, good) to `World`
   (JSON-serializable; missing ⇒ 1); dissatisfaction, the needs UI, the regime chips, and the §2
   squeeze counters all read that stored value — never a stock recompute (the read services and
   planners have no other path to the flow; see §2's plumbing note). This kills the
@@ -88,7 +88,7 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
 - **Selling/decay signal is the ISOLATED ceiling term — not realized output, and not the old
   storage-band position**: producers' `used = count × min(effectiveFulfilment, sellingFactor +
   USED_SLACK)`, where `sellingFactor` is the produce-direction ceiling throttle alone (the §1
-  knee curve at the pulse's stock — the "warehouse full, output unwanted" brake the sim already
+  knee curve at the cycle's stock — the "warehouse full, output unwanted" brake the sim already
   computes as its own term). Staffing stays its own separate min, counted once, exactly as the
   shipped `buildingUsed` composes it. **The signal must never read realized / suppressed /
   input-gated output** — realized output folds in labour fulfilment, the input gate, strike
@@ -101,8 +101,8 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   the old storage-band read: it is structurally broken for exporters — the band is scaled by
   *local* demand (`demandRate` floors at `MIN_DEMAND`) while an exporter's capacity serves
   *remote* demand, so a pure-extractor colony's single level can out-produce its deceleration
-  zone in one pulse. The isolated ceiling term is immune where it matters: §2 draws structural
-  exporters to comfort each logistics pulse, so their start-of-pulse stock sits at or below the
+  zone in one cycle. The isolated ceiling term is immune where it matters: §2 draws structural
+  exporters to comfort each logistics cycle, so their start-of-cycle stock sits at or below the
   anchor where the throttle is flat (reads fully selling); genuinely glutted or demand-dead
   producers pile into `[T, 1.3×T]`, throttle toward 0, and prune to fit. **Funding-bound
   exclusion (mirrors §2's build-side exclusion)**: a producer whose good has reachable structural
@@ -142,7 +142,7 @@ recalibration.
 - **Provisioning margin**: capacity targets `(1 + PROVISION_MARGIN) × demand` (initial 0.10–0.15).
   Exact-capacity builds park a system on the comfort boundary with no recovery rate; the margin is
   the shock absorber.
-- **Feedback backstop**: a system **rationing for ≥ 2 consecutive pulses** counts its rationed gap
+- **Feedback backstop**: a system **rationing for ≥ 2 consecutive cycles** counts its rationed gap
   as structural deficit — with two exclusions so it never builds capacity at problems capacity
   can't fix: squeezes explained by **reachable-but-unshipped spare** (the matcher ran out of
   funded haul budget — a treasury/logistics-funding problem; building local capacity there would
@@ -167,20 +167,20 @@ recalibration.
   the deficit netting is its actual output above demand, never its un-struck capacity. Planning
   against output that is not being produced overstates galaxy-wide spare and suppresses building
   at the importers that need it.
-- **Response pacing** (kills the burst-build): a residual must persist 2 consecutive pulses before
-  it is proposable, and each pulse proposes at most `BUILD_RATE_CAP` (~⅓–½, calibrated) of a good's
+- **Response pacing** (kills the burst-build): a residual must persist 2 consecutive cycles before
+  it is proposable, and each cycle proposes at most `BUILD_RATE_CAP` (~⅓–½, calibrated) of a good's
   outstanding gap — the correction ramps over 2–3 cycles. Distance-weighting the spare pool is a
   noted possible refinement, deliberately not in this pass.
 - **New stored state + plumbing (the new signals need carriers — none exists today)**: the
-  squeeze-persistence and proposal-persistence counters AND §1's per-pulse satisfaction are
+  squeeze-persistence and proposal-persistence counters AND §1's per-cycle satisfaction are
   per-(system, good) `World` state — JSON-serializable, save-compatible (missing ⇒ 0 for
   counters, 1 for satisfaction), mirroring §5's idle-counter story. The realized-aware
   classification additionally needs realized/suppressed production threaded to the planners:
   today `runWorldTick` hands directed-logistics and directed-build a bare `{ tick }` ctx (no
   `economySignals`), and their row types carry no unrest or maintenance malus to re-derive
-  suppression locally — extend the planner rows (or ctx.results) explicitly. Off-cycle-pulse
-  fallback: when the logistics/construction pulse lands where `economySignals` is undefined, the
-  planners read the last persisted cycle-pulse values.
+  suppression locally — extend the planner rows (or ctx.results) explicitly. Mid-cycle
+  fallback: when the logistics/construction cycle start lands where `economySignals` is undefined,
+  the planners read the last persisted cycle-start values.
 - **The government consumption boost folds into `demandRate`** (superseded — the necessity slice
   deletes the boost, see below): today it is added to the drain
   *after* the band is built, so on low-civilian-demand goods (weapons/fuel at militarist systems)
@@ -200,7 +200,7 @@ recalibration.
   Non-producing stock-holders keep the anchor floor.
 - **Assessment timing remains explicit**: logistics stays after economy/population in the tick.
   Imports change stock immediately but do not rewrite the already-measured satisfaction or unrest
-  for that pulse; they are assessed at the next economy pulse. Add an end-to-end ordering test.
+  for that cycle; they are assessed at the next economy cycle. Add an end-to-end ordering test.
   This is causal history, not stale data, and §6 labels the latest assessment accordingly.
 
 ## 3. Population growth and housing — fuel tank → pressure valve
@@ -209,7 +209,7 @@ recalibration.
   sibling terms rather than one opaque sum. Supplied systems recover faster toward the equilibrium
   supported by their current tax pressure; Rationing accumulates unrest gradually; Shortage
   accumulates it faster. The calibrated functions must be monotonic (worse delivery never creates
-  less pressure), preserve each tax level's intended equilibrium, and keep one isolated bad pulse
+  less pressure), preserve each tax level's intended equilibrium, and keep one isolated bad cycle
   recoverable rather than strike-triggering. Do not implement this by multiplying the whole
   existing integrator: that would silently change what taxation means. Add an end-to-end recovery
   test proving that current Needs becomes Supplied immediately while stored unrest then declines
@@ -407,7 +407,7 @@ recalibration.
   Exempting housing from the idle test was considered and rejected: it treats one badly-sized site
   as a defect in a rule that is correct, and it would leave genuinely abandoned housing unpruned.
 - **The cost of dropping the spare level is opening absorption, and it is bounded** — a fresh colony
-  holds one level rather than two, and the relief valve adds the next within a pulse of the trigger.
+  holds one level rather than two, and the relief valve adds the next within a cycle of the trigger.
   The real tension is lumpiness: a 2-pop seed against a 20-pop housing unit means no colony can open
   looking anything but empty. Sizing the *seed* against the housing unit is the deeper fix and is
   deliberately deferred — it changes colonisation pacing and needs a founding policy. The idle
@@ -490,8 +490,8 @@ Content contract only; concrete layout gets the house collaborative wireframe pa
 | `CROWD_BRAKE_END` | 1.15 | Occupancy ratio where growth reaches zero |
 | crowding-pressure clamp | 0.05 | Max unrest-integrator contribution from overcrowding |
 | `PROVISION_MARGIN` | 0.10–0.15 | Planner capacity margin over demand |
-| squeeze persistence | 2 pulses | Feedback-backstop + proposal persistence window |
-| `BUILD_RATE_CAP` | ~0.4 | Max fraction of a good's gap proposed per pulse |
+| squeeze persistence | 2 cycles | Feedback-backstop + proposal persistence window |
+| `BUILD_RATE_CAP` | ~0.4 | Max fraction of a good's gap proposed per cycle |
 | `idleBufferCycles` | 12 (was 6) | Sustained-idle buffer |
 | housing pressure trigger / target | 0.95 / 0.92 | Autonomic housing relief band (target inside the vacancy slack) |
 | `RATION_EXIT_EPS` | calibrated with the presentation pass | Regime-chip enter/exit hysteresis around rationing |
@@ -522,10 +522,10 @@ flow-only invariant, §1/§5).
   update fixtures; keep magnitude assertions range-y per the coarse-health standard.
 - **Harness validation targets**: no "pops short" badges at rest on healthy systems; median
   price/base ≈ 1.0 with real dispersion both directions; housing stacks stable without rebuild
-  churn; no burst builds (new sim metric: max levels committed per good per pulse); dead colonies
+  churn; no burst builds (new sim metric: max levels committed per good per cycle); dead colonies
   still cleaned up; genuinely glutted capacity prunes; colonies populate; no NaN/runaway/pinning.
   Also assert: Supplied recovery is faster than Rationing recovery; Shortage accumulates faster
-  than shallow Rationing; tax equilibria remain ordered and intentional; one shortage pulse is
+  than shallow Rationing; tax equilibria remain ordered and intentional; one shortage cycle is
   recoverable; logistics delivered after assessment changes satisfaction on the next assessment.
 - **Additional targets for the collapse/colony pass**: a system supplied in its high-demand goods
   and short only in low-demand ones stays off the fast unrest rate and settles below the strike

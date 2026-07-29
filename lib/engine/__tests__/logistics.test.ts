@@ -102,7 +102,7 @@ describe("buildLogisticsRows", () => {
         exportPartners: [{ systemId: "A", systemName: "A", quantity: 60 }],
       })],
     ]);
-    const model = buildLogisticsRows(prodCon, flows, 8); // 8 cycles in the window
+    const model = buildLogisticsRows(prodCon, flows, 8); // 8 reference cycles in the window
     const water = model.rows.find((r) => r.goodId === "water")!;
     // imports/exports divided by 8; production/consumption (per-cycle already) unchanged
     expect(water.exportLogistics).toBe(7.5);
