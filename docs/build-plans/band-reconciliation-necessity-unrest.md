@@ -37,7 +37,7 @@ that is about to move.
   sums** (the rule PR5 established).
 - Every ceiling/cut/weight in this slice is a **first cut; the simulator owns the finals.** Say so in
   the docstring, as the surrounding constants do.
-- Cover is measured in **months**, not days — one economy pulse is one month and consumes one
+- Cover is measured in **cycles**, not days — one economy cycle consumes one
   `demandRate`. Every "days-of-supply" docstring is legacy and wrong.
 - The four downstream unrest consumers (purse, directed-logistics exporter drawability, planner
   squeeze backstop, infrastructure decay channels) are **measured before and after, never
@@ -500,9 +500,9 @@ consumption scaling as one of the two things the bridge exists to exercise. Rewr
  * The invariant breaks the instant any goods-magnitude term is quantised
  * (`Math.round`/`floor` on a goods amount) or left as an unscaled absolute — those
  * are a rounding error at S=100 but a large fraction at S=1, so they diverge only
- * at low scale and compound through every monthly pulse. This broad end-to-end guard
+ * at low scale and compound through every cycle start. This broad end-to-end guard
  * reliably exercises the seed-stock de-rounding (from tick 0) and every per-capita
- * demand term through the monthly economy pulse. There is no longer a flat scaled
+ * demand term through the economy cycle. There is no longer a flat scaled
  * demand term in the civilian path to exercise — the civilian basket is
  * population-proportional throughout — so that specific coverage is gone rather than
  * merely untested. The logistics-transfer term is guarded directly by a focused unit
@@ -1009,7 +1009,7 @@ fail — Task B3 owns them.
 
 `lib/tick/types.ts`:
 ```ts
-  /** Per-system supplied/rationing/shortage reading of this pulse's consumption satisfaction, with
+  /** Per-system supplied/rationing/shortage reading of this cycle's consumption satisfaction, with
    *  the survival-good shortfall bit the unrest ceiling reads. */
   supplyStateBySystem: Map<string, SupplyState>;
 ```
@@ -1283,7 +1283,7 @@ export function unrestCeiling(d: number, survivalShortfall: boolean, params: Unr
  * catch-up factor are fully decoupled, and each ceiling constant states a maximum rather than
  * implying one through a ratio. `floor` is the standing pressure (tax + crowding), clamped to [0,1]
  * by the caller; at D = 0 unrest settles exactly at `floor`. Catastrophe still lives in the integral —
- * one bad pulse is recoverable, chronic shortage climbs toward the ceiling. The caller pre-scales the
+ * one bad cycle is recoverable, chronic shortage climbs toward the ceiling. The caller pre-scales the
  * decays by the catch-up factor (never the ceilings); k is clamped after scaling, so a large catch-up
  * can never flip the relaxation term and overshoot below the floor.
  */
@@ -1352,7 +1352,7 @@ And rewrite `POPULATION_PARAMS`' symmetry rationale (lines 36-47), whose premise
 
 ```ts
 // lib/tick/processors/population.ts
-  // Rates are reference-denominated; one run applies catchUpFactor(interval) reference-months of
+  // Rates are reference-denominated; one run applies catchUpFactor(interval) reference cycles of
   // change. Only the relaxation rates rescale the time step — the ceilings are dimensionless bounds
   // on the equilibrium, and the gain is derived from the (scaled, clamped) rate inside
   // accumulateUnrest, so equilibrium is catch-up invariant by construction.
@@ -1516,7 +1516,7 @@ Expected: FAIL — `civilianDemand` is not a known property; the ore case folds 
 // lib/engine/directed-build.ts
 /**
  * Civilian-only, necessity-weighted dissatisfaction D in [0,1] for one system — the input to the
- * housing "fed" gate. Reuses the population engine's fold over the economy pulse's persisted per-good
+ * housing "fed" gate. Reuses the population engine's fold over the economy cycle's persisted per-good
  * satisfaction (delivered ÷ demanded — the same measure the needs display reads), so a
  * deliberately-at-comfort exporter with full delivery reads as satisfied. Weighted by CIVILIAN demand
  * alone: the gate means exactly one thing, "are the people here fed?", and industrial-input
@@ -1643,7 +1643,7 @@ Update the `PopNeed.pressure` docstring (line 27) and the module docstring's mir
 ```
 ```
  * Pressure mirrors the necessity-weighted share × gap² shape of the `dissatisfaction()` sum, weighted
- * by unfloored civilian want × GOOD_NECESSITY (the pulse's own shares fold in demand floors and
+ * by unfloored civilian want × GOOD_NECESSITY (the cycle's own shares fold in demand floors and
  * modifiers, so magnitudes can differ slightly). Pure — callers pass market rows and a demand basis.
 ```
 
@@ -1733,7 +1733,7 @@ import type { WorldMarket } from "@/lib/world/types";
 /**
  * Per-system share of each supply regime at the end of the run — the permanent instrument for the
  * unrest fold. Recomputed from the final world's persisted per-good satisfaction against each
- * system's own civilian demand, which is exactly what the economy pulse folded, so the reading is the
+ * system's own civilian demand, which is exactly what the economy cycle folded, so the reading is the
  * simulation's own classification rather than a parallel one. Settled systems only: an unclaimed rock
  * has no market and no opinion.
  */
@@ -1846,12 +1846,12 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Modify: `docs/build-plans/band-reconciliation-umbrella.md`
 - Modify: `docs/BACKLOG.md`
 
-- [ ] **Step 1: Correct "days" to "months" everywhere it means an economy pulse**
+- [ ] **Step 1: Correct "days" to "cycles" everywhere it means an economy cycle**
 
 Run: `grep -rniE "days[- ]of[- ]supply|days of|/cyc|cycles of" lib/ components/ --include=*.ts --include=*.tsx`
 
-An economy pulse is one month and consumes one `demandRate`, so `TARGET_COVER` 40 is 40 months and
-`RATION_COVER` 2 is 2 months. Fix each docstring occurrence. Known sites:
+An economy cycle consumes one `demandRate`, so `TARGET_COVER` 40 is 40 cycles and
+`RATION_COVER` 2 is 2 cycles. Fix each docstring occurrence. Known sites:
 - `lib/constants/economy.ts:1` — "Days of total local demand held at the price/base reserve anchor."
 - `lib/constants/economy.ts:8-9` — `HOLD_COVER`'s "days-of-supply anchor"
 - `lib/constants/economy.ts:19-25` — `RATION_COVER`'s "demand cycles"
@@ -1866,8 +1866,8 @@ While there, add the warning-gap fact to `RATION_COVER`'s docstring, which is th
 stands as authored:
 
 ```
-   * The gap between the logistics deficit signal (0.8 × the 40-month anchor) and this knee is roughly
-   * 30 logistics pulses, and logistics resolves every pulse — a system that starves never ran out of
+   * The gap between the logistics deficit signal (0.8 × the 40-cycle anchor) and this knee is roughly
+   * 30 logistics cycles, and logistics resolves every cycle — a system that starves never ran out of
    * warning, it ran out of supply or of budget to move it. Widening this buffer is never the fix for
    * a starving galaxy; the early warning belongs in the UI, not in unrest.
 ```
@@ -1910,7 +1910,7 @@ Append to `docs/BACKLOG.md`:
 
 ```bash
 git add -A
-git commit -m "docs(economy): cover is measured in months; book the deferred follow-ons
+git commit -m "docs(economy): cover is measured in cycles; book the deferred follow-ons
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ```
@@ -1920,7 +1920,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task B8: Validate, measure the four unrest consumers, and open the PR
 
 This pass takes ambient equilibrium unrest from ≈0.82 to ≈0.30 galaxy-wide and clears the strike flag
-almost everywhere. **Four shipped mechanics change behaviour at the same pulse, and none of them is
+almost everywhere. **Four shipped mechanics change behaviour at the same cycle, and none of them is
 pre-tuned here** — every one of their constants was calibrated against the striking galaxy, so tuning
 them now would be tuning against a galaxy that does not exist yet. Measure, report, retune only where
 the sim shows a problem.
@@ -1954,16 +1954,16 @@ Compare against the PR A "after" reading from Task A4 Step 3.
 Report these explicitly in the PR body — they are the deliverable, not a footnote:
 1. **The purse** — faction solvency and funded fractions. Strike suppression currently cuts realized
    output (the production tax base) to ≈64% galaxy-wide; ending the ambient strike raises it ≈1.5× in
-   one pulse while maintenance bills do not move.
-2. **Directed logistics** — transfers per pulse and the logistics bill. `surplusDrawable`'s
+   one cycle while maintenance bills do not move.
+2. **Directed logistics** — transfers per cycle and the logistics bill. `surplusDrawable`'s
    deep-exporter path is gated on the strike flag, so today **no** exporter is drawable below its
    anchor; the flag clears everywhere and structural exporters become drawable to their reserve.
-3. **The planner's squeeze backstop** — levels committed per build pulse. `strikeExplains` silences
-   the feedback gap almost everywhere today and switches on galaxy-wide at the same pulse that
+3. **The planner's squeeze backstop** — levels committed per build cycle. `strikeExplains` silences
+   the feedback gap almost everywhere today and switches on galaxy-wide at the same cycle that
    de-suppressed output raises exporter spare — two effects pushing opposite ways, resultant not
    derivable from the constants.
 4. **Infrastructure decay** — levels shed per channel. The unrest-teardown channel goes to exactly
-   zero, leaving the 12-month idle channel as the only pruner at the moment rising output pushes
+   zero, leaving the 12-cycle idle channel as the only pruner at the moment rising output pushes
    stock toward the operating ceiling and turns strike-throttled producers into glut-idlers.
 
 If one of these is clearly pathological (e.g. the idle channel alone cannot prune the new glut and

@@ -17,7 +17,7 @@
   crowding), with goods dissatisfaction forcing the excess at regime-sensitive rates: Supplied
   recovers faster, Rationing accumulates at the current gain, Shortage faster.
 - Add the minimal supplied/rationing/shortage engine helper on the shared band constants and emit
-  it per system from the economy pulse.
+  it per system from the economy cycle.
 - Flip autonomic housing to pressure relief: trigger `r > 0.95`, sized to `r ≈ 0.92`, fed gate
   stays, calm gate dropped, `SETTLE_MARGIN` retired.
 - Bundle +1 housing level beyond seed need at colony establish where habitable land permits.
@@ -107,7 +107,7 @@ small D. Bounded and monotonic; no second demand-weighting.
 
 ```ts
 export interface UnrestParams {
-  /** Excess-integration gain per reference month while Rationing. */
+  /** Excess-integration gain per reference cycle while Rationing. */
   gainRationing: number;   // 0.06 (the current gain)
   /** Excess-integration gain while Shortage. */
   gainShortage: number;    // 0.12
@@ -133,8 +133,8 @@ Properties the unit tests assert (spec §3/§8):
 - **Supplied recovers faster than Rationing** (`recoveryDecay > decay` on the same excess).
 - **Shortage accumulates faster than shallow Rationing** at equal D.
 - **Monotonic**: worse delivery (lower satisfaction ⇒ higher D and/or worse regime) never yields
-  lower next-pulse unrest.
-- **One bad pulse recoverable**: from unrest = floor, a single full-shortage pulse
+  lower next-cycle unrest.
+- **One bad cycle recoverable**: from unrest = floor, a single full-shortage cycle
   (`gainShortage × 1 × catchUp ≤ 0.24`) plus a floor ≤ 0.23 stays below the 0.65 strike threshold.
 - Linear filter: `catchUpFactor` pre-scales both gains and both decays exactly as today (the
   processor scales; `k` is clamped to [0,1] after scaling so a large catch-up can never overshoot
@@ -162,7 +162,7 @@ off crowding alone: max floor = very-high tax 0.18 + 0.05 = 0.23 < 0.65.
 `EconomySignals` (`lib/tick/types.ts`) gains:
 
 ```ts
-/** Per-system supplied/rationing/shortage fold of this pulse's consumption satisfaction. */
+/** Per-system supplied/rationing/shortage fold of this cycle's consumption satisfaction. */
 supplyRegimeBySystem: Map<string, SupplyRegime>;
 ```
 
@@ -249,7 +249,7 @@ Migration throughput (mirrors the `buildCommitmentsByGood` pattern end to end):
 
 ```ts
 // lib/tick/types.ts — TickProcessorResult gains:
-/** People moved this monthly pulse (colonist delivery + edge diffusion), conserved flows only.
+/** People moved this cycle start (colonist delivery + edge diffusion), conserved flows only.
  *  Calibration instrumentation — surfaced via runWorldTick().instrumentation, never broadcast. */
 migrationMoved?: { colonists: number; diffusion: number };
 
@@ -259,8 +259,8 @@ export type TickInstrumentation =
 
 The migration processor sums `allocateColonists` deliveries and per-edge `moved` into the result;
 `runWorldTick` captures it beside `buildCommitmentsByGood` and returns it in `instrumentation`;
-the runner accumulates totals + a per-pulse mean; experiment JSON and the simulate console report
-gain a migration-throughput line (people/pulse, colonists vs diffusion split).
+the runner accumulates totals + a per-cycle mean; experiment JSON and the simulate console report
+gain a migration-throughput line (people/cycle, colonists vs diffusion split).
 
 ### 9. Stale plan-referencing comments fixed in passing
 
@@ -313,7 +313,7 @@ git commit -m "docs(plan): PR4 population/housing task plan"
   D = 0 regardless of decay rate; supplied excess decays at `recoveryDecay`, rationing at `decay`
   (assert the geometric factor over two steps); shortage rises faster than rationing at equal D;
   monotonic across the regime boundary (worse regime + equal-or-worse D ⇒ ≥ unrest); one
-  full-shortage pulse from floor 0.23 stays < 0.65; output clamped [0,1]; k clamped so decay
+  full-shortage cycle from floor 0.23 stays < 0.65; output clamped [0,1]; k clamped so decay
   scaled by catchUp 2 never overshoots the floor.
 - [ ] Failing tests — `crowdingPressure`: 0 at r ≤ 1, 0.05 at r ≥ 1.15, linear between, 0.05 at
   popCap ≤ 0 with pop > 0, 0 with pop ≤ 0.
@@ -349,7 +349,7 @@ npx tsc --noEmit
   (satisfaction < 0.5) reads shortage, a produce-only system with no consumption reads supplied.
 - [ ] Failing tests — population processor: tax pressure enters as floor, not gain (a taxed calm
   supplied system settles AT `TAX_LEVEL_UNREST_PRESSURE[level]`, not gain × it — update the
-  `0.06 × 0.18` first-pulse assertion deliberately); crowding pressure raises the floor at
+  `0.06 × 0.18` first-cycle assertion deliberately); crowding pressure raises the floor at
   r > 1 and is absent at r ≤ 1; missing regime map entry defaults supplied; missing tax map ⇒
   floor is crowding only; all four unrest rates scale by catchUp at interval 48.
 - [ ] Implement Locked Decision 5. Update the `PopulationProcessorParams.taxPressureBySystem` and
@@ -427,17 +427,17 @@ git commit -m "feat(colonisation): bundle headroom housing at establish"
 
 **Modify/Test:** `lib/world/__tests__/tick.test.ts` (fixtures per PR3 Task 6's pattern).
 
-- [ ] Recovery fixture: a developed system driven into shortage for one economy pulse (stock
+- [ ] Recovery fixture: a developed system driven into shortage for one economy cycle (stock
   drained below `SHORTAGE_SATISFACTION` delivery), then restocked. Assert: unrest rose by ≈
-  `gainShortage × D` that pulse; next assessment the regime is supplied immediately (satisfaction
+  `gainShortage × D` that cycle; next assessment the regime is supplied immediately (satisfaction
   back to 1) while stored unrest **declines geometrically at `recoveryDecay`** toward the
-  tax-crowding floor over the following pulses — memory drains at the designed rate, never
+  tax-crowding floor over the following cycles — memory drains at the designed rate, never
   snaps.
 - [ ] Growth fixture: a fed, calm, taxed system at r = 0.97 grows at full rate through the real
   tick (the old logistic would have crawled), and its unrest holds at the tax floor; the same
   system pushed to r = 1.16 stops growing but does NOT lose population to overshoot death while
   unrest < 0.65.
-- [ ] Relief fixture: the r = 0.97 system's next construction pulse commits relief housing sized
+- [ ] Relief fixture: the r = 0.97 system's next construction cycle commits relief housing sized
   back to r ≤ 0.92 despite unrest above the retired `UNREST_SETTLE`.
 - [ ] Verify and commit `test(population): lock recovery and growth ordering end to end`.
 
@@ -455,10 +455,10 @@ git commit -m "feat(colonisation): bundle headroom housing at establish"
 - [ ] Failing tests — summary: `brakedCount` counts crowdFactor ≤ 0.25 systems only;
   `meanOccupancy` over popCap > 0 systems; `saturatedCount` unchanged numerically.
 - [ ] Failing tests — throughput: migration processor result sums colonist deliveries and edge
-  moves separately; off-pulse ticks report nothing; conserved flows only (no death/growth terms);
+  moves separately; mid-cycle ticks report nothing; conserved flows only (no death/growth terms);
   experiment JSON includes the throughput summary.
 - [ ] Implement Locked Decision 8: processor result field, `TickInstrumentation` pick,
-  `runWorldTick` capture + return, runner accumulation (totals + per-pulse mean), simulate report
+  `runWorldTick` capture + return, runner accumulation (totals + per-cycle mean), simulate report
   lines (population section gains occupancy/braked; new migration-throughput line with the
   land-tight-seed caveat noted in the section header comment).
 - [ ] Rewrite the three stale plan-referencing comments (Locked Decision 9) — values unchanged.

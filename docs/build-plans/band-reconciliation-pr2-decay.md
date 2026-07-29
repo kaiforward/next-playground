@@ -20,7 +20,7 @@ Make infrastructure decay read the same healthy/glut geometry the economy now ru
 - the Industry read path recomputes the same factor from current stock + band and consumes the same
   funding-bound marker, so panel `used` and decay cannot disagree;
 - housing gets a 10% vacancy allowance and the base idle buffer doubles from 6 to 12 reference
-  months;
+  cycles;
 - the legacy full-storage-band `outputUptake` / `selfLimitingFactor` machinery is deleted.
 
 This PR removes the post-PR1 producer-decay incoherence. It does **not** make the planner
@@ -44,7 +44,7 @@ These are resolved here so implementation does not rediscover them halfway throu
 
 ### 1. `sellingFactor` is the exact pre-flow ceiling term
 
-For a produced market row, the economy pulse records:
+For a produced market row, the economy cycle records:
 
 ```ts
 productionCeiling(tickEntries[i].stock, tickEntries[i].targetStock, simParams.holdCover)
@@ -82,7 +82,7 @@ logisticsFundingBound?: boolean;
 One field is sufficient because the consumers already know their role: decay only asks on a
 produced/selling row, while PR3's backstop will ask on a rationed deficit. On every due logistics
 assessment, all market rows belonging to the processed faction shard are explicitly refreshed
-true/false, so a recovered budget or vanished route clears stale protection. Off-pulse and not-due
+true/false, so a recovered budget or vanished route clears stale protection. Mid-cycle and not-due
 factions retain their latest completed assessment.
 
 This is additive optional `World` state: missing reads false and **does not** bump
@@ -92,9 +92,9 @@ This is additive optional `World` state: missing reads false and **does not** bu
 
 The fixed tick order remains economy → decay → population/migration → logistics → build. A marker
 written by logistics cannot protect decay earlier in the same tick. Decay therefore reads the latest
-persisted logistics assessment (normally the previous logistics pulse); the current logistics pulse
+persisted logistics assessment (normally the previous logistics cycle); the current logistics cycle
 then refreshes it for the next economy/decay assessment. This is the same deliberate assessment lag
-the functional spec already owns for logistics → satisfaction, and it works when month/logistics
+the functional spec already owns for logistics → satisfaction, and it works when economy/logistics
 cadences diverge. Do not reorder processors, dry-run the matcher before decay, or duplicate matching
 inside the economy stage.
 
@@ -137,7 +137,7 @@ to classify Glut honestly, and PR3 needs the separate funding explanation.
 
 ---
 
-### Task 1: Emit the isolated selling factor from the economy pulse
+### Task 1: Emit the isolated selling factor from the economy cycle
 
 **Files:**
 
@@ -488,7 +488,7 @@ The directed-logistics processor should accumulate all match results, then:
   next boolean differs from `market.logisticsFundingBound ?? false`; this includes stale true rows
   that must be cleared without cloning every unchanged market;
 - perform this refresh even when there are zero transfers or the funded fraction is zero;
-- skip it on off-pulse / no-due-key paths, preserving the prior completed assessment.
+- skip it on mid-cycle / no-due-key paths, preserving the prior completed assessment.
 
 Extend `MemoryDirectedLogisticsWorld` with a `fundingBoundUpdates: Map<string, boolean>` capture and a
 separate apply method. Add processor tests for:
@@ -497,7 +497,7 @@ separate apply method. Add processor tests for:
 - unrelated rows in the same due faction refresh false;
 - a second ample-budget assessment clears formerly true rows;
 - unreachable pairs remain false;
-- off-pulse makes no status writes.
+- mid-cycle makes no status writes.
 
 - [ ] **Step 5: Fold adapter writes into `World` and same-tick build rows**
 
@@ -511,7 +511,7 @@ patchLogisticsMarketRows(rowsBySystem, stockUpdates, fundingBoundUpdates)
 
 The World merge updates `stock` only when a stock update exists and
 `logisticsFundingBound` only when a status update exists. The row patch does the same before building
-`SystemBuildRow`, so PR3 can consume the latest same-pulse destination marker without reopening PR2
+`SystemBuildRow`, so PR3 can consume the latest same-cycle destination marker without reopening PR2
 plumbing. Keep untouched row arrays by reference where neither map mentions their system.
 
 Add a `runWorldTick` test proving a marker written by directed logistics appears on both endpoint
@@ -585,7 +585,7 @@ In `buildIndustryReadout`, default the appended accessor to false. The service c
 
 - [ ] **Step 3: Feed decay from the latest persisted logistics assessment**
 
-On an economy pulse in `runWorldTick`, derive a transient nested map from current `markets` after the
+On an economy cycle in `runWorldTick`, derive a transient nested map from current `markets` after the
 economy adapter has committed its stock/satisfaction updates (the optional marker survives its row
 spread). Include only true rows; do not allocate inner sets for systems with no marker.
 
@@ -595,10 +595,10 @@ not an economy measurement.
 
 Add an end-to-end timing test:
 
-- begin an economy pulse with a pre-existing true marker on a glutted producer;
-- assert this pulse's buffered decay is protected;
+- begin an economy cycle with a pre-existing true marker on a glutted producer;
+- assert this cycle's buffered decay is protected;
 - let logistics refresh/clear the marker later in the tick;
-- on the next economy pulse, assert ordinary glut idle behavior resumes.
+- on the next economy cycle, assert ordinary glut idle behavior resumes.
 
 This pins the causal one-assessment lag and prevents a future “fix” from reordering the pipeline.
 
@@ -632,7 +632,7 @@ git commit -m "feat(economy): protect funding-bound exporters from idle decay"
 **Interfaces:**
 
 - Adds leaf constant: `VACANCY_SLACK = 0.10`.
-- Changes `INFRASTRUCTURE_DECAY_PARAMS.idleBufferMonths` from `6` to `12` reference months.
+- Changes `INFRASTRUCTURE_DECAY_PARAMS.idleBufferCycles` from `6` to `12` reference cycles.
 - Keeps `housingUsed(population)` as **literal occupancy**. Only the decay/readout utilization path
   applies vacancy allowance.
 
@@ -674,10 +674,10 @@ those mechanics; this PR changes only the decay-relevant “used” amount.
 
 - [ ] **Step 3: Set the base buffer to 12**
 
-Update `INFRASTRUCTURE_DECAY_PARAMS.idleBufferMonths` and its comments to current-reality language.
+Update `INFRASTRUCTURE_DECAY_PARAMS.idleBufferCycles` and its comments to current-reality language.
 Maintenance funding continues to multiply the base exactly as shipped:
 
-- funded scale `1` → 12 reference months;
+- funded scale `1` → 12 reference cycles;
 - full-maintenance scale `1.25` → 15;
 - insolvency scale `0.25` → 3.
 
@@ -733,7 +733,7 @@ special attention to:
 - `EconomySignals` object literals;
 - Industry `used` values (producer slack and housing vacancy intentionally change them);
 - one-level decay fixtures (glut slack may now protect them by design);
-- interval-awareness tests (12 is a reference-month base, catch-up behavior is unchanged);
+- interval-awareness tests (12 is a reference cycle base, catch-up behavior is unchanged);
 - save/world equality fixtures (optional marker missing is false, not an error).
 
 - [ ] **Step 3: Run both invariance bridges unmodified**
@@ -834,7 +834,7 @@ until PR5 completes the feature and docs lifecycle.
   explicitly preserved and tested.
 - Industry display vs decay consistency → shared `buildingUsed`, same `productionCeiling`, same persisted
   funding marker in Tasks 2 and 4.
-- Independent month/logistics cadences → persisted latest assessment; no backward dependency or reorder.
-- PR3 handoff → same-pulse build rows receive refreshed `logisticsFundingBound`; destination role is ready
+- Independent economy/logistics cadences → persisted latest assessment; no backward dependency or reorder.
+- PR3 handoff → same-cycle build rows receive refreshed `logisticsFundingBound`; destination role is ready
   without reopening World/adapter plumbing.
 - PR4/PR5 scope → no planner/population/regime/UI/docs-fold work pulled forward.
