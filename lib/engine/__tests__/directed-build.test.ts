@@ -687,6 +687,17 @@ describe("fed", () => {
     expect(fed(sysWith({ goods: [good({ goodId: "food" })] }))).toBe(true);
   });
 
+  it("reads an OMITTED civilianDemand as nobody to feed, not as a starving population", () => {
+    // Built without the `good()` helper on purpose: the helper always injects civilianDemand, so it
+    // cannot exercise the `?? 0` default the field's docstring promises engine-test fixtures. A
+    // survival good at satisfaction 0 with no civilian demand at all must still read as fed.
+    const noDemand: BuildGoodState[] = [
+      { goodId: "food", stock: 0, targetStock: 20, demand: 10, capacityProduction: 0, satisfaction: 0 },
+      { goodId: "water", stock: 0, targetStock: 20, demand: 10, capacityProduction: 0, satisfaction: 0 },
+    ];
+    expect(fed(sysWith({ goods: noDemand }))).toBe(true);
+  });
+
   it("is true at maximum unrest — supply is the only gate on housing", () => {
     // Reinstating any calm term here would deadlock relief: a fully restive world is precisely the
     // one whose crowding the housing exists to relieve.

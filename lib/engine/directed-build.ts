@@ -55,8 +55,8 @@ export interface BuildGoodState {
   capacityProduction: number;
   /**
    * Persisted consumption satisfaction from the last economy cycle (delivered ÷ demanded, ∈
-   * [0,1]; missing ⇒ 1) — supplyDissatisfaction's only input. stock/targetStock stay on this
-   * type for the deficit finder and severity weights; they no longer feed the fed-proxy.
+   * [0,1]; missing ⇒ 1) — what `fed()` reads. stock/targetStock stay on this type for the deficit
+   * finder and severity weights; they do not feed the housing gate.
    */
   satisfaction?: number;
   /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
@@ -132,6 +132,11 @@ export function hopRouteCost(
  * workforce that housing would let it hold. Unrest is not a gate either, for the same reason:
  * crowding is itself an unrest source, so refusing relief housing on a restive world would hold the
  * valve shut on exactly the world that needs it.
+ *
+ * A consequence worth stating outright: `foldSupplyState` also labels a system Shortage on D alone
+ * (D ≥ D_SHORTAGE_CUT), and such a world — deprived across the basket but with food and water
+ * arriving — is deliberately still fed here. The gate answers "can these people eat?", not "is this
+ * system comfortable?", so the two readings are allowed to disagree in exactly that case.
  */
 export function fed(sys: BuildSystemState): boolean {
   return !hasSurvivalShortfall(

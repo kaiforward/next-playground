@@ -71,16 +71,21 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   boundary bias of post-tick stock reads (a cycle that starts above the ration threshold delivers
   in full but may end below it) and retires the two secondary computation sites that would otherwise contradict the sim:
   the pop-needs display projection (`lib/engine/pop-needs.ts`) and the build planner's linear
-  `stock/target` fed-proxy (`supplyDissatisfaction`), both re-based on the same measure — the
-  planner proxy otherwise punishes reserve drawdown as unmet current need.
+  `stock/target` fed-proxy, both re-based on the same measure — the planner proxy otherwise punishes
+  reserve drawdown as unmet current need. (The planner's gate has since narrowed further: `fed()`
+  reads the survival floor alone, not a fold over the basket.)
 - **Production knee at the anchor**: full rate while `stock ≤ T`; ramps **linearly** to 0 across
   `[T, 1.3×T]`. The anchor is the producer's normal hold; `[T, 1.3×T]` becomes a deceleration zone
   absorbing shocks. A self-supplier with margin capacity rests just above `T` → **healthy price ≈
   base** (decision: knee *at* the anchor, so price is a true health gauge with full two-sided
   dispersion range; the rejected alternative — knee above the anchor — made "healthy" read ~0.8×
   everywhere and compressed the glut-signalling range). Two owned nuances: an exporter's resting
-  price sits between base and ~1.33× scaling with how hard logistics draws it (§2's
-  strategic-export-reserve draw) — hot demand makes exporters dearer, which is signal, not noise; and
+  price is **pinned at its ceiling**, not graded — a drawn exporter rests at `EXPORT_RESERVE_COVER`
+  (10) cycles = 0.25×T, below the price-saturation point `T ÷ priceCeiling` (0.50×T…0.33×T across the
+  roster), so the curve clamps. The graded band this nuance originally claimed (base…~1.33×) was an
+  artifact of the retired reserve being 0.75×T; it is not reachable while the reserve sits below
+  saturation. Restoring it means an anchor that the galaxy's production can actually fund — see the
+  anchor-funding item in `docs/BACKLOG.md`, which owns this. And
   `[rationStock, T]` is a curve-side dead zone (both flanks flat), so a dented self-supplier recovers
   on the provisioning margin's timescale (~0.25%-of-T/cycle at margin 0.1) with price elevated
   meanwhile — accepted: price doubles as a shock-age gauge; the margin is sized against recovery

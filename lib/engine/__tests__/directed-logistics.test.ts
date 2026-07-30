@@ -389,6 +389,18 @@ describe("strategic exporter reserve", () => {
     expect(realizedZeroTransfer.quantity).toBe(50);
   });
 
+  it("reserves nothing for a good with no local demand left, and pins that it is deliberate", () => {
+    // The reserve is cycles of the system's OWN demand, so a good nobody here consumes any more
+    // reserves nothing and the whole pile is drawable. Reachable in the lag window after a good's
+    // last local consumer decays away: `demand` is recomputed per logistics run while `targetStock`
+    // rides the market's persisted demandRate, so targetStock can still be positive here and the
+    // `targetStock <= 0` guard does not fire. Correct — there is no local population to hold stock
+    // for — but pinned so a future change cannot flip it silently.
+    expect(surplusDrawable(500, 100, 0, 30)).toBe(500);
+    // …and with the anchor gone too, the guard takes over and nothing is drawable.
+    expect(surplusDrawable(500, 0, 0, 30)).toBe(0);
+  });
+
   it("keeps the strategic reserve safely above ration cover", () => {
     // Both are cycles of cover, so they compare directly — exporting must never ration the exporter.
     expect(DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER).toBeGreaterThan(ECONOMY_CONSTANTS.RATION_COVER);

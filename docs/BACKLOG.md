@@ -105,6 +105,31 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
+- **[L] `TARGET_COVER` is an inventory target the galaxy's production cannot fund** — every market is
+  anchored at 40 cycles of its own demand, and the galaxy's entire net production surplus is **7.8% of
+  demand**. Measured at 3000 ticks / seed 42 / 600 systems: total stock 60.1M against a total anchor of
+  164.1M — a **fill ratio of 0.366**, needing **327 cycles** to close with nothing consumed on the way
+  (the run is 125). So **64.6% of all 14,898 markets sit below their price-saturation point
+  (`targetStock ÷ priceCeiling`) and price at the ceiling** — which is the galaxy-wide "expensive
+  everywhere" reading (89% of markets above 1.1× base, median 2.11×), not a pricing bug.
+  **This is the same category error as the exporter reserve, one level up.** `TARGET_COVER` is authored
+  as a *pricing* reference — the stock level where mid == basePrice — and two other systems borrow it as
+  a *fill target*: `classifyMarketState`'s deficit line and the transfer shortfall (`targetStock −
+  stock`). Either re-denominate those two against a fundable fill target (the shape used for
+  `EXPORT_RESERVE_COVER`), or lower the anchor to where a healthy galaxy can actually hold stock.
+  **A one-constant probe is already measured — do not re-derive it.** `TARGET_COVER` 40 → 15 gives
+  price median 2.11× → 1.50×, cheap-share 3% → 10%, near-base 7% → 14%, p10 1.09× → 0.92× (real
+  two-sided dispersion for the first time), fill ratio 0.366 → 0.708, ceiling-pinned markets 64.6% →
+  33.0%, mean D 0.080 → 0.059, mean unrest 0.199 → 0.170, striking 21 → 13, Shortage 43 → 22 — **but
+  population 397.5K → 373.8K (−6%) and Supplied systems 56 → 20.** So it is a real trade, not a free
+  win, and 15 is not the answer: at 15 the fill ratio is still 0.708 and a third of markets remain
+  pinned. Two couplings to fix in the same pass or they will bite: `RATION_COVER` (2) is absolute, so
+  lowering the anchor moves rationing from 5% to 13% of it; and `EXPORT_RESERVE_COVER` (10) is likewise
+  absolute, so a lower anchor puts exporters back *above* saturation and restores their graded price
+  (the open finding from PR #207's review — this item owns it).
+  **Do this together with the unrest re-cut below** — both are recalibration against the same healthier
+  galaxy, and done separately the band gets tuned twice. `.superpowers/lock-diag.ts` (gitignored) has
+  the anchor-funding and producer-stock instrumentation already built.
 - **[M] Re-cut the unrest band against a supplied galaxy** — every band constant was calibrated
   against an ambient deficit that no longer exists. `D_SHORTAGE_CUT` (0.25) was cut explicitly against
   "the ambient barren-galaxy deficit ≈0.14 (every tier-1 and tier-2 good empty)", and the unrest slopes,
