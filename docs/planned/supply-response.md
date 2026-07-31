@@ -16,11 +16,11 @@ to roughly a 17% average shortfall, not a 3% one.
 
 The change is one measure, one demotion, and one resolution:
 
-- **The score becomes a supply percentage.** Weighted mean satisfaction instead of a weighted mean of
+- **The score becomes Provision.** Weighted mean satisfaction instead of a weighted mean of
   squared gaps. "This world is getting 83% of what it needs" becomes literally true, spans a usable
   range by construction, and can be authored against in the units a designer actually thinks in.
 - **Bands stop gating anything.** Supplied / Strained / Rationing / Shortage become description. No
-  gameplay effect keys off which band a world is in; effects scale off the percentage. Where the
+  gameplay effect keys off which band a world is in; effects scale off Provision. Where the
   boundaries sit becomes a legibility choice rather than a balance risk.
 - **Permanently struck worlds resolve.** A world that can physically recover gets a route back; a
   world that cannot is allowed to fail. Today neither happens and they park forever, polluting every
@@ -57,11 +57,11 @@ settles, only how quickly it gets there, so the effect is milder than the label'
 suggests. It is still a cliff at exactly zero, and it is the only place a band currently decides
 anything.
 
-## The score becomes a supply percentage
+## The score becomes Provision
 
 Each good a world demands has a satisfaction in [0,1]. Weight each by its demand share times its
 authored necessity — the existing `GOOD_NECESSITY` weighting, unchanged — and take the mean. That is
-the world's **supply percentage**: the share of what it needs, weighted by how much it needs it.
+the world's **Provision**: the share of what it needs, weighted by how much it needs it.
 
 Read directly:
 
@@ -69,7 +69,17 @@ Read directly:
 - 83% — the galaxy's current typical world
 - 50% — half of what this world needs, weighted by importance, is not arriving
 
-The quantity the unrest integral consumes is its complement, the **shortfall** (`1 − supply%`), which
+Stored in [0,1] — per-good satisfaction already is, so the aggregate needs no conversion anywhere and
+the displayed percentage is the honest number rather than a rescaling.
+
+**Deliberately not called "standard of living".** Victoria 3's term measures whether a population can
+*afford* its needs; Provision measures whether the goods physically *arrived*. Those are different
+quantities, and this codebase's recurring failure is a name or number that looks like it means the
+right thing. If pop wealth is modelled later the two become genuinely distinct and both worth having —
+a world may hold the wealth and still not have the goods — so the names must not be interchangeable
+now.
+
+The quantity the unrest integral consumes is its complement, the **shortfall** (`1 − Provision`), which
 occupies the same role `D` does today and spans the range the slopes were originally authored for.
 Whether the existing slope constants are already approximately correct against the un-squared
 quantity is a measurement, not an assumption — the range coincidence is suggestive and must be
@@ -90,7 +100,7 @@ must always matter. The scalar stays readable because it is not carrying the sev
 
 ## Bands become description
 
-Four bands, on the supply percentage:
+Four bands, on Provision:
 
 | Band | Rule |
 | --- | --- |
@@ -104,7 +114,7 @@ line, and `SURVIVAL_GOODS` is the famine distinction. Only the ~90% Supplied bou
 answers "how short before a player should care" — a legibility question, not a balance one.
 
 **No gameplay effect reads the band.** The relaxation-rate switch is removed and the rate becomes a
-single value; effects that should vary with supply read the percentage. This is the load-bearing part
+single value; effects that should vary with supply read Provision. This is the load-bearing part
 of the demotion: once nothing is gated, the boundaries can be moved on taste without a recalibration,
 and they can never again be the reason a healthy galaxy reads as struggling.
 
@@ -137,7 +147,7 @@ generality, so the change term is a stepping stone rather than a detour.
 
 Three changes, in this order, each measured before the next starts:
 
-1. **The supply percentage** — the score, the bands' demotion, and the struck-world resolution. This
+1. **Provision** — the score, the bands' demotion, and the struck-world resolution. This
    is the body of this document and is self-contained.
 2. **The change term** — unrest responds to supply moving, not only to its level. Evaluated against
    (1) so its contribution is attributable.
@@ -188,7 +198,7 @@ and the rate selection stops branching on a label.
 ## Open questions
 
 - **Does breadth matter?** Worst-good banding means a world short on ten goods at 85% bands as
-  Supplied, identically to a flawless one. The supply percentage does capture breadth, so the two
+  Supplied, identically to a flawless one. Provision does capture breadth, so the two
   numbers disagree by design. Whether the band should escalate on breadth is a real choice and should
   be decided deliberately rather than by accident.
 - **Are the existing slopes right for the un-squared quantity?** The range coincidence suggests they
