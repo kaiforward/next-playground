@@ -100,6 +100,19 @@ Well-defined, can start now.
   reconciliation population PR — the field is inert, so a ~91-site mechanical diff at that PR's tail
   bought no functional ground while adding review surface where mechanical regressions hide.
 - **[M] System-finder dev tool** — A queryable dev panel (or `scripts/` CLI) to surface representative systems by characteristic for manual smoke-testing / QA: population band (dead/undeveloped/tiny-outpost/healthy), economy-type, deposit profile, building roster, NaN/anomaly checks — returning name + direct `/system/<id>` link. Recurring need whenever generation/economy changes land (e.g. verifying barren-but-alive systems read correctly). Build it against the in-memory world (`getWorld()`), surfaced in a `scripts/` CLI or the dev-tools panel.
+- **[S] Cohort the harness metrics — one galaxy-wide average hides the answer** — every headline number
+  the simulate report prints is a mean or median over **all** systems or **all** markets, so a two-pop
+  frontier rock and a developed homeworld are averaged into one figure. That has now produced wrong
+  readings three separate times: `MIN_DEMAND` exists only because tiny worlds break the cover
+  arithmetic; four in five permanently-struck worlds are deposit-less rocks being judged against a
+  homeworld's standard; and `medianCover` medians over all markets, so cohort mix moves it
+  independently of supply (a trap already known and still not designed out).
+  Split the report by cohort — population band, homeworld vs colony, and age since founding — rather
+  than adding more galaxy-wide aggregates. It is an instrument change with no gameplay risk, and it
+  directly sharpens questions already booked: "electronics sits at 0.25 cover" is ambiguous today
+  because it cannot distinguish mature worlds failing from young colonies still filling.
+  **Do this before the economy items below.** Every one of them is a decision taken downstream of a
+  measurement, and the measurements are currently averaging incomparable things.
 
 ## Needs Design
 
@@ -266,3 +279,36 @@ Blocked on prerequisites or very large scope.
 
 - **[M] Switchable faction relation model** — `FactionRelation` currently stores one shared `score` per faction pair (symmetric). If the War re-spec or later play-testing reveals asymmetric opinions matter (one-sided grudges, vassal arrangements, "I trust you more than you trust me"), switch to per-direction scores. Two shapes available: (a) add `aOpinionOfB` / `bOpinionOfA` columns keeping the canonical-ordering convention; (b) drop ordering, store two rows per pair. Reevaluate when the pivot's diplomacy phase (Phase 5) or war (Phase 6) is specced.
 - **[S] Flow-overlay particle thresholds vs economy-scale** — The map flow-overlay particle density (`LOGISTICS_FLOW` / `TRADE_FLOW` in `components/map/pixi/theme.ts`: `volumePerExtraParticle`, `minParticlesPerEdge`, `maxParticlesPerEdge`, `maxTotalParticles`) is tuned for S=1 flow magnitudes and is intentionally **not** scaled by `ECONOMY_SCALE` (client-side visual constants; the knob is server-only by design). At the calibrated S≈100 every edge pins at `maxParticlesPerEdge` and the global budget concentrates on the top flows, so the overlay loses its high- vs low-volume contrast (purely a legibility loss, not perf/correctness). Revisit the thresholds when running at the scaled economy; also a natural fold-in for the pivot's flow-system merge (Phase 4).
+
+### Economy + player depth — layered after PR6
+
+Three new mechanics, all deliberately deferred. The ordering principle: **get the existing economy
+logical and stable first**, so PR6's presentation layers onto something settled, and only then add
+mechanics. Each was checked for whether deferring it traps us, and none does — but two carry a
+condition, recorded with them. The shared condition is that **nothing here is a reason to precision-tune
+now**: each of these changes what the unrest slopes are measured against, so constants tuned before them
+are invalidated twice over (the standing "coarse health bar only" practice in AGENTS.md already says
+this; the risk is forgetting it under pressure to make numbers look good).
+
+- **[L] Adaptive expectation — judge a world against its own history, not a global line** — every
+  threshold today is global and fixed, so a two-pop colony and a homeworld are held to one standard and
+  that standard never moves as the galaxy develops. The measurements show the consequence: as the galaxy
+  matures, mean shortfall runs 0.148 → 0.080 → 0.030 and striking worlds 32 → 21 → 13 — **the unrest
+  system winds down monotonically**, because worlds improve against a bar that stays put. That is a
+  late-game content problem no recalibration can reach. Designed as step 3 of
+  [supply-response.md](./planned/supply-response.md); do not attempt before step 2 (the change term),
+  which is the same mechanism in cruder form and is what shows whether a change response behaves.
+- **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand
+  becomes partly monetary rather than purely physical. Provision survives as a ratio (delivered ÷
+  demanded) and stays a genuinely distinct layer — a world can hold the wealth and still not have the
+  goods, which is the state worth modelling. **Condition: `demandRate` must be untangled first.** It is
+  already double-purposed as both the pricing anchor and the logistics deficit anchor (see its docstring
+  on `WorldMarket`), and hanging wealth-modulated demand off an already-overloaded quantity repeats the
+  exact failure this backlog keeps recording. That untangling is the `TARGET_COVER` role-separation item
+  above, which this promotes from nice-to-have to prerequisite.
+- **[L] Expanded pop tiers / social strata** — today's pop tiering is labour-grade only (unskilled,
+  skilled, academy-gated). Richer strata would carry their own needs baskets. Safest of the three to
+  defer: Provision is already a weighted mean over a basket, so richer classes only change the basket's
+  composition. It also *improves* adaptive expectation rather than conflicting with it — per-class
+  expectations are exactly how Victoria 3 derives its reference — so the two compose if strata land
+  first, and nothing breaks if they don't.
