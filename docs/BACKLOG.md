@@ -105,31 +105,32 @@ Well-defined, can start now.
 
 Direction is clear, approach needs a design doc before implementation.
 
-- **[L] `TARGET_COVER` is an inventory target the galaxy's production cannot fund** — every market is
-  anchored at 40 cycles of its own demand, and the galaxy's entire net production surplus is **7.8% of
-  demand**. Measured at 3000 ticks / seed 42 / 600 systems: total stock 60.1M against a total anchor of
-  164.1M — a **fill ratio of 0.366**, needing **327 cycles** to close with nothing consumed on the way
-  (the run is 125). So **64.6% of all 14,898 markets sit below their price-saturation point
-  (`targetStock ÷ priceCeiling`) and price at the ceiling** — which is the galaxy-wide "expensive
-  everywhere" reading (89% of markets above 1.1× base, median 2.11×), not a pricing bug.
-  **This is the same category error as the exporter reserve, one level up.** `TARGET_COVER` is authored
-  as a *pricing* reference — the stock level where mid == basePrice — and two other systems borrow it as
-  a *fill target*: `classifyMarketState`'s deficit line and the transfer shortfall (`targetStock −
-  stock`). Either re-denominate those two against a fundable fill target (the shape used for
-  `EXPORT_RESERVE_COVER`), or lower the anchor to where a healthy galaxy can actually hold stock.
-  **A one-constant probe is already measured — do not re-derive it.** `TARGET_COVER` 40 → 15 gives
-  price median 2.11× → 1.50×, cheap-share 3% → 10%, near-base 7% → 14%, p10 1.09× → 0.92× (real
-  two-sided dispersion for the first time), fill ratio 0.366 → 0.708, ceiling-pinned markets 64.6% →
-  33.0%, mean D 0.080 → 0.059, mean unrest 0.199 → 0.170, striking 21 → 13, Shortage 43 → 22 — **but
-  population 397.5K → 373.8K (−6%) and Supplied systems 56 → 20.** So it is a real trade, not a free
-  win, and 15 is not the answer: at 15 the fill ratio is still 0.708 and a third of markets remain
-  pinned. Two couplings to fix in the same pass or they will bite: `RATION_COVER` (2) is absolute, so
-  lowering the anchor moves rationing from 5% to 13% of it; and `EXPORT_RESERVE_COVER` (10) is likewise
-  absolute, so a lower anchor puts exporters back *above* saturation and restores their graded price
-  (the open finding from PR #207's review — this item owns it).
-  **Do this together with the unrest re-cut below** — both are recalibration against the same healthier
-  galaxy, and done separately the band gets tuned twice. `.superpowers/lock-diag.ts` (gitignored) has
-  the anchor-funding and producer-stock instrumentation already built.
+- **[M] `TARGET_COVER` carries three roles in one constant** — it is authored as a *pricing* reference
+  (the cover at which mid == basePrice, and explicitly "the whole-roster knob" for cross-system price
+  dispersion), and two other systems borrow it: `classifyMarketState`'s deficit line and the transfer
+  shortfall (`targetStock − stock`), plus it is the base of `productionCeiling`'s throttle. Separating
+  those is still worth doing — but for the *player-knob* reason below, **not** because the anchor is
+  unfundable. It is not; that claim was measured at 125 cycles, inside the economy's ~300-cycle startup
+  transient, and is retracted (AGENTS.md, "Verifying changes", has the rule that catches this class).
+  **Do NOT lower the anchor.** The 40 → 15 probe is superseded: run to 416 cycles the unmodified galaxy
+  reaches price median 1.23×, p10 0.87×, cheap 12% / near-base 22%, mean D 0.030 — *better than* what 15
+  bought at 125 cycles (1.50× / 0.92× / 10% / 14% / 0.059) and without its −6% population. `TARGET_COVER`'s
+  own docstring already predicted the failure mode: "Lower values pin advanced goods to the price floor
+  (cheap everywhere); higher values pin staples to the ceiling."
+  **The anchor is never reached, by design, and that is fine.** `productionCeiling` runs at full rate only
+  *up to* the anchor and ramps to 0 at `HOLD_COVER × anchor`, so a producer approaches it from below and
+  cannot pass it except via imports; and logistics stops requesting once a market clears
+  `DEFICIT_FRACTION × anchor`. Measured cover therefore rests near **0.82** (just above the 0.8 deficit
+  line) for any serviced good — the effective fill target is 32 cycles, not 40. The two attractors visible
+  in the per-good data are worth knowing: **0.82 ≈ `DEFICIT_FRACTION`** means "logistics services this
+  good", and **0.25 = `EXPORT_RESERVE_COVER ÷ TARGET_COVER`** means "every producer is drained flat".
+  **What is left to design** is role separation in service of a player-facing stockpile target (hold more
+  cover for war, or to fund exports). That only works once the borrowers are re-denominated: under today's
+  coupling a player raising cover would also un-throttle production, flip their markets to deficit, and
+  spike prices — none of which they asked for. Use the shape that already worked for `EXPORT_RESERVE_COVER`
+  in #207 (denominate in cycles of demand, not as a fraction of the price anchor).
+  Couplings to keep straight when it moves: `RATION_COVER` (2) and `EXPORT_RESERVE_COVER` (10) are both
+  absolute cycle counts, so they do not scale with the anchor.
 - **[M] Re-cut the unrest band against a supplied galaxy** — every band constant was calibrated
   against an ambient deficit that no longer exists. `D_SHORTAGE_CUT` (0.25) was cut explicitly against
   "the ambient barren-galaxy deficit ≈0.14 (every tier-1 and tier-2 good empty)", and the unrest slopes,
@@ -140,6 +141,41 @@ Direction is clear, approach needs a design doc before implementation.
   distribution rather than nudging them — `lib/constants/__tests__/band-constants.test.ts` asserts the
   separations that must survive (sustained Rationing never collapses at any tax; a total food or water
   failure always does).
+  **This is the one defect on this list that a longer horizon makes WORSE, so cut it against 416 cycles,
+  not 125.** At 10,000 ticks mean D falls further to **0.030** and mean unrest to 0.156 — yet the regime
+  split is Supplied 34.0% / **Rationing 62.7%** / Shortage 3.3%. Nearly two thirds of the galaxy is
+  labelled Rationing while dissatisfaction is essentially nil, so the Supplied/Rationing boundary is
+  being crossed by noise. The band is not grading anything, and every other constant on this list is
+  horizon-sensitive in the opposite direction. Re-cut the Supplied/Rationing boundary first — it is
+  doing the most visible damage and is independent of the cover work above.
+- **[M] `electronics` and `luxuries` are never serviced, even at equilibrium** — at 416 cycles every
+  other good reaches 0.4–1.0 median cover; these two sit at **0.25 with 19% and 26% of their markets
+  completely empty**. 0.25 is exactly `EXPORT_RESERVE_COVER ÷ TARGET_COVER`, i.e. every producer of them
+  is drained flat to its warehouse reserve and the good still does not reach anyone — so this is a
+  **production** shortfall, not a distribution one. Two suspects worth separating before designing
+  anything: the build planner not committing tier-2/3 capacity (academy-gated skill labour is the likely
+  binding constraint), versus the recipes' input chains starving upstream. **Ruled OUT as a cause:**
+  phantom `MIN_DEMAND` demand stealing their allocation. That looked total at 29 cycles (100% of
+  `ship_frames`/`weapons_systems`/`reactor_cores`/`targeting_arrays` deliveries went to markets with no
+  real demand) but is a one-time founding tax — at 416 cycles floored markets are 6.5% of markets, 0.0%
+  of requested volume and **0.3% of delivered quantity**. Do not re-open it.
+- **[S] `fuel` is the only good that gets *worse* with time** — median cover **0.79 → 0.61** and empty
+  markets 5% → 8% between 125 and 416 cycles, against 24 goods improving and one flat. Cause unknown.
+  **The obvious guess is already dead:** logistics does not consume fuel stock — `fuelCost` is a
+  per-connection weight in the route-cost function (`HOP_WEIGHT`/`FUEL_WEIGHT`), not a draw on the
+  market — so shipping cannot be eating it. Start instead from what changes between the two horizons
+  for fuel specifically: its consumer mix (which buildings burn it) against its producer cohort.
+- **[S] `HOLD_COVER` (1.3) caps production below `SURPLUS_MARGIN` (1.4), so a self-supplier can never
+  become a donor** — `productionCeiling` returns 0 at `1.3 × targetStock`; the ordinary-donor branch of
+  `surplusDrawable` requires `stock ≥ 1.4 × targetStock`. A system can therefore only ever re-donate
+  surplus it was **given**, never surplus it **made**; only structural exporters (`production > demand`)
+  ship anything. The git history says this was not chosen: `SURPLUS_MARGIN: 1.4` landed 2026-06-27 in the
+  SP5 logistics feature (`5e665be7`), and `HOLD_COVER: 1.3` landed three days later in the *separate*
+  production-throttle feature (`49d66500`), calibrated against price median with no reference to the
+  threshold it was capping. May still be defensible as a rule — but nothing says so, and
+  `SURPLUS_MARGIN`'s "deliberate residual" docstring describes a band production cannot cross. First
+  step is a measurement, not a change: count transfers that fire via the non-exporter path over a
+  10,000-tick run. If it is zero, the margin is decorative and the two constants need one owner.
 - **[M] Struck worlds can neither grow out of it nor die** — 11 of 573 settled systems (499 people)
   sit striking indefinitely, with **zero** of them declining over the last 500 ticks. Growth carries
   `(1 − D)` and decline carries unrest, so at high D the two terms nearly cancel and the world parks

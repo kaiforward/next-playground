@@ -31,8 +31,19 @@ import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
 import { STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { toTickSystems } from "../lib/world/tick";
 import type { HarnessConfig, HarnessResults } from "../lib/tick-harness/types";
+
+/**
+ * Quick-run horizons. The startup read is early enough that founding and provisioning
+ * behaviour is still visible; the equilibrium read is past the economy's ~300-cycle
+ * startup transient, which is the only point a constant may be tuned against. Neither
+ * substitutes for the other — a short-horizon number is not evidence of an equilibrium
+ * fault, and an equilibrium number cannot see a founding fault at all.
+ */
+const STARTUP_TICKS = 1000;
+const EQUILIBRIUM_TICKS = 10000;
 
 // Enforce the import-order invariant the dotenv import above depends on. ES modules
 // evaluate imports in source order, and economy-scale.ts resolves ECONOMY_SCALE at
@@ -528,9 +539,19 @@ Options:
 
 Quick Run:
   Running with no flags generates the default-scale world (${DEFAULT_SYSTEM_COUNT}
-  systems), runs 500 ticks with seed 42, and reports market/population/infrastructure
-  health. For custom parameters, use --config with a YAML file — see
-  experiments/examples/ for templates.
+  systems, seed 42) and runs it over TWO horizons, reporting market/population/
+  infrastructure health for each:
+
+    startup      ${STARTUP_TICKS} ticks (${Math.floor(STARTUP_TICKS / CYCLE_LENGTH)} cycles)  — founding + provisioning behaviour
+    equilibrium  ${EQUILIBRIUM_TICKS} ticks (${Math.floor(EQUILIBRIUM_TICKS / CYCLE_LENGTH)} cycles) — the settled galaxy
+
+  Both are reported because they answer different questions. The economy's startup
+  transient runs ~300+ cycles, so a short read routinely shows a transient as a fault
+  — never tune a constant against the startup horizon. Equally, the equilibrium read
+  cannot see a founding fault at all. Takes ~2 minutes.
+
+  For custom parameters, use --config with a YAML file — see experiments/examples/
+  for templates.
 
 Examples:
   npm run simulate                                                 # Quick sanity check
@@ -547,24 +568,45 @@ async function main(): Promise<void> {
     return;
   }
 
-  const config: HarnessConfig = {
-    systemCount: DEFAULT_SYSTEM_COUNT,
-    seed: 42,
-    tickCount: 500,
-  };
+  // Two horizons, because they answer different questions and neither is optional.
+  // The startup read is the only place founding/provisioning faults are visible; the
+  // equilibrium read is the only valid basis for tuning a constant. The economy's startup
+  // transient runs ~300+ cycles, so anything shorter reports a transient as a fault —
+  // see AGENTS.md, "Verifying changes".
+  const horizons: { label: string; asks: string; config: HarnessConfig }[] = [
+    {
+      label: "startup",
+      asks: "founding + provisioning behaviour — NOT a basis for tuning",
+      config: { systemCount: DEFAULT_SYSTEM_COUNT, seed: 42, tickCount: STARTUP_TICKS },
+    },
+    {
+      label: "equilibrium",
+      asks: "the settled galaxy — the only valid basis for tuning",
+      config: { systemCount: DEFAULT_SYSTEM_COUNT, seed: 42, tickCount: EQUILIBRIUM_TICKS },
+    },
+  ];
 
-  console.log(
-    `Running quick-run: ${config.systemCount} systems, ${config.tickCount} ticks, ` +
-    `seed ${config.seed}, economy scale ${ECONOMY_SCALE}\n`,
-  );
+  const jsonOut: Record<string, HarnessResults> = {};
 
-  const results = await runTickHarness(config);
+  for (const h of horizons) {
+    const cycles = Math.floor(h.config.tickCount / CYCLE_LENGTH);
+    if (!args.json) {
+      console.log("═".repeat(78));
+      console.log(
+        `${h.label.toUpperCase()} — ${h.config.tickCount} ticks (${cycles} cycles), ` +
+        `${h.config.systemCount} systems, seed ${h.config.seed}, economy scale ${ECONOMY_SCALE}`,
+      );
+      console.log(`  answers: ${h.asks}`);
+      console.log("═".repeat(78) + "\n");
+    }
 
-  if (args.json) {
-    console.log(JSON.stringify(results, null, 2));
-  } else {
-    console.log(formatTable(results));
+    const results = await runTickHarness(h.config);
+
+    if (args.json) jsonOut[h.label] = results;
+    else console.log(formatTable(results) + "\n");
   }
+
+  if (args.json) console.log(JSON.stringify(jsonOut, null, 2));
 }
 
 main().catch((err) => {
