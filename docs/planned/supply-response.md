@@ -124,9 +124,26 @@ recovering, on top of the level response. This is the mechanism Victoria 3 leans
 headline radicalisation is on standard of living *moving*, not on its absolute value — and it is what
 lets a recovering world visibly recover rather than merely stop getting worse.
 
-**This is separable and should be evaluated second.** Restoring the score's range may be sufficient
-on its own; adding a derivative term at the same time would make it impossible to attribute which
-change did what. Ship the percentage, measure, then decide.
+**This is separable and ships after the percentage.** Restoring the score's range may be sufficient on
+its own, and adding a derivative term at the same time would make it impossible to attribute which
+change did what.
+
+It is also the first half of a larger idea. Comparing supply against *last cycle* is the crude form of
+comparing it against a **slow-moving baseline of what this world has been getting** — the adaptive
+expectation described under Open Questions. The two are the same mechanism at different levels of
+generality, so the change term is a stepping stone rather than a detour.
+
+### Sequence
+
+Three changes, in this order, each measured before the next starts:
+
+1. **The supply percentage** — the score, the bands' demotion, and the struck-world resolution. This
+   is the body of this document and is self-contained.
+2. **The change term** — unrest responds to supply moving, not only to its level. Evaluated against
+   (1) so its contribution is attributable.
+3. **The adaptive expectation** — the reference each world is judged against becomes its own history
+   rather than a global constant. Only worth attempting once (2) has shown what a change response
+   does, since it generalises exactly that.
 
 ## Struck worlds resolve
 
@@ -176,11 +193,20 @@ and the rate selection stops branching on a label.
   be decided deliberately rather than by accident.
 - **Are the existing slopes right for the un-squared quantity?** The range coincidence suggests they
   may be close. This must be measured at the equilibrium horizon before any constant is moved.
-- **Should worlds be judged against a local expectation rather than an absolute line?** Victoria 3
-  compares each population to what *it* expects, derived from its own circumstances, which is why it
-  never has to place a universal threshold correctly. A frontier colony and a homeworld arguably
-  should not be held to one standard. This is a larger idea than the rest of this document and is
-  recorded here rather than designed.
+- **Should worlds be judged against a local expectation rather than an absolute line?** Every
+  threshold here is global and fixed: a two-pop frontier colony and a developed homeworld are held to
+  one identical standard, and that standard never moves as the galaxy develops. The consequence is
+  visible in the measurements — as the galaxy matures, mean shortfall runs 0.148 → 0.080 → 0.030 and
+  striking worlds 32 → 21 → 13. **The unrest system winds down monotonically**, because worlds keep
+  improving against a bar that stays put. No re-cut fixes that; the problem is that the reference is
+  fixed at all.
+  Victoria 3 avoids it by giving each population an expectation derived from its own circumstances,
+  which rises with literacy and technology — so development raises the bar rather than clearing it.
+  The equivalent here is a slow-moving baseline of what a world has been getting: a colony that has
+  always scraped by is content, a rich world that dips is not. This also dissolves the
+  threshold-placement problem entirely, since there is no longer an absolute threshold to place.
+  Recorded rather than designed — it is the third item in the sequence above and should not be
+  attempted before the change term has shown what a change response does.
 - **Where exactly does the Supplied boundary sit?** ~90% is a starting position, chosen for
   legibility. Once no gameplay reads it, this can be settled by looking at the UI rather than the
   simulator.
