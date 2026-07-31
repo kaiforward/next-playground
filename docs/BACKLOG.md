@@ -146,8 +146,15 @@ Direction is clear, approach needs a design doc before implementation.
   split is Supplied 34.0% / **Rationing 62.7%** / Shortage 3.3%. Nearly two thirds of the galaxy is
   labelled Rationing while dissatisfaction is essentially nil, so the Supplied/Rationing boundary is
   being crossed by noise. The band is not grading anything, and every other constant on this list is
-  horizon-sensitive in the opposite direction. Re-cut the Supplied/Rationing boundary first — it is
-  doing the most visible damage and is independent of the cover work above.
+  horizon-sensitive in the opposite direction.
+  **Superseded in scope by [supply-response.md](./planned/supply-response.md)** — a re-cut alone was
+  the wrong instrument. The diagnosis moved on inspection: the unrest fixed point is
+  `floor + slope × D`, so the regime label gates recovery *speed* only, and the real defect is that
+  `D`'s own range collapsed ~5× (the fold squares each good's shortfall, and the slopes were cut
+  against the unsquared scale). Re-cutting constants against a measured distribution was also
+  explicitly rejected as a fitted-to-one-seed answer. The spec instead makes the score a readable
+  supply percentage, demotes the bands to description, and resolves the struck-world cohort. Run
+  `/spec-review` on it before planning implementation.
 - **[M] `electronics` and `luxuries` are never serviced, even at equilibrium** — at 416 cycles every
   other good reaches 0.4–1.0 median cover; these two sit at **0.25 with 19% and 26% of their markets
   completely empty**. 0.25 is exactly `EXPORT_RESERVE_COVER ÷ TARGET_COVER`, i.e. every producer of them
