@@ -84,8 +84,8 @@ ceiling `1.3×T` (HOLD_COVER), storage max ≈ `2×T + storage`, price-saturatio
   (10) cycles = 0.25×T, below the price-saturation point `T ÷ priceCeiling` (0.50×T…0.33×T across the
   roster), so the curve clamps. The graded band this nuance originally claimed (base…~1.33×) was an
   artifact of the retired reserve being 0.75×T; it is not reachable while the reserve sits below
-  saturation. Restoring it means an anchor that the galaxy's production can actually fund — see the
-  anchor-funding item in `docs/BACKLOG.md`, which owns this. And
+  saturation. Whether it should be restored at all is open — see "An exporter's resting price is pinned
+  at its ceiling, not graded" in `docs/BACKLOG.md`, which owns this. And
   `[rationStock, T]` is a curve-side dead zone (both flanks flat), so a dented self-supplier recovers
   on the provisioning margin's timescale (~0.25%-of-T/cycle at margin 0.1) with price elevated
   meanwhile — accepted: price doubles as a shock-age gauge; the margin is sized against recovery

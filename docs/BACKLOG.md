@@ -144,6 +144,22 @@ Direction is clear, approach needs a design doc before implementation.
   in #207 (denominate in cycles of demand, not as a fraction of the price anchor).
   Couplings to keep straight when it moves: `RATION_COVER` (2) and `EXPORT_RESERVE_COVER` (10) are both
   absolute cycle counts, so they do not scale with the anchor.
+- **[S] An exporter's resting price is pinned at its ceiling, not graded** — a drawn exporter rests at
+  `EXPORT_RESERVE_COVER` (10 cycles) = 0.25×`TARGET_COVER`, which sits below the price-saturation point
+  `T ÷ priceCeiling` (0.50×T…0.33×T across the roster), so the price curve **clamps** rather than grades.
+  Every drawn exporter therefore reads the same maximum price no matter how drawn it is, and price stops
+  being a health gauge on exactly the cohort that ships goods. The design intent
+  (`docs/planned/economy-band-reconciliation.md`, "Production knee at the anchor") was a graded
+  base…~1.33× band; that band was an artifact of the *retired* 0.75×T reserve and is unreachable while
+  the reserve sits below saturation.
+  **The obvious remedy is dead and this item does not inherit it**: the fix used to be "lower the anchor
+  so production can fund it", which the horizon retraction above kills — do NOT lower the anchor. Nor is
+  raising the reserve free: #207 deliberately re-denominated `EXPORT_RESERVE_COVER` in cycles of demand
+  rather than as a fraction of the anchor, and raising it withholds real stock from importers.
+  **First step is a decision, not a change**: is a flat exporter price acceptable (exporters are supposed
+  to run drained, and the importers they serve carry the dispersion), or does price need to grade there?
+  If it needs to grade, the lever is the curve's saturation point, not the reserve — which makes this a
+  companion to the per-good `MarketCurve.k` item below rather than a cover-constant change.
 - **[M] Re-cut the unrest band against a supplied galaxy** — every band constant was calibrated
   against an ambient deficit that no longer exists. `D_SHORTAGE_CUT` (0.25) was cut explicitly against
   "the ambient barren-galaxy deficit ≈0.14 (every tier-1 and tier-2 good empty)", and the unrest slopes,
@@ -196,6 +212,10 @@ Direction is clear, approach needs a design doc before implementation.
   `SURPLUS_MARGIN`'s "deliberate residual" docstring describes a band production cannot cross. First
   step is a measurement, not a change: count transfers that fire via the non-exporter path over a
   10,000-tick run. If it is zero, the margin is decorative and the two constants need one owner.
+  The producer-stock instrumentation that measurement needs is already written — `.superpowers/lock-diag.ts`
+  (gitignored, so no grep will find it) takes `DIAG_TICKS`/`DIAG_SYSTEMS`/`DIAG_SEED` and reports
+  anchor-funding plus per-producer stock; `floor-diag.ts` beside it attributes requested vs delivered
+  per good at the moment of each transfer.
 - **[M] Struck worlds can neither grow out of it nor die** — 11 of 573 settled systems (499 people)
   sit striking indefinitely, with **zero** of them declining over the last 500 ticks. Growth carries
   `(1 − D)` and decline carries unrest, so at high D the two terms nearly cancel and the world parks
