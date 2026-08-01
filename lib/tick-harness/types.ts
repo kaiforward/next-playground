@@ -293,6 +293,10 @@ export interface HarnessResults {
   marketSnapshots: { tick: number; markets: MarketSnapshot[] }[];
   /** Derived market health metrics. */
   marketHealth: MarketHealthSummary;
+  /** Per-good cover and price split by market role. */
+  roleCoverLevels: RoleCoverEntry[];
+  /** Supply and unrest per world cohort. Cohorts overlap; each row carries its own denominator. */
+  worldCohorts: WorldCohortEntry[];
   /** Impact measurement for each event that occurred. */
   eventImpacts: EventImpact[];
   /** Whole-run directed-logistics activity — did goods actually move. */

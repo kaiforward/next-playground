@@ -24,6 +24,8 @@ import type { BuildCommitmentRecord, FoundedColonyRecord } from "./build-analysi
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
 import type { TreasurySnapshot } from "./treasury-analysis";
+import { computeRoleCoverLevels, computeWorldCohorts } from "./cohort-analysis";
+import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
 import type { WorldFlowEvent, WorldMarket } from "@/lib/world/types";
@@ -186,6 +188,15 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
 
   const marketHealth = computeMarketHealth(currentMarkets);
 
+  // Cohorted reads, from the final world only — no per-tick tracking. Reuses the tick rows
+  // the report already builds rather than walking the world a second time.
+  const finalTickSystems = toTickSystems(world);
+  const homeworldIds = new Set(world.factions.map((f) => f.homeworldId));
+  const roleCoverLevels = computeRoleCoverLevels(finalTickSystems, currentMarkets);
+  const worldCohorts = computeWorldCohorts(
+    finalTickSystems, currentMarkets, homeworldIds, STRIKE_PARAMS.threshold, world.events,
+  );
+
   const systemNames = new Map(world.systems.map((s) => [s.id, s.name]));
   const eventImpacts = computeEventImpacts(completedEvents, systemNames);
 
@@ -204,6 +215,8 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     economyScale: ECONOMY_SCALE,
     marketSnapshots,
     marketHealth,
+    roleCoverLevels,
+    worldCohorts,
     eventImpacts,
     logisticsActivity: summarizeLogistics(logisticsFlows),
     buildBurstSummary: summarizeBuildBursts(buildCommitments),

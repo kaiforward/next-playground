@@ -114,6 +114,8 @@ describe("ExperimentConfig", () => {
           priceLevels: { median: 1, p10: 1, p90: 1, cheapFrac: 0, nearFrac: 1, expensiveFrac: 0 },
           coverLevels: [],
         },
+        roleCoverLevels: [],
+        worldCohorts: [],
         eventImpacts: [],
         logisticsActivity: {
           transferCount: 0, activeTicks: 0, totalQuantity: 0, meanTransferSize: 0,
