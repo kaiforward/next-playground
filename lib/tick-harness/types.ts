@@ -13,6 +13,11 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 
+// ── Market role classification ──────────────────────────────────
+
+/** Which role a market (system × good) plays for that good. Mutually exclusive. */
+export type MarketRole = "exporter" | "self-supplier" | "consumer" | "inert";
+
 // ── Calibration harness config ──────────────────────────────────
 
 export interface HarnessConfig {
