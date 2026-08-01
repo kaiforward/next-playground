@@ -78,6 +78,31 @@ export interface RoleCoverEntry {
   exporterMedianPriceRatio: number;
 }
 
+// ── World cohorts ───────────────────────────────────────────────
+
+/**
+ * A settled system's cohorts. The three groupings are independent views, not one
+ * partition: a system lands in exactly one population band and exactly one of
+ * homeworld/colony, plus `survival-short` if it cannot feed itself. Rows therefore
+ * overlap by design and each carries its own denominator.
+ */
+export type WorldCohort =
+  | "pop <10" | "pop 10-100" | "pop 100-1K" | "pop >=1K"
+  | "survival-short" | "homeworld" | "colony";
+
+/** One cohort's supply and unrest reading. Cohorts overlap — see cohortsForSystem. */
+export interface WorldCohortEntry {
+  cohort: WorldCohort;
+  /** Settled systems in this cohort — this row's own denominator. */
+  n: number;
+  meanDissatisfaction: number;
+  meanUnrest: number;
+  strikingShare: number;
+  suppliedShare: number;
+  rationingShare: number;
+  shortageShare: number;
+}
+
 export interface MarketHealthSummary {
   /** Per-good average price standard deviation across systems (high = trade opportunity). */
   priceDispersion: { goodId: string; avgStdDev: number }[];

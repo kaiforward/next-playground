@@ -151,3 +151,60 @@ describe("computeRoleCoverLevels", () => {
     expect(water.exporterMedianPriceRatio).toBeCloseTo(1.25, 5);
   });
 });
+
+import { cohortsForSystem, computeWorldCohorts } from "../cohort-analysis";
+
+describe("cohortsForSystem", () => {
+  it("places a system in exactly one population band", () => {
+    const bands = cohortsForSystem(sys("s1", { population: 50 }), new Set());
+    expect(bands).toContain("pop 10-100");
+    expect(bands).not.toContain("pop <10");
+    expect(bands).not.toContain("pop 100-1K");
+  });
+
+  it("labels a homeworld a homeworld and everything else a colony", () => {
+    expect(cohortsForSystem(sys("s1"), new Set(["s1"]))).toContain("homeworld");
+    expect(cohortsForSystem(sys("s2"), new Set(["s1"]))).toContain("colony");
+  });
+
+  it("adds survival-short for a world with no arable slot, alongside its other cohorts", () => {
+    const rock = sys("s1", {
+      population: 5,
+      slotCap: { gas: 0, minerals: 0, ore: 3, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    });
+    const cohorts = cohortsForSystem(rock, new Set());
+
+    expect(cohorts).toContain("survival-short");
+    expect(cohorts).toContain("pop <10");
+    expect(cohorts).toContain("colony");
+  });
+
+  it("does not call a world with an arable slot survival-short", () => {
+    const farm = sys("s1", {
+      slotCap: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 2, water: 0, radioactive: 0 },
+    });
+    expect(cohortsForSystem(farm, new Set())).not.toContain("survival-short");
+  });
+});
+
+describe("computeWorldCohorts", () => {
+  it("omits a cohort with no members rather than emitting a NaN row", () => {
+    const entries = computeWorldCohorts([sys("s1", { population: 50 })], [], new Set(), 0.8, []);
+
+    expect(entries.some((e) => e.cohort === "pop 10-100")).toBe(true);
+    expect(entries.some((e) => e.cohort === "pop >=1K")).toBe(false);
+    for (const e of entries) {
+      expect(Number.isNaN(e.meanDissatisfaction)).toBe(false);
+      expect(Number.isNaN(e.meanUnrest)).toBe(false);
+    }
+  });
+
+  it("counts a striking system into its cohort's striking share", () => {
+    const systems = [sys("s1", { population: 50, unrest: 0.9 }), sys("s2", { population: 50, unrest: 0 })];
+    const entries = computeWorldCohorts(systems, [], new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop 10-100");
+
+    expect(band?.n).toBe(2);
+    expect(band?.strikingShare).toBe(0.5);
+  });
+});

@@ -13,10 +13,11 @@ import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import { median } from "@/lib/utils/math";
 import { nearBandFloor } from "./market-analysis";
+import { perSystemSupplyState } from "./population-analysis";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { TickSystem } from "@/lib/tick/rows";
-import type { WorldMarket } from "@/lib/world/types";
-import type { MarketRole, RoleCoverEntry, StockedRole } from "./types";
+import type { WorldEvent, WorldMarket } from "@/lib/world/types";
+import type { MarketRole, RoleCoverEntry, StockedRole, WorldCohort, WorldCohortEntry } from "./types";
 
 /**
  * A market's role, tested in a fixed order because one market can satisfy several
@@ -133,4 +134,88 @@ export function computeRoleCoverLevels(
     });
   }
   return result.sort((a, b) => a.goodId.localeCompare(b.goodId));
+}
+
+/**
+ * Population band edges. Chosen to straddle where the galaxy-wide means were misread — a
+ * two-pop frontier rock against a developed homeworld — rather than for round numbers.
+ */
+const POP_BANDS: { cohort: WorldCohort; below: number }[] = [
+  { cohort: "pop <10", below: 10 },
+  { cohort: "pop 10-100", below: 100 },
+  { cohort: "pop 100-1K", below: 1000 },
+  { cohort: "pop >=1K", below: Infinity },
+];
+
+/** Order the report renders cohorts in — bands ascending, then the cross-cutting views. */
+const COHORT_ORDER: WorldCohort[] = [
+  "pop <10", "pop 10-100", "pop 100-1K", "pop >=1K",
+  "survival-short", "homeworld", "colony",
+];
+
+export function cohortsForSystem(s: TickSystem, homeworldIds: Set<string>): WorldCohort[] {
+  const band = POP_BANDS.find((b) => s.population < b.below)?.cohort ?? "pop >=1K";
+  const cohorts: WorldCohort[] = [band, homeworldIds.has(s.id) ? "homeworld" : "colony"];
+  // No arable slot means the world cannot feed itself at any level of development — the
+  // physical limit that separates a deprived rock from a world the economy is failing.
+  if (s.slotCap.arable <= 0) cohorts.push("survival-short");
+  return cohorts;
+}
+
+/**
+ * Supply and unrest per world cohort. This is what the galaxy-wide mean cannot answer:
+ * whether the unrest band grades anything, or whether its boundaries are being crossed by
+ * noise in a population that was never comparable in the first place.
+ */
+export function computeWorldCohorts(
+  systems: TickSystem[],
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
+  homeworldIds: Set<string>,
+  strikeThreshold: number,
+  events: ReadonlyArray<WorldEvent> = [],
+): WorldCohortEntry[] {
+  const states = perSystemSupplyState(systems, markets, events);
+
+  const acc = new Map<WorldCohort, {
+    n: number; dSum: number; unrestSum: number; striking: number;
+    supplied: number; rationing: number; shortage: number;
+  }>();
+
+  for (const s of systems) {
+    const state = states.get(s.id);
+    if (!state) continue; // unsettled — perSystemSupplyState already filtered it out
+
+    for (const cohort of cohortsForSystem(s, homeworldIds)) {
+      let a = acc.get(cohort);
+      if (!a) {
+        a = { n: 0, dSum: 0, unrestSum: 0, striking: 0, supplied: 0, rationing: 0, shortage: 0 };
+        acc.set(cohort, a);
+      }
+      a.n += 1;
+      a.dSum += state.d;
+      a.unrestSum += s.unrest;
+      if (s.unrest >= strikeThreshold) a.striking += 1;
+      if (state.regime === "supplied") a.supplied += 1;
+      else if (state.regime === "rationing") a.rationing += 1;
+      else a.shortage += 1;
+    }
+  }
+
+  const result: WorldCohortEntry[] = [];
+  for (const cohort of COHORT_ORDER) {
+    const a = acc.get(cohort);
+    // A cohort with no members is omitted entirely rather than emitting a divide-by-zero row.
+    if (!a || a.n === 0) continue;
+    result.push({
+      cohort,
+      n: a.n,
+      meanDissatisfaction: a.dSum / a.n,
+      meanUnrest: a.unrestSum / a.n,
+      strikingShare: a.striking / a.n,
+      suppliedShare: a.supplied / a.n,
+      rationingShare: a.rationing / a.n,
+      shortageShare: a.shortage / a.n,
+    });
+  }
+  return result;
 }
