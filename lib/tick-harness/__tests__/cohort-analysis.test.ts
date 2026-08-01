@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { classifyMarketRole, computeRoleCoverLevels } from "../cohort-analysis";
-import { MIN_DEMAND } from "@/lib/constants/market-economy";
+import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { WorldMarket } from "@/lib/world/types";
 import type { TickSystem } from "@/lib/tick/rows";
@@ -104,5 +104,50 @@ describe("computeRoleCoverLevels", () => {
 
     expect(entry.countByRole.consumer).toBe(2);
     expect(entry.consumerEmptyFrac).toBe(0.5);
+  });
+
+  it("keeps each role's median cover and the exporter price ratio scoped to only its own markets", () => {
+    // A single fully-staffed water extractor: population 10 covers its 10-unit labour
+    // demand exactly (LABOUR_BY_TIER[0].unskilled), so it produces at full rate — 2.0
+    // (OUTPUT_PER_UNIT.water at ECONOMY_SCALE 1) against a population-10 civilian want of
+    // only 0.007 × 10 = 0.07 (nothing else consumes water) — a real exporter, not one
+    // merely sitting on the MIN_DEMAND floor.
+    const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
+    const systems = [
+      sys("exp-a", { population: 10, buildings: { water: 1 }, yields: producerYields }),
+      sys("exp-b", { population: 10, buildings: { water: 1 }, yields: producerYields }),
+      // Same extractor and the same fixed 2.0 production, but population 500 lifts
+      // civilian consumption to 0.007 × 500 = 3.5 — still a producer, just not a net
+      // exporter, so this must land as self-supplier.
+      sys("self", { population: 500, buildings: { water: 1 }, yields: producerYields }),
+      // No buildings anywhere ⇒ production 0; demandRate above MIN_DEMAND makes it a consumer.
+      sys("con"),
+    ];
+    // demandRate 1 everywhere makes every market's targetStock exactly TARGET_COVER (the
+    // same trick market-analysis.test.ts's fixtures use), so stock alone fixes each
+    // market's cover, and — for the exporters — its price ratio too (k=1 default elasticity
+    // on water ⇒ price ratio = targetStock / stock = 1 / cover).
+    const markets = [
+      mkt("exp-a", "water", TARGET_COVER * 2, 1),   // cover 2.0, price ratio 0.5
+      mkt("exp-b", "water", TARGET_COVER * 0.5, 1), // cover 0.5, price ratio 2.0
+      mkt("self", "water", TARGET_COVER * 0.8, 1),  // cover 0.8
+      mkt("con", "water", TARGET_COVER * 0.2, 1),   // cover 0.2
+    ];
+
+    const [water] = computeRoleCoverLevels(systems, markets);
+
+    expect(water.countByRole.exporter).toBe(2);
+    expect(water.countByRole["self-supplier"]).toBe(1);
+    expect(water.countByRole.consumer).toBe(1);
+
+    // Median of exactly {2.0, 0.5} (1.25) — distinct from the self-supplier's 0.8 and the
+    // consumer's 0.2, so either list absorbing the wrong market's cover would fail this.
+    expect(water.medianCoverByRole.exporter).toBeCloseTo(1.25, 5);
+    expect(water.medianCoverByRole["self-supplier"]).toBeCloseTo(0.8, 5);
+    expect(water.medianCoverByRole.consumer).toBeCloseTo(0.2, 5);
+
+    // Median of {0.5, 2.0} across the exporter markets only (1.25) — a value that can
+    // only come from those two prices, not from a crossed or empty list.
+    expect(water.exporterMedianPriceRatio).toBeCloseTo(1.25, 5);
   });
 });
