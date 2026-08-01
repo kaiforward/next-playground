@@ -4,12 +4,20 @@
  * Usage:
  *   npm run simulate                                            # Quick sanity check
  *   npm run simulate -- --config experiments/examples/baseline.yaml  # Real experiment
- *   npm run simulate -- --json                                  # Quick run, JSON output
+ *   npm run --silent simulate -- --json                         # Quick run, JSON output
  *
  * Options:
  *   --config PATH    Load experiment from YAML config file
  *   --json           Output raw JSON instead of formatted table
  *   --help           Show this help message
+ *
+ * The two output modes emit different JSON shapes: --config emits one bare
+ * HarnessResults, the quick run emits `{ startup, equilibrium }` keyed by horizon
+ * and omits the `marketSnapshots` trajectory (see HorizonReport).
+ *
+ * Redirecting --json needs `npm run --silent`: npm prints its own "> script" banner to
+ * stdout, which lands inside the document and makes it unparseable. The script's own
+ * progress output already goes to stderr.
  */
 
 // Load `.env` FIRST — before any import that reads process.env at module load (economy-scale.ts resolves
@@ -44,6 +52,24 @@ import type { HarnessConfig, HarnessResults } from "../lib/tick-harness/types";
  */
 const STARTUP_TICKS = 1000;
 const EQUILIBRIUM_TICKS = 10000;
+
+type HorizonLabel = "startup" | "equilibrium";
+
+/** What `--json` reports per horizon: the full results minus the market trajectory. */
+type HorizonReport = Omit<HarnessResults, "marketSnapshots">;
+
+/**
+ * Drop the market trajectory before serializing. It is the bulk of the document at the
+ * equilibrium horizon — snapshot row density grows with the galaxy, so it outweighs the
+ * startup horizon's copy many times over — and nothing downstream reads it; `marketHealth`
+ * is the derived report. Dropped rather than downsampled so the omission is one stated
+ * rule instead of a silent sample.
+ */
+function toHorizonReport(results: HarnessResults): HorizonReport {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit-by-rest-destructure
+  const { marketSnapshots, ...report } = results;
+  return report;
+}
 
 // Enforce the import-order invariant the dotenv import above depends on. ES modules
 // evaluate imports in source order, and economy-scale.ts resolves ECONOMY_SCALE at
@@ -534,7 +560,12 @@ Usage:
 
 Options:
   --config PATH    Load experiment from YAML config file (saves result to experiments/)
-  --json           Output JSON instead of table
+  --json           Output JSON instead of table. The quick run emits
+                   { startup, equilibrium } keyed by horizon and omits the
+                   marketSnapshots trajectory; --config emits one bare result.
+                   Progress goes to stderr so stdout stays a clean document —
+                   but redirecting still needs "npm run --silent", or npm's own
+                   "> script" banner lands inside the JSON.
   --help           Show this help
 
 Quick Run:
@@ -556,7 +587,7 @@ Quick Run:
 Examples:
   npm run simulate                                                 # Quick sanity check
   npm run simulate -- --config experiments/examples/baseline.yaml  # Experiment from YAML
-  npm run simulate -- --json                                       # Quick run, JSON output
+  npm run --silent simulate -- --json > run.json                   # Quick run, JSON output
 `);
   process.exit(0);
 }
@@ -573,7 +604,7 @@ async function main(): Promise<void> {
   // equilibrium read is the only valid basis for tuning a constant. The economy's startup
   // transient runs ~300+ cycles, so anything shorter reports a transient as a fault —
   // see AGENTS.md, "Verifying changes".
-  const horizons: { label: string; asks: string; config: HarnessConfig }[] = [
+  const horizons: { label: HorizonLabel; asks: string; config: HarnessConfig }[] = [
     {
       label: "startup",
       asks: "founding + provisioning behaviour — NOT a basis for tuning",
@@ -586,23 +617,28 @@ async function main(): Promise<void> {
     },
   ];
 
-  const jsonOut: Record<string, HarnessResults> = {};
+  const jsonOut: Partial<Record<HorizonLabel, HorizonReport>> = {};
 
   for (const h of horizons) {
     const cycles = Math.floor(h.config.tickCount / CYCLE_LENGTH);
-    if (!args.json) {
+    const banner =
+      `${h.label.toUpperCase()} — ${h.config.tickCount} ticks (${cycles} cycles), ` +
+      `${h.config.systemCount} systems, seed ${h.config.seed}, economy scale ${ECONOMY_SCALE}`;
+
+    if (args.json) {
+      // The run takes minutes and --json holds all output until the end, so the banner
+      // goes to stderr — it reports progress without corrupting the piped document.
+      console.error(`${banner} — running…`);
+    } else {
       console.log("═".repeat(78));
-      console.log(
-        `${h.label.toUpperCase()} — ${h.config.tickCount} ticks (${cycles} cycles), ` +
-        `${h.config.systemCount} systems, seed ${h.config.seed}, economy scale ${ECONOMY_SCALE}`,
-      );
+      console.log(banner);
       console.log(`  answers: ${h.asks}`);
       console.log("═".repeat(78) + "\n");
     }
 
     const results = await runTickHarness(h.config);
 
-    if (args.json) jsonOut[h.label] = results;
+    if (args.json) jsonOut[h.label] = toHorizonReport(results);
     else console.log(formatTable(results) + "\n");
   }
 
