@@ -20,7 +20,7 @@ Shared, harness-neutral skills live in `.agents/skills/`. Claude discovery adapt
 - `npm run simulate` — Headless sanity check over the real tick (`lib/tick-harness/runner.ts`), reporting intrinsic economy-health metrics at **two horizons**: startup (1000 ticks) for founding/provisioning behaviour, and equilibrium (10,000 ticks) for the settled galaxy. ~2 min. Never tune a constant against the startup read — see "Verifying changes" below.
 - `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`).
 
-The calibration harness (`lib/tick-harness/`) is a dev instrument, not a game feature — it runs `runWorldTick` (the exact tick the live loop runs) headlessly and reports economy-health metrics for validating changes before they ship. There is only one tick body, so the harness and the live game run literally the same code (no harness-only "bots" or strategies). World generation is `generateWorld(systemCount, seed)` (`lib/world/gen.ts`) invoked in-process on **New game**; there is no seed script and no database.
+The calibration harness (`lib/tick-harness/`) is a dev instrument, not a game feature — it runs `runWorldTick` (the exact tick the live loop runs) headlessly and reports economy-health metrics for validating changes before they ship. There is only one tick body, so the harness and the live game run literally the same code (no harness-only "bots" or strategies). World generation (`lib/world/gen.ts`) is invoked in-process on **New game**; there is no seed script and no database.
 
 ## Tech Stack
 
