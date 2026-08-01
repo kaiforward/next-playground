@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { detectPingPong, summarizeInfrastructure, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
+import { detectPingPong, perSystemSupplyState, summarizeInfrastructure, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
 import { D_SHORTAGE_CUT } from "@/lib/constants/economy";
@@ -272,5 +272,47 @@ describe("summarizeSupplyRegimes", () => {
     expect(summary.counted).toBe(0);
     expect(Number.isFinite(summary.suppliedShare)).toBe(true);
     expect(summary.meanDissatisfaction).toBe(0);
+  });
+});
+
+function sys(id: string, over: Partial<TickSystem> = {}): TickSystem {
+  return {
+    id, name: id, economyType: "agricultural", regionId: "r1", factionId: "f1",
+    control: "developed", governmentType: "federation", population: 100, popCap: 200,
+    unrest: 0, buildings: {}, buildingIdleCycles: {}, collapseDebt: 0,
+    yields: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    slotCap: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    generalSpace: 100, habitableSpace: 50,
+    ...over,
+  };
+}
+
+describe("perSystemSupplyState", () => {
+  it("returns one entry per settled system", () => {
+    const systems = [sys("s1"), sys("s2")];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 1 },
+      { systemId: "s2", goodId: "water", satisfaction: 0 },
+    ];
+
+    const states = perSystemSupplyState(systems, markets);
+
+    expect(states.size).toBe(2);
+    expect(states.get("s1")?.d).toBeLessThan(states.get("s2")?.d ?? 0);
+  });
+
+  it("agrees with the galaxy-wide summary it feeds", () => {
+    const systems = [sys("s1"), sys("s2")];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 1 },
+      { systemId: "s2", goodId: "water", satisfaction: 0 },
+    ];
+
+    const states = perSystemSupplyState(systems, markets);
+    const summary = summarizeSupplyRegimes(systems, markets);
+
+    const meanD = [...states.values()].reduce((a, s) => a + s.d, 0) / states.size;
+    expect(meanD).toBeCloseTo(summary.meanDissatisfaction, 10);
+    expect(states.size).toBe(summary.counted);
   });
 });

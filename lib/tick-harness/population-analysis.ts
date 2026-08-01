@@ -1,5 +1,5 @@
 import type { TickSystem } from "@/lib/tick/rows";
-import { crowdFactor, dissatisfaction, foldSupplyState } from "@/lib/engine/population";
+import { crowdFactor, dissatisfaction, foldSupplyState, type SupplyRegime } from "@/lib/engine/population";
 import { goodSatisfactionsBySystem } from "@/lib/tick-harness/good-satisfaction";
 import { aggregateModifiers, buildModifiersForPhase, type ModifierRow } from "@/lib/engine/events";
 import { EVENT_DEFINITIONS, MODIFIER_CAPS } from "@/lib/constants/events";
@@ -243,11 +243,22 @@ export interface SupplyRegimeSummary {
   meanDissatisfaction: number;
 }
 
-export function summarizeSupplyRegimes(
+/** One settled system's supply reading — the magnitude and the label it folds to. */
+export interface SystemSupplyState {
+  d: number;
+  regime: SupplyRegime;
+}
+
+/**
+ * Per-system dissatisfaction and regime at the end of the run, keyed by system id. The
+ * galaxy-wide summary folds this same map, so a cohorted regime split and the galaxy-wide
+ * one cannot drift apart. Settled systems only: an unclaimed rock has no market and no opinion.
+ */
+export function perSystemSupplyState(
   systems: TickSystem[],
   markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
   events: ReadonlyArray<WorldEvent> = [],
-): SupplyRegimeSummary {
+): Map<string, SystemSupplyState> {
   const settledSystems = systems.filter(isSettled);
   const settled = new Map(settledSystems.map((s) => [s.id, s]));
   const modsBySystem = consumptionMultBySystem(settledSystems, events);
@@ -256,17 +267,30 @@ export function summarizeSupplyRegimes(
     return mods ? aggregateModifiers(mods, goodId, MODIFIER_CAPS).consumptionMult : 1;
   });
 
-  let supplied = 0, rationing = 0, shortage = 0, dSum = 0;
+  const states = new Map<string, SystemSupplyState>();
   for (const systemId of settled.keys()) {
     const goods = goodsBySystem.get(systemId) ?? [];
     const d = dissatisfaction(goods);
+    states.set(systemId, { d, regime: foldSupplyState(goods, d).regime });
+  }
+  return states;
+}
+
+export function summarizeSupplyRegimes(
+  systems: TickSystem[],
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
+  events: ReadonlyArray<WorldEvent> = [],
+): SupplyRegimeSummary {
+  const states = perSystemSupplyState(systems, markets, events);
+
+  let supplied = 0, rationing = 0, shortage = 0, dSum = 0;
+  for (const { d, regime } of states.values()) {
     dSum += d;
-    const regime = foldSupplyState(goods, d).regime;
     if (regime === "supplied") supplied++;
     else if (regime === "rationing") rationing++;
     else shortage++;
   }
-  const counted = settled.size;
+  const counted = states.size;
   const share = (n: number) => (counted > 0 ? n / counted : 0);
   return {
     counted, supplied, rationing, shortage,
