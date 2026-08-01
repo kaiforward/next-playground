@@ -62,6 +62,22 @@ export interface CoverLevelEntry {
   deficitFrac: number;
 }
 
+/** Roles that hold stock — `inert` is excluded: a median cover over pricing-artifact markets means nothing. */
+export type StockedRole = Exclude<MarketRole, "inert">;
+
+/** One good's cover and price, split by the role each of its markets plays. */
+export interface RoleCoverEntry {
+  goodId: string;
+  /** Market count in each role, including inert. */
+  countByRole: Record<MarketRole, number>;
+  /** Median stock / targetStock per role. 0 for a role with no markets. */
+  medianCoverByRole: Record<StockedRole, number>;
+  /** Share of consumer markets sitting at the stock floor — literally empty, not merely low. */
+  consumerEmptyFrac: number;
+  /** Median price / basePrice across exporter markets — the resting-price read. */
+  exporterMedianPriceRatio: number;
+}
+
 export interface MarketHealthSummary {
   /** Per-good average price standard deviation across systems (high = trade opportunity). */
   priceDispersion: { goodId: string; avgStdDev: number }[];
