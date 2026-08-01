@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyMarketRole, computeRoleCoverLevels } from "../cohort-analysis";
+import { classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts } from "../cohort-analysis";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { WorldMarket } from "@/lib/world/types";
@@ -152,8 +152,6 @@ describe("computeRoleCoverLevels", () => {
   });
 });
 
-import { cohortsForSystem, computeWorldCohorts } from "../cohort-analysis";
-
 describe("cohortsForSystem", () => {
   it("places a system in exactly one population band", () => {
     const bands = cohortsForSystem(sys("s1", { population: 50 }), new Set());
@@ -206,5 +204,35 @@ describe("computeWorldCohorts", () => {
 
     expect(band?.n).toBe(2);
     expect(band?.strikingShare).toBe(0.5);
+  });
+
+  it("gives each overlapping cohort its own row and its own denominator", () => {
+    // A rock: population 5 (band "pop <10"), no arable slot (default slotCap ⇒
+    // survival-short), not a homeworld ⇒ colony. Lands in three rows at once.
+    const rock = sys("s1", { population: 5 });
+    // A homeworld with an arable slot: population 500 (a different band, "pop
+    // 100-1K"), homeworld ⇒ not colony, arable ⇒ not survival-short. Deliberately
+    // shares none of the rock's cohorts, so a dropped or double-counted row shows up
+    // as a wrong `n` on a specific cohort rather than a coincidental match.
+    const homeworld = sys("s2", {
+      population: 500,
+      slotCap: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 2, water: 0, radioactive: 0 },
+    });
+    const entries = computeWorldCohorts([rock, homeworld], [], new Set(["s2"]), 0.8, []);
+    const byCohort = new Map(entries.map((e) => [e.cohort, e]));
+
+    // The rock's three rows: each n === 1, from the rock alone.
+    expect(byCohort.get("pop <10")?.n).toBe(1);
+    expect(byCohort.get("survival-short")?.n).toBe(1);
+    expect(byCohort.get("colony")?.n).toBe(1);
+
+    // The homeworld's two rows: each n === 1, from the homeworld alone — unaffected
+    // by the rock's rows above.
+    expect(byCohort.get("pop 100-1K")?.n).toBe(1);
+    expect(byCohort.get("homeworld")?.n).toBe(1);
+
+    // Neither system reaches these cohorts.
+    expect(byCohort.has("pop >=1K")).toBe(false);
+    expect(byCohort.has("pop 10-100")).toBe(false);
   });
 });
