@@ -1107,16 +1107,23 @@ In the EQUILIBRIUM block, confirm:
 - the `survival-short` row exists and its mean D is materially above the `homeworld` row's — the struck-world finding predicts this, and if it is absent the classifier is wrong
 - no cell reads `NaN`
 
-- [ ] **Step 5: Commit any fix, then open the PR**
+- [ ] **Step 5: Run the PR build gate**
 
-If steps 2–4 surface a defect, fix it with a test that reproduces it first. Then push and open the PR against `feat/band-reconciliation`, quoting the fuel and electronics readings from steps 2–3 in the description.
+Run: `npx next build --webpack`
+Expected: exit 0.
+
+This is the project's named PR build gate (`AGENTS.md`) and neither `tsc` nor Vitest substitutes for it. Two failure modes it alone catches: Tailwind's oxide scanner reads every file in the project for class candidates, so a backslash-hex sequence in scanned prose aborts the build at `globals.css:1:1` — and a server-only env read that resolves differently in the client bundle. `docs/` is excluded via `@source not "../docs"`, but the gate is what proves it.
+
+- [ ] **Step 6: Commit any fix, then open the PR**
+
+If steps 2–5 surface a defect, fix it with a test that reproduces it first. Then push and open the PR against `feat/band-reconciliation`, quoting the fuel and electronics readings from steps 2–3 in the description.
 
 ```bash
 git push -u origin feat/cohorted-harness-metrics
 gh pr create --base feat/band-reconciliation --title "feat(harness): cohort the simulate report's supply readings" --body "..."
 ```
 
-- [ ] **Step 6: Review**
+- [ ] **Step 7: Review**
 
 Run `/uber-review` against the PR. Per the project's review rule, each sub-feature is reviewed going into the shared branch so that shared→main needs only a light sanity pass.
 
