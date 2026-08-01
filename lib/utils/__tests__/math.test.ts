@@ -1,5 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { weightedMean } from "@/lib/utils/math";
+import { median, quantile, weightedMean } from "@/lib/utils/math";
+
+describe("median", () => {
+  it("returns the middle value for an odd-length list", () => {
+    expect(median([3, 1, 2])).toBe(2);
+  });
+
+  it("averages the two middle values for an even-length list", () => {
+    expect(median([1, 2, 3, 4])).toBe(2.5);
+  });
+
+  it("returns 0 for an empty list rather than NaN", () => {
+    expect(median([])).toBe(0);
+  });
+
+  it("does not mutate its input", () => {
+    const xs = [3, 1, 2];
+    median(xs);
+    expect(xs).toEqual([3, 1, 2]);
+  });
+});
+
+describe("quantile", () => {
+  it("returns the value at the requested quantile", () => {
+    expect(quantile([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 0.1)).toBe(2);
+  });
+
+  it("returns 0 for an empty list rather than NaN", () => {
+    expect(quantile([], 0.5)).toBe(0);
+  });
+});
 
 describe("weightedMean", () => {
   it("weights each value by its weight", () => {
