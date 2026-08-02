@@ -136,6 +136,24 @@ function fmtNum(n: number): string {
   return n.toFixed(0);
 }
 
+type ColAlign = "l" | "r";
+
+/**
+ * One table: header row, dash separator, data rows. Cells arrive already formatted — this only
+ * pads and joins them. Alignment defaults to label-left / values-right; pass `align` for the
+ * tables whose columns don't follow that shape.
+ */
+function renderTable(
+  headers: string[],
+  widths: number[],
+  rows: string[][],
+  align: ColAlign[] = headers.map((_, i) => (i === 0 ? "l" : "r")),
+): string[] {
+  const line = (cells: string[]): string =>
+    cells.map((c, i) => (align[i] === "l" ? pad(c, widths[i]) : rpad(c, widths[i]))).join(" | ");
+  return [line(headers), widths.map((w) => "-".repeat(w)).join("-+-"), ...rows.map(line)];
+}
+
 function formatTable(results: HarnessResults): string {
   const { marketHealth, roleCoverLevels, worldCohorts, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
@@ -143,27 +161,24 @@ function formatTable(results: HarnessResults): string {
   // summaries below — they used to each call toTickSystems(finalWorld) separately.
   const finalTickSystems = toTickSystems(finalWorld);
 
+  // Market Health and the role breakdown below share one good order, so a good flagged in the
+  // first lines up row-for-row with the cohort decomposition that explains it. Alphabetical is
+  // the tie-break, keeping the order total for goods with no dispersion reading.
+  const dispersionByGood = new Map((marketHealth?.priceDispersion ?? []).map((d) => [d.goodId, d.avgStdDev]));
+  const byDispersion = (a: string, b: string): number =>
+    (dispersionByGood.get(b) ?? 0) - (dispersionByGood.get(a) ?? 0) || a.localeCompare(b);
+
   const lines: string[] = [];
 
   // Region Overview
   if (regionOverview.length > 0) {
     lines.push("Region Overview:");
-
-    const roHeaders = ["Region", "Government", "Systems"];
-    const roWidths = [16, 16, 8];
-
-    lines.push(roHeaders.map((h, i) => pad(h, roWidths[i])).join(" | "));
-    lines.push(roWidths.map((w) => "-".repeat(w)).join("-+-"));
-
-    for (const r of regionOverview) {
-      const row = [
-        pad(r.name, roWidths[0]),
-        pad(r.dominantGovernmentType, roWidths[1]),
-        rpad(String(r.systemCount), roWidths[2]),
-      ];
-      lines.push(row.join(" | "));
-    }
-
+    lines.push(...renderTable(
+      ["Region", "Government", "Systems"],
+      [16, 16, 8],
+      regionOverview.map((r) => [r.name, r.dominantGovernmentType, String(r.systemCount)]),
+      ["l", "l", "r"],
+    ));
     lines.push("");
   }
 
@@ -174,12 +189,6 @@ function formatTable(results: HarnessResults): string {
     lines.push("");
     lines.push("Market Health (end of simulation):");
 
-    const dHeaders = ["Good", "Price StdDev", "Stock Drift", "Cover", "Deficit %", "Surplus %", "Floor %", "Ceil %"];
-    const dWidths = [12, 13, 13, 7, 9, 9, 8, 8];
-
-    lines.push(dHeaders.map((h, i) => pad(h, dWidths[i])).join(" | "));
-    lines.push(dWidths.map((w) => "-".repeat(w)).join("-+-"));
-
     const dispMap = new Map(marketHealth.priceDispersion.map((d) => [d.goodId, d]));
     const driftMap = new Map(marketHealth.stockDrift.map((d) => [d.goodId, d]));
     const pinMap = new Map(marketHealth.stockPins.map((p) => [p.goodId, p]));
@@ -187,27 +196,28 @@ function formatTable(results: HarnessResults): string {
     const allGoods = [...new Set([
       ...marketHealth.priceDispersion.map((d) => d.goodId),
       ...marketHealth.stockDrift.map((d) => d.goodId),
-    ])];
+    ])].sort(byDispersion);
 
-    allGoods.sort((a, b) => (dispMap.get(b)?.avgStdDev ?? 0) - (dispMap.get(a)?.avgStdDev ?? 0));
-
-    for (const goodId of allGoods) {
-      const disp = dispMap.get(goodId);
-      const drift = driftMap.get(goodId);
-      const pin = pinMap.get(goodId);
-      const cover = coverMap.get(goodId);
-      const row = [
-        pad(goodId, dWidths[0]),
-        rpad(disp ? disp.avgStdDev.toFixed(1) : "-", dWidths[1]),
-        rpad(drift ? (drift.avgStockDrift >= 0 ? "+" : "") + drift.avgStockDrift.toFixed(1) : "-", dWidths[2]),
-        rpad(cover ? cover.medianCover.toFixed(2) + "x" : "-", dWidths[3]),
-        rpad(cover ? (cover.deficitFrac * 100).toFixed(0) + "%" : "-", dWidths[4]),
-        rpad(cover ? (cover.surplusFrac * 100).toFixed(0) + "%" : "-", dWidths[5]),
-        rpad(pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-", dWidths[6]),
-        rpad(pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-", dWidths[7]),
-      ];
-      lines.push(row.join(" | "));
-    }
+    lines.push(...renderTable(
+      ["Good", "Price StdDev", "Stock Drift", "Cover", "Deficit %", "Surplus %", "Floor %", "Ceil %"],
+      [12, 13, 13, 7, 9, 9, 8, 8],
+      allGoods.map((goodId) => {
+        const disp = dispMap.get(goodId);
+        const drift = driftMap.get(goodId);
+        const pin = pinMap.get(goodId);
+        const cover = coverMap.get(goodId);
+        return [
+          goodId,
+          disp ? disp.avgStdDev.toFixed(1) : "-",
+          drift ? (drift.avgStockDrift >= 0 ? "+" : "") + drift.avgStockDrift.toFixed(1) : "-",
+          cover ? cover.medianCover.toFixed(2) + "x" : "-",
+          cover ? (cover.deficitFrac * 100).toFixed(0) + "%" : "-",
+          cover ? (cover.surplusFrac * 100).toFixed(0) + "%" : "-",
+          pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-",
+          pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-",
+        ];
+      }),
+    ));
 
     const inertTotal = roleCoverLevels.reduce((n, e) => n + e.countByRole.inert, 0);
     const marketTotal = roleCoverLevels.reduce(
@@ -240,25 +250,23 @@ function formatTable(results: HarnessResults): string {
     lines.push("");
     lines.push("Cover & price by market role (end of simulation):");
 
-    const rHeaders = ["Good", "Exp n/med", "Self n/med", "Cons n/med", "Cons empty%", "Inert n", "Exp price x"];
-    const rWidths = [16, 11, 11, 11, 12, 12, 12];
-
-    lines.push(rHeaders.map((h, i) => (i === 0 ? pad(h, rWidths[i]) : rpad(h, rWidths[i]))).join(" | "));
-    lines.push(rWidths.map((w) => "-".repeat(w)).join("-+-"));
-
     const cell = (n: number, med: number): string => (n === 0 ? "-" : `${n}/${med.toFixed(2)}`);
 
-    for (const e of roleCoverLevels) {
-      lines.push([
-        pad(e.goodId, rWidths[0]),
-        rpad(cell(e.countByRole.exporter, e.medianCoverByRole.exporter), rWidths[1]),
-        rpad(cell(e.countByRole["self-supplier"], e.medianCoverByRole["self-supplier"]), rWidths[2]),
-        rpad(cell(e.countByRole.consumer, e.medianCoverByRole.consumer), rWidths[3]),
-        rpad(e.countByRole.consumer > 0 ? `${(e.consumerEmptyFrac * 100).toFixed(0)}%` : "-", rWidths[4]),
-        rpad(`${e.countByRole.inert} (${e.trulyInertCount})`, rWidths[5]),
-        rpad(e.countByRole.exporter > 0 ? e.exporterMedianPriceRatio.toFixed(2) : "-", rWidths[6]),
-      ].join(" | "));
-    }
+    lines.push(...renderTable(
+      ["Good", "Exp n/med", "Self n/med", "Cons n/med", "Cons empty%", "Inert n", "Exp price x"],
+      [16, 11, 11, 11, 12, 12, 12],
+      [...roleCoverLevels]
+        .sort((a, b) => byDispersion(a.goodId, b.goodId))
+        .map((e) => [
+          e.goodId,
+          cell(e.countByRole.exporter, e.medianCoverByRole.exporter),
+          cell(e.countByRole["self-supplier"], e.medianCoverByRole["self-supplier"]),
+          cell(e.countByRole.consumer, e.medianCoverByRole.consumer),
+          e.countByRole.consumer > 0 ? `${(e.consumerEmptyFrac * 100).toFixed(0)}%` : "-",
+          `${e.countByRole.inert} (${e.trulyInertCount})`,
+          e.countByRole.exporter > 0 ? e.exporterMedianPriceRatio.toFixed(2) : "-",
+        ]),
+    ));
 
     lines.push("  inert = no production, local demand below the MIN_DEMAND pricing floor. Not the same");
     lines.push("  as no demand: a small world can floor for real. Inert n = total (of which 0-demand).");
@@ -274,11 +282,6 @@ function formatTable(results: HarnessResults): string {
     );
     lines.push("");
     lines.push("Population & Unrest (end of simulation):");
-
-    const pHeaders = ["Metric", "Value"];
-    const pWidths = [24, 16];
-    lines.push([pad(pHeaders[0], pWidths[0]), rpad(pHeaders[1], pWidths[1])].join(" | "));
-    lines.push(pWidths.map((w) => "-".repeat(w)).join("-+-"));
 
     const pingPong = detectPingPong(populationSnapshots);
     const pRows: [string, string][] = [
@@ -304,25 +307,22 @@ function formatTable(results: HarnessResults): string {
       ["Stranded (popCap ≈ 0)", `${pop.strandedCount} (${fmtNum(pop.strandedPopulation)} pop)`],
       ["Ping-pong (migration)", String(pingPong)],
     ];
-    for (const [label, value] of pRows) {
-      lines.push([pad(label, pWidths[0]), rpad(value, pWidths[1])].join(" | "));
-    }
+    lines.push(...renderTable(["Metric", "Value"], [24, 16], pRows.map(([l, v]) => [l, v])));
     lines.push('  meanUnrest is over all settled systems — see "Supply & unrest by world cohort" for the split.');
 
     const regimes = summarizeSupplyRegimes(finalTickSystems, finalWorld.markets, finalWorld.events);
     lines.push("");
     lines.push("Supply regimes (per settled system, end of simulation):");
-    const rWidths = [24, 12, 12];
-    lines.push([pad("Regime", rWidths[0]), rpad("Systems", rWidths[1]), rpad("Share", rWidths[2])].join(" | "));
-    lines.push(rWidths.map((w) => "-".repeat(w)).join("-+-"));
     const rRows: [string, number, number][] = [
       ["Supplied", regimes.supplied, regimes.suppliedShare],
       ["Rationing", regimes.rationing, regimes.rationingShare],
       ["Shortage", regimes.shortage, regimes.shortageShare],
     ];
-    for (const [l, n, sh] of rRows) {
-      lines.push([pad(l, rWidths[0]), rpad(String(n), rWidths[1]), rpad(`${(sh * 100).toFixed(1)}%`, rWidths[2])].join(" | "));
-    }
+    lines.push(...renderTable(
+      ["Regime", "Systems", "Share"],
+      [24, 12, 12],
+      rRows.map(([l, n, sh]) => [l, String(n), `${(sh * 100).toFixed(1)}%`]),
+    ));
     lines.push(`  mean D ${regimes.meanDissatisfaction.toFixed(3)} over ${regimes.counted} settled systems`);
     lines.push('  mean D and mean unrest average incomparable worlds — see "Supply & unrest by world cohort".');
   }
@@ -333,26 +333,20 @@ function formatTable(results: HarnessResults): string {
     lines.push("");
     lines.push("Supply & unrest by world cohort (end of simulation):");
 
-    const wHeaders = ["Cohort", "n", "mean D", "unrest", "strike%", "Sup/Rat/Sho %"];
-    const wWidths = [16, 6, 8, 8, 9, 20];
-
-    lines.push(wHeaders.map((h, i) => (i === 0 ? pad(h, wWidths[i]) : rpad(h, wWidths[i]))).join(" | "));
-    lines.push(wWidths.map((w) => "-".repeat(w)).join("-+-"));
-
-    for (const c of worldCohorts) {
-      const split =
+    lines.push(...renderTable(
+      ["Cohort", "n", "mean D", "unrest", "strike%", "Sup/Rat/Sho %"],
+      [16, 6, 8, 8, 9, 20],
+      worldCohorts.map((c) => [
+        c.cohort,
+        String(c.n),
+        c.meanDissatisfaction.toFixed(3),
+        c.meanUnrest.toFixed(3),
+        `${(c.strikingShare * 100).toFixed(1)}%`,
         `${(c.suppliedShare * 100).toFixed(0)} / ` +
-        `${(c.rationingShare * 100).toFixed(0)} / ` +
-        `${(c.shortageShare * 100).toFixed(0)}`;
-      lines.push([
-        pad(c.cohort, wWidths[0]),
-        rpad(String(c.n), wWidths[1]),
-        rpad(c.meanDissatisfaction.toFixed(3), wWidths[2]),
-        rpad(c.meanUnrest.toFixed(3), wWidths[3]),
-        rpad(`${(c.strikingShare * 100).toFixed(1)}%`, wWidths[4]),
-        rpad(split, wWidths[5]),
-      ].join(" | "));
-    }
+          `${(c.rationingShare * 100).toFixed(0)} / ` +
+          `${(c.shortageShare * 100).toFixed(0)}`,
+      ]),
+    ));
 
     lines.push("  cohorts overlap — a system appears in its population band, in homeworld/colony,");
     lines.push("  and in survival-short if it has no arable slot. Each row's n is its own denominator.");
@@ -378,16 +372,13 @@ function formatTable(results: HarnessResults): string {
     const infra = summarizeInfrastructure(finalTickSystems, initialBuildingTotal);
     lines.push("");
     lines.push("Infrastructure (end of simulation):");
-    const iWidths = [24, 16];
-    lines.push([pad("Metric", iWidths[0]), rpad("Value", iWidths[1])].join(" | "));
-    lines.push(iWidths.map((w) => "-".repeat(w)).join("-+-"));
     const iRows: [string, string][] = [
       ["Built start", fmtNum(infra.builtStart)],
       ["Built end", fmtNum(infra.builtEnd)],
       ["Decayed %", infra.decayedPct.toFixed(2) + "%"],
       ["Collapsed systems (≈0)", String(infra.collapsedCount)],
     ];
-    for (const [l, v] of iRows) lines.push([pad(l, iWidths[0]), rpad(v, iWidths[1])].join(" | "));
+    lines.push(...renderTable(["Metric", "Value"], [24, 16], iRows.map(([l, v]) => [l, v])));
   }
 
   // Colonisation / build-loop health — does a colonised system actually get built out?
@@ -396,9 +387,6 @@ function formatTable(results: HarnessResults): string {
     const col = summarizeColonisation(finalTickSystems, homeworldIds, finalWorld.constructionProjects);
     lines.push("");
     lines.push("Colonisation & Build Loop (end of simulation):");
-    const cWidths = [30, 12, 12];
-    lines.push([pad("Metric", cWidths[0]), rpad("Homeworld", cWidths[1]), rpad("Colony", cWidths[2])].join(" | "));
-    lines.push(cWidths.map((w) => "-".repeat(w)).join("-+-"));
     const cRows: [string, number, number][] = [
       ["Developed systems", col.homeworld.count, col.colony.count],
       ["  with tier-0 extraction", col.homeworld.withTier0, col.colony.withTier0],
@@ -408,9 +396,11 @@ function formatTable(results: HarnessResults): string {
       ["  popCap-starved (pop, cap≈0)", col.homeworld.popCapStarved, col.colony.popCapStarved],
       ["  deposits idle (no tier-0)", col.homeworld.depositsIdle, col.colony.depositsIdle],
     ];
-    for (const [label, hw, cl] of cRows) {
-      lines.push([pad(label, cWidths[0]), rpad(String(hw), cWidths[1]), rpad(String(cl), cWidths[2])].join(" | "));
-    }
+    lines.push(...renderTable(
+      ["Metric", "Homeworld", "Colony"],
+      [30, 12, 12],
+      cRows.map(([label, hw, cl]) => [label, String(hw), String(cl)]),
+    ));
     lines.push(
       `Construction queue: homeworld ${col.queue.homeworldProjects} projects (${col.queue.homeworldLevels} lvls), ` +
         `colony ${col.queue.colonyProjects} projects (${col.queue.colonyLevels} lvls, ` +
@@ -492,9 +482,6 @@ function formatTable(results: HarnessResults): string {
     const lg = logisticsActivity;
     lines.push("");
     lines.push("Logistics Activity (whole run):");
-    const lWidths = [24, 16];
-    lines.push([pad("Metric", lWidths[0]), rpad("Value", lWidths[1])].join(" | "));
-    lines.push(lWidths.map((w) => "-".repeat(w)).join("-+-"));
     const lRows: [string, string][] = [
       ["Transfers", fmtNum(lg.transferCount)],
       ["Ticks with transfers", String(lg.activeTicks)],
@@ -503,7 +490,7 @@ function formatTable(results: HarnessResults): string {
       ["Systems participating", String(lg.participatingSystems)],
       ["Goods moved", String(lg.byGood.length)],
     ];
-    for (const [l, v] of lRows) lines.push([pad(l, lWidths[0]), rpad(v, lWidths[1])].join(" | "));
+    lines.push(...renderTable(["Metric", "Value"], [24, 16], lRows.map(([l, v]) => [l, v])));
     if (lg.byGood.length > 0) {
       const top = lg.byGood.slice(0, 5).map((g) => `${g.goodId} ${fmtNum(g.quantity)}`).join(", ");
       lines.push(`  heaviest goods: ${top}`);
@@ -525,40 +512,29 @@ function formatTable(results: HarnessResults): string {
     lines.push("");
     lines.push(`Event Impact (top ${topEvents.length} of ${eventImpacts.length}):`);
 
-    const eHeaders = ["Type", "System", "Ticks", "Sev", "Price Δ", "Top Movers"];
     const eWidths = [20, 16, 12, 5, 9, 30];
 
-    lines.push(eHeaders.map((h, i) => pad(h, eWidths[i])).join(" | "));
-    lines.push(eWidths.map((w) => "-".repeat(w)).join("-+-"));
-
-    for (const e of topEvents) {
-      const isChild = e.parentEventType !== null;
-      const typeLabel = isChild ? `  └ ${e.eventType}` : e.eventType;
-      const priceSign = e.weightedPriceImpactPct >= 0 ? "+" : "";
-
-      const topMovers = [...e.goodPriceChanges]
-        .sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct))
-        .slice(0, 2)
-        .map((g) => {
-          const s = g.changePct >= 0 ? "+" : "";
-          return `${g.goodId} ${s}${g.changePct.toFixed(0)}%`;
-        })
-        .join(", ");
-
-      const truncName = e.systemName.length > eWidths[1]
-        ? e.systemName.slice(0, eWidths[1] - 2) + ".."
-        : e.systemName;
-
-      const row = [
-        pad(typeLabel, eWidths[0]),
-        pad(truncName, eWidths[1]),
-        pad(`${e.startTick}-${e.endTick}`, eWidths[2]),
-        rpad(e.severity.toFixed(1), eWidths[3]),
-        rpad(`${priceSign}${e.weightedPriceImpactPct.toFixed(1)}%`, eWidths[4]),
-        pad(topMovers || "-", eWidths[5]),
-      ];
-      lines.push(row.join(" | "));
-    }
+    lines.push(...renderTable(
+      ["Type", "System", "Ticks", "Sev", "Price Δ", "Top Movers"],
+      eWidths,
+      topEvents.map((e) => {
+        const priceSign = e.weightedPriceImpactPct >= 0 ? "+" : "";
+        const topMovers = [...e.goodPriceChanges]
+          .sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct))
+          .slice(0, 2)
+          .map((g) => `${g.goodId} ${g.changePct >= 0 ? "+" : ""}${g.changePct.toFixed(0)}%`)
+          .join(", ");
+        return [
+          e.parentEventType !== null ? `  └ ${e.eventType}` : e.eventType,
+          e.systemName.length > eWidths[1] ? e.systemName.slice(0, eWidths[1] - 2) + ".." : e.systemName,
+          `${e.startTick}-${e.endTick}`,
+          e.severity.toFixed(1),
+          `${priceSign}${e.weightedPriceImpactPct.toFixed(1)}%`,
+          topMovers || "-",
+        ];
+      }),
+      ["l", "l", "l", "r", "r", "l"],
+    ));
   } else {
     lines.push("");
     lines.push("Event Impact: no events occurred during simulation");
