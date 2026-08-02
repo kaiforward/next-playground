@@ -278,7 +278,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 > descriptions** for buildings, especially academies. Reuses the existing `Tooltip`. The ambitious
 > **Paradox-style nested/pinnable deep-tooltip system** (rich-tooltip infra + a cross-linking concept
 > glossary) is a SEPARATE, larger project deferred until after the full sX economy track. Both get a
-> collaborative HTML-prototype design pass before build. Tracked in `docs/BACKLOG.md`.
+> collaborative HTML-prototype design pass before build. Tracked in `docs/ROADMAP.md`.
 
 > **S1 absorbs the old standalone "skilled labour" stage** (was S3). Per-good labour, per-good space, and
 > skilled labour are the same factor equation and must be calibrated jointly — see

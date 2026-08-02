@@ -106,7 +106,7 @@ a preview line (source system, seed pop, bundled housing, work) that **is** the 
 dialog; clicking it orders directly. An ineligible controlled system shows the verb disabled with the
 blocking reason, teaching the planner's own rules. The seed-source tie-break (nearest developed
 same-faction system) differs in one respect from the autonomic planner's — see
-[BACKLOG.md](../../BACKLOG.md) for the recorded (accepted) divergence.
+[ROADMAP.md](../../ROADMAP.md) for the recorded (accepted) divergence.
 
 ### Cancel
 

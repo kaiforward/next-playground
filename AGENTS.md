@@ -43,13 +43,13 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 - `docs/active/` — shipped systems (`gameplay/`, `engineering/`, `design-system/`).
 - `docs/planned/` — designed, not built.
 - `docs/build-plans/` — transient build plans; **delete each when its feature ships**.
-- `docs/BACKLOG.md` — actionable work items; delete when shipped.
+- `docs/ROADMAP.md` — **the single ordered queue of work.** Nothing else keeps a second copy of it; memory tracks only where we are on it. Delete a row when it ships.
 
 Conventions:
 - **No `docs/archive/`** — superseded docs are deleted. Git is the history.
 - **Active docs describe current reality in present tense** — no change history, no phase numbers or nicknames.
 - **Specs lead with a plain-language headline** of the mechanics and their interactions; math goes in later sections.
-- **Before deleting a doc, book what it defers.** Grep it for "→ BACKLOG"/deferred/follow-up and confirm each was actually booked (`git log -S` the destination) — a plan claiming it routed something is not evidence anyone did.
+- **Before deleting a doc, book what it defers.** Grep it for deferred/follow-up/"→ ROADMAP" work and confirm each was actually booked (`git log -S` the destination) — a plan claiming it routed something is not evidence anyone did.
 
 ## Conventions
 
@@ -141,7 +141,7 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 ### Review process
 - **Spec gate:** `/spec-review <doc>` on any spec with cross-mechanic surface (economy, tick processors, changed signals/primitives) BEFORE writing the implementation plan. Pure-UI and tooling skip it.
 - **Everything you know about a PR goes on the table BEFORE it merges.** Findings, doubts, "worth considering" notes, anything you would otherwise append afterwards — they belong in the review response while the merge is still a decision Kai can make differently. A post-merge "oh, also, three things…" is withholding the inputs to a decision he already made, and is the single most-repeated failure here. If you genuinely only see something after the merge, say plainly that it was missed at review time.
-- **A BACKLOG item is Kai's decision, not yours.** Booking a finding instead of fixing it must be (a) stated in the turn's response and (b) named in the commit message. Default: if it is cheap, self-contained and in a file the PR already touches, fix it and say so.
+- **A roadmap item is Kai's decision, not yours.** Booking a finding instead of fixing it must be (a) stated in the turn's response and (b) named in the commit message. Default: if it is cheap, self-contained and in a file the PR already touches, fix it and say so.
 - **Open the PR before reviewing**, so findings land as PR comments. Don't gate PR creation on a clean review.
 - **Review each sub-feature going INTO shared**, while it is small and in context — a whole-branch review at the end is the symptom of having skipped that gate, not the standard.
 - **PR-mode `/uber-review`: check out the PR head first**, else agents review stale base-branch code.

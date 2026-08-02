@@ -106,7 +106,7 @@ Present each finding and ask the user to call it:
 
 - **Accept** — the spec gets amended with the proposed amendment.
 - **Reject** — intended behaviour or wrong finding; record the call in the report.
-- **Defer** — real but out of scope; **book it** (into `docs/BACKLOG.md` or the spec's own open-questions section) before moving on — a deferred finding with no booked destination is a dropped finding.
+- **Defer** — real but out of scope; **book it** (into `docs/ROADMAP.md` or the spec's own open-questions section) before moving on — a deferred finding with no booked destination is a dropped finding.
 
 Do not touch the spec until the user has called every finding.
 
