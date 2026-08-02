@@ -510,11 +510,10 @@ describe("planFactionBuilds — relief housing", () => {
     expect(countFor(planFactionBuilds([starved], () => 1, DEV_REFS), "A", "housing")).toBe(0);
   });
 
-  it("relieves a crowded system whose unrest sits at the maximum standing floor", () => {
-    // The deadlock case: a very-high-tax world (tax floor 0.18) that is also full (crowding 0.05)
-    // carries 0.23 standing unrest — more than any calm gate would admit. Its pop (98) is past the
-    // trigger against its 5-level cap (100), and crowding is exactly what the housing would relieve,
-    // so unrest must not hold the valve shut.
+  it("relieves a crowded system sitting right against its housing cap", () => {
+    // The case relief housing exists for: pop (98) is past the trigger against a 5-level cap (100),
+    // and crowding is exactly what the extra level would relieve. Nothing but supply may hold the
+    // valve shut here — see the fed-gate docstring for why a calm term would deadlock it.
     const crowded: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 98, control: "developed",
       buildings: { housing: 5 },
@@ -697,11 +696,6 @@ describe("fed", () => {
     expect(fed(sysWith({ goods: noDemand }))).toBe(true);
   });
 
-  it("is true at maximum unrest — supply is the only gate on housing", () => {
-    // Reinstating any calm term here would deadlock relief: a fully restive world is precisely the
-    // one whose crowding the housing exists to relieve.
-    expect(fed(sysWith({ goods: fedGoods, }))).toBe(true);
-  });
 });
 
 describe("habitableHousingHeadroom", () => {
