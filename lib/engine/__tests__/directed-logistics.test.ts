@@ -12,7 +12,7 @@ import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
 
 describe("classifyMarketState", () => {
   it("classifies below the deficit fraction as deficit with shortfall to target", () => {
-    // targetStock 10, DEFICIT_FRACTION 0.8 → threshold 8; stock 2 < 8.
+    // logisticsTarget 10, DEFICIT_FRACTION 0.8 → threshold 8; stock 2 < 8.
     const c = classifyMarketState(2, 10);
     expect(c.kind).toBe("deficit");
     expect(c.shortfall).toBe(8);
@@ -20,7 +20,7 @@ describe("classifyMarketState", () => {
   });
 
   it("classifies at/above the surplus margin as surplus with drawable above target", () => {
-    // targetStock 50, SURPLUS_MARGIN 1.4 → threshold 70; stock 100 ≥ 70.
+    // logisticsTarget 50, SURPLUS_MARGIN 1.4 → threshold 70; stock 100 ≥ 70.
     const c = classifyMarketState(100, 50);
     expect(c.kind).toBe("surplus");
     expect(c.drawable).toBe(50);
@@ -28,7 +28,7 @@ describe("classifyMarketState", () => {
   });
 
   it("classifies the dead-band between thresholds as balanced", () => {
-    // targetStock 10 → deficit < 8, surplus ≥ 14; stock 10 is between.
+    // logisticsTarget 10 → deficit < 8, surplus ≥ 14; stock 10 is between.
     const c = classifyMarketState(10, 10);
     expect(c.kind).toBe("balanced");
     expect(c.shortfall).toBe(0);
@@ -40,7 +40,7 @@ describe("classifyMarketState", () => {
     expect(classifyMarketState(7.9, 10).shortfall).toBeCloseTo(2.1);
   });
 
-  it("classifies a zero-anchor good (targetStock 0, positive stock) as balanced, not surplus", () => {
+  it("classifies a zero-anchor good (logisticsTarget 0, positive stock) as balanced, not surplus", () => {
     const c = classifyMarketState(50, 0);
     expect(c.kind).toBe("balanced");
     expect(c.drawable).toBe(0);
@@ -62,7 +62,11 @@ function sys(
   systemId: string,
   generation: number,
   good: {
-    goodId: string; stock: number; targetStock: number; demand: number; civilianDemand?: number;
+    goodId: string; stock: number; logisticsTarget: number; demand: number; civilianDemand?: number;
+    /** The PRICE anchor, which only the donor side reads. Defaults to the warehousing target, which
+     *  is what the two figures are equal to at any market whose demand clears MIN_DEMAND — the
+     *  ordinary case these fixtures describe. The floored-market cases set them apart. */
+    targetStock?: number;
     production?: number; capacityProduction?: number; productionSuppressed?: boolean;
   },
 ): SystemLogisticsState {
@@ -71,6 +75,7 @@ function sys(
     systemId, factionId: "f1", generation,
     goods: [{
       ...good,
+      targetStock: good.targetStock ?? good.logisticsTarget,
       production,
       capacityProduction: good.capacityProduction ?? production,
       // The matcher never reads it (only the build planner's fed-gate does); these fixtures are
@@ -85,11 +90,11 @@ const oneHop: RouteCost = (_from, to) => (to === "far" ? null : 1);
 
 describe("matchFactionTransfers", () => {
   it("moves drawable surplus to a below-anchor deficit", () => {
-    // A: stock 100 ≥ targetStock 50 × 1.4 = 70 ✓ surplus; drawable = 100 − 50 = 50
-    // B: stock 2 < targetStock 10 × 0.8 = 8 ✓ deficit; shortfall = 10 − 2 = 8
+    // A: stock 100 ≥ logisticsTarget 50 × 1.4 = 70 ✓ surplus; drawable = 100 − 50 = 50
+    // B: stock 2 < logisticsTarget 10 × 0.8 = 8 ✓ deficit; shortfall = 10 − 2 = 8
     // qty = min(8, 50, budget 100) = 8; cost = 8
-    const surplus = sys("A", 100, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
-    const deficit = sys("B", 0, { goodId: "food", stock: 2, targetStock: 10, demand: 5 });
+    const surplus = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 2, logisticsTarget: 10, demand: 5 });
     const { transfers } = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ goodId: "food", fromSystemId: "A", toSystemId: "B" });
@@ -98,54 +103,131 @@ describe("matchFactionTransfers", () => {
   });
 
   it("never draws a source below its own target", () => {
-    // A: stock 12 ≥ targetStock 8 × 1.4 = 11.2 ✓ surplus; drawable = 12 − 8 = 4
-    // B: stock 0 < targetStock 10 × 0.8 = 8 ✓ deficit; shortfall = 10 − 0 = 10
+    // A: stock 12 ≥ logisticsTarget 8 × 1.4 = 11.2 ✓ surplus; drawable = 12 − 8 = 4
+    // B: stock 0 < logisticsTarget 10 × 0.8 = 8 ✓ deficit; shortfall = 10 − 0 = 10
     // qty = min(10, 4, budget 100) = 4 — donor draws down to its own target (8), not below it
-    const surplus = sys("A", 100, { goodId: "food", stock: 12, targetStock: 8, demand: 5 });
-    const deficit = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const surplus = sys("A", 100, { goodId: "food", stock: 12, logisticsTarget: 8, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     const { transfers } = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers[0].quantity).toBe(4); // drawable = 12 - 8 (target)
   });
 
   it("is bounded by the faction budget (under-serves, leaving residual)", () => {
-    // A: stock 100 ≥ targetStock 50 × 1.4 = 70 ✓ surplus; budget = 3 → at most 3 moved
-    const surplus = sys("A", 3, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
-    const deficit = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    // A: stock 100 ≥ logisticsTarget 50 × 1.4 = 70 ✓ surplus; budget = 3 → at most 3 moved
+    const surplus = sys("A", 3, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     // budget = 3 (only A generates), cost 1/unit → at most 3 moved despite a shortfall of 10
     const { transfers } = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers[0].quantity).toBe(3);
   });
 
   it("ranks the most severe deficit first when budget is scarce", () => {
-    // A: stock 100 ≥ targetStock 50 × 1.4 = 70 ✓ surplus
+    // A: stock 100 ≥ logisticsTarget 50 × 1.4 = 70 ✓ surplus
     // B mild (demand 1), C severe (demand 10) — C should be served first.
-    const surplus = sys("A", 5, { goodId: "food", stock: 100, targetStock: 50, demand: 1 });
-    const mild = sys("B", 0, { goodId: "food", stock: 5, targetStock: 10, demand: 1 });
-    const severe = sys("C", 0, { goodId: "food", stock: 5, targetStock: 10, demand: 10 });
+    const surplus = sys("A", 5, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 1 });
+    const mild = sys("B", 0, { goodId: "food", stock: 5, logisticsTarget: 10, demand: 1 });
+    const severe = sys("C", 0, { goodId: "food", stock: 5, logisticsTarget: 10, demand: 10 });
     const { transfers } = matchFactionTransfers([surplus, mild, severe], oneHop);
     expect(transfers[0].toSystemId).toBe("C");
   });
 
+  it("does not haul to a market whose demand only clears the MIN_DEMAND pricing floor", () => {
+    // C is a small colony: real demand 0.01/cycle, so its persisted demandRate is pinned at the
+    // MIN_DEMAND guard and its PRICE anchor reads 2 — 200 cycles of what it actually uses. Its
+    // warehousing target is the honest 40 × 0.01 = 0.4, which its stock of 1 already clears.
+    // B is a real consumer with the same good and a genuine shortfall.
+    const donor = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const real = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
+    const floored = sys("C", 0, {
+      goodId: "food", stock: 1, logisticsTarget: 0.4, demand: 0.01,
+    });
+
+    const { transfers } = matchFactionTransfers([donor, real, floored], oneHop);
+    expect(transfers.map((t) => t.toSystemId)).toEqual(["B"]);
+
+    // Discrimination check: the ONLY thing keeping C out is the separated denominator. Point its
+    // warehousing target back at the price anchor — what the matcher read before the split — and C
+    // becomes a deficit again. If this half ever stops producing two transfers, the case above has
+    // stopped proving anything.
+    const asBefore = sys("C", 0, {
+      goodId: "food", stock: 1, logisticsTarget: 2, demand: 0.01,
+    });
+    const before = matchFactionTransfers([donor, real, asBefore], oneHop);
+    expect(before.transfers.map((t) => t.toSystemId)).toEqual(["B", "C"]);
+  });
+
+  it("still hauls to a small market whose real demand clears the floor", () => {
+    // The mirror of the case above — the change must not simply stop serving small worlds. Real
+    // demand 0.5/cycle gives a warehousing target of 20, and a stock of 1 is a genuine shortfall.
+    const donor = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const small = sys("C", 0, {
+      goodId: "food", stock: 1, logisticsTarget: 20, demand: 0.5,
+    });
+    const { transfers } = matchFactionTransfers([donor, small], oneHop);
+    expect(transfers.map((t) => t.toSystemId)).toEqual(["C"]);
+    expect(transfers[0].quantity).toBe(19);
+  });
+
+  // ── The donor side deliberately still reads the PRICE anchor while the deficit side reads the
+  // warehousing target. That asymmetry is known-wrong and documented as such, but it is live
+  // behaviour and these two cases pin it: both fail if the matcher's surplusDrawable call is
+  // repointed at `logisticsTarget`. Every other fixture in this file leaves the two figures equal,
+  // so without these the central claim of the split is untested in either direction.
+
+  it("keeps a pure exporter shipping, because the donor side reads the floored price anchor", () => {
+    // The trap surplusDrawable's docstring warns about. A raw-material exporter consumes none of
+    // what it digs: real demand 0, so its warehousing target is legitimately 0 while its price
+    // anchor sits at the MIN_DEMAND floor (40 × 0.05 = 2). surplusDrawable's `targetStock <= 0`
+    // guard runs BEFORE the exporter branch — hand it the demand-derived target and the guard
+    // fires, returning 0 drawable and stopping raw-material trade dead across the galaxy.
+    const exporter = sys("A", 100, {
+      goodId: "ore", stock: 500, logisticsTarget: 0, targetStock: 2, demand: 0, production: 30,
+    });
+    const consumer = sys("B", 0, { goodId: "ore", stock: 0, logisticsTarget: 10, demand: 5 });
+
+    const { transfers } = matchFactionTransfers([exporter, consumer], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
+    // Drawable is the whole stock (exporter reserve = 10 × demand 0), so the recipient's
+    // shortfall binds: 10 − 0.
+    expect(transfers[0].quantity).toBe(10);
+  });
+
+  it("sizes an ordinary donor's drawable off the price anchor, not the warehousing target", () => {
+    // The non-exporter branch of the same asymmetry, at a floored market where the two diverge.
+    // A holds 2.9 against a floored anchor of 2 → clears the 1.4× margin (2.8) and donates
+    // 2.9 − 2 = 0.9. Measured against its warehousing target of 0.4 instead it would donate
+    // 2.5 — nearly three times as much, drawn out of a market the anchor says is barely above par.
+    const donor = sys("A", 100, {
+      goodId: "food", stock: 2.9, logisticsTarget: 0.4, targetStock: 2, demand: 0.01, production: 0,
+    });
+    const consumer = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
+
+    const { transfers } = matchFactionTransfers([donor, consumer], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0].quantity).toBeCloseTo(0.9, 10);
+  });
+
   it("skips unreachable deficits (route cost null)", () => {
-    const surplus = sys("A", 100, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
-    const deficit = sys("far", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const surplus = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const deficit = sys("far", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     expect(matchFactionTransfers([surplus, deficit], oneHop).transfers).toHaveLength(0);
   });
 
   it("ignores goods that are neither surplus nor deficit", () => {
-    // a: stock 50 < targetStock 50 × 1.4 = 70 → NOT surplus; stock 50 ≥ targetStock 50 × 0.8 = 40 → NOT deficit
+    // a: stock 50 < logisticsTarget 50 × 1.4 = 70 → NOT surplus; stock 50 ≥ logisticsTarget 50 × 0.8 = 40 → NOT deficit
     // b: same → NOT surplus, NOT deficit
-    const a = sys("A", 100, { goodId: "food", stock: 50, targetStock: 50, demand: 5 });
-    const b = sys("B", 0, { goodId: "food", stock: 50, targetStock: 50, demand: 5 });
+    const a = sys("A", 100, { goodId: "food", stock: 50, logisticsTarget: 50, demand: 5 });
+    const b = sys("B", 0, { goodId: "food", stock: 50, logisticsTarget: 50, demand: 5 });
     expect(matchFactionTransfers([a, b], oneHop).transfers).toHaveLength(0);
   });
 
   it("draws one source across two deficits without exceeding its drawable", () => {
-    // A: stock 20 ≥ targetStock 10 × 1.4 = 14 ✓ surplus; drawable = 20 − 10 = 10. budget = 100.
-    const surplus = sys("A", 100, { goodId: "food", stock: 20, targetStock: 10, demand: 0 });
+    // A: stock 20 ≥ logisticsTarget 10 × 1.4 = 14 ✓ surplus; drawable = 20 − 10 = 10. budget = 100.
+    const surplus = sys("A", 100, { goodId: "food", stock: 20, logisticsTarget: 10, demand: 0 });
     // C more severe (demand 10), B less severe (demand 1); each: stock 4 < 10 × 0.8 = 8 ✓ deficit, shortfall = 6.
-    const severe = sys("C", 0, { goodId: "food", stock: 4, targetStock: 10, demand: 10 });
-    const mild = sys("B", 0, { goodId: "food", stock: 4, targetStock: 10, demand: 1 });
+    const severe = sys("C", 0, { goodId: "food", stock: 4, logisticsTarget: 10, demand: 10 });
+    const mild = sys("B", 0, { goodId: "food", stock: 4, logisticsTarget: 10, demand: 1 });
     const { transfers } = matchFactionTransfers([surplus, severe, mild], oneHop);
     // C served first (severity 60 > 6): qty = min(shortfall 6, drawable 10, budget 100) = 6.
     // B served from A's residual drawable (10 - 6 = 4): qty = min(shortfall 6, drawable 4, budget 94) = 4.
@@ -156,11 +238,11 @@ describe("matchFactionTransfers", () => {
   });
 
   it("treats a market above its anchor as a surplus even when far from any storage ceiling", () => {
-    // stock 80 = 1.6× its targetStock of 50 → surplus under the anchor rule, though nowhere near a
+    // stock 80 = 1.6× its logisticsTarget of 50 → surplus under the anchor rule, though nowhere near a
     // storage ceiling. The near-ceiling rule (stock ≥ maxStock×0.9) missed exactly this case
     // (simulator diagnosis 2026-06-26).
-    const surplus = sys("A", 100, { goodId: "food", stock: 80, targetStock: 50, demand: 5 });
-    const deficit = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const surplus = sys("A", 100, { goodId: "food", stock: 80, logisticsTarget: 50, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     const { transfers } = matchFactionTransfers([surplus, deficit], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
@@ -169,30 +251,30 @@ describe("matchFactionTransfers", () => {
   });
 
   it("never ships a good into a system that already produces enough of it (production ≥ demand)", () => {
-    // B sits below its anchor (stock 2 < targetStock 10 × 0.8 = 8 → would classify as a deficit),
+    // B sits below its anchor (stock 2 < logisticsTarget 10 × 0.8 = 8 → would classify as a deficit),
     // but it produces 20/tick against demand 5 → it self-supplies. Shipping more in just piles its
     // stock toward the ceiling and decays its own extractors, so it must NOT be a sink.
-    const surplus = sys("A", 100, { goodId: "ore", stock: 100, targetStock: 50, demand: 5, production: 0 });
-    const producer = sys("B", 0, { goodId: "ore", stock: 2, targetStock: 10, demand: 5, production: 20 });
+    const surplus = sys("A", 100, { goodId: "ore", stock: 100, logisticsTarget: 50, demand: 5, production: 0 });
+    const producer = sys("B", 0, { goodId: "ore", stock: 2, logisticsTarget: 10, demand: 5, production: 20 });
     expect(matchFactionTransfers([surplus, producer], oneHop).transfers).toHaveLength(0);
   });
 
   it("still serves a deficit that produces some of the good but cannot self-supply (production < demand)", () => {
     // B produces 3/tick but demands 8 → a genuine net importer; logistics should still fill it.
-    const surplus = sys("A", 100, { goodId: "ore", stock: 100, targetStock: 50, demand: 8, production: 0 });
-    const importer = sys("B", 0, { goodId: "ore", stock: 0, targetStock: 10, demand: 8, production: 3 });
+    const surplus = sys("A", 100, { goodId: "ore", stock: 100, logisticsTarget: 50, demand: 8, production: 0 });
+    const importer = sys("B", 0, { goodId: "ore", stock: 0, logisticsTarget: 10, demand: 8, production: 3 });
     const { transfers } = matchFactionTransfers([surplus, importer], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
   });
 
   it("treats a structural producer above its anchor as a surplus, even below the 1.4× margin", () => {
-    // A produces 30 > demand 5 → a structural exporter; stock 110 = 1.1× its targetStock 100, BELOW
+    // A produces 30 > demand 5 → a structural exporter; stock 110 = 1.1× its logisticsTarget 100, BELOW
     // the 1.4× margin (140). The production throttle caps producers at ~1.3× their anchor so they
     // never reach 1.4× — a structural exporter must still donate what it holds above its own anchor
     // (drawable = 110 − 100 = 10), mirroring the deficit-side self-supply gate.
-    const producer = sys("A", 100, { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 30 });
-    const deficit = sys("B", 0, { goodId: "food", stock: 2, targetStock: 10, demand: 5, production: 0 });
+    const producer = sys("A", 100, { goodId: "food", stock: 110, logisticsTarget: 100, demand: 5, production: 30 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 2, logisticsTarget: 10, demand: 5, production: 0 });
     const { transfers } = matchFactionTransfers([producer, deficit], oneHop);
     expect(transfers).toHaveLength(1);
     expect(transfers[0]).toMatchObject({ goodId: "food", fromSystemId: "A", toSystemId: "B" });
@@ -204,45 +286,45 @@ describe("matchFactionTransfers", () => {
     // A holds stock 110 = 1.1× anchor but produces 0 — it's sitting on imported inventory, not a
     // structural exporter. Only structural producers donate from the 1.0–1.4× band; a non-producer
     // keeps the protective margin so logistics doesn't immediately re-export what was shipped to it.
-    const holder = sys("A", 100, { goodId: "food", stock: 110, targetStock: 100, demand: 5, production: 0 });
-    const deficit = sys("B", 0, { goodId: "food", stock: 2, targetStock: 10, demand: 5, production: 0 });
+    const holder = sys("A", 100, { goodId: "food", stock: 110, logisticsTarget: 100, demand: 5, production: 0 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 2, logisticsTarget: 10, demand: 5, production: 0 });
     expect(matchFactionTransfers([holder, deficit], oneHop).transfers).toHaveLength(0);
   });
 
   it("reports a partially funded reachable match", () => {
-    const donor = sys("A", 3, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
-    const receiver = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const donor = sys("A", 3, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const receiver = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     const result = matchFactionTransfers([donor, receiver], oneHop);
     expect(result.transfers[0].quantity).toBe(3);
     expect(result.fundingBound).toEqual([{ goodId: "food", fromSystemId: "A", toSystemId: "B" }]);
   });
 
   it("reports a zero-budget reachable match without emitting a transfer", () => {
-    const donor = sys("A", 0, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
-    const receiver = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const donor = sys("A", 0, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const receiver = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     const result = matchFactionTransfers([donor, receiver], oneHop);
     expect(result.transfers).toEqual([]);
     expect(result.fundingBound).toHaveLength(1);
   });
 
   it("does not mark an ample-budget or drawable-bound transfer", () => {
-    const donor = sys("A", 100, { goodId: "food", stock: 14, targetStock: 10, demand: 5, production: 0 });
-    const receiver = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const donor = sys("A", 100, { goodId: "food", stock: 14, logisticsTarget: 10, demand: 5, production: 0 });
+    const receiver = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     const result = matchFactionTransfers([donor, receiver], oneHop);
     expect(result.transfers[0].quantity).toBe(4);
     expect(result.fundingBound).toEqual([]);
   });
 
   it("does not mark unreachable or source-less deficits", () => {
-    const donor = sys("A", 0, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
-    const receiver = sys("far", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const donor = sys("A", 0, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const receiver = sys("far", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     expect(matchFactionTransfers([donor, receiver], oneHop).fundingBound).toEqual([]);
   });
 
   it("continues classifying later deficits after the budget is exhausted", () => {
-    const donor = sys("A", 2, { goodId: "food", stock: 100, targetStock: 50, demand: 5 });
-    const severe = sys("B", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 10 });
-    const later = sys("C", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 1 });
+    const donor = sys("A", 2, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const severe = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 10 });
+    const later = sys("C", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 1 });
     const result = matchFactionTransfers([donor, severe, later], oneHop);
     expect(result.transfers).toHaveLength(1);
     expect(result.fundingBound.map((match) => match.toSystemId)).toEqual(["B", "C"]);
@@ -250,9 +332,9 @@ describe("matchFactionTransfers", () => {
 
   it("limits zero-budget classification to bounded route candidates", () => {
     const donors = Array.from({ length: 100 }, (_value, index) =>
-      sys(`S${index}`, 0, { goodId: "food", stock: 100, targetStock: 50, demand: 5 }),
+      sys(`S${index}`, 0, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 }),
     );
-    const receiver = sys("D", 0, { goodId: "food", stock: 0, targetStock: 10, demand: 5 });
+    const receiver = sys("D", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
     let routeLookups = 0;
     const result = matchFactionTransfers(
       [...donors, receiver],
@@ -345,10 +427,10 @@ describe("strategic exporter reserve", () => {
 
   it("does not deep-draw an input-starved former exporter despite its capacity", () => {
     const donor = sys("A", 100, {
-      goodId: "ore", stock: 110, targetStock: 100, demand: 5,
+      goodId: "ore", stock: 110, logisticsTarget: 100, demand: 5,
       production: 0, capacityProduction: 30,
     });
-    const receiver = sys("B", 0, { goodId: "ore", stock: 0, targetStock: 10, demand: 5 });
+    const receiver = sys("B", 0, { goodId: "ore", stock: 0, logisticsTarget: 10, demand: 5 });
     expect(matchFactionTransfers([donor, receiver], oneHop).transfers).toEqual([]);
   });
 
@@ -373,13 +455,13 @@ describe("strategic exporter reserve", () => {
   });
 
   it("keeps suppressed and realized-zero former exporters on the ordinary excess path", () => {
-    const recipient = sys("B", 0, { goodId: "ore", stock: 0, targetStock: 100, demand: 5 });
+    const recipient = sys("B", 0, { goodId: "ore", stock: 0, logisticsTarget: 100, demand: 5 });
     const suppressed = sys("A", 100, {
-      goodId: "ore", stock: 150, targetStock: 100, demand: 5,
+      goodId: "ore", stock: 150, logisticsTarget: 100, demand: 5,
       production: 30, capacityProduction: 30, productionSuppressed: true,
     });
     const realizedZero = sys("C", 100, {
-      goodId: "ore", stock: 150, targetStock: 100, demand: 5,
+      goodId: "ore", stock: 150, logisticsTarget: 100, demand: 5,
       production: 0, capacityProduction: 30,
     });
 
@@ -397,7 +479,10 @@ describe("strategic exporter reserve", () => {
     // `targetStock <= 0` guard does not fire. Correct — there is no local population to hold stock
     // for — but pinned so a future change cannot flip it silently.
     expect(surplusDrawable(500, 100, 0, 30)).toBe(500);
-    // …and with the anchor gone too, the guard takes over and nothing is drawable.
+    // …and with the anchor gone too, the guard takes over and nothing is drawable. This is the trap
+    // for anyone re-denominating this side in real demand: a pure exporter's demand IS zero, so its
+    // target would be zero, and every raw-material shipment in the galaxy would stop. Only the
+    // MIN_DEMAND floor keeps the guard from firing today. See surplusDrawable's docstring.
     expect(surplusDrawable(500, 0, 0, 30)).toBe(0);
   });
 

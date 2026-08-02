@@ -1,12 +1,20 @@
 /**
  * Shared per-system market-state derivation for the directed-logistics matcher and
  * the directed-build planner. Given one system's buildings/population/yields and its
- * market rows, produce the engine's GoodMarketState[]: per good, current stock, the
- * cycles-of-supply price anchor (targetStock), and total demand (civilian consumption +
- * industrial input draw). One definition so both processors read markets identically.
+ * market rows, produce the engine's GoodMarketState[]: per good, current stock, the cycles-of-supply
+ * warehousing target the deficit test measures against (logisticsTarget), the price anchor
+ * (targetStock), and total demand (civilian consumption + industrial input draw). One definition so
+ * both processors read markets identically.
+ *
+ * The two stock figures are NOT interchangeable. `targetStock` divides by the row's `demandRate`,
+ * which floors at `MIN_DEMAND` — a divide-by-zero guard on *pricing* — so below that floor it
+ * describes the guard rather than anything consumed locally. `logisticsTarget` divides by real
+ * demand. Deficits use the latter; only `surplusDrawable` still reads the former, and only because
+ * moving it could not be shown to be safe (see its docstring).
  */
 import type { ResourceVector } from "@/lib/types/game";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { GOODS } from "@/lib/constants/goods";
 import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/industry";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
@@ -30,11 +38,15 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
     const band = marketBandForRow(m, GOODS[m.goodId]);
     const civ = consByKey.get(m.goodId) ?? 0;
     const industrial = inputDemandFromProduction(m.goodId, prodByKey);
+    const demand = civ + industrial;
     goods.push({
       goodId: m.goodId,
       stock: m.stock,
       targetStock: band.targetStock,
-      demand: civ + industrial,
+      // Cycles of the demand this system actually has. Carries `anchorMult` so an event that
+      // shifts a market's anchor moves the warehousing target with it.
+      logisticsTarget: DIRECTED_LOGISTICS.WAREHOUSE_COVER * Math.max(0, demand) * m.anchorMult,
+      demand,
       civilianDemand: civ,
       // An explicit zero is a completed assessment and must remain a sink. Capacity is
       // only a legacy-save fallback while the persisted rate is genuinely absent.

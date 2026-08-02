@@ -24,7 +24,7 @@ import type { BuildCommitmentRecord, FoundedColonyRecord } from "./build-analysi
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
 import type { TreasurySnapshot } from "./treasury-analysis";
-import { computeRoleCoverLevels, computeWorldCohorts } from "./cohort-analysis";
+import { computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey } from "./cohort-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
@@ -186,11 +186,17 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     marketSnapshots.push({ tick: world.meta.currentTick, markets: takeMarketSnapshot(currentMarkets) });
   }
 
-  const marketHealth = computeMarketHealth(currentMarkets);
-
   // Cohorted reads, from the final world only — no per-tick tracking. Reuses the tick rows
   // the report already builds rather than walking the world a second time.
   const finalTickSystems = toTickSystems(world);
+
+  // The deficit share is measured against the warehousing target, which needs the systems'
+  // real demand — a market row carries only the MIN_DEMAND-floored rate.
+  const marketHealth = computeMarketHealth(
+    currentMarkets,
+    logisticsTargetsByKey(finalTickSystems, currentMarkets),
+  );
+
   const homeworldIds = new Set(world.factions.map((f) => f.homeworldId));
   const roleCoverLevels = computeRoleCoverLevels(finalTickSystems, currentMarkets);
   const worldCohorts = computeWorldCohorts(

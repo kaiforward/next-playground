@@ -16,6 +16,9 @@ function market(
   return { systemId, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
 
+/** Warehousing targets only feed `deficitFrac`; the suites below assert other metrics. */
+const NO_TARGETS = new Map<string, number>();
+
 describe("takeMarketSnapshot", () => {
   it("emits one snapshot per market with the spot price at its stock", () => {
     // demandRate 1, anchorMult 1 ⇒ reference stock = TARGET_COVER. Holding stock
@@ -41,7 +44,7 @@ describe("computeMarketHealth — stock drift", () => {
       market("sys-1", "water", 200),
       market("sys-2", "water", 140),
       market("sys-1", "luxuries", 20),
-    ]);
+    ], NO_TARGETS);
 
     const expectedWater = (200 + 140) / 2 - TARGET_COVER;
     const expectedLux = 20 - TARGET_COVER;
@@ -60,10 +63,10 @@ describe("computeMarketHealth — stock drift", () => {
     // anchorMult shifts the reference (TARGET_COVER × demandRate × anchorMult). A
     // stock just above the anchorMult-1 reference reads below it once doubled.
     const stock = TARGET_COVER + 10;
-    const { stockDrift: base } = computeMarketHealth([market("sys-1", "water", stock)]);
+    const { stockDrift: base } = computeMarketHealth([market("sys-1", "water", stock)], NO_TARGETS);
     const { stockDrift: shifted } = computeMarketHealth([
       { ...market("sys-1", "water", stock), anchorMult: 2 },
-    ]);
+    ], NO_TARGETS);
     expect(base[0].avgStockDrift).toBeGreaterThan(0); // above reference TARGET_COVER
     expect(shifted[0].avgStockDrift).toBeLessThan(0); // below reference 2 × TARGET_COVER
   });
@@ -80,7 +83,7 @@ describe("computeMarketHealth — stock pins", () => {
       market("sys-1", "ore", 0), // empty → pinned
       market("sys-2", "ore", buffer), // exactly at the buffer → pinned (≤)
       market("sys-3", "ore", buffer * 2), // past the buffer → not pinned
-    ]);
+    ], NO_TARGETS);
 
     const ore = stockPins.find((p) => p.goodId === "ore");
     expect(ore?.floorFrac).toBeCloseTo(2 / 3, 5);
@@ -94,7 +97,7 @@ describe("computeMarketHealth — stock pins", () => {
     const oreBand = marketBandForRow(market("sys-1", "ore", 0), GOODS.ore);
     const { stockPins } = computeMarketHealth([
       market("sys-1", "ore", oreBand.minStock), // stock = band.minStock → floorFrac 0
-    ]);
+    ], NO_TARGETS);
 
     const ore = stockPins.find((p) => p.goodId === "ore");
     expect(ore?.floorFrac).toBe(0);
@@ -113,7 +116,7 @@ describe("computeMarketHealth — stock pins", () => {
       market("sys-2", "ore", 0),
       market("sys-1", "luxuries", luxBand.maxStock),
       market("sys-2", "luxuries", (luxBand.minStock + luxBand.maxStock) / 2),
-    ]);
+    ], NO_TARGETS);
 
     const ore = stockPins.find((p) => p.goodId === "ore");
     expect(ore?.floorFrac).toBe(1);
@@ -138,7 +141,7 @@ describe("computeMarketHealth — stock pins", () => {
       market("sys-1", "ore", 0),
       market("sys-1", "metals", 0),
       market("sys-2", "metals", (metalsBand.minStock + metalsBand.maxStock) / 2),
-    ]);
+    ], NO_TARGETS);
 
     const ore = stockPins.find((p) => p.goodId === "ore")!;
     const metals = stockPins.find((p) => p.goodId === "metals")!;
@@ -159,7 +162,7 @@ describe("computeMarketHealth — price dispersion", () => {
       market("sys-1", "water", TARGET_COVER), // at the anchor → price == basePrice
       market("sys-2", "water", TARGET_COVER * 0.75), // scarcer → dearer
       market("sys-1", "luxuries", 20), // single system → no dispersion
-    ]);
+    ], NO_TARGETS);
 
     const water = priceDispersion.find((p) => p.goodId === "water");
     const lux = priceDispersion.find((p) => p.goodId === "luxuries");
@@ -177,7 +180,7 @@ describe("computeMarketHealth — price levels", () => {
       market("sys-1", "water", 80),
       market("sys-2", "water", 40),
       market("sys-3", "water", 20),
-    ]);
+    ], NO_TARGETS);
     expect(priceLevels.median).toBeCloseTo(1.0, 5);
     expect(priceLevels.p10).toBeCloseTo(0.5, 5);
     expect(priceLevels.p90).toBeCloseTo(2.0, 5);
@@ -188,16 +191,54 @@ describe("computeMarketHealth — price levels", () => {
 });
 
 describe("computeMarketHealth — cover levels", () => {
+  /** Warehousing targets keyed as the runner keys them, for markets whose demand clears the floor. */
+  const targets = (...entries: [string, number][]) => new Map(entries);
+
   it("reports per-good median cover and surplus/deficit fractions vs the anchor", () => {
-    // covers (stock/target=40): 80→2.0 surplus(≥1.4), 40→1.0 balanced, 20→0.5 deficit(<0.8).
-    const { coverLevels } = computeMarketHealth([
-      market("sys-1", "water", 80),
-      market("sys-2", "water", 40),
-      market("sys-3", "water", 20),
-    ]);
+    // covers (stock/anchor=40): 80→2.0 surplus(≥1.4), 40→1.0 balanced, 20→0.5 deficit(<0.8).
+    // Unfloored demand here matches the row's rate, so each warehousing target is the anchor too.
+    const { coverLevels } = computeMarketHealth(
+      [
+        market("sys-1", "water", 80),
+        market("sys-2", "water", 40),
+        market("sys-3", "water", 20),
+      ],
+      targets(["sys-1|water", 40], ["sys-2|water", 40], ["sys-3|water", 40]),
+    );
     const water = coverLevels.find((c) => c.goodId === "water");
     expect(water?.medianCover).toBeCloseTo(1.0, 5);
     expect(water?.surplusFrac).toBeCloseTo(1 / 3, 5);
     expect(water?.deficitFrac).toBeCloseTo(1 / 3, 5);
+  });
+
+  it("counts deficits against the warehousing target, not the floored price anchor", () => {
+    // The divergence this metric exists to report honestly. Both markets hold stock 20 against
+    // an anchor of 40, so both read cover 0.5 — but sys-2's real demand sits under MIN_DEMAND,
+    // giving it a warehousing target of 4 that its stock of 20 clears five times over. Only
+    // sys-1 is a market directed logistics would fill.
+    const { coverLevels } = computeMarketHealth(
+      [market("sys-1", "water", 20), market("sys-2", "water", 20)],
+      targets(["sys-1|water", 40], ["sys-2|water", 4]),
+    );
+    const water = coverLevels.find((c) => c.goodId === "water");
+    expect(water?.medianCover).toBeCloseTo(0.5, 5); // both still read low cover vs the anchor…
+    expect(water?.deficitFrac).toBeCloseTo(1 / 2, 5); // …but only one is a live deficit.
+
+    // Discrimination check: point the floored market's target back at the anchor — what this
+    // metric read before the split — and it becomes a deficit again. If this stops reporting
+    // 100%, the case above has stopped proving anything.
+    const asBefore = computeMarketHealth(
+      [market("sys-1", "water", 20), market("sys-2", "water", 20)],
+      targets(["sys-1|water", 40], ["sys-2|water", 40]),
+    );
+    expect(asBefore.coverLevels.find((c) => c.goodId === "water")?.deficitFrac).toBeCloseTo(1, 5);
+  });
+
+  it("never counts a market with no known warehousing target as a deficit", () => {
+    // An unknown target is not evidence of need — an empty map must not report a starving galaxy.
+    const { coverLevels } = computeMarketHealth([market("sys-1", "water", 0)], new Map());
+    const water = coverLevels.find((c) => c.goodId === "water");
+    expect(water?.medianCover).toBe(0);
+    expect(water?.deficitFrac).toBe(0);
   });
 });

@@ -36,6 +36,9 @@ import {
 export interface BuildGoodState {
   goodId: string;
   stock: number;
+  /** Cycles-of-supply PRICE anchor — what `surplusDrawable` measures an ordinary donor against, so
+   *  the input-supply gate reads "surplus" exactly as the logistics matcher does. Floored at
+   *  `MIN_DEMAND`; moving this side off the floor is an open item (see surplusDrawable). */
   targetStock: number;
   /** Total local demand rate (civilian + industrial); severity weight + the self-supply gate (vs production). */
   demand: number;
@@ -55,8 +58,8 @@ export interface BuildGoodState {
   capacityProduction: number;
   /**
    * Persisted consumption satisfaction from the last economy cycle (delivered ÷ demanded, ∈
-   * [0,1]; missing ⇒ 1) — what `fed()` reads. stock/targetStock stay on this type for the deficit
-   * finder and severity weights; they do not feed the housing gate.
+   * [0,1]; missing ⇒ 1) — what `fed()` reads. stock/targetStock stay on this type for the
+   * input-supply gate; they do not feed the housing gate.
    */
   satisfaction?: number;
   /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */

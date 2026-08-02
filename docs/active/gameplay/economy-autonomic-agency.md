@@ -62,33 +62,63 @@ diffusion. It shares the intra-faction edge substrate with population migration 
 Both act only on **developed** systems: migration's open edges are gated to developed-both endpoints and
 directed logistics only routes between developed participants, so an unclaimed or controlled system neither
 sends nor receives goods or population (its seeded market is frozen). Logistics draws only from
-market stock **above** a donor's own cycles-of-supply anchor, so a donor is never pulled below its comfort
-target and locals keep their supply (the v1 form of civilian crowd-out — emergent, target-protected).
+market stock **above** a donor's own retained cover — its cycles-of-supply anchor for an ordinary
+holder, its export reserve for a structural producer — so locals keep their supply (the v1 form of
+civilian crowd-out — emergent, target-protected).
 
 ---
 
 ## The shared reading: market state per good
 
 Both halves read the same per-system, per-good numbers — stock, `production`, `demand` (civilian
-consumption + industrial input draw), and the **cycles-of-supply price anchor** (`targetStock = TARGET_COVER
-× demandRate`, the same number the supply/demand UI shows) — but they ask **different questions of them**,
-because they do different jobs. **Logistics moves the running-balance stock**, so it classifies against the
-stock anchor; **build sizes sustainable capacity**, so it reads the per-tick flow (`production` vs
-`demand`). The anchor drives pricing, satisfaction, and logistics; it no longer sizes builds.
+consumption + industrial input draw), the **cycles-of-supply price anchor** (`targetStock = TARGET_COVER
+× demandRate`, the same number the supply/demand UI shows), and the **warehousing target**
+(`logisticsTarget = WAREHOUSE_COVER × demand`) — but they ask **different questions of them**,
+because they do different jobs. **Logistics moves the running-balance stock**, so it classifies against a
+stock target; **build sizes sustainable capacity**, so it reads the per-tick flow (`production` vs
+`demand`). The price anchor drives pricing and satisfaction; it no longer sizes builds, and it no longer
+sizes hauls.
+
+The two figures share a shape and differ in their denominator, which is the whole point. The price
+anchor divides by `demandRate`, floored at `MIN_DEMAND` so a near-empty market still yields a finite
+price — a pricing guard. The warehousing target divides by real `demand`, unfloored, and is what the
+**deficit** test measures against. They are equal
+wherever demand clears the floor and the warehousing target is smaller below it, so **only markets whose
+real demand sits under the pricing floor are affected**: without the split, a colony wanting a third
+of the ship frames the floor assumes asked for 133 cycles of cover rather than 40. That is a founding-era cost — a new
+colony opens holding nothing on all 26 goods, so it opens as a full-anchor deficit on all 26 — and it is
+invisible at equilibrium: over the first 42 cycles it took **24.7%** of delivered haul volume and over 90%
+of the haul of the scarce advanced goods, against 0.3% by 417 cycles. A target of zero means nobody there
+wants the good at all, and the market leaves the match entirely.
+
+`WAREHOUSE_COVER` is held equal to `TARGET_COVER` (40) but is free to move: how much a warehouse holds is
+a different question from where a good prices at par. It is the sibling of `EXPORT_RESERVE_COVER` — both
+are warehouse policy stated in cycles of real demand.
 
 **Logistics classification** (stock-based):
 
-- **Deficit** — `stock < targetStock × DEFICIT_FRACTION` (below the anchor, with a dead-band). Severity =
-  shortfall × demand.
-- **Surplus** — a source of drawable stock by either path, always donating only `stock − targetStock`
-  (never below the anchor): **(a)** `stock ≥ targetStock × SURPLUS_MARGIN` — any holder of excess
-  inventory (margin > 1 leaves the deliberate residual); or **(b)** a **structural producer**
-  (`production > demand`) holding stock above its anchor. Path (b) mirrors the deficit-side self-supply
-  gate and is required because the economy's production throttle caps a producer at
-  `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin — without it a structural exporter could
-  never form a surplus, and directed logistics went dead for every good its producers also consume
-  (food, water, biomass).
-- **Balanced** — the dead-band between, and anything with no demand anchor.
+- **Deficit** — `stock < logisticsTarget × DEFICIT_FRACTION` (below the warehousing target, with a
+  dead-band). Severity = shortfall × demand.
+- **Surplus** — a source of drawable stock by either path, and the two paths stop at different
+  floors: **(a)** `stock ≥ targetStock × SURPLUS_MARGIN` — any holder of excess inventory (margin > 1
+  leaves the deliberate residual) — donating only `stock − targetStock`, never below the anchor; or
+  **(b)** a **structural producer** (`production > demand`) shipping down to `EXPORT_RESERVE_COVER`
+  cycles of its own demand, which sits far *below* the anchor and is where 96.5% of hauls come
+  from — an exporter is drained to its reserve, not to par. Path (b)
+  mirrors the deficit-side self-supply gate and is required because the economy's production throttle
+  caps a producer at `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin — without it a
+  structural exporter could never form a surplus, and directed logistics went dead for every good its
+  producers also consume (food, water, biomass).
+  **The donor side still measures against the PRICE anchor, and that is known-wrong.** Denominating it
+  in real demand too was tried and measured as a no-op for shipping (+0.0% drawable; 96.5% of hauls come
+  from structural exporters, whose branch never reads the target), yet coincided with `electronics`
+  consumer cover falling 0.78 → 0.21 for reasons never established. `surplusDrawable` also feeds the
+  build planner's input-supply gate and the colony founding manifest, so one edit moves three
+  mechanisms at once; finishing it means isolating one caller at a time. A second trap for whoever
+  does: its `targetStock ≤ 0` guard runs *before* the exporter branch, and a pure exporter's real
+  demand is zero — only the floor keeps that guard from stopping raw-material trade dead.
+- **Balanced** — the dead-band between, and anything with no demand at all (a zero warehousing target
+  is never a sink).
 
 **Build classification** (rate-based): a **rate deficit** is `production < demand` (magnitude `demand −
 production`), and a system is a build target for it unless a reachable **rate exporter** (`production >
@@ -128,8 +158,9 @@ This one choice does triple duty:
 Per faction, per cycle: rank deficits worst-first (shortfall × demand), and for each, find the nearest
 same-faction surplus of that good within a hop budget. Allocate
 `transfer = min(deficit shortfall, surplus drawable, remaining pool / route cost)`, spend the pool, advance,
-and stop when it's exhausted. The donor never drops below its own anchor, so moving goods never creates a
-new deficit. Deficits left unserved — pool spent, or no surplus in reach — are the residual.
+and stop when it's exhausted. The donor never drops below its own retained cover — the anchor for an
+ordinary holder, the export reserve for a structural producer — so moving goods never creates a new
+deficit. Deficits left unserved — pool spent, or no surplus in reach — are the residual.
 
 ### Silent application
 
