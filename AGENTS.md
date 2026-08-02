@@ -1,205 +1,176 @@
 # Stellar Trader
 
-Single-player grand-strategy game (working title pending) in a procedurally generated galaxy — colonise, develop worlds under physical constraints, and steer a living simulated economy. It runs as an **in-memory, no-login local simulation**. Being re-conceived from a browser-based multiplayer space-trading game; the roadmap is in `docs/planned/grand-strategy-vision.md`.
+Single-player grand-strategy game in a procedurally generated galaxy — colonise, develop worlds under physical constraints, steer a living simulated economy. In-memory, no login, no database. Roadmap: `docs/planned/grand-strategy-vision.md`.
 
-**Important**: Read `docs/SPEC.md` at the start of every session to understand the full game, all active systems, and how they interact. The SPEC is the functional source of truth — this file is the code reference.
+**Read `docs/SPEC.md` at the start of every session** — it is the functional source of truth for the game and how its systems interact. This file is the code reference.
 
 ## Skills
 
-- `/bootstrap` — Run environment checks (node, deps, env, outdated packages, build)
-- `/spec-review <doc-path>` — Adversarially review a cross-mechanic feature spec before implementation planning
-- `/uber-review [PR#]` — Run the multi-agent code-review pipeline against a branch or pull request
+- `/bootstrap` — environment checks (node, deps, env, outdated packages, build)
+- `/spec-review <doc-path>` — adversarial review of a cross-mechanic spec, before implementation planning
+- `/uber-review [PR#]` — multi-agent code review of a branch or PR
 
-Shared, harness-neutral skills live in `.agents/skills/`. Claude discovery adapters live in `.claude/skills/`; the canonical workflow remains the `.agents` copy.
+Skills are authored in `.agents/skills/` (canonical). `.claude/skills/` holds discovery adapters only.
 
 ## Commands
 
-- `npm run dev` — Start dev server (Turbopack)
-- `npm run build` — Production build. **Use `npx next build --webpack` as the PR build gate** (Turbopack build has other quirks; webpack is the stable gate).
-- `npx vitest run` — Run unit tests
-- `npm run simulate` — Headless sanity check over the real tick (`lib/tick-harness/runner.ts`), reporting intrinsic economy-health metrics at **two horizons**: startup (1000 ticks) for founding/provisioning behaviour, and equilibrium (10,000 ticks) for the settled galaxy. ~2 min. Never tune a constant against the startup read — see "Verifying changes" below.
-- `npm run simulate -- --config <file>` — Run experiment from YAML config (saves to `experiments/`).
-
-The calibration harness (`lib/tick-harness/`) is a dev instrument, not a game feature — it runs `runWorldTick` (the exact tick the live loop runs) headlessly and reports economy-health metrics for validating changes before they ship. There is only one tick body, so the harness and the live game run literally the same code (no harness-only "bots" or strategies). World generation (`lib/world/gen.ts`) is invoked in-process on **New game**; there is no seed script and no database.
+- `npm run dev` — dev server (Turbopack)
+- `npx next build --webpack` — **the build gate**. `npm run build` uses Turbopack, which has other quirks.
+- `npx vitest run` — unit tests
+- `npm run simulate` — headless run of the real tick, reporting economy health at two horizons: 1000 ticks (startup/founding behaviour) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`.
 
 ## Tech Stack
 
-Next.js 16 (App Router), TypeScript 5 (strict), Tailwind CSS v4 + tailwind-variants, TanStack Query v5 (Suspense mode), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4. **No database and no auth** — the world is an in-memory singleton in the server process, persisted as JSON save files on local disk.
+Next.js 16 (App Router), TypeScript 5 strict, Tailwind v4 + tailwind-variants, TanStack Query v5 (Suspense), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4. No database, no auth — the world is an in-memory singleton in the server process, saved as JSON on local disk.
 
 ## Project Structure
 
-Core layers (fixed roles — see AGENTS.md conventions for rules):
-- `lib/engine/` — Pure game logic. Zero I/O (no `fs`, no `process.env`, no DB). Test with Vitest.
-- `lib/world/` — Single-player runtime substrate: the in-memory world store (`store.ts`, a globalThis singleton), world-gen (`gen.ts`), save/load (`save.ts` pure + `save-files.ts`, the only `fs` importer in `lib/`), the tick loop (`tick-loop.ts`), and the one shared tick body `runWorldTick` (`tick.ts`). See `docs/active/engineering/single-player-runtime.md`.
-- `lib/services/` — All world-state reads and business logic (read the in-memory world; no DB). Route handlers are thin wrappers.
-- `lib/tick/` — Processor pipeline. Each processor splits into a typed `World` interface (`lib/tick/world/`), a single in-memory adapter (`lib/tick/adapters/memory/`), and a pure processor body (`lib/tick/processors/`). `runWorldTick` drives them; the live game and the calibration harness run the same bodies. See `docs/active/engineering/processor-architecture.md`.
-- `lib/tick-harness/` — The calibration harness: a dev instrument that runs `generateWorld` + `runWorldTick` headlessly for N ticks and reports economy-health metrics (`npm run simulate`). Not game logic and not engine-pure — it drives the real tick and analyzes its output. Its scope is the tick processors and the data they consume/produce, nothing else.
-- `app/api/game/` — Thin HTTP wrappers: call service → NextResponse.json (no auth).
-- `app/(game)/` — Game UI pages. `app/start/` — start screen (Continue / Load / New game).
+Each layer has one job. Prefer extra boilerplate (a hook, a schema, a service) over mixing two jobs in one file.
+
+- `lib/engine/` — pure game logic, zero I/O.
+- `lib/world/` — runtime substrate: world store (`store.ts`, a `globalThis` singleton), world-gen (`gen.ts`), save/load (`save.ts` pure + `save-files.ts`, the only `fs` importer in `lib/`), tick loop (`tick-loop.ts`), and the one shared tick body `runWorldTick` (`tick.ts`).
+- `lib/services/` — all world-state reads and business logic.
+- `lib/tick/` — processor pipeline: typed `World` interface (`world/`), in-memory adapter (`adapters/memory/`), pure processor body (`processors/`).
+- `lib/tick-harness/` — the calibration harness behind `npm run simulate`. A dev instrument, not game logic: it drives the real `runWorldTick` (one tick body only — no harness-only bots) and analyses the output. Scope is the tick processors and their data, nothing else.
+- `app/api/game/` — thin wrappers: call service → `NextResponse.json`.
+- `app/(game)/` — game UI. `app/start/` — start screen.
+
+Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.md`.
 
 ## Docs
 
-Functional spec: `docs/SPEC.md` — master game spec with system interaction map. Read this first.
+- `docs/SPEC.md` — master functional spec + system interaction map.
+- `docs/active/` — shipped systems (`gameplay/`, `engineering/`, `design-system/`).
+- `docs/planned/` — designed, not built.
+- `docs/build-plans/` — transient build plans; **delete each when its feature ships**.
+- `docs/BACKLOG.md` — actionable work items; delete when shipped.
 
-Design docs (under `docs/`):
-- `docs/active/` — Implemented systems, split by type: `gameplay/` (economy + specialisation, events, trade-simulation, navigation, universe, system-traits, faction-system, ship-roster, …), `engineering/` (single-player-runtime, tick-engine, processor-architecture, map-data-loading), `design-system/` (theme)
-- `docs/planned/` — Designed but not yet built (grand-strategy-vision, economy-simulation-vision, economy-specialisation, war-system, …)
-- `docs/build-plans/` — Transient, code-heavy build plans for in-flight features. **Delete each once its feature ships** — the functional spec moves to `docs/active/` and the code is the source of truth. Functional roadmaps that merely order unbuilt features go in `docs/planned/`, not here.
-- `docs/BACKLOG.md` — Actionable work items (delete when shipped)
-
-Doc conventions:
-- **No `docs/archive/`** — superseded design docs are deleted (git is the history). The tree is only active (current rules) / planned (unbuilt) / build-plans (transient).
-- **Booking is the cost of being allowed to delete** — before deleting a doc, grep it for work it routes elsewhere ("→ BACKLOG", deferred, follow-up) and confirm each item was *actually* booked (`git log -S` the destination file; a plan saying "routed to BACKLOG" is not evidence anyone did it). A retiring doc is routinely the only record on `main` of the work it defers, so deleting it unbooked destroys that record silently — and git history is not a substitute, because nobody greps deleted files for a lever they don't know exists.
-- **Active docs describe current reality in present tense** — no change-history/timeline ("removed in Phase 2"), no ephemeral phase nicknames or numbers; a deferred feature is stated as present-fact + a minimal planned-doc pointer.
-- **Specs lead with a concise human-readable headline** of the key mechanics + interactions; math/specifics go in later detail sections.
-
-## Design Principles
-
-These apply to every layer — components, hooks, services, engine, processors, constants.
-
-- **Separation of concerns** — Each layer has one job. Components render UI. Hooks manage data fetching and client state. Services own business logic and world-state access. Engine functions are pure computation. Route handlers are thin wrappers. Prefer additional boilerplate (hooks, schemas, services) over mixing concerns in a single file.
-- **DRY (Don't Repeat Yourself)** — When logic, markup, or configuration appears in more than one place, extract it. Shared UI goes in `components/ui/` or `components/form/`. Shared business logic goes in `lib/utils/` or `lib/engine/`. Shared types go in `lib/types/`. The second occurrence is the signal to extract — don't wait for a third.
-- **KISS (Keep It Simple)** — Solve the current problem with the minimum necessary complexity. Don't add indirection, abstraction, or configuration for hypothetical future needs. A straightforward 20-line function is better than a clever 5-line one. When choosing between approaches, pick the one that's easiest to read, debug, and delete.
-- **Reusability** — Design interfaces (props, function signatures, types) for the next 10 uses, not just the current one. Use typed props, discriminated unions, and explicit accessor functions over loose string keys or open-ended config objects.
-- **Security** — Validate at system boundaries (API routes, form schemas — e.g. New-game system count and save names are Zod-validated at the route). The in-memory world is advanced only by the single-owner tick loop and mutated by services through the world store; never trust client state for writes.
+Conventions:
+- **No `docs/archive/`** — superseded docs are deleted. Git is the history.
+- **Active docs describe current reality in present tense** — no change history, no phase numbers or nicknames.
+- **Specs lead with a plain-language headline** of the mechanics and their interactions; math goes in later sections.
+- **Before deleting a doc, book what it defers.** Grep it for "→ BACKLOG"/deferred/follow-up and confirm each was actually booked (`git log -S` the destination) — a plan claiming it routed something is not evidence anyone did.
 
 ## Conventions
 
-- **No `as` type assertions** — The only permitted uses of `as` are `as const` and inside runtime type guard functions (`lib/types/guards.ts`) that validate before returning. All other `as` casts are strictly forbidden. If TypeScript can't infer the type, fix the types at the source rather than casting at the consumer.
-- **Type at the boundary, trust downstream** — Untyped data enters only at true boundaries (save-file `deserialize`, API `JSON.parse`); narrow it once with guards from `lib/types/guards.ts`, and the in-memory tick adapters narrow any string-typed row columns to unions on the way to a processor body. Services return fully typed data — components, hooks, and processors never re-validate types that were already validated upstream. If a component needs a type guard, the service isn't returning the right type.
-- **No `unknown` in the codebase** — `Record<string, unknown>`, `unknown`, and untyped maps/arrays are banned everywhere: components, hooks, services, processors, engine, constants. The only exception is `JSON.parse` results at system boundaries (API routes, save-file `deserialize`, sessionStorage), which must be narrowed immediately with `typeof`/`in` checks — never stored as `unknown`. If a type is too loose, fix it at the source: hand-owned `World` row types (`lib/world/types.ts`), typed event maps for event data, specific value unions for filter params. Extra boilerplate is always preferable to `unknown`.
-- **Generics must stay generic** — Generic components like `DataTable<T>` must work with `T` directly, never intersect it with `Record<string, unknown>` or widen it to weaken type safety. Use typed accessors (`render(row: T)`, `getValue(row: T)`) instead of string-key property access. If a generic component needs to access row data, require explicit accessor functions — never cast `T` to access properties by dynamic key.
-- Engine functions are pure — no `fs`/`process.env`/DB imports. Test with Vitest.
-- World state is read from the in-memory store (`lib/world/store.ts`, `getWorld()`), never a DB. The world is JSON-serializable — no `Map`/`Set`/`Date`/class instances in `World`.
-- Tailwind v4 theme is in `globals.css` (`@theme inline {}`), no tailwind.config.js.
-- API responses use `ApiResponse<T>` format: `{ data?: T, error?: string }`.
-- Services layer (`lib/services/`) holds all world-state/business logic. Route handlers are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions.
-- **Discriminated unions for result types** — `{ ok: true; data } | { ok: false; error }`, never `{ ok: boolean; data?; error? }`.
-- **Avoid the postfix `!` non-null assertion** — strip `null | undefined` with a real check, not `foo!`. Exception: `find(...)!` in tests is an accepted project idiom.
-- Client data fetching uses TanStack Query hooks (`lib/hooks/`) with `useSuspenseQuery`. Pages/components wrap data-fetching sections in `QueryBoundary` instead of inline loading/error checks. Query keys are centralized in `lib/query/keys.ts`. Ship arrival invalidation is centralized in `useTickInvalidation` — pages do not subscribe to arrivals individually.
-- Forms use React Hook Form + Zod schemas (`lib/schemas/`). Use `TextInput`/`NumberInput`/`SelectInput` from `components/form/`, never raw `<input>` or `<select>`.
-- **Comments describe the code, not the plan** — code comments never reference the plan/phase/PR/migration that produced them.
-- **Separate static metadata from per-tick dynamic data** — different read paths/endpoints, cached by change cadence (static = `staleTime: Infinity`; dynamic = tick-invalidated).
-- **Keep gameplay and performance concerns separate** — never let a performance mechanism (e.g. sharding) silently become a gameplay rule; topology vs sharding are distinct.
+- **No `as` type assertions** — only `as const` and casts inside runtime guards in `lib/types/guards.ts`. If TypeScript can't infer it, fix the type at the source.
+- **No `unknown`** — `unknown`, `Record<string, unknown>`, untyped maps/arrays are banned everywhere. Only exception: a `JSON.parse` result at a true boundary (API route, save-file `deserialize`, sessionStorage), narrowed immediately with `typeof`/`in`.
+- **Type at the boundary, trust downstream** — narrow once at the boundary with `lib/types/guards.ts`; tick adapters narrow string columns to unions on the way into a processor. Components, hooks and processors never re-validate. If a component needs a guard, the service is returning the wrong type.
+- **Generics stay generic** — never intersect `T` with `Record<string, unknown>` or reach into it by string key. Require explicit accessors (`render(row: T)`, `getValue(row: T)`).
+- **Discriminated unions for results** — `{ ok: true; data } | { ok: false; error }`, never `{ ok: boolean; data?; error? }`.
+- **Avoid postfix `!`** — strip `null | undefined` with a real check. Exception: `find(...)!` in tests is an accepted idiom.
+- **Extract on the second occurrence**, not the third — shared UI to `components/ui|form/`, shared logic to `lib/utils|engine/`, shared types to `lib/types/`.
+- **Clean up what your own change strands.** A field, prop or helper your rewrite leaves without readers is part of that change, not a follow-up — cost is judged by the judgement required, not the number of sites. `tsc` does not reach object literals typed by inference (an `Array.from`/`map` callback return), so finish with a text grep, not a clean typecheck.
+- **Comments describe the code, not the plan** — never name the plan/phase/PR/migration that produced them.
+- Engine functions are pure — no `fs`/`process.env`/DB imports.
+- World state is read from `getWorld()` (`lib/world/store.ts`), never a DB.
+- Services own all world-state and business logic; route handlers are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions.
+- API responses use `ApiResponse<T>`: `{ data?: T, error?: string }`.
+- Client data fetching uses TanStack Query hooks (`lib/hooks/`) with `useSuspenseQuery`, wrapped in `QueryBoundary` — no inline loading/error checks. Query keys live in `lib/query/keys.ts`. Ship-arrival invalidation is centralised in `useTickInvalidation`.
+- Forms use React Hook Form + Zod (`lib/schemas/`) with `components/form/` controls — never raw `<input>`/`<select>`.
+- `"use client"` only where needed — no hooks, state or handlers means no directive.
+- Tailwind v4 theme lives in `globals.css` (`@theme inline {}`); there is no `tailwind.config.js`.
+- **Separate static metadata from per-tick dynamic data** — different read paths, cached by change cadence (static `staleTime: Infinity`, dynamic tick-invalidated).
+- **Keep gameplay and performance concerns separate** — never let a performance mechanism (e.g. sharding) become a gameplay rule.
+- Validate at system boundaries with Zod (API routes, form schemas). Never trust client state for writes.
 
 ## Gotchas / Known Pitfalls
 
-Non-obvious, stack-specific traps — counter-intuitive enough that you wouldn't think to check, so check here. (The `/uber-review` skill's `rules/code-standards.md` is the review-time projection of these + the Conventions above; when you add a rule here, add its review slug there.)
+Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` is the review-time projection of these + the Conventions above — when you add a rule here, add its review slug there.)
 
 **In-memory world & save files**
-- The world is **process state** — a full dev-server restart (not HMR) loses unsaved progress. The `TickLoop` autosaves every 60 s while running + on pause, and the store is a `globalThis` singleton so HMR survives — a restart doesn't. (Turbopack's persistent cache can even re-run a deleted `instrumentation.ts` after a restart; `rm -rf .next` if boot behaviour looks stale.)
-- `World` must stay **JSON-serializable**: no `Map`/`Set`/`Date`/class instances, and no `Infinity`/`NaN` in world state — `JSON.stringify` turns those into `null`, silently corrupting a save. Guard tick math that could produce them.
-- `save-files.ts` is the only `fs` importer in `lib/` — keep it (and any Node-edge code) behind a **dynamic** `import()` from the pure path so the engine/services/world-gen graph stays worker-portable (path-B guardrail). Static `fs`/`process.env` imports in `lib/engine`, `lib/services`, or `lib/world` (except `save-files.ts`) break that.
-- A failing tick **hard-pauses** the loop and never commits the broken world (no `setWorld`, no autosave) — atomicity comes from the store accepting only a fully-successful tick, not a transaction.
-- Determinism: tick math uses seeded RNG (`tickRng(seed, tick)`); never read `Date.now`/`Math.random`/`new Date()` inside a processor body (wall-clock is for pacing/autosave/logging only).
+- The world is **process state** — a dev-server restart (not HMR) loses unsaved progress. `TickLoop` autosaves every 60 s and on pause; the store is a `globalThis` singleton so HMR survives. If boot behaviour looks stale, `rm -rf .next` (Turbopack's persistent cache can re-run a deleted `instrumentation.ts`).
+- `World` must stay **JSON-serializable**: no `Map`/`Set`/`Date`/class instances, no `Infinity`/`NaN` — `JSON.stringify` turns those into `null` and silently corrupts the save. Guard tick math that can produce them.
+- `save-files.ts` is the only `fs` importer in `lib/` — reach it (and any Node-edge code) via a **dynamic** `import()` so the engine/services/world-gen graph stays worker-portable. Static `fs`/`process.env` imports in `lib/engine`, `lib/services` or `lib/world` break that.
+- A failing tick **hard-pauses** the loop and never commits the broken world — atomicity comes from the store accepting only a fully-successful tick.
+- Determinism: use seeded `tickRng(seed, tick)`. Never `Date.now`/`Math.random`/`new Date()` inside a processor body (wall-clock is for pacing/autosave/logging only).
 
-**Testing / Vitest**
-- The `unit` project runs both `lib/**` and `components/**` `*.test.ts`. There is no longer an integration/Postgres project (deleted with the DB). No jsdom — DOM-touching tests need an inline `globalThis` stub in `beforeAll`.
+**Testing**
+- The `unit` Vitest project runs `lib/**` and `components/**`. No jsdom — DOM-touching tests need an inline `globalThis` stub in `beforeAll`.
 
 **Next.js 16 / React / TanStack Query**
-- `useSuspenseQuery` fires during SSR render (not in an effect) — relative-URL `fetch()` crashes on the server; `QueryBoundary`'s mounted guard defers children past hydration.
-- Parallel-route `@slot`s: a slot with no URL match on soft-nav goes stale — give it a `[...catchAll]/page.tsx` returning `null`, plus a `default.tsx` for hard-nav.
+- `useSuspenseQuery` fires during SSR render, not in an effect — relative-URL `fetch()` crashes on the server. `QueryBoundary`'s mounted guard defers children past hydration.
+- Parallel-route `@slot`s go stale on soft-nav with no URL match — add `[...catchAll]/page.tsx` returning `null`, plus `default.tsx` for hard-nav.
 - Never `.sort()` a state array during render — use `[...arr].sort()` / `.toSorted()`.
 - Await async callbacks passed to children; type the prop `() => Promise<void>` (TS won't warn on `() => void`).
-- SSE-driven hooks must seed initial state from a REST endpoint on mount, else stale defaults until the first event.
-- A parent "reset on input change" effect can clobber a child's lifted data when the child's query is **cached** (both `setState`s land in one commit, parent wins). Tag lifted state with the input it was fetched for and render on match — don't clear via a competing effect.
-- Zod v4: `superRefine` uses `code: "custom"` (string) and runs only after base validation passes.
-- RHF: a resolver swapped via `useMemo` does NOT auto-revalidate — `useEffect` + `trigger()`.
-- react-error-boundary v5 `fallbackRender`: `error` is `unknown` — coerce `error instanceof Error ? error : new Error(String(error))`.
-- A server-only env read at module load (`process.env.X`) is `undefined` in the **client bundle** unless `NEXT_PUBLIC_*` or listed in `next.config.ts` `env` — so a client component that reads its *resolved value* (directly, or via a transitively-imported constant derived from it) silently falls back to the default client-side while the server uses the real value. The trigger is the client **reading the value**, not merely importing the module (importing a module that derives `X` but reading only unscaled siblings is safe). Prefer keeping such envs **server-only** and having the client consume already-resolved data from the API; expose via `next.config.ts` only when the client genuinely must recompute from the env itself. `ECONOMY_SCALE` is intentionally server-only for this reason. (Map extent is not such a case: it rides in generated world state as `meta.mapSize` and the client reads it from the atlas rather than recomputing from an env.)
+- SSE-driven hooks must seed initial state from a REST endpoint on mount.
+- A parent "reset on input change" effect clobbers a child's lifted data when the child's query is **cached** (both `setState`s land in one commit, parent wins). Tag lifted state with the input it was fetched for; don't clear via a competing effect.
+- Zod v4: `superRefine` uses `code: "custom"` and runs only after base validation passes.
+- RHF: a resolver swapped via `useMemo` does not auto-revalidate — `useEffect` + `trigger()`.
+- react-error-boundary v5 `fallbackRender`: `error` is `unknown` — coerce it.
+- A `process.env.X` read at module load is `undefined` in the **client bundle** unless `NEXT_PUBLIC_*` or listed in `next.config.ts` `env`. A client component reading its *resolved value* — directly, or through a transitively-imported constant derived from it — silently falls back to the default while the server uses the real one. The trigger is reading the value, not importing the module. Keep such envs server-only and let the client consume resolved data from the API (`ECONOMY_SCALE` is deliberately server-only).
 
 **Caching / API / data shapes**
-- Never `Cache-Control: immutable` on API responses (it's for hashed static assets) — a **New game** replaces the whole world, so `immutable`/long `max-age` would serve stale system ids that mismatch live tile/dynamic data; use `no-cache`/`max-age` and let TanStack `staleTime` handle in-memory caching. Routes are no longer auth-gated, so the old `public`-cross-serves-users hazard is gone, but `private, no-cache` stays the sensible default.
-- `ECONOMY_PRODUCTION`/`ECONOMY_CONSUMPTION` are `Record<EconomyType, Record<string, number>>` — use `getProducedGoods()`/`getConsumedGoods()` or the `in` operator, never `.includes()` (fails silently on a Record).
+- Never `Cache-Control: immutable` or a long `max-age` on an API response — a **New game** replaces the whole world, so stale system ids mismatch live data. Use `private, no-cache` and let TanStack `staleTime` cache in memory.
+- `ECONOMY_PRODUCTION`/`ECONOMY_CONSUMPTION` are `Record<EconomyType, Record<string, number>>` — use `getProducedGoods()`/`getConsumedGoods()` or `in`, never `.includes()` (fails silently on a Record).
 
 **Map / Pixi** (skip unless touching the map / WebGL surface)
-- Map extent (`mapSize`) comes from the atlas (`meta.mapSize`, generated from system count) — the client computes tile geometry from that value, not an env var. Pass it through explicitly (`systemToTile`/`tileBounds`/`frustumToTiles` all take `mapSize`); there is no module-level `UNIVERSE_SCALE`/tile-size constant anymore.
-- Pixi rasterizes small text / sharp corners as aliased mush — map markers use rounded corners + zoom-gated text. Deliberate departure from Foundry's no-rounding rule, which is HTML-only; the WebGL map is its own surface.
-- Throttle (leading+trailing), not debounce, for Pixi-ticker→`setState` (debounce never fires during continuous zoom).
+- Map extent comes from the atlas (`meta.mapSize`), not an env — pass it explicitly (`systemToTile`/`tileBounds`/`frustumToTiles` all take it).
+- Pixi rasterizes small text and sharp corners as aliased mush — map markers use rounded corners + zoom-gated text. Deliberate departure from Foundry's no-rounding rule, which is HTML-only.
+- Throttle (leading+trailing), not debounce, for Pixi-ticker → `setState` — debounce never fires during continuous zoom.
 - Frustum-gate object *creation*, not just visibility — `SystemObject` is expensive; create only in-frustum, batched per frame.
-- `frustumToTiles` max col/row uses `ceil(max / TILE_SIZE) - 1` (half-open `[min, max)`, matching `systemToTile`).
-- Keep tick-scoped data (visibility, dynamic) on tick-keyed queries, not viewport-keyed — viewport keys cause flicker + redundant calls on every pan.
-- Native `<dialog>` modal: never set `m-0`/`inset-auto` — it breaks `showModal()` UA centering.
+- `frustumToTiles` max col/row uses `ceil(max / TILE_SIZE) - 1` (half-open, matching `systemToTile`).
+- Keep tick-scoped data on tick-keyed queries, never viewport-keyed — viewport keys cause flicker and redundant calls on every pan.
+- Native `<dialog>` modal: never `m-0`/`inset-auto` — it breaks `showModal()` UA centering.
 
 **Misc**
-- **`git ls-files` is the instrument; `ls` lies.** A `.gitignore` negation under an excluded *directory* is a silent no-op — git cannot re-include anything beneath an excluded directory, so `/experiments` + `!/experiments/examples/` tracked nothing for as long as it existed (fixed by excluding the directory's *contents*: `/experiments/*`). The failure is invisible on disk: the files are right there, `ls` shows them, editors open them, and only `git ls-files` reveals the repo never had them. Before assuming a path is versioned — especially before `git rm`, a move, or "it's in the repo, I can see it" — check `git ls-files`, not `ls`.
-- **Tailwind v4 (`@tailwindcss/oxide`) auto-scans the whole project — incl. `docs/*.md` — for class candidates.** A backslash-hex sequence in scanned prose (a Windows path like `…\c5612caa…`, a regex `\d`/`\c`) is read as a CSS escape and rejected as `Invalid code point <n>` at `globals.css:1:1`, aborting `npm run build`. `docs/` is excluded via `@source not "../docs"` in `globals.css`; keep non-source prose out of the scan (or add another `@source not`). Note this only surfaces on a real `next build` (Turbopack) — `tsc` and Vitest stay green — and only on a branch whose offending doc was actually pushed, so CI catches it but local `tsc`-only checks won't.
+- **`git ls-files` is the instrument; `ls` lies.** A `.gitignore` negation under an excluded *directory* is a silent no-op — exclude the directory's *contents* (`/experiments/*`) if anything beneath it must be re-includable. Check `git ls-files` before assuming a path is versioned.
+- **Tailwind v4 scans the whole project for class candidates, including `docs/*.md`.** A backslash-hex sequence in scanned prose (a Windows path, a regex `\d`) reads as a CSS escape and aborts `next build` with `Invalid code point`. `docs/` is excluded via `@source not "../docs"` in `globals.css` — keep non-source prose out of the scan. Only surfaces on a real `next build`; `tsc` and Vitest stay green.
 
 ## UI Components
 
-**Theme**: "Foundry" — industrial, sharp-edged, copper/amber accents. Full reference: `docs/active/design-system/theme.md`. Key rules: no rounded corners on cards/buttons/badges (only DetailPanel modal and FilterBar chips get rounding), copper left-accent stripe on all cards, `font-display` (Chakra Petch) for headings, `font-mono` (Geist Mono) for numeric values.
+**Theme "Foundry"** — industrial, sharp-edged, copper/amber. Full reference: `docs/active/design-system/theme.md`. No rounded corners on cards/buttons/badges (only DetailPanel modal and FilterBar chips round), copper left-accent stripe on cards, `font-display` (Chakra Petch) for headings, `font-mono` (Geist Mono) for numbers.
 
-Use existing components instead of inline markup. Never duplicate markup that already has a component. Use `tv()` variants, typed props, and semantic HTML (`<dl>` for key-value, `<button>` for actions). Keep variant counts small and intentional.
+Use existing components instead of inline markup. Use `tv()` variants, typed props, semantic HTML (`<dl>` for key-value, `<button>` for actions). Keep variant counts small.
 
-- `components/ui/` — Layout and action primitives (Button, Card, Badge, PageContainer, ProgressBar, StatDisplay, DataTable, StatList, LoadingFallback, ErrorFallback). Read the file for props/variants.
-- `components/form/` — Form controls (TextInput, NumberInput, RangeInput, SelectInput, FormError). Never use raw `<input>` or `<select>`.
-- **QueryBoundary** (`components/ui/query-boundary.tsx`) — Wraps data-fetching sections. Uses a mounted guard to defer children past SSR hydration so `useSuspenseQuery` only fires in the browser. Composes Suspense + ErrorBoundary + QueryErrorResetBoundary.
-- **Dialog** (`components/ui/dialog.tsx`) — Native `<dialog>` wrapper. Non-modal uses `.show()` + manual Escape/focus; modal uses `showModal()` + browser-native focus trap. Companion `useDialog` hook.
-
-## Quality Checklist
-
-After each phase or meaningful commit, verify against these common pitfalls before moving on:
-
-- **Typed keys** — Maps use union keys from constants/types, not `Record<string, ...>`
-- **Existing components** — `EmptyState`, `ErrorFallback`, form components, `Badge` — not raw markup
-- **No duplication** — If logic/markup exists in two places, extract to `lib/utils/` or `components/ui/`
-- **`"use client"` only where needed** — Components without hooks, state, or event handlers don't need it
-- **Clean up after yourself** — No unused props, dead imports, or orphaned code left behind. **Dead code your own change creates is part of that change, not a follow-up**: when a rewrite strands a field, prop, or helper, removing it is the work being finished, and a mechanical compiler-guided sweep is not a reason to book it instead. Judge the cost by the *judgement* required, not the sites touched — the build-path `unrest` field survived three sightings this way, each re-deriving the same 90-site estimate. Note what "compiler-guided" does not reach: an object literal returned from an `Array.from`/`map` callback gets its type by inference, so TypeScript's excess-property check never fires and a `tsc`-driven sweep skips it silently. Finish with a text grep, not a clean typecheck.
+- `components/ui/` — Button, Card, Badge, PageContainer, ProgressBar, StatDisplay, DataTable, StatList, EmptyState, LoadingFallback, ErrorFallback. Read the file for props.
+- `components/form/` — TextInput, NumberInput, RangeInput, SelectInput, FormError.
+- `QueryBoundary` — composes Suspense + ErrorBoundary + QueryErrorResetBoundary with a mounted guard.
+- `Dialog` — native `<dialog>` wrapper; non-modal uses `.show()` + manual Escape/focus, modal uses `showModal()`. Companion `useDialog` hook.
 
 ## Git Workflow
 
-- Feature branch per feature (`feat/feature-name`), PR to main when complete.
-- Commit after each meaningful unit of work (new model, API route, component).
-- **Break large features into 2-4 phase PRs** — each PR small enough to hold full convention context. Review against the quality checklist after each phase, not just at the end. A 12-phase plan should ship as 3-4 PRs, not one monolithic branch. (A markdown-only/tooling change is a single PR — the phase-PR rule is for code features.)
-- **The PR unit is the cohesive PART/sub-project, not its internal phases.** A part may be organised internally into Phase A/B/C — those are check-in **pauses**, not separate PRs. Accumulate them all on the one part-branch and match how the prior part shipped (if Part 1 was one PR, Part 2 is one PR). The 2-4-PR split above is for a *single* sub-project genuinely too big for one PR — never read a build plan's "3 phases" as "3 PRs".
-- **Multi-PR features use a shared feature branch:** branch off main, phase PRs merge into the shared branch, one final PR shared→main. Shared branches keep a clean atomic per-feature history — phase branches squash in; no merge/bugfix/impl-detail commits on shared.
-- **Merge shared→main (or phase→shared) as squash or fast-forward, never a regular merge commit** — squash when phase-commit subjects carry build-noise (`PR3`/`Phase B`/etc.), else fast-forward to keep clean atomic per-feature history.
-- **Never open a PR whose base is another open PR's branch.** Squash is the merge default here, so merging the base PR rewrites its commits and deletes its branch — which **permanently auto-closes** the stacked PR. GitHub refuses to reopen it or retarget it, and restoring the deleted base ref does not help; the only way out is a replacement PR. Branch sequential work off `main` and wait, or accept the replacement. If you are ever mid-stack anyway: grab the base branch's head SHA **before** merging (`--delete-branch` removes the local branch too, so the name is gone and the SHA is the only handle), then `git rebase --onto origin/main <old-base-head-SHA> <branch>`.
-- **Worktrees are for parallel workstreams, not sequential PRs** — use them for concurrent independent sessions or to keep main's checkout untouched (dev server, editor); for sequential PR-by-PR work on one feature use a shared branch. Always `git worktree remove` after — never leave stale worktrees.
-- **Do the doc lifecycle on the feature branch BEFORE the final whole-branch review** (promote spec → `docs/active/`, update the umbrella + `docs/SPEC.md`, delete the build plan) — the review's fold-conformance lens then checks the fold, and post-merge docs force a pointless docs-only PR.
+- Feature branch per feature (`feat/name`), PR to main when complete. Commit after each meaningful unit of work.
+- **The PR unit is the cohesive part/sub-project, not its internal phases.** Phase A/B/C are check-in *pauses* on one branch — never read "3 phases" as "3 PRs". Split into 2-4 PRs only when a single sub-project is genuinely too big for one; markdown/tooling changes are always one PR.
+- **Multi-PR features use a shared feature branch** — branch off main, sub-PRs merge into shared, one final PR shared→main.
+- **Merge as squash or fast-forward, never a merge commit** — squash when commit subjects carry build noise (`PR3`, `Phase B`), else fast-forward.
+- **Never open a PR whose base is another open PR's branch.** Squash-merging the base rewrites its commits and deletes its branch, which *permanently* auto-closes the stacked PR — GitHub will not reopen or retarget it. Branch sequential work off `main`. If already stacked: capture the base head SHA before merging, then `git rebase --onto origin/main <old-base-SHA> <branch>`.
+- **Worktrees are for parallel workstreams, not sequential PRs.** Always `git worktree remove` after.
+- **Do the doc lifecycle on the branch before the final review** — promote spec to `docs/active/`, update `docs/SPEC.md`, delete the build plan. Post-merge docs force a pointless docs-only PR.
 
 ### Review process
-- **Spec-stage gate:** run `/spec-review <spec-doc>` on an approved feature spec with cross-mechanic surface (economy, tick processors, changed signals/primitives) BEFORE writing the implementation plan. Pure-UI slices and tooling changes skip it.
-- Review with `/uber-review`. Local reviews diff against the shared feature branch (not main) when one exists; PR reviews are fine as-is.
-- **Open the PR *before* reviewing** — push and open it, then run the review, so findings land as PR comments. Don't gate PR creation on a clean review.
-- **Review each sub-feature GOING INTO shared, so shared→main needs only a light sanity pass.** Each sub-feature is its own small branch, `/uber-review`'d while it is small and still in context. An expensive whole-branch review at the end is the *symptom* of having skipped that per-feature gate — not the standard (SP5 autonomic-light accumulated 49 commits / ~8k lines / 56 files on one branch and forced exactly that).
+- **Spec gate:** `/spec-review <doc>` on any spec with cross-mechanic surface (economy, tick processors, changed signals/primitives) BEFORE writing the implementation plan. Pure-UI and tooling skip it.
+- **Everything you know about a PR goes on the table BEFORE it merges.** Findings, doubts, "worth considering" notes, anything you would otherwise append afterwards — they belong in the review response while the merge is still a decision Kai can make differently. A post-merge "oh, also, three things…" is withholding the inputs to a decision he already made, and is the single most-repeated failure here. If you genuinely only see something after the merge, say plainly that it was missed at review time.
+- **A BACKLOG item is Kai's decision, not yours.** Booking a finding instead of fixing it must be (a) stated in the turn's response and (b) named in the commit message. Default: if it is cheap, self-contained and in a file the PR already touches, fix it and say so.
+- **Open the PR before reviewing**, so findings land as PR comments. Don't gate PR creation on a clean review.
+- **Review each sub-feature going INTO shared**, while it is small and in context — a whole-branch review at the end is the symptom of having skipped that gate, not the standard.
 - **PR-mode `/uber-review`: check out the PR head first**, else agents review stale base-branch code.
-- **Scale the review to substantive surface, not file count.** Deletion-heavy PRs: strip pure-deletion files from the reviewed diff (`--diff-filter=d`; pass the deleted-file list as context — the big token lever), bump `--chunk-size`, prune `--only` reviewers whose domain was deleted.
-- **Fix cheap + self-contained + already-touching Minor findings in-task** — don't reflexively defer them; deferred ones get an explicit owned cleanup pass, not a weak final-review sink.
-- **A BACKLOG item is Kai's decision, not the agent's.** Converting a review finding into a backlog row instead of fixing it must be (a) stated in the turn's response, in the list of what the turn did, and (b) named in the commit message. A commit that says "fix all findings" while silently booking three of them is the failure this rule exists to stop — it happened in #209, and the first Kai heard of those three items was after the PR had merged. If a finding is cheap and in a file the PR already touches, the default is to fix it and say so; if it genuinely should be deferred, say *why* and let Kai decide.
-- **When the user runs the manual/visual smoke themselves, wait for their go-ahead** before launching the whole-branch review.
-- **Never merge over red CI.** If a failure is an unrelated flake (e.g. heavy sim tests timing out under parallel load), confirm it passes in isolation and fix the flake to green — don't merge past it.
+- **Scale the review to substantive surface, not file count.** Deletion-heavy PRs: strip pure-deletion files (`--diff-filter=d`, pass the deleted list as context), bump `--chunk-size`, prune `--only` reviewers whose domain was deleted.
+- **Wait for Kai's go-ahead** when he is running the manual/visual smoke himself.
+- **Never merge over red CI.** Confirm an unrelated flake passes in isolation and fix it — don't merge past it.
 
 ## Working Practices
 
-**Verifying changes (dev has no live universe)**
-- Verify generation/economy CHANGES by intrinsic coherence, not bit-identical parity vs old output — seeded RNG shifts by design when the draws change.
-- Prove a gameplay mechanic works via the simulator (the real tick) measuring the actual OUTCOME — not isolated engine fixtures (which pass while the galaxy is 100% broken). Add a sim metric when a symptom hides in aggregate health.
-- Until all mechanisms ship, calibrate the economy to a COARSE health bar only (no NaN/runaway/pinning; dispersion; liquidity) — defer precision tuning (it's perishable) and loosen magnitude-pinning tests to ranges.
-- **Write the test that fails when the task's own premise breaks**, not one that confirms the happy path reads right. Asserting a role's median cover is 1.25 proves nothing if two roles' lists are crossed and both still yield 1.25. The cheapest proof is a mutation check: break the property deliberately, watch the test fail, revert. If you cannot make it fail, it is not covering the thing — this is the engine-fixture trap above, one level down in the test itself.
-- **A galaxy-wide mean moves with cohort MIX, not just with the thing it measures.** `fuel`'s median cover "regressing" 0.85 → 0.61 between the 1000-tick startup and 10,000-tick equilibrium horizons was entirely the exporter cohort growing 23 → 220 markets, each resting at 0.25 by design (`EXPORT_RESERVE_COVER × demand`, unfloored — true only where local demand clears `MIN_DEMAND`; the cover denominator itself is floored), while the consumers they serve improved (22% → 10% empty). Before diagnosing any aggregate, read it cohorted (`npm run simulate` splits by market role and world cohort) — a population that changed composition explains more of these numbers than a mechanism that changed behaviour.
-- **The economy's startup transient is ~300+ cycles. NEVER diagnose it from a short run — read both horizons.** `CYCLE_LENGTH` is 24, so 500 ticks is 20.8 cycles against a 40-cycle `TARGET_COVER`: the old default measured less than half of one market's target and nothing had shipped yet (logistics first moves at ~t=456). Two "serious defect" findings were raised and then killed by simply running longer — `TARGET_COVER` "unfundable" (a 125-cycle artifact; at 416 cycles the galaxy reaches price median 1.23× and mean D 0.030 on its own), and the 500-tick default itself. **A short-horizon number is never evidence of an equilibrium fault.** But it is the only place *startup* faults are visible at all — the founding pathology (every market opening with a full anchor for goods nobody there consumes) is invisible by 416 cycles. So `npm run simulate` runs **two horizons** and they answer different questions: the short read is for founding/provisioning behaviour, the long read is the only valid basis for tuning any constant. Never quote one at the other's question.
-- **A "ruled out" needs both horizons too, and must say which horizon and cohort it was measured at.** Nobody re-tests a negative, so a wrong one steers every later investigation away from the cause.
+**Verifying changes** (dev has no live universe)
+- **Prove a mechanic works with `npm run simulate` measuring the actual outcome** — not isolated engine fixtures, which pass while the galaxy is 100% broken. Add a sim metric when a symptom hides inside an aggregate.
+- Verify generation/economy changes by intrinsic coherence, not parity with old output — seeded RNG shifts by design when the draws change.
+- **Read both horizons, always.** Startup (1000 t) answers founding/provisioning questions; equilibrium (10,000 t) is the only valid basis for tuning a constant. The startup transient is ~300+ cycles (`CYCLE_LENGTH` 24). Never quote one at the other's question: a short read is not evidence of an equilibrium fault, and an equilibrium read is not evidence a founding fault does not exist.
+- **A "ruled out" is a claim with the same evidence bar as a finding** — both horizons, and record which horizon and cohort it was measured at. Nobody re-tests a negative, so a wrong one steers every later investigation away from the cause.
+- **Read an aggregate cohorted before diagnosing it** (`npm run simulate` splits by market role and world cohort). A galaxy-wide median moves with cohort *mix*, not just with the thing it measures.
+- **Write the test that fails when the task's own premise breaks**, not one that confirms the happy path. Cheapest proof: break the property deliberately, watch the test fail, revert. If you can't make it fail, it isn't covering the thing.
+- Calibrate to a coarse health bar only (no NaN/runaway/pinning; dispersion; liquidity) until all mechanisms ship — precision tuning is perishable.
 
 **Before building a mechanic**
-- Map its runtime interactions with ALL shipped mechanics (decay, staffing, pop viability) first — a plan that ignores staffing builds unstaffable capacity that decay then eats.
-- Verify a foundation exposes the discrete primitives the upper layers need before building on it; interaction specs are not integration proof.
-- **Read what a constant was authored to MEAN before leaning on it — the docstring, not the value.** The recurring design failure here is a number authored for one purpose being read as if it meant another, and the tell has been in the docstring every time: `GOOD_CONSUMPTION` says "higher tier → lower need… only their relative shape matters", i.e. it is a tier gradient and NOT a necessity ranking (medicine 0.001 sits below gas 0.004 purely by tier) — a spec that read it as necessity got the fold backwards. Same class: `priceFloor`/`priceCeiling` are a pure tier lookup with zero per-good variation; `volatility` was authored for trade flavour and is read by nothing; the harness ran at `ECONOMY_SCALE=1` while the game ran at 100; `medianCover` medians over ALL markets so cohort mix moves it independently of supply. The economy's cover constants are the densest nest of this: `MIN_DEMAND`'s docstring says outright it is a "floor on the cycles-of-supply denominator so a near-empty system yields a finite cover instead of a divide-by-zero" — a *pricing* guard that is now the source of a real logistics deficit signal on every market with no consumer; `TARGET_COVER` is authored as "the whole-roster knob" for price dispersion and is additionally read as a fill target, a deficit-line base and the production throttle's knee; and `HOLD_COVER` (1.3) was calibrated against price median three days after `SURPLUS_MARGIN` (1.4) shipped, silently capping production below the donor threshold. A value that *looks* like it means the right thing is the trap — check the authored intent, and check the table's real shape (how many goods, what actually feeds the fold) rather than a hand-built subset.
+- **Map its runtime interactions with ALL shipped mechanics first** — decay, staffing, pop viability, and **events** (the one most often forgotten). A plan that ignores staffing builds unstaffable capacity that decay then eats.
+- Verify the foundation exposes the discrete primitives the upper layers need; an interaction spec is not integration proof.
+- **Read what a constant was authored to MEAN — its docstring, not its value.** Numbers here are routinely authored for one purpose and read as if they meant another: `GOOD_CONSUMPTION` is a tier gradient, not a necessity ranking; `MIN_DEMAND` is a divide-by-zero guard for *pricing*; `TARGET_COVER` is a price-dispersion knob. Check the authored intent and the table's real shape before leaning on a value.
 
 **UI / dataviz**
-- UI-heavy work gets a collaborative design pass with a browser-viewable HTML prototype the user approves BEFORE implementation — never an agent invoking frontend-design blind. Go breadth-first: rough wireframes to react to, then refine the chosen one — don't jump straight to a single polished prototype.
-- A shared/segmented bar is for two consumers of ONE datapoint, never N differently-scaled series (those get separate bars; per-grade detail → tooltip mini-bars).
+- UI-heavy work gets a collaborative design pass with a browser-viewable HTML prototype Kai approves BEFORE implementation. Breadth-first: rough wireframes to react to, then refine the chosen one.
+- A shared/segmented bar is for two consumers of ONE datapoint, never N differently-scaled series.
 
 **Scripts**
-- `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test); one-off diagnostics live in scratch and are never committed.
+- `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test). One-off diagnostics live in scratch and are never committed.
 
-## Shell Commands
-
-- **Never use `cd` in compound commands** — The working directory is already the project root. Compound commands like `cd /path && git log` trigger security approval prompts. Just run the command directly (e.g. `git log`).
-
-## Troubleshooting
-
-When hitting errors, don't fix symptoms directly. Step back and search for the canonical
-implementation pattern for the specific tool combination (e.g. "Next.js 16 App Router + TanStack
-Query Suspense setup"). Official docs and standard patterns resolve issues faster than iterating on
-type errors.
+**Shell**
+- Never use `cd` in compound commands — the working directory is already the project root.
