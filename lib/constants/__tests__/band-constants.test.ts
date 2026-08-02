@@ -35,12 +35,20 @@ function sysWithGoods(readings: GoodSatisfaction[]): BuildSystemState {
 
 describe("band constant dependencies", () => {
   it("starts logistics replenishment well before emergency rationing", () => {
-    // Imports must arrive before rationing starts: receivers classify as
-    // The deficit threshold is an anchor fraction; convert it to demand cycles
-    // before comparing it with the independently-defined ration threshold.
-    expect(DIRECTED_LOGISTICS.DEFICIT_FRACTION * TARGET_COVER).toBeGreaterThan(
-      ECONOMY_CONSTANTS.RATION_COVER,
-    );
+    // Imports must arrive before rationing starts. The deficit threshold is a fraction of the
+    // WAREHOUSING target — `WAREHOUSE_COVER × real demand`, what classifyMarketState measures
+    // against — so it is already in demand cycles and compares directly with the independently
+    // defined ration threshold. Reading TARGET_COVER here instead would leave this invariant
+    // green while a lowered WAREHOUSE_COVER put the deficit signal below the rationing knee.
+    expect(DIRECTED_LOGISTICS.DEFICIT_FRACTION * DIRECTED_LOGISTICS.WAREHOUSE_COVER)
+      .toBeGreaterThan(ECONOMY_CONSTANTS.RATION_COVER);
+  });
+  it("holds the warehousing target equal to the price anchor", () => {
+    // Stated, not assumed. The two are free to diverge by design — how much a warehouse holds is
+    // a different question from where a good prices at par — but while they are equal, the split
+    // introduced by the demand-denominator change is confined to markets whose real demand sits
+    // under MIN_DEMAND. Moving one without the other is a deliberate act that should land here.
+    expect(DIRECTED_LOGISTICS.WAREHOUSE_COVER).toBe(TARGET_COVER);
   });
   it("keeps rationing close to empty and the hold ceiling above the anchor", () => {
     expect(ECONOMY_CONSTANTS.RATION_COVER).toBeLessThan(TARGET_COVER);

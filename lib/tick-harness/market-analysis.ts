@@ -52,14 +52,21 @@ export function takeMarketSnapshot(markets: WorldMarket[]): MarketSnapshot[] {
   }));
 }
 
-/** Compute market health summary from the final market state. */
-export function computeMarketHealth(markets: WorldMarket[]): MarketHealthSummary {
+/**
+ * Compute market health summary from the final market state. `logisticsTargets` carries each
+ * market's warehousing target (see `logisticsTargetsByKey`); it is required rather than optional
+ * because omitting it would silently report zero deficits everywhere.
+ */
+export function computeMarketHealth(
+  markets: WorldMarket[],
+  logisticsTargets: Map<string, number>,
+): MarketHealthSummary {
   return {
     priceDispersion: computePriceDispersion(markets),
     stockDrift: computeStockDrift(markets),
     stockPins: computeStockPins(markets),
     priceLevels: computePriceLevels(markets),
-    coverLevels: computeCoverLevels(markets),
+    coverLevels: computeCoverLevels(markets, logisticsTargets),
   };
 }
 
@@ -198,29 +205,54 @@ function computePriceLevels(markets: WorldMarket[]): PriceLevelSummary {
   };
 }
 
-// ── Cover levels (stock / targetStock, per good) ────────────────
+// ── Cover levels (stock vs the per-good stock targets) ──────────
 /**
- * Per-good distribution of cover = stock / anchor. Surplus/deficit use the same
- * thresholds as directed logistics so the harness read lines up with the live audit.
+ * Per-good distribution of cover = stock / price anchor, plus the share of markets standing
+ * below the live logistics deficit line.
+ *
+ * **The two halves read different denominators, deliberately, because the mechanics do.**
+ * `medianCover` and `surplusFrac` measure against the price anchor: cover is the pricing
+ * reading the supply/demand UI shows, and the donor side of the matcher (`surplusDrawable`)
+ * genuinely still measures excess against that anchor. `deficitFrac` measures against the
+ * warehousing target (`logisticsTarget = WAREHOUSE_COVER × real demand`), because that is what
+ * `classifyMarketState` sizes a deficit against. The two coincide wherever real demand clears
+ * `MIN_DEMAND` and diverge below it, so a floored market can legitimately show a low
+ * `medianCover` while not counting as a deficit — it is stocked for what it actually uses.
+ *
+ * This is a stock-vs-target reading only. It does NOT apply the matcher's self-supply gate
+ * (`production < demand`), so a producer standing below its target counts here while the live
+ * matcher would skip it as a sink. `deficitFrac` is therefore an upper bound on the markets
+ * logistics acts on, not an exact replay of the match.
+ *
+ * A market with no entry in `logisticsTargets` (its system absent from the run's system rows)
+ * is never counted as a deficit — an unknown target is not evidence of need.
  */
-function computeCoverLevels(markets: WorldMarket[]): CoverLevelEntry[] {
+function computeCoverLevels(
+  markets: WorldMarket[],
+  logisticsTargets: Map<string, number>,
+): CoverLevelEntry[] {
   const coversByGood = new Map<string, number[]>();
+  const deficitsByGood = new Map<string, number>();
   for (const m of markets) {
     const target = curveForRow(m, GOODS[m.goodId]).targetStock;
     if (target <= 0) continue;
     const list = coversByGood.get(m.goodId) ?? [];
     list.push(m.stock / target);
     coversByGood.set(m.goodId, list);
+
+    const logisticsTarget = logisticsTargets.get(`${m.systemId}|${m.goodId}`) ?? 0;
+    const isDeficit = logisticsTarget > 0
+      && m.stock < logisticsTarget * DIRECTED_LOGISTICS.DEFICIT_FRACTION;
+    if (isDeficit) deficitsByGood.set(m.goodId, (deficitsByGood.get(m.goodId) ?? 0) + 1);
   }
   const result: CoverLevelEntry[] = [];
   for (const [goodId, covers] of coversByGood) {
     const surplus = covers.filter((c) => c >= DIRECTED_LOGISTICS.SURPLUS_MARGIN).length;
-    const deficit = covers.filter((c) => c < DIRECTED_LOGISTICS.DEFICIT_FRACTION).length;
     result.push({
       goodId,
       medianCover: median(covers),
       surplusFrac: surplus / covers.length,
-      deficitFrac: deficit / covers.length,
+      deficitFrac: (deficitsByGood.get(goodId) ?? 0) / covers.length,
     });
   }
   return result.sort((a, b) => b.medianCover - a.medianCover);

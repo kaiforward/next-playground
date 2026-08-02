@@ -90,6 +90,31 @@ export function marketRolesByKey(
 }
 
 /**
+ * Every market's warehousing target (`WAREHOUSE_COVER × real demand × anchorMult`), keyed
+ * `systemId|goodId` — the figure `classifyMarketState` measures a deficit against. It cannot be
+ * read off a market row alone: the row carries only the `MIN_DEMAND`-floored `demandRate`, so the
+ * real demand has to come back through `toGoodMarketStates` from the system's population and
+ * industry. A market whose system is absent from `systems` gets no entry.
+ */
+export function logisticsTargetsByKey(
+  systems: TickSystem[],
+  markets: WorldMarket[],
+): Map<string, number> {
+  const rowsBySystem = marketRowsBySystem(markets);
+  const targets = new Map<string, number>();
+
+  for (const s of systems) {
+    const rows = rowsBySystem.get(s.id);
+    if (!rows) continue;
+    const states = toGoodMarketStates({
+      buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
+    });
+    for (const state of states) targets.set(`${s.id}|${state.goodId}`, state.logisticsTarget);
+  }
+  return targets;
+}
+
+/**
  * Per good, cover and price split by market role. This is what separates "every producer is
  * drained flat" from "consumers are never served" — a distinction the galaxy-wide median
  * cannot make, because it medians both populations together.

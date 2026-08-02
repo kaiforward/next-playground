@@ -168,6 +168,46 @@ describe("matchFactionTransfers", () => {
     expect(transfers[0].quantity).toBe(19);
   });
 
+  // ── The donor side deliberately still reads the PRICE anchor while the deficit side reads the
+  // warehousing target. That asymmetry is known-wrong and documented as such, but it is live
+  // behaviour and these two cases pin it: both fail if the matcher's surplusDrawable call is
+  // repointed at `logisticsTarget`. Every other fixture in this file leaves the two figures equal,
+  // so without these the central claim of the split is untested in either direction.
+
+  it("keeps a pure exporter shipping, because the donor side reads the floored price anchor", () => {
+    // The trap surplusDrawable's docstring warns about. A raw-material exporter consumes none of
+    // what it digs: real demand 0, so its warehousing target is legitimately 0 while its price
+    // anchor sits at the MIN_DEMAND floor (40 × 0.05 = 2). surplusDrawable's `targetStock <= 0`
+    // guard runs BEFORE the exporter branch — hand it the demand-derived target and the guard
+    // fires, returning 0 drawable and stopping raw-material trade dead across the galaxy.
+    const exporter = sys("A", 100, {
+      goodId: "ore", stock: 500, logisticsTarget: 0, targetStock: 2, demand: 0, production: 30,
+    });
+    const consumer = sys("B", 0, { goodId: "ore", stock: 0, logisticsTarget: 10, demand: 5 });
+
+    const { transfers } = matchFactionTransfers([exporter, consumer], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "A", toSystemId: "B" });
+    // Drawable is the whole stock (exporter reserve = 10 × demand 0), so the recipient's
+    // shortfall binds: 10 − 0.
+    expect(transfers[0].quantity).toBe(10);
+  });
+
+  it("sizes an ordinary donor's drawable off the price anchor, not the warehousing target", () => {
+    // The non-exporter branch of the same asymmetry, at a floored market where the two diverge.
+    // A holds 2.9 against a floored anchor of 2 → clears the 1.4× margin (2.8) and donates
+    // 2.9 − 2 = 0.9. Measured against its warehousing target of 0.4 instead it would donate
+    // 2.5 — nearly three times as much, drawn out of a market the anchor says is barely above par.
+    const donor = sys("A", 100, {
+      goodId: "food", stock: 2.9, logisticsTarget: 0.4, targetStock: 2, demand: 0.01, production: 0,
+    });
+    const consumer = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
+
+    const { transfers } = matchFactionTransfers([donor, consumer], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0].quantity).toBeCloseTo(0.9, 10);
+  });
+
   it("skips unreachable deficits (route cost null)", () => {
     const surplus = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
     const deficit = sys("far", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
