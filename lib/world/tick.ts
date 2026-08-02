@@ -263,7 +263,7 @@ function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
 // ── Directed-logistics / directed-build row builders (per-system rows the
 // two planners share) ───────────────────────────────────────────
 
-function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLogistics[]> {
+export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLogistics[]> {
   const bySystem = new Map<string, MarketRowForLogistics[]>();
   for (const m of markets) {
     const row: MarketRowForLogistics = {

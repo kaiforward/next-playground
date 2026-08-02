@@ -100,19 +100,23 @@ Well-defined, can start now.
   reconciliation population PR — the field is inert, so a ~91-site mechanical diff at that PR's tail
   bought no functional ground while adding review surface where mechanical regressions hide.
 - **[M] System-finder dev tool** — A queryable dev panel (or `scripts/` CLI) to surface representative systems by characteristic for manual smoke-testing / QA: population band (dead/undeveloped/tiny-outpost/healthy), economy-type, deposit profile, building roster, NaN/anomaly checks — returning name + direct `/system/<id>` link. Recurring need whenever generation/economy changes land (e.g. verifying barren-but-alive systems read correctly). Build it against the in-memory world (`getWorld()`), surfaced in a `scripts/` CLI or the dev-tools panel.
-- **[S] Cohort the harness metrics — one galaxy-wide average hides the answer** — every headline number
-  the simulate report prints is a mean or median over **all** systems or **all** markets, so a two-pop
-  frontier rock and a developed homeworld are averaged into one figure. That has now produced wrong
-  readings three separate times: `MIN_DEMAND` exists only because tiny worlds break the cover
-  arithmetic; four in five permanently-struck worlds are deposit-less rocks being judged against a
-  homeworld's standard; and `medianCover` medians over all markets, so cohort mix moves it
-  independently of supply (a trap already known and still not designed out).
-  Split the report by cohort — population band, homeworld vs colony, and age since founding — rather
-  than adding more galaxy-wide aggregates. It is an instrument change with no gameplay risk, and it
-  directly sharpens questions already booked: "electronics sits at 0.25 cover" is ambiguous today
-  because it cannot distinguish mature worlds failing from young colonies still filling.
-  **Do this before the economy items below.** Every one of them is a decision taken downstream of a
-  measurement, and the measurements are currently averaging incomparable things.
+- **[S] `simulate`'s market-health and role-cover tables sort differently, so the decomposition can't be
+  read against the column it decomposes** — `scripts/simulate.ts`'s "Market Health" table sorts goods by
+  price dispersion (descending), while "Cover & price by market role" sorts alphabetically. Reading the
+  cohorted breakdown for a good flagged in the health table means hunting for it in a differently-ordered
+  table below. Sort the role table by the same key (or accept a shared `goodId` order and sort both by
+  that) so the two tables line up row-for-row.
+- **[S] `ExperimentResult` omits `roleCoverLevels`/`worldCohorts`** — `lib/tick-harness/experiment.ts`'s
+  `buildExperimentResult` (used by `npm run simulate -- --config`) does not carry the two cohorted-metrics
+  fields, so a saved experiment artifact under `experiments/` cannot be compared against another run on
+  either axis. `--json` output (the quick-run path) already carries both. Add the two fields to
+  `ExperimentResult` and `buildExperimentResult` once a config-run consumer actually needs the comparison.
+- **[S] `formatTable` repeats table-rendering boilerplate five times** — `scripts/simulate.ts`'s
+  `formatTable` builds headers/widths/dash-separator/row-join by hand for each of its ~10 tables; the
+  header-join, dash-row, and per-cell pad/rpad pattern is identical across all of them. A shared
+  `renderTable(headers: string[], widths: number[], rows: string[][]): string[]` helper (first column
+  left-padded, the rest right-padded, matching the existing convention) would cut the duplication without
+  changing any rendered output.
 
 ## Needs Design
 
@@ -148,7 +152,9 @@ Direction is clear, approach needs a design doc before implementation.
   `EXPORT_RESERVE_COVER` (10 cycles) = 0.25×`TARGET_COVER`, which sits below the price-saturation point
   `T ÷ priceCeiling` (0.50×T…0.33×T across the roster), so the price curve **clamps** rather than grades.
   Every drawn exporter therefore reads the same maximum price no matter how drawn it is, and price stops
-  being a health gauge on exactly the cohort that ships goods. The design intent
+  being a health gauge on exactly the cohort that ships goods.
+  **Measured, no longer inferred:** the cohorted report's exporter price column reads **3.00× for
+  `electronics` and `luxuries` and 2.50× for `fuel`** at equilibrium — at the ceiling in every case. The design intent
   (`docs/planned/economy-band-reconciliation.md`, "Production knee at the anchor") was a graded
   base…~1.33× band; that band was an artifact of the *retired* 0.75×T reserve and is unreachable while
   the reserve sits below saturation.
@@ -176,6 +182,12 @@ Direction is clear, approach needs a design doc before implementation.
   labelled Rationing while dissatisfaction is essentially nil, so the Supplied/Rationing boundary is
   being crossed by noise. The band is not grading anything, and every other constant on this list is
   horizon-sensitive in the opposite direction.
+  **The cohorted read makes this conclusive: homeworlds sitting at mean D 0.000 are still 40% Rationing.**
+  `foldSupplyState` returns `rationing` for *any* `d > 0`, so the label fires on a rounding artifact —
+  there is no threshold to re-cut, because there is no threshold. The cohorts also show the galaxy mean
+  D of 0.030 is an artifact of mix: `pop 10-100` runs D 0.105 with **17.9% striking** against
+  `pop >=1K` at D 0.011 and 0.0%. Any re-cut derived from the galaxy-wide distribution would be fitted
+  to the big-world cohort that dominates the count.
   **Superseded in scope by [supply-response.md](./planned/supply-response.md)** — a re-cut alone was
   the wrong instrument. The diagnosis moved on inspection: the unrest fixed point is
   `floor + slope × D`, so the regime label gates recovery *speed* only, and the real defect is that
@@ -184,23 +196,36 @@ Direction is clear, approach needs a design doc before implementation.
   explicitly rejected as a fitted-to-one-seed answer. The spec instead makes the score a readable
   supply percentage, demotes the bands to description, and resolves the struck-world cohort. Run
   `/spec-review` on it before planning implementation.
-- **[M] `electronics` and `luxuries` are never serviced, even at equilibrium** — at 416 cycles every
-  other good reaches 0.4–1.0 median cover; these two sit at **0.25 with 19% and 26% of their markets
-  completely empty**. 0.25 is exactly `EXPORT_RESERVE_COVER ÷ TARGET_COVER`, i.e. every producer of them
-  is drained flat to its warehouse reserve and the good still does not reach anyone — so this is a
-  **production** shortfall, not a distribution one. Two suspects worth separating before designing
-  anything: the build planner not committing tier-2/3 capacity (academy-gated skill labour is the likely
-  binding constraint), versus the recipes' input chains starving upstream. **Ruled OUT as a cause:**
+- **[M] `luxuries` consumers are starving — and `electronics` is a different problem** — these two were
+  booked as one item because both read 0.25 median cover galaxy-wide. The cohorted read shows the
+  headline number was hiding opposite diagnoses, so **split them before designing against either**:
+  - **`luxuries` — a real service failure.** Consumer markets sit at **0.02 median cover with 53% empty**.
+    Consumers genuinely are not being served; this is the item that keeps the original framing.
+  - **`electronics` — consumers are largely served.** Consumer markets sit at **0.77 median cover** (near
+    the 0.82 serviced attractor) with 32% empty. The 0.25 galaxy-wide figure is the *producer* cohort:
+    239 exporters and 174 self-suppliers, against only 148 consumers, all resting at their drained
+    reserve. Producers holding at reserve while their consumers read 0.77 is the system working, not
+    failing — what remains worth asking is whether 32% empty consumers is acceptable, which is a much
+    narrower question than "never serviced".
+    **Caveat:** the consumer cohort itself excludes markets whose local demand floors below
+    `MIN_DEMAND` (the harness's `inert` role), which skews it toward larger worlds — "consumers are
+    largely served" is a claim about above-floor markets, not about every world that wants electronics.
+  0.25 is exactly `EXPORT_RESERVE_COVER ÷ TARGET_COVER`, i.e. a producer drained flat to its warehouse
+  reserve. Two suspects worth separating for the `luxuries` half: the build planner not committing
+  tier-2/3 capacity (academy-gated skill labour is the likely binding constraint), versus the recipes'
+  input chains starving upstream. **Ruled OUT as a cause:**
   phantom `MIN_DEMAND` demand stealing their allocation. That looked total at 29 cycles (100% of
   `ship_frames`/`weapons_systems`/`reactor_cores`/`targeting_arrays` deliveries went to markets with no
   real demand) but is a one-time founding tax — at 416 cycles floored markets are 6.5% of markets, 0.0%
   of requested volume and **0.3% of delivered quantity**. Do not re-open it.
-- **[S] `fuel` is the only good that gets *worse* with time** — median cover **0.79 → 0.61** and empty
-  markets 5% → 8% between 125 and 416 cycles, against 24 goods improving and one flat. Cause unknown.
-  **The obvious guess is already dead:** logistics does not consume fuel stock — `fuelCost` is a
-  per-connection weight in the route-cost function (`HOP_WEIGHT`/`FUEL_WEIGHT`), not a draw on the
-  market — so shipping cannot be eating it. Start instead from what changes between the two horizons
-  for fuel specifically: its consumer mix (which buildings burn it) against its producer cohort.
+- ~~**[S] `fuel` is the only good that gets *worse* with time**~~ — **RETRACTED, not a defect.** The
+  cohorted read settles it: fuel's exporter cohort grows **23 → 220 markets** between the two horizons
+  and every exporter rests at 0.25 (`EXPORT_RESERVE_COVER ÷ TARGET_COVER`, by design), while the
+  consumers they serve hold: empty markets halve (**22% → 10%**) and the consumer median is roughly
+  flat (0.93 → 0.87, itself mix-sensitive as the consumer cohort grows). The galaxy-wide fall is the
+  growing producer cohort diluting the median, i.e. exactly the `medianCover` cohort-mix trap, now
+  demonstrated rather than suspected. Kept as the record so it is not re-opened from the old framing;
+  delete once someone has read it. The general lesson is booked in AGENTS.md, "Verifying changes".
 - **[S] `HOLD_COVER` (1.3) caps production below `SURPLUS_MARGIN` (1.4), so a self-supplier can never
   become a donor** — `productionCeiling` returns 0 at `1.3 × targetStock`; the ordinary-donor branch of
   `surplusDrawable` requires `stock ≥ 1.4 × targetStock`. A system can therefore only ever re-donate
@@ -299,6 +324,15 @@ Blocked on prerequisites or very large scope.
 
 - **[M] Switchable faction relation model** — `FactionRelation` currently stores one shared `score` per faction pair (symmetric). If the War re-spec or later play-testing reveals asymmetric opinions matter (one-sided grudges, vassal arrangements, "I trust you more than you trust me"), switch to per-direction scores. Two shapes available: (a) add `aOpinionOfB` / `bOpinionOfA` columns keeping the canonical-ordering convention; (b) drop ordering, store two rows per pair. Reevaluate when the pivot's diplomacy phase (Phase 5) or war (Phase 6) is specced.
 - **[S] Flow-overlay particle thresholds vs economy-scale** — The map flow-overlay particle density (`LOGISTICS_FLOW` / `TRADE_FLOW` in `components/map/pixi/theme.ts`: `volumePerExtraParticle`, `minParticlesPerEdge`, `maxParticlesPerEdge`, `maxTotalParticles`) is tuned for S=1 flow magnitudes and is intentionally **not** scaled by `ECONOMY_SCALE` (client-side visual constants; the knob is server-only by design). At the calibrated S≈100 every edge pins at `maxParticlesPerEdge` and the global budget concentrates on the top flows, so the overlay loses its high- vs low-volume contrast (purely a legibility loss, not perf/correctness). Revisit the thresholds when running at the scaled economy; also a natural fold-in for the pivot's flow-system merge (Phase 4).
+- **[S] Age-since-founding cohort axis for the calibration harness — deliberately cut, needs `foundedTick`
+  on `TickSystem`** — the cohorted harness metrics work considered founding age as a third cohort axis
+  alongside market role and world cohort, and dropped it: only colonies founded *during a run* carry a
+  `foundedTick`, so every world-gen-seeded system would land in one undifferentiated bucket, and at the
+  equilibrium horizon that bucket is most of the galaxy. `foundingStock` already reports opening
+  satisfaction for exactly the in-run cohort, which is the age question that had a customer; population
+  band proxies "young colony still filling" well enough since young colonies are small. Revisit only if
+  a real founding-age cohort is needed — it requires threading a `foundedTick` onto `TickSystem` (and
+  world state, a save-format consideration), not just harness-side code.
 
 ### Economy + player depth — layered after PR6
 

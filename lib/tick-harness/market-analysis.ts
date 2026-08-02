@@ -9,6 +9,7 @@
 import { spotPrice, curveForRow, marketBandForRow, midPriceAt } from "@/lib/engine/market-pricing";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { GOODS } from "@/lib/constants/goods";
+import { median, quantile } from "@/lib/utils/math";
 import type {
   MarketSnapshot, MarketHealthSummary,
   PriceLevelSummary, CoverLevelEntry,
@@ -32,7 +33,7 @@ const BAND_PROXIMITY_FRAC = 0.02;
  * construct, not a clamp; nothing pins there, and deep draws below it are the
  * crisis zone working as designed.
  */
-function nearBandFloor(m: WorldMarket, band: { minStock: number; maxStock: number }): boolean {
+export function nearBandFloor(m: WorldMarket, band: { minStock: number; maxStock: number }): boolean {
   return m.stock <= BAND_PROXIMITY_FRAC * band.maxStock;
 }
 
@@ -169,19 +170,6 @@ function computeStockPins(
   return result.sort(
     (a, b) => b.floorFrac + b.ceilingFrac - (a.floorFrac + a.ceilingFrac),
   );
-}
-
-// ── Distribution helpers ────────────────────────────────────────
-function median(xs: number[]): number {
-  if (xs.length === 0) return 0;
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-}
-function quantile(xs: number[], q: number): number {
-  if (xs.length === 0) return 0;
-  const s = [...xs].sort((a, b) => a - b);
-  return s[Math.min(s.length - 1, Math.floor(q * s.length))];
 }
 
 // ── Price levels (price / basePrice, galaxy-wide) ───────────────

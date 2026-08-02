@@ -13,6 +13,11 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 
+// ── Market role classification ──────────────────────────────────
+
+/** Which role a market (system × good) plays for that good. Mutually exclusive. */
+export type MarketRole = "exporter" | "self-supplier" | "consumer" | "inert";
+
 // ── Calibration harness config ──────────────────────────────────
 
 export interface HarnessConfig {
@@ -55,6 +60,50 @@ export interface CoverLevelEntry {
   surplusFrac: number;
   /** Fraction below the deficit fraction. */
   deficitFrac: number;
+}
+
+/** Roles that hold stock — `inert` is excluded: a median cover over pricing-artifact markets means nothing. */
+export type StockedRole = Exclude<MarketRole, "inert">;
+
+/** One good's cover and price, split by the role each of its markets plays. */
+export interface RoleCoverEntry {
+  goodId: string;
+  /** Market count in each role, including inert. */
+  countByRole: Record<MarketRole, number>;
+  /** Median stock / targetStock per role. 0 for a role with no markets. */
+  medianCoverByRole: Record<StockedRole, number>;
+  /** Of `countByRole.inert`, the subset whose local demand is genuinely 0 rather than merely
+   *  floored below MIN_DEMAND — a small world can have real demand that still lands as inert. */
+  trulyInertCount: number;
+  /** Share of consumer markets sitting at the stock floor — literally empty, not merely low. */
+  consumerEmptyFrac: number;
+  /** Median price / basePrice across exporter markets — the resting-price read. */
+  exporterMedianPriceRatio: number;
+}
+
+// ── World cohorts ───────────────────────────────────────────────
+
+/**
+ * A settled system's cohorts. The three groupings are independent views, not one
+ * partition: a system lands in exactly one population band and exactly one of
+ * homeworld/colony, plus `survival-short` if it cannot feed itself. Rows therefore
+ * overlap by design and each carries its own denominator.
+ */
+export type WorldCohort =
+  | "pop <10" | "pop 10-100" | "pop 100-1K" | "pop >=1K"
+  | "survival-short" | "homeworld" | "colony";
+
+/** One cohort's supply and unrest reading. Cohorts overlap — see cohortsForSystem. */
+export interface WorldCohortEntry {
+  cohort: WorldCohort;
+  /** Settled systems in this cohort — this row's own denominator. */
+  n: number;
+  meanDissatisfaction: number;
+  meanUnrest: number;
+  strikingShare: number;
+  suppliedShare: number;
+  rationingShare: number;
+  shortageShare: number;
 }
 
 export interface MarketHealthSummary {
@@ -247,6 +296,10 @@ export interface HarnessResults {
   marketSnapshots: { tick: number; markets: MarketSnapshot[] }[];
   /** Derived market health metrics. */
   marketHealth: MarketHealthSummary;
+  /** Per-good cover and price split by market role. */
+  roleCoverLevels: RoleCoverEntry[];
+  /** Supply and unrest per world cohort. Cohorts overlap; each row carries its own denominator. */
+  worldCohorts: WorldCohortEntry[];
   /** Impact measurement for each event that occurred. */
   eventImpacts: EventImpact[];
   /** Whole-run directed-logistics activity — did goods actually move. */
