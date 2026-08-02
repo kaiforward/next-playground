@@ -137,7 +137,7 @@ function fmtNum(n: number): string {
 }
 
 function formatTable(results: HarnessResults): string {
-  const { marketHealth, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
+  const { marketHealth, roleCoverLevels, worldCohorts, eventImpacts, logisticsActivity, regionOverview, elapsedMs, finalWorld, initialPopulationTotal, initialBuildingTotal, populationSnapshots } = results;
 
   // Computed once and reused by both the population/unrest and infrastructure
   // summaries below — they used to each call toTickSystems(finalWorld) separately.
@@ -209,6 +209,18 @@ function formatTable(results: HarnessResults): string {
       lines.push(row.join(" | "));
     }
 
+    const inertTotal = roleCoverLevels.reduce((n, e) => n + e.countByRole.inert, 0);
+    const marketTotal = roleCoverLevels.reduce(
+      (n, e) => n + e.countByRole.exporter + e.countByRole["self-supplier"] + e.countByRole.consumer + e.countByRole.inert,
+      0,
+    );
+    if (marketTotal > 0) {
+      lines.push(
+        `  medianCover is over ALL markets of a good — ${inertTotal} of ${marketTotal} ` +
+        `(${((inertTotal / marketTotal) * 100).toFixed(1)}%) are inert. See "Cover & price by market role".`,
+      );
+    }
+
     const pl = marketHealth.priceLevels;
     lines.push("");
     lines.push(
@@ -220,6 +232,36 @@ function formatTable(results: HarnessResults): string {
         `near 0.9-1.1x: ${(pl.nearFrac * 100).toFixed(0)}%   ` +
         `expensive >1.1x: ${(pl.expensiveFrac * 100).toFixed(0)}%`,
     );
+  }
+
+  // Cover by market role — separates "producers drained flat" from "consumers never served",
+  // which the galaxy-wide median cannot distinguish because it medians both together.
+  if (roleCoverLevels.length > 0) {
+    lines.push("");
+    lines.push("Cover & price by market role (end of simulation):");
+
+    const rHeaders = ["Good", "Exp n/med", "Self n/med", "Cons n/med", "Cons empty%", "Inert n", "Exp price x"];
+    const rWidths = [16, 11, 11, 11, 12, 8, 12];
+
+    lines.push(rHeaders.map((h, i) => (i === 0 ? pad(h, rWidths[i]) : rpad(h, rWidths[i]))).join(" | "));
+    lines.push(rWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+    const cell = (n: number, med: number): string => (n === 0 ? "-" : `${n}/${med.toFixed(2)}`);
+
+    for (const e of roleCoverLevels) {
+      lines.push([
+        pad(e.goodId, rWidths[0]),
+        rpad(cell(e.countByRole.exporter, e.medianCoverByRole.exporter), rWidths[1]),
+        rpad(cell(e.countByRole["self-supplier"], e.medianCoverByRole["self-supplier"]), rWidths[2]),
+        rpad(cell(e.countByRole.consumer, e.medianCoverByRole.consumer), rWidths[3]),
+        rpad(e.countByRole.consumer > 0 ? `${(e.consumerEmptyFrac * 100).toFixed(0)}%` : "-", rWidths[4]),
+        rpad(String(e.countByRole.inert), rWidths[5]),
+        rpad(e.countByRole.exporter > 0 ? e.exporterMedianPriceRatio.toFixed(2) : "-", rWidths[6]),
+      ].join(" | "));
+    }
+
+    lines.push("  inert = no production and no real demand; the row exists only because MIN_DEMAND");
+    lines.push("  floored its denominator. A pricing guard, not a deficit signal.");
   }
 
   // Population and unrest summary
@@ -265,6 +307,7 @@ function formatTable(results: HarnessResults): string {
     for (const [label, value] of pRows) {
       lines.push([pad(label, pWidths[0]), rpad(value, pWidths[1])].join(" | "));
     }
+    lines.push('  meanUnrest is over all settled systems — see "Supply & unrest by world cohort" for the split.');
 
     const regimes = summarizeSupplyRegimes(finalTickSystems, finalWorld.markets, finalWorld.events);
     lines.push("");
@@ -281,6 +324,38 @@ function formatTable(results: HarnessResults): string {
       lines.push([pad(l, rWidths[0]), rpad(String(n), rWidths[1]), rpad(`${(sh * 100).toFixed(1)}%`, rWidths[2])].join(" | "));
     }
     lines.push(`  mean D ${regimes.meanDissatisfaction.toFixed(3)} over ${regimes.counted} settled systems`);
+    lines.push('  mean D and mean unrest average incomparable worlds — see "Supply & unrest by world cohort".');
+  }
+
+  // Cohorts overlap by design: a system is in one population band, one of homeworld/colony,
+  // and additionally survival-short if it cannot feed itself. Each row's n is its own denominator.
+  if (worldCohorts.length > 0) {
+    lines.push("");
+    lines.push("Supply & unrest by world cohort (end of simulation):");
+
+    const wHeaders = ["Cohort", "n", "mean D", "unrest", "strike%", "Sup/Rat/Sho %"];
+    const wWidths = [16, 6, 8, 8, 9, 20];
+
+    lines.push(wHeaders.map((h, i) => (i === 0 ? pad(h, wWidths[i]) : rpad(h, wWidths[i]))).join(" | "));
+    lines.push(wWidths.map((w) => "-".repeat(w)).join("-+-"));
+
+    for (const c of worldCohorts) {
+      const split =
+        `${(c.suppliedShare * 100).toFixed(0)} / ` +
+        `${(c.rationingShare * 100).toFixed(0)} / ` +
+        `${(c.shortageShare * 100).toFixed(0)}`;
+      lines.push([
+        pad(c.cohort, wWidths[0]),
+        rpad(String(c.n), wWidths[1]),
+        rpad(c.meanDissatisfaction.toFixed(3), wWidths[2]),
+        rpad(c.meanUnrest.toFixed(3), wWidths[3]),
+        rpad(`${(c.strikingShare * 100).toFixed(1)}%`, wWidths[4]),
+        rpad(split, wWidths[5]),
+      ].join(" | "));
+    }
+
+    lines.push("  cohorts overlap — a system appears in its population band, in homeworld/colony,");
+    lines.push("  and in survival-short if it has no arable slot. Each row's n is its own denominator.");
   }
 
   // Migration throughput (whole run) — reads most meaningfully on a land-tight seed, where colony
