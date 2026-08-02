@@ -16,8 +16,6 @@ export interface SystemBuildRow {
   /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
   control: SystemControl;
   population: number;
-  /** Stored unrest integral 0…1, as the population processor left it. */
-  unrest: number;
   buildings: Record<string, number>;
   /** Per-resource effective yields, for the shared market-state derivation. */
   yields: ResourceVector;

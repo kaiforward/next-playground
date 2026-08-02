@@ -32,7 +32,6 @@ Well-defined, can start now.
   takes untrusted JSON, so a save written before the union (or hand-edited) needs a guard in
   `lib/types/guards.ts` narrowing `string` → `GoodId` with a decided failure mode (reject the save vs
   drop the row). Don't start it without settling that.
-- **[S] Purge the Postgres fossils outside `lib/tick/`** — Prisma was deleted in the Phase-2 pivot, but comments across `lib/types/game.ts:1`, `lib/types/guards.ts:2-4` ("Runtime type guards for Prisma boundary values" — the boundaries are now save-file `deserialize` + API `JSON.parse`), `lib/utils/format.ts:67`, `lib/utils/__tests__/format.test.ts:44`, `lib/world/types.ts:3`, `lib/world/gen.ts:3,49` (points at `prisma/seed.ts`, deleted), `lib/engine/relations.ts:3`, and `lib/engine/system-trade-flow.ts:4,7` still describe it as live. Mostly "no Prisma dependency" negative-space claims that are now vacuous, plus two that point a reader at deleted files. The tick's own two-backend claims were swept with the harness rename; this is the same rot in the layers that PR's scope didn't reach. Comment-only, zero risk. Find them with: `grep -rni "prisma" --include="*.ts" lib/`.
 - **[L] Economy band reconciliation** — design pass DONE (2026-07-20: brainstorm + EU5/Vic3
   research + adversarially-reviewed spec): see
   [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md) for the full design
@@ -56,14 +55,6 @@ Well-defined, can start now.
 - **[S] Move the dev cheat-panel button to the header** — other floating elements, including the map
   sidebar, get in the way of it where it currently sits.
 - **[S] Improve UI** — Standardize main content panel size, system detail smaller than command center.
-- **[S] Colony seed-source tie-break differs between the player verb and the planner on an exact hop
-  tie** — the player's direct-colony verb (`findSeedSource`, `lib/services/colony-eligibility.ts`) picks
-  the nearest developed same-faction system with a deterministic **smallest-id** tie-break; the autonomic
-  planner's own candidate provider (`developProvider`, `lib/world/tick.ts`) picks whichever tied system
-  its hop-map iteration encounters **first** (insertion order, not sorted). Decision recorded during the
-  Slice 2 PR B review: keep as-is (both are valid, deterministic choices and an exact tie is rare) —
-  align only if it ever actually matters (e.g. a test or a player report keys off which specific source
-  system a colony drew from).
 - **[S] Two independently-coded build-ceiling checks assume monotonic system ownership** — the
   build-options read service (`lib/services/build-options.ts`) nets committed levels from the player
   **faction's** open rows at a system, while the mutation service's own check
@@ -79,44 +70,7 @@ Well-defined, can start now.
   a support building whose skill1 draw is the binding constraint — a display-consistency note, not a
   correctness bug (both are internally consistent with what they each drive); worth a single shared
   staffing-estimate helper if the divergence ever confuses a player-facing readout.
-- **[S] Remove the dead `unrest` field from the directed-build path** — the build path carries a
-  per-system `unrest` copy that nothing reads. `BuildSystemState.unrest`
-  (`lib/engine/directed-build.ts`) and `SystemBuildRow.unrest` (`lib/tick/world/directed-build-world.ts`)
-  went dead when the housing relief valve replaced the settle-margin pacer: the valve is gated on
-  supply alone (`fed()` reads only its goods' survival satisfaction), so the old calm gate that
-  consumed unrest is gone. `fed()`'s docstring already records that unrest is deliberately not a gate —
-  the field is simply the leftover input. Verified dead three times independently (two task reviews
-  plus a cross-layer sweep): the only occurrences in the whole build path are the two declarations,
-  `unrest: row.unrest` in `toBuildState` (`lib/tick/processors/directed-build.ts`), and the row
-  construction in `lib/world/tick.ts`. Dead data that later readers will assume is load-bearing.
-  **Caveat that matters:** the *system's* `unrest` in world state is untouched and still written every
-  cycle by the population processor (`lib/tick/adapters/memory/population.ts`) — only the build-path
-  row copy is dead. Do not let a grep for `unrest` sweep the live one out with it.
-  **Blast radius: 4 production sites + 87 fixture sites** across three test files —
-  `lib/engine/__tests__/directed-build.test.ts` (66), `lib/tick/processors/__tests__/directed-build.test.ts`
-  (20), `lib/tick/adapters/memory/__tests__/directed-build.test.ts` (1). Mechanical breadth, not risk.
-  **Recipe:** drop the two declarations and the two mappings, then `npx tsc --noEmit` and delete each
-  `unrest: N,` the excess-property check flags; repeat until clean. Deliberately held out of the band
-  reconciliation population PR — the field is inert, so a ~91-site mechanical diff at that PR's tail
-  bought no functional ground while adding review surface where mechanical regressions hide.
 - **[M] System-finder dev tool** — A queryable dev panel (or `scripts/` CLI) to surface representative systems by characteristic for manual smoke-testing / QA: population band (dead/undeveloped/tiny-outpost/healthy), economy-type, deposit profile, building roster, NaN/anomaly checks — returning name + direct `/system/<id>` link. Recurring need whenever generation/economy changes land (e.g. verifying barren-but-alive systems read correctly). Build it against the in-memory world (`getWorld()`), surfaced in a `scripts/` CLI or the dev-tools panel.
-- **[S] `simulate`'s market-health and role-cover tables sort differently, so the decomposition can't be
-  read against the column it decomposes** — `scripts/simulate.ts`'s "Market Health" table sorts goods by
-  price dispersion (descending), while "Cover & price by market role" sorts alphabetically. Reading the
-  cohorted breakdown for a good flagged in the health table means hunting for it in a differently-ordered
-  table below. Sort the role table by the same key (or accept a shared `goodId` order and sort both by
-  that) so the two tables line up row-for-row.
-- **[S] `ExperimentResult` omits `roleCoverLevels`/`worldCohorts`** — `lib/tick-harness/experiment.ts`'s
-  `buildExperimentResult` (used by `npm run simulate -- --config`) does not carry the two cohorted-metrics
-  fields, so a saved experiment artifact under `experiments/` cannot be compared against another run on
-  either axis. `--json` output (the quick-run path) already carries both. Add the two fields to
-  `ExperimentResult` and `buildExperimentResult` once a config-run consumer actually needs the comparison.
-- **[S] `formatTable` repeats table-rendering boilerplate five times** — `scripts/simulate.ts`'s
-  `formatTable` builds headers/widths/dash-separator/row-join by hand for each of its ~10 tables; the
-  header-join, dash-row, and per-cell pad/rpad pattern is identical across all of them. A shared
-  `renderTable(headers: string[], widths: number[], rows: string[][]): string[]` helper (first column
-  left-padded, the rest right-padded, matching the existing convention) would cut the duplication without
-  changing any rendered output.
 
 ## Needs Design
 
@@ -218,14 +172,6 @@ Direction is clear, approach needs a design doc before implementation.
   `ship_frames`/`weapons_systems`/`reactor_cores`/`targeting_arrays` deliveries went to markets with no
   real demand) but is a one-time founding tax — at 416 cycles floored markets are 6.5% of markets, 0.0%
   of requested volume and **0.3% of delivered quantity**. Do not re-open it.
-- ~~**[S] `fuel` is the only good that gets *worse* with time**~~ — **RETRACTED, not a defect.** The
-  cohorted read settles it: fuel's exporter cohort grows **23 → 220 markets** between the two horizons
-  and every exporter rests at 0.25 (`EXPORT_RESERVE_COVER ÷ TARGET_COVER`, by design), while the
-  consumers they serve hold: empty markets halve (**22% → 10%**) and the consumer median is roughly
-  flat (0.93 → 0.87, itself mix-sensitive as the consumer cohort grows). The galaxy-wide fall is the
-  growing producer cohort diluting the median, i.e. exactly the `medianCover` cohort-mix trap, now
-  demonstrated rather than suspected. Kept as the record so it is not re-opened from the old framing;
-  delete once someone has read it. The general lesson is booked in AGENTS.md, "Verifying changes".
 - **[S] `HOLD_COVER` (1.3) caps production below `SURPLUS_MARGIN` (1.4), so a self-supplier can never
   become a donor** — `productionCeiling` returns 0 at `1.3 × targetStock`; the ordinary-donor branch of
   `surplusDrawable` requires `stock ≥ 1.4 × targetStock`. A system can therefore only ever re-donate

@@ -124,7 +124,6 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
     factionId: row.factionId,
     control: row.control,
     population: row.population,
-    unrest: row.unrest,
     buildings: row.buildings,
     slotCap: row.slotCap,
     generalSpace: row.generalSpace,

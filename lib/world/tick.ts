@@ -310,7 +310,6 @@ function buildBuildRows(
     factionId: s.factionId,
     control: s.control,
     population: s.population,
-    unrest: s.unrest,
     buildings: s.buildings,
     yields: s.yields,
     slotCap: s.slotCap,
@@ -991,6 +990,10 @@ export async function runWorldTick(
       // Colony-candidate provider: a faction's CONTROLLED systems that have a reachable developed
       // same-faction seed source, tagged with their substrate + that source. The colony planner scores
       // them via colonyValue and funds establish projects from the shared pool.
+      // Ties on hop count keep the first system this iteration reaches (strict `<` below), whereas
+      // the player's own verb (`findSeedSource`, lib/services/colony-eligibility.ts) breaks ties to
+      // the smallest id — so on an exact tie the two can name different sources. Both are
+      // deterministic and a tie is rare; see that function for why they are left unaligned.
       const developProvider = (factionId: string): ColonyEstablishCandidate[] => {
         const candidates: ColonyEstablishCandidate[] = [];
         for (const s of systems) {

@@ -53,6 +53,11 @@ export interface ExperimentResult {
   /** The scale the run resolved at — a saved result is unreadable without knowing it. */
   economyScale: number;
   marketHealth: HarnessResults["marketHealth"];
+  /** Per-good cover and price split by market role — the cohort decomposition of `marketHealth`,
+   *  without which a saved run's galaxy-wide medians cannot be compared against another's. */
+  roleCoverLevels: HarnessResults["roleCoverLevels"];
+  /** Per-cohort supply and unrest — the same separation on the population axis. */
+  worldCohorts: HarnessResults["worldCohorts"];
   eventImpacts: HarnessResults["eventImpacts"];
   treasurySummary: TreasurySummary;
   treasurySnapshots: TreasurySnapshot[];
@@ -73,6 +78,8 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     config: results.config,
     economyScale: results.economyScale,
     marketHealth: results.marketHealth,
+    roleCoverLevels: results.roleCoverLevels,
+    worldCohorts: results.worldCohorts,
     eventImpacts: results.eventImpacts,
     treasurySummary: results.treasurySummary,
     treasurySnapshots: results.treasurySnapshots,

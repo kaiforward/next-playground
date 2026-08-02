@@ -41,7 +41,7 @@ describe("formatHeadcount", () => {
   it("renders zero for an empty system", () => {
     expect(formatHeadcount(0)).toBe("0");
   });
-  it("handles large (billions) values — display-only, never written to Prisma", () => {
+  it("handles large (billions) values — display-only, never written back to world state", () => {
     expect(formatHeadcount(3400).replace(/\D/g, "")).toBe("3400000000");
   });
 });

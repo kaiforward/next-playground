@@ -1,6 +1,6 @@
 /**
  * World-state types — the hand-owned, in-memory model of the whole game
- * universe. No Prisma dependency; every field is a plain string/number/
+ * universe. Every field is a plain string/number/
  * boolean/array/object so the whole `World` survives
  * `JSON.parse(JSON.stringify(world))` (save/load round-trips through this).
  *

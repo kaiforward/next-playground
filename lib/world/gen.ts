@@ -1,8 +1,8 @@
 /**
- * Pure world generation — composes `generateUniverse` with the
- * post-generation derivations `prisma/seed.ts` writes to Postgres, producing
- * a fully-populated in-memory `World` directly. No DB dependency; every
- * synthetic id is minted from a monotonic counter rather than a cuid.
+ * Pure world generation — composes `generateUniverse` with the post-generation
+ * derivations (markets, factions, relations, ships), producing a fully-populated
+ * in-memory `World` directly. Every synthetic id is minted from a monotonic counter,
+ * so a given seed yields a byte-identical world.
  */
 
 import { createSystemMarkets } from "@/lib/world/markets";
@@ -47,10 +47,8 @@ function mintId(minter: IdMinter, prefix: string): string {
 
 /**
  * Build `generateUniverse`'s params from a fully-interpolated universe-gen
- * config (Task 2's `genConfigForSystemCount`). Mirrors `prisma/seed.ts`'s
- * `GenParams` construction field-for-field, except `seed` comes from the
- * caller (the config's own `SEED` stays pinned at the `BASE_CONFIG` default
- * and is not the per-world seed).
+ * config (`genConfigForSystemCount`). `seed` comes from the caller — the config's
+ * own `SEED` stays pinned at the `BASE_CONFIG` default and is not the per-world seed.
  */
 export function buildGenParams(
   seed: number,

@@ -190,11 +190,11 @@ export const RELATION_HISTORY_MAX = 10;
  * Sentinel `phaseDuration` for relations-owned events (pact_under_negotiation,
  * alliance_dissolved). The events processor skips these event types via the
  * `RELATIONS_OWNED_LIFECYCLE` guard, so the value never actually drives a
- * transition — but it must fit in PostgreSQL int4 (max 2,147,483,647).
+ * transition — but it must stay an ordinary finite integer, since `World` is
+ * persisted through `JSON.stringify` and a sentinel like `Infinity` would
+ * serialize to `null` and silently corrupt the save.
  *
  * Two billion ticks ≈ 63 years at one tick/second, so this is "forever" for
- * any conceivable game lifetime. Previously this was `Number.MAX_SAFE_INTEGER`,
- * which overflowed int4 and aborted relations-event inserts (see PR #70
- * post-merge fix).
+ * any conceivable game lifetime.
  */
 export const RELATIONS_PHASE_SENTINEL = 2_000_000_000;

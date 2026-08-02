@@ -1,4 +1,4 @@
-// Shared game types — no Prisma dependency, importable everywhere
+// Shared game types — importable everywhere
 
 import type { ShipSize, ShipRole } from "@/lib/constants/ships";
 import type { EventTypeId } from "@/lib/constants/events";

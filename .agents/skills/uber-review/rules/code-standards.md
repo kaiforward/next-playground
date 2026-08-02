@@ -35,6 +35,8 @@ When you flag a violation, use the matching slug below so dedup is deterministic
 | `unawaited-async-callback` | a child not awaiting an async callback prop (type it `() => Promise<void>`) |
 | `sse-without-seed` | an SSE-driven hook with no REST seed of initial state |
 | `debounce-in-render-loop` | debounce (not throttle) on a Pixi-ticker → `setState` loop |
+| `deferred-in-reach` | a new `docs/BACKLOG.md` row deferring a cheap, self-contained problem in a file this diff already edits — see nuance below |
+| `stranded-by-own-change` | a field/prop/helper this diff leaves with no readers — dead code the same diff created — see nuance below |
 
 ## Flagging nuance (review-only — not in AGENTS.md)
 
@@ -46,7 +48,9 @@ Distinguish carefully before flagging; these are the recurring false-positive tr
 - **`sort-mutates-state`** — only a `.sort()` on a React **state** value during render, not every `.sort()`.
 - **`static-node-edge-in-pure-path`** — flag a **static** `import` of `fs`/`node:fs`/`process.env` reads in `lib/engine`, `lib/services`, or `lib/world` (except `save-files.ts`). A dynamic `await import(...)` inside a function body is the sanctioned pattern; don't flag those, and don't flag Node imports in `scripts/` or route handlers.
 - **`world-not-serializable`** — flag a `Map`/`Set`/`Date`/class instance or a possible `Infinity`/`NaN` assigned into a `World` row / `meta`. Ordinary local `Map`/`Set` inside a processor body (not persisted into `World`) is fine.
-- Non-executable text (markdown, prompts, YAML) is never a violation by content match — see the severity rubric's scope guard.
+- **`deferred-in-reach`** — the one case where a `docs/BACKLOG.md` addition IS reviewable, and the deliberate exception to "respect clearly-deferred items". Flag only when all three hold: the row is **added by this diff**, it describes a problem in a file **this diff already edits**, and fixing it needs no design decision. Judge cheapness by judgement required, not lines touched — a compiler-guided mechanical sweep is cheap at any size. Escalate to `major` when the commit message or PR body claims the review findings were fixed. Do NOT flag pre-existing backlog rows, rows about untouched files, or anything needing a design call — those are legitimate deferrals.
+- **`stranded-by-own-change`** — the companion to `deferred-in-reach`: that slug fires only when a diff *books* the dead code, this one when it simply leaves it. Flag when this diff removes the last reader of a field/prop/helper and does not remove the thing itself. Verify the last reader is actually gone — grep the whole repo, not the diff, and remember a declaration reached through generic inference (an object literal returned from an `Array.from`/`map` callback) never trips TypeScript's excess-property check, so "tsc is clean" is not evidence the sweep was complete. Do NOT flag code that was already dead before this diff — that is pre-existing, and belongs to whoever stranded it.
+- Non-executable text (markdown, prompts, YAML) is never a violation by content match — see the severity rubric's scope guard. The `deferred-in-reach` slug above is the one exception, and it flags the *act of deferring*, not any rule matched inside the prose.
 
 ## Maintenance note
 
