@@ -72,6 +72,9 @@ export interface RoleCoverEntry {
   countByRole: Record<MarketRole, number>;
   /** Median stock / targetStock per role. 0 for a role with no markets. */
   medianCoverByRole: Record<StockedRole, number>;
+  /** Of `countByRole.inert`, the subset whose local demand is genuinely 0 rather than merely
+   *  floored below MIN_DEMAND — a small world can have real demand that still lands as inert. */
+  trulyInertCount: number;
   /** Share of consumer markets sitting at the stock floor — literally empty, not merely low. */
   consumerEmptyFrac: number;
   /** Median price / basePrice across exporter markets — the resting-price read. */

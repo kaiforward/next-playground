@@ -241,7 +241,7 @@ function formatTable(results: HarnessResults): string {
     lines.push("Cover & price by market role (end of simulation):");
 
     const rHeaders = ["Good", "Exp n/med", "Self n/med", "Cons n/med", "Cons empty%", "Inert n", "Exp price x"];
-    const rWidths = [16, 11, 11, 11, 12, 8, 12];
+    const rWidths = [16, 11, 11, 11, 12, 12, 12];
 
     lines.push(rHeaders.map((h, i) => (i === 0 ? pad(h, rWidths[i]) : rpad(h, rWidths[i]))).join(" | "));
     lines.push(rWidths.map((w) => "-".repeat(w)).join("-+-"));
@@ -255,13 +255,13 @@ function formatTable(results: HarnessResults): string {
         rpad(cell(e.countByRole["self-supplier"], e.medianCoverByRole["self-supplier"]), rWidths[2]),
         rpad(cell(e.countByRole.consumer, e.medianCoverByRole.consumer), rWidths[3]),
         rpad(e.countByRole.consumer > 0 ? `${(e.consumerEmptyFrac * 100).toFixed(0)}%` : "-", rWidths[4]),
-        rpad(String(e.countByRole.inert), rWidths[5]),
+        rpad(`${e.countByRole.inert} (${e.trulyInertCount})`, rWidths[5]),
         rpad(e.countByRole.exporter > 0 ? e.exporterMedianPriceRatio.toFixed(2) : "-", rWidths[6]),
       ].join(" | "));
     }
 
-    lines.push("  inert = no production and no real demand; the row exists only because MIN_DEMAND");
-    lines.push("  floored its denominator. A pricing guard, not a deficit signal.");
+    lines.push("  inert = no production, local demand below the MIN_DEMAND pricing floor. Not the same");
+    lines.push("  as no demand: a small world can floor for real. Inert n = total (of which 0-demand).");
   }
 
   // Population and unrest summary

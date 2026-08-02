@@ -30,11 +30,15 @@ import type { MarketRole, RoleCoverEntry, StockedRole, WorldCohort, WorldCohortE
  *
  * Precedence matters at one junction: a mining world producing ore nobody there consumes
  * has a floored demandRate and real production. It is an exporter — it genuinely ships the
- * good — so the production tests run first and `inert` means "neither produces nor really
- * demands", a market that is pure pricing-floor artifact.
+ * good — so the production tests run first and `inert` means "no production, and local
+ * demand below the MIN_DEMAND pricing floor" — its cover denominator is the pricing floor,
+ * not real need. That is NOT the same as zero demand: a small world can have genuine demand
+ * that still sits under the floor (below ~7 population for water, ~50 for electronics, ~167
+ * for ship_frames) and lands here too, indistinguishable from a market nobody wants anything
+ * from unless the caller also reads `state.demand` (0 vs. > 0).
  */
 export function classifyMarketRole(state: GoodMarketState, demandRate: number): MarketRole {
-  const production = state.production ?? 0;
+  const production = state.production;
   // Mirrors surplusDrawable's own exporter branch, so a market this calls an exporter is
   // exactly one directed logistics would draw from.
   if (production > state.demand && !state.productionSuppressed) return "exporter";
@@ -42,19 +46,33 @@ export function classifyMarketRole(state: GoodMarketState, demandRate: number): 
   // The floor is assigned from the same constant, not computed, so a floored row lands on
   // it exactly; the epsilon only guards against accumulated float drift in the industrial term.
   if (demandRate > MIN_DEMAND * (1 + 1e-9)) return "consumer";
+  // Below the floor — not "no demand". A market here may have zero local demand, or real
+  // demand too small to clear MIN_DEMAND; the pricing denominator alone cannot tell them
+  // apart. Callers that need the distinction cross-check state.demand (see marketRolesByKey).
   return "inert";
 }
 
 const STOCKED_ROLES: StockedRole[] = ["exporter", "self-supplier", "consumer"];
 
-/** Every market's role, keyed `systemId|goodId`. One pass over the galaxy. */
+/**
+ * A market's role, plus the unfloored `state.demand` that fed the classification. Carried
+ * alongside the role so a caller can separate a genuinely-empty inert market (demand === 0)
+ * from one whose real demand just sits below the MIN_DEMAND pricing floor, without
+ * recomputing `toGoodMarketStates` a second time.
+ */
+export interface MarketRoleInfo {
+  role: MarketRole;
+  demand: number;
+}
+
+/** Every market's role and demand, keyed `systemId|goodId`. One pass over the galaxy. */
 export function marketRolesByKey(
   systems: TickSystem[],
   markets: WorldMarket[],
-): Map<string, MarketRole> {
+): Map<string, MarketRoleInfo> {
   const rowsBySystem = marketRowsBySystem(markets);
   const demandRateByKey = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.demandRate]));
-  const roles = new Map<string, MarketRole>();
+  const roles = new Map<string, MarketRoleInfo>();
 
   for (const s of systems) {
     const rows = rowsBySystem.get(s.id);
@@ -64,7 +82,8 @@ export function marketRolesByKey(
     });
     for (const state of states) {
       const key = `${s.id}|${state.goodId}`;
-      roles.set(key, classifyMarketRole(state, demandRateByKey.get(key) ?? 0));
+      const demandRate = demandRateByKey.get(key) ?? 0;
+      roles.set(key, { role: classifyMarketRole(state, demandRate), demand: state.demand });
     }
   }
   return roles;
@@ -85,12 +104,14 @@ export function computeRoleCoverLevels(
   const covers = new Map<string, Record<StockedRole, number[]>>();
   const consumerEmpty = new Map<string, number>();
   const exporterPrices = new Map<string, number[]>();
+  const trulyInertCounts = new Map<string, number>();
 
   for (const m of markets) {
     const good = GOODS[m.goodId];
     if (!good) continue;
-    const role = roles.get(`${m.systemId}|${m.goodId}`);
-    if (!role) continue;
+    const info = roles.get(`${m.systemId}|${m.goodId}`);
+    if (!info) continue;
+    const { role } = info;
 
     let count = counts.get(m.goodId);
     if (!count) {
@@ -99,10 +120,15 @@ export function computeRoleCoverLevels(
       covers.set(m.goodId, { exporter: [], "self-supplier": [], consumer: [] });
       consumerEmpty.set(m.goodId, 0);
       exporterPrices.set(m.goodId, []);
+      trulyInertCounts.set(m.goodId, 0);
     }
     count[role] += 1;
 
-    if (role === "inert") continue;
+    if (role === "inert") {
+      // Genuinely wanted by nobody, not merely floored — the honest subset of "inert".
+      if (info.demand === 0) trulyInertCounts.set(m.goodId, (trulyInertCounts.get(m.goodId) ?? 0) + 1);
+      continue;
+    }
 
     const curve = curveForRow(m, good);
     if (curve.targetStock > 0) covers.get(m.goodId)?.[role].push(m.stock / curve.targetStock);
@@ -128,6 +154,7 @@ export function computeRoleCoverLevels(
       goodId,
       countByRole,
       medianCoverByRole,
+      trulyInertCount: trulyInertCounts.get(goodId) ?? 0,
       // Guarded: a good with no consumer markets reports 0, never NaN.
       consumerEmptyFrac: consumers > 0 ? (consumerEmpty.get(goodId) ?? 0) / consumers : 0,
       exporterMedianPriceRatio: median(exporterPrices.get(goodId) ?? []),
@@ -156,8 +183,8 @@ const COHORT_ORDER: WorldCohort[] = [
 export function cohortsForSystem(s: TickSystem, homeworldIds: Set<string>): WorldCohort[] {
   const band = POP_BANDS.find((b) => s.population < b.below)?.cohort ?? "pop >=1K";
   const cohorts: WorldCohort[] = [band, homeworldIds.has(s.id) ? "homeworld" : "colony"];
-  // No arable slot means the world cannot feed itself at any level of development — the
-  // physical limit that separates a deprived rock from a world the economy is failing.
+  // No arable slot means no local food production — the physical limit that separates a
+  // deprived rock from a world the economy is failing.
   if (s.slotCap.arable <= 0) cohorts.push("survival-short");
   return cohorts;
 }

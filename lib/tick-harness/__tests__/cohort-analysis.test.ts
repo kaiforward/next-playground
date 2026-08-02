@@ -126,10 +126,16 @@ describe("computeRoleCoverLevels", () => {
     // demandRate 1 everywhere makes every market's targetStock exactly TARGET_COVER (the
     // same trick market-analysis.test.ts's fixtures use), so stock alone fixes each
     // market's cover, and — for the exporters — its price ratio too (k=1 default elasticity
-    // on water ⇒ price ratio = targetStock / stock = 1 / cover).
+    // on water ⇒ price ratio = targetStock / stock = 1 / cover). exp-a and exp-b are chosen
+    // so the cover set {2.0, 0.8} and the price-ratio set {0.5, 1.25} are DIFFERENT sets with
+    // DIFFERENT medians (1.4 vs 0.875) — an implementation that pushed a cover value into the
+    // price list, or vice versa, would fail at least one of the two assertions below instead
+    // of silently reproducing the right answer by coincidence. 1.25 also sits inside the
+    // price curve's graded band (floor 0.5, ceiling 2.0 on water) rather than on a clamp
+    // boundary, unlike 0.5 and 2.0 which both sit exactly on one.
     const markets = [
       mkt("exp-a", "water", TARGET_COVER * 2, 1),   // cover 2.0, price ratio 0.5
-      mkt("exp-b", "water", TARGET_COVER * 0.5, 1), // cover 0.5, price ratio 2.0
+      mkt("exp-b", "water", TARGET_COVER * 0.8, 1), // cover 0.8, price ratio 1.25
       mkt("self", "water", TARGET_COVER * 0.8, 1),  // cover 0.8
       mkt("con", "water", TARGET_COVER * 0.2, 1),   // cover 0.2
     ];
@@ -140,15 +146,36 @@ describe("computeRoleCoverLevels", () => {
     expect(water.countByRole["self-supplier"]).toBe(1);
     expect(water.countByRole.consumer).toBe(1);
 
-    // Median of exactly {2.0, 0.5} (1.25) — distinct from the self-supplier's 0.8 and the
-    // consumer's 0.2, so either list absorbing the wrong market's cover would fail this.
-    expect(water.medianCoverByRole.exporter).toBeCloseTo(1.25, 5);
+    // Median of {2.0, 0.8} (1.4) — distinct from the self-supplier's 0.8, the consumer's
+    // 0.2, and the price-ratio median below, so either list absorbing the wrong market's
+    // values would fail this.
+    expect(water.medianCoverByRole.exporter).toBeCloseTo(1.4, 5);
     expect(water.medianCoverByRole["self-supplier"]).toBeCloseTo(0.8, 5);
     expect(water.medianCoverByRole.consumer).toBeCloseTo(0.2, 5);
 
-    // Median of {0.5, 2.0} across the exporter markets only (1.25) — a value that can
-    // only come from those two prices, not from a crossed or empty list.
-    expect(water.exporterMedianPriceRatio).toBeCloseTo(1.25, 5);
+    // Median of {0.5, 1.25} across the exporter markets only (0.875) — distinct from the
+    // exporter cover median (1.4) above, so a cover value crossed into this list, or vice
+    // versa, changes one assertion without the other.
+    expect(water.exporterMedianPriceRatio).toBeCloseTo(0.875, 5);
+  });
+
+  it("separates a genuinely-empty inert market from one with real sub-floor demand", () => {
+    // s1: population 0, no buildings — civilian consumption is strictly population-
+    // proportional (GOOD_CONSUMPTION × population, no flat term), so state.demand is
+    // exactly 0. s2: population 3, well under water's ~7-population MIN_DEMAND threshold
+    // (0.007/head × 3 = 0.021 < MIN_DEMAND) — real, non-zero demand that still floors.
+    // Both markets carry demandRate at the floor, so both classify inert; only s1 is
+    // genuinely wanted by nobody.
+    const systems = [sys("s1", { population: 0 }), sys("s2", { population: 3 })];
+    const markets = [
+      mkt("s1", "water", 50, MIN_DEMAND),
+      mkt("s2", "water", 50, MIN_DEMAND),
+    ];
+
+    const [entry] = computeRoleCoverLevels(systems, markets);
+
+    expect(entry.countByRole.inert).toBe(2);
+    expect(entry.trulyInertCount).toBe(1);
   });
 });
 
