@@ -310,7 +310,6 @@ function buildBuildRows(
     factionId: s.factionId,
     control: s.control,
     population: s.population,
-    unrest: s.unrest,
     buildings: s.buildings,
     yields: s.yields,
     slotCap: s.slotCap,

@@ -78,8 +78,6 @@ export interface BuildSystemState {
   /** Three-state ownership: unclaimed frontier → controlled (outpost tier) → developed (build-gate). */
   control: SystemControl;
   population: number;
-  /** Stored unrest integral 0…1, as the population processor left it. */
-  unrest: number;
   /** Current building counts (production types + "housing"). */
   buildings: Record<string, number>;
   /** Per-resource deposit-slot cap (Σ body slots) — caps tier-0 extractor counts. */

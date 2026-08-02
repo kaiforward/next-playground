@@ -23,7 +23,7 @@ import { emptyResourceVector } from "@/lib/engine/resources";
 /** A minimal buildable system carrying just the market readings the fed gate looks at. */
 function sysWithGoods(readings: GoodSatisfaction[]): BuildSystemState {
   return {
-    systemId: "s1", factionId: "f1", control: "developed", population: 20, unrest: 0,
+    systemId: "s1", factionId: "f1", control: "developed", population: 20,
     buildings: {}, slotCap: emptyResourceVector(),
     generalSpace: 10, habitableSpace: 10,
     goods: readings.map((r) => ({

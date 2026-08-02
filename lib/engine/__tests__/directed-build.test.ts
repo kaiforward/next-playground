@@ -26,7 +26,7 @@ const DEV_REFS: DevelopmentRefs = { popRef: 150, industryRef: 12 };
 
 function sysWith(partial: Partial<BuildSystemState>): BuildSystemState {
   return {
-    systemId: "X", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+    systemId: "X", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0, goods: [],
     ...partial,
   };
@@ -44,7 +44,7 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
   // A developed sink with an uncovered `ore` gap (demand D, no built capacity) and one prior assessment.
   function sink(systemId: string, demand: number): BuildSystemState {
     return {
-      systemId, factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId, factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand, production: 0, capacityProduction: 0, proposalCycles: 1 }],
     };
@@ -55,7 +55,7 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
   function exporter(systemId: string, spare: number): BuildSystemState {
     const demand = 4;
     return {
-      systemId, factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId, factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 100, targetStock: 50, demand, production: demand + spare, capacityProduction: demand + spare }],
     };
@@ -97,7 +97,7 @@ describe("planFactionProposals — flow-aware coverage netting (§3.1)", () => {
     // The holder carries built capacity and stock but produces nothing (production 0 < demand) → no
     // export rate, so it never cancels; the sink stays structural. Logistics still ships its stock.
     const drainingPile: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "B", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 100, targetStock: 50, demand: 4, production: 0, capacityProduction: 8 }],
     };
@@ -115,19 +115,19 @@ describe("assessStructuralDeficits — isEconomicallyActive gate", () => {
   it("excludes non-developed systems from gaps, spare, and persistence writes", () => {
     // A developed sink with an uncovered ore gap (one prior assessment).
     const developedSink: BuildSystemState = {
-      systemId: "D", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "D", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand: 10, production: 0, capacityProduction: 0, proposalCycles: 1 }],
     };
     // An UNCLAIMED exporter with ample ore spare — would fully cancel D's gap if it counted.
     const inactiveExporter: BuildSystemState = {
-      systemId: "E", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "E", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 100, targetStock: 50, demand: 4, production: 50, capacityProduction: 50 }],
     };
     // An UNCLAIMED sink with its own ore gap and buildable land — would otherwise emit a proposal + persistence write.
     const inactiveSink: BuildSystemState = {
-      systemId: "U", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "U", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
       slotCap: makeResourceVector({ ore: 10 }), generalSpace: 50, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 1, targetStock: 20, demand: 10, production: 0, capacityProduction: 0, proposalCycles: 1 }],
     };
@@ -221,7 +221,7 @@ function tier0Sys(builtFood: number, foodSlots: number): BuildSystemState {
   // here we set every resource's cap so the test is independent of the food→resource mapping.
   for (const k of RESOURCE_TYPES) slotCap[k] = foodSlots;
   return {
-    systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed",
+    systemId: "A", factionId: "f1", population: 100, control: "unclaimed",
     buildings: { food: builtFood }, slotCap, generalSpace: 100, habitableSpace: 50, goods: [],
   };
 }
@@ -241,7 +241,7 @@ describe("buildableUnits / buildableOutput", () => {
   it("caps a tier-1+ factory by remaining general space ÷ footprint", () => {
     // metals is tier-1 (recipe { ore: 1 }); generalSpace 100, no buildings → 100 / spaceCost units.
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
       slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
     };
     expect(buildableUnits(sys, "metals")).toBeGreaterThan(0);
@@ -249,7 +249,7 @@ describe("buildableUnits / buildableOutput", () => {
 
   it("reduces tier-1+ capacity by space already used by existing buildings", () => {
     const full: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: { metals: 100 },
+      systemId: "A", factionId: "f1", population: 100, control: "unclaimed", buildings: { metals: 100 },
       slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
     };
     // metals occupies general space; with 100 units already built, ~no room left.
@@ -258,7 +258,7 @@ describe("buildableUnits / buildableOutput", () => {
 
   it("returns zero capacity for an unknown good not in GOOD_TIER_BY_KEY", () => {
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
       slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 50, goods: [],
     };
     // "not_a_real_good" is not in GOOD_TIER_BY_KEY; should return 0, not divide by default footprint
@@ -280,7 +280,7 @@ describe("planFactionBuilds", () => {
     // (1 + margin) × 20 × cap ≈ 8.8 output — a few whole levels, not the deposit-capped stock target.
     const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "F", control: "developed", population: 100000, unrest: 0,
+      systemId: "A", factionId: "F", control: "developed", population: 100000,
       buildings: {}, slotCap: makeResourceVector({ arable: 1000 }), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 0, targetStock: TARGET_COVER * 20, demand: 20, production: 0, capacityProduction: 0 }],
     };
@@ -302,7 +302,7 @@ describe("planFactionBuilds", () => {
     const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
     const smallDemand = OUTPUT_PER_UNIT.food * 0.5; // half of one extractor's output — floors to 0
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "F", control: "developed", population: 100, unrest: 0,
+      systemId: "A", factionId: "F", control: "developed", population: 100,
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 0, targetStock: 1, demand: smallDemand, production: 0, capacityProduction: 0 }],
     };
@@ -316,7 +316,7 @@ describe("planFactionBuilds", () => {
     // population-scaled budget would have admitted.
     const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "F", control: "developed", population: 100, unrest: 0,
+      systemId: "A", factionId: "F", control: "developed", population: 100,
       buildings: {}, slotCap: makeResourceVector({ ore: 1000 }), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 100000, production: 0, capacityProduction: 0 }],
     };
@@ -330,12 +330,12 @@ describe("planFactionBuilds", () => {
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
     const builder: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
+      systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5, capacityProduction: 0}],
     };
@@ -349,18 +349,18 @@ describe("planFactionBuilds", () => {
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
     const surplus: BuildSystemState = {
-      systemId: "S", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "S", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       // Rate exporter: produces 30 > its own demand 5 → a sustainable food source logistics can carry.
       goods: [{ goodId: "food", stock: 100, targetStock: 20, demand: 5, production: 30, capacityProduction: 30 }],
     };
     const builder: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
+      systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 50, goods: [],
     };
     const builds = planFactionBuilds([deficit, surplus, builder], () => 1, DEV_REFS);
@@ -370,12 +370,12 @@ describe("planFactionBuilds", () => {
   it("gates a tier-1+ build until its inputs are locally produced (the cascade)", () => {
     // A: structural metals deficit. B: general space + budget but NO ore production and no reachable ore surplus.
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const builderNoInput: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
+      systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50, goods: [],
     };
     expect(countFor(planFactionBuilds([deficit, builderNoInput], () => 1, DEV_REFS), "B", "metals")).toBe(0);
@@ -389,7 +389,7 @@ describe("planFactionBuilds", () => {
 
   it("builds proactive housing (no production) at a fed system with no structural deficits", () => {
     const fed: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 10, targetStock: 10, demand: 5, capacityProduction: 0}],
     };
@@ -413,17 +413,17 @@ describe("planFactionBuilds", () => {
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
 
     const deficitFood: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const deficitWater: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+      systemId: "B", factionId: "f1", population: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "water", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
     const builder: BuildSystemState = {
-      systemId: "C", factionId: "f1", population: 10000, unrest: 0, control: "developed", buildings: {},
+      systemId: "C", factionId: "f1", population: 10000, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 50,
       goods: [],
     };
@@ -449,16 +449,16 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     return {
       deficit: {
-        systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+        systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
         slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
         goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0}],
       },
       builder: {
-        systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
+        systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
         slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
       },
       oreSurplus: {
-        systemId: "S", factionId: "f1", population: 100, unrest: 0, control: "unclaimed", buildings: {},
+        systemId: "S", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
         slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
         goods: [{ goodId: "ore", stock: 100, targetStock: 20, demand: 5, production: 0, capacityProduction: 0 }],
       },
@@ -502,7 +502,7 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
 describe("planFactionBuilds — relief housing", () => {
   it("does not build housing at a starved system", () => {
     const starved: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       // satisfaction 0 models the starving flow the fed-proxy now reads (low stock alone no longer counts).
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 100, civilianDemand: 100, capacityProduction: 0, satisfaction: 0 }],
@@ -516,7 +516,7 @@ describe("planFactionBuilds — relief housing", () => {
     // trigger against its 5-level cap (100), and crowding is exactly what the housing would relieve,
     // so unrest must not hold the valve shut.
     const crowded: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 98, unrest: 0.23, control: "developed",
+      systemId: "A", factionId: "f1", population: 98, control: "developed",
       buildings: { housing: 5 },
       slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
@@ -526,7 +526,7 @@ describe("planFactionBuilds — relief housing", () => {
 
   it("never builds housing past the habitable cap", () => {
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100000, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100000, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 1000, habitableSpace: 5,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
@@ -542,7 +542,7 @@ describe("planFactionBuilds — relief housing", () => {
     // reintroduced pop×0.05-style budget (80 at pop 1600) would cap the commit below the relief
     // want — this pins that it does not.
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 1600, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 1600, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 100000, habitableSpace: 100000,
       goods: [{ goodId: "food", stock: 20, targetStock: 20, demand: 5, capacityProduction: 0}],
     };
@@ -555,14 +555,14 @@ describe("planFactionBuilds — relief housing", () => {
     // Builder has NO habitable land: the housing pass cannot fire, so any housing here
     // would be the deleted co-build. Expect production, zero housing.
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const builder: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
+      systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 0,
       goods: [],
     };
@@ -589,7 +589,6 @@ describe("planFactionBuilds performance", () => {
         factionId: "f1",
         control: "developed",
         population: 100,
-        unrest: 0,
         buildings: {},
         slotCap,
         generalSpace: 50,
@@ -620,7 +619,7 @@ describe("planFactionBuilds performance", () => {
     // the top (binary search, not an O(capUnits) descent). Correctness: built labour ≤ population.
     const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "F", control: "developed", population: 40 * oreLabour, unrest: 0,
+      systemId: "A", factionId: "F", control: "developed", population: 40 * oreLabour,
       buildings: {}, slotCap: makeResourceVector({ ore: 100000 }), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 0, targetStock: 1, demand: 1_000_000, production: 0, capacityProduction: 0 }],
     };
@@ -701,7 +700,7 @@ describe("fed", () => {
   it("is true at maximum unrest — supply is the only gate on housing", () => {
     // Reinstating any calm term here would deadlock relief: a fully restive world is precisely the
     // one whose crowding the housing exists to relieve.
-    expect(fed(sysWith({ goods: fedGoods, unrest: 1 }))).toBe(true);
+    expect(fed(sysWith({ goods: fedGoods, }))).toBe(true);
   });
 });
 
@@ -820,12 +819,12 @@ describe("planFactionBuilds — spare-labour gate", () => {
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     return [
       {
-        systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+        systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
         slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
         goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50, capacityProduction: 0}],
       },
       {
-        systemId: "B", factionId: "f1", population: builderPop, unrest: 0, control: "developed",
+        systemId: "B", factionId: "f1", population: builderPop, control: "developed",
         buildings: builderBuildings,
         slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
       },
@@ -854,7 +853,7 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
     const slotCap = emptyResourceVector();
     slotCap.ore = 4;
     const atPotential: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed",
+      systemId: "A", factionId: "f1", population: 100, control: "developed",
       buildings: { housing: 5, ore: 4 },
       slotCap, generalSpace: 9, habitableSpace: 5,
       goods: [{ goodId: "ore", stock: 50, targetStock: 50, demand: 20, capacityProduction: 0}],
@@ -867,13 +866,13 @@ describe("planFactionBuilds — idle at potential & barren worlds", () => {
     const slotCap = emptyResourceVector();
     slotCap.ore = 56;
     const barren: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 3, unrest: 0, control: "developed",
+      systemId: "B", factionId: "f1", population: 3, control: "developed",
       buildings: { ore: 3 / oreLabour }, // ore count × oreLabour == population → spareLabour 0
       slotCap, generalSpace: 60, habitableSpace: 0.001,
       goods: [],
     };
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 1, targetStock: 50, demand: 50, capacityProduction: 0}],
     };
@@ -889,7 +888,7 @@ const selfAndNeighbourRoute: RouteCost = (from, to) => (from === to ? 0 : 1);
 // (mirrors the file's existing deficit fixtures: stock 1, target 20, demand 5 → shortfall 19).
 function deficitOnly(goodId: string): BuildSystemState {
   return {
-    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+    systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     goods: [{ goodId, stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
   };
@@ -901,7 +900,7 @@ function deficitOnly(goodId: string): BuildSystemState {
 // academies yet, so both skill-1 and skill-2 ceilings must be lifted to serve the deficit.
 function makeElectronicsDeficitWithCapableSite(): BuildSystemState[] {
   const capable: BuildSystemState = {
-    systemId: "B", factionId: "f1", population: 500, unrest: 0, control: "developed",
+    systemId: "B", factionId: "f1", population: 500, control: "developed",
     buildings: { components: 5, chemicals: 5 },
     slotCap: emptyResourceVector(), generalSpace: 200, habitableSpace: 0,
     goods: [],
@@ -918,7 +917,7 @@ function makeOreDeficitWithCapableSite(): BuildSystemState[] {
   const slotCap = emptyResourceVector();
   for (const k of RESOURCE_TYPES) slotCap[k] = 10;
   const capable: BuildSystemState = {
-    systemId: "B", factionId: "f1", population: 300, unrest: 0, control: "developed", buildings: {},
+    systemId: "B", factionId: "f1", population: 300, control: "developed", buildings: {},
     slotCap, generalSpace: 0, habitableSpace: 0, goods: [],
   };
   return [deficitOnly("ore"), capable];
@@ -930,7 +929,7 @@ function makeOreDeficitWithCapableSite(): BuildSystemState[] {
 // existing ceiling already covers the build and no new school should be built.
 function makeTier1DeficitWithSchoolsAlready(): BuildSystemState[] {
   const capable: BuildSystemState = {
-    systemId: "B", factionId: "f1", population: 300, unrest: 0, control: "developed",
+    systemId: "B", factionId: "f1", population: 300, control: "developed",
     buildings: { ore: 5, [VOCATIONAL_SCHOOL_TYPE]: 10 },
     slotCap: emptyResourceVector(), generalSpace: 100, habitableSpace: 0,
     goods: [],
@@ -996,12 +995,12 @@ describe("academy co-build", () => {
 // site B has ample population and general space, and locally produces ore (its recipe input).
 function heavyDeficitScenario(): BuildSystemState[] {
   const deficit: BuildSystemState = {
-    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+    systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     goods: [{ goodId: "metals", stock: 1, targetStock: 1000, demand: 500, capacityProduction: 0}],
   };
   const producer: BuildSystemState = {
-    systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
+    systemId: "B", factionId: "f1", population: 5000, control: "developed",
     buildings: { ore: 5 },
     slotCap: emptyResourceVector(), generalSpace: 500, habitableSpace: 0,
     goods: [],
@@ -1029,17 +1028,17 @@ function crossFamilyDeficitScenario(): BuildSystemState[] {
   // Each deficit's RATE (demand − production) is sized to clear ANCHOR_MIN_THROUGHPUT on its own, so
   // both families independently qualify for a complex — proving the cap (not the floor) suppresses the second.
   const deficitMetals: BuildSystemState = {
-    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+    systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     goods: [{ goodId: "metals", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0, capacityProduction: 0 }],
   };
   const deficitFuel: BuildSystemState = {
-    systemId: "C", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+    systemId: "C", factionId: "f1", population: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     goods: [{ goodId: "fuel", stock: 1, targetStock: 30, demand: ANCHOR_MIN_THROUGHPUT * 3, production: 0, capacityProduction: 0 }],
   };
   const producer: BuildSystemState = {
-    systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
+    systemId: "B", factionId: "f1", population: 5000, control: "developed",
     buildings: { ore: 5, gas: 5 },
     slotCap: emptyResourceVector(), generalSpace: 500, habitableSpace: 0,
     goods: [],
@@ -1060,18 +1059,18 @@ function anchoredVsGreenfieldScenario(): BuildSystemState[] {
   const committedDeficit = capUnits * OUTPUT_PER_UNIT.metals * 1.15;
   const demand = committedDeficit / ((1 + DIRECTED_BUILD.PROVISION_MARGIN) * DIRECTED_BUILD.BUILD_RATE_CAP);
   const deficit: BuildSystemState = {
-    systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+    systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     goods: [{ goodId: "metals", stock: 0, targetStock: 1, demand, production: 0, capacityProduction: 0 }],
   };
   const greenfield: BuildSystemState = {
-    systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
+    systemId: "B", factionId: "f1", population: 5000, control: "developed",
     buildings: { ore: 5 },
     slotCap: emptyResourceVector(), generalSpace: space, habitableSpace: 0,
     goods: [],
   };
   const anchored: BuildSystemState = {
-    systemId: "C", factionId: "f1", population: 5000, unrest: 0, control: "developed",
+    systemId: "C", factionId: "f1", population: 5000, control: "developed",
     buildings: { ore: 5, [HEAVY_INDUSTRY_COMPLEX]: 1 },
     slotCap: emptyResourceVector(), generalSpace: space + ANCHOR_FOOTPRINT, habitableSpace: 0,
     goods: [],
@@ -1155,12 +1154,12 @@ describe("planFactionProposals", () => {
     const slotCap = emptyResourceVector();
     for (const k of RESOURCE_TYPES) slotCap[k] = 10;
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 100, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "food", stock: 1, targetStock: 20, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
     };
     const builder: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 200, unrest: 0, control: "developed", buildings: {},
+      systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
       slotCap, generalSpace: 50, habitableSpace: 0, goods: [], // no habitable land → isolate industry
     };
     const proposals = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS).proposals;
@@ -1205,12 +1204,12 @@ describe("planFactionProposals", () => {
     // production. A: a persistent metals deficit (tier-1, draws skill1). B: an input-reachable builder
     // with no academy of its own, so serving the deficit normally co-builds a licensing academy.
     const deficit: BuildSystemState = {
-      systemId: "A", factionId: "f1", population: 0, unrest: 0, control: "developed", buildings: {},
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "metals", stock: 1, targetStock: 20, demand: 10, capacityProduction: 0, proposalCycles: 1 }],
     };
     const builder: BuildSystemState = {
-      systemId: "B", factionId: "f1", population: 5000, unrest: 0, control: "developed",
+      systemId: "B", factionId: "f1", population: 5000, control: "developed",
       buildings: { ore: 5 }, slotCap: emptyResourceVector(), generalSpace: 200, habitableSpace: 0, goods: [],
     };
     const metalsBundle = (open: WorldConstructionProject[]) =>
@@ -1246,7 +1245,7 @@ function policySystem(
   partial: Partial<BuildSystemState> = {},
 ): BuildSystemState {
   return {
-    systemId: "P", factionId: "f1", control: "developed", population: 10_000, unrest: 0,
+    systemId: "P", factionId: "f1", control: "developed", population: 10_000,
     buildings: {}, slotCap: makeResourceVector({ arable: 1_000, ore: 1_000 }), generalSpace: 1_000, habitableSpace: 0,
     goods: [good], ...partial,
   };
@@ -1422,7 +1421,7 @@ describe("planFactionBuilds: develop gate", () => {
     // this a tiny colony deadlocks (no pop to staff → no build → no jobs → no inflow).
     const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
     const site: BuildSystemState = {
-      systemId: "A", factionId: "F", control: "developed", population: 2, unrest: 0,
+      systemId: "A", factionId: "F", control: "developed", population: 2,
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
       goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0, capacityProduction: 0 }],
     };
@@ -1438,7 +1437,7 @@ describe("planFactionBuilds: develop gate", () => {
     // and the planner would stand up industry on an unpopulated world. Same fixture as above, pop 0.
     const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
     const site: BuildSystemState = {
-      systemId: "A", factionId: "F", control: "developed", population: 0, unrest: 0,
+      systemId: "A", factionId: "F", control: "developed", population: 0,
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
       goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0, capacityProduction: 0 }],
     };
@@ -1466,7 +1465,7 @@ describe("hopRouteCost", () => {
   it("makes the planner build a system's OWN local deficit (self-supply)", () => {
     const rc = hopRouteCost(new Map(), DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
     const sys: BuildSystemState = {
-      systemId: "A", factionId: "F", control: "developed", population: 1000, unrest: 0,
+      systemId: "A", factionId: "F", control: "developed", population: 1000,
       buildings: {}, slotCap: makeResourceVector({ arable: 10 }), generalSpace: 100, habitableSpace: 100,
       goods: [{ goodId: "food", stock: 0, targetStock: 500, demand: 50, production: 0, capacityProduction: 0 }],
     };
@@ -1498,7 +1497,7 @@ function homeState(opts: {
   goods?: BuildGoodState[];
 }): BuildSystemState {
   return {
-    systemId: opts.systemId ?? "home", factionId: "f1", control: "developed", population: 1000, unrest: 0,
+    systemId: opts.systemId ?? "home", factionId: "f1", control: "developed", population: 1000,
     buildings: opts.housing ? { [HOUSING_TYPE]: opts.housing } : {},
     slotCap: opts.slotCap ?? emptyResourceVector(),
     generalSpace: 0, habitableSpace: opts.habitableSpace ?? 0, goods: opts.goods ?? [],
@@ -1632,7 +1631,7 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
   function staffedSource(systemId: string, oreLevels: number, output: number): BuildSystemState {
     return {
       systemId, factionId: "f1", control: "developed",
-      population: oreLevels * oreLabour, unrest: 0,
+      population: oreLevels * oreLabour,
       buildings: { ore: oreLevels },
       slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
       goods: [{ goodId: "ore", stock: 0, targetStock: 0, demand: 0, production: output, capacityProduction: output }],
@@ -1679,7 +1678,7 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
   // ── Settler-supply founding gate (anti-sprawl) ──
   // A full core (pop == popCap ⇒ not hungry) with 100 idle spare pops and no industry (labourDemand 0).
   const supplyCore: BuildSystemState = {
-    systemId: "core", factionId: "f1", control: "developed", population: 100, unrest: 0,
+    systemId: "core", factionId: "f1", control: "developed", population: 100,
     buildings: { [HOUSING_TYPE]: 100 / POP_CENTRE_DENSITY }, slotCap: emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0, goods: [],
   };
