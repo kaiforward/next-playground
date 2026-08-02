@@ -7,7 +7,7 @@ import { scaleValue } from "@/lib/constants/economy-scale";
 export const DIRECTED_LOGISTICS = {
   /** Work-budget a system contributes per cycle = population × this. Free in v1 (no treasury). */
   GENERATION_PER_POP: scaleValue(0.5),
-  /** A good is a surplus when stock ≥ targetStock × this (held above its cycles-of-supply anchor). Margin > 1 leaves a deliberate residual (negative space). */
+  /** A good is a surplus when stock ≥ targetStock × this (held above its cycles-of-supply price anchor). Margin > 1 leaves a deliberate residual (negative space). */
   SURPLUS_MARGIN: 1.4,
   /**
    * Cycles of its own demand a structural exporter keeps on hand before shipping the rest — a
@@ -21,7 +21,31 @@ export const DIRECTED_LOGISTICS = {
    * initial market seed reserve.
    */
   EXPORT_RESERVE_COVER: 10,
-  /** A good is a deficit when stock < targetStock × this (below its cycles-of-supply anchor). < 1 leaves a comfortable dead-band above it (with SURPLUS_MARGIN) — the residual / negative space. */
+  /**
+   * Cycles of a system's REAL demand that directed logistics tries to keep on hand — the warehousing
+   * target the DEFICIT test measures against. The donor side still reads the price anchor — known-wrong,
+   * see surplusDrawable.
+   *
+   * Deliberately its own constant rather than `TARGET_COVER`, despite currently holding the same
+   * value. `TARGET_COVER` is the price-curve reference, and its denominator (`demandRate`) is floored
+   * at `MIN_DEMAND` — a divide-by-zero guard on *pricing*, per that constant's own docstring. Borrowing
+   * the pricing anchor as a stock target handed every market whose real demand sits under the floor a
+   * target of `TARGET_COVER × MIN_DEMAND` regardless of what anyone there actually consumes: at
+   * ECONOMY_SCALE=1, a 50-population colony wanting 0.015/cycle of ship frames is floored to 0.05
+   * and so asked for a 2-unit target — 133 cycles of its real supply, not 40.
+   * That is a founding-era pathology, invisible at equilibrium — a colony opens holding nothing on all
+   * 26 goods, so it opens as a full-anchor deficit on all 26. Measured over the first 42 cycles it took
+   * 24.7% of the galaxy's delivered haul volume, and over 90% of the haul of the scarce advanced goods
+   * (weapons systems, reactor cores, ship frames); by 417 cycles the cohort has grown out of the floor
+   * and it reads 0.3%.
+   *
+   * Equal to `TARGET_COVER` so that separating the roles changes behaviour at floored markets ONLY.
+   * The two are free to move apart: how much a warehouse holds is a different question from where a
+   * good prices at par. Sibling of `EXPORT_RESERVE_COVER` — both are warehouse policy stated in
+   * cycles of real demand, which is why neither is denominated against the price anchor.
+   */
+  WAREHOUSE_COVER: 40,
+  /** A good is a deficit when stock < logisticsTarget × this (below its warehousing target). < 1 leaves a comfortable dead-band above it (with SURPLUS_MARGIN) — the residual / negative space. */
   DEFICIT_FRACTION: 0.8,
   /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */
   MAX_HOPS: 4,

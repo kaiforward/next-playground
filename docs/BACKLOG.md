@@ -167,11 +167,17 @@ Direction is clear, approach needs a design doc before implementation.
   0.25 is exactly `EXPORT_RESERVE_COVER ÷ TARGET_COVER`, i.e. a producer drained flat to its warehouse
   reserve. Two suspects worth separating for the `luxuries` half: the build planner not committing
   tier-2/3 capacity (academy-gated skill labour is the likely binding constraint), versus the recipes'
-  input chains starving upstream. **Ruled OUT as a cause:**
-  phantom `MIN_DEMAND` demand stealing their allocation. That looked total at 29 cycles (100% of
-  `ship_frames`/`weapons_systems`/`reactor_cores`/`targeting_arrays` deliveries went to markets with no
-  real demand) but is a one-time founding tax — at 416 cycles floored markets are 6.5% of markets, 0.0%
-  of requested volume and **0.3% of delivered quantity**. Do not re-open it.
+  input chains starving upstream. **Ruled OUT as a cause of the equilibrium reading:**
+  phantom `MIN_DEMAND` demand stealing their allocation. At 416 cycles floored markets are 6.5% of
+  markets, 0.0% of requested volume and **0.3% of delivered quantity**, and `luxuries`' own floored
+  share of delivered volume is 0.6% — so it is not what leaves luxuries consumers at 0.02 cover. Do not
+  re-open it *as an equilibrium explanation*.
+  **But "one-time founding tax" undersold the startup half, and that half is now fixed.** It was not a
+  29-cycle artifact: at 42 cycles floored markets were 41% of all markets and took **24.7% of delivered
+  haul volume**, over 90% for `ship_frames`/`weapons_systems`/`reactor_cores`. Directed logistics now
+  measures deficits against a warehousing target denominated in real demand (`WAREHOUSE_COVER × demand`)
+  rather than the `MIN_DEMAND`-floored price anchor. Re-measure the `luxuries` cohort at the startup
+  horizon before ranking the two remaining suspects — the startup picture predates that fix.
 - **[S] `HOLD_COVER` (1.3) caps production below `SURPLUS_MARGIN` (1.4), so a self-supplier can never
   become a donor** — `productionCeiling` returns 0 at `1.3 × targetStock`; the ordinary-donor branch of
   `surplusDrawable` requires `stock ≥ 1.4 × targetStock`. A system can therefore only ever re-donate
