@@ -69,7 +69,7 @@ export const PEOPLE_PER_UNIT = 1_000_000;
  * 1,000,000 people, so 141.763123 -> "141,763,123"; the Float's fractional part
  * supplies the live-ticking low digits.
  *
- * Display-only: the scaled value exceeds int32 and must never be written to Prisma.
+ * Display-only: the scaled value exceeds int32 and must never be written back to world state.
  */
 export function formatHeadcount(pop: number): string {
   return Math.round(pop * PEOPLE_PER_UNIT).toLocaleString();

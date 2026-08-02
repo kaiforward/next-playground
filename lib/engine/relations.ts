@@ -1,6 +1,6 @@
 /**
  * Pure relations engine — deterministic drift math and event templates.
- * No DB or Prisma dependency. All inputs come in as plain views/maps.
+ * All inputs come in as plain views/maps.
  */
 
 import {

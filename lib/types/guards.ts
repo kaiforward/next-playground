@@ -1,9 +1,9 @@
 /**
- * Runtime type guards for Prisma boundary values.
+ * Runtime type guards for untrusted boundary values.
  *
- * Prisma stores union-typed fields as plain strings. These guards validate
- * at the DB boundary so downstream code can use the proper union types
- * without unsafe `as` casts.
+ * Save-file `deserialize` and API `JSON.parse` both hand back union-typed fields as plain
+ * strings. These guards validate once at that boundary so downstream code can use the proper
+ * union types without unsafe `as` casts.
  */
 
 import type {
