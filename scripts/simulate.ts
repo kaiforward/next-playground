@@ -36,6 +36,7 @@ import {
 import { summarizePopulation, detectPingPong, summarizeInfrastructure, summarizeSupplyRegimes } from "../lib/tick-harness/population-analysis";
 import { summarizeColonisation, summarizeConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
+import { renderTable } from "../lib/tick-harness/table";
 import { STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
@@ -122,36 +123,10 @@ function parseArgs(argv: string[]): {
 
 // ── Formatting ──────────────────────────────────────────────────
 
-function pad(str: string, width: number): string {
-  return str.padEnd(width);
-}
-
-function rpad(str: string, width: number): string {
-  return str.padStart(width);
-}
-
 function fmtNum(n: number): string {
   if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + "K";
   return n.toFixed(0);
-}
-
-type ColAlign = "l" | "r";
-
-/**
- * One table: header row, dash separator, data rows. Cells arrive already formatted — this only
- * pads and joins them. Alignment defaults to label-left / values-right; pass `align` for the
- * tables whose columns don't follow that shape.
- */
-function renderTable(
-  headers: string[],
-  widths: number[],
-  rows: string[][],
-  align: ColAlign[] = headers.map((_, i) => (i === 0 ? "l" : "r")),
-): string[] {
-  const line = (cells: string[]): string =>
-    cells.map((c, i) => (align[i] === "l" ? pad(c, widths[i]) : rpad(c, widths[i]))).join(" | ");
-  return [line(headers), widths.map((w) => "-".repeat(w)).join("-+-"), ...rows.map(line)];
 }
 
 function formatTable(results: HarnessResults): string {
@@ -164,7 +139,7 @@ function formatTable(results: HarnessResults): string {
   // Market Health and the role breakdown below share one good order, so a good flagged in the
   // first lines up row-for-row with the cohort decomposition that explains it. Alphabetical is
   // the tie-break, keeping the order total for goods with no dispersion reading.
-  const dispersionByGood = new Map((marketHealth?.priceDispersion ?? []).map((d) => [d.goodId, d.avgStdDev]));
+  const dispersionByGood = new Map(marketHealth.priceDispersion.map((d) => [d.goodId, d.avgStdDev]));
   const byDispersion = (a: string, b: string): number =>
     (dispersionByGood.get(b) ?? 0) - (dispersionByGood.get(a) ?? 0) || a.localeCompare(b);
 
@@ -185,64 +160,62 @@ function formatTable(results: HarnessResults): string {
   lines.push(`Simulation completed in ${elapsedMs.toFixed(0)}ms`);
 
   // Market health summary
-  if (marketHealth) {
-    lines.push("");
-    lines.push("Market Health (end of simulation):");
+  lines.push("");
+  lines.push("Market Health (end of simulation):");
 
-    const dispMap = new Map(marketHealth.priceDispersion.map((d) => [d.goodId, d]));
-    const driftMap = new Map(marketHealth.stockDrift.map((d) => [d.goodId, d]));
-    const pinMap = new Map(marketHealth.stockPins.map((p) => [p.goodId, p]));
-    const coverMap = new Map(marketHealth.coverLevels.map((c) => [c.goodId, c]));
-    const allGoods = [...new Set([
-      ...marketHealth.priceDispersion.map((d) => d.goodId),
-      ...marketHealth.stockDrift.map((d) => d.goodId),
-    ])].sort(byDispersion);
+  const dispMap = new Map(marketHealth.priceDispersion.map((d) => [d.goodId, d]));
+  const driftMap = new Map(marketHealth.stockDrift.map((d) => [d.goodId, d]));
+  const pinMap = new Map(marketHealth.stockPins.map((p) => [p.goodId, p]));
+  const coverMap = new Map(marketHealth.coverLevels.map((c) => [c.goodId, c]));
+  const allGoods = [...new Set([
+    ...marketHealth.priceDispersion.map((d) => d.goodId),
+    ...marketHealth.stockDrift.map((d) => d.goodId),
+  ])].sort(byDispersion);
 
-    lines.push(...renderTable(
-      ["Good", "Price StdDev", "Stock Drift", "Cover", "Deficit %", "Surplus %", "Floor %", "Ceil %"],
-      [12, 13, 13, 7, 9, 9, 8, 8],
-      allGoods.map((goodId) => {
-        const disp = dispMap.get(goodId);
-        const drift = driftMap.get(goodId);
-        const pin = pinMap.get(goodId);
-        const cover = coverMap.get(goodId);
-        return [
-          goodId,
-          disp ? disp.avgStdDev.toFixed(1) : "-",
-          drift ? (drift.avgStockDrift >= 0 ? "+" : "") + drift.avgStockDrift.toFixed(1) : "-",
-          cover ? cover.medianCover.toFixed(2) + "x" : "-",
-          cover ? (cover.deficitFrac * 100).toFixed(0) + "%" : "-",
-          cover ? (cover.surplusFrac * 100).toFixed(0) + "%" : "-",
-          pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-",
-          pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-",
-        ];
-      }),
-    ));
+  lines.push(...renderTable(
+    ["Good", "Price StdDev", "Stock Drift", "Cover", "Deficit %", "Surplus %", "Floor %", "Ceil %"],
+    [12, 13, 13, 7, 9, 9, 8, 8],
+    allGoods.map((goodId) => {
+      const disp = dispMap.get(goodId);
+      const drift = driftMap.get(goodId);
+      const pin = pinMap.get(goodId);
+      const cover = coverMap.get(goodId);
+      return [
+        goodId,
+        disp ? disp.avgStdDev.toFixed(1) : "-",
+        drift ? (drift.avgStockDrift >= 0 ? "+" : "") + drift.avgStockDrift.toFixed(1) : "-",
+        cover ? cover.medianCover.toFixed(2) + "x" : "-",
+        cover ? (cover.deficitFrac * 100).toFixed(0) + "%" : "-",
+        cover ? (cover.surplusFrac * 100).toFixed(0) + "%" : "-",
+        pin ? (pin.floorFrac * 100).toFixed(0) + "%" : "-",
+        pin ? (pin.ceilingFrac * 100).toFixed(0) + "%" : "-",
+      ];
+    }),
+  ));
 
-    const inertTotal = roleCoverLevels.reduce((n, e) => n + e.countByRole.inert, 0);
-    const marketTotal = roleCoverLevels.reduce(
-      (n, e) => n + e.countByRole.exporter + e.countByRole["self-supplier"] + e.countByRole.consumer + e.countByRole.inert,
-      0,
-    );
-    if (marketTotal > 0) {
-      lines.push(
-        `  medianCover is over ALL markets of a good — ${inertTotal} of ${marketTotal} ` +
-        `(${((inertTotal / marketTotal) * 100).toFixed(1)}%) are inert. See "Cover & price by market role".`,
-      );
-    }
-
-    const pl = marketHealth.priceLevels;
-    lines.push("");
+  const inertTotal = roleCoverLevels.reduce((n, e) => n + e.countByRole.inert, 0);
+  const marketTotal = roleCoverLevels.reduce(
+    (n, e) => n + e.countByRole.exporter + e.countByRole["self-supplier"] + e.countByRole.consumer + e.countByRole.inert,
+    0,
+  );
+  if (marketTotal > 0) {
     lines.push(
-      `Price levels (price/base, all markets): median ${pl.median.toFixed(2)}x  ` +
-        `p10 ${pl.p10.toFixed(2)}x  p90 ${pl.p90.toFixed(2)}x`,
-    );
-    lines.push(
-      `  cheap <0.9x: ${(pl.cheapFrac * 100).toFixed(0)}%   ` +
-        `near 0.9-1.1x: ${(pl.nearFrac * 100).toFixed(0)}%   ` +
-        `expensive >1.1x: ${(pl.expensiveFrac * 100).toFixed(0)}%`,
+      `  medianCover is over ALL markets of a good — ${inertTotal} of ${marketTotal} ` +
+      `(${((inertTotal / marketTotal) * 100).toFixed(1)}%) are inert. See "Cover & price by market role".`,
     );
   }
+
+  const pl = marketHealth.priceLevels;
+  lines.push("");
+  lines.push(
+    `Price levels (price/base, all markets): median ${pl.median.toFixed(2)}x  ` +
+      `p10 ${pl.p10.toFixed(2)}x  p90 ${pl.p90.toFixed(2)}x`,
+  );
+  lines.push(
+    `  cheap <0.9x: ${(pl.cheapFrac * 100).toFixed(0)}%   ` +
+      `near 0.9-1.1x: ${(pl.nearFrac * 100).toFixed(0)}%   ` +
+      `expensive >1.1x: ${(pl.expensiveFrac * 100).toFixed(0)}%`,
+  );
 
   // Cover by market role — separates "producers drained flat" from "consumers never served",
   // which the galaxy-wide median cannot distinguish because it medians both together.

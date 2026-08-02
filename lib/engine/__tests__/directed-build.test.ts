@@ -889,7 +889,7 @@ function deficitOnly(goodId: string): BuildSystemState {
 }
 
 // Electronics (tier-2, recipe { components, chemicals }) is a structural deficit at neighbour A;
-// site B has ample population, general space, unrest 0, and locally produces both recipe inputs
+// site B has ample population, general space, and locally produces both recipe inputs
 // (so the input-reachability gate passes without needing a third surplus system) — but no
 // academies yet, so both skill-1 and skill-2 ceilings must be lifted to serve the deficit.
 function makeElectronicsDeficitWithCapableSite(): BuildSystemState[] {
@@ -1693,7 +1693,7 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
     // Five hungry colonies (developed, pop 2 below their popCap 20) already soak the budget:
     // releasable 100 + 5×2 = 110 ⇒ affordable 5, minus 5 hungry ⇒ budget 0, so nothing new is founded.
     const hungry: BuildSystemState[] = Array.from({ length: 5 }, (_, i) => ({
-      systemId: `h${i}`, factionId: "f1", control: "developed", population: 2, unrest: 0,
+      systemId: `h${i}`, factionId: "f1", control: "developed", population: 2,
       buildings: { [HOUSING_TYPE]: 1 }, slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 100, goods: [],
     }));
     const gated = { ...COLONY_PARAMS, minSettlerSupply: 20, employedLeakFraction: 0 };

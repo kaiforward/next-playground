@@ -144,7 +144,7 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 - **Existing components** — `EmptyState`, `ErrorFallback`, form components, `Badge` — not raw markup
 - **No duplication** — If logic/markup exists in two places, extract to `lib/utils/` or `components/ui/`
 - **`"use client"` only where needed** — Components without hooks, state, or event handlers don't need it
-- **Clean up after yourself** — No unused props, dead imports, or orphaned code left behind
+- **Clean up after yourself** — No unused props, dead imports, or orphaned code left behind. **Dead code your own change creates is part of that change, not a follow-up**: when a rewrite strands a field, prop, or helper, removing it is the work being finished, and a mechanical compiler-guided sweep is not a reason to book it instead. Judge the cost by the *judgement* required, not the sites touched — the build-path `unrest` field survived three sightings this way, each re-deriving the same 90-site estimate. Note what "compiler-guided" does not reach: an object literal returned from an `Array.from`/`map` callback gets its type by inference, so TypeScript's excess-property check never fires and a `tsc`-driven sweep skips it silently. Finish with a text grep, not a clean typecheck.
 
 ## Git Workflow
 
@@ -167,7 +167,6 @@ After each phase or meaningful commit, verify against these common pitfalls befo
 - **Scale the review to substantive surface, not file count.** Deletion-heavy PRs: strip pure-deletion files from the reviewed diff (`--diff-filter=d`; pass the deleted-file list as context — the big token lever), bump `--chunk-size`, prune `--only` reviewers whose domain was deleted.
 - **Fix cheap + self-contained + already-touching Minor findings in-task** — don't reflexively defer them; deferred ones get an explicit owned cleanup pass, not a weak final-review sink.
 - **A BACKLOG item is Kai's decision, not the agent's.** Converting a review finding into a backlog row instead of fixing it must be (a) stated in the turn's response, in the list of what the turn did, and (b) named in the commit message. A commit that says "fix all findings" while silently booking three of them is the failure this rule exists to stop — it happened in #209, and the first Kai heard of those three items was after the PR had merged. If a finding is cheap and in a file the PR already touches, the default is to fix it and say so; if it genuinely should be deferred, say *why* and let Kai decide.
-- **Dead code your own change creates is part of that change, not a follow-up.** When a rewrite strands a field, prop, or helper, removing it is the work being finished — a mechanical, compiler-guided sweep is not a reason to book it. The build-path `unrest` field survived three separate sightings this way while every sighting re-derived the same 90-site cost. Judge these by *judgement* required, not lines touched.
 - **When the user runs the manual/visual smoke themselves, wait for their go-ahead** before launching the whole-branch review.
 - **Never merge over red CI.** If a failure is an unrelated flake (e.g. heavy sim tests timing out under parallel load), confirm it passes in isolation and fix the flake to green — don't merge past it.
 

@@ -19,7 +19,16 @@ export const COLONY_REACH_HOPS = Math.max(
   DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS,
 );
 
-/** Nearest developed same-faction seed source within the tick's reach radius, or null. */
+/**
+ * Nearest developed same-faction seed source within the tick's reach radius, or null.
+ *
+ * Ties on hop count break to the **smallest system id**. The autonomic planner's own provider
+ * (`developProvider`, `lib/world/tick.ts`) instead keeps the first tied system its hop-map
+ * iteration reaches, so on an exact tie the player verb and the planner can name different
+ * sources. Both are deterministic and an exact tie is rare, so they are deliberately left
+ * unaligned; unify them behind one helper if anything ever keys off which specific source a
+ * colony drew from.
+ */
 export function findSeedSource(world: World, factionId: string, systemId: string): string | null {
   const hops = boundedHopsFromOrigin(systemId, toTickConnections(world), COLONY_REACH_HOPS);
   let best: { id: string; h: number } | null = null;

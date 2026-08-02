@@ -171,5 +171,44 @@ describe("ExperimentConfig", () => {
       const saved = buildExperimentResult(minimalResults());
       expect(saved.migrationThroughput).toEqual({ totalColonists: 0, totalDiffusion: 0, cycleCount: 0, meanPerCycle: 0 });
     });
+
+    // The cohorted reads are the whole point of a saved artifact being comparable: a galaxy-wide
+    // median moves with cohort MIX, so two runs can only be read against each other per role and
+    // per world cohort. Dropping either field silently makes saved experiments incomparable.
+    it("includes the per-role cover breakdown in the saved experiment JSON", () => {
+      const results = minimalResults();
+      results.roleCoverLevels = [{
+        goodId: "fuel",
+        countByRole: { exporter: 220, "self-supplier": 14, consumer: 88, inert: 15 },
+        medianCoverByRole: { exporter: 0.25, "self-supplier": 0.9, consumer: 0.87 },
+        trulyInertCount: 0,
+        consumerEmptyFrac: 0.1,
+        exporterMedianPriceRatio: 2.5,
+      }];
+      const saved = buildExperimentResult(results);
+      expect(saved.roleCoverLevels).toEqual(results.roleCoverLevels);
+    });
+
+    it("includes the per-world-cohort supply breakdown in the saved experiment JSON", () => {
+      const results = minimalResults();
+      results.worldCohorts = [{
+        cohort: "pop >=1K",
+        n: 370,
+        meanDissatisfaction: 0.011,
+        meanUnrest: 0.14,
+        strikingShare: 0,
+        suppliedShare: 0.34,
+        rationingShare: 0.627,
+        shortageShare: 0.033,
+      }];
+      const saved = buildExperimentResult(results);
+      expect(saved.worldCohorts).toEqual(results.worldCohorts);
+    });
+
+    it("reports empty cohort reads for a run that produced none", () => {
+      const saved = buildExperimentResult(minimalResults());
+      expect(saved.roleCoverLevels).toEqual([]);
+      expect(saved.worldCohorts).toEqual([]);
+    });
   });
 });
