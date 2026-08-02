@@ -17,7 +17,7 @@ Expect edits. This is a living document.
 
 ## 1. What this document is (and what it replaces)
 
-Today's economy is a single-stock market sim (see [economy.md](../active/gameplay/economy.md)) where price is the *only* consequence of supply/demand: a system that "needs" food but can't get it simply has expensive food — it doesn't suffer, decline, or change. Needs exist purely as a trading signal. The pricing anchor (`targetStock`) is a per-good magic constant, half measured-from-simulator and half derived from a separate set of seed magic numbers (`equilibrium`, `SELF_SUFFICIENCY`). Production/consumption come from flat per-economy-type rate tables.
+The economy this vision was written against (2026-05) was a single-stock market sim where price was the *only* consequence of supply/demand: a system that "needed" food but couldn't get it simply had expensive food — it didn't suffer, decline, or change. Needs existed purely as a trading signal, and the pricing anchor was a per-good magic constant derived from seed magic numbers (`equilibrium`, `SELF_SUFFICIENCY`). **That starting point is gone** — `SELF_SUFFICIENCY` no longer exists in the codebase and `targetStock` is now a cover-based anchor (`TARGET_COVER × demandRate`). Read this section as the motivation, not as a description of current state; `docs/active/gameplay/economy.md` is what ships.
 
 This vision replaces that with a **living, physical simulation**: goods are produced by *what a system physically is*, consumed by *the people who live there*, moved by trade, and the running balance decides whether a system **grows or starves**. Price becomes a *readout* of that physical state, not a tuned control.
 

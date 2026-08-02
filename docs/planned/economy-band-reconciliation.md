@@ -1,8 +1,9 @@
 # Economy Band Reconciliation — Knee'd Curves, Regime Legibility, and the Pressure-Driven Population
 
-> Design pass settled 2026-07-20 (supersedes the `[L]` BACKLOG brief). Not yet built. Landing this
-> triggers an unrest/tax recalibration and a treasury recalibration (see §8). The wireframe work in
-> §7 gets its own collaborative HTML pass at build time.
+> **Mostly built.** The simulation half shipped on `feat/band-reconciliation`; §7's constant table now
+> reads as an as-built list. What remains is the presentation layer (PR6): §6's panel contract and
+> `RATION_EXIT_EPS`, which has no implementation. The unrest/tax and treasury recalibrations in §8
+> have landed. Delete this doc when PR6 ships and its functional content folds into `docs/active/`.
 
 ## Headline
 

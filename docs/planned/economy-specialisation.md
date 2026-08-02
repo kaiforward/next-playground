@@ -14,9 +14,10 @@
 
 ## Headline
 
-The matured economy is **flat** — every developed system can make everything, so there's nothing to
-trade and no price spread to arbitrage. This track makes the *baseline* economy structurally specialise
-so that durable trade gradients exist **before** any agency or events are added. The principle:
+This track's problem statement — a **flat** matured economy where every developed system can make
+everything, so no durable trade gradient exists — was addressed by S1-S3, which shipped; the mature
+galaxy now holds a spread. What survives here is S4, the guardrails and joint calibration that keep
+that spread durable. The principle the whole track is built on:
 
 > A system's labour, space, and development must be **insufficient to build the full goods basket at the
 > scale its population demands**, so it specialises in a few goods and imports the rest.

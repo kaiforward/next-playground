@@ -98,10 +98,15 @@ numbers it presents are re-tuned underneath it.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line.
    *Next step:* after item 6.
-   **PR6 owns the doc fold** for four active docs the arc made stale:
-   `economy-autonomic-agency.md`, `colonisation.md`, `tick-engine.md`, and `economy.md` (its decay
-   section still documents the continuous `count ← count − unrestRate · count` formula, stale since
-   whole-level decay and severity ramping shipped). Do the fold on the branch, before the final review.
+   **PR6 owns the doc fold**, which is bigger than it looks — do it on the branch, before the final review:
+   - Four **active** docs the arc made stale: `economy-autonomic-agency.md`, `colonisation.md`,
+     `tick-engine.md`, and `economy.md` (its decay section still documents the continuous
+     `count ← count − unrestRate · count` formula, stale since whole-level decay and severity ramping).
+   - Two **planned** docs whose features have already shipped and which must be promoted into
+     `docs/active/` and deleted: `necessity-weighted-unrest.md` (448 lines — `GOOD_NECESSITY` and
+     `slopeShortage` are live, and its headline "every good … currently hits unrest with the same
+     instrument" is now false) and `economy-rationing-amendment.md` (89 lines — `RATION_COVER` is live).
+   - `economy-band-reconciliation.md` itself is deleted at the same point.
 
 ---
 
@@ -215,8 +220,10 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[S] `idleBufferMonths`** — the fallback lever if the tighter colony-opening absorption proves too slow.
 - **[S] Decide the fate of `docs/planned/economy-specialisation-s4-guardrails.md`** — a pre-pivot
   discussion agenda (findings F1-F6, hypotheses H1-H3, a 10-item calibration lever list) paused
-  2026-07-03 and never resumed. The band reconciliation has since rewritten most of what it analysed.
-  Read it once and either promote the surviving items here or delete it.
+  2026-07-03 and never resumed. **Its entire evidence base is unverifiable**: every figure was measured
+  against a live Postgres world via `npm run audit:economy`, and neither the database nor the script
+  exists any more. The doc now carries a warning header saying so. Read the questions, discard the
+  numbers, and either re-measure the survivors with `npm run simulate` or delete it.
 
 **Deferred / conditional**
 - **[M] Switchable faction relation model** — `FactionRelation` stores one symmetric `score` per pair. If

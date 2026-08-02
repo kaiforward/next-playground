@@ -11,7 +11,7 @@
 
 Wars and territorial conflict between factions. This covers two distinct layers: **ambient border conflicts** (event-system-driven tension at faction borders) and **interactive faction wars** (full wars with player involvement, battle mechanics, and territory capture).
 
-**Replaces**: The random War event in the current event catalog (`lib/constants/events.ts`) will be removed when this system is implemented. Border conflicts absorb its role as the source of war-themed economy/danger modifiers.
+**Build state**: the **ambient layer already ships** — `border_conflict` is a live `EventType` in `lib/constants/events.ts` and carries the war-themed economy/danger modifiers, and the random War event it replaced is already deleted. What this doc still designs is the **interactive faction-war layer** (declaration, war exhaustion, battle resolution, territory capture); none of it exists in code.
 
 **Depends on**: [Faction System](../active/gameplay/faction-system.md) (relations, alliances, doctrine), [Ship Roster](../active/gameplay/ship-roster.md) (combat stats for battle resolution)
 
