@@ -115,6 +115,23 @@ direction was picked before the evidence, it cost a PR.
   everything by ~t500 stops being possible when each colony must be provisioned and paid for).
   Stated as direction; the audit itself reads roadmap-worthy and awaits Kai's placement in the
   queue.
+- Kai, 2026-08-03 (post item-5 review, discussing the dead zone): the real-world hard part of
+  logistics is not per-world stock thresholds but being part of a **chain** — infrastructure,
+  cost, labour, distance (the Victoria 3 difficulty). A throughput/entrepôt world would *request
+  more inbound when its exports hit their limit* — demand propagating upstream through hubs —
+  while producers near enough to consumers ship direct. Today's greedy point-to-point matcher has
+  no hub concept, and the dead zone actively fights relaying (stock held between the brake and the
+  donation line cannot be re-shipped). On player exposure, the leaning both sides agreed on:
+  **sensible defaults for the threshold family, never raw player-tweakable valves** — per-good
+  warehouse micromanagement would be unmanageable and the numbers are illegible; if a valve ever
+  earns player agency it should be one coarse in-fiction policy (a faction stockpile stance), with
+  real player control living where the architecture already puts it (automation toggles, budgets,
+  directed orders). Also noted: the dead zone's "player must invest" pressure is invisible in the
+  UI — a world silently neither producing nor shipping — so even if dwell-time measurement shows
+  the lock binding as intended, there is a legibility question about whether an unseeable band is
+  the right *kind* of pressure. Hub-as-a-role (deliberate buffer + propagated demand + per-route
+  capacity) reads as logistics-depth-pass material, not a threshold tweak. All stated as leanings;
+  the dead zone's own fate still waits on the dwell-time evidence above.
 
 ## Related roadmap items
 

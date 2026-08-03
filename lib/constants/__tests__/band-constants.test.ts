@@ -60,6 +60,16 @@ describe("band constant dependencies", () => {
     // under MIN_DEMAND. Moving one without the other is a deliberate act that should land here.
     expect(DIRECTED_LOGISTICS.WAREHOUSE_COVER).toBe(TARGET_COVER);
   });
+  it("keeps the production brake's ceiling at or below the donation line", () => {
+    // The dead zone between them is chosen conservatism: a self-supplier whose stock lands between
+    // the brake ceiling (production halted) and the donation line (giving refused) can only drain
+    // back down — a world that produces less than it uses should not dump stock it cannot replace.
+    // Flip the two lines and every self-sufficient world becomes a continuous exporter instead.
+    // Compared in the same units (cycles of demand, at markets where the anchor and donor
+    // denominators coincide): moving either constant across the other should land here.
+    expect(ECONOMY_CONSTANTS.HOLD_COVER * TARGET_COVER)
+      .toBeLessThanOrEqual(DIRECTED_LOGISTICS.SURPLUS_MARGIN * DIRECTED_LOGISTICS.DONOR_RESERVE_COVER);
+  });
   it("holds the founding endowment at world-gen's reserve share of a full anchor cover", () => {
     // Stated, not assumed — the docstring's authorship claim, pinned. The founding manifest opens
     // a colony at the same share of a full cycles-of-supply cover that world-gen's initial reserve
