@@ -5,20 +5,22 @@ description: Adversarial multi-agent review of a feature spec against the existi
 
 # /spec-review — Adversarial spec review
 
-You are orchestrating an adversarial review of a **feature spec** against the **existing codebase** — before any code is written. This is the counterpart to `/uber-review`: that pipeline checks code-vs-spec after build; this one checks spec-vs-reality before build. The misses it targets: scope the spec doesn't know it's missing, shipped mechanics it silently interacts with, and contradictions or failure modes inside its own design.
+You are orchestrating an adversarial review of a **feature spec** against the **existing codebase** — before any code is written. This is the counterpart to `/uber-review`: that pipeline checks code-vs-spec after build; this one checks spec-vs-reality before build.
+
+**The rubric is the design-hazards worksheet** — `.agents/skills/shared/design-hazards.md`, the six ways a design here has been wrong, each demanding an artifact the spec must carry. The review's first question, before any lens runs: **is each row filled with evidence, or with assertion?** A row filled from memory is the form every one of the six took when it shipped.
 
 This file is your playbook. Lens prompts live in `prompts/` next to it.
 
 ## Inputs
 
-- Positional `<doc-path>` (required) — the spec to review, e.g. `docs/planned/economy-band-reconciliation.md`. If missing or not a readable markdown doc, exit with a clear message.
+- Positional `<doc-path>` (required) — the spec to review, e.g. `docs/planned/supply-response.md`. If missing or not a readable markdown doc, exit with a clear message.
 - `--effort=quick|standard|deep` — default `standard`.
 
 ## When to run / when to skip
 
 - **Run** on specs with real cross-mechanic surface: economy changes, tick processors, anything that adds/changes/removes signals, formulas, thresholds, or triggers that shipped mechanics consume.
 - **Skip** pure-UI slices and tooling changes — there is nothing for the consumer sweep to sweep. Say so rather than running a hollow review.
-- **Slot**: after the spec is written and the user has approved it, before `writing-plans`. Once per feature.
+- **Slot**: after the spec is written and the user has approved it, before `/build-plan`. Once per feature.
 
 ## Effort dial
 
@@ -33,42 +35,77 @@ Resolve tiers through `.agents/model-tiers.md`. If the harness cannot choose a m
 ## Severity rubric
 
 - `critical` — the spec as written builds the wrong thing: it breaks shipped behaviour, deadlocks/oscillates/runs away dynamically, or contradicts itself on a load-bearing point.
-- `major` — missed scope that requires a spec amendment: an unaccounted consumer, an unnamed interaction with a shipped mechanic, an unhandled state.
+- `major` — missed scope that requires a spec amendment: an unaccounted consumer, an unnamed interaction with a shipped mechanic, an unhandled state. **An in-scope worksheet row that is missing or assertion-filled is automatically `major`** — reaching implementation with an unfilled row is the process failure the worksheet exists to prevent.
 - `minor` — clarification-level: ambiguity or a gap that planning could plausibly resolve without redesign.
 
 ## Pipeline
 
-### 1. Map the spec
+### 1. Audit the worksheet — the first question
 
-Read the spec doc **in full**, plus `docs/SPEC.md` (the system interaction map). Build two lists:
+Read the spec doc **in full**, then classify each of the six hazard rows:
 
-- **Changed primitives** — every signal, field, formula, threshold, or trigger the spec adds, changes, or removes.
-- **Touched mechanics** — every shipped mechanic the spec names, plus shipped mechanics it plausibly interacts with but does not name (use the SPEC.md interaction map to enumerate candidates).
+- **evidence** — the artifact the row demands is present: pasted `npm run impact` output, `file:line` citations, numbers carrying horizon + cohort.
+- **assertion** — the row is filled, but from memory: a readers table with no `file:line`, a claim with no number, "considered, no issue". Treat as unfilled.
+- **missing** — the row isn't there at all.
+- **out of scope** — only by the worksheet's own scope rule (pure-UI/tooling fills rows 3 and 6 only). Since /spec-review skips pure-UI specs, expect all six in scope.
 
-### 2. Write the per-lens sharpening
+The classification is a **required table in the report**, and it aims the lenses in step 3. It never bounces the review: a spec with six missing rows gets the most useful review of all — the lenses produce the missing artifacts themselves, and filling the worksheet becomes the amendments.
 
-For each lens, write a 2–4 sentence attack framing **specific to this spec**, derived from the two lists. The sharpening points the lens at the spec's probable blind side; it never tells the lens what to conclude. The shape that works: identify which *side* of each mechanism the spec redesigns, and aim the lens at the other side — e.g. "this spec redesigns the push side of each loop — sweep the receiving/clamping consumers whose triggers were previously synonymous with pathology."
+**Falsifier check — audit the diff, not the intention.** Locate the evidence the spec rests on: the spec's own evidence section, or the feature's working file (`docs/build-plans/<feature>.md`, `## Evidence`). Then find the falsifier's **first entry into history anywhere** — evidence migrates between files (roadmap row → working file → spec), and a log scoped to the current file reads a migration commit as authorship:
 
-### 3. Dispatch the lens agents
+```
+git log --oneline -S Falsifier -- docs/   # docs-wide: the falsifier's true first commit (unscoped also matches the skill files themselves)
+git log --oneline -- <file>               # where the evidence and conclusion landed
+git show <first-sha>                      # the falsifier as originally committed
+```
+
+A well-kept file carries its own provenance line ("committed at `<sha>`, moved here unedited") — verify it rather than trusting it. The verdict compares the falsifier's first commit against the conclusion's first commit, and the falsifier's original text against the spec's current text. One line in the report:
+
+- **pre-committed** — the falsifier entered history before the conclusion, and its current text matches `git show <first-sha>`.
+- **edited after commit** — the current text differs from the first-committed text. The diff goes to the consistency lens as a finding. This has been caught here once already — a falsifier quietly condensed during write-up.
+- **written alongside** — falsifier and conclusion first appear in one commit. Not fatal, but a falsifier written after the number exists is not a falsifier; the `Licenses` line gets extra scrutiny.
+- **absent** — every current-behaviour claim in the spec is an untested hypothesis unless row 4 evidences it individually.
+
+### 2. Map the spec
+
+Read `docs/SPEC.md` (the system interaction map). Build two lists:
+
+- **Changed primitives** — every signal, field, formula, threshold, or trigger the spec adds, changes, or removes. Row 1/row 5 tables classified `evidence` are your starting list; where those rows are weak, build it from the spec text yourself.
+- **Touched mechanics** — every shipped mechanic the spec names, plus shipped mechanics it plausibly interacts with but does not name (the worksheet's row-3 system table + the SPEC.md interaction map enumerate the candidates).
+
+### 3. Write the per-lens sharpening
+
+Each lens owns specific hazard rows:
+
+| Lens | Rows |
+|---|---|
+| consumer-sweep | 1 (one quantity, several jobs), 2 (constant misread), 5 (primitive that doesn't exist) |
+| interaction-attack | 3 (a system you did not think about) |
+| consistency-attack | 4 (claims without measurement), 6 (aggregate moves for other reasons), + spec-internal contradiction and stability |
+
+For each lens, write a 2–4 sentence attack framing **specific to this spec**, derived from the audit and the two lists. A row classified `assertion` or `missing` is that lens's primary target — it will produce the row's artifact itself and attack the spec with it; a row classified `evidence` gets spot-checked for completeness instead. Beyond the rows, aim at the spec's probable blind side — identify which *side* of each mechanism the spec redesigns and point the lens at the other side, e.g. "this spec redesigns the push side of each loop — sweep the receiving/clamping consumers whose triggers were previously synonymous with pathology." The sharpening never tells the lens what to conclude.
+
+### 4. Dispatch the lens agents
 
 **Standard / deep**: dispatch three independent general-purpose agents **in parallel** when the harness supports it, using the tier from the effort dial. Each agent's prompt, in order:
 
 1. Contents of its lens prompt — `prompts/consumer-sweep.md`, `prompts/interaction-attack.md`, or `prompts/consistency-attack.md`
-2. `## Spec-specific sharpening` — that lens's sharpening from step 2
+2. `## Spec-specific sharpening` — that lens's sharpening from step 3
 3. `## Spec under review` — the doc path (the agent reads it in full)
-4. `## Changed primitives` — the list from step 1
+4. `## Changed primitives` — the list from step 2
+5. `## Worksheet audit` — the step-1 classification of the rows this lens owns; for the consistency lens, also the falsifier verdict
 
-**Quick**: dispatch one `strong` agent whose prompt concatenates all three lens prompts under clear separators, followed by the sharpenings, doc path, and primitives list. Note in the report that the convergence signal is unavailable in quick mode.
+**Quick**: dispatch one `strong` agent whose prompt concatenates all three lens prompts under clear separators, followed by the sharpenings, doc path, primitives list, and the full audit. Note in the report that the convergence signal is unavailable in quick mode.
 
 Each agent returns JSON in a fenced block (schema in the lens prompts). Parse with the same fenced-block regex + retry-once policy as `/uber-review`: on malformed output, re-dispatch once appending "Your previous response was malformed. Return ONLY a JSON object in a ```json fenced block." If still malformed, drop that lens with a warning in the report.
 
-### 4. Verify and merge
+### 5. Verify and merge
 
 - **Spot-verify every `critical` and `major` finding yourself** — open the cited files and confirm the load-bearing claim before accepting it. A finding that does not survive verification is **dropped into the audit trail**, never silently discarded and never reported as real.
 - **Convergence**: two lenses independently reporting the same underlying issue → merge and mark **high-confidence** (this is the strongest signal the process produces).
 - **Dedup by judgment** — pools are small; merge same-issue findings across lenses yourself. No dedup agents.
 
-### 5. Report
+### 6. Report
 
 Save to `.agent-reviews/spec-<docname>-<YYYY-MM-DD-HHmmss>.md` (create `.agent-reviews/` if missing — it is gitignored) and print a terminal summary.
 
@@ -79,10 +116,18 @@ Save to `.agent-reviews/spec-<docname>-<YYYY-MM-DD-HHmmss>.md` (create `.agent-r
 - **Effort**: <effort>
 - **Lenses**: <3 parallel | 1 combined (quick)>
 
+## Worksheet audit
+
+| Row | Hazard | Status | Basis |
+|---|---|---|---|
+<one row per hazard: evidence / assertion / missing / out of scope, with what is (or isn't) in the row>
+
+Falsifier: <verdict from step 1, with the commit shas it rests on>
+
 ## Findings
 
 <grouped critical → major → minor; per finding:>
-- **<severity>** [<lens(es)>] <high-confidence flag if convergent> — <plain-terms claim>
+- **<severity>** [<lens(es)>] <hazard row if any> <high-confidence flag if convergent> — <plain-terms claim>
   - Evidence: <file:line + snippet/reasoning>
   - Verification: <what the orchestrator confirmed in code>
   - Proposed amendment: <concrete spec change, ready to apply>
@@ -98,9 +143,9 @@ Save to `.agent-reviews/spec-<docname>-<YYYY-MM-DD-HHmmss>.md` (create `.agent-r
 - Per-lens stats: <findings / refuted angles / approx tokens if visible>
 ```
 
-Terminal summary: counts by severity, the high-confidence findings called out, and the report path.
+Terminal summary: the worksheet audit verdict in one line (e.g. "3 of 6 rows evidence, falsifier pre-committed"), counts by severity, the high-confidence findings called out, and the report path.
 
-### 6. Triage gate — REQUIRED, blocking
+### 7. Triage gate — REQUIRED, blocking
 
 Present each finding and ask the user to call it:
 
@@ -110,9 +155,9 @@ Present each finding and ask the user to call it:
 
 Do not touch the spec until the user has called every finding.
 
-### 7. Apply
+### 8. Apply
 
-Edit the spec doc with **only** the accepted amendments. Show the user the diff. Update the report with the triage outcomes. The spec then proceeds to `writing-plans`.
+Edit the spec doc with **only** the accepted amendments. Show the user the diff. Update the report with the triage outcomes. The spec then proceeds to `/build-plan`.
 
 ## Error handling
 

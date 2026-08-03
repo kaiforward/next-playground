@@ -157,6 +157,15 @@ cannot reach.
   (falsified).** The run found two gaps, both now fixed: it wrote evidence into `docs/ROADMAP.md`
   (contradicting the roadmap's own header) and it sent you to patch tracked engine code with no revert
   step. It also produced mechanisms A and B above, which are the reusable output.
+- **`/spec-review` rubric rewritten to the design hazards** — the worksheet audit is the review's
+  first step ("is each row filled with evidence, or with assertion?") and a required table in the
+  report; an unfilled in-scope row is automatically `major`. Each lens owns its rows (1/2/5
+  consumer-sweep, 3 interaction-attack, 4/6 consistency-attack): an `evidence` row gets spot-checked
+  for completeness, an `assertion`/`missing` row the lens fills itself and attacks with. Mechanism A
+  carried in as the falsifier git-history check; validating it against the item-2 working file
+  exposed that a file-scoped `git log` reads a migration commit as authorship — the check searches
+  `docs/` history-wide and compares the falsifier's first-committed text against the spec's current
+  text.
 
 ## Left to do
 
@@ -165,13 +174,13 @@ cannot reach.
 2. **`/feature-spec`** — four-field header, hazard worksheet, refuses to start without evidence.
 3. **`/build-plan`** — small, and mostly restraint: files, task order and the interfaces between
    tasks, explicitly not the code. Its self-review is the final step, not a second expensive gate.
-4. **Rewrite `/spec-review`'s rubric** to the design hazards, with "is this row filled with evidence
-   or assertion" as its first question.
-5. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
-   separate task — a checklist item on items 1-4. The test of whether it worked is the same as for
+4. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
+   separate task — a checklist item on items 1-3. The test of whether it worked is the same as for
    `/measure`: dogfood the skill on a real queue item and see whether the mechanism catches something.
+   `/spec-review` still awaits its dogfood — the natural moment is roadmap item 6, whose next step is
+   the gate itself.
 
-6. **Open, Kai's call:** should `/measure`'s reporting step require a plain-language statement *before*
+5. **Open, Kai's call:** should `/measure`'s reporting step require a plain-language statement *before*
    the numbers? The preference already exists in `~/.claude/CLAUDE.md` ("lead with plain functional
    terms") and did not fire during the item 2 write-up — which is rank 3 behaving exactly as this file
    predicts. Moving it into the skill would make it rank 2. Raised, not decided.
