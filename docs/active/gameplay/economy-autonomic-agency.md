@@ -170,6 +170,13 @@ and stop when it's exhausted. The donor never drops below its own retained cover
 for an ordinary holder, the export reserve for a structural producer — so moving goods never creates a
 new deficit. Deficits left unserved — pool spent, or no surplus in reach — are the residual.
 
+Who carries the residual is not uniform: severity ranks by shortfall × demand, so mid-size pure
+consumers of the highest-floor goods (ship_frames above all) are served last from the thinnest
+margins, and at some seeds a persistently larger share of them sits empty than under the old
+price-anchor donor rule (~9 points at one measured seed, cover medians and every aggregate at
+parity) — an accepted cost, on the record with its measurements in #212. The structural answer
+belongs to colonisation pacing and globally-aware production planning, not to the donor rule.
+
 ### Silent application
 
 A matched transfer applies its stock deltas on the cycle boundary (`from −= q`, `to += q`, both

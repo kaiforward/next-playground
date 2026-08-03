@@ -116,6 +116,8 @@ direction was picked before the evidence, it cost a PR.
 
 ## Related roadmap items
 
-Items 1, 2, 4 and 5 in `docs/ROADMAP.md` all touch this. They are not re-scoped or merged — that is
-Kai's call and has not been made. Item 5 (`TARGET_COVER` carrying three roles) is the closest sibling:
-the same constant, the same complaint, one layer up.
+Items 2, 4 and 5 in `docs/ROADMAP.md` all touch this (item 1, the donor side, shipped as #212 —
+the generosity rule now reads `DONOR_RESERVE_COVER`, so this file's "two readers" framing is one
+reader now: the production brake). They are not re-scoped or merged — that is Kai's call and has
+not been made. Item 5 (`TARGET_COVER` carrying three roles) is the closest sibling: the same
+constant, the same complaint, one layer up.

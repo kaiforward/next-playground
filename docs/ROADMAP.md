@@ -32,22 +32,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 ## Queued — economy
 
 Ordered. These gate PR6: its presentation layer must sit on an economy that is settled, or the
-numbers it presents are re-tuned underneath it.
-
-1. **[M] `surplusDrawable`'s three callers share one denominator** — the donor-side half left open when
-   #211 fixed the deficit side. The logistics donor, the build input-supply gate and the colony founding
-   manifest all read the same quantity; moving it off the `MIN_DEMAND` floor dropped `electronics` cover
-   0.78 → 0.21 for reasons never established. Detail: memory `surplusdrawable-three-callers`.
-   **Mechanism established — the collapse does not exist at equilibrium.** The 0.78 → 0.21 read was
-   a t=10,000 snapshot inside the startup transient: the edit delays the late-game consumer-shelf
-   fill ~1,000-2,000 ticks (scarcity-era deliveries divert from low-severity consumers to
-   high-severity self-supplier sinks) and both runs are identical from t=12,000 on. Evidence:
-   [surplusdrawable-three-callers.md](./build-plans/surplusdrawable-three-callers.md).
-   *Next step:* a design decision, in the pricing-vs-logistics session — whether to ship the
-   donor-side decoupling, weighing the real transient cost and the `targetStock <= 0`
-   exporter-guard trap; update `surplusDrawable`'s "could not be shown safe" docstring with it.
-   *Don't:* read any high-tier consumer metric at the 10k horizon as an equilibrium level — it is
-   mid-transient there (electronics/luxuries recoveries land t≈9,500-11,000).
+numbers it presents are re-tuned underneath it. (Item 1, the `surplusDrawable` donor side, shipped
+as #212 — rows keep their numbers when one ships, so references stay stable.)
 
 2. **[S] `HOLD_COVER` (1.3) caps production below `SURPLUS_MARGIN` (1.4)** — `productionCeiling` returns 0
    at `1.3 × targetStock`; the ordinary-donor branch of `surplusDrawable` needs `stock ≥ 1.4 ×`. So a
@@ -59,7 +45,11 @@ numbers it presents are re-tuned underneath it.
    sources 2.91% of hauls at startup and 1.82% at equilibrium, and 95% of those donors held stock no
    delivery could have supplied — made, not given. What survives is a narrower lock at `[1.3, 1.4) ×
    targetStock`: production halted, donation refused, exit only downward.
-   *Next step:* re-scope the item against that evidence (Kai's call).
+   *Next step:* re-scope the item against that evidence (Kai's call). Two small deferrals from the
+   donor-reserve ship (#212) belong to this pass: `surplusDrawable`'s `targetStock <= 0` guard is
+   now the function's only price-anchor read (decide its fate), and the harness surplus-share
+   metric (`market-analysis.ts:250`) still counts against price-anchor cover, which no longer
+   describes the donor rule.
    *Don't:* give the two constants one owner on the strength of the row above — it was written from the
    arithmetic, not from a measurement, and the measurement disagrees.
 
@@ -215,6 +205,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
+- **[S] Decide the simulate "equilibrium" horizon** — the quick run's 10,000-tick label sits inside
+  the startup transient for high-tier consumer metrics (electronics/luxuries recoveries land
+  t≈9,500-11,000; ship_frames later still). Options: extend the labelled horizon to 12-16k
+  (+20-60% runtime on every run) or keep 10k and rely on the documented trap (memory
+  `measurement-traps`, "The horizon"). Kai's call; surfaced 2026-08-03.
 - **[M] System-finder dev tool** — queryable dev panel or `scripts/` CLI surfacing representative systems by
   characteristic (population band, economy type, deposit profile, building roster, NaN checks) with a direct
   `/system/<id>` link. Recurring need whenever generation or economy changes land.
