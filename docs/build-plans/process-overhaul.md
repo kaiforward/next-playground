@@ -183,7 +183,6 @@ cannot reach.
    `/spec-review` and `/build-plan` both still await that dogfood — the natural moment is roadmap
    item 6, whose next step is the spec-review gate itself, with planning right behind it.
 
-4. **Open, Kai's call:** should `/measure`'s reporting step require a plain-language statement *before*
-   the numbers? The preference already exists in `~/.claude/CLAUDE.md` ("lead with plain functional
-   terms") and did not fire during the item 2 write-up — which is rank 3 behaving exactly as this file
-   predicts. Moving it into the skill would make it rank 2. Raised, not decided.
+The plain-language-before-numbers question is closed — Kai called it yes on 2026-08-03: a required
+`Meaning` line now leads `/measure`'s report frame (rank 2). The rank-3 preference in
+`~/.claude/CLAUDE.md` had demonstrably failed to fire during the item-2 write-up.

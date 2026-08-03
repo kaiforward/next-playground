@@ -81,15 +81,19 @@ scratch runner in `.superpowers/` (gitignored) survives the session.
 
 ### 5. Report in the required frame
 
-Every reading gets all five. A missing field is a defect, not a formatting choice.
+Every reading gets all six, `Meaning` first. A missing field is a defect, not a formatting choice.
 
 ```
+Meaning:    one plain-language sentence — what was found, in functional terms, no numbers
 Claim:      <the sentence from step 1>
 Number:     <the reading>
 Horizon:    startup (1000t) AND equilibrium (10,000t) — both, or say why one is enough
 Cohort:     which population this was read over (market role, world cohort, faction…)
 Licenses:   what this number does and does NOT support
 ```
+
+`Meaning` leads because a reader who stops after one line must still leave with the finding — the
+numbers are the reference, not the message.
 
 **The `Licenses` line is the one that was missing when this went wrong.** Every figure in the ruled-out
 note was accurate; the inference from them was not. A startup fault can set the equilibrium level, so
