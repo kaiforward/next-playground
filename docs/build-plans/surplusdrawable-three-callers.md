@@ -235,3 +235,43 @@ partially cancel. Whatever mechanism is at work routes through caller interactio
 All `lib/` instrumentation was reverted before this write-up (`git checkout -- lib/`; greps for
 `demandAnchor` / the instrument marker across `lib/` and `scripts/` return nothing). Raw sim
 outputs for R1-R4 are in the session scratchpad only; the excerpts above are the durable record.
+
+---
+
+# Phase 2 — mechanism investigation
+
+The attribution above says *where* (matcher donor side + caller interaction); this phase asks
+*why*. Candidate mechanisms on the table: (1) buffer-strip — small consumers' standing stock
+becomes drawable and is siphoned to worst-first deficits; (2) industry-map steering — perturbed
+donor eligibility changes which tier-1+ sites get approved, compounding into a worse electronics
+production topology; (3) exporter-flip cascade — input-starved producers flip off the protected
+exporter branch and get drained past recovery; (4) cohort-mix artifact — the consumer median moves
+because cohort membership moves. 1/4 are distribution stories, 2/3 are production stories.
+
+## M1 claim — the first fork: production vs distribution
+
+Under the full demand-anchor edit (all three callers, the R1 variant), the electronics collapse
+is a **production collapse**: the galaxy's realized electronics production rate at equilibrium is
+materially below baseline — not the same output held in different places.
+
+## M1 falsifier, committed before any run
+
+Instrument: `.superpowers/mechanism-diag.ts` (scratch, gitignored) — runs the real
+`runWorldTick` to 10,000 ticks at the standard config (600 systems, seed 42, `ECONOMY_SCALE=100`),
+snapshots every 250 ticks (per tracked good: role counts and per-role median cover via the
+harness's own `computeRoleCoverLevels`, plus galaxy totals of stock / real demand / realized
+production / building levels), and dumps a per-system CSV at the final frame. Tracked goods:
+electronics, luxuries, ship_frames, components. Run twice: baseline (clean tree) and variant
+(the R1 all-three-callers edit reapplied).
+
+- **Validity gates** (instrument must reproduce the known R0/R1 report rows at its final frame,
+  same seed and code path so digit-exact): baseline → electronics exp n 242, cons n 152, cons
+  median 0.78, empty 34%; variant → 230 / 138 / 0.21 / 46%. Miss ⇒ INCONCLUSIVE — fix the
+  instrument, do not reinterpret.
+- **The claim is FALSE if** variant galaxy realized electronics production at t=10,000 is within
+  **±10%** of baseline. (Then the distribution stories lead and the production stories 2/3 lose
+  their shared premise.)
+- Recorded alongside, not falsifier bars: electronics building levels (placement vs suppression:
+  levels flat + production down ⇒ suppression/starvation; levels down ⇒ planner placement),
+  consumer-cohort total stock, the first snapshot tick where variant consumer median cover drops
+  below 0.60 (timing shape: smooth drain vs stepped), same series for luxuries/ship_frames.
