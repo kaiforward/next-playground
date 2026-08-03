@@ -55,3 +55,39 @@ was a shipping no-op, so the guard cannot have moved. Call sites under test pass
 deficit side moved to in #211); `BuildGoodState` gains a temporary optional `logisticsTarget`
 field to carry it through the build planner. All edits are measuring instrument, never committed,
 reverted before write-up.
+
+## Evidence
+
+### R0 — baseline · validity gate PASSED
+
+Unmodified tree @ `1b4af1ba`, `npm run simulate` (600 systems, seed 42, `ECONOMY_SCALE=100`).
+Every figure session 63's baseline is known by reproduces exactly. Raw excerpt, equilibrium
+(10,000t / 416 cycles) unless marked:
+
+```
+Cover & price by market role (end of simulation):
+Good             |   Exp n/med |  Self n/med |  Cons n/med |  Cons empty% |      Inert n |  Exp price x
+electronics      |    242/0.25 |    163/0.29 |    152/0.78 |          34% |       25 (0) |         3.00
+luxuries         |    212/0.25 |    154/0.49 |    150/0.81 |          37% |       66 (0) |         3.00
+ship_frames      |    194/0.25 |    124/0.81 |    152/0.82 |          20% |      112 (0) |         3.00
+
+startup (1000t):
+electronics      |     19/0.30 |      1/0.17 |    193/0.83 |          36% |      130 (0) |         3.00
+luxuries         |     19/0.29 |      1/0.19 |    128/0.93 |          12% |      195 (0) |         3.00
+ship_frames      |     28/0.25 |      1/0.14 |     31/0.84 |           0% |      283 (0) |         3.00
+
+Supply regimes: Supplied 209 (35.9%) | Rationing 353 (60.7%) | Shortage 20 (3.4%) | mean D 0.027
+Colony build loop: with tier-1+ industry 525 | colony projects by kind: ... tier1=51 ...
+Logistics: Transfers 1.1M | Quantity moved 858.5M | Systems participating 582
+Founding stock: 562 colonies founded | opening satisfaction mean 0.42 | opened deprived (<0.50): 380
+```
+
+Matches the known baseline: electronics consumer 0.78 / 34% empty, luxuries 0.81 / 37%,
+Supplied 209 (35.9%), tier-1+ industry 525, colony tier1 projects 51, ~1.1M transfers.
+
+### R1–R4 — not yet run
+
+Paused 2026-08-03 (machine restart) before any code edit was applied; working tree clean at pause.
+Resume point: apply the `demandAnchor` variant to all three call sites (R1), then isolate per
+caller (R2 matcher · R3 build gate · R4 founding manifest), reverting all `lib/` edits before
+write-up.
