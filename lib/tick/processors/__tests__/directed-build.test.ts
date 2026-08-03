@@ -1075,16 +1075,24 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
   });
 
   it("never draws the founder below its own drawable surplus", async () => {
-    // targetStock = TARGET_COVER x demandRate(1) = 40, and the source holds barely above it, so
-    // surplusDrawable — not the colony's want — is the binding cap.
-    const anchor = TARGET_COVER;
-    const w = new MemoryDirectedBuildWorld([stockedHome({ food: anchor * 1.5 })]);
+    // A food exporter parked just above its strategic reserve, so surplusDrawable — not the colony's
+    // want — is the binding cap. It has to be an exporter to sit that finely: an ordinary donor keeps
+    // DONOR_RESERVE_COVER cycles of its OWN demand, and at this population that floor is far above
+    // anything a 2-pop seed asks for, so a non-exporting home of this size simply spares nothing.
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
+    const exportRate = homeDemand * 2;
+    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + foundingWant("food") / 2;
+    const w = new MemoryDirectedBuildWorld([stockedHome({ food: stock }, { food: exportRate })]);
     await developColony(w, [colonyCand("c1")]);
 
     const food = w.developments[0].stockManifest.find((l) => l.goodId === "food");
-    const drawable = surplusDrawable(anchor * 1.5, anchor, 1, 0, false);
+    const drawable = surplusDrawable(
+      stock, TARGET_COVER, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand,
+      homeDemand, exportRate, false,
+    );
     expect(drawable).toBeGreaterThan(0);
-    expect(food?.quantity ?? 0).toBeLessThanOrEqual(drawable);
+    expect(drawable).toBeLessThan(foundingWant("food")); // the founder's spare, not the want, binds
+    expect(food?.quantity ?? 0).toBeCloseTo(drawable, 6);
   });
 
   it("sends nothing from a source that holds nothing, and the colony still lands", async () => {
@@ -1111,7 +1119,10 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
     const draws = w.developments.map(
       (d) => d.stockManifest.find((l) => l.goodId === "food")?.quantity ?? 0,
     );
-    const drawable = surplusDrawable(stock, TARGET_COVER, homeDemand, exportRate, false);
+    const drawable = surplusDrawable(
+      stock, TARGET_COVER, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand,
+      homeDemand, exportRate, false,
+    );
     expect(draws[0]).toBeCloseTo(foundingWant("food"), 6); // the first colony is fully provisioned…
     expect(draws[1]).toBeGreaterThan(0);
     expect(draws[1]).toBeLessThan(draws[0]);               // …the second gets only what is left…

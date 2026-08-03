@@ -210,12 +210,14 @@ function computePriceLevels(markets: WorldMarket[]): PriceLevelSummary {
  * Per-good distribution of cover = stock / price anchor, plus the share of markets standing
  * below the live logistics deficit line.
  *
- * **The two halves read different denominators, deliberately, because the mechanics do.**
- * `medianCover` and `surplusFrac` measure against the price anchor: cover is the pricing
- * reading the supply/demand UI shows, and the donor side of the matcher (`surplusDrawable`)
- * genuinely still measures excess against that anchor. `deficitFrac` measures against the
- * warehousing target (`logisticsTarget = WAREHOUSE_COVER × real demand`), because that is what
- * `classifyMarketState` sizes a deficit against. The two coincide wherever real demand clears
+ * **The two halves read different denominators, deliberately.** `medianCover` and `surplusFrac`
+ * measure against the price anchor: cover is the pricing reading the supply/demand UI shows, and
+ * holding it there keeps the series comparable across runs. It is a reporting convention, not a
+ * replay of the donor rule — an ordinary donor measures its excess against `donorReserve`
+ * (`DONOR_RESERVE_COVER × real demand`), so on a floored market `surplusFrac` no longer describes
+ * who will actually give something away. `deficitFrac` measures against the warehousing target
+ * (`logisticsTarget = WAREHOUSE_COVER × real demand`), because that is what `classifyMarketState`
+ * sizes a deficit against. Anchor and demand denominators coincide wherever real demand clears
  * `MIN_DEMAND` and diverge below it, so a floored market can legitimately show a low
  * `medianCover` while not counting as a deficit — it is stocked for what it actually uses.
  *

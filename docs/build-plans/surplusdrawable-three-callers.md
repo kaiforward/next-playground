@@ -368,6 +368,11 @@ Findings:
    every tracked good's consumer cohort, and both settle at ~0.90/11-12% for electronics. The
    entire session-63 "0.78 → 0.21 collapse" is two phases of one recovery curve sampled at
    t=10,000. The edit's real cost is transient: consumer-shelf fill is delayed ~1,000-2,000 ticks.
+   Addendum (recorded at spec review, from the same runs' raw series): electronics **building
+   levels** at t=16,000 read 2,599 (baseline) vs 2,628 (variant) and **realized production**
+   771,564 vs 752,529 — converged within ~1-2.5%. Colony tier-1 **project counts** (51 vs 31 at
+   10k, the largest build-loop mover) are a sim-report metric the diag does not emit and have **no
+   16k read anywhere** — the donor-reserve spec's verification owes one.
 2. **The mid-game mechanism is flow diversion, not flow reduction.** Total haul quantity is
    saturated and identical; electronics moves slightly MORE under the variant, but 42% less of it
    lands on consumer-role markets during the scarcity era, while below-floor-sourced quantity

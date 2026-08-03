@@ -11,6 +11,7 @@ function state(over: Partial<GoodMarketState> = {}): GoodMarketState {
     stock: 100,
     targetStock: 100,
     logisticsTarget: 100,
+    donorReserve: 100,
     demand: 10,
     civilianDemand: 10,
     production: 0,

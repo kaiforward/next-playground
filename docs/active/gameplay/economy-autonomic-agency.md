@@ -62,7 +62,7 @@ diffusion. It shares the intra-faction edge substrate with population migration 
 Both act only on **developed** systems: migration's open edges are gated to developed-both endpoints and
 directed logistics only routes between developed participants, so an unclaimed or controlled system neither
 sends nor receives goods or population (its seeded market is frozen). Logistics draws only from
-market stock **above** a donor's own retained cover — its cycles-of-supply anchor for an ordinary
+market stock **above** a donor's own retained cover — cycles of its real demand for an ordinary
 holder, its export reserve for a structural producer — so locals keep their supply (the v1 form of
 civilian crowd-out — emergent, target-protected).
 
@@ -95,28 +95,36 @@ wants the good at all, and the market leaves the match entirely.
 a different question from where a good prices at par. It is the sibling of `EXPORT_RESERVE_COVER` — both
 are warehouse policy stated in cycles of real demand.
 
+`DONOR_RESERVE_COVER` (40) is the same policy on the giving side: cycles of its own real demand an
+ordinary donor keeps before it parts with anything. It is authored separately from `WAREHOUSE_COVER`
+and the two are free to diverge, subject to one invariant — `DONOR_RESERVE_COVER ≥ WAREHOUSE_COVER ×
+DEFICIT_FRACTION`, since a donor drained below the deficit line would read as a sink and be refilled
+on the next cycle. Both ride `anchorMult`, so an anchor-shifting event moves the floor a donor stops
+at and the target a sink fills to together.
+
 **Logistics classification** (stock-based):
 
 - **Deficit** — `stock < logisticsTarget × DEFICIT_FRACTION` (below the warehousing target, with a
   dead-band). Severity = shortfall × demand.
 - **Surplus** — a source of drawable stock by either path, and the two paths stop at different
-  floors: **(a)** `stock ≥ targetStock × SURPLUS_MARGIN` — any holder of excess inventory (margin > 1
-  leaves the deliberate residual) — donating only `stock − targetStock`, never below the anchor; or
-  **(b)** a **structural producer** (`production > demand`) shipping down to `EXPORT_RESERVE_COVER`
-  cycles of its own demand, which sits far *below* the anchor and is where 96.5% of hauls come
-  from — an exporter is drained to its reserve, not to par. Path (b)
+  floors: **(a)** `stock ≥ donorReserve × SURPLUS_MARGIN` — any holder of excess inventory (margin > 1
+  leaves the deliberate residual) — donating only `stock − donorReserve`, never below the reserve it
+  keeps for itself; or **(b)** a **structural producer** (`production > demand`) shipping down to
+  `EXPORT_RESERVE_COVER` cycles of its own demand, which sits far *below* the reserve and is where
+  96.5% of hauls come from — an exporter is drained to its reserve, not to par. Path (b)
   mirrors the deficit-side self-supply gate and is required because the economy's production throttle
   caps a producer at `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin — without it a
   structural exporter could never form a surplus, and directed logistics went dead for every good its
   producers also consume (food, water, biomass).
-  **The donor side still measures against the PRICE anchor, and that is known-wrong.** Denominating it
-  in real demand too was tried and measured as a no-op for shipping (+0.0% drawable; 96.5% of hauls come
-  from structural exporters, whose branch never reads the target), yet coincided with `electronics`
-  consumer cover falling 0.78 → 0.21 for reasons never established. `surplusDrawable` also feeds the
-  build planner's input-supply gate and the colony founding manifest, so one edit moves three
-  mechanisms at once; finishing it means isolating one caller at a time. A second trap for whoever
-  does: its `targetStock ≤ 0` guard runs *before* the exporter branch, and a pure exporter's real
-  demand is zero — only the floor keeps that guard from stopping raw-material trade dead.
+  Both ends of the match are denominated in real demand: no logistics decision reads the price anchor
+  any more. The one thing that still does is `surplusDrawable`'s `targetStock ≤ 0` guard, which runs
+  *before* the exporter branch — a pure exporter's real demand is zero, so only the `MIN_DEMAND`-floored
+  anchor keeps that guard from stopping raw-material trade dead. Moving the donor side was measured
+  end to end first: equilibrium is unchanged on every tracked good, galaxy production −0.3%, and the
+  accepted cost is transient — stock the anchor used to over-shelter on small markets now feeds the
+  front of the severity queue, so mid-game consumer shelves fill ~1,000–2,000 ticks later.
+  At demand 0 the reserve is 0 and the whole pile is drawable: nobody there consumes the good, so
+  there is nothing to hold it for.
 - **Balanced** — the dead-band between, and anything with no demand at all (a zero warehousing target
   is never a sink).
 
@@ -158,9 +166,9 @@ This one choice does triple duty:
 Per faction, per cycle: rank deficits worst-first (shortfall × demand), and for each, find the nearest
 same-faction surplus of that good within a hop budget. Allocate
 `transfer = min(deficit shortfall, surplus drawable, remaining pool / route cost)`, spend the pool, advance,
-and stop when it's exhausted. The donor never drops below its own retained cover — the anchor for an
-ordinary holder, the export reserve for a structural producer — so moving goods never creates a new
-deficit. Deficits left unserved — pool spent, or no surplus in reach — are the residual.
+and stop when it's exhausted. The donor never drops below its own retained cover — the demand reserve
+for an ordinary holder, the export reserve for a structural producer — so moving goods never creates a
+new deficit. Deficits left unserved — pool spent, or no surplus in reach — are the residual.
 
 ### Silent application
 
@@ -315,7 +323,7 @@ galaxy**: pop decline arrested rather than trending down, striking-system count 
 climbing, fed systems climbing toward potential (housing → population → industry) and asymptoting there,
 barren/low-habitable worlds staying small — while the self-sufficient core and the stranded fringe are
 untouched. Coarse health-bar, not precision (per the calibrate-to-shape stance): no NaN / runaway / pinning;
-logistics never draws a donor below its anchor; build never exceeds habitable land or staffable labour;
+logistics never draws a donor below its own reserve; build never exceeds habitable land or staffable labour;
 budget < need leaves a visible residual. Validated in the simulator first, then live observation.
 
 ---
