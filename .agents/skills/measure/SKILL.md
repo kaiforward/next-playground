@@ -63,10 +63,21 @@ Scratch diagnostics live in `.superpowers/` (gitignored) and are never committed
 (anchor funding, per-producer stock) and `floor-diag.ts` (per-good floored share, requested vs
 delivered at the moment of transfer) already exist and take `DIAG_TICKS`/`DIAG_SYSTEMS`/`DIAG_SEED`.
 
-### 4. Run it, and record the raw output
+### 4. Run it, validate it, record the raw output
 
-Paste the actual output into the working file. Not your summary of it — the output. A summary is
+**Validate the instrument before you read it.** Find a quantity the tick already records independently
+and check the two agree — `flowEvents` has exactly one writer (directed-logistics), so an attributed
+haul count must equal it. A zero is the case that most needs this: a counter that never fires and a
+mechanism that never fires look identical, and only a second signal tells you which one you have.
+
+Then paste the actual output into the working file. Not your summary of it — the output. A summary is
 where the horizon and the cohort quietly fall off.
+
+**Then revert your instrumentation, in the same turn.** Counting "inside the processor" means editing
+tracked code under `lib/`. That patch is a measuring tool, not a change, and it must never reach a
+commit: `git checkout -- <file>`, then `git status` and a grep for the hook's name across `lib/` and
+`scripts/`. Do this before writing up, not after — the write-up is where it gets forgotten. Only the
+scratch runner in `.superpowers/` (gitignored) survives the session.
 
 ### 5. Report in the required frame
 
@@ -120,10 +131,18 @@ Fuller list: the `measurement-traps` memory.
 
 ## Output
 
-Append an `## Evidence` section to the feature's working file (`docs/build-plans/<feature>.md`),
-containing the five-field frame from step 5 plus the raw output. If there is no working file — a
-standalone question, e.g. a roadmap row — write the same block into the roadmap row itself, so the
-next person inherits the number rather than the impression.
+Everything goes in the feature's working file, `docs/build-plans/<feature>.md`: an `## Evidence`
+section with the five-field frame from step 5 plus the raw output.
+
+**If there is no working file yet — a standalone question, e.g. a roadmap row — create one.** That is
+the file step 2's claim and falsifier are committed into, before the instrument runs, and the file the
+later spec or build plan continues. It is transient like any build plan: deleted when the item ships,
+after carrying anything durable into the active doc or the `killed-designs` memory.
+
+**Never write the evidence into `docs/ROADMAP.md`.** The roadmap's own header says measurements belong
+in the linked doc, and a row is *what it is / next step / Don't* — three lines, not an appendix. The
+row gets one pointer line and, if the reading changed the item, a corrected next step. A 130-line
+evidence block in the queue is how the queue stops being readable.
 
 Then say, in one line, which of the three outcomes it was and what happens next.
 
