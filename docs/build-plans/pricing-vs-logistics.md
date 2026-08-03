@@ -89,6 +89,14 @@ direction was picked before the evidence, it cost a PR.
 4. Does price belong in the logistics decision in some *other* form — as a signal about where goods are
    wanted, rather than as the yardstick for how full a warehouse is?
 
+## Inputs noted for the discussion (not options, not decisions)
+
+- Kai, 2026-08-03: the matcher's sink ordering (severity = shortfall × demand, worst-first) is
+  itself design space — e.g. scaling need by relative size so a tiny/new colony's request can
+  outrank raw tonnage, and giving the player a mechanical lever over flow priority. Explicitly
+  separable from the donor-side reserve change (which only alters how much a market may *give*,
+  never who is *served* first) and not scoped into it.
+
 ## Related roadmap items
 
 Items 1, 2, 4 and 5 in `docs/ROADMAP.md` all touch this. They are not re-scoped or merged — that is
