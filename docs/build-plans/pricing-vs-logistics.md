@@ -26,16 +26,13 @@ There are two different "how much should sit here" numbers, and they answer diff
 `MIN_DEMAND` is a divide-by-zero guard whose own docstring calls it a floor on the *pricing*
 denominator. It was never authored to describe need.
 
-#211 moved the **deficit** side (who needs goods) onto `logisticsTarget`. Two readers were left on the
-price anchor and are the subject of this question:
+#211 moved the **deficit** side (who needs goods) onto `logisticsTarget`. Of the two readers left on
+the price anchor at that point, one remains and is the subject of this question:
 
 - **The production brake** — `productionCeiling` stops output at `HOLD_COVER × targetStock`.
-- **The generosity rule** — the ordinary-donor branch of `surplusDrawable` requires
-  `stock ≥ SURPLUS_MARGIN × targetStock`.
-
-The code already flags the second as known-wrong and left in deliberately, because the obvious fix was
-tried, could not be shown safe, and coincided with an unexplained `electronics` regression (roadmap
-item 1).
+- ~~**The generosity rule**~~ — shipped out in #212 (`DONOR_RESERVE_COVER`); the item-5 role split
+  then removed the anchor from the logistics data path entirely (`GoodMarketState` no longer carries
+  `targetStock`; `surplusDrawable`'s dead `targetStock ≤ 0` guard is deleted).
 
 ## What is measured
 
@@ -116,11 +113,12 @@ direction was picked before the evidence, it cost a PR.
 
 ## Related roadmap items
 
-Item 5 in `docs/ROADMAP.md` touches this (item 4, exporter price pinning, moved to the unqueued
-goods-pricing revisit on 2026-08-03 — pricing rework waits for pop wages or inter-faction trade). Item 1 (the donor side) shipped as #212 — the
+Item 4 (exporter price pinning) moved to the unqueued goods-pricing revisit on 2026-08-03 — pricing
+rework waits for pop wages or inter-faction trade. Item 1 (the donor side) shipped as #212 — the
 generosity rule now reads `DONOR_RESERVE_COVER`. Item 2 closed 2026-08-03 as chosen conservatism
 (the [1.3, 1.4)× self-supplier lock is intended; see memory `killed-designs`) — **which makes this
-session the sole owner of the brake-denominator question**: `productionCeiling`'s
-`HOLD_COVER × targetStock` is now the last physical mechanism measured against the price anchor,
-and question 1 above reduces to it alone. Item 5 (`TARGET_COVER` carrying three roles) is the
-closest sibling: the same constant, the same complaint, one layer up.
+session the sole owner of the brake-denominator question**. Item 5 (`TARGET_COVER` carrying three
+roles) shipped: the founding fill target is `FOUNDING_STOCK_COVER` cycles of raw demand, the
+harness surplus metric reads the donor line, and no logistics or planner code touches the anchor.
+`productionCeiling`'s `HOLD_COVER × targetStock` is now the *only* physical mechanism measured
+against the price anchor, and question 1 above reduces to it alone.

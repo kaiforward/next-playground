@@ -32,23 +32,10 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 ## Queued — economy
 
 Ordered. These gate PR6: its presentation layer must sit on an economy that is settled, or the
-numbers it presents are re-tuned underneath it. (Item 1, the `surplusDrawable` donor side, shipped
-as #212 — rows keep their numbers when one ships, so references stay stable.)
-
-5. **[M] `TARGET_COVER` carries three roles in one constant** — authored as a *pricing* reference and the
-   whole-roster knob for price dispersion, then borrowed as a fill target and as `productionCeiling`'s
-   throttle knee. #211 already took the logistics deficit line off it (`WAREHOUSE_COVER` owns that now,
-   held equal at 40 and asserted in `band-constants.test.ts`).
-   *Next step:* re-denominate the remaining borrowers in cycles of demand — the shape `EXPORT_RESERVE_COVER`
-   used in #207 and `WAREHOUSE_COVER` used in #211. Prerequisite for pop wealth. Carries three small
-   deferrals from #212 and the row-2 closure: decide the fate of `surplusDrawable`'s `targetStock <= 0`
-   guard (the function's last price-anchor read), re-denominate or retire the harness surplus-share
-   metric (`market-analysis.ts:250`, still counts against price-anchor cover), and fix the docstrings
-   that say "roadmap item 2 owns" the brake line — that ownership moved to the pricing-vs-logistics
-   session when row 2 closed (see memory `killed-designs`, the [1.3,1.4) lock entry).
-   *Don't:* lower the anchor. That was measured at 125 cycles, inside the ~300-cycle startup transient,
-   and is retracted; run unmodified to 416 cycles and the galaxy reaches price median 1.23×, mean D 0.030
-   on its own. The anchor is never reached by design and that is fine.
+numbers it presents are re-tuned underneath it. (Items 1 and 5 — the `surplusDrawable` donor side,
+#212, and the `TARGET_COVER` role split — shipped; rows keep their numbers when one ships, so
+references stay stable. The one mechanism still measured against the price anchor is
+`productionCeiling`'s throttle knee, owned by the pricing-vs-logistics session.)
 
 10. **[L] Colonisation economics — founding stops being free.** Now that monetary mechanics exist,
     colonisation becomes a major, resource-intensive undertaking (Stellaris-scale): claims,
@@ -126,9 +113,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   rests at `EXPORT_RESERVE_COVER`, below the curve's saturation point, so the curve clamps, and
   price stops being a health gauge on exactly the cohort that ships goods). Acceptable meanwhile:
   exporters run drained by design, importers carry the dispersion.
-  *Don't:* lower the anchor (retracted — see queue item 5) or raise the export reserve (withholds
-  real stock from importers). If grading is wanted, the lever is the curve's saturation point —
-  which makes the `MarketCurve.k` item below this work's natural first slice.
+  *Don't:* lower the anchor (retracted: measured at 125 cycles, inside the ~300-cycle startup
+  transient — run unmodified to 416 cycles the galaxy reaches price median 1.23× on its own) or
+  raise the export reserve (withholds real stock from importers). If grading is wanted, the lever
+  is the curve's saturation point — which makes the `MarketCurve.k` item below this work's natural
+  first slice.
 - **[M] Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
   real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
   is 1 for every good and `priceFloor`/`priceCeiling` is a pure tier lookup with zero per-good variation.
@@ -138,8 +127,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   replaces it as an economic axis.
 - **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand becomes
   partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still
-  lack the goods). *Blocked:* `demandRate` is already double-purposed as pricing anchor and logistics
-  deficit anchor — item 5 is a hard prerequisite, not a nice-to-have.
+  lack the goods). The former blocker — `demandRate` double-purposed as pricing anchor and logistics
+  deficit anchor — cleared with #211/#212 and the `TARGET_COVER` role split: pricing keeps the floored
+  `demandRate` denominator, logistics and founding read real demand.
 - **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
   their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
   its reference); nothing breaks if it never lands.
