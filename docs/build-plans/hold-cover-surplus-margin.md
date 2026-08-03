@@ -72,12 +72,33 @@ the ordinary one — and usually arrives already above `1.4 ×`, because one pro
 anchor can exceed the whole band (`production > 0.4 × targetStock` clears it in a single step). It is a
 handoff, not a lock. The lock is only for those that land inside `[1.3, 1.4)`.
 
-### Open question this evidence does not answer
+### How long does the gap hold a market? (derived, NOT measured)
 
-Which route lifts an ordinary-path market over `1.4 × targetStock`: own-production overshoot, or a
-shrinking `targetStock` (`anchorMult` event, demand decline)? The fork matters — overshoot means the
-system broadly works and the gap is a rough edge; a shrinking anchor means donations are driven by the
-yardstick moving rather than by anyone holding real spare. Not measured; one more 10,000-tick run.
+Every good carries a per-capita civilian rate in `GOOD_CONSUMPTION` (ore included, at 0.002/pop), so
+local demand for a good is never zero on an inhabited world and stock always drains. The `[1.3, 1.4)`
+band is therefore **transient, not a permanent lock** — a market consumes its way back under the brake
+and resumes producing. The distinct-pair counts fit that reading: 3,277 pairs touched the band over the
+run against 470 in the final 1,000 ticks, which is churn, not a stuck cohort.
+
+Where it bites is the **floored** cohort. `demandRate = max(real consumption, MIN_DEMAND)`, so the floor
+only takes over where real consumption sits under it — small worlds, and higher-tier goods at larger
+populations (~25 pop for ore, ~50 for electronics, ~167 for ship frames). There the band's width is
+denominated in guard-units while draining happens in real units, so the dwell time stretches in
+proportion to how far below the floor the market sits.
+
+**None of this is measured.** Occupancy was counted per evaluation, which is a churn metric; dwell time
+per (system, good) was not. The traps memory warns about exactly this substitution.
+
+### Open questions this evidence does not answer
+
+1. **Dwell time.** For each market entering `[1.3, 1.4)`, how long does it stay, split by whether its
+   `demandRate` is floored? That is the question that decides whether this is a rough edge or a defect.
+2. **Which route lifts a market over `1.4 ×`** — own-production overshoot, or a shrinking `targetStock`
+   (`anchorMult` event, demand decline)? Overshoot means the system broadly works; a shrinking anchor
+   means donations are driven by the yardstick moving rather than by anyone holding real spare.
+
+Both fold into the larger design question in
+[pricing-vs-logistics.md](./pricing-vs-logistics.md) — do not answer them in isolation.
 
 <details><summary>Raw output — <code>.superpowers/branch-diag.ts</code>, 600 systems, seed 42, 10,000 ticks</summary>
 
