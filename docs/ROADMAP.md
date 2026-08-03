@@ -35,32 +35,6 @@ Ordered. These gate PR6: its presentation layer must sit on an economy that is s
 numbers it presents are re-tuned underneath it. (Item 1, the `surplusDrawable` donor side, shipped
 as #212 — rows keep their numbers when one ships, so references stay stable.)
 
-2. **[S] `HOLD_COVER` (1.3) caps production below `SURPLUS_MARGIN` (1.4)** — `productionCeiling` returns 0
-   at `1.3 × targetStock`; the ordinary-donor branch of `surplusDrawable` needs `stock ≥ 1.4 ×`. So a
-   self-supplier can only re-donate surplus it was *given*, never surplus it *made*. Not a chosen rule:
-   the two constants landed three days apart in unrelated features, the later one calibrated against
-   price median with no reference to the threshold it was capping.
-   **Measured, and the premise above is false** — evidence in
-   [hold-cover-surplus-margin.md](./build-plans/hold-cover-surplus-margin.md). The non-exporter path
-   sources 2.91% of hauls at startup and 1.82% at equilibrium, and 95% of those donors held stock no
-   delivery could have supplied — made, not given. What survives is a narrower lock at `[1.3, 1.4) ×
-   targetStock`: production halted, donation refused, exit only downward.
-   *Next step:* re-scope the item against that evidence (Kai's call). Two small deferrals from the
-   donor-reserve ship (#212) belong to this pass: `surplusDrawable`'s `targetStock <= 0` guard is
-   now the function's only price-anchor read (decide its fate), and the harness surplus-share
-   metric (`market-analysis.ts:250`) still counts against price-anchor cover, which no longer
-   describes the donor rule.
-   *Don't:* give the two constants one owner on the strength of the row above — it was written from the
-   arithmetic, not from a measurement, and the measurement disagrees.
-
-3. **[S] `luxuries` consumers — re-measure before ranking anything.** Was 0.02 median cover / 53% empty;
-   #211 took it to 0.81 / 37% over 150 consumer markets. Whatever remains is a smaller, different
-   problem than the one originally booked. Two old suspects (build planner not committing academy-gated
-   tier-2/3 capacity, vs input chains starving upstream) were both ranked against the 0.02 galaxy.
-   *Next step:* re-measure the cohort post-#211, then decide whether 37% empty is even a defect.
-   *Don't:* re-merge this with `electronics` — its consumers sit at 0.77, near the serviced attractor;
-   the shared 0.25 headline was the *producer* cohort resting at reserve, i.e. the system working.
-
 4. **[S] An exporter's resting price is pinned at its ceiling, not graded** — a drawn exporter rests at
    `EXPORT_RESERVE_COVER` (10 cycles), below the price curve's saturation point, so the curve clamps.
    Measured at equilibrium: 3.00× / 3.00× / 2.50× for `electronics` / `luxuries` / `fuel`. Price stops
@@ -76,7 +50,12 @@ as #212 — rows keep their numbers when one ships, so references stay stable.)
    throttle knee. #211 already took the logistics deficit line off it (`WAREHOUSE_COVER` owns that now,
    held equal at 40 and asserted in `band-constants.test.ts`).
    *Next step:* re-denominate the remaining borrowers in cycles of demand — the shape `EXPORT_RESERVE_COVER`
-   used in #207 and `WAREHOUSE_COVER` used in #211. Prerequisite for pop wealth.
+   used in #207 and `WAREHOUSE_COVER` used in #211. Prerequisite for pop wealth. Carries three small
+   deferrals from #212 and the row-2 closure: decide the fate of `surplusDrawable`'s `targetStock <= 0`
+   guard (the function's last price-anchor read), re-denominate or retire the harness surplus-share
+   metric (`market-analysis.ts:250`, still counts against price-anchor cover), and fix the docstrings
+   that say "roadmap item 2 owns" the brake line — that ownership moved to the pricing-vs-logistics
+   session when row 2 closed (see memory `killed-designs`, the [1.3,1.4) lock entry).
    *Don't:* lower the anchor. That was measured at 125 cycles, inside the ~300-cycle startup transient,
    and is retracted; run unmodified to 416 cycles and the galaxy reaches price median 1.23×, mean D 0.030
    on its own. The anchor is never reached by design and that is fine.
