@@ -496,6 +496,50 @@ aggregate counters only. Validation: the run is deterministic under the seed, so
 total must reproduce the dwell run's braked total (160,732) exactly, and the eligible count must
 again equal the independent developed-market count.
 
+## Evidence: size of the demand fiction (claim committed before the instrument ran)
+
+**Status: falsifier committed, instrument not yet run.**
+
+**Definitions.** At each logistics evaluation, for every developed-system market whose demand
+includes an industrial component: *nominal* industrial input demand is what the state carries today
+(`demand − civilianDemand`, capacity-based); *realized-based* input demand is the same engine
+function (`inputDemandFromProduction`) fed the system's realized production rates instead of
+capacity. The ratio realized/nominal bounds the fiction: the true "honest" figure (what factories
+would draw if the input were abundant) sits between the two, because realized output is itself
+gated by the very input under measurement.
+
+**Claim.** The fiction is broad, not confined to the camping cohort: at equilibrium, ≥ 10% of
+industrial-demand market-checks show realized-based draw at or below half of nominal
+(ratio ≤ 0.5), and galaxy-wide nominal industrial input demand exceeds realized-based by ≥ 1.25×.
+
+**Falsifier.** If at equilibrium under 10% of industrial-demand checks sit at ratio ≤ 0.5 AND the
+galaxy-wide nominal/realized-based ratio is under 1.25×, the fiction is narrow: demand honesty
+remains the right fix for the measured campers but loses its "touches every reader" urgency, and
+the spec re-scopes it accordingly.
+
+## Evidence: are throttled exporters sated? (claim committed before the instrument ran)
+
+**Status: falsifier committed, instrument not yet run.**
+
+**Definitions.** A *throttled exporter* check is an exporter-path market (matcher's own test)
+above its anchor (ramp or closed). It *faces reachable unmet demand* when, at the same
+evaluation, some same-faction system within the matcher's own reachability (`reachableSystemIds`
++ non-null `routeCost`) classifies as a deficit sink in the same good (the matcher's own
+membership: `classifyMarketState` deficit, shortfall > 0, production < demand).
+
+**Claim.** Throttled exporters are mostly sated: at equilibrium, under 25% of throttled
+exporter-path checks face any reachable same-faction deficit in the same good.
+
+**Falsifier.** If ≥ 25% of throttled exporter-path checks face a reachable deficit at equilibrium,
+the brake is suppressing production in the presence of reachable unmet demand at scale — the
+governor is an active cause of undersupply, raising the brake redesign's urgency and implicating
+it in the served-last pattern.
+
+**Instrument (both measurements).** One combined run, same hook site and conditions as the two
+prior runs (12,000 ticks, 600 systems, seed 42), aggregate counters only. Validation: eligible
+must equal the independent developed-market count, and the ramp/closed totals must reproduce the
+brake-cohort run's 586,588 / 160,732 exactly (deterministic seed).
+
 ## Related roadmap items
 
 Item 4 (exporter price pinning) moved to the unqueued goods-pricing revisit on 2026-08-03 — pricing
