@@ -11,7 +11,8 @@
     "test:unit": "vitest run --project unit",
     "simulate": "tsx scripts/simulate.ts",
     "validate:gen": "tsx --tsconfig tsconfig.json scripts/validate-distributions.ts",
-    "report:coherence": "tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts"
+    "report:coherence": "tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts",
+    "impact": "tsx --tsconfig tsconfig.json scripts/impact.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
