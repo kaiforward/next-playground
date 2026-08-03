@@ -85,9 +85,153 @@ Founding stock: 562 colonies founded | opening satisfaction mean 0.42 | opened d
 Matches the known baseline: electronics consumer 0.78 / 34% empty, luxuries 0.81 / 37%,
 Supplied 209 (35.9%), tier-1+ industry 525, colony tier1 projects 51, ~1.1M transfers.
 
-### R1–R4 — not yet run
+### R1 — all three callers on the demand anchor · validity gate PASSED (reproduces to the digit)
 
-Paused 2026-08-03 (machine restart) before any code edit was applied; working tree clean at pause.
-Resume point: apply the `demandAnchor` variant to all three call sites (R1), then isolate per
-caller (R2 matcher · R3 build gate · R4 founding manifest), reverting all `lib/` edits before
-write-up.
+Variant applied exactly as specified above (`demandAnchor` param, ordinary-donor branch only;
+matcher + build gate + founding manifest all pass `logisticsTarget`). `npm run simulate`, same
+config as R0. Raw excerpt:
+
+```
+equilibrium (10,000t):
+electronics      |    230/0.25 |    190/0.38 |    138/0.21 |          46% |       24 (0) |         3.00
+luxuries         |    221/0.25 |    152/0.50 |    143/0.80 |          35% |       66 (0) |         3.00
+ship_frames      |    184/0.25 |    131/0.80 |    153/0.82 |          34% |      114 (0) |         3.00
+
+startup (1000t):
+electronics      |     19/0.30 |      1/0.17 |    196/0.83 |          37% |      127 (0) |         3.00
+luxuries         |     19/0.29 |      1/0.19 |    128/0.93 |          12% |      195 (0) |         3.00
+ship_frames      |     28/0.25 |      1/0.14 |     31/0.84 |           0% |      283 (0) |         3.00
+
+Supply regimes: Supplied 169 (29.0%) | Rationing 401 (68.9%) | Shortage 12 (2.1%) | mean D 0.030
+Colony build loop: with tier-1+ industry 530 | colony projects by kind: ... tier1=31 ...
+Logistics: Transfers 1.1M | Quantity moved 857.1M | Systems participating 582
+Founding stock: 562 colonies founded | opening satisfaction mean 0.43 | opened deprived (<0.50): 380
+```
+
+Reproduces every session-63 under-edit figure exactly: electronics consumer **0.21 / 46% empty**
+(gate: ≤ 0.35), ship_frames empty 34%, tier-1+ industry 530, colony tier1 projects 31, luxuries
+0.80. Shipping unchanged (857.1M moved vs 858.5M baseline — the known no-op). Startup horizon is
+essentially untouched (electronics consumer 0.83/37% vs 0.83/36% baseline): the regression is an
+equilibrium phenomenon. The reconstruction is faithful; per-caller isolation is now meaningful.
+
+### R2 — matcher donor side only · equilibrium 0.42 (above the ≤ 0.40 bar, barely)
+
+Only the matcher call site passes `logisticsTarget`; build gate and founding manifest on the
+unmodified anchor. Raw excerpt:
+
+```
+equilibrium (10,000t):
+electronics      |    232/0.25 |    172/0.28 |    154/0.42 |          41% |       24 (0) |         3.00
+luxuries         |    228/0.25 |    150/0.30 |    138/0.68 |          38% |       66 (0) |         3.00
+ship_frames      |    188/0.25 |    124/0.82 |    156/0.82 |          33% |      114 (0) |         3.00
+
+startup (1000t): identical rows to R1 (0.83/37%, 0.93/12%, 0.84/0%)
+
+Supply regimes: Supplied 183 (31.4%) | Rationing/Shortage rest | mean D 0.032
+Colony build loop: with tier-1+ industry 526 | colony projects by kind: ... tier1=35 ...
+Logistics: Quantity moved 852.7M
+Founding stock: 562 colonies founded | opening satisfaction mean 0.43 | opened deprived (<0.50): 380
+```
+
+Reading: matcher-only lands at 0.42 — above the ≤ 0.40 "another caller carries it" bar by 0.02,
+but far below the 0.78 baseline: the matcher alone reproduces most of the collapse. Also moves
+what the full edit did not: luxuries consumer 0.68 (R0 0.81, R1 0.80) and luxuries/electronics
+self-supplier cover down to 0.30/0.28 (R0 0.49/0.29) — caller effects evidently offset each other
+in R1. Build stats stay near baseline (526 vs 525 tier-1+; tier1 projects 35).
+
+### R3 — build-planner input-supply gate only · equilibrium 0.82 → FALSIFIES the claim
+
+Only the build gate call site passes `logisticsTarget`; matcher and founding manifest on the
+unmodified anchor. Raw excerpt:
+
+```
+equilibrium (10,000t):
+electronics      |    221/0.25 |    168/0.37 |    170/0.82 |          37% |       23 (0) |         3.00
+luxuries         |    209/0.25 |    160/0.33 |    145/0.52 |          39% |       68 (0) |         3.00
+ship_frames      |    189/0.28 |    125/0.83 |    155/0.83 |          20% |      113 (0) |         3.00
+
+startup (1000t): baseline rows (electronics 193/0.83, 36%)
+
+Supply regimes: Supplied 216 (37.1%) | mean D 0.031
+Colony build loop: with tier-1+ industry 529 | colony projects by kind: ... tier1=41 ...
+Logistics: Quantity moved 861.9M
+Founding stock: 562 colonies founded | opening satisfaction mean 0.42 | opened deprived (<0.50): 380
+```
+
+Reading: 0.82 ≥ 0.60 — **the gate alone does not carry the regression; the claim is false.**
+Electronics consumer cover is at/above baseline (0.78) with the gate alone changed. Oddity for the
+record: build-gate-only *does* tank luxuries consumer cover (0.81 → 0.52) while leaving
+electronics whole — the mirror image of what the claim predicted, and more evidence the callers
+interact good-by-good rather than adding up.
+
+### R4 — colony founding manifest only · equilibrium 0.83 · no regression
+
+Only `planFoundingStock`'s call site passes `logisticsTarget`; matcher and build gate on the
+unmodified anchor. Raw excerpt:
+
+```
+equilibrium (10,000t):
+electronics      |    242/0.25 |    168/0.27 |    150/0.83 |          28% |       22 (0) |         3.00
+luxuries         |    216/0.25 |    157/0.33 |    143/0.77 |          40% |       66 (0) |         3.00
+ship_frames      |    201/0.27 |    111/0.81 |    157/0.82 |          25% |      113 (0) |         3.00
+
+startup (1000t): baseline rows (electronics 193/0.83, 36%)
+
+Supply regimes: Supplied 197 (33.8%) | mean D 0.022
+Colony build loop: with tier-1+ industry 528 | colony projects by kind: ... tier1=39 ...
+Logistics: Quantity moved 852.2M
+Founding stock: 562 colonies founded | opening satisfaction mean 0.43 | opened deprived (<0.50): 380
+```
+
+Reading: the founding manifest alone regresses nothing (electronics 0.83, luxuries 0.77,
+ship_frames 0.82/25%).
+
+## Outcome — FALSIFIED, on two committed clauses at once
+
+| Run | electronics cons (eq) | empty% | luxuries cons | ship_frames empty% | tier1 projects |
+|---|---|---|---|---|---|
+| R0 baseline | 0.78 | 34% | 0.81 | 20% | 51 |
+| R1 all three | **0.21** | 46% | 0.80 | 34% | 31 |
+| R2 matcher only | 0.42 | 41% | 0.68 | 33% | 35 |
+| R3 build gate only | 0.82 | 37% | 0.52 | 20% | 41 |
+| R4 founding only | 0.83 | 28% | 0.77 | 25% | 39 |
+
+- **R3 tripped its bar** (0.82 ≥ 0.60): the build gate alone does not carry the regression — the
+  claim's named suspect is exonerated outright.
+- **The compound clause also tripped**: R1 reproduces 0.21 but no single-caller run reads ≤ 0.40 —
+  the collapse as measured needs more than one caller changed together.
+- R2 (0.42) sits 0.02 above its ≤ 0.40 bar. That bar was committed before the run and stands: the
+  matcher alone does not formally "carry" the full collapse — but 0.78 → 0.42 is most of the
+  distance, and the matcher is the only caller that moves electronics at all on its own.
+
+```
+Meaning:    The electronics collapse is not the build planner's — the logistics matcher's donor
+            side carries most of it alone, and the full collapse only appears when the matcher
+            changes together with another caller; the callers interact good-by-good rather than
+            adding up.
+Claim:      Under a demand-denominated ordinary-donor anchor, the electronics collapse is produced
+            by the build planner's input-supply gate, not the matcher donor side or the founding
+            manifest.
+Number:     electronics consumer median cover at equilibrium — R0 0.78 · R1 (all) 0.21 ·
+            R2 (matcher) 0.42 · R3 (build gate) 0.82 · R4 (founding) 0.83.
+Horizon:    Both. Startup is flat across all five runs (consumer 0.83, 36-37% empty everywhere);
+            the regression is equilibrium-only. Falsifier bars were equilibrium bars.
+Cohort:     electronics consumer-role markets (n 138-170 by run), galaxy of 600 systems, seed 42,
+            ECONOMY_SCALE=100. Secondary reads: luxuries/ship_frames consumer cohorts, colony
+            build-loop stats.
+Licenses:   Supports: dropping the build-gate-first theory; treating the matcher donor side as the
+            primary carrier; requiring any future donor-anchor design to be tested against caller
+            interaction, not per-caller in isolation. Does NOT support: a mechanism story for WHY
+            the matcher change collapses electronics (unmeasured); "the build gate is harmless" in
+            general (gate-only tanked LUXURIES 0.81 → 0.52, R3); reading R2's 0.42 as "the matcher
+            is the whole cause"; any tuning.
+```
+
+Interaction evidence worth keeping: every single-caller run degrades *some* consumer cohort
+(R2: luxuries 0.68; R3: luxuries 0.52; R4: luxuries 0.77/40% empty) yet R1 with all three leaves
+luxuries at 0.80 — single-caller effects are not additive components of the full edit; they
+partially cancel. Whatever mechanism is at work routes through caller interaction.
+
+All `lib/` instrumentation was reverted before this write-up (`git checkout -- lib/`; greps for
+`demandAnchor` / the instrument marker across `lib/` and `scripts/` return nothing). Raw sim
+outputs for R1-R4 are in the session scratchpad only; the excerpts above are the durable record.
