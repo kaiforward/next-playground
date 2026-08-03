@@ -166,21 +166,24 @@ cannot reach.
   exposed that a file-scoped `git log` reads a migration commit as authorship — the check searches
   `docs/` history-wide and compares the falsifier's first-committed text against the spec's current
   text.
+- **`/build-plan`** — rank 2 by format: four required task fields (`Files / Interface / Proves /
+  Consumes`) and three required plan sections (Verification, Doc fold, Not covered), so a skipped
+  part is a visible hole rather than an absence. Mechanism B carried in as **Not covered** — every
+  exclusion booked or reasoned, attached to finishing the plan. Self-review is the final step:
+  minutes, a checklist, no agent dispatch.
 
 ## Left to do
 
 1. **`/brainstorm`** — prose discussion, no forced-choice lists, terminal state is `/measure` rather
    than a spec.
 2. **`/feature-spec`** — four-field header, hazard worksheet, refuses to start without evidence.
-3. **`/build-plan`** — small, and mostly restraint: files, task order and the interfaces between
-   tasks, explicitly not the code. Its self-review is the final step, not a second expensive gate.
-4. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
-   separate task — a checklist item on items 1-3. The test of whether it worked is the same as for
+3. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
+   separate task — a checklist item on items 1-2. The test of whether it worked is the same as for
    `/measure`: dogfood the skill on a real queue item and see whether the mechanism catches something.
-   `/spec-review` still awaits its dogfood — the natural moment is roadmap item 6, whose next step is
-   the gate itself.
+   `/spec-review` and `/build-plan` both still await that dogfood — the natural moment is roadmap
+   item 6, whose next step is the spec-review gate itself, with planning right behind it.
 
-5. **Open, Kai's call:** should `/measure`'s reporting step require a plain-language statement *before*
+4. **Open, Kai's call:** should `/measure`'s reporting step require a plain-language statement *before*
    the numbers? The preference already exists in `~/.claude/CLAUDE.md` ("lead with plain functional
    terms") and did not fire during the item 2 write-up — which is rank 3 behaving exactly as this file
    predicts. Moving it into the skill would make it rank 2. Raised, not decided.

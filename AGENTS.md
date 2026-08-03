@@ -9,6 +9,7 @@ Single-player grand-strategy game in a procedurally generated galaxy — colonis
 - `/measure` — **evidence before design.** Run it whenever anything downstream will rest on a claim about how the game behaves today, including a claim that something is ruled out.
 - `/bootstrap` — environment checks (node, deps, env, outdated packages, build)
 - `/spec-review <doc-path>` — adversarial review of a cross-mechanic spec, before implementation planning
+- `/build-plan <feature>` — implementation plan from a reviewed spec: files, task order and the interfaces between tasks — not the code
 - `/uber-review [PR#]` — multi-agent code review of a branch or PR
 
 Design-stage hazards (the six ways a design here has been wrong, as a worksheet) live in
