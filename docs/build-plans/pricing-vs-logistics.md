@@ -1,8 +1,8 @@
 # How should pricing affect internal logistics?
 
-**Status: an open design question, not a design.** Nothing here is decided. This file exists so a new
-session can pick the discussion up without re-deriving it, and so the measured facts stay separated
-from the reasoning built on top of them.
+**Status: direction agreed 2026-08-03 (see "Direction" below); measurements before spec.** The
+original open question is settled in shape; this file now carries the agreed direction and the
+evidence, and stays alive as the working file until the work ships.
 
 Transient (build-plan lifecycle): delete when the question is settled, carrying the decision into
 `docs/active/gameplay/economy-autonomic-agency.md` and anything killed into the `killed-designs` memory.
@@ -312,6 +312,68 @@ reading: collector's per-evaluation eligible-market count must equal an independ
 developed-system market rows, and in-zone occupancy must land near the prior measurement's ~1% of
 ordinary-path checks (same seed and conditions). The lib/ hook is a measuring patch, reverted
 before write-up.
+
+## Direction agreed (Kai, 2026-08-03) — pending measurements, then spec
+
+Agreed in discussion after the dwell evidence landed. Not yet a spec; the spec follows the two
+measurements below and gets a `/spec-review` (heavy cross-mechanic surface: economy processor,
+logistics, planner all read the demand figure).
+
+1. **Demand honesty first — the lead work item.** Industrial input demand is today counted at
+   factory *capacity*; it must be counted at what factories would actually draw (gated by staffing,
+   strike, and their own output brake — "what would this factory pull if this input were abundant").
+   Civilian want always counts at full rate — a starving world must never read as low-demand (the
+   rationing death-spiral trap). This is the fix for the measured camping cohort, and it touches
+   every reader of the demand figure at once: deficit targets, donor reserves, matcher severity,
+   planner sizing.
+2. **The brake leaves the price anchor, onto honest flow.** Stockpile fullness is measured against
+   the larger of "cycles of what I actually use" (consumers) and "cycles of what I make" (producers'
+   working inventory: while shipments collect output the yard stays low and production runs; when
+   nothing draws, the yard fills and the world idles). No price reference, no `MIN_DEMAND` floor —
+   the output denominator answers open question 2's pure-exporter trap directly.
+3. **Price re-enters only in the later pricing pass** (the unqueued goods-pricing revisit) — as a
+   signal layered on this machinery, which must function without it. Kai: the current pricing
+   mechanism is wrong and needs its own pass; nothing here should lean on it.
+4. **The dead-band stays** (question 3): chosen conservatism stands — the dwell evidence shows the
+   band is mostly a harmless handoff whose only pathology was the dishonest demand figure. At spec
+   time both lines get restated in one unit family and the `band-constants.test.ts` invariant (today
+   comparing anchor-units to demand-units) is rewritten in those units.
+
+Dispositions of the four open questions: Q1 answered (off the anchor, onto honest use/output,
+demand honesty first), Q2 dissolved by the output denominator, Q3 stays as chosen conservatism
+restated in new units, Q4 explicitly deferred to the pricing pass.
+
+**Next steps, in order:**
+- `/measure` who the brake currently bites (below) — sizes how much live behaviour the brake
+  redesign changes, especially for exporters.
+- `/measure` the size of the demand fiction — nominal (capacity-based) vs realized industrial input
+  draw, galaxy-wide census. The full behavioural A/B (honest vs nominal) runs at implementation
+  time, when an honest figure exists to A/B.
+- Then the spec, then `/spec-review`.
+
+## Evidence: who does the brake bite (claim committed before the instrument ran)
+
+**Status: falsifier committed, instrument not yet run.**
+
+**Definitions.** At each logistics evaluation (the same read point as the dwell instrument), every
+developed-system market is classified by brake state against the anchor band — *free*
+(stock ≤ targetStock), *ramp* (targetStock < stock < HOLD_COVER × targetStock, production
+partially throttled), *closed* (stock ≥ HOLD_COVER × targetStock) — and by path, using the
+matcher's own exporter test: *exporter-path* (production > demand and not suppressed) vs
+*ordinary-path*. "Throttled" = ramp or closed.
+
+**Claim.** The brake's throttle rests almost entirely on ordinary-path markets: at equilibrium,
+exporter-path markets account for under 10% of throttled checks.
+
+**Falsifier.** If exporter-path markets are ≥ 10% of throttled checks at equilibrium, the claim is
+false — the brake is actively throttling export capacity today, the redesign changes live export
+behaviour materially, and the brake change needs its own behavioural A/B rather than riding the
+demand-honesty one.
+
+**Instrument.** Same hook site and conditions as the dwell run (12,000 ticks, 600 systems, seed 42),
+aggregate counters only. Validation: the run is deterministic under the seed, so the closed-check
+total must reproduce the dwell run's braked total (160,732) exactly, and the eligible count must
+again equal the independent developed-market count.
 
 ## Related roadmap items
 
