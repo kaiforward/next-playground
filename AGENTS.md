@@ -6,9 +6,13 @@ Single-player grand-strategy game in a procedurally generated galaxy — colonis
 
 ## Skills
 
+- `/measure` — **evidence before design.** Run it whenever anything downstream will rest on a claim about how the game behaves today, including a claim that something is ruled out.
 - `/bootstrap` — environment checks (node, deps, env, outdated packages, build)
 - `/spec-review <doc-path>` — adversarial review of a cross-mechanic spec, before implementation planning
 - `/uber-review [PR#]` — multi-agent code review of a branch or PR
+
+Design-stage hazards (the six ways a design here has been wrong, as a worksheet) live in
+`.agents/skills/shared/design-hazards.md`. Fill it at design, check it at spec review.
 
 Skills are authored in `.agents/skills/` (canonical). `.claude/skills/` holds discovery adapters only.
 
@@ -18,6 +22,7 @@ Skills are authored in `.agents/skills/` (canonical). `.claude/skills/` holds di
 - `npx next build --webpack` — **the build gate**. `npm run build` uses Turbopack, which has other quirks.
 - `npx vitest run` — unit tests
 - `npm run simulate` — headless run of the real tick, reporting economy health at two horizons: 1000 ticks (startup/founding behaviour) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`.
+- `npm run impact -- <SYMBOL>` — every module that reads a constant, field or signal, which tick processors declare it, which ones write it without declaring it, and their position in the run order. Run it before leaning on any shared quantity.
 
 ## Tech Stack
 

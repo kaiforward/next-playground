@@ -90,13 +90,52 @@ stripped of the conditions it was taken under is what turns into a false premise
 - **Memory pruned** from 20 files to the ones that still change what gets done; shipped-work narrative
   deleted, recurring traps consolidated.
 
+- **`docs/planned/` corrected.** Seven of fourteen docs described shipped code, in the tense of work
+  still outstanding. Five fixed in place; two (`necessity-weighted-unrest.md`,
+  `economy-rationing-amendment.md`) have shipped in full and are booked into PR6's doc fold.
+
+## The sequence we are building
+
+```
+/brainstorm  → chosen idea + its falsifier   (prose, no forced-choice lists)
+/measure     → concrete evidence             (falsified → back to /brainstorm)
+/feature-spec→ functional spec               (entry condition: evidence exists)
+/spec-review → revised functional spec       (rubric = the design hazards)
+/build-plan  → implementation plan           (files + interfaces, NOT the code)
+implementation → PR
+/uber-review → merge
+```
+
+Handoff is **a file, not a conversation**: one working file per feature at
+`docs/build-plans/<feature>.md`, accreting `## Idea` → `## Evidence` → `## Spec`. Each skill's entry
+condition is the previous section existing, so it resumes in a fresh context. `/clear` between
+`/measure` and `/feature-spec` is the default — what remains in context by then is mostly refuted
+probes, and carrying those next to real numbers in the same voice is failure #2 self-inflicted.
+
+**Why three ranks of guarantee, and why we prefer the first:**
+
+1. **Baked into a tool** — cannot be skipped. `npm run simulate` running both horizons by default
+   fixed permanently what "read both horizons" as a rule never did.
+2. **A step that emits an artifact** — visible when skipped.
+3. **A rule in a file** — fires only if read and applied. This is where every failure lives.
+
+## Done
+
+- **`npm run impact`** — rank 1. Answers "who else reads this?" from the tracked tree, which is the
+  question that, answered from memory, created `TARGET_COVER`, `MIN_DEMAND` and `surplusDrawable`.
+- **The design-hazards worksheet** (`.agents/skills/shared/design-hazards.md`) — rank 2. Six hazards,
+  each from a defect that shipped, with rows filled from command output.
+- **`/measure`** — rank 2. The stage superpowers has no equivalent of.
+
 ## Left to do
 
-1. **Design the project-specific skills.** Open question, and the real work. The shape has to answer:
-   what makes an agent actually do the check before producing output? Candidates worth weighing —
-   a system-interaction map that must be filled in from the code (with events as a required row); a
-   measurement-first gate that refuses to accept a design until a number exists; making the
-   *evidence*, not the plan, the artifact that gets reviewed.
-2. **Decide what replaces `/spec-review` and the superpowers workflow**, or whether they survive in
-   reduced form.
-3. **Prune the docs the same way** — `docs/planned/` and `docs/build-plans/` have not had the same pass.
+1. **`/brainstorm`** — prose discussion, no forced-choice lists, terminal state is `/measure` rather
+   than a spec.
+2. **`/feature-spec`** — four-field header, hazard worksheet, refuses to start without evidence.
+3. **`/build-plan`** — small, and mostly restraint: files, task order and the interfaces between
+   tasks, explicitly not the code. Its self-review is the final step, not a second expensive gate.
+4. **Rewrite `/spec-review`'s rubric** to the design hazards, with "is this row filled with evidence
+   or assertion" as its first question.
+5. **Dogfood `/measure` on a real roadmap question** before trusting it. Roadmap item 2 (`HOLD_COVER`
+   capping below `SURPLUS_MARGIN`) is the natural first one — it is already written as
+   "first step is a measurement, not a change".
