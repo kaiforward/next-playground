@@ -96,6 +96,23 @@ direction was picked before the evidence, it cost a PR.
   outrank raw tonnage, and giving the player a mechanical lever over flow priority. Explicitly
   separable from the donor-side reserve change (which only alters how much a market may *give*,
   never who is *served* first) and not scoped into it.
+- Kai, 2026-08-03 (during donor-reserve verification, prompted by the ship_frames empty-tail
+  finding): the deeper problem is upstream of flow priority — colonisation is far too generous
+  (the AI founds essentially everything by ~tick 500, and those colonies then leech for thousands
+  of ticks: served last, growing slowly, with little capacity to lift themselves out). Direction,
+  stated as opinion not decision: make colonisation resource-aware; make production planning
+  consider global faction/market needs rather than purely local ones; plus the other queued fixes.
+  The chronic marginality of mid-size consumers on thin chains (ship_frames especially) is a
+  symptom of this, not of the logistics rules alone.
+- Kai, 2026-08-03 (after the long-horizon stability read): now that monetary mechanics exist,
+  **systematically remove anything that is still free.** The code marks several such quantities
+  itself: the logistics work budget ("free, population-scaled in v1"), the per-pop construction
+  pool base, cheap claims, a founding manifest that costs goods but no money. Colonisation in
+  particular should be a major undertaking in the Stellaris mould — very expensive and resource
+  intensive — which is also the structural fix for the leech-colony pattern above (founding
+  everything by ~t500 stops being possible when each colony must be provisioned and paid for).
+  Stated as direction; the audit itself reads roadmap-worthy and awaits Kai's placement in the
+  queue.
 
 ## Related roadmap items
 
