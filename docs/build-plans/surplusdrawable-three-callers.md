@@ -339,3 +339,62 @@ floor status drifts slowly — noted instrument caveat, composition aggregates o
   live suspect.
 - Control prediction, recorded: baseline rests at ~0.78-0.82 (the deficit line) from t=10,000 on;
   materially exceeding it would mean the resting-state story of finding 2 is wrong.
+
+### M2 result — CONFIRMED. The "collapse" is a snapshot artifact; the edit is equilibrium-neutral
+
+Validity gates passed digit-exact (both 16k runs reproduce their 10k final frames at t=10,000
+exactly). Raw outputs in scratchpad `mech/{baseline16k,variant16k}-*`.
+
+```
+electronics consumer median cover / empty%:
+t=        10,000   11,000   12,000   13,000   14,000   16,000
+baseline  0.78/34  0.87/27  0.85/27  0.88/23  0.87/17  0.90/11
+variant   0.21/46  0.75/31  0.85/28  0.87/22  0.88/19  0.90/12
+
+luxuries   16k: base 0.88/12  variant 0.87/14
+ship_frames16k: base 0.85/25  variant 0.82/23
+components 16k: base 0.93/3   variant 0.95/3
+
+flow window t=5,000-5,500 (mid-divergence, all-goods totals nearly identical: 53.55M vs 53.81M):
+                                baseline        variant
+qty sourced from below-floor    1.42M (2.6%)    2.29M (4.2%)   +61%
+electronics total moved         1.327M          1.363M         +3%
+electronics INTO consumers      206.5K (15.6%)  120.1K (8.8%)  -42%
+```
+
+Findings:
+
+1. **The variant reaches the same equilibrium.** By t=12,000 the two runs are indistinguishable on
+   every tracked good's consumer cohort, and both settle at ~0.90/11-12% for electronics. The
+   entire session-63 "0.78 → 0.21 collapse" is two phases of one recovery curve sampled at
+   t=10,000. The edit's real cost is transient: consumer-shelf fill is delayed ~1,000-2,000 ticks.
+2. **The mid-game mechanism is flow diversion, not flow reduction.** Total haul quantity is
+   saturated and identical; electronics moves slightly MORE under the variant, but 42% less of it
+   lands on consumer-role markets during the scarcity era, while below-floor-sourced quantity
+   rises 61%. Correction to M1-finding-2's resting-state guess: the baseline does not rest at the
+   deficit line — both runs keep improving to ~0.90 by 16k, so 0.78 at t=10,000 was itself still
+   mid-transient.
+3. **Instrument finding, galaxy-scale: the 10,000-tick "equilibrium" horizon is INSIDE the startup
+   transient for late-recovering metrics** (high-tier consumer cover: electronics crosses 0.7
+   around t≈9,700; luxuries hits 0.81 at t=10,000 exactly, from 0.34 at t=9,500). Any A/B read of
+   such a metric at 10k measures recovery timing, not equilibrium level. Needs to go to the
+   measurement-traps memory and the simulate docs.
+
+## M3 claim — the diversion route
+
+The mid-game diversion routes through sink priority, not source starvation: in the t=5,000-5,500
+window the variant delivers materially more electronics into self-supplier-role deficit sinks than
+baseline, and increased deliveries into non-consumer roles account for the bulk of the ~87K/window
+drop in into-consumer deliveries.
+
+## M3 falsifier, committed before any run
+
+Instrument: same diag with per-window electronics inbound quantity split by sink role
+(consumer / self-supplier / exporter / inert) and distinct sink counts per role; two runs to
+t=5,500 with the single window t=5,000-5,500 (validity gate: window totals must reproduce the 16k
+runs' window-1 aggregates, deterministic prefix).
+
+- **FALSE if** variant electronics-into-self-suppliers ≤ 1.1× baseline's; and
+- **the diversion framing as a whole is wrong if** the summed increase into non-consumer roles
+  accounts for < 50% of the into-consumer drop — then the flow moved across ticks/goods instead
+  and the instrument goes to per-endpoint tracking.
