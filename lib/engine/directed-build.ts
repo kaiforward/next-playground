@@ -10,6 +10,7 @@
 import type { ResourceVector } from "@/lib/types/game";
 import type { SystemControl, WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
 import { DIRECTED_BUILD, SPECULATIVE_BASICS } from "@/lib/constants/directed-build";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -36,10 +37,17 @@ import {
 export interface BuildGoodState {
   goodId: string;
   stock: number;
-  /** Cycles-of-supply PRICE anchor — what `surplusDrawable` measures an ordinary donor against, so
-   *  the input-supply gate reads "surplus" exactly as the logistics matcher does. Floored at
-   *  `MIN_DEMAND`; moving this side off the floor is an open item (see surplusDrawable). */
+  /** Cycles-of-supply PRICE anchor, floored at `MIN_DEMAND`. The input-supply gate passes it to
+   *  `surplusDrawable` for its degenerate `<= 0` guard only — nothing here is denominated in it. */
   targetStock: number;
+  /** Cycles-of-supply DONOR floor (DONOR_RESERVE_COVER × demand × anchorMult) — what an ordinary
+   *  donor keeps for itself, so the input-supply gate reads "surplus" exactly as the logistics
+   *  matcher does. Optional for engine-test fixtures; the tick path always supplies it via
+   *  toGoodMarketStates. Absent, the gate reconstructs it from `demand` without `anchorMult` rather
+   *  than falling back to `targetStock`: a fixture that omits the field is then governed by the same
+   *  demand-denominated rule as the live path, where reading the price anchor would quietly restore
+   *  the retired one. */
+  donorReserve?: number;
   /** Total local demand rate (civilian + industrial); severity weight + the self-supply gate (vs production). */
   demand: number;
   /** Civilian-only demand rate — what the fed gate reads to know whether anyone here wants this good.
@@ -691,7 +699,9 @@ function planFactionBundles(
   const surplusSystemsByGood = new Map<string, string[]>();
   for (const s of systems) {
     for (const g of s.goods) {
-      if (surplusDrawable(g.stock, g.targetStock, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
+      const donorReserve = g.donorReserve
+        ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
+      if (surplusDrawable(g.stock, g.targetStock, donorReserve, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
         const list = surplusSystemsByGood.get(g.goodId) ?? [];
         list.push(s.systemId);
         surplusSystemsByGood.set(g.goodId, list);

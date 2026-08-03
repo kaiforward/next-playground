@@ -23,8 +23,7 @@ export const DIRECTED_LOGISTICS = {
   EXPORT_RESERVE_COVER: 10,
   /**
    * Cycles of a system's REAL demand that directed logistics tries to keep on hand — the warehousing
-   * target the DEFICIT test measures against. The donor side still reads the price anchor — known-wrong,
-   * see surplusDrawable.
+   * target the DEFICIT test measures against.
    *
    * Deliberately its own constant rather than `TARGET_COVER`, despite currently holding the same
    * value. `TARGET_COVER` is the price-curve reference, and its denominator (`demandRate`) is floored
@@ -47,6 +46,27 @@ export const DIRECTED_LOGISTICS = {
   WAREHOUSE_COVER: 40,
   /** A good is a deficit when stock < logisticsTarget × this (below its warehousing target). < 1 leaves a comfortable dead-band above it (with SURPLUS_MARGIN) — the residual / negative space. */
   DEFICIT_FRACTION: 0.8,
+  /**
+   * Cycles of its own REAL demand an ordinary (non-exporter) donor keeps for itself before it will
+   * give anything away — what `surplusDrawable` measures the donor side against. Sibling of
+   * `WAREHOUSE_COVER`: both are demand-denominated logistics policy, and both ride `anchorMult`, so
+   * an event that shifts a market's anchors moves the floor a donor stops at coherently with the
+   * target the deficit side fills to.
+   *
+   * Equal to `WAREHOUSE_COVER` (and so to `TARGET_COVER`) today by choice, not by derivation — each
+   * is free to move on its own, subject to one invariant: `DONOR_RESERVE_COVER ≥ WAREHOUSE_COVER ×
+   * DEFICIT_FRACTION` (40 ≥ 32). Below that line a donor drawn down to its reserve immediately reads
+   * as a deficit sink and is refilled — a drain/refill loop rather than a dead-band.
+   *
+   * `EXPORT_RESERVE_COVER` is the naming and denominator precedent only. This constant knowingly
+   * departs from that one's immunity to `anchor_shift`: an exporter's reserve is a warehousing rule
+   * that has no business riding the price anchor, while the ordinary donor's floor is deliberately
+   * tied to the same anchor movement as the deficit line it faces across the match.
+   *
+   * The production brake is a separate question and stays where it is — `productionCeiling` still
+   * throttles at `HOLD_COVER × targetStock`, the price anchor. Nothing here moves it.
+   */
+  DONOR_RESERVE_COVER: 40,
   /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */
   MAX_HOPS: 4,
   /** Per-unit route cost = quantity × (hops × HOP_WEIGHT + totalFuelCost × FUEL_WEIGHT). */

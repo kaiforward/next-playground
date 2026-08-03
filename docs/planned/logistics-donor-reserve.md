@@ -209,6 +209,36 @@ each seed's own baseline; the delay signature present and bounded (~1–2k ticks
 The pending simulate-horizon decision (extend the labelled equilibrium horizon vs keep 10k with
 the documented trap) is Kai's open call and not blocked by this.
 
+## Verification results (2026-08-03, pre-PR)
+
+Full raw outputs in the session scratchpad (`verify/`); instrument = the session's mechanism diag
++ `--config` sim runs at 16k; trajectory pairs at seed 4242 to 20k and 30k.
+
+- **Formula identity: proven bit-for-bit.** The implemented code at seed 42/16k reproduces the
+  measured variant on every field of all 256 diag snapshots; final CSV byte-identical. The
+  M-series evidence transfers to the shipped code with no interpretation gap.
+- **Unit suite 2,122 green, `tsc` clean**, deliberate-break proof: repointing the ordinary branch
+  fails exactly the 5 pinning tests; the rejected `?? targetStock` fallback is discriminated by 1.
+- **Equilibrium parity** at 16k across seeds 42/777/4242: consumer cover medians per good, built
+  tier-1+ industry, production, shipping totals. Supplied share better at 777 (54.5% vs 52.8%),
+  temporarily lower at 4242 @16k (45.9% vs 54.1%, still filling).
+- **The tier-1 project-count 16k read the spec owed**: in-flight tier-1 projects remain lower
+  under the change at the 16k snapshot (777: 29 vs 42; 4242: 33 vs 33 — seed-dependent) while
+  built industry is at parity — a queue-timing effect, not capacity loss.
+- **FINDING — persistent empty-share elevation on the thinnest chains at one seed.** At seed 4242
+  through t=30,000 (Kai's stated limit), ship_frames consumer-empty share holds at 26-29% vs
+  baseline's 17-20% with no closing trend (cover medians at parity, 0.81-0.85 both); electronics
+  shows a milder persistent elevation (5-14% vs 1-6%). Seed 777 shows the ship_frames signature
+  at its 16k read (27% vs 15%); seed 42 converged fully. The affected markets are mid-size
+  consumers (median pop ~924 vs baseline's empty cohort at ~1,661) — the served-last stratum of
+  the severity queue on the goods with the highest demand floors. Per Kai's read: a symptom of
+  the upstream problems (colonisation generosity, locally-blind production planning, served-last
+  priority — see pricing-vs-logistics inputs), not of the donor rule per se — the old price-anchor
+  rule was not protecting these markets by design, and the mechanism-level cause of the baseline's
+  fuller mid-size consumers remains unestablished. **Whether to accept this as a documented cost
+  is the open merge decision — Kai's, with this section as its input; the upstream work owns the
+  real fix either way.**
+
 ## Out of scope
 
 The production brake (roadmap item 2), sink ordering / player flow-priority (pricing-vs-logistics),

@@ -460,7 +460,9 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
       oreSurplus: {
         systemId: "S", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
         slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
-        goods: [{ goodId: "ore", stock: 100, targetStock: 20, demand: 5, production: 0, capacityProduction: 0 }],
+        // Demand is the anchor's own basis (targetStock = TARGET_COVER × demand, so 20 ⇒ 0.5), which
+        // is also the donor reserve the gate reconstructs for a fixture that carries no `donorReserve`.
+        goods: [{ goodId: "ore", stock: 100, targetStock: 20, demand: 0.5, production: 0, capacityProduction: 0 }],
       },
     };
   }
@@ -490,12 +492,24 @@ describe("planFactionBuilds — tier-1+ input reachability", () => {
   });
 
   it("does not greenlight the factory when the in-band input holder is a non-producer (no phantom source)", () => {
-    // Same stock 22 in the 1.0–1.4× band, but production 0 → sitting on imported inventory, not a
-    // structural exporter. surplusDrawable returns 0, so ore is not a reachable input and no metals
-    // factory is built — mirroring the matcher's re-export guard at the build-planner gate.
+    // Same stock 22 in the 1.0–1.4× band above its reserve of 20, but production 0 → sitting on
+    // imported inventory, not a structural exporter. surplusDrawable returns 0, so ore is not a
+    // reachable input and no metals factory is built — mirroring the matcher's re-export guard at the
+    // build-planner gate.
     const { deficit, builder, oreSurplus } = scenario();
-    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 5, production: 0, capacityProduction: 0 }];
+    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 0.5, production: 0, capacityProduction: 0 }];
     expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBe(0);
+  });
+
+  it("greenlights the factory from a floored input holder sitting above its own demand reserve", () => {
+    // The gate reads the donor rule, not the price anchor. S is a small market: its anchor is pinned
+    // at the MIN_DEMAND floor (20), while 40 cycles of the 0.01/cycle it really uses is a reserve of
+    // 0.4. Stock 22 is under the anchor and far over the reserve, so the inputs a factory at B would
+    // receive are there — and the fixture carries no `donorReserve`, so this is also the gate's
+    // reconstruction of it from demand.
+    const { deficit, builder, oreSurplus } = scenario();
+    oreSurplus.goods = [{ goodId: "ore", stock: 22, targetStock: 20, demand: 0.01, production: 0, capacityProduction: 0 }];
+    expect(countFor(planFactionBuilds([deficit, builder, oreSurplus], () => 1, DEV_REFS), "B", "metals")).toBeGreaterThan(0);
   });
 });
 

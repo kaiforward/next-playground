@@ -63,10 +63,15 @@ function sys(
   generation: number,
   good: {
     goodId: string; stock: number; logisticsTarget: number; demand: number; civilianDemand?: number;
-    /** The PRICE anchor, which only the donor side reads. Defaults to the warehousing target, which
-     *  is what the two figures are equal to at any market whose demand clears MIN_DEMAND — the
-     *  ordinary case these fixtures describe. The floored-market cases set them apart. */
+    /** The PRICE anchor, which logistics reads only as the `targetStock <= 0` guard. Defaults to the
+     *  warehousing target, which is what the two figures are equal to at any market whose demand
+     *  clears MIN_DEMAND — the ordinary case these fixtures describe. The floored-market cases set
+     *  them apart. */
     targetStock?: number;
+    /** What the ordinary-donor branch stops at. Defaults to the same demand × anchorMult the fixture
+     *  states through its warehousing target, which is how the tick path derives it — the two covers
+     *  are equal today, so the default moves with either constant instead of pinning a figure. */
+    donorReserve?: number;
     production?: number; capacityProduction?: number; productionSuppressed?: boolean;
   },
 ): SystemLogisticsState {
@@ -76,6 +81,9 @@ function sys(
     goods: [{
       ...good,
       targetStock: good.targetStock ?? good.logisticsTarget,
+      donorReserve: good.donorReserve
+        ?? good.logisticsTarget
+          * (DIRECTED_LOGISTICS.DONOR_RESERVE_COVER / DIRECTED_LOGISTICS.WAREHOUSE_COVER),
       production,
       capacityProduction: good.capacityProduction ?? production,
       // The matcher never reads it (only the build planner's fed-gate does); these fixtures are
@@ -168,11 +176,12 @@ describe("matchFactionTransfers", () => {
     expect(transfers[0].quantity).toBe(19);
   });
 
-  // ── The donor side deliberately still reads the PRICE anchor while the deficit side reads the
-  // warehousing target. That asymmetry is known-wrong and documented as such, but it is live
-  // behaviour and these two cases pin it: both fail if the matcher's surplusDrawable call is
-  // repointed at `logisticsTarget`. Every other fixture in this file leaves the two figures equal,
-  // so without these the central claim of the split is untested in either direction.
+  // ── Both ends of a match are denominated in real demand: the deficit side fills to the warehousing
+  // target, an ordinary donor stops at its own reserve. What survives of the PRICE anchor in the donor
+  // path is the `targetStock <= 0` guard alone, and these two cases pin that shape at a floored market
+  // where the figures diverge — the exporter case fails if the guard is repointed at a demand-derived
+  // target, the ordinary-donor case if the reserve is repointed back at the anchor. Every other
+  // fixture in this file leaves the figures equal, so without these neither half is tested.
 
   it("keeps a pure exporter shipping, because the donor side reads the floored price anchor", () => {
     // The trap surplusDrawable's docstring warns about. A raw-material exporter consumes none of
@@ -193,19 +202,56 @@ describe("matchFactionTransfers", () => {
     expect(transfers[0].quantity).toBe(10);
   });
 
-  it("sizes an ordinary donor's drawable off the price anchor, not the warehousing target", () => {
-    // The non-exporter branch of the same asymmetry, at a floored market where the two diverge.
-    // A holds 2.9 against a floored anchor of 2 → clears the 1.4× margin (2.8) and donates
-    // 2.9 − 2 = 0.9. Measured against its warehousing target of 0.4 instead it would donate
-    // 2.5 — nearly three times as much, drawn out of a market the anchor says is barely above par.
+  it("sizes an ordinary donor's drawable off its own demand reserve, not the price anchor", () => {
+    // The non-exporter branch at the same floored market, where the two figures diverge. A consumes
+    // 0.01/cycle, so it keeps DONOR_RESERVE_COVER cycles of that — a reserve of 0.4 — clears the 1.4×
+    // margin on it (0.56) and donates 2.9 − 0.4 = 2.5. Measured against the floored anchor of 2 it
+    // would donate 0.9, holding back stock on behalf of a divide-by-zero guard on pricing rather than
+    // anyone who lives there.
     const donor = sys("A", 100, {
-      goodId: "food", stock: 2.9, logisticsTarget: 0.4, targetStock: 2, demand: 0.01, production: 0,
+      goodId: "food", stock: 2.9, logisticsTarget: 0.4, targetStock: 2, donorReserve: 0.4,
+      demand: 0.01, production: 0,
     });
     const consumer = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
 
     const { transfers } = matchFactionTransfers([donor, consumer], oneHop);
     expect(transfers).toHaveLength(1);
-    expect(transfers[0].quantity).toBeCloseTo(0.9, 10);
+    expect(transfers[0].quantity).toBeCloseTo(2.5, 10);
+  });
+
+  it("draws a below-anchor floored market that clears the margin on its own reserve", () => {
+    // The market the change acts on. C holds 1.5 under a floored price anchor of 2, so the old rule
+    // saw no source here at all; against its own reserve of 0.4 it is well clear of the 0.56 margin
+    // and donates 1.1. Stock the galaxy could not reach, because the market it sat on was small.
+    const floored = sys("C", 100, {
+      goodId: "food", stock: 1.5, logisticsTarget: 0.4, targetStock: 2, donorReserve: 0.4,
+      demand: 0.01, production: 0,
+    });
+    const consumer = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
+
+    const { transfers } = matchFactionTransfers([floored, consumer], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "C", toSystemId: "B" });
+    expect(transfers[0].quantity).toBeCloseTo(1.1, 10);
+  });
+
+  it("never draws an ordinary donor below its reserve, which rides the market's anchor multiplier", () => {
+    // An anchor_shift doubling A's anchors doubles the floor it stops at, exactly as it doubles the
+    // target the deficit side fills to — the two move together by construction. B wants far more than
+    // A can spare, so what binds the haul is A's own reserve: it ends holding exactly that.
+    const demand = 2;
+    const anchorMult = 2;
+    const reserve = DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * demand * anchorMult;
+    const donor = sys("A", 1e6, {
+      goodId: "food", stock: 300, demand, production: 0, donorReserve: reserve,
+      logisticsTarget: DIRECTED_LOGISTICS.WAREHOUSE_COVER * demand * anchorMult,
+    });
+    const consumer = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 1000, demand: 50 });
+
+    const { transfers } = matchFactionTransfers([donor, consumer], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0].quantity).toBeCloseTo(300 - reserve, 10);
+    expect(300 - transfers[0].quantity).toBeCloseTo(reserve, 10);
   });
 
   it("skips unreachable deficits (route cost null)", () => {
@@ -353,46 +399,56 @@ describe("matchFactionTransfers", () => {
 });
 
 // Direct coverage of the donor test shared by the logistics matcher AND the build planner.
-// The two-path rule (clears-margin OR structural-producer-above-anchor) and its guards are
+// The two-path rule (clears-margin OR structural-producer-above-reserve) and its guards are
 // pinned here so a boundary mutation — e.g. the structural-producer `>` softening to `>=`, or a
 // dropped zero-anchor guard — fails a test rather than silently regressing directed logistics.
+// These fixtures pass the same figure for the price anchor and the donor reserve, which is what the
+// tick path derives at any market whose demand clears MIN_DEMAND; the floored cases above are where
+// the two come apart.
 /** What a structural exporter holds back: EXPORT_RESERVE_COVER cycles of its own demand. */
 const exporterReserve = (demand: number) => DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * demand;
 
 describe("surplusDrawable", () => {
   const margin = DIRECTED_LOGISTICS.SURPLUS_MARGIN; // 1.4
 
-  it("returns 0 for a zero/negative demand anchor (no cycles-of-supply target), even for a producer", () => {
-    expect(surplusDrawable(50, 0, 5, 30)).toBe(0);
-    expect(surplusDrawable(50, -10, 5, 30)).toBe(0);
+  it("returns 0 for a zero/negative price anchor (the degenerate guard), even for a producer", () => {
+    expect(surplusDrawable(50, 0, 100, 5, 30)).toBe(0);
+    expect(surplusDrawable(50, -10, 100, 5, 30)).toBe(0);
   });
 
-  it("keeps ordinary stock-holders at their anchor", () => {
-    expect(surplusDrawable(100, 100, 5, 0)).toBe(0);
-    expect(surplusDrawable(90, 100, 5, 0)).toBe(0);
+  it("keeps ordinary stock-holders at their reserve", () => {
+    expect(surplusDrawable(100, 100, 100, 5, 0)).toBe(0);
+    expect(surplusDrawable(90, 100, 100, 5, 0)).toBe(0);
   });
 
-  it("path (a): any holder clearing the surplus margin donates stock above its anchor", () => {
+  it("path (a): any holder clearing the surplus margin donates stock above its reserve", () => {
     // stock 150 ≥ 100 × 1.4 = 140 → clears margin; non-producer still donates 150 − 100 = 50.
-    expect(surplusDrawable(100 * margin + 10, 100, 5, 0)).toBe(100 * margin + 10 - 100);
+    expect(surplusDrawable(100 * margin + 10, 100, 100, 5, 0)).toBe(100 * margin + 10 - 100);
   });
 
-  it("path (b): a structural producer above its anchor donates even below the 1.4× margin", () => {
-    // stock 110 = 1.1× anchor (below 140), production 30 > demand 5 → drawable is everything above
+  it("path (b): a structural producer above its reserve donates even below the 1.4× margin", () => {
+    // stock 110 = 1.1× reserve (below 140), production 30 > demand 5 → drawable is everything above
     // the exporter's own reserve (EXPORT_RESERVE_COVER cycles of demand 5).
-    expect(surplusDrawable(110, 100, 5, 30)).toBe(110 - exporterReserve(5));
+    expect(surplusDrawable(110, 100, 100, 5, 30)).toBe(110 - exporterReserve(5));
   });
 
   it("excludes a non-producer sitting in the 1.0–1.4× band (no re-export churn)", () => {
     // stock 110 in-band, production 0 ≤ demand 5, doesn't clear the margin → not drawable.
-    expect(surplusDrawable(110, 100, 5, 0)).toBe(0);
+    expect(surplusDrawable(110, 100, 100, 5, 0)).toBe(0);
   });
 
   it("excludes the production == demand boundary in-band (a balanced self-supplier is not a donor)", () => {
     // Pins the strict `production > demand`: equal production must NOT qualify as path (b).
-    expect(surplusDrawable(110, 100, 5, 5)).toBe(0);
+    expect(surplusDrawable(110, 100, 100, 5, 5)).toBe(0);
     // A hair above demand DOES qualify — confirms the boundary sits exactly at equality.
-    expect(surplusDrawable(110, 100, 5, 5.01)).toBe(110 - exporterReserve(5));
+    expect(surplusDrawable(110, 100, 100, 5, 5.01)).toBe(110 - exporterReserve(5));
+  });
+
+  it("sizes the ordinary donor's floor off demand, so a shifted price anchor does not move it", () => {
+    // The mirror of the exporter case below: same stock and reserve, anchor doubled — the donor
+    // gives away exactly the same, because nothing on this path is denominated in the anchor.
+    expect(surplusDrawable(150, 100, 100, 5, 0)).toBe(50);
+    expect(surplusDrawable(150, 200, 100, 5, 0)).toBe(50);
   });
 });
 
@@ -401,7 +457,7 @@ describe("strategic exporter reserve", () => {
     const target = 100;
     const demand = 5;
     const stock = target * 0.9;
-    const drawable = surplusDrawable(stock, target, demand, 30);
+    const drawable = surplusDrawable(stock, target, target, demand, 30);
     expect(drawable).toBeCloseTo(stock - exporterReserve(demand));
     expect(stock - drawable).toBeCloseTo(exporterReserve(demand));
   });
@@ -411,18 +467,19 @@ describe("strategic exporter reserve", () => {
     // stock, anchor doubled: the exporter keeps the same reserve and ships the same quantity.
     const demand = 5;
     const stock = 200;
-    expect(surplusDrawable(stock, 100, demand, 30)).toBeCloseTo(stock - exporterReserve(demand));
-    expect(surplusDrawable(stock, 200, demand, 30)).toBeCloseTo(stock - exporterReserve(demand));
+    expect(surplusDrawable(stock, 100, 100, demand, 30)).toBeCloseTo(stock - exporterReserve(demand));
+    expect(surplusDrawable(stock, 200, 100, demand, 30)).toBeCloseTo(stock - exporterReserve(demand));
   });
 
-  it("draws a producer below the anchor down to the reserve floor, where a non-producer draws nothing", () => {
+  it("draws a producer below its donor floor down to the reserve, where a non-producer draws nothing", () => {
     const target = 100;
     const demand = 5;
-    const stock = exporterReserve(demand) + 30; // between the reserve floor and the anchor
-    // A producer above demand deep-draws below the anchor down to the reserve — it stops AT the reserve, not the anchor.
-    expect(surplusDrawable(stock, target, demand, 30)).toBeCloseTo(30);
-    // The same sub-anchor stock with no production draws nothing — the non-producer path needs stock > anchor.
-    expect(surplusDrawable(stock, target, demand, 0)).toBe(0);
+    const stock = exporterReserve(demand) + 30; // between the exporter reserve and the donor floor
+    // A producer above demand deep-draws past the donor floor down to its reserve — it stops AT the
+    // reserve, not the floor an ordinary donor would keep.
+    expect(surplusDrawable(stock, target, target, demand, 30)).toBeCloseTo(30);
+    // The same stock with no production draws nothing — the ordinary path needs stock above its reserve.
+    expect(surplusDrawable(stock, target, target, demand, 0)).toBe(0);
   });
 
   it("does not deep-draw an input-starved former exporter despite its capacity", () => {
@@ -435,23 +492,23 @@ describe("strategic exporter reserve", () => {
   });
 
   it("does not deep-draw a suppressed structural producer", () => {
-    expect(surplusDrawable(110, 100, 5, 30, true)).toBe(0);
+    expect(surplusDrawable(110, 100, 100, 5, 30, true)).toBe(0);
   });
 
   it("keeps its own suppression meaning, distinct from the build planner's", () => {
     // Two questions, two answers, deliberately not unified. Here the question is a DRAWDOWN — may we
-    // ship this system down past its anchor as a free-flowing exporter? — and a struck producer is
-    // refused, because the output backing that reserve has stopped arriving. The build planner asks
+    // ship this system down past its donor floor as a free-flowing exporter? — and a struck producer
+    // is refused, because the output backing that reserve has stopped arriving. The build planner asks
     // whether a strike EXPLAINS a shortfall, which is only ever true where the system already holds
     // capacity in the good; a struck system with no capacity is still given the industry it lacks.
     // Collapsing the two would either deep-draw a striking exporter or freeze a striking world out of
     // construction entirely.
-    const unsuppressed = surplusDrawable(110, 100, 5, 30, false);
+    const unsuppressed = surplusDrawable(110, 100, 100, 5, 30, false);
     expect(unsuppressed).toBeGreaterThan(0);         // structural exporter: ships to its reserve
-    expect(surplusDrawable(110, 100, 5, 30, true)).toBeLessThan(unsuppressed);
+    expect(surplusDrawable(110, 100, 100, 5, 30, true)).toBeLessThan(unsuppressed);
     // The flag only ever gates the structural-exporter fast path: a donor whose production does not
     // exceed its demand is on the ordinary path either way, so suppression changes nothing there.
-    expect(surplusDrawable(150, 100, 5, 0, true)).toBe(surplusDrawable(150, 100, 5, 0, false));
+    expect(surplusDrawable(150, 100, 100, 5, 0, true)).toBe(surplusDrawable(150, 100, 100, 5, 0, false));
   });
 
   it("keeps suppressed and realized-zero former exporters on the ordinary excess path", () => {
@@ -472,18 +529,19 @@ describe("strategic exporter reserve", () => {
   });
 
   it("reserves nothing for a good with no local demand left, and pins that it is deliberate", () => {
-    // The reserve is cycles of the system's OWN demand, so a good nobody here consumes any more
-    // reserves nothing and the whole pile is drawable. Reachable in the lag window after a good's
-    // last local consumer decays away: `demand` is recomputed per logistics run while `targetStock`
-    // rides the market's persisted demandRate, so targetStock can still be positive here and the
-    // `targetStock <= 0` guard does not fire. Correct — there is no local population to hold stock
-    // for — but pinned so a future change cannot flip it silently.
-    expect(surplusDrawable(500, 100, 0, 30)).toBe(500);
-    // …and with the anchor gone too, the guard takes over and nothing is drawable. This is the trap
-    // for anyone re-denominating this side in real demand: a pure exporter's demand IS zero, so its
-    // target would be zero, and every raw-material shipment in the galaxy would stop. Only the
-    // MIN_DEMAND floor keeps the guard from firing today. See surplusDrawable's docstring.
-    expect(surplusDrawable(500, 0, 0, 30)).toBe(0);
+    // Both reserves are cycles of the system's OWN demand, so a good nobody here consumes any more
+    // reserves nothing and the whole pile is drawable — on either branch. Reachable in the lag window
+    // after a good's last local consumer decays away: `demand` is recomputed per logistics run while
+    // `targetStock` rides the market's persisted demandRate, so targetStock can still be positive here
+    // and the `targetStock <= 0` guard does not fire. Correct — there is no local population to hold
+    // stock for — but pinned so a future change cannot flip it silently.
+    expect(surplusDrawable(500, 100, 0, 0, 30)).toBe(500);
+    expect(surplusDrawable(500, 100, 0, 0, 0)).toBe(500); // ordinary donor: margin on 0 is vacuous
+    // …and with the anchor gone too, the guard takes over and nothing is drawable. That guard is the
+    // reason the anchor is still passed at all: a pure exporter's demand IS zero, so a demand-derived
+    // figure in its place would fire it and stop every raw-material shipment in the galaxy. Only the
+    // MIN_DEMAND floor keeps it from firing. See surplusDrawable's docstring.
+    expect(surplusDrawable(500, 0, 0, 0, 30)).toBe(0);
   });
 
   it("keeps the strategic reserve safely above ration cover", () => {

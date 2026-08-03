@@ -108,7 +108,7 @@ function planFoundingStock(
     const want = COLONISATION.FOUNDING_STOCK_ANCHOR_FRAC * TARGET_COVER * colonyDemandRate;
     const key = `${source.systemId}|${good.goodId}`;
     const remaining = balance.get(key)
-      ?? surplusDrawable(good.stock, good.targetStock, good.demand, good.production ?? 0, good.productionSuppressed);
+      ?? surplusDrawable(good.stock, good.targetStock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed);
     const quantity = Math.min(want, Math.max(0, remaining));
     if (!(quantity > 0)) continue;
     balance.set(key, remaining - quantity);

@@ -43,6 +43,14 @@ describe("band constant dependencies", () => {
     expect(DIRECTED_LOGISTICS.DEFICIT_FRACTION * DIRECTED_LOGISTICS.WAREHOUSE_COVER)
       .toBeGreaterThan(ECONOMY_CONSTANTS.RATION_COVER);
   });
+  it("leaves a donor drawn to its reserve above the line that would make it a sink", () => {
+    // The two ends of one match, in the same demand cycles. A donor stops at DONOR_RESERVE_COVER;
+    // it reads as a deficit again below WAREHOUSE_COVER × DEFICIT_FRACTION. Let the reserve fall
+    // under that line and every donation immediately makes the donor a sink to be refilled — a
+    // drain/refill loop across the galaxy rather than the dead-band the two thresholds are for.
+    expect(DIRECTED_LOGISTICS.DONOR_RESERVE_COVER)
+      .toBeGreaterThanOrEqual(DIRECTED_LOGISTICS.WAREHOUSE_COVER * DIRECTED_LOGISTICS.DEFICIT_FRACTION);
+  });
   it("holds the warehousing target equal to the price anchor", () => {
     // Stated, not assumed. The two are free to diverge by design — how much a warehouse holds is
     // a different question from where a good prices at par — but while they are equal, the split
