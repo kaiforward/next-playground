@@ -198,9 +198,13 @@ each seed's own baseline; the delay signature present and bounded (~1–2k ticks
 - **Build-loop metrics at 12k+** on each seed — tier-1+ industry, building levels, and colony
   tier-1 project counts (the −39% @10k mover has no 16k read today; this closes it).
 - **Inert-cohort observability**: record galaxy total stock held on inert-role markets at both
-  horizons. The design predicts it **falls** (previously-sheltered stock is released); a rise, or
-  an inert count growing while stock stays flat, means stock is being stranded rather than freed
-  and the equilibrium-parity read is not covering the affected cohort.
+  horizons. Calibrated against the measured runs' 16k CSVs (checked at review-apply time): at
+  equilibrium the honest expectation is **parity within noise** — electronics inert stock read
+  2,426 vs 2,609 and below-floor 114K vs 120K across baseline/variant, i.e. the release washes
+  out like every other metric; the release signature lives in the **transient** (below-floor-
+  sourced flow +61% in the mid-game window). The alarm is a **large sustained equilibrium rise**
+  (stock stranding), not any rise; a mid-game read or flow-composition window is the place to see
+  the release itself.
 
 The pending simulate-horizon decision (extend the labelled equilibrium horizon vs keep 10k with
 the documented trap) is Kai's open call and not blocked by this.
