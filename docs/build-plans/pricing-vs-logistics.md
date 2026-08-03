@@ -344,16 +344,137 @@ demand honesty first), Q2 dissolved by the output denominator, Q3 stays as chose
 restated in new units, Q4 explicitly deferred to the pricing pass.
 
 **Next steps, in order:**
-- `/measure` who the brake currently bites (below) — sizes how much live behaviour the brake
-  redesign changes, especially for exporters.
+- ~~`/measure` who the brake currently bites~~ — done 2026-08-03, claim falsified (below): the
+  brake is a live exporter governor; the brake change carries its own behavioural A/B.
 - `/measure` the size of the demand fiction — nominal (capacity-based) vs realized industrial input
   draw, galaxy-wide census. The full behavioural A/B (honest vs nominal) runs at implementation
   time, when an honest figure exists to A/B.
+- `/measure` (for the spec): of the throttled exporters, how many face unmet reachable demand
+  (governor wrongly engaged) vs none (sated — the mechanism working as intended)?
 - Then the spec, then `/spec-review`.
 
 ## Evidence: who does the brake bite (claim committed before the instrument ran)
 
-**Status: falsifier committed, instrument not yet run.**
+**Status: measured 2026-08-03 — claim FALSIFIED.** The falsifier (`df4640ae`) predates the run.
+The falsified claim was this session's own in-discussion arithmetic ("the brake mostly doesn't
+bind exporters while logistics drains them") — wrong, and caught for the price of one measurement.
+
+```
+Meaning:  The brake is a live governor on exporters today, not a self-supplier-only mechanism —
+          at equilibrium a third of all throttled market-checks are exporter-path, and nearly a
+          fifth of exporter checks are throttled, almost always partially (the ramp) rather than
+          fully halted. The brake redesign is therefore a material change to live export
+          behaviour, not a tidy-up.
+Claim:    exporter-path markets account for under 10% of throttled checks at equilibrium.
+Number:   equilibrium exporter share of throttled = 31.9% (94,063 ramp + 4,768 closed of
+          309,785). Exporter share of fully-closed alone: 8.1% — 95% of exporter throttling is
+          the ramp, the partial regime. Throttle rate within each path: exporters 18.3%,
+          ordinary 21.7%. Startup: exporter share of throttled 58.7% (seeded stocks).
+Horizon:  both, one 12,000-tick run. Stationarity: exporter share of throttled 37.0% → 31.9%
+          across the two late windows (falling, far above 10% in both); total throttled share of
+          checks 13.4% → 20.5% — still RISING at t=12,000, so the throttle-occupancy level is
+          not settled, only the cohort composition reading.
+Cohort:   all developed-system markets, same conditions as the dwell run (600 systems, seed 42,
+          scale 100, single seed). Per-good: exporter ramp dominated by food and water
+          (agricultural exporters); fully-closed dominated by ordinary-path food/ore/munitions.
+Licenses: Supports: the brake change needs its own behavioural A/B (the falsifier's stated
+          consequence — now in force); the operative throttle regime is the ramp, so the redesign
+          is about where the *governor* sits, not about un-halting stopped worlds; an exporter's
+          governor is today denominated in its floored LOCAL demand, unrelated to its role.
+          Does NOT support: that this throttling is wrong (a sated exporter idling may be the
+          mechanism working as intended — whether each throttled exporter faces unmet reachable
+          demand was not measured); the equilibrium level of throttle occupancy (still rising);
+          generalisation beyond seed 42.
+```
+
+**Consequence, per the pre-committed falsifier:** the brake-denominator change is a live
+behaviour change for exporters and carries its own behavioural A/B at implementation — it does
+not ride the demand-honesty change. The direction itself stands (it never rested on this claim);
+the risk ordering is updated: demand honesty is the safer half, the brake change the riskier.
+One follow-up measurement now matters for the spec: of the throttled exporters, how many face
+unmet reachable demand (governor wrongly engaged) vs none (sated, working as intended)?
+
+<details><summary>Raw output (12,000-tick run)</summary>
+
+```
+scale=100 systems=600 seed=42 ticks=12000 cycle=24 logisticsInterval=24
+band: free ≤ target(TARGET_COVER=40) < ramp < closed ≥ HOLD_COVER(1.3)×target; exporter = production > demand && !suppressed
+
+VALIDATION:
+  sampled boundary ticks: 500 (first 24, last 12000)
+  t=24: hook eligible=520  independent developed-market count=520  MATCH
+  t=6024: hook eligible=15132  independent developed-market count=15132  MATCH
+  t=12000: hook eligible=15132  independent developed-market count=15132  MATCH
+  closed-check whole-run total: 160732  expected (dwell run, deterministic): 160732  MATCH
+
+STARTUP (≤ t=1008)
+  checks: 116324  (exporter-path 22711 = 19.5%, ordinary 93613)
+  throttled (ramp+closed): 6413 = 5.5% of checks
+    ramp   4820 (exporter 3164, ordinary 1656)
+    closed 1593 (exporter 603, ordinary 990)
+  exporter share of throttled: 3767/6413 = 58.7%
+  exporter share of closed:    603/1593 = 37.9%
+  throttle rate within each path: exporters 16.6%  ordinary 2.8%
+
+STATIONARITY CHECK (t=7200–9600)
+  checks: 1513200  (exporter-path 558042 = 36.9%, ordinary 955158)
+  throttled (ramp+closed): 202014 = 13.4% of checks
+    ramp   158041 (exporter 69923, ordinary 88118)
+    closed 43973 (exporter 4885, ordinary 39088)
+  exporter share of throttled: 74808/202014 = 37.0%
+  exporter share of closed:    4885/43973 = 11.1%
+  throttle rate within each path: exporters 13.4%  ordinary 13.3%
+
+EQUILIBRIUM (t=9600–12000)
+  checks: 1513200  (exporter-path 539827 = 35.7%, ordinary 973373)
+  throttled (ramp+closed): 309785 = 20.5% of checks
+    ramp   250634 (exporter 94063, ordinary 156571)
+    closed 59151 (exporter 4768, ordinary 54383)
+  exporter share of throttled: 98831/309785 = 31.9%
+  exporter share of closed:    4768/59151 = 8.1%
+  throttle rate within each path: exporters 18.3%  ordinary 21.7%
+
+WHOLE RUN
+  checks: 6921460  (exporter-path 2287814 = 33.1%, ordinary 4633646)
+  throttled (ramp+closed): 747320 = 10.8% of checks
+    ramp   586588 (exporter 270594, ordinary 315994)
+    closed 160732 (exporter 25871, ordinary 134861)
+  exporter share of throttled: 296465/747320 = 39.7%
+  exporter share of closed:    25871/160732 = 16.1%
+  throttle rate within each path: exporters 13.0%  ordinary 9.7%
+
+CLAIM (equilibrium): exporter-path < 10% of throttled checks: 31.9% → FALSIFIED
+
+CLOSED BY GOOD (whole run, top 12 by total):
+  food             total=  23533  exporter=   2876  ordinary=  20657
+  ore              total=  15573  exporter=   5675  ordinary=   9898
+  munitions        total=  14000  exporter=   2745  ordinary=  11255
+  gas              total=  11990  exporter=   2887  ordinary=   9103
+  minerals         total=  11050  exporter=   2745  ordinary=   8305
+  metals           total=   8353  exporter=   1700  ordinary=   6653
+  water            total=   8218  exporter=    876  ordinary=   7342
+  fuel             total=   7618  exporter=   1870  ordinary=   5748
+  components       total=   6220  exporter=    707  ordinary=   5513
+  machinery        total=   6061  exporter=    165  ordinary=   5896
+  chemicals        total=   5689  exporter=   1300  ordinary=   4389
+  radioactives     total=   5010  exporter=    576  ordinary=   4434
+
+RAMP BY GOOD (whole run, top 12 by total):
+  food             total= 105561  exporter=  62656  ordinary=  42905
+  water            total=  70878  exporter=  42597  ordinary=  28281
+  munitions        total=  43183  exporter=  20797  ordinary=  22386
+  gas              total=  36539  exporter=  12856  ordinary=  23683
+  minerals         total=  31978  exporter=   8851  ordinary=  23127
+  metals           total=  28564  exporter=   5147  ordinary=  23417
+  radioactives     total=  26671  exporter=  14321  ordinary=  12350
+  ore              total=  24864  exporter=   7588  ordinary=  17276
+  chemicals        total=  19869  exporter=   6861  ordinary=  13008
+  components       total=  19584  exporter=   6763  ordinary=  12821
+  hull_plating     total=  18872  exporter=   8560  ordinary=  10312
+  machinery        total=  18300  exporter=   8307  ordinary=   9993
+```
+
+</details>
 
 **Definitions.** At each logistics evaluation (the same read point as the dwell instrument), every
 developed-system market is classified by brake state against the anchor band — *free*
