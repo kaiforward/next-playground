@@ -275,3 +275,67 @@ electronics, luxuries, ship_frames, components. Run twice: baseline (clean tree)
   levels flat + production down ⇒ suppression/starvation; levels down ⇒ planner placement),
   consumer-cohort total stock, the first snapshot tick where variant consumer median cover drops
   below 0.60 (timing shape: smooth drain vs stepped), same series for luxuries/ship_frames.
+
+### M1 result — FALSIFIED. Production is untouched; the collapse is a stalled late-game recovery
+
+Both validity gates passed digit-exact (baseline final frame: electronics 242/0.25 · 163/0.29 ·
+152/0.78 · 34%; variant: 230/0.25 · 190/0.38 · 138/0.21 · 46% — every figure matches the sim
+reports). Raw series/CSVs in the session scratchpad (`mech/{baseline,variant}-{series.json,final.csv}`).
+
+```
+galaxy electronics @ t=10,000        baseline      variant       Δ
+realized production rate             786,874.9     784,723.2     -0.3%   (bar was ±10%)
+building levels                      2,621         2,688         +2.6%
+total standing stock                 9,046,774     9,382,741     +3.7%
+consumer-cohort standing stock       265,451       183,301       -31%
+
+trajectory (electronics consumer median cover / empty%):
+t=       5000   6000   7000   7500   8000   8500   9000   9500   10000
+base     0.00   0.00   0.00   0.12   0.33   0.20   0.25   0.67   0.78
+         /88%   /75%   /58%   /49%   /41%   /47%   /44%   /36%   /34%
+variant  0.00   0.00   0.00   0.00   0.00   0.00   0.00   0.00   0.21
+         /90%   /90%   /86%   /82%   /80%   /71%   /63%   /54%   /46%
+consStock: base 43K→265K over the window; variant held at 21-87K until t~9000 (5-10x below)
+```
+
+Three findings on top of the falsification:
+
+1. **Baseline 0.78 is not a steady state — it is a late-arriving recovery.** Baseline electronics
+   consumers sit at ~0 cover, 80-90% empty, for the entire mid-game; shelves fill only from
+   t≈7,000 on the back of a 13x production ramp (levels 137 → 2,621). The variant tracks the
+   identical curve until t≈5,500, then stalls ~2,000+ ticks behind: at t=10,000 it sits where
+   baseline was at t≈8,000-8,500, still rising. "0.78 vs 0.21" is two phases of the same curve.
+2. **The depressed consumers are ABOVE-floor markets.** `WAREHOUSE_COVER` = `TARGET_COVER` = 40,
+   so the two anchors are identical wherever real demand clears `MIN_DEMAND` — the edit perturbs
+   below-floor markets only. Final-frame CSV split: the electronics consumer cohort is ~99%
+   above-floor in both runs (151/152 and 136/138; median pop ~135 vs the ~50-pop floor threshold).
+   Baseline above-floor consumers rest at fill 0.80 of the warehouse target — exactly the
+   DEFICIT_FRACTION line, which is what "healthy 0.78" is. The variant's depressed consumers are
+   markets whose own thresholds the edit does not touch: the starvation is imposed upstream.
+3. Production stories (2: industry-map steering, 3: exporter-flip cascade) are dead at the galaxy
+   scale: production, levels, and total stock are all at-or-above baseline. The mechanism is pure
+   distribution: the same goods exist and consumers do not receive them for thousands of ticks.
+
+## M2 claim — delay vs standing drain
+
+The variant does not lower the electronics consumer equilibrium — it delays it. Run past 10,000
+ticks, the variant consumer cohort continues along baseline's recovery curve to baseline's resting
+level (the deficit line, ~0.78-0.82) instead of plateauing below it.
+
+## M2 falsifier, committed before any run
+
+Instrument: extended `mechanism-diag.ts` — both runs to 16,000 ticks, same snapshots, plus two
+flow-composition windows (t=5,000-5,500 and t=12,000-12,500) aggregating `flowEvents` per window:
+haul quantity sourced from below-floor donors vs above-floor, electronics quantity delivered into
+consumer-role markets, and churn (system,good) pairs appearing as both source and sink within one
+window. Endpoint classification uses a floor-status map refreshed every 50 ticks (post-tick state;
+floor status drifts slowly — noted instrument caveat, composition aggregates only).
+
+- **Validity gate:** each extended run must reproduce its own 10,000-tick final frame digit-exact
+  at t=10,000 (deterministic same-seed prefix). Miss ⇒ INCONCLUSIVE, instrument fault.
+- **The claim is FALSE if** at t=16,000 the variant electronics consumer median cover is ≤ 0.60,
+  **or** the t=12,000→16,000 trend is flat (Δ < +0.05 across the window) while still below 0.70.
+  Either reading means a standing drain holds the cohort down and the churn mechanism is the
+  live suspect.
+- Control prediction, recorded: baseline rests at ~0.78-0.82 (the deficit line) from t=10,000 on;
+  materially exceeding it would mean the resting-state story of finding 2 is wrong.
