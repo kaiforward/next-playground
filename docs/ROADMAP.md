@@ -35,16 +35,6 @@ Ordered. These gate PR6: its presentation layer must sit on an economy that is s
 numbers it presents are re-tuned underneath it. (Item 1, the `surplusDrawable` donor side, shipped
 as #212 — rows keep their numbers when one ships, so references stay stable.)
 
-4. **[S] An exporter's resting price is pinned at its ceiling, not graded** — a drawn exporter rests at
-   `EXPORT_RESERVE_COVER` (10 cycles), below the price curve's saturation point, so the curve clamps.
-   Measured at equilibrium: 3.00× / 3.00× / 2.50× for `electronics` / `luxuries` / `fuel`. Price stops
-   being a health gauge on exactly the cohort that ships goods.
-   *Next step:* a **decision, not a change** — is a flat exporter price acceptable (exporters run drained
-   by design, importers carry the dispersion), or must it grade?
-   *Don't:* lower the anchor (retracted — see item 5), and don't raise the reserve (that withholds real
-   stock from importers). If it must grade, the lever is the curve's saturation point, which makes this a
-   companion to per-good `MarketCurve.k`.
-
 5. **[M] `TARGET_COVER` carries three roles in one constant** — authored as a *pricing* reference and the
    whole-roster knob for price dispersion, then borrowed as a fill target and as `productionCeiling`'s
    throttle knee. #211 already took the logistics deficit line off it (`WAREHOUSE_COVER` owns that now,
@@ -128,9 +118,21 @@ as #212 — rows keep their numbers when one ships, so references stay stable.)
 No order. Pull from here when the queue empties, or fold one in when a PR is already in the file.
 
 **Economy / simulation**
+- **[L] Goods-pricing revisit** — moved way back from the economy queue by explicit decision
+  (2026-08-03): pricing is only worth reworking when demand becomes partly monetary — pop wages
+  and real goods purchase, or inter-faction trade agreements / shared markets. Carries the former
+  queue item 4 unresolved: an exporter's resting price pins at its ceiling (measured at
+  equilibrium: 3.00× / 3.00× / 2.50× for `electronics` / `luxuries` / `fuel` — a drawn exporter
+  rests at `EXPORT_RESERVE_COVER`, below the curve's saturation point, so the curve clamps, and
+  price stops being a health gauge on exactly the cohort that ships goods). Acceptable meanwhile:
+  exporters run drained by design, importers carry the dispersion.
+  *Don't:* lower the anchor (retracted — see queue item 5) or raise the export reserve (withholds
+  real stock from importers). If grading is wanted, the lever is the curve's saturation point —
+  which makes the `MarketCurve.k` item below this work's natural first slice.
 - **[M] Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
   real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
   is 1 for every good and `priceFloor`/`priceCeiling` is a pure tier lookup with zero per-good variation.
+  Likely folds into the goods-pricing revisit above when that comes forward.
 - **[M] Government layer revisit** — `GOVERNMENT_TYPES` carries only event weights and a danger baseline
   since the flat `consumptionBoosts` term was deleted. Governments are economically inert until something
   replaces it as an economic axis.

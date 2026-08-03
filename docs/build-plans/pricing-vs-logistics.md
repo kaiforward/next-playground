@@ -116,7 +116,8 @@ direction was picked before the evidence, it cost a PR.
 
 ## Related roadmap items
 
-Items 4 and 5 in `docs/ROADMAP.md` touch this. Item 1 (the donor side) shipped as #212 — the
+Item 5 in `docs/ROADMAP.md` touches this (item 4, exporter price pinning, moved to the unqueued
+goods-pricing revisit on 2026-08-03 — pricing rework waits for pop wages or inter-faction trade). Item 1 (the donor side) shipped as #212 — the
 generosity rule now reads `DONOR_RESERVE_COVER`. Item 2 closed 2026-08-03 as chosen conservatism
 (the [1.3, 1.4)× self-supplier lock is intended; see memory `killed-designs`) — **which makes this
 session the sole owner of the brake-denominator question**: `productionCeiling`'s
