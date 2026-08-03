@@ -9,7 +9,6 @@ function state(over: Partial<GoodMarketState> = {}): GoodMarketState {
   return {
     goodId: "water",
     stock: 100,
-    targetStock: 100,
     logisticsTarget: 100,
     donorReserve: 100,
     demand: 10,

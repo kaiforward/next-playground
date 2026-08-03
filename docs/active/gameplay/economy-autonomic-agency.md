@@ -116,10 +116,9 @@ at and the target a sink fills to together.
   caps a producer at `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin — without it a
   structural exporter could never form a surplus, and directed logistics went dead for every good its
   producers also consume (food, water, biomass).
-  Both ends of the match are denominated in real demand: no logistics decision reads the price anchor
-  any more. The one thing that still does is `surplusDrawable`'s `targetStock ≤ 0` guard, which runs
-  *before* the exporter branch — a pure exporter's real demand is zero, so only the `MIN_DEMAND`-floored
-  anchor keeps that guard from stopping raw-material trade dead. Moving the donor side was measured
+  Both ends of the match are denominated in real demand: the price anchor does not reach logistics
+  at all — the production brake (`productionCeiling` at `HOLD_COVER × targetStock`) is the one
+  physical mechanism still measured against it. Moving the donor side was measured
   end to end first: equilibrium is unchanged on every tracked good, galaxy production −0.3%, and the
   accepted cost is transient — stock the anchor used to over-shelter on small markets now feeds the
   front of the severity queue, so mid-game consumer shelves fill ~1,000–2,000 ticks later.

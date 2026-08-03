@@ -61,8 +61,8 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  * only to be drained straight back to it, so it exported its thin margin and nothing more.
  *
  * The ordinary donor's floor is demand-denominated for the same reason, and both sides of the match
- * now are: the deficit test fills to `logisticsTarget`, the donor stops at `donorReserve`, and
- * neither reads the `MIN_DEMAND`-floored price anchor — which on a small market states a
+ * are: the deficit test fills to `logisticsTarget`, the donor stops at `donorReserve`, and nothing
+ * in this function reads the `MIN_DEMAND`-floored price anchor — which on a small market states a
  * divide-by-zero guard on *pricing* rather than anything anyone there consumes. Moving this side was
  * measured end to end first: equilibrium is unchanged on every tracked good (consumer cover matches
  * baseline at 16,000 ticks, galaxy production −0.3%). The accepted cost is transient — stock the
@@ -71,10 +71,6 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  * consumer-cover "collapse" once read off a 10,000-tick A/B was a horizon artifact: that horizon
  * sits inside the transient for high-tier consumer cover, which is why any A/B of it is taken at
  * 12,000+ or as a trajectory.
- *
- * `targetStock` survives here only as the `<= 0` guard, and that guard is a trap: it runs BEFORE the
- * exporter branch, so handing it a demand-derived figure (legitimately 0 for a pure exporter) would
- * return 0 drawable and stop raw-material trade dead. Only the floored anchor keeps it from firing.
  *
  * At `demand === 0` the reserve is 0, the SURPLUS_MARGIN test is vacuous and the market's entire
  * stock is drawable. Deliberate: there is no local consumption to hold stock for, and it mirrors
@@ -90,13 +86,11 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  */
 export function surplusDrawable(
   stock: number,
-  targetStock: number,
   donorReserve: number,
   demand: number,
   production: number,
   productionSuppressed = false,
 ): number {
-  if (targetStock <= 0) return 0;
   const exporterReserve = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * Math.max(0, demand);
   if (production > demand && !productionSuppressed) return Math.max(0, stock - exporterReserve);
 
@@ -114,12 +108,6 @@ export function systemLogisticsGeneration(population: number): number {
 export interface GoodMarketState {
   goodId: string;
   stock: number;
-  /** Cycles-of-supply PRICE anchor (TARGET_COVER × demandRate × anchorMult), where the good prices at
-   *  par. Its denominator floors at `MIN_DEMAND`, so it describes a pricing guard rather than local
-   *  need on any market below that floor. No logistics decision is denominated in it any more; it
-   *  reaches `surplusDrawable` only as the `<= 0` guard that keeps a demand-derived figure from
-   *  stopping raw-material trade — see that docstring. */
-  targetStock: number;
   /** Cycles-of-supply WAREHOUSING target (WAREHOUSE_COVER × demand × anchorMult) — how much of the
    *  good this system tries to keep on hand. Deficit ⇔ stock < logisticsTarget × DEFICIT_FRACTION.
    *  Denominated in the system's REAL demand, unfloored, so a market whose demand sits under
@@ -234,7 +222,7 @@ export function matchFactionTransfers(
       }
       // Surplus source — standing excess inventory above the donor's own reserve OR a structural
       // producer (see surplusDrawable; the latter is what the production throttle would otherwise suppress).
-      const drawable = surplusDrawable(g.stock, g.targetStock, g.donorReserve, g.demand, g.production, g.productionSuppressed);
+      const drawable = surplusDrawable(g.stock, g.donorReserve, g.demand, g.production, g.productionSuppressed);
       if (drawable > 0) {
         const bySystem = surplusesByGood.get(g.goodId) ?? new Map<string, Surplus>();
         bySystem.set(s.systemId, {

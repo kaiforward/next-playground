@@ -23,18 +23,6 @@ import type { ResourceVector } from "@/lib/types/game";
 export const DEFAULT_ELASTICITY = 1;
 
 /**
- * Cycles of cover (stock ÷ local demand rate) at which a good's mid price equals
- * its basePrice. The single global reference that replaces the per-good anchor
- * table — per-good market depth now emerges from per-good demand rates.
- *
- * The single global cover lever for the 26-good roster: at 40, every good keeps
- * non-trivial cross-system price dispersion, so staples (deep cover) and advanced
- * goods (thin cover) are both tradeable at once. Lower values pin advanced goods
- * to the price floor (cheap everywhere); higher values pin staples to the ceiling.
- * Per-good imbalances are tuned via each good's production coeff / per-capita need
- * (see physical-economy.ts); this stays the whole-roster knob.
- */
-/**
  * Floor on the cycles-of-supply denominator so a near-empty system yields a finite
  * cover instead of a divide-by-zero / zero reference. First-draft value; tuned via `npm run simulate`.
  */

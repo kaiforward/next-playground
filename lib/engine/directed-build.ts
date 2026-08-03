@@ -37,16 +37,11 @@ import {
 export interface BuildGoodState {
   goodId: string;
   stock: number;
-  /** Cycles-of-supply PRICE anchor, floored at `MIN_DEMAND`. The input-supply gate passes it to
-   *  `surplusDrawable` for its degenerate `<= 0` guard only — nothing here is denominated in it. */
-  targetStock: number;
   /** Cycles-of-supply DONOR floor (DONOR_RESERVE_COVER × demand × anchorMult) — what an ordinary
    *  donor keeps for itself, so the input-supply gate reads "surplus" exactly as the logistics
    *  matcher does. Optional for engine-test fixtures; the tick path always supplies it via
-   *  toGoodMarketStates. Absent, the gate reconstructs it from `demand` without `anchorMult` rather
-   *  than falling back to `targetStock`: a fixture that omits the field is then governed by the same
-   *  demand-denominated rule as the live path, where reading the price anchor would quietly restore
-   *  the retired one. */
+   *  toGoodMarketStates. Absent, the gate reconstructs it from `demand` without `anchorMult`, so a
+   *  fixture that omits the field is governed by the same demand-denominated rule as the live path. */
   donorReserve?: number;
   /** Total local demand rate (civilian + industrial); severity weight + the self-supply gate (vs production). */
   demand: number;
@@ -66,8 +61,8 @@ export interface BuildGoodState {
   capacityProduction: number;
   /**
    * Persisted consumption satisfaction from the last economy cycle (delivered ÷ demanded, ∈
-   * [0,1]; missing ⇒ 1) — what `fed()` reads. stock/targetStock stay on this type for the
-   * input-supply gate; they do not feed the housing gate.
+   * [0,1]; missing ⇒ 1) — what `fed()` reads. `stock` stays on this type for the
+   * input-supply gate; it does not feed the housing gate.
    */
   satisfaction?: number;
   /** Strike or maintenance reduced actual output; event modifiers deliberately do not set this. */
@@ -701,7 +696,7 @@ function planFactionBundles(
     for (const g of s.goods) {
       const donorReserve = g.donorReserve
         ?? DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, g.demand);
-      if (surplusDrawable(g.stock, g.targetStock, donorReserve, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
+      if (surplusDrawable(g.stock, donorReserve, g.demand, g.production ?? 0, g.productionSuppressed) > 0) {
         const list = surplusSystemsByGood.get(g.goodId) ?? [];
         list.push(s.systemId);
         surplusSystemsByGood.set(g.goodId, list);

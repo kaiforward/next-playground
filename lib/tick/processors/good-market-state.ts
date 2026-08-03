@@ -3,20 +3,15 @@
  * the directed-build planner. Given one system's buildings/population/yields and its
  * market rows, produce the engine's GoodMarketState[]: per good, current stock, the cycles-of-supply
  * warehousing target the deficit test measures against (logisticsTarget), the donor floor an
- * ordinary source stops at (donorReserve), the price anchor (targetStock), and total demand
- * (civilian consumption + industrial input draw). One definition so both processors read markets
- * identically.
+ * ordinary source stops at (donorReserve), and total demand (civilian consumption + industrial
+ * input draw). One definition so both processors read markets identically.
  *
- * The stock figures are NOT interchangeable. `targetStock` divides by the row's `demandRate`, which
- * floors at `MIN_DEMAND` — a divide-by-zero guard on *pricing* — so below that floor it describes the
- * guard rather than anything consumed locally. `logisticsTarget` and `donorReserve` divide by real
- * demand: both sides of a match are denominated in what the system actually uses, and the anchor
- * reaches logistics only as `surplusDrawable`'s degenerate `<= 0` guard.
+ * Everything here divides by REAL demand — deliberately not the row's `demandRate`, which floors at
+ * `MIN_DEMAND` (a divide-by-zero guard on *pricing*) and below that floor describes the guard rather
+ * than anything consumed locally. The price anchor does not reach logistics at all.
  */
 import type { ResourceVector } from "@/lib/types/game";
-import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
-import { GOODS } from "@/lib/constants/goods";
 import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/industry";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
@@ -36,14 +31,12 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
 
   const goods: GoodMarketState[] = [];
   for (const m of row.markets) {
-    const band = marketBandForRow(m, GOODS[m.goodId]);
     const civ = consByKey.get(m.goodId) ?? 0;
     const industrial = inputDemandFromProduction(m.goodId, prodByKey);
     const demand = civ + industrial;
     goods.push({
       goodId: m.goodId,
       stock: m.stock,
-      targetStock: band.targetStock,
       // Cycles of the demand this system actually has. Both carry `anchorMult` so an event that
       // shifts a market's anchor moves the warehousing target and the donor floor together.
       logisticsTarget: DIRECTED_LOGISTICS.WAREHOUSE_COVER * Math.max(0, demand) * m.anchorMult,

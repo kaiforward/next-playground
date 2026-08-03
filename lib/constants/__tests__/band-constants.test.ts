@@ -27,7 +27,7 @@ function sysWithGoods(readings: GoodSatisfaction[]): BuildSystemState {
     buildings: {}, slotCap: emptyResourceVector(),
     generalSpace: 10, habitableSpace: 10,
     goods: readings.map((r) => ({
-      goodId: r.goodId, stock: 0, targetStock: 0, demand: r.demanded, civilianDemand: r.demanded,
+      goodId: r.goodId, stock: 0, demand: r.demanded, civilianDemand: r.demanded,
       capacityProduction: 0, satisfaction: r.satisfaction,
     })),
   };
