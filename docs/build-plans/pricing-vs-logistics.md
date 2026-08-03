@@ -133,6 +133,42 @@ direction was picked before the evidence, it cost a PR.
   capacity) reads as logistics-depth-pass material, not a threshold tweak. All stated as leanings;
   the dead zone's own fate still waits on the dwell-time evidence above.
 
+## Evidence: dead-zone dwell time (claim committed before the instrument ran)
+
+**Status: falsifier committed, instrument not yet run.** Numbers land below when it has.
+
+**Definitions.** A market is *in the dead zone* at a logistics evaluation when both are true at the
+matcher's own read point: `stock ≥ HOLD_COVER × targetStock` (the brake ceiling — production fully
+halted, `marketBandForRow`'s anchor) and `surplusDrawable(...) === 0` (donation refused). One sample
+per market per logistics evaluation (`LOGISTICS_INTERVAL` = `CYCLE_LENGTH` = 24, so evaluations ≡
+cycles). A *visit* is a maximal run of consecutive in-zone evaluations for one (system, good). A
+*camp* is a visit of ≥ 8 consecutive evaluations — twice the ≤ 4-cycle full-rate drain-through
+width of the zone, so a camp means the market drains at well under half its nominal demand rate
+rather than merely passing through. Visits still in-zone at run end are *censored* and counted
+separately (a permanent lock shows up there, not in completed visits).
+
+**Claim.** The [1.3, 1.4)× dead zone is a real lock: at equilibrium, a material share of the
+markets that enter it camp there rather than passing through — (a) camps are ≥ 10% of completed
+visits, or (b) camps (completed + censored) hold ≥ 25% of total in-zone market-cycles, or (c) ≥ 10
+distinct markets end the run mid-camp.
+
+**Falsifier.** If at BOTH horizons (startup: visits starting in cycles 0–42; equilibrium: the last
+100 cycles of a 12,000-tick run, checked stationary against the 100 cycles before it) all three
+fail — camp share < 10% of completed visits, camp occupancy < 25% of in-zone market-cycles, and
+< 10 markets censored mid-camp — the claim is false: the zone is a transient handoff. The
+"silent locked world" legibility worry and any lock-relief argument in open question 1 lose their
+factual premise, and the brake-denominator question is argued on pricing-coupling grounds alone.
+
+**Instrument.** Hook inside the directed-logistics processor at state assembly (the matcher's read
+point, inside the tick), computing the brake line with `marketBandForRow` and the donation side with
+`surplusDrawable` — the engine's own functions. Scratch runner `.superpowers/dwell-diag.ts` drives
+`runWorldTick` for 12,000 ticks (600 systems, seed 42), reconstructs visits, cohorts floored
+(real demand < `MIN_DEMAND`) vs unfloored markets and reports per-good campers. Validation before
+reading: collector's per-evaluation eligible-market count must equal an independent count of
+developed-system market rows, and in-zone occupancy must land near the prior measurement's ~1% of
+ordinary-path checks (same seed and conditions). The lib/ hook is a measuring patch, reverted
+before write-up.
+
 ## Related roadmap items
 
 Item 4 (exporter price pinning) moved to the unqueued goods-pricing revisit on 2026-08-03 — pricing
