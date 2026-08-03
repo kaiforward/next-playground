@@ -38,13 +38,16 @@ numbers it presents are re-tuned underneath it.
    #211 fixed the deficit side. The logistics donor, the build input-supply gate and the colony founding
    manifest all read the same quantity; moving it off the `MIN_DEMAND` floor dropped `electronics` cover
    0.78 → 0.21 for reasons never established. Detail: memory `surplusdrawable-three-callers`.
-   **Measured — the build-gate theory is falsified**; the matcher donor side carries most of the
-   collapse alone (0.78 → 0.42) and the full collapse needs caller interaction. Evidence:
+   **Mechanism established — the collapse does not exist at equilibrium.** The 0.78 → 0.21 read was
+   a t=10,000 snapshot inside the startup transient: the edit delays the late-game consumer-shelf
+   fill ~1,000-2,000 ticks (scarcity-era deliveries divert from low-severity consumers to
+   high-severity self-supplier sinks) and both runs are identical from t=12,000 on. Evidence:
    [surplusdrawable-three-callers.md](./build-plans/surplusdrawable-three-callers.md).
-   *Next step:* back to brainstorm — a mechanism question (why does the matcher's donor anchor
-   collapse electronics at equilibrium?), not a caller-attribution one.
-   *Don't:* swap the denominator again; don't test donor-anchor designs per-caller in isolation —
-   the callers' effects cancel and compound good-by-good.
+   *Next step:* a design decision, in the pricing-vs-logistics session — whether to ship the
+   donor-side decoupling, weighing the real transient cost and the `targetStock <= 0`
+   exporter-guard trap; update `surplusDrawable`'s "could not be shown safe" docstring with it.
+   *Don't:* read any high-tier consumer metric at the 10k horizon as an equilibrium level — it is
+   mid-transient there (electronics/luxuries recoveries land t≈9,500-11,000).
 
 2. **[S] `HOLD_COVER` (1.3) caps production below `SURPLUS_MARGIN` (1.4)** — `productionCeiling` returns 0
    at `1.3 × targetStock`; the ordinary-donor branch of `surplusDrawable` needs `stock ≥ 1.4 ×`. So a

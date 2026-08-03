@@ -398,3 +398,56 @@ runs' window-1 aggregates, deterministic prefix).
 - **the diversion framing as a whole is wrong if** the summed increase into non-consumer roles
   accounts for < 50% of the into-consumer drop — then the flow moved across ticks/goods instead
   and the instrument goes to per-endpoint tracking.
+
+### M3 result — CONFIRMED (first bar knife-edge)
+
+Validity gate passed: the 5,500-tick runs reproduce the 16k runs' window-1 aggregates exactly.
+
+```
+electronics inbound, t=5,000-5,500      baseline              variant
+into self-suppliers                     1,086,517 (149 sinks) 1,210,019 (174 sinks)  +11.4%
+into consumers                            206,535 ( 55 sinks)   120,138 ( 38 sinks)  -42%
+into exporters + inert                     33,628                 32,706             flat
+```
+
+Ratio 1.114 vs the 1.1 bar — passed, barely; the second bar passed comfortably (+123.5K into
+self-suppliers covers 143% of the -86.4K consumer drop). Under the variant, 17 fewer consumer
+markets received ANY electronics in the window and 25 more self-suppliers did. The diverted flow
+lands on self-supplier-role deficit sinks — industrial systems with own production below their own
+(large) demand, whose severity (shortfall × demand) outranks every small pure consumer in the
+matcher's worst-first queue.
+
+## Phase 2 conclusion
+
+```
+Meaning:    The feared electronics collapse does not exist at equilibrium. The donor-anchor edit
+            delays the late-game consumer-shelf fill by ~1,000-2,000 ticks — during the scarcity
+            era it diverts deliveries from low-severity pure consumers toward high-severity
+            self-supplier sinks — and the "0.78 → 0.21 collapse" was the t=10,000 read catching
+            the two runs at different phases of the same recovery, because the 10k "equilibrium"
+            horizon sits inside the startup transient for high-tier consumer metrics.
+Claim(s):   M1 production-collapse — FALSIFIED (production Δ -0.3%). M2 delay-not-drain —
+            CONFIRMED (variant ≡ baseline from t=12,000; all four goods converge by 16k).
+            M3 diversion-to-self-suppliers — CONFIRMED (143% of the consumer drop accounted).
+Number:     electronics consumer median cover: 10k base 0.78 / variant 0.21; 12k 0.85 / 0.85;
+            16k 0.90 / 0.90. Window t=5,000-5,500: into-consumers -42%, into-self-suppliers
+            +11.4%, below-floor-sourced +61%, totals flat (53.6M vs 53.8M).
+Horizon:    startup flat (all runs); 10k IS the anomaly (mid-transient); true equilibrium read at
+            16k. The falsifier bars were stated at their own horizons and all resolved.
+Cohort:     electronics consumer-role markets (n 136-152 by run/phase), plus per-role flow sinks;
+            600 systems, seed 42, ECONOMY_SCALE=100 — single seed/config, see Licenses.
+Licenses:   SUPPORTS: unblocking the donor-side decoupling as equilibrium-safe at this config;
+            reclassifying session-63's regression as a horizon artifact; requiring high-tier
+            consumer metrics to be read at 12k+ (or as trajectories) in any future A/B.
+            Does NOT support: calling the transient cost free (consumers wait 1-2k ticks longer
+            for goods mid-game — a real, player-visible cost to weigh in the design); any claim
+            across other seeds/configs; skipping the exporter-guard trap (`targetStock <= 0` runs
+            before the exporter branch) in a real fix; a verified explanation of the single-caller
+            luxuries dips (R2 0.68 / R3 0.52 at 10k — most plausibly the same phase-race artifact,
+            since baseline luxuries hits 0.81 at t=10,000 exactly from 0.34 at t=9,500, but no 16k
+            single-caller runs were taken, so that stays a hypothesis).
+```
+
+Instrument: `.superpowers/mechanism-diag.ts` (scratch, gitignored) — kept for the session; raw
+outputs in the session scratchpad `mech/`. All `lib/` instrument edits reverted after every run
+(greps for `demandAnchor` clean); the tree never carried them into a commit.
