@@ -60,6 +60,26 @@ as #212 — rows keep their numbers when one ships, so references stay stable.)
    and is retracted; run unmodified to 416 cycles and the galaxy reaches price median 1.23×, mean D 0.030
    on its own. The anchor is never reached by design and that is fine.
 
+10. **[L] Colonisation economics — founding stops being free.** Now that monetary mechanics exist,
+    colonisation becomes a major, resource-intensive undertaking (Stellaris-scale): claims,
+    establish projects and founding manifests carry real monetary and goods cost, and the AI
+    founding policy prices colonies against its treasury instead of founding essentially everything
+    by ~t500. Absorbs the **remove-everything-free audit**: the logistics work budget ("free,
+    population-scaled in v1"), the per-pop construction pool base, cheap claims — sweep for the
+    rest. Aim: fewer, deliberate colonies — the structural fix for the leech-colony / served-last
+    pattern (the #212 documented cost, noted in `economy-autonomic-agency.md`). Design inputs:
+    [pricing-vs-logistics.md](./build-plans/pricing-vs-logistics.md) "Inputs noted". The parked
+    "colony seed size vs housing unit" item parked *because* it changes founding pacing — it may
+    un-park here, deliberately.
+    Sits before Provision by explicit ordering decision (2026-08-03): Provision's struck-world
+    resolution and band calibration would otherwise be tuned against a galaxy of cheap colonies
+    this row then removes.
+    *Next step:* `/measure` the founding-economics baseline (founding rate and timing, per-colony
+    cost today, treasury headroom at founding scale) before any design; then spec + `/spec-review`
+    (heavy cross-mechanic: treasury, build planner, colonisation-value, migration, events).
+    *Don't:* precision-tune anything Provision will re-define (its own Don't), and don't design the
+    cost model from intuition — the treasury balances and founding cadence are measurable first.
+
 ---
 
 ## Queued — supply response, then PR6
