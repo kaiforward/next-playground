@@ -50,6 +50,29 @@ numbers it presents are re-tuned underneath it.
    is decorative and the two constants need one owner. `.superpowers/lock-diag.ts` (gitignored) already
    reports per-producer stock and takes `DIAG_TICKS`/`DIAG_SYSTEMS`/`DIAG_SEED`.
 
+   ### Evidence (in progress — `/measure`)
+
+   **Claim:** the ordinary-donor branch of `surplusDrawable` (taken when `production ≤ demand`, or when
+   production is suppressed; requires `stock ≥ SURPLUS_MARGIN × targetStock`) sources zero directed-logistics
+   hauls, because `productionCeiling` halts own-production at `HOLD_COVER × targetStock` and 1.3 < 1.4.
+   Both functions read the SAME `targetStock` — the price anchor `TARGET_COVER × demandRate × anchorMult`
+   (`marketBandForRow`), confirmed at `lib/engine/tick.ts:77` and `lib/engine/directed-logistics.ts:96-99`.
+
+   **Falsifier, committed before the run:**
+   - *Any* haul sourced from the ordinary-donor branch falsifies "never fires" — the bar is a hard zero,
+     at both 1,000t and 10,000t.
+   - Separately, if that branch sources **≥ 1%** of hauls by count at either horizon, "the margin is
+     decorative" is also false and item 2 must be re-scoped rather than resolved by giving the two
+     constants one owner.
+   - A run in which no (system, good) pair *ever* sits above `1.0 × targetStock` on the ordinary path is
+     **inconclusive**, not confirmatory: the branch would be unreached for an unrelated reason and the
+     instrument has not tested the claim.
+
+   Secondary reading, same run (attribution, not a pass/fail): of any hauls the branch does source, the
+   share whose donor stock arrived by delivery/founding vs. by own production, and the occupancy of the
+   `[1.3, 1.4) × targetStock` dead band — the population that raising `HOLD_COVER` to `SURPLUS_MARGIN`
+   would unlock.
+
 3. **[S] `luxuries` consumers — re-measure before ranking anything.** Was 0.02 median cover / 53% empty;
    #211 took it to 0.81 / 37% over 150 consumer markets. Whatever remains is a smaller, different
    problem than the one originally booked. Two old suspects (build planner not committing academy-gated
