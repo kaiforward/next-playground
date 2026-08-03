@@ -119,13 +119,44 @@ probes, and carrying those next to real numbers in the same voice is failure #2 
 2. **A step that emits an artifact** — visible when skipped.
 3. **A rule in a file** — fires only if read and applied. This is where every failure lives.
 
+## Two mechanisms that worked — integrate these into the remaining skills
+
+From dogfooding `/measure` on roadmap item 2. Both are cheap, and both caught a real error *in that
+run* rather than in principle. They are the transferable part; the measurement itself was incidental.
+
+**A. Pre-commit the guard.** Write the thing that would kill your conclusion, and `git commit` it,
+*before* the conclusion exists. This is what upgrades a rank-2 artifact towards rank 1: skipping a
+step normally shows up as an **absence**, which is invisible, but editing a pre-committed guard shows
+up as a **diff**, which is not. It fired immediately — while writing up results the falsifier got
+quietly condensed into a tidier version, and `git diff` against the earlier commit exposed it. Nobody
+can audit an intention; they can audit a diff.
+
+Applies to: `/brainstorm` (its terminal falsifier should be *committed*, not merely stated),
+`/spec-review` (is this spec's falsifier in the history, or written alongside its conclusion?).
+
+**B. Force the negative statement.** Every claim carries, in the same breath, what it does **not**
+support. `/measure`'s `Licenses` field is the instance. It works for the reason this file already
+identifies — producing text beats doing the check — so the check is attached to the text-production
+itself rather than left as a separate step to skip. This is what surfaced that item 2's premise was
+backwards: the numbers were fine and the write-up was nearly done before the field forced the question.
+
+Applies to: `/feature-spec` (a "what this spec does not claim" field), `/build-plan` (what the plan
+does not cover), `/uber-review` (what a finding does not establish).
+
+**Why these two and not more rules:** neither asks anyone to be careful. A shows the skip, B makes the
+check a precondition of finishing the sentence. That is the same shape as rank 1, applied where a tool
+cannot reach.
+
 ## Done
 
 - **`npm run impact`** — rank 1. Answers "who else reads this?" from the tracked tree, which is the
   question that, answered from memory, created `TARGET_COVER`, `MIN_DEMAND` and `surplusDrawable`.
 - **The design-hazards worksheet** (`.agents/skills/shared/design-hazards.md`) — rank 2. Six hazards,
   each from a defect that shipped, with rows filled from command output.
-- **`/measure`** — rank 2. The stage superpowers has no equivalent of.
+- **`/measure`** — rank 2. The stage superpowers has no equivalent of. **Dogfooded on roadmap item 2
+  (falsified).** The run found two gaps, both now fixed: it wrote evidence into `docs/ROADMAP.md`
+  (contradicting the roadmap's own header) and it sent you to patch tracked engine code with no revert
+  step. It also produced mechanisms A and B above, which are the reusable output.
 
 ## Left to do
 
@@ -136,6 +167,11 @@ probes, and carrying those next to real numbers in the same voice is failure #2 
    tasks, explicitly not the code. Its self-review is the final step, not a second expensive gate.
 4. **Rewrite `/spec-review`'s rubric** to the design hazards, with "is this row filled with evidence
    or assertion" as its first question.
-5. **Dogfood `/measure` on a real roadmap question** before trusting it. Roadmap item 2 (`HOLD_COVER`
-   capping below `SURPLUS_MARGIN`) is the natural first one — it is already written as
-   "first step is a measurement, not a change".
+5. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
+   separate task — a checklist item on items 1-4. The test of whether it worked is the same as for
+   `/measure`: dogfood the skill on a real queue item and see whether the mechanism catches something.
+
+6. **Open, Kai's call:** should `/measure`'s reporting step require a plain-language statement *before*
+   the numbers? The preference already exists in `~/.claude/CLAUDE.md` ("lead with plain functional
+   terms") and did not fire during the item 2 write-up — which is rank 3 behaving exactly as this file
+   predicts. Moving it into the skill would make it rank 2. Raised, not decided.
