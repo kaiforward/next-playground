@@ -60,7 +60,7 @@ a thousand people or two:
 
 It is a constant authored for a typical developed system and applied at every population, so it
 distorts *small* systems hardest. Its damage is not theoretical: the colony founding manifest sizes
-each line as `FOUNDING_STOCK_ANCHOR_FRAC × TARGET_COVER × consumptionRate`, so a 2-pop federation seed
+each line as `FOUNDING_STOCK_COVER × consumptionRate`, so a 2-pop federation seed
 asks its founder for ~3006 medicine against ~36 food — the endowment is ~99% medicine by quantity, and
 founding a colony strips the founder's entire drawable medicine reserve. Under any necessity weighting
 a colony would also read as a permanent famine from birth on a good it cannot produce.

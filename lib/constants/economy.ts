@@ -1,4 +1,23 @@
-/** Cycles of total local demand held at the price/base reserve anchor. */
+/**
+ * Cycles of cover (stock ÷ local demand rate) at which a good's mid price equals
+ * its basePrice — the pricing reference (`targetStock = TARGET_COVER × demandRate
+ * × anchorMult`). The single global reference that replaces the per-good anchor
+ * table — per-good market depth emerges from per-good demand rates.
+ *
+ * The single global cover lever for the 26-good roster: at 40, every good keeps
+ * non-trivial cross-system price dispersion, so staples (deep cover) and advanced
+ * goods (thin cover) are both tradeable at once. Lower values pin advanced goods
+ * to the price floor (cheap everywhere); higher values pin staples to the ceiling.
+ * Per-good imbalances are tuned via each good's production coeff / per-capita need
+ * (see physical-economy.ts); this stays the whole-roster knob.
+ *
+ * A PRICING constant, plus one deliberate physical rider: `productionCeiling`'s
+ * throttle knee runs off the anchor this defines (`HOLD_COVER × targetStock`).
+ * Warehouse/logistics policy is denominated in cycles of real demand by its own
+ * constants (`EXPORT_RESERVE_COVER`, `WAREHOUSE_COVER`, `DONOR_RESERVE_COVER`,
+ * `FOUNDING_STOCK_COVER`) — held equal to or authored against this value where
+ * noted in their docstrings, never derived from it.
+ */
 export const TARGET_COVER = 40;
 
 /** Economy simulation constants — used by the economy tick. */

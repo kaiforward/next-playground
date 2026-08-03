@@ -26,16 +26,13 @@ There are two different "how much should sit here" numbers, and they answer diff
 `MIN_DEMAND` is a divide-by-zero guard whose own docstring calls it a floor on the *pricing*
 denominator. It was never authored to describe need.
 
-#211 moved the **deficit** side (who needs goods) onto `logisticsTarget`. Two readers were left on the
-price anchor and are the subject of this question:
+#211 moved the **deficit** side (who needs goods) onto `logisticsTarget`. Of the two readers left on
+the price anchor at that point, one remains and is the subject of this question:
 
 - **The production brake** — `productionCeiling` stops output at `HOLD_COVER × targetStock`.
-- **The generosity rule** — the ordinary-donor branch of `surplusDrawable` requires
-  `stock ≥ SURPLUS_MARGIN × targetStock`.
-
-The code already flags the second as known-wrong and left in deliberately, because the obvious fix was
-tried, could not be shown safe, and coincided with an unexplained `electronics` regression (roadmap
-item 1).
+- ~~**The generosity rule**~~ — shipped out in #212 (`DONOR_RESERVE_COVER`); the item-5 role split
+  then removed the anchor from the logistics data path entirely (`GoodMarketState` no longer carries
+  `targetStock`; `surplusDrawable`'s dead `targetStock ≤ 0` guard is deleted).
 
 ## What is measured
 
@@ -54,7 +51,9 @@ From [hold-cover-surplus-margin.md](./hold-cover-surplus-margin.md) — 600 syst
 - **Which route lifts a market over 1.4×** — own production overshooting the brake, versus the anchor
   shrinking underneath it (an `anchorMult` event, or demand decline).
 - **The other two callers of `surplusDrawable`** — the build input-supply gate and the colony founding
-  manifest. Only the logistics matcher was measured. That is roadmap item 1, still open.
+  manifest. Only the logistics matcher was measured. Both callers have since been re-pointed at
+  demand-denominated figures (#212 and the item-5 role split), but re-pointed is not measured — no
+  count of how often either fires exists.
 - **Anything about what changing `HOLD_COVER` would do.** `npm run impact` puts it in
   `economy`/`industry`/`tick` — it throttles production galaxy-wide, not just this donor edge.
 
@@ -77,12 +76,15 @@ and would otherwise be re-derived.
 Open, in rough dependency order. **No options are proposed here on purpose** — the last three times a
 direction was picked before the evidence, it cost a PR.
 
-1. Should a *physical* logistics threshold reference the price anchor at all, or should both readers move
-   to a demand-denominated figure the way the deficit side already did?
-2. If they move: what happens on markets whose real demand is under the floor, where the price anchor is
-   currently the only thing keeping the number finite? (`surplusDrawable`'s docstring names a specific
-   trap here — its `targetStock <= 0` guard runs *before* the exporter branch, so a demand-derived target
-   of 0 for a pure exporter would return zero drawable and stop raw-material trade dead.)
+1. Should the production brake reference the price anchor at all, or move to a demand-denominated
+   figure the way the deficit, donor, and founding sides already did? (It is the last physical reader —
+   the generosity rule moved in #212 and the item-5 role split took the anchor out of the logistics
+   data path entirely.)
+2. If it moves: what happens on markets whose real demand is under the floor? The anchor's `MIN_DEMAND`
+   floor is currently what keeps the brake's knee finite there. A demand-derived knee of 0 for a pure
+   exporter would make `productionCeiling` return 0 at any stock — production halted outright, the
+   brake-side mirror of the donor-side trap that died with `surplusDrawable`'s guard (there, demand 0
+   correctly meant *everything is drawable*; here it would mean *nothing may be produced*).
 3. Should the brake and the generosity line share one owner, or is a deliberate gap between them wanted?
    The measurement kills the "it never fires" argument for collapsing them, so the case has to be made
    on design grounds instead.
@@ -113,14 +115,32 @@ direction was picked before the evidence, it cost a PR.
   everything by ~t500 stops being possible when each colony must be provisioned and paid for).
   Stated as direction; the audit itself reads roadmap-worthy and awaits Kai's placement in the
   queue.
+- Kai, 2026-08-03 (post item-5 review, discussing the dead zone): the real-world hard part of
+  logistics is not per-world stock thresholds but being part of a **chain** — infrastructure,
+  cost, labour, distance (the Victoria 3 difficulty). A throughput/entrepôt world would *request
+  more inbound when its exports hit their limit* — demand propagating upstream through hubs —
+  while producers near enough to consumers ship direct. Today's greedy point-to-point matcher has
+  no hub concept, and the dead zone actively fights relaying (stock held between the brake and the
+  donation line cannot be re-shipped). On player exposure, the leaning both sides agreed on:
+  **sensible defaults for the threshold family, never raw player-tweakable valves** — per-good
+  warehouse micromanagement would be unmanageable and the numbers are illegible; if a valve ever
+  earns player agency it should be one coarse in-fiction policy (a faction stockpile stance), with
+  real player control living where the architecture already puts it (automation toggles, budgets,
+  directed orders). Also noted: the dead zone's "player must invest" pressure is invisible in the
+  UI — a world silently neither producing nor shipping — so even if dwell-time measurement shows
+  the lock binding as intended, there is a legibility question about whether an unseeable band is
+  the right *kind* of pressure. Hub-as-a-role (deliberate buffer + propagated demand + per-route
+  capacity) reads as logistics-depth-pass material, not a threshold tweak. All stated as leanings;
+  the dead zone's own fate still waits on the dwell-time evidence above.
 
 ## Related roadmap items
 
-Item 5 in `docs/ROADMAP.md` touches this (item 4, exporter price pinning, moved to the unqueued
-goods-pricing revisit on 2026-08-03 — pricing rework waits for pop wages or inter-faction trade). Item 1 (the donor side) shipped as #212 — the
+Item 4 (exporter price pinning) moved to the unqueued goods-pricing revisit on 2026-08-03 — pricing
+rework waits for pop wages or inter-faction trade. Item 1 (the donor side) shipped as #212 — the
 generosity rule now reads `DONOR_RESERVE_COVER`. Item 2 closed 2026-08-03 as chosen conservatism
 (the [1.3, 1.4)× self-supplier lock is intended; see memory `killed-designs`) — **which makes this
-session the sole owner of the brake-denominator question**: `productionCeiling`'s
-`HOLD_COVER × targetStock` is now the last physical mechanism measured against the price anchor,
-and question 1 above reduces to it alone. Item 5 (`TARGET_COVER` carrying three roles) is the
-closest sibling: the same constant, the same complaint, one layer up.
+session the sole owner of the brake-denominator question**. Item 5 (`TARGET_COVER` carrying three
+roles) shipped: the founding fill target is `FOUNDING_STOCK_COVER` cycles of raw demand, the
+harness surplus metric reads the donor line, and no logistics or planner code touches the anchor.
+`productionCeiling`'s `HOLD_COVER × targetStock` is now the *only* physical mechanism measured
+against the price anchor, and question 1 above reduces to it alone.

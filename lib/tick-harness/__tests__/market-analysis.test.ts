@@ -194,8 +194,8 @@ describe("computeMarketHealth — cover levels", () => {
   /** Warehousing targets keyed as the runner keys them, for markets whose demand clears the floor. */
   const targets = (...entries: [string, number][]) => new Map(entries);
 
-  it("reports per-good median cover and surplus/deficit fractions vs the anchor", () => {
-    // covers (stock/anchor=40): 80→2.0 surplus(≥1.4), 40→1.0 balanced, 20→0.5 deficit(<0.8).
+  it("reports per-good median cover vs the anchor and surplus/deficit fractions vs the logistics lines", () => {
+    // covers (stock/anchor=40): 80→2.0 surplus(≥1.4×donor line 40), 40→1.0 balanced, 20→0.5 deficit(<0.8).
     // Unfloored demand here matches the row's rate, so each warehousing target is the anchor too.
     const { coverLevels } = computeMarketHealth(
       [
@@ -234,11 +234,49 @@ describe("computeMarketHealth — cover levels", () => {
     expect(asBefore.coverLevels.find((c) => c.goodId === "water")?.deficitFrac).toBeCloseTo(1, 5);
   });
 
-  it("never counts a market with no known warehousing target as a deficit", () => {
-    // An unknown target is not evidence of need — an empty map must not report a starving galaxy.
-    const { coverLevels } = computeMarketHealth([market("sys-1", "water", 0)], new Map());
+  it("counts surpluses against the donor line, not the price anchor", () => {
+    // The surplus mirror of the deficit split above. Stock 45 against an anchor of 40 reads
+    // cover 1.125 — nowhere near the anchor-margin line of 56 — but sys-1's real demand sits
+    // under MIN_DEMAND, giving it a donor line of 4 × 1.4 = 5.6 that its stock clears: it is
+    // a market the donor rule would actually draw from.
+    const { coverLevels } = computeMarketHealth(
+      [market("sys-1", "water", 45), market("sys-2", "water", 45)],
+      targets(["sys-1|water", 4], ["sys-2|water", 40]),
+    );
     const water = coverLevels.find((c) => c.goodId === "water");
-    expect(water?.medianCover).toBe(0);
+    expect(water?.surplusFrac).toBeCloseTo(1 / 2, 5);
+
+    // Discrimination check, isolated to the donor comparison itself: at a warehousing target of 40,
+    // stock 45 clears the deficit line (45 ≥ 32) and sits in the dead-band below the donor line
+    // (45 < 40 × 1.4 = 56) — neither a deficit nor a surplus. Stock chosen above the deficit line so
+    // this contrast exercises the donor comparison, not the branch exclusivity.
+    const asBefore = computeMarketHealth(
+      [market("sys-1", "water", 45), market("sys-2", "water", 45)],
+      targets(["sys-1|water", 40], ["sys-2|water", 40]),
+    );
+    const before = asBefore.coverLevels.find((c) => c.goodId === "water");
+    expect(before?.surplusFrac).toBe(0);
+    expect(before?.deficitFrac).toBe(0);
+  });
+
+  it("counts a stocked market with a KNOWN zero warehousing target as a surplus (fully drawable)", () => {
+    // Real demand 0 ⇒ donor reserve 0 ⇒ the whole pile is drawable under the live donor rule
+    // (surplusDrawable's demand-0 branch). A known 0 must not be conflated with an absent entry:
+    // the target map stores an entry for every walked market, including a computed 0.
+    const { coverLevels } = computeMarketHealth(
+      [market("sys-1", "water", 30), market("sys-2", "water", 0)],
+      targets(["sys-1|water", 0], ["sys-2|water", 0]),
+    );
+    const water = coverLevels.find((c) => c.goodId === "water");
+    expect(water?.surplusFrac).toBeCloseTo(1 / 2, 5); // stocked ⇒ surplus; empty ⇒ neither
+    expect(water?.deficitFrac).toBe(0); // a zero target is never a sink
+  });
+
+  it("never counts a market with no known warehousing target as a deficit or a surplus", () => {
+    // An unknown target is not evidence of need — an empty map must not report a starving galaxy.
+    const { coverLevels } = computeMarketHealth([market("sys-1", "water", 200)], new Map());
+    const water = coverLevels.find((c) => c.goodId === "water");
     expect(water?.deficitFrac).toBe(0);
+    expect(water?.surplusFrac).toBe(0);
   });
 });

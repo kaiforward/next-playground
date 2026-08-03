@@ -63,8 +63,9 @@ export const DIRECTED_LOGISTICS = {
    * that has no business riding the price anchor, while the ordinary donor's floor is deliberately
    * tied to the same anchor movement as the deficit line it faces across the match.
    *
-   * The production brake is a separate question and stays where it is — `productionCeiling` still
-   * throttles at `HOLD_COVER × targetStock`, the price anchor. Nothing here moves it.
+   * The production brake is deliberately separate: `productionCeiling` throttles at
+   * `HOLD_COVER × targetStock`, the price anchor — the one physical mechanism still measured
+   * against it. Nothing here moves it.
    */
   DONOR_RESERVE_COVER: 40,
   /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */

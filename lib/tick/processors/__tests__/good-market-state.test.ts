@@ -35,7 +35,7 @@ const statesFor = (row: MarketRowForLogistics, population: number) =>
   toGoodMarketStates({ buildings: {}, population, yields: unitResourceVector(), markets: [row] });
 
 describe("toGoodMarketStates", () => {
-  it("passes stock + goodId through and uses the band's targetStock", () => {
+  it("passes stock + goodId through and derives demand from the system's own basis", () => {
     const m = foodMarket(7, 40);
     const out = toGoodMarketStates({
       buildings: {}, population: 100, yields: unitResourceVector(), markets: [m],
@@ -43,7 +43,6 @@ describe("toGoodMarketStates", () => {
     expect(out).toHaveLength(1);
     expect(out[0].goodId).toBe("food");
     expect(out[0].stock).toBe(7);
-    expect(out[0].targetStock).toBe(marketBandForRow(m, GOODS[m.goodId]).targetStock);
     expect(Number.isFinite(out[0].demand)).toBe(true);
     // With no buildings the industrial draw is 0, so `demand` is exactly the civilian rate at the
     // system's own labour basis — pins the civ + industrial composition, not just its finiteness.

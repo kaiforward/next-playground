@@ -208,26 +208,31 @@ function computePriceLevels(markets: WorldMarket[]): PriceLevelSummary {
 // ── Cover levels (stock vs the per-good stock targets) ──────────
 /**
  * Per-good distribution of cover = stock / price anchor, plus the share of markets standing
- * below the live logistics deficit line.
+ * below the live logistics deficit line and at/above the ordinary-donor line.
  *
- * **The two halves read different denominators, deliberately.** `medianCover` and `surplusFrac`
- * measure against the price anchor: cover is the pricing reading the supply/demand UI shows, and
- * holding it there keeps the series comparable across runs. It is a reporting convention, not a
- * replay of the donor rule — an ordinary donor measures its excess against `donorReserve`
- * (`DONOR_RESERVE_COVER × real demand`), so on a floored market `surplusFrac` no longer describes
- * who will actually give something away. `deficitFrac` measures against the warehousing target
- * (`logisticsTarget = WAREHOUSE_COVER × real demand`), because that is what `classifyMarketState`
- * sizes a deficit against. Anchor and demand denominators coincide wherever real demand clears
- * `MIN_DEMAND` and diverge below it, so a floored market can legitimately show a low
- * `medianCover` while not counting as a deficit — it is stocked for what it actually uses.
+ * **`medianCover` reads a different denominator from the two fractions, deliberately.** It measures
+ * against the price anchor: cover is the pricing reading the supply/demand UI shows, and holding it
+ * there keeps the series comparable across runs. `deficitFrac` and `surplusFrac` measure against the
+ * demand-denominated logistics thresholds, because those are what the live rules read: a deficit is
+ * `stock < logisticsTarget × DEFICIT_FRACTION` (what `classifyMarketState` sizes a deficit against),
+ * a surplus is the ordinary-donor rule `stock ≥ donorReserve × SURPLUS_MARGIN` (with `donorReserve`
+ * derived from the warehousing target via the constants' ratio). Anchor and demand denominators
+ * coincide wherever real demand clears `MIN_DEMAND` and diverge below it, so a floored market can
+ * legitimately show a low `medianCover` while not counting as a deficit — it is stocked for what it
+ * actually uses.
  *
  * This is a stock-vs-target reading only. It does NOT apply the matcher's self-supply gate
  * (`production < demand`), so a producer standing below its target counts here while the live
- * matcher would skip it as a sink. `deficitFrac` is therefore an upper bound on the markets
- * logistics acts on, not an exact replay of the match.
+ * matcher would skip it as a sink — `deficitFrac` is an upper bound on the markets logistics acts
+ * on. Symmetrically, `surplusFrac` ignores the structural-exporter path (`production > demand`,
+ * which ships far below the donor line and sources most hauls), so it is a lower bound on donors:
+ * the share of markets holding a standing excess, not a haul forecast.
  *
  * A market with no entry in `logisticsTargets` (its system absent from the run's system rows)
- * is never counted as a deficit — an unknown target is not evidence of need.
+ * is never counted as a deficit or a surplus — an unknown target is evidence of neither. A KNOWN
+ * target of 0 is different: real demand is 0, the donor reserve is 0, and under the live donor rule
+ * the market's entire stock is drawable (see `surplusDrawable`'s demand-0 branch) — so it counts as
+ * a surplus whenever it holds any stock, and can never be a deficit.
  */
 function computeCoverLevels(
   markets: WorldMarket[],
@@ -235,6 +240,11 @@ function computeCoverLevels(
 ): CoverLevelEntry[] {
   const coversByGood = new Map<string, number[]>();
   const deficitsByGood = new Map<string, number>();
+  const surplusesByGood = new Map<string, number>();
+  // The donor floor rides the same demand denominator as the warehousing target, so it is
+  // recovered from the target via the constants' ratio rather than threaded separately.
+  const donorPerTarget =
+    DIRECTED_LOGISTICS.DONOR_RESERVE_COVER / DIRECTED_LOGISTICS.WAREHOUSE_COVER;
   for (const m of markets) {
     const target = curveForRow(m, GOODS[m.goodId]).targetStock;
     if (target <= 0) continue;
@@ -242,18 +252,23 @@ function computeCoverLevels(
     list.push(m.stock / target);
     coversByGood.set(m.goodId, list);
 
-    const logisticsTarget = logisticsTargets.get(`${m.systemId}|${m.goodId}`) ?? 0;
-    const isDeficit = logisticsTarget > 0
-      && m.stock < logisticsTarget * DIRECTED_LOGISTICS.DEFICIT_FRACTION;
-    if (isDeficit) deficitsByGood.set(m.goodId, (deficitsByGood.get(m.goodId) ?? 0) + 1);
+    const logisticsTarget = logisticsTargets.get(`${m.systemId}|${m.goodId}`);
+    if (logisticsTarget === undefined) continue;
+    if (logisticsTarget > 0 && m.stock < logisticsTarget * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
+      deficitsByGood.set(m.goodId, (deficitsByGood.get(m.goodId) ?? 0) + 1);
+    } else if (
+      m.stock > 0 &&
+      m.stock >= logisticsTarget * donorPerTarget * DIRECTED_LOGISTICS.SURPLUS_MARGIN
+    ) {
+      surplusesByGood.set(m.goodId, (surplusesByGood.get(m.goodId) ?? 0) + 1);
+    }
   }
   const result: CoverLevelEntry[] = [];
   for (const [goodId, covers] of coversByGood) {
-    const surplus = covers.filter((c) => c >= DIRECTED_LOGISTICS.SURPLUS_MARGIN).length;
     result.push({
       goodId,
       medianCover: median(covers),
-      surplusFrac: surplus / covers.length,
+      surplusFrac: (surplusesByGood.get(goodId) ?? 0) / covers.length,
       deficitFrac: (deficitsByGood.get(goodId) ?? 0) / covers.length,
     });
   }

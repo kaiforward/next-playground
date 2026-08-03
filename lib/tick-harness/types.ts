@@ -54,11 +54,13 @@ export interface PriceLevelSummary {
 
 export interface CoverLevelEntry {
   goodId: string;
-  /** Median stock / targetStock (cycles-of-supply cover) across systems. */
+  /** Median stock / price anchor (cycles-of-supply cover, the pricing reading) across systems. */
   medianCover: number;
-  /** Fraction of markets at/above the surplus margin. */
+  /** Fraction of markets at/above the ordinary-donor line (donor reserve × surplus margin,
+   *  demand-denominated) — holders of a standing drawable excess. */
   surplusFrac: number;
-  /** Fraction below the deficit fraction. */
+  /** Fraction below the logistics deficit line (warehousing target × deficit fraction,
+   *  demand-denominated). */
   deficitFrac: number;
 }
 

@@ -16,7 +16,6 @@ import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
-import { TARGET_COVER } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
 const reachable: RouteCost = () => 1;
@@ -1022,10 +1021,9 @@ const SEED_BASIS: CivilianDemandBasis = {
   population: EXPANSION.COLONY_SEED_POP, technicians: 0, engineers: 0,
 };
 
-/** What the colony wants of `goodId`: its share of its own pricing anchor, per the founding policy. */
+/** What the colony wants of `goodId`: cycles of its own raw rate, per the founding policy. */
 const foundingWant = (goodId: string) =>
-  COLONISATION.FOUNDING_STOCK_ANCHOR_FRAC * TARGET_COVER
-  * consumptionRate(goodId, SEED_BASIS);
+  COLONISATION.FOUNDING_STOCK_COVER * consumptionRate(goodId, SEED_BASIS);
 
 function stockedMarket(systemId: string, goodId: string, stock: number): MarketRowForLogistics {
   return { id: `${systemId}|${goodId}`, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
@@ -1087,7 +1085,7 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
 
     const food = w.developments[0].stockManifest.find((l) => l.goodId === "food");
     const drawable = surplusDrawable(
-      stock, TARGET_COVER, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand,
+      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand,
       homeDemand, exportRate, false,
     );
     expect(drawable).toBeGreaterThan(0);
@@ -1120,7 +1118,7 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
       (d) => d.stockManifest.find((l) => l.goodId === "food")?.quantity ?? 0,
     );
     const drawable = surplusDrawable(
-      stock, TARGET_COVER, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand,
+      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand,
       homeDemand, exportRate, false,
     );
     expect(draws[0]).toBeCloseTo(foundingWant("food"), 6); // the first colony is fully provisioned…

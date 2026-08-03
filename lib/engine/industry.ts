@@ -40,7 +40,7 @@ import {
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
-import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { inputGate, inputDrawRatio } from "@/lib/engine/supply-chain";
 import { productionCeiling } from "@/lib/engine/tick";
 import { USED_SLACK, VACANCY_SLACK } from "@/lib/constants/infrastructure";
@@ -684,7 +684,7 @@ export function buildIndustryReadout(
   marketStock: Record<string, number>,
   bandOf: (goodId: string) => MarketBand | undefined,
   yields: ResourceVector,
-  demandRateOf?: (goodId: string) => number,
+  demandRateOf: (goodId: string) => number,
   logisticsFundingBoundOf?: (goodId: string) => boolean,
 ): SystemIndustryReadout {
   const parts = labourParts(buildings);
@@ -696,12 +696,9 @@ export function buildIndustryReadout(
     skill2: { have: parts.skill2Cap, need: parts.skill2Demand, fulfil: state.skill2Fulfil },
   };
   const stockOf = (g: string): number => marketStock[g] ?? 0;
-  // Runtime callers provide the authoritative aggregate draw rate. The fallback
-  // keeps pure fixtures concise; their unshifted bands encode TARGET_COVER cycles.
-  const rationStockOf = (g: string): number => {
-    const demandRate = demandRateOf?.(g) ?? (bandOf(g)?.targetStock ?? 0) / TARGET_COVER;
-    return ECONOMY_CONSTANTS.RATION_COVER * demandRate;
-  };
+  // The caller provides the authoritative aggregate draw rate — the ration threshold is
+  // demand-denominated, never recovered from the pricing band.
+  const rationStockOf = (g: string): number => ECONOMY_CONSTANTS.RATION_COVER * demandRateOf(g);
   // Isolated selling factor for a produced good ∈ [0,1]; a good with no market band sells freely (1).
   // Shared by buildingUsed and the producer idleReason.
   const sellingFactorOf = (g: string): number => {

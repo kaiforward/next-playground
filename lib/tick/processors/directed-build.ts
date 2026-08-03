@@ -11,7 +11,6 @@ import { workCostPerLevel } from "@/lib/constants/construction";
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { COLONISATION } from "@/lib/constants/colonisation";
-import { TARGET_COVER } from "@/lib/constants/economy";
 import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
@@ -80,8 +79,8 @@ export interface DirectedBuildProcessorParams {
  *
  * Sized on the COLONY's own basket — `consumptionRate` at the seed population, so the manifest is
  * mostly food and water at a small seed and only a trace of anything an engineer would want, with no
- * per-good list deciding what matters. The want per good is `FOUNDING_STOCK_ANCHOR_FRAC` of a full
- * cover of that raw rate: every good opens at the same cycles-of-supply of what the seed genuinely uses.
+ * per-good list deciding what matters. The want per good is `FOUNDING_STOCK_COVER` cycles of that
+ * raw rate: every good opens at the same cycles-of-supply of what the seed genuinely uses.
  * Deliberately not a share of the good's pricing anchor — that anchor floors at `MIN_DEMAND`, which at
  * a 2-pop seed flattens nearly every good to one figure and erases the basket's shape.
  *
@@ -105,10 +104,10 @@ function planFoundingStock(
   for (const good of toGoodMarketStates(source)) {
     const colonyDemandRate = consumptionRate(good.goodId, basis);
     if (colonyDemandRate <= 0) continue; // the seed does not consume it
-    const want = COLONISATION.FOUNDING_STOCK_ANCHOR_FRAC * TARGET_COVER * colonyDemandRate;
+    const want = COLONISATION.FOUNDING_STOCK_COVER * colonyDemandRate;
     const key = `${source.systemId}|${good.goodId}`;
     const remaining = balance.get(key)
-      ?? surplusDrawable(good.stock, good.targetStock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed);
+      ?? surplusDrawable(good.stock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed);
     const quantity = Math.min(want, Math.max(0, remaining));
     if (!(quantity > 0)) continue;
     balance.set(key, remaining - quantity);
