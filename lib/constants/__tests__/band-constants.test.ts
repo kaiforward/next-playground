@@ -7,6 +7,8 @@ import {
   D_SHORTAGE_BLEND,
 } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { COLONISATION } from "@/lib/constants/colonisation";
+import { INITIAL_RESERVE_ANCHOR_FRAC } from "@/lib/constants/market-economy";
 import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING, UNREST_PARAMS } from "@/lib/constants/population";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { VACANCY_SLACK, INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
@@ -57,6 +59,14 @@ describe("band constant dependencies", () => {
     // introduced by the demand-denominator change is confined to markets whose real demand sits
     // under MIN_DEMAND. Moving one without the other is a deliberate act that should land here.
     expect(DIRECTED_LOGISTICS.WAREHOUSE_COVER).toBe(TARGET_COVER);
+  });
+  it("holds the founding endowment at world-gen's reserve share of a full anchor cover", () => {
+    // Stated, not assumed — the docstring's authorship claim, pinned. The founding manifest opens
+    // a colony at the same share of a full cycles-of-supply cover that world-gen's initial reserve
+    // keeps of the price anchor; each is free to move (a founder's willingness to part with stock
+    // is a different question from how full a generated market starts), but moving one without the
+    // other is a deliberate act that should land here.
+    expect(COLONISATION.FOUNDING_STOCK_COVER).toBe(INITIAL_RESERVE_ANCHOR_FRAC * TARGET_COVER);
   });
   it("keeps rationing close to empty and the hold ceiling above the anchor", () => {
     expect(ECONOMY_CONSTANTS.RATION_COVER).toBeLessThan(TARGET_COVER);

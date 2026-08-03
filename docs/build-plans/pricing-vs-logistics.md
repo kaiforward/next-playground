@@ -51,7 +51,9 @@ From [hold-cover-surplus-margin.md](./hold-cover-surplus-margin.md) — 600 syst
 - **Which route lifts a market over 1.4×** — own production overshooting the brake, versus the anchor
   shrinking underneath it (an `anchorMult` event, or demand decline).
 - **The other two callers of `surplusDrawable`** — the build input-supply gate and the colony founding
-  manifest. Only the logistics matcher was measured. That is roadmap item 1, still open.
+  manifest. Only the logistics matcher was measured. Both callers have since been re-pointed at
+  demand-denominated figures (#212 and the item-5 role split), but re-pointed is not measured — no
+  count of how often either fires exists.
 - **Anything about what changing `HOLD_COVER` would do.** `npm run impact` puts it in
   `economy`/`industry`/`tick` — it throttles production galaxy-wide, not just this donor edge.
 
@@ -74,12 +76,15 @@ and would otherwise be re-derived.
 Open, in rough dependency order. **No options are proposed here on purpose** — the last three times a
 direction was picked before the evidence, it cost a PR.
 
-1. Should a *physical* logistics threshold reference the price anchor at all, or should both readers move
-   to a demand-denominated figure the way the deficit side already did?
-2. If they move: what happens on markets whose real demand is under the floor, where the price anchor is
-   currently the only thing keeping the number finite? (`surplusDrawable`'s docstring names a specific
-   trap here — its `targetStock <= 0` guard runs *before* the exporter branch, so a demand-derived target
-   of 0 for a pure exporter would return zero drawable and stop raw-material trade dead.)
+1. Should the production brake reference the price anchor at all, or move to a demand-denominated
+   figure the way the deficit, donor, and founding sides already did? (It is the last physical reader —
+   the generosity rule moved in #212 and the item-5 role split took the anchor out of the logistics
+   data path entirely.)
+2. If it moves: what happens on markets whose real demand is under the floor? The anchor's `MIN_DEMAND`
+   floor is currently what keeps the brake's knee finite there. A demand-derived knee of 0 for a pure
+   exporter would make `productionCeiling` return 0 at any stock — production halted outright, the
+   brake-side mirror of the donor-side trap that died with `surplusDrawable`'s guard (there, demand 0
+   correctly meant *everything is drawable*; here it would mean *nothing may be produced*).
 3. Should the brake and the generosity line share one owner, or is a deliberate gap between them wanted?
    The measurement kills the "it never fires" argument for collapsing them, so the case has to be made
    on design grounds instead.

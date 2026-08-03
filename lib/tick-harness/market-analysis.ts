@@ -229,7 +229,10 @@ function computePriceLevels(markets: WorldMarket[]): PriceLevelSummary {
  * the share of markets holding a standing excess, not a haul forecast.
  *
  * A market with no entry in `logisticsTargets` (its system absent from the run's system rows)
- * is never counted as a deficit or a surplus — an unknown target is evidence of neither.
+ * is never counted as a deficit or a surplus — an unknown target is evidence of neither. A KNOWN
+ * target of 0 is different: real demand is 0, the donor reserve is 0, and under the live donor rule
+ * the market's entire stock is drawable (see `surplusDrawable`'s demand-0 branch) — so it counts as
+ * a surplus whenever it holds any stock, and can never be a deficit.
  */
 function computeCoverLevels(
   markets: WorldMarket[],
@@ -249,11 +252,14 @@ function computeCoverLevels(
     list.push(m.stock / target);
     coversByGood.set(m.goodId, list);
 
-    const logisticsTarget = logisticsTargets.get(`${m.systemId}|${m.goodId}`) ?? 0;
-    if (logisticsTarget <= 0) continue;
-    if (m.stock < logisticsTarget * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
+    const logisticsTarget = logisticsTargets.get(`${m.systemId}|${m.goodId}`);
+    if (logisticsTarget === undefined) continue;
+    if (logisticsTarget > 0 && m.stock < logisticsTarget * DIRECTED_LOGISTICS.DEFICIT_FRACTION) {
       deficitsByGood.set(m.goodId, (deficitsByGood.get(m.goodId) ?? 0) + 1);
-    } else if (m.stock >= logisticsTarget * donorPerTarget * DIRECTED_LOGISTICS.SURPLUS_MARGIN) {
+    } else if (
+      m.stock > 0 &&
+      m.stock >= logisticsTarget * donorPerTarget * DIRECTED_LOGISTICS.SURPLUS_MARGIN
+    ) {
       surplusesByGood.set(m.goodId, (surplusesByGood.get(m.goodId) ?? 0) + 1);
     }
   }

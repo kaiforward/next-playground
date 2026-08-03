@@ -11,10 +11,12 @@
  * Per-good imbalances are tuned via each good's production coeff / per-capita need
  * (see physical-economy.ts); this stays the whole-roster knob.
  *
- * A PRICING constant only. Warehouse/logistics policy is denominated in cycles of
- * real demand by its own constants (`EXPORT_RESERVE_COVER`, `WAREHOUSE_COVER`,
- * `DONOR_RESERVE_COVER`, `FOUNDING_STOCK_COVER`) — held equal to or authored
- * against this value where noted in their docstrings, never derived from it.
+ * A PRICING constant, plus one deliberate physical rider: `productionCeiling`'s
+ * throttle knee runs off the anchor this defines (`HOLD_COVER × targetStock`).
+ * Warehouse/logistics policy is denominated in cycles of real demand by its own
+ * constants (`EXPORT_RESERVE_COVER`, `WAREHOUSE_COVER`, `DONOR_RESERVE_COVER`,
+ * `FOUNDING_STOCK_COVER`) — held equal to or authored against this value where
+ * noted in their docstrings, never derived from it.
  */
 export const TARGET_COVER = 40;
 

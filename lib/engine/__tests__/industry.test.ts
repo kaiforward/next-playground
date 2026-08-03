@@ -55,6 +55,7 @@ import {
   CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
@@ -292,8 +293,8 @@ describe("buildIndustryReadout", () => {
   });
 
   it("supplyChain entry is throttled (inputGate < 1) inside the ration zone", () => {
-    // Ore stock inside its emergency ration zone makes the scarcity ramp bite.
-    const marketStock = { ore: 5 };
+    // Ore stock strictly below the ration threshold (RATION_COVER × 2.5 = 5) makes the ramp bite.
+    const marketStock = { ore: 2 };
     const readout = buildIndustryReadout(buildings, pop, marketStock, bandOf, unitResourceVector(), demandRateOf);
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
@@ -343,6 +344,22 @@ describe("buildIndustryReadout", () => {
     // Input below comfort ⇒ the ramp binds even though stock > 0.
     const scarce = buildIndustryReadout(producer, producerPop, { ore: oreDraw * 0.3 }, rampBand, unitResourceVector(), rampDemand);
     expect(scarce.supplyChain.find((e) => e.goodId === "metals")!.throttledBy).toContain("ore");
+  });
+
+  it("rations input draws on the caller's demand rate, never a rate recovered from the pricing band", () => {
+    // The role-separation premise itself, as a failing test for its reversal. The band's anchor is
+    // 100, so a threshold recovered from the band (RATION_COVER × 100 / the 40-cycle anchor = 5)
+    // reads this stock as comfortably supplied — while the caller's stated demand rate puts the
+    // genuine threshold at RATION_COVER × stock, well above it. The gate must read the ramp value
+    // sqrt(1 / RATION_COVER), which it only does if the threshold comes from `demandRateOf`.
+    const gross = buildingProduction(buildings, "metals", computeLabourState(buildings, pop), unitResourceVector());
+    const oreDraw = gross * GOOD_RECIPES["metals"]["ore"];
+    const stock = oreDraw * 2; // covers the draw, so availability never binds — the ramp alone decides
+    expect(stock).toBeGreaterThan(5); // strictly above the band-derived threshold: the old rule reads 1 here
+    const readout = buildIndustryReadout(buildings, pop, { ore: stock }, bandOf, unitResourceVector(), () => stock);
+    const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
+    expect(entry.inputGate).toBeCloseTo(Math.sqrt(1 / ECONOMY_CONSTANTS.RATION_COVER), 6);
+    expect(entry.throttledBy).toContain("ore");
   });
 
   it("tier-0 goods (no recipe) are absent from supplyChain", () => {
