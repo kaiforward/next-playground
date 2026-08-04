@@ -127,8 +127,10 @@ the use figure through `GoodMarketState.demand`).
   the just-written unrest — the wrong half of both.)
 
 One pure engine function produces both figures so the logistics read, the planner, the seeder and
-the brake cannot diverge. Save-shape bump; pre-1.0 saves break by policy; all writes finite-guarded
-as `realizedProductionRate` is (`economy.ts:181-183`).
+the brake cannot diverge. **No save-format bump** (Kai 2026-08-04): all three new fields are
+additive-optional with defined absent-behaviour (suppress/mult read 1, `honestUseRate`
+live-recomputes), which is exactly the case `save.ts`'s own docstring exempts from a bump. All
+writes finite-guarded as `realizedProductionRate` is (`economy.ts:181-183`).
 
 ## Stage 2 — multi-donor matching
 
@@ -238,7 +240,9 @@ ceiling = 1 while stock ≤ min(knee, rampEnd);
   knee re-ranks import queues galaxy-wide without a line of logistics code changing. **The stage-3
   A/B runs a third arm** — new knee in the tick, `brakeCeiling` inside the draw figure pinned to
   the old anchor-based ceiling — so the brake's direct effect and the urgency ripple are
-  attributable separately.
+  attributable separately. The pin is a **committed harness switch** riding the same override
+  channel as the cadence (`runWorldTick` opts), not a local measuring patch (Kai 2026-08-04);
+  the live game never sets it.
 
 **The dead-band, restated in one unit family** (the chosen conservatism stays): brake ceiling
 `BRAKE_RAMP × BRAKE_USE_COVER` = 52 vs donation line `SURPLUS_MARGIN × DONOR_RESERVE_COVER` = 56 —
@@ -286,10 +290,10 @@ liquidity), unrest/population aggregates cohorted, interval invariance.
   10's territory.
 - The dead-band between brake and donation line: chosen conservatism, restated not resized.
 - Sink ordering (severity-first): Kai's flow-priority design space, untouched.
-- Hub/chain logistics depth: later pass; `docs/planned/negative-space-economy.md`'s "make the base
-  efficient — NOT OK" bullet is reconciled *there* — this spec's stance, per Kai 2026-08-04: the
-  negative space emerges from real constraints (budget, infrastructure, scarcity), never from
-  designed algorithmic inefficiency.
+- Hub/chain logistics depth: later pass. This spec's stance, per Kai 2026-08-04: the negative
+  space emerges from real constraints (budget, infrastructure, scarcity), never from designed
+  algorithmic inefficiency — `docs/planned/negative-space-economy.md`'s conflicting "make the base
+  efficient — NOT OK" bullet was removed the same day; its tuning guardrail now states this stance.
 - Relations' dead trade-volume driver (`relations.ts:191` counts only cross-faction flows; none
   exist) — pre-existing, booked on the roadmap 2026-08-04, wired when inter-faction trade ships.
 
@@ -374,7 +378,7 @@ IMPACT: matchFactionTransfers — CONTAINED, 1 module: directed-logistics (+30 t
 | Colonisation + founding manifest | Want line unchanged; **cap moves** (use-figure reserves via `surplusDrawable` at `processors/directed-build.ts:110`) — founders part with more; founding-horizon A/B metrics watch it. | — |
 | Treasury / purse | Ladder order is load-bearing: logistics paid **above** construction (`treasury.ts:101`) — stage 2's bill starves construction first; `funded.logistics < 1` latch is a second budget-binding channel. Both instrumented in stage 2's A/B with the raise-the-budget resolution. | — |
 | Factions + relations | **None, verified structurally**: `getTradeVolumeBetween` skips same-faction rows (`relations.ts:191`); all flow rows are same-faction by construction; independents collide as `""`. (Side discovery — the trade driver is dead code today — booked on the roadmap, out of scope.) | — |
-| Save format (`World` shape) | Three new persisted market fields (`honestUseRate`, `productionSuppressRate`, `productionMult`) + `MarketTickEntry`/`MarketView` additions; seeded at creation; finite-guarded; pre-1.0 break by policy. | — |
+| Save format (`World` shape) | Three new persisted market fields (`honestUseRate`, `productionSuppressRate`, `productionMult`) + `MarketTickEntry`/`MarketView` additions; seeded at creation; finite-guarded; additive-optional with defined fallbacks — no format bump, per `save.ts`'s authored rule (Kai 2026-08-04). | — |
 | Harness metrics | Role classifier moves with both stages (`cohort-analysis.ts:44` reads `state.demand`; `production` is realized) — **cohort discipline protocol** in §Staging (membership tables + pinned baseline partition). Cover is anchor-denominated and unmoved (verified); the surplus metric moves with the use figure — annotated. | — |
 
 ### 4. Claims about current behaviour

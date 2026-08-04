@@ -991,7 +991,7 @@ feed a brake ceiling into `useRatesByGood` — and (b) must fail.
 Consumes:   —
 
 ### Task 2 — the economy processor persists the draw figure's two live inputs and emits the strike scalar
-Files:      `lib/world/types.ts`; `lib/world/save.ts`; `lib/tick/world/economy-world.ts`;
+Files:      `lib/world/types.ts`; `lib/tick/world/economy-world.ts`;
 `lib/tick/types.ts`; `lib/tick/processors/economy.ts`; `lib/tick/adapters/memory/economy.ts`;
 `lib/world/tick.ts` (`marketRowsBySystem`); `lib/tick/world/directed-logistics-world.ts`;
 `lib/tick/processors/__tests__/economy.test.ts`
@@ -1004,7 +1004,9 @@ Interface:
 - `EconomySignals` gains `productionSuppressBySystem: Map<string, number>` — the map the processor
   already builds at `economy.ts:116-122`, emitted rather than recomputed downstream.
 - `MarketRowForLogistics` gains the same two optional fields.
-- `SAVE_FORMAT_VERSION` → 11 (per the spec's save-shape bump; pre-1.0 saves break by policy).
+- **No `SAVE_FORMAT_VERSION` bump** (Kai 2026-08-04): all three fields are additive-optional with
+  defined absent-behaviour (suppress/mult read 1, `honestUseRate` live-recomputes) — the case
+  `save.ts`'s docstring exempts. An old save loads with them absent and self-heals on first tick.
 Figure:     neither — these are **draw**-figure inputs only. Nothing here touches the use figure.
 Proves:     `lib/tick/processors/__tests__/economy.test.ts` — a system above the strike threshold
 writes `productionSuppressRate < 1` on **every** market row it owns while a calm system writes
@@ -1314,22 +1316,27 @@ Consumes:   Task 11.
 
 ### Task 15 — harness: the knee-binding-term table and the third-arm switch
 Files:      `lib/tick-harness/market-analysis.ts`; `lib/tick-harness/types.ts`;
-`lib/tick-harness/runner.ts`; `scripts/simulate.ts`
+`lib/tick-harness/runner.ts`; `lib/tick-harness/experiment.ts`; `lib/world/tick.ts`;
+`lib/tick/processors/good-market-state.ts`; `scripts/simulate.ts`
 Interface:  `HarnessResults.kneeBinding: Array<{ goodId: string; use: number; output: number; storage: number }>`
 — per good, the share of producing markets whose knee was set by each term, at both horizons. This is
 the evidence the storage-constant sizing decision is later taken on.
-The **third A/B arm** is produced by a temporary local edit pinning `toGoodMarketStates`'s
-`brakeCeilingOf` to the old anchor-based ceiling — the measuring-patch pattern the four measurements
-used (`.superpowers/diag-hooks.md`), reverted before merge and never committed.
+The **third A/B arm** is driven by a **committed switch** (Kai 2026-08-04, over the measuring-patch
+pattern): `drawBrakeCeiling?: "live" | "anchor"` (default `"live"`) on
+`ExperimentConfigSchema`/`HarnessConfig` and on `runWorldTick`'s `opts` — the second per-run
+override channel after `cadence` (`world/tick.ts:634`), threaded to `toGoodMarketStates` and read
+only by the draw figure's `brakeCeilingOf`. `"anchor"` pins it to the old anchor-based ceiling; the
+tick's own brake is untouched by the switch, and the live game never sets it — a measurement arm,
+not a gameplay flag.
 Proves:     the three shares sum to the producing-market count per good (an instrument self-check),
 and the storage share is non-zero on metals, fuel and gas — matching the arithmetic the spec's
 finding 2 derived. Fails if the binding term is recorded after the taper rather than at the knee.
 Consumes:   Tasks 11, 12.
 
 ### Gate — stage-3 A/B (three arms)
-Arms: (A) stage-2 head; (B) stage-3 head; (C) stage-3 head with the draw figure's `brakeCeiling`
-pinned to the old anchor ceiling — so the brake's direct effect and the logistics-urgency ripple are
-attributable separately.
+Arms: (A) stage-2 head; (B) stage-3 head; (C) stage-3 head with `drawBrakeCeiling: "anchor"` —
+the draw figure's `brakeCeiling` pinned to the old anchor ceiling via the committed switch (Task
+15) — so the brake's direct effect and the logistics-urgency ripple are attributable separately.
 Reads taken at **12,000+ ticks or as a trajectory** — the 10,000 label sits inside the high-tier
 startup transient — plus the 1000-tick founding horizon, cohorted, membership tables published,
 primary reads pinned to arm A's partition.
@@ -1422,10 +1429,10 @@ On the branch, before each stage's final review — not after.
 - **Sink ordering (severity-first) and player-facing flow priority.** **Dropped:** Kai's design space,
   explicitly untouched by the spec. Stage 1 changes severity's *weight*, never its *rule*.
 - **Hub/chain logistics depth — propagated demand, entrepôt roles, per-route capacity.** **Dropped:**
-  a later pass. `docs/planned/negative-space-economy.md`'s "make the base efficient — NOT OK" bullet
-  is reconciled *there*, by the spec's own decision; this pass's stance (negative space emerges from
-  budget, infrastructure and scarcity, never from designed algorithmic inefficiency) is recorded in
-  the spec and in Kai's 2026-08-04 input above.
+  a later pass. This pass's stance (negative space emerges from budget, infrastructure and scarcity,
+  never from designed algorithmic inefficiency) is recorded in the spec; the conflicting "make the
+  base efficient — NOT OK" bullet in `docs/planned/negative-space-economy.md` was removed 2026-08-04
+  (Kai), its tuning guardrail restated to this stance.
 - **Relations' dead trade-volume driver** (`getTradeVolumeBetween` counts only cross-faction flows;
   none exist). **Booked:** ROADMAP Deferred/conditional, added 2026-08-04. Pre-existing, untouched.
 - **Renaming `GoodMarketState.demand` to something that says "use".** **Dropped:** a rename touches
