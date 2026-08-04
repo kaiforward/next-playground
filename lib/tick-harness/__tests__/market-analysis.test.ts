@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   takeMarketSnapshot,
   computeMarketHealth,
+  newDemandHuntingAccumulator,
+  sampleDemandHunting,
+  summarizeDemandHunting,
 } from "../market-analysis";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import type { WorldMarket } from "@/lib/world/types";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
@@ -278,5 +282,125 @@ describe("computeMarketHealth — cover levels", () => {
     const water = coverLevels.find((c) => c.goodId === "water");
     expect(water?.deficitFrac).toBe(0);
     expect(water?.surplusFrac).toBe(0);
+  });
+});
+
+// ── Demand hunting ────────────────────────────────────────────────
+
+describe("demand hunting", () => {
+  const WAREHOUSE = DIRECTED_LOGISTICS.WAREHOUSE_COVER;
+  // `ore` is a recipe input (metals consumes it); `luxuries` is consumed by nothing.
+  const inputRow = (systemId: string, stock: number, useRate = 1): WorldMarket => ({
+    systemId, goodId: "ore", stock, anchorMult: 1, demandRate: 1,
+    honestUseRate: useRate, storageCapacity: 0,
+  });
+  const deep = (systemId: string) => inputRow(systemId, 0); // far below target × 0.8
+  const full = (systemId: string) => inputRow(systemId, WAREHOUSE * 2); // far above target × 1.4
+
+  it("reads no flips on a market that never crosses the dead band", () => {
+    const acc = newDemandHuntingAccumulator();
+    for (let i = 0; i < 6; i++) sampleDemandHunting(acc, [deep("s1")]);
+    expect(summarizeDemandHunting(acc, []).flipRate).toBe(0);
+  });
+
+  it("counts a market oscillating between deficit and surplus on every reversal", () => {
+    const acc = newDemandHuntingAccumulator();
+    // deficit, surplus, deficit, surplus → 3 reversals over 3 comparable readings (the first
+    // decided reading has nothing to reverse and sits outside the denominator).
+    sampleDemandHunting(acc, [deep("s1")]);
+    sampleDemandHunting(acc, [full("s1")]);
+    sampleDemandHunting(acc, [deep("s1")]);
+    sampleDemandHunting(acc, [full("s1")]);
+    expect(acc.decidedReadings).toBe(4);
+    expect(summarizeDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
+  });
+
+  it("excludes each market's first decided reading from the denominator", () => {
+    // Two markets, one sample each: two decided readings, zero comparable — an unreversible
+    // first reading must dilute nothing, or the rate shrinks with how often markets decide.
+    const acc = newDemandHuntingAccumulator();
+    sampleDemandHunting(acc, [deep("s1"), full("s2")]);
+    expect(acc.decidedReadings).toBe(2);
+    expect(summarizeDemandHunting(acc, []).flipRate).toBe(0);
+
+    // One of them reverses once: 1 reversal over exactly 1 comparable reading, not over 3.
+    sampleDemandHunting(acc, [full("s1")]);
+    expect(summarizeDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
+  });
+
+  it("registers an oscillation THROUGH the dead band as a reversal", () => {
+    // deficit → balanced → surplus: the balanced sample is skipped and must not overwrite the
+    // market's last decided reading, so the surplus still reverses the deficit — 1 reversal
+    // over 1 comparable reading. An implementation that recorded the balanced sample would
+    // report 0 here while the market genuinely oscillated.
+    const mid = inputRow("s1", WAREHOUSE); // inside [0.8, 1.4) × target — balanced
+    const acc = newDemandHuntingAccumulator();
+    sampleDemandHunting(acc, [deep("s1")]);
+    sampleDemandHunting(acc, [mid]);
+    sampleDemandHunting(acc, [full("s1")]);
+    expect(acc.decidedReadings).toBe(2); // the balanced sample decided nothing
+    expect(summarizeDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
+  });
+
+  it("ignores goods no recipe consumes — hunting is an industrial-input pathology", () => {
+    const acc = newDemandHuntingAccumulator();
+    const luxuries = (stock: number): WorldMarket => ({
+      systemId: "s1", goodId: "luxuries", stock, anchorMult: 1, demandRate: 1,
+      honestUseRate: 1, storageCapacity: 0,
+    });
+    sampleDemandHunting(acc, [luxuries(0)]);
+    sampleDemandHunting(acc, [luxuries(WAREHOUSE * 2)]);
+    expect(summarizeDemandHunting(acc, []).flipRate).toBe(0);
+  });
+
+  it("skips a row with no use figure rather than classifying it against a zero target", () => {
+    // Asserted on the accumulator, not on flipRate — a skipped row and a classified-but-never-
+    // reversing row both produce flipRate 0, so only the decided-reading count can see the guard.
+    const acc = newDemandHuntingAccumulator();
+    const bare: WorldMarket = {
+      systemId: "s1", goodId: "ore", stock: 0, anchorMult: 1, demandRate: 1, storageCapacity: 0,
+    };
+    sampleDemandHunting(acc, [bare]);
+    sampleDemandHunting(acc, [bare]);
+    expect(acc.decidedReadings).toBe(0);
+
+    // Positive control: the same row carrying a use figure classifies both times.
+    const carried = newDemandHuntingAccumulator();
+    sampleDemandHunting(carried, [{ ...bare, honestUseRate: 1 }]);
+    sampleDemandHunting(carried, [{ ...bare, honestUseRate: 1 }]);
+    expect(carried.decidedReadings).toBe(2);
+  });
+
+  it("reads no haul churn when every delivery stays where it landed", () => {
+    const flows = [
+      { tick: 1, fromSystemId: "a", toSystemId: "b", goodId: "ore", quantity: 100 },
+      { tick: 2, fromSystemId: "a", toSystemId: "c", goodId: "ore", quantity: 50 },
+    ];
+    expect(summarizeDemandHunting(newDemandHuntingAccumulator(), flows).haulChurnRatio).toBe(0);
+  });
+
+  it("counts tonnage delivered and then donated straight back out as churn", () => {
+    // b receives 100 and later ships 40 of it onward. Delivered tonnage is every arrival —
+    // b's 100, c's 50 and d's 40 — so 40 of 190 churned.
+    const flows = [
+      { tick: 1, fromSystemId: "a", toSystemId: "b", goodId: "ore", quantity: 100 },
+      { tick: 2, fromSystemId: "a", toSystemId: "c", goodId: "ore", quantity: 50 },
+      { tick: 3, fromSystemId: "b", toSystemId: "d", goodId: "ore", quantity: 40 },
+    ];
+    expect(summarizeDemandHunting(newDemandHuntingAccumulator(), flows).haulChurnRatio)
+      .toBeCloseTo(40 / 190, 9);
+  });
+
+  it("never counts more churn out of a market than was delivered into it", () => {
+    // A structural exporter ships far more than it ever received; that is production, not churn.
+    // Only the 10 tonnes b was actually sent can be re-donated tonnage, out of 910 delivered —
+    // uncapped, b's 900 would count and the reading would be ~0.99 instead.
+    const flows = [
+      { tick: 1, fromSystemId: "a", toSystemId: "b", goodId: "ore", quantity: 10 },
+      { tick: 2, fromSystemId: "b", toSystemId: "c", goodId: "ore", quantity: 900 },
+    ];
+    const { haulChurnRatio } = summarizeDemandHunting(newDemandHuntingAccumulator(), flows);
+    expect(haulChurnRatio).toBeCloseTo(10 / 910, 9);
+    expect(haulChurnRatio).toBeLessThan(0.05);
   });
 });

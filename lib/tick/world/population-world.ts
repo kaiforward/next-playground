@@ -24,8 +24,17 @@ export interface PopulationWorld {
   getPopulationState(systemIds: string[]): Promise<PopulationStateView[]>;
   /** Bulk-write population + unrest. */
   applyPopulationUpdates(updates: PopulationUpdate[]): Promise<void>;
-  /** Recompute demandRate from the civilian demand basis (population + skilled work) plus industrial input draw, for those systems' markets. */
-  rewriteDemandRates(pops: Array<{ systemId: string; population: number }>): Promise<void>;
+  /**
+   * Rewrite both per-market demand figures for those systems' markets, in one pass:
+   * `demandRate`, the floored capacity-based pricing anchor (civilian basis + industrial input
+   * draw), and `honestUseRate`, the unfloored use figure warehousing is denominated in (civilian
+   * want at full rate + the recipe draw scaled by `productionSuppress`, the system's strike ×
+   * maintenance scalar ∈ (0,1]). The strike scalar reaches only the use figure — pricing does
+   * not move with labour action.
+   */
+  rewriteDemandRates(
+    pops: Array<{ systemId: string; population: number; productionSuppress: number }>,
+  ): Promise<void>;
 }
 
 /** Per-run params passed alongside the world, all sourced by `runWorldTick`; calibratable. */

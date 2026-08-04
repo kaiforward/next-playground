@@ -68,6 +68,9 @@ function sys(
      *  are equal today, so the default moves with either constant instead of pinning a figure. */
     donorReserve?: number;
     production?: number; capacityProduction?: number; productionSuppressed?: boolean;
+    /** Urgency weight. Defaults to `demand` — nothing braked, no event running — which is what
+     *  every fixture predating the two-figure split states by construction. */
+    drawDemand?: number;
   },
 ): SystemLogisticsState {
   const production = good.production ?? 0;
@@ -75,6 +78,7 @@ function sys(
     systemId, factionId: "f1", generation,
     goods: [{
       ...good,
+      drawDemand: good.drawDemand ?? good.demand,
       donorReserve: good.donorReserve
         ?? good.logisticsTarget
           * (DIRECTED_LOGISTICS.DONOR_RESERVE_COVER / DIRECTED_LOGISTICS.WAREHOUSE_COVER),
@@ -388,6 +392,25 @@ describe("matchFactionTransfers", () => {
       { goodId: "food", fromSystemId: "S0", toSystemId: "D" },
     ]);
   });
+
+  it("ranks the import queue by draw urgency, not by standing use", () => {
+    // Two deficits with identical shortfall and identical use figures; only their ability to
+    // consume the delivery right now differs. `idle`'s consuming industry is braked shut, so
+    // `running` must be served first even though both worlds want the good equally in the long run.
+    //
+    // `idle` is listed first on purpose: a severity weight still reading `demand` leaves the two
+    // tied, and the stable sort then serves whichever came first.
+    const donor = sys("A", 10, { goodId: "ore", stock: 100, logisticsTarget: 50, demand: 5 });
+    const idle = sys("idle", 0, { goodId: "ore", stock: 0, logisticsTarget: 10, demand: 5, drawDemand: 0.5 });
+    const running = sys("running", 0, { goodId: "ore", stock: 0, logisticsTarget: 10, demand: 5, drawDemand: 5 });
+
+    // Budget 10 at 1 hop covers exactly one of the two 10-unit shortfalls.
+    const { transfers } = matchFactionTransfers([idle, running, donor], oneHop);
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0].toSystemId).toBe("running");
+    expect(transfers[0].quantity).toBe(10);
+  });
+
 });
 
 // Direct coverage of the donor test shared by the logistics matcher AND the build planner.

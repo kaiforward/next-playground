@@ -20,6 +20,7 @@ import { goodSatisfactionsBySystem } from "@/lib/tick-harness/good-satisfaction"
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { median } from "@/lib/utils/math";
 import type { BuildBurstSummary, FoundingStockSummary } from "./types";
 
 /** How a developed system's built base breaks down by role/tier. */
@@ -73,6 +74,35 @@ export interface FoundedColonyRecord {
   openingSatisfaction: number | null;
   /** The convex fold unrest itself reads (`dissatisfaction`) at that cycle; null until sampled. */
   openingDissatisfaction: number | null;
+  /** Total tonnage the founding manifest shipped from the founder; absent until recorded. */
+  manifestTonnage?: number;
+  /** The founder's own remaining cover on the manifest's BINDING good — post-manifest stock ÷ that
+   *  good's donor floor, minimum across the manifest — sampled at the founding tick. Below 1 means
+   *  founding drew the founder under the floor it is meant to keep for itself. Absent when the
+   *  manifest gave no measurable reading (no shipped good with a positive donor floor). */
+  founderCoverAfter?: number;
+}
+
+/**
+ * Record what one founding cost its founder. Called at the founding tick, where the founder's
+ * post-manifest stock still reflects this manifest and no other. A colony with no manifest is
+ * never recorded, so it contributes no cover reading rather than a 0 one.
+ */
+export function recordFoundingManifest(
+  tracker: Map<string, FoundedColonyRecord>,
+  systemId: string,
+  manifestTonnage: number,
+  founderCoverAfter: number | undefined,
+): void {
+  const record = tracker.get(systemId);
+  if (!record || !(manifestTonnage > 0)) return;
+  record.manifestTonnage = manifestTonnage;
+  // A cover with nothing measurable behind it stays absent — folding a placeholder 0 into the
+  // median would read as a founder drained flat, the opposite of "there was no floor to draw
+  // under". Same rule for a corrupt (non-finite) reading.
+  if (founderCoverAfter !== undefined && Number.isFinite(founderCoverAfter)) {
+    record.founderCoverAfter = Math.max(0, founderCoverAfter);
+  }
 }
 
 /** Opening satisfaction below this reads as a colony that arrived deprived. */
@@ -159,7 +189,12 @@ export function summarizeFoundingStock(
   let satisfactionSum = 0;
   let dissatisfactionSum = 0;
   let openingDeprivedCount = 0;
+  let manifestTonnageSum = 0;
+  const founderCovers: number[] = [];
   for (const r of tracker.values()) {
+    manifestTonnageSum += r.manifestTonnage ?? 0;
+    // Only a colony that actually drew a manifest says anything about the cost to its founder.
+    if (r.founderCoverAfter !== undefined) founderCovers.push(r.founderCoverAfter);
     if (r.openingSatisfaction === null || r.openingDissatisfaction === null) continue;
     sampledCount++;
     satisfactionSum += r.openingSatisfaction;
@@ -172,6 +207,10 @@ export function summarizeFoundingStock(
     meanOpeningSatisfaction: sampledCount > 0 ? satisfactionSum / sampledCount : 0,
     meanOpeningDissatisfaction: sampledCount > 0 ? dissatisfactionSum / sampledCount : 0,
     openingDeprivedCount,
+    // Denominated over every colony founded, so a run that ships nothing reads 0 rather than
+    // hiding behind a shrunken denominator.
+    meanManifestTonnage: tracker.size > 0 ? manifestTonnageSum / tracker.size : 0,
+    medianFounderCoverAfter: founderCovers.length > 0 ? median(founderCovers) : null,
   };
 }
 

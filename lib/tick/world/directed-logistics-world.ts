@@ -17,6 +17,9 @@ export interface MarketRowForLogistics {
   stock: number;
   anchorMult: number;
   demandRate: number;
+  /** Persisted use figure — what this system's population and industry draw when running.
+   *  Missing ⇒ recompute live; never read a missing field as 0. */
+  honestUseRate?: number;
   storageCapacity: number;
   /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1). */
   satisfaction?: number;
@@ -24,6 +27,10 @@ export interface MarketRowForLogistics {
   realizedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
   productionSuppressed?: boolean;
+  /** The owning system's strike × maintenance production scalar, ∈ (0,1]; missing ⇒ 1. */
+  productionSuppressRate?: number;
+  /** Aggregated event production multiplier applied last cycle; missing ⇒ 1. */
+  productionMult?: number;
   /** Rationed-economy persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
   squeezeCycles?: number;
   /** Structural-deficit persistence clock: advanced by the cycle's reference-time span, saturated at 2. */

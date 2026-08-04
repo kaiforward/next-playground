@@ -140,6 +140,9 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         satisfaction: isFinite(u.satisfaction) ? Math.max(0, Math.min(1, u.satisfaction)) : 1,
         realizedProductionRate: isFinite(u.realizedProductionRate) ? Math.max(0, u.realizedProductionRate) : 0,
         productionSuppressed: u.productionSuppressed,
+        // A non-finite gate reads as no gate (the absent-field behaviour), not as a stop.
+        productionSuppressRate: isFinite(u.productionSuppressRate) ? Math.max(0, u.productionSuppressRate) : 1,
+        productionMult: isFinite(u.productionMult) ? Math.max(0, u.productionMult) : 1,
         squeezeCycles: isFinite(u.squeezeCycles) ? Math.max(0, Math.min(2, u.squeezeCycles)) : 0,
       };
     });

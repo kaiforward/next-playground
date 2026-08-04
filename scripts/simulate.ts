@@ -8,6 +8,7 @@
  *
  * Options:
  *   --config PATH    Load experiment from YAML config file
+ *   --pin PATH       Cohort this run against a baseline run's role partition
  *   --json           Output raw JSON instead of formatted table
  *   --help           Show this help message
  *
@@ -32,7 +33,10 @@ import {
   ExperimentConfigSchema,
   experimentToHarnessConfig,
   buildExperimentResult,
+  parsePinnedRoles,
+  pinnedRolesFor,
 } from "../lib/tick-harness/experiment";
+import type { PinnedRolesDocument } from "../lib/tick-harness/experiment";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure, summarizeSupplyRegimes } from "../lib/tick-harness/population-analysis";
 import { summarizeColonisation, summarizeConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
@@ -42,7 +46,8 @@ import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { toTickSystems } from "../lib/world/tick";
-import type { HarnessConfig, HarnessResults } from "../lib/tick-harness/types";
+import { MARKET_ROLES } from "../lib/tick-harness/types";
+import type { HarnessConfig, HarnessResults, MarketRole } from "../lib/tick-harness/types";
 
 /**
  * Quick-run horizons. The startup read is early enough that founding and provisioning
@@ -95,11 +100,13 @@ function parseArgs(argv: string[]): {
   json: boolean;
   help: boolean;
   config?: string;
+  pin?: string;
 } {
-  const result: { json: boolean; help: boolean; config: string | undefined } = {
+  const result: { json: boolean; help: boolean; config: string | undefined; pin: string | undefined } = {
     json: false,
     help: false,
     config: undefined,
+    pin: undefined,
   };
 
   for (let i = 0; i < argv.length; i++) {
@@ -111,6 +118,9 @@ function parseArgs(argv: string[]): {
       case "--config":
         result.config = argv[++i];
         break;
+      case "--pin":
+        result.pin = argv[++i];
+        break;
       case "--help":
       case "-h":
         result.help = true;
@@ -119,6 +129,36 @@ function parseArgs(argv: string[]): {
   }
 
   return result;
+}
+
+/**
+ * Load a baseline arm's role partition off a saved results JSON. `lib/tick-harness` stays fs-free,
+ * so the read lives here and the narrowing lives in `experiment.ts`. Exits on any problem: a pin
+ * that silently failed to load would produce an arm cohorted against its own membership while
+ * reporting itself as pinned, which is the one way this instrument can lie.
+ */
+function loadPinnedRoles(pinPath: string): PinnedRolesDocument {
+  const resolved = path.resolve(pinPath);
+  if (!fs.existsSync(resolved)) {
+    console.error(`Pin file not found: ${resolved}`);
+    process.exit(1);
+  }
+  const parsed = parsePinnedRoles(fs.readFileSync(resolved, "utf-8"));
+  if (!parsed.ok) {
+    console.error(`Cannot pin roles from ${resolved}: ${parsed.error}`);
+    process.exit(1);
+  }
+  // An empty partition would "pin" zero markets while the report prints PINNED — refuse it here,
+  // where the filename is still in hand.
+  const partitions = [parsed.document.single, ...Object.values(parsed.document.byHorizon)];
+  if (partitions.every((p) => p === null || Object.keys(p).length === 0)) {
+    console.error(
+      `Cannot pin roles from ${resolved}: every marketRoles partition in the file is empty — ` +
+        `there is nothing to pin to.`,
+    );
+    process.exit(1);
+  }
+  return parsed.document;
 }
 
 // ── Formatting ──────────────────────────────────────────────────
@@ -205,6 +245,14 @@ function formatTable(results: HarnessResults): string {
     );
   }
 
+  // Whether the network is chasing a demand signal that moves under it. Read as an A/B delta,
+  // not against a target — a busy network legitimately moves goods on.
+  const dh = results.demandHunting;
+  lines.push(
+    `  demand hunting: ${(dh.flipRate * 100).toFixed(1)}% of decided industrial-input readings ` +
+      `reversed the previous one | ${(dh.haulChurnRatio * 100).toFixed(1)}% of delivered tonnage left again`,
+  );
+
   const pl = marketHealth.priceLevels;
   lines.push("");
   lines.push(
@@ -241,6 +289,20 @@ function formatTable(results: HarnessResults): string {
         ]),
     ));
 
+    // Per-arm membership table. Every cover and price figure above is a median WITHIN a role, so
+    // two arms are only comparable if their cohorts hold the same markets — read this before
+    // reading any delta, and pin the second arm (--pin) when it does not match.
+    const membership: Record<MarketRole, number> = {
+      exporter: 0, "self-supplier": 0, consumer: 0, inert: 0,
+    };
+    for (const entry of roleCoverLevels) {
+      for (const role of MARKET_ROLES) membership[role] += entry.countByRole[role];
+    }
+    lines.push(
+      `  membership: exporter ${membership.exporter}, self-supplier ${membership["self-supplier"]}, ` +
+        `consumer ${membership.consumer}, inert ${membership.inert}` +
+        (results.config.pinnedRoles ? "  (PINNED to a baseline partition)" : ""),
+    );
     lines.push("  inert = no production, local demand below the MIN_DEMAND pricing floor. Not the same");
     lines.push("  as no demand: a small world can floor for real. Inert n = total (of which 0-demand).");
   }
@@ -394,6 +456,15 @@ function formatTable(results: HarnessResults): string {
           `opened deprived (<0.50): ${fs.openingDeprivedCount}`,
       );
     }
+    if (fs.foundedCount > 0) {
+      lines.push(
+        `  cost to founders: mean manifest ${fmtNum(fs.meanManifestTonnage)} t/colony | ` +
+          `median founder cover after (binding good) ` +
+          (fs.medianFounderCoverAfter !== null
+            ? `${fs.medianFounderCoverAfter.toFixed(2)}×`
+            : "n/a (no measurable manifest)"),
+      );
+    }
     const cp = summarizeConstructionPool(finalTickSystems, finalWorld.constructionProjects);
     lines.push(
       `Construction pool: base ${fmtNum(cp.poolBase)} + centres ${fmtNum(cp.poolCentres)} ` +
@@ -518,7 +589,11 @@ function formatTable(results: HarnessResults): string {
 
 // ── Experiment runner ───────────────────────────────────────────
 
-async function runExperiment(configPath: string, jsonOutput: boolean): Promise<void> {
+async function runExperiment(
+  configPath: string,
+  jsonOutput: boolean,
+  pinned?: PinnedRolesDocument,
+): Promise<void> {
   const resolved = path.resolve(configPath);
   if (!fs.existsSync(resolved)) {
     console.error(`Config file not found: ${resolved}`);
@@ -538,14 +613,32 @@ async function runExperiment(configPath: string, jsonOutput: boolean): Promise<v
   }
 
   const { config, label } = experimentToHarnessConfig(validated.data);
+  // `loadPinnedRoles` promises to exit on any problem — and a pin that silently applies to
+  // nothing is exactly such a problem. A horizon-keyed document (the quick run's shape) carries
+  // no single partition, and a --config run cannot choose a horizon on the user's behalf.
+  let pinnedRoles: Record<string, MarketRole> | undefined;
+  if (pinned) {
+    pinnedRoles = pinnedRolesFor(pinned);
+    if (pinnedRoles === undefined) {
+      console.error(
+        "The pin file is keyed by horizon (a quick-run --json report) and carries no single " +
+          "partition, so a --config run cannot use it. Pin to a saved --config result " +
+          "(experiments/*.json) or a bare --config --json document instead.",
+      );
+      process.exit(1);
+    }
+  }
 
-  console.log(
+  // Status goes to stderr so `--json > file` stays valid JSON, matching the quick-run path.
+  console.error(
     `Running experiment${label ? ` "${label}"` : ""}: ` +
     `${config.tickCount} ticks, seed ${config.seed}, ${config.systemCount} systems, ` +
-    `economy scale ${ECONOMY_SCALE}\n`,
+    `economy scale ${ECONOMY_SCALE}` +
+    (pinnedRoles ? `, cohorts pinned to ${Object.keys(pinnedRoles).length} baseline markets` : "") +
+    `\n`,
   );
 
-  const results = await runTickHarness(config, label);
+  const results = await runTickHarness({ ...config, pinnedRoles }, label);
 
   if (jsonOutput) {
     console.log(JSON.stringify(results, null, 2));
@@ -568,7 +661,7 @@ async function runExperiment(configPath: string, jsonOutput: boolean): Promise<v
 
   const result = buildExperimentResult(results);
   fs.writeFileSync(outFile, JSON.stringify(result, null, 2));
-  console.log(`\nResult saved to ${path.relative(process.cwd(), outFile)}`);
+  console.error(`\nResult saved to ${path.relative(process.cwd(), outFile)}`);
 }
 
 // ── Main ────────────────────────────────────────────────────────
@@ -584,6 +677,13 @@ Usage:
 
 Options:
   --config PATH    Load experiment from YAML config file (saves result to experiments/)
+  --pin PATH       Take cohort membership from a baseline run's saved JSON
+                   (its "marketRoles") instead of classifying this run's markets
+                   live. Cover and price are medians WITHIN a role, and the role
+                   classifier reads the demand figure — so without a pin the two
+                   arms of an A/B can differ by cohort mix alone. A horizon-keyed
+                   document pins each horizon to its own. See --json below for
+                   how to write the baseline file.
   --json           Output JSON instead of table. The quick run emits
                    { startup, equilibrium } keyed by horizon and omits the
                    marketSnapshots trajectory; --config emits one bare result.
@@ -612,14 +712,20 @@ Examples:
   npm run simulate                                                 # Quick sanity check
   npm run simulate -- --config experiments/examples/baseline.yaml  # Experiment from YAML
   npm run --silent simulate -- --json > run.json                   # Quick run, JSON output
+
+  # A/B with cohort membership held fixed — write the baseline, then pin arm two to it:
+  npm run --silent simulate -- --json > baseline.json
+  npm run simulate -- --pin baseline.json
 `);
   process.exit(0);
 }
 
 // Config mode vs quick-run mode
 async function main(): Promise<void> {
+  const pinnedDocument = args.pin ? loadPinnedRoles(args.pin) : undefined;
+
   if (args.config) {
-    await runExperiment(args.config, args.json);
+    await runExperiment(args.config, args.json, pinnedDocument);
     return;
   }
 
@@ -660,7 +766,12 @@ async function main(): Promise<void> {
       console.log("═".repeat(78) + "\n");
     }
 
-    const results = await runTickHarness(h.config);
+    // Each horizon pins to its OWN horizon in the baseline document — an equilibrium arm cohorted
+    // against a startup partition would be measured over a membership neither arm has.
+    const results = await runTickHarness({
+      ...h.config,
+      pinnedRoles: pinnedDocument ? pinnedRolesFor(pinnedDocument, h.label) : undefined,
+    });
 
     if (args.json) jsonOut[h.label] = toHorizonReport(results);
     else console.log(formatTable(results) + "\n");

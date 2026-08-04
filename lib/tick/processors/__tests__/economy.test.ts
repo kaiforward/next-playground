@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
+import { strikeMultiplier } from "@/lib/engine/population";
 import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
@@ -905,5 +906,96 @@ describe("economy processor: persisted planner assessment", () => {
     });
     await runEconomyProcessor(coarse, makeCtx(0), { ...ECON_PARAMS, interval: 48 });
     expect(coarse.markets[0].squeezeCycles).toBe(2); // catchUpFactor(48) = 2 saturates in one
+  });
+});
+
+// ── Draw-figure inputs ────────────────────────────────────────────
+
+describe("economy processor: persisted draw-figure inputs", () => {
+  const marketOf = (world: InMemoryEconomyWorld, systemId: string, goodId: string): WorldMarket => {
+    const row = world.markets.find((m) => m.systemId === systemId && m.goodId === goodId);
+    if (row === undefined) throw new Error(`Expected a ${goodId} market at ${systemId}`);
+    return row;
+  };
+
+  it("persists the SYSTEM suppression scalar on every row, including goods the system never produces", async () => {
+    // The scalar is a property of the system (its unrest and maintenance funding), unlike the
+    // `productionSuppressed` bool beside it, which is false on every good the system has no
+    // industry for. Taking the rate from that bool would read 1 on exactly the rows whose
+    // consuming industry is struck hardest.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("strike", 0.9)], // buildings: { food: 2 } — a food producer only
+      markets: [
+        makeMarket("strike", "food", FIXTURE_BAND.targetStock - 2),
+        makeMarket("strike", "ore", FIXTURE_BAND.targetStock - 2), // no ore industry here
+      ],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+
+    const expected = strikeMultiplier(0.9, STRIKE_PARAMS);
+    expect(expected).toBeLessThan(1);
+    expect(marketOf(world, "strike", "food").productionSuppressRate).toBeCloseTo(expected, 9);
+    expect(marketOf(world, "strike", "ore").productionSuppressRate).toBeCloseTo(expected, 9);
+    expect(marketOf(world, "strike", "ore").productionSuppressed).toBe(false); // the bool it must not read
+  });
+
+  it("writes exactly 1 at a calm, fully-maintained system", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("calm", 0)],
+      markets: [makeMarket("calm", "food", FIXTURE_BAND.targetStock - 2)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(marketOf(world, "calm", "food").productionSuppressRate).toBe(1);
+  });
+
+  it("folds the maintenance malus into the same scalar", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("underfunded", 0)],
+      markets: [makeMarket("underfunded", "food", FIXTURE_BAND.targetStock - 2)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), {
+      ...ECON_PARAMS,
+      maintenanceMalusBySystem: new Map([["underfunded", 0.5]]),
+    });
+    expect(marketOf(world, "underfunded", "food").productionSuppressRate).toBeCloseTo(0.5, 9);
+  });
+
+  it("persists the event production multiplier the tick actually applied, per good", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("event", 0)],
+      markets: [
+        makeMarket("event", "food", FIXTURE_BAND.targetStock - 2),
+        makeMarket("event", "ore", FIXTURE_BAND.targetStock - 2),
+      ],
+      modifiers: [{
+        domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "event",
+        goodId: "food", parameter: "production_rate", value: 0.25,
+      }],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(marketOf(world, "event", "food").productionMult).toBeCloseTo(0.25, 9);
+    expect(marketOf(world, "event", "ore").productionMult).toBe(1); // the modifier names food only
+    // The event multiplier is not suppression — the two channels stay distinct on the row.
+    expect(marketOf(world, "event", "food").productionSuppressRate).toBe(1);
+  });
+
+  it("emits the suppression scalar on economy signals, one entry per system processed", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("strike", 0.9), makeProducerSystem("calm", 0)],
+      markets: [
+        makeMarket("strike", "food", FIXTURE_BAND.targetStock - 2),
+        makeMarket("calm", "food", FIXTURE_BAND.targetStock - 2),
+      ],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    const bySystem = requireEconomySignals(result.economySignals).productionSuppressBySystem;
+    expect(bySystem.get("strike")).toBeCloseTo(strikeMultiplier(0.9, STRIKE_PARAMS), 9);
+    expect(bySystem.get("calm")).toBe(1);
+    // The emitted value is the one the tick applied, not a recompute — it must match the rows.
+    expect(bySystem.get("strike")).toBe(marketOf(world, "strike", "food").productionSuppressRate);
   });
 });

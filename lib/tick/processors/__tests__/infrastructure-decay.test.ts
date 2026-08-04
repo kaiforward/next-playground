@@ -42,6 +42,7 @@ describe("infrastructure-decay processor", () => {
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     const s = world.systems[0];
@@ -57,6 +58,7 @@ describe("infrastructure-decay processor", () => {
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     expect(world.systems.find((x) => x.id === "s2")!.buildings).toEqual({ [HOUSING_TYPE]: 10, ore: 10 });
@@ -69,6 +71,7 @@ describe("infrastructure-decay processor", () => {
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map(), // no selling factor recorded for s1 → defaults to 1
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     const s = world.systems[0];
@@ -93,6 +96,7 @@ describe("infrastructure-decay processor", () => {
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     for (const expected of [0.3, 0.6, 0.9]) {
       await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
@@ -114,6 +118,7 @@ describe("infrastructure-decay processor", () => {
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     expect(world.systems[0].collapseDebt).toBeGreaterThan(0); // still in the regime
@@ -139,6 +144,7 @@ describe("infrastructure-decay processor", () => {
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map(),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), {
       decay: { idleBufferCycles: 2, unrestThreshold: 0.75 },
@@ -165,6 +171,7 @@ describe("infrastructure-decay processor", () => {
         ["ordinary", new Map([["ore", 0]])],
       ]),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), {
       decay: DECAY,

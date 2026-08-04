@@ -5,7 +5,8 @@ import type { TickContext } from "@/lib/tick/types";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
 import { civilianDemandRateForGood, totalDemandRateForGood } from "@/lib/constants/market-economy";
-import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import type { SupplyRegime, SupplyState } from "@/lib/engine/population";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
@@ -60,7 +61,11 @@ function sys(id: string, population: number, popCap: number, unrest = 0, buildin
 function market(systemId: string, goodId: string): WorldMarket {
   return { systemId, goodId, stock: 100, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
-function ctxWithD(d: Map<string, number>, regimes: Map<string, SupplyRegime> = new Map()): TickContext {
+function ctxWithD(
+  d: Map<string, number>,
+  regimes: Map<string, SupplyRegime> = new Map(),
+  productionSuppressBySystem: Map<string, number> = new Map(),
+): TickContext {
   const states = new Map<string, SupplyState>(
     [...regimes].map(([systemId, regime]) => [systemId, { regime, survivalShortfall: false }]),
   );
@@ -73,6 +78,7 @@ function ctxWithD(d: Map<string, number>, regimes: Map<string, SupplyRegime> = n
           supplyStateBySystem: states,
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: new Map(),
+          productionSuppressBySystem,
         },
       }],
     ]),
@@ -435,5 +441,87 @@ describe("population processor", () => {
     const expected = RATES.slopeRationing * d;
     expect(await settleAt(24)).toBeCloseTo(expected, 6);
     expect(await settleAt(48)).toBeCloseTo(expected, 6);
+  });
+});
+
+// ── The use figure, written beside the pricing rate ────────────────
+
+describe("population processor: the honest use figure", () => {
+  // A smelter world: metals draws ore, and the vocational school licenses the tier-1
+  // technicians without which metals output — and so ore's industrial draw — is zero.
+  const BUILDINGS = { metals: 3, housing: 1, vocational_school: 1 };
+  const START_POP = 500;
+
+  function runAt(suppress: Map<string, number>): Promise<InMemoryPopulationWorld> {
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("s", START_POP, 1000, 0, BUILDINGS)],
+      markets: [market("s", "food"), market("s", "ore")],
+    });
+    return runPopulationProcessor(world, ctxWithD(new Map([["s", 0]]), new Map(), suppress), PARAMS)
+      .then(() => world);
+  }
+
+  const rowOf = (world: InMemoryPopulationWorld, goodId: string): WorldMarket => {
+    const row = world.markets.find((m) => m.systemId === "s" && m.goodId === goodId);
+    if (row === undefined) throw new Error(`Expected an ${goodId} market`);
+    return row;
+  };
+
+  it("leaves the pricing demandRate untouched by the strike while the use figure falls", async () => {
+    const calm = await runAt(new Map());
+    const struck = await runAt(new Map([["s", 0.4]]));
+
+    // D is 0 in both runs, so population evolves identically and the two are comparable.
+    const pop = struck.systems[0].population;
+    expect(calm.systems[0].population).toBeCloseTo(pop, 9);
+
+    // The pricing rate is capacity-based and floored — an independent oracle, not a read-back.
+    const priced = totalDemandRateForGood("ore", popOnly(pop), BUILDINGS, unitResourceVector());
+    expect(rowOf(calm, "ore").demandRate).toBeCloseTo(priced, 9);
+    expect(rowOf(struck, "ore").demandRate).toBeCloseTo(priced, 9);
+
+    // The use figure is not floored and not capacity-based: it falls with the strike.
+    const calmUse = rowOf(calm, "ore").honestUseRate;
+    const struckUse = rowOf(struck, "ore").honestUseRate;
+    if (calmUse === undefined || struckUse === undefined) throw new Error("Expected a use rate on both rows");
+    expect(struckUse).toBeLessThan(calmUse);
+  });
+
+  it("gates only the industrial half — civilian want stays at full rate under a strike", async () => {
+    const struck = await runAt(new Map([["s", 0.4]]));
+    const pop = struck.systems[0].population;
+    const snap = computeSystemLabourSnapshot(BUILDINGS, pop);
+
+    // Independent oracle: the civilian rate at full population plus the capacity draw scaled once.
+    const civilian = consumptionRate("ore", snap.basis);
+    const industrial = inputDemandForGood(BUILDINGS, "ore", snap.state, unitResourceVector());
+    expect(industrial).toBeGreaterThan(0); // or the gating assertion below is vacuous
+    expect(rowOf(struck, "ore").honestUseRate).toBeCloseTo(civilian + industrial * 0.4, 9);
+
+    // Nothing consumes food as a recipe input, so its use figure is civilian alone — and a
+    // starving town must read as a full-rate consumer however hard its industry is struck.
+    expect(rowOf(struck, "food").honestUseRate).toBeCloseTo(consumptionRate("food", snap.basis), 9);
+  });
+
+  it("reads a system missing from the suppress signal as unsuppressed", async () => {
+    const absent = await runAt(new Map([["other", 0.2]]));
+    const calm = await runAt(new Map([["s", 1]]));
+    expect(rowOf(absent, "ore").honestUseRate).toBeCloseTo(rowOf(calm, "ore").honestUseRate ?? 0, 9);
+  });
+
+  it("leaves the use figure absent — never 0 — when the compute is corrupt", async () => {
+    // A NaN population poisons the whole use computation. The write side's one guarantee is that
+    // the poison never lands as 0: the readers' contract is absent ⇒ live recompute, while a
+    // persisted 0 is a completed assessment that makes the row un-sinkable and fully drawable
+    // at once. The stale prior figure must not survive either — absence is the recompute signal.
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("s", Number.NaN, 1000, 0, BUILDINGS)],
+      markets: [{ ...market("s", "ore"), honestUseRate: 12.5 }],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map([["s", 0]])), PARAMS);
+
+    const row = rowOf(world, "ore");
+    expect(row.honestUseRate).toBeUndefined();
+    expect("honestUseRate" in row).toBe(false);
   });
 });

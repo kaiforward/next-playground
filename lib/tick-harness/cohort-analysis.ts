@@ -118,12 +118,39 @@ export function logisticsTargetsByKey(
  * Per good, cover and price split by market role. This is what separates "every producer is
  * drained flat" from "consumers are never served" — a distinction the galaxy-wide median
  * cannot make, because it medians both populations together.
+ *
+ * `pinnedRoles` holds cohort MEMBERSHIP fixed against a partition measured elsewhere — the
+ * baseline arm of an A/B. The classifier reads `state.demand` in its exporter branch, so any
+ * change to the demand figure moves membership by construction, and a cover median then moves
+ * with the cohort mix rather than with anything about supply. A market the pinned partition
+ * never saw (a colony founded after the baseline) is classified live, so the later arm's
+ * population is never silently smaller. `countByRole` is the membership table to print per arm.
+ *
+ * `precomputedRoles` reuses a `marketRolesByKey` pass the caller already ran (the runner builds
+ * one to publish the live partition); absent, the pass runs here.
  */
 export function computeRoleCoverLevels(
   systems: TickSystem[],
   markets: WorldMarket[],
+  pinnedRoles?: ReadonlyMap<string, MarketRole>,
+  precomputedRoles?: Map<string, MarketRoleInfo>,
 ): RoleCoverEntry[] {
-  const roles = marketRolesByKey(systems, markets);
+  const roles = precomputedRoles ?? marketRolesByKey(systems, markets);
+
+  // A pin that matches nothing is another world's partition (different seed or system count).
+  // Proceeding would classify every market live while the report labels itself pinned — the one
+  // lie this instrument exists to prevent — so it fails loudly instead.
+  if (pinnedRoles && pinnedRoles.size > 0) {
+    let matched = 0;
+    for (const key of roles.keys()) if (pinnedRoles.has(key)) matched++;
+    if (matched === 0) {
+      throw new Error(
+        `Pinned partition matched 0 of ${roles.size} live markets — the pin file was written ` +
+          `by a different world (seed or system count). A pinned report over a live-classified ` +
+          `cohort would be a lie; refusing to produce one.`,
+      );
+    }
+  }
 
   const counts = new Map<string, Record<MarketRole, number>>();
   const covers = new Map<string, Record<StockedRole, number[]>>();
@@ -134,9 +161,11 @@ export function computeRoleCoverLevels(
   for (const m of markets) {
     const good = GOODS[m.goodId];
     if (!good) continue;
-    const info = roles.get(`${m.systemId}|${m.goodId}`);
+    const key = `${m.systemId}|${m.goodId}`;
+    const info = roles.get(key);
     if (!info) continue;
-    const { role } = info;
+    // `demand` stays live — only the partition is held fixed.
+    const role = pinnedRoles?.get(key) ?? info.role;
 
     let count = counts.get(m.goodId);
     if (!count) {

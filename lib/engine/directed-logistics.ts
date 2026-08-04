@@ -120,8 +120,16 @@ export interface GoodMarketState {
    *  at and the target the deficit side fills to move together. 0 where nothing here wants the good,
    *  which makes the whole stock drawable — see `surplusDrawable`. */
   donorReserve: number;
-  /** Total local demand rate (civilian + industrial). Severity weight + the self-supply gate (vs production). */
+  /** The USE figure: what this system's population and industry draw when running — civilian want at
+   *  full rate plus the staffing- and strike-gated recipe draw. Every warehousing quantity above is
+   *  denominated in it, as is the self-supply gate (vs production), because a classification that
+   *  flipped with a one-cycle brake flicker is worse than none. Never the urgency weight. */
   demand: number;
+  /** The DRAW figure: `demand` further gated by each consuming factory's own output brake at its
+   *  current stock and its live event production multiplier — how urgently a delivery is needed
+   *  RIGHT NOW, as opposed to how much this world uses in the long run. Its only reader is the
+   *  matcher's severity weight; nothing that sizes or reserves stock may touch it. */
+  drawDemand: number;
   /** The civilian half of `demand` alone (per-capita baseline + skilled baskets, no industrial input
    *  draw). The housing fed-gate folds this: necessity is authored on the civilian axis, so weighting
    *  a refinery's ore draw with it would collapse D however starved its factories are. */
@@ -217,7 +225,11 @@ export function matchFactionTransfers(
       // inventory relative to their demand rate — read as deficits and get shipped a good they
       // already make, piling stock to the ceiling and decaying their own producers.
       if (c.kind === "deficit" && c.shortfall > 0 && g.production < g.demand) {
-        deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, severity: c.shortfall * g.demand });
+        // Triage weight reads the DRAW figure: a factory that cannot run right now — its own yard
+        // full, or an event holding its rate down — should not outrank one that is idle for want of
+        // this very delivery. Membership above is still decided on the use figure, so the queue
+        // reorders without anyone dropping out of it.
+        deficits.push({ systemId: s.systemId, goodId: g.goodId, shortfall: c.shortfall, severity: c.shortfall * g.drawDemand });
         continue;
       }
       // Surplus source — standing excess inventory above the donor's own reserve OR a structural

@@ -12,11 +12,15 @@ import type { GovernmentType } from "@/lib/types/game";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
+import type { DemandHuntingSummary } from "./market-analysis";
 
 // ── Market role classification ──────────────────────────────────
 
-/** Which role a market (system × good) plays for that good. Mutually exclusive. */
-export type MarketRole = "exporter" | "self-supplier" | "consumer" | "inert";
+/** Which role a market (system × good) plays for that good. Mutually exclusive. The tuple is
+ *  the single source for every roster iteration/validation, so a fifth role added to it grows
+ *  the union and every consumer together. */
+export const MARKET_ROLES = ["exporter", "self-supplier", "consumer", "inert"] as const;
+export type MarketRole = (typeof MARKET_ROLES)[number];
 
 // ── Calibration harness config ──────────────────────────────────
 
@@ -26,6 +30,14 @@ export interface HarnessConfig {
   tickCount: number;
   /** Optional per-run cycle-cadence override; absent ⇒ the live-loop constants. */
   cadence?: TickCadence;
+  /**
+   * A baseline arm's role partition (`marketRoles` off its results), keyed `systemId|goodId`.
+   * Supplied, this run's cover and price reads are cohorted against THAT membership instead of
+   * its own — the role classifier reads the demand figure, so membership moves with any change
+   * to it and a cover median then moves with the cohort mix rather than with supply. Absent ⇒
+   * each market is classified live, as always.
+   */
+  pinnedRoles?: Record<string, MarketRole>;
 }
 
 // ── Market health ───────────────────────────────────────────────
@@ -273,6 +285,15 @@ export interface FoundingStockSummary {
   meanOpeningDissatisfaction: number;
   /** Sampled colonies that opened below half satisfaction. Should read ~0. */
   openingDeprivedCount: number;
+  /** Mean manifest tonnage per colony founded — what founding costs a founder in goods. The
+   *  manifest's cap is use-figure denominated, so this moves when a founder's stated draw does. */
+  meanManifestTonnage: number;
+  /** Median, over colonies that drew a manifest with a measurable cover reading, of the founder's
+   *  own remaining cover on the binding good (post-manifest stock ÷ that good's donor floor).
+   *  Below 1 means founding is drawing founders under the floor they are meant to keep. Null when
+   *  no founding produced a measurable reading — the median of nothing must not print as a
+   *  founder drained to 0.00×. */
+  medianFounderCoverAfter: number | null;
 }
 
 // ── Region overview ─────────────────────────────────────────────
@@ -300,6 +321,16 @@ export interface HarnessResults {
   marketHealth: MarketHealthSummary;
   /** Per-good cover and price split by market role. */
   roleCoverLevels: RoleCoverEntry[];
+  /**
+   * The role this run classified each market into, keyed `systemId|goodId` — the partition a
+   * later arm pins to via `HarnessConfig.pinnedRoles`. Always the LIVE classification, even on a
+   * pinned run: echoing back the pin would hide exactly the membership drift the pin exists to
+   * measure. A plain record, not a Map, because results are saved as JSON.
+   */
+  marketRoles: Record<string, MarketRole>;
+  /** Whether the network is chasing a demand signal that moves under it — deficit↔surplus
+   *  reversals on industrial-input markets, and delivered tonnage that leaves again. */
+  demandHunting: DemandHuntingSummary;
   /** Supply and unrest per world cohort. Cohorts overlap; each row carries its own denominator. */
   worldCohorts: WorldCohortEntry[];
   /** Impact measurement for each event that occurred. */

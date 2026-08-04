@@ -1072,9 +1072,11 @@ Interface:
   membership, self-supply gate, donor selection, reserves, budget accounting and the dead-band are
   untouched at this stage.
 - **Stage-1 note, load-bearing:** `brakeCeilingOf` is *the live brake*, which at stage 1 is still the
-  anchor-based `productionCeiling(stock, targetStock, HOLD_COVER)` off `marketBandForRow`. Stage 3
-  swaps the brake's body and the draw figure inherits the change with no logistics edit — that is
-  exactly the second-order ripple stage 3's third A/B arm isolates.
+  anchor-based `productionCeiling(stock, targetStock, HOLD_COVER)` off `marketBandForRow`. This makes
+  `good-market-state.ts` a fourth live knee call site: stage 3's new knee signature forces a
+  re-point here like the other three (Task 12's Files carry it), and the draw figure then inherits
+  the swapped brake through that re-pointed call — the second-order ripple stage 3's third A/B arm
+  isolates via its `drawBrakeCeiling` switch.
 - Two deliberate mixtures recorded in comments, not changed: the planner's queued-output increment
   (`directed-build.ts:263`) stays raw capacity (queued capacity has no stock, strike or brake state);
   the founding manifest's *want* line stays raw civilian while its *cap* now flows through
@@ -1100,7 +1102,8 @@ independent capacity computation, which is how the panel and the matcher drift a
 Consumes:   Tasks 1, 2.
 
 ### Task 7 — harness: cohort comparability + stage-1 detectors
-Files:      `lib/tick-harness/cohort-analysis.ts`; `lib/tick-harness/types.ts`;
+Files:      `lib/tick-harness/cohort-analysis.ts`; `lib/tick-harness/market-analysis.ts` (the
+hunting detector — a market-classification reading, not a role/cohort one); `lib/tick-harness/types.ts`;
 `lib/tick-harness/build-analysis.ts`; `lib/tick-harness/runner.ts`; `lib/tick/types.ts`;
 `lib/tick/processors/directed-build.ts`; `lib/world/tick.ts`; `scripts/simulate.ts`
 Interface:
@@ -1113,11 +1116,13 @@ Interface:
   cycle-over-cycle deficit↔surplus flips on industrial-input goods, and delivered-then-re-donated
   tonnage ÷ delivered. Both horizons.
 - `TickProcessorResult` / `TickInstrumentation` gain
-  `foundingManifests?: Array<{ systemId: string; sourceSystemId: string; tonnage: number }>`
-  (from `SystemDevelopment.stockManifest`, which already carries `sourceSystemId`);
+  `foundingManifests?: Array<{ systemId: string; sourceSystemId: string; tonnage: number; goodIds: string[] }>`
+  (from `SystemDevelopment.stockManifest`, which already carries `sourceSystemId`; `goodIds` scopes
+  the cover read to the goods the manifest actually touched);
   `FoundedColonyRecord` gains `manifestTonnage` and `founderCoverAfter` (founder's post-manifest stock
-  ÷ its `donorReserve`, sampled at the founding tick); `FoundingStockSummary` gains
-  `meanManifestTonnage` and `medianFounderCoverAfter`.
+  ÷ its `donorReserve`, the **minimum across the manifest's goods** — the binding good, since the
+  metric exists to catch a founder drawn under its own floor; sampled at the founding tick);
+  `FoundingStockSummary` gains `meanManifestTonnage` and `medianFounderCoverAfter`.
 Figure:     all of it reads **use** by construction (`GoodMarketState.demand`, `donorReserve`). No
 harness metric reads the draw figure.
 Proves:     the hunting detector fires on a deliberately-crossed build (warehousing thresholds wired
@@ -1208,6 +1213,10 @@ Merge condition: **budget-capped delivery count 0.** If any deliveries are budge
 mechanics against an ample budget; pricing the budget is roadmap row 10's work). If flow-row volume is
 a problem, a per-deficit donor cap is the stated fallback — a design limit, recorded, never silent.
 Also: cadence-invariance pair, coarse health bar, `npx vitest run`, `npx next build --webpack`.
+Also: a cycle-start wall-clock read (`npm run simulate` elapsed, or the tick-perf profile) before
+stage 2 lands — stage 1 stacked ~tens of ms of new work onto the tick every stage resolves on
+(use-figure rewrite + the shared derivation for logistics and build), and stage 2's multi-donor
+matcher adds to the same tick; a hitch is cheaper to catch between stages than inside one.
 
 ---
 
@@ -1253,6 +1262,7 @@ Consumes:   —
 Files:      `lib/engine/tick.ts`; `lib/engine/market-tick-builder.ts`; `lib/engine/supply-chain.ts`;
 `lib/tick/world/economy-world.ts`; `lib/tick/processors/economy.ts`;
 `lib/tick/adapters/memory/economy.ts`; `lib/world/tick.ts`; `lib/engine/industry.ts`;
+`lib/tick/processors/good-market-state.ts`; `lib/tick/processors/__tests__/good-market-state.test.ts`;
 `lib/engine/__tests__/tick.test.ts`; `lib/tick/processors/__tests__/economy.test.ts`
 Interface:
 - `MarketTickEntry` and `TickEntryInput` gain `honestUseRate: number` (**the USE figure**),
@@ -1263,9 +1273,11 @@ Interface:
   `adapters/memory/economy.ts:78, 89`). The processor must pass the pre-catchUp, pre-suppress value:
   `entry.productionRate` is catch-up-scaled (`economy.ts:145`) and strike-suppressed
   (`tick.ts:153-156`) and would make the knee cadence-dependent.
-- The three live brake call sites all call the one knee function: `supply-chain.ts:122` (the coupled
+- The four live brake call sites all call the one knee function: `supply-chain.ts:122` (the coupled
   tick), `economy.ts:205` (selling-factor signal → decay), `industry.ts:707`
-  (`buildIndustryReadout`'s selling factor, via Task 13).
+  (`buildIndustryReadout`'s selling factor, via Task 13), and the draw figure's per-market brake
+  pass in `good-market-state.ts` (stage 1's addition — the site Task 15's `drawBrakeCeiling`
+  third-arm switch selects between live and anchor).
 - `simulateEconomyTick` (`tick.ts:92-117`) is production-dead and is **deleted**, with all six
   `simulateEconomyTick — *` suites (`— production` / `— operating ceiling` / `— consumption` /
   `— consumption multipliers` / `— immutability` / `— per-entry band` — every suite in

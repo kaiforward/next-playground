@@ -41,7 +41,8 @@ function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: numb
     systemId: row.systemId,
     factionId: row.factionId,
     generation: systemLogisticsGeneration(row.population) * catchUp * funded,
-    goods: toGoodMarketStates(row),
+    // The matcher is the draw figure's only reader, so this is the one call site that computes it.
+    goods: toGoodMarketStates(row, { withDraw: true }),
   };
 }
 

@@ -228,6 +228,17 @@ export interface WorldMarket {
    * civilian+industrial total on the first cycle.
    */
   demandRate: number;
+  /**
+   * What this system's population and industry actually USE of this good per reference cycle:
+   * civilian want at full rate plus the local recipe draw, staffing- and strike-gated. Every
+   * warehousing quantity — logistics targets, donor floors, consumer/producer classification —
+   * is denominated in it, so it must move only as buildings, population and strike state move,
+   * never with stock. Distinct from `demandRate` above, which is the floored, capacity-based
+   * pricing anchor. Rewritten each economy cycle by the population processor and seeded at
+   * market creation. **Missing reads as a live recompute, never 0** — a 0 would make the row an
+   * un-sinkable, fully-drawable donor.
+   */
+  honestUseRate?: number;
   /** Infrastructure storage capacity for this good from the system's built buildings. */
   storageCapacity: number;
   /**
@@ -242,6 +253,16 @@ export interface WorldMarket {
   realizedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers are deliberately excluded. Missing reads as false. */
   productionSuppressed?: boolean;
+  /**
+   * The strike × maintenance production scalar the economy applied to this row's SYSTEM this cycle,
+   * ∈ (0,1]. Distinct from the `productionSuppressed` bool above, which is a property of the market
+   * (false on every good the system has no industry for). Persisted because the draw figure is
+   * derived live at read points, away from the strike params and the maintenance malus.
+   * Missing reads as 1.
+   */
+  productionSuppressRate?: number;
+  /** Aggregated event production multiplier the economy applied this cycle (caps 0.1–3.0). Missing reads as 1. */
+  productionMult?: number;
   /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2], advanced
    *  per assessment by the economy interval's catchUpFactor (2 = two reference cycles). Missing reads as 0. */
   squeezeCycles?: number;

@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts } from "../cohort-analysis";
+import {
+  classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts, marketRolesByKey,
+} from "../cohort-analysis";
+import type { MarketRole } from "../types";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { WorldMarket } from "@/lib/world/types";
@@ -12,6 +15,8 @@ function state(over: Partial<GoodMarketState> = {}): GoodMarketState {
     logisticsTarget: 100,
     donorReserve: 100,
     demand: 10,
+    // Nothing braked and no event running, which is what these role fixtures state.
+    drawDemand: 10,
     civilianDemand: 10,
     production: 0,
     capacityProduction: 0,
@@ -84,6 +89,59 @@ describe("computeRoleCoverLevels", () => {
     expect(entry.countByRole.inert).toBe(1);
     expect(entry.countByRole.exporter).toBe(0);
     expect(entry.countByRole["self-supplier"]).toBe(0);
+  });
+
+  it("is unchanged when pinned to the partition it would have computed itself", () => {
+    // The null case the pin must satisfy before any A/B can trust it: pinning to the classifier's
+    // own fresh roles has to reproduce the unpinned report exactly, or the pin is itself a change.
+    const systems = [sys("s1"), sys("s2")];
+    const markets = [mkt("s1", "water", 50, 10), mkt("s2", "water", 0, MIN_DEMAND)];
+
+    const fresh = new Map(
+      [...marketRolesByKey(systems, markets)].map(([key, info]) => [key, info.role]),
+    );
+    expect(computeRoleCoverLevels(systems, markets, fresh))
+      .toEqual(computeRoleCoverLevels(systems, markets));
+  });
+
+  it("holds cohort membership fixed against the pinned partition, not the live classification", () => {
+    // The classifier reads `state.demand` in its exporter branch, so membership moves in any stage
+    // that changes the demand figure — and a cover median then moves with the cohort MIX rather than
+    // with anything about supply. Pinning is what makes two arms comparable. The fixture is a
+    // staffed extractor on a live water deposit — a genuine exporter (the scoping test below pins
+    // the arithmetic) — so the pin demonstrably overrides a real producer classification.
+    const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
+    const systems = [sys("s1", { population: 10, buildings: { water: 1 }, yields: producerYields })];
+    const markets = [mkt("s1", "water", 50, 1)];
+
+    const liveInfo = marketRolesByKey(systems, markets).get("s1|water");
+    expect(liveInfo?.role).toBe("exporter"); // non-vacuous: the pin overrides a role really held
+
+    const pinned = computeRoleCoverLevels(systems, markets, new Map([["s1|water", "consumer"]]));
+    expect(pinned[0].countByRole.consumer).toBe(1);
+    expect(pinned[0].countByRole.exporter).toBe(0);
+  });
+
+  it("refuses a pin that matches no live market — another world's partition", () => {
+    // Sequential system ids collide across seeds, so a wrong-world pin usually half-matches; a
+    // zero-match pin (different systemCount, renamed goods) would otherwise classify everything
+    // live while the report prints PINNED.
+    const systems = [sys("s1")];
+    const markets = [mkt("s1", "water", 50, 10)];
+    expect(() =>
+      computeRoleCoverLevels(systems, markets, new Map<string, MarketRole>([["other|ore", "consumer"]])),
+    ).toThrow(/matched 0/);
+  });
+
+  it("falls back to the live role for a market the pinned partition never saw", () => {
+    // A colony founded after the baseline arm was measured has no pinned entry; dropping it would
+    // silently shrink the later arm's population.
+    const systems = [sys("s1"), sys("s2")];
+    const markets = [mkt("s1", "water", 50, 10), mkt("s2", "water", 50, 10)];
+    const partial = new Map<string, MarketRole>([["s1|water", "consumer"]]);
+
+    const [entry] = computeRoleCoverLevels(systems, markets, partial);
+    expect(entry.countByRole.consumer).toBe(2); // s2 classified live, still counted
   });
 
   it("reports 0 rather than NaN for a role with no markets", () => {
