@@ -27,7 +27,7 @@ import type { BuildCommitmentRecord, FoundedColonyRecord } from "./build-analysi
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
 import type { TreasurySnapshot } from "./treasury-analysis";
-import { computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey } from "./cohort-analysis";
+import { computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey, marketRolesByKey } from "./cohort-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
@@ -35,6 +35,7 @@ import type { WorldFlowEvent, WorldMarket } from "@/lib/world/types";
 import type {
   HarnessConfig,
   HarnessResults,
+  MarketRole,
   MarketSnapshot,
   EventLifecycle,
   RegionOverviewEntry,
@@ -255,7 +256,18 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   );
 
   const homeworldIds = new Set(world.factions.map((f) => f.homeworldId));
-  const roleCoverLevels = computeRoleCoverLevels(finalTickSystems, currentMarkets);
+  // The live partition — what this arm actually classified — published so a later arm can pin to
+  // it. Taken before the pin is applied below, so a pinned run still reports its own membership
+  // and the drift between arms stays visible.
+  const marketRoles: Record<string, MarketRole> = {};
+  for (const [key, info] of marketRolesByKey(finalTickSystems, currentMarkets)) {
+    marketRoles[key] = info.role;
+  }
+  const roleCoverLevels = computeRoleCoverLevels(
+    finalTickSystems,
+    currentMarkets,
+    config.pinnedRoles ? new Map(Object.entries(config.pinnedRoles)) : undefined,
+  );
   const worldCohorts = computeWorldCohorts(
     finalTickSystems, currentMarkets, homeworldIds, STRIKE_PARAMS.threshold, world.events,
   );
@@ -279,6 +291,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     marketSnapshots,
     marketHealth,
     roleCoverLevels,
+    marketRoles,
     demandHunting: summarizeDemandHunting(demandHunting, logisticsFlows),
     worldCohorts,
     eventImpacts,

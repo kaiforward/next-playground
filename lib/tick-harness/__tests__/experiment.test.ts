@@ -3,6 +3,8 @@ import {
   ExperimentConfigSchema,
   experimentToHarnessConfig,
   buildExperimentResult,
+  parsePinnedRoles,
+  pinnedRolesFor,
 } from "../experiment";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { generateWorld } from "@/lib/world/gen";
@@ -115,6 +117,7 @@ describe("ExperimentConfig", () => {
           coverLevels: [],
         },
         roleCoverLevels: [],
+        marketRoles: {},
         demandHunting: { flipRate: 0, haulChurnRatio: 0 },
         worldCohorts: [],
         eventImpacts: [],
@@ -212,5 +215,55 @@ describe("ExperimentConfig", () => {
       expect(saved.roleCoverLevels).toEqual([]);
       expect(saved.worldCohorts).toEqual([]);
     });
+  });
+});
+
+describe("parsePinnedRoles", () => {
+  const roles = { "s1|ore": "exporter", "s2|ore": "consumer" };
+
+  it("reads the partition off a single saved result", () => {
+    const parsed = parsePinnedRoles(JSON.stringify({ marketRoles: roles, elapsedMs: 1 }));
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(parsed.document.single).toEqual(roles);
+    expect(pinnedRolesFor(parsed.document, "equilibrium")).toEqual(roles);
+  });
+
+  it("reads a partition per horizon off a quick-run report, and keeps them apart", () => {
+    // The quick run emits both horizons in one document. Pinning an equilibrium arm to a startup
+    // partition would compare two arms against a membership neither of them has.
+    const startup = { "s1|ore": "consumer" };
+    const parsed = parsePinnedRoles(JSON.stringify({
+      startup: { marketRoles: startup },
+      equilibrium: { marketRoles: roles },
+    }));
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(pinnedRolesFor(parsed.document, "startup")).toEqual(startup);
+    expect(pinnedRolesFor(parsed.document, "equilibrium")).toEqual(roles);
+  });
+
+  it("rejects a document carrying no partition at all, naming what it looked for", () => {
+    const parsed = parsePinnedRoles(JSON.stringify({ marketHealth: {}, elapsedMs: 1 }));
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toContain("marketRoles");
+  });
+
+  it("rejects a value that is not one of the four roles", () => {
+    // A typo'd or stale role would silently create a fifth cohort that counts nothing.
+    const parsed = parsePinnedRoles(JSON.stringify({ marketRoles: { "s1|ore": "importer" } }));
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toContain("importer");
+  });
+
+  it("rejects a file that is not JSON at all", () => {
+    const parsed = parsePinnedRoles("not json {");
+    expect(parsed.ok).toBe(false);
+  });
+
+  it("reports no partition for a horizon the document does not carry", () => {
+    const parsed = parsePinnedRoles(JSON.stringify({ equilibrium: { marketRoles: roles } }));
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(pinnedRolesFor(parsed.document, "startup")).toBeUndefined();
   });
 });
