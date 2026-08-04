@@ -136,6 +136,24 @@ direction was picked before the evidence, it cost a PR.
   capacity) reads as logistics-depth-pass material, not a threshold tweak. All stated as leanings;
   the dead zone's own fate still waits on the dwell-time evidence above.
 
+- Kai, 2026-08-04 (after the deficit-attribution falsification): **"deliberate under-serve" is
+  retired as design intent.** The goal is logistics as efficient as possible, limited by budget
+  and infrastructure — the AI must never intentionally withhold goods from a system that needs
+  them while capacity exists. The stale docstring/doc claims (processor comment, SPEC.md,
+  `economy-autonomic-agency.md`, the cadence-invariance yaml) were cleaned the same day; the
+  negative space remains, but it emerges from real constraints (finite priced budget,
+  infrastructure, genuine scarcity), not from designed inefficiency.
+  `docs/planned/negative-space-economy.md`'s "make the base efficient — NOT OK" bullet is in
+  tension with the matcher fix below and needs deliberate reconciliation when that fix is specced.
+- Kai, 2026-08-04: the budget overscale (94% idle) is fine for now — an ample budget lets the
+  other mechanics be proven sound before the budget is limited. When it is properly implemented
+  (monetised, row 10's territory), binding it near the current ~6% spend level is a strong
+  possibility.
+- Kai, 2026-08-04: the single-donor-per-deficit-per-cycle matcher cap **should be fixed**
+  (direction stated after the attribution evidence; placement in the queue pending).
+- Kai, 2026-08-04: actual resource scarcity (the thin-reachable-stock share of the residual) is
+  not a mechanical problem in the way the matcher cap is — genuine scarcity is acceptable.
+
 ## Evidence: dead-zone dwell time (claim committed before the instrument ran)
 
 **Status: measured 2026-08-03.** The claim and falsifier below were committed before the

@@ -32,16 +32,15 @@ it **builds viable systems up toward their potential**. Two mechanisms, one slow
 **Two rules:**
 
 > **Directed logistics:** a faction moves its own surplus to its own deficits — the sole goods-mover
-> between systems — on a slow clock, silently, within a capacity budget set *below* total need.
+> between systems — on a slow clock, silently, within a finite capacity budget.
 >
 > **Autonomic build:** a faction builds its systems up toward viable potential — housing leads,
 > population fills it, industry follows the resident workforce.
 
 Both are **needs-driven and capacity-bounded**, treasury-funded on top: the owning faction's latched
-funded fraction scales what share of each pool's throughput runs, never past the physical ceiling. The
-physical budget is deliberately smaller than total need, so a permanent residual remains — the
-**negative space**, and the standing player opportunity the later scaling/bounty rework turns into
-contestable trade.
+funded fraction scales what share of each pool's throughput runs, never past the physical ceiling.
+Whatever the pools cannot serve remains as a permanent residual — the **negative space**, and the
+standing player opportunity the later scaling/bounty rework turns into contestable trade.
 
 The two halves reinforce each other and are why **logistics-first** was the correct sequencing: logistics
 delivers supply → a system becomes *fed and calm* → a fed, calm system is what the build planner grows.
@@ -155,7 +154,7 @@ cycle, no carry-over.
 **Work = quantity × route cost**, where route cost combines hop count and total fuel cost along the path.
 This one choice does triple duty:
 
-1. **Limiter** — match until the pool is spent, then stop. Pool < total need ⇒ residual ⇒ negative space.
+1. **Limiter** — match until the pool is spent, then stop; the pool is a hard capacity ceiling on hauling.
 2. **Logistics unit** — population-scaled, treasury-funded (`funded.logistics`).
 3. **Distance-as-cost** — near deficits are cheap, distant ones expensive, so the matcher feeds nearby
    suppliable systems and leaves the stranded few unfed, exactly as designed, with no money model.
@@ -330,7 +329,7 @@ climbing, fed systems climbing toward potential (housing → population → indu
 barren/low-habitable worlds staying small — while the self-sufficient core and the stranded fringe are
 untouched. Coarse health-bar, not precision (per the calibrate-to-shape stance): no NaN / runaway / pinning;
 logistics never draws a donor below its own reserve; build never exceeds habitable land or staffable labour;
-budget < need leaves a visible residual. Validated in the simulator first, then live observation.
+a visible residual of unserved deficits remains. Validated in the simulator first, then live observation.
 
 ---
 

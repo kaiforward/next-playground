@@ -59,9 +59,9 @@ function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: numb
  *    donors / cheap re-export targets. The target (40 economy-runs of cover) already
  *    vastly exceeds one cycle's draw, so a single fill-to-anchor over-provisions on its own.
  *  - The haul *budget* IS scaled (`generation × catchUp` in `toLogisticsState`). It is
- *    per-cycle income (Σ pop × generation, exhaustion = deliberate under-serve); paid
- *    unscaled but more often, it would silently inflate wall-clock haul capacity exactly
- *    in the budget-bound under-serve regime the mechanic is designed around.
+ *    per-cycle income (Σ pop × generation) — a capacity ceiling, not a target; paid
+ *    unscaled but more often, it would silently inflate wall-clock haul capacity
+ *    whenever the budget binds.
  */
 export async function runDirectedLogisticsProcessor(
   world: DirectedLogisticsWorld,
