@@ -352,10 +352,13 @@ restated in new units, Q4 explicitly deferred to the pricing pass.
 - ~~`/measure` throttled exporters: unmet vs sated~~ — done 2026-08-04, claim falsified (below):
   71.8% face reachable deficits; the standing constraint is haul budget / matching, not
   production volume.
-- `/measure` (new, from the B falsification): why do reachable deficits persist beside drawable
-  stock — budget exhaustion vs route cost vs matching order? Sizes how much of the served-last
-  pattern the haul budget owns before any brake conclusions are drawn. Adjoins row 10's
-  remove-everything-free audit; sequencing with row 10 is Kai's call.
+- ~~`/measure` (new, from the B falsification): why do reachable deficits persist beside drawable
+  stock — budget exhaustion vs route cost vs matching order?~~ — done 2026-08-04, claim FALSIFIED
+  (below): the haul budget owns 0% — it never binds (zero funding-bound events, 6–8% spent) and an
+  infinite budget reproduces the identical transfers. Persisting deficits are thin reachable
+  drawable stock (~57% at equilibrium, the brake A/B's channel) + the single-donor-per-cycle
+  matcher structure (~42%, logistics-depth-pass material). Row 10's budget monetisation has no
+  flow leverage unless authored to bind.
 - Then the spec (demand honesty + brake denominators), then `/spec-review`.
 
 ## Evidence: who does the brake bite (claim committed before the instrument ran)
@@ -696,7 +699,148 @@ brake-cohort run's 586,588 / 160,732 exactly (deterministic seed).
 
 ## Evidence: deficit persistence attribution (claim committed before the instrument ran)
 
-**Status: claim committed, instrument not yet run.**
+**Status: measured 2026-08-04 — claim FALSIFIED.** Falsifier committed as `c71c2589` before the
+run.
+
+```
+Meaning:  The free haul budget owns NONE of the persisting deficit tonnage — it never binds
+          (zero funding-bound events in 10,000 faction-evaluations; 6–8% of the budget spent)
+          and an infinite-budget counterfactual reproduces the identical transfer set. Deficits
+          persist because drawable stock within reach is thin (~57% of equilibrium unmet
+          tonnage) and because the matcher grants each deficit one donor per cycle, leaving
+          reachable stock unshipped (~42%); route reachability is a rounding error (~1%).
+Claim:    as committed below (budget-owned = U_real − U_inf ≥ 50% of U_real at equilibrium).
+Number:   equilibrium: budget-owned 0.0% — U_real = U_inf = 10,566,883,192 shortfall-units
+          exactly; funding-bound 0 of 2,000 evaluations (0 of 10,000 whole run); budget spent
+          6.0% (whole run 8.1%). U_inf decomposition: single-source 42.0%, thin-reachable-stock
+          56.8%, unreachable 1.0%, drained-by-order 0.2%, no-donor 0.0%. Service by severity
+          quartile (worst→least): 2.1 / 5.3 / 9.0 / 18.6%. Sink population quartiles: smallest
+          quartile served 19.2% of its shortfall, largest 1.7% — ~75% of U_real sits in the
+          largest-population quartile. Startup: budget-owned 0.0%; no-donor 86.4%
+          (lone-homeworld factions), thin 12.2%.
+Horizon:  both, one 12,000-tick run. The claim reading is stationary (budget-owned 0.0% and
+          funding-bound 0 in every window); the structural mix is NOT stationary — single-source
+          29.5% → 42.0% and thin 69.2% → 56.8% across the late windows, still shifting at
+          t=12,000 as the maturing galaxy accumulates drawable stock.
+Cohort:   every matcher deficit (2,820,188 deficit-checks over 10,000 faction-evaluations, all
+          factions + independents), 600 systems, seed 42, scale 100, single seed. Tonnage is
+          fill-to-logisticsTarget shortfall units (40-cycle warehouse cover), not per-cycle
+          consumption.
+Licenses: Supports: the served-last pattern is not a budget phenomenon — monetising the haul
+          budget (row 10's audit) changes nothing at current effective pricing, since flows use
+          6–8% of it (a priced budget binds only if authored below that); the brake A/B must not
+          read persisting deficits as budget noise, and budget headroom EXISTS for brake-released
+          stock to move; the one-donor-per-deficit-per-cycle structure is a real and growing
+          constraint (42% of equilibrium unmet tonnage sat reachable-but-unshipped at the
+          deficit's turn); in tonnage terms "served last" is the LARGEST worlds — their 40-cycle
+          gaps dwarf any donor's drawable — while the smallest quartile gets the best fill
+          fraction.
+          Does NOT support: why reachable drawable stock is thin (brake suppression vs
+          consumption vs donor reserves — the brake A/B's question, unanswered here); that a
+          funding gate can never bind (funded fractions sat ≈1 in this run; row 10 could author
+          one that does); reading U_real as starvation (it is a warehousing gap); generalisation
+          beyond seed 42.
+```
+
+**Consequence, per the pre-committed falsifier:** the presumption that row 10's
+remove-everything-free audit has leverage on the served-last pattern through the haul budget is
+dead — the budget is ~94% idle and pricing it is treasury flavour, not a flow change, unless it
+is deliberately authored to bind. The attribution redirects the question to the two live owners:
+thin reachable drawable stock (the channel the brake redesign acts on — and since the budget
+never binds, any stock the brake change releases has the haul headroom to actually move) and the
+matcher's single-donor-per-deficit-per-cycle structure, which adjoins Kai's hub/chain leaning in
+"Inputs noted" and reads as logistics-depth-pass material, not part of this spec. The
+leech-colony framing also inverts in tonnage terms: small colonies get the best fill *fraction*;
+the unmet-tonnage backlog concentrates at the largest worlds.
+
+<details><summary>Raw output (12,000-tick run)</summary>
+
+```
+scale=100 systems=600 seed=42 ticks=12000 cycle=24 logisticsInterval=24
+deficit = classifyMarketState deficit ∧ shortfall>0 ∧ production<demand (matcher membership); residual = shortfall − delivered at evaluation end
+U_real = residual under the live budget; U_inf = residual under generation=1e15 (same states, same matcher); budget-owned = U_real − U_inf
+CF structural buckets: single-source (reachable drawable remained at its turn) / drained-by-order (reachable initial ≥ shortfall) / thin (reachable initial < shortfall) / unreachable / no-donor
+constants: DEFICIT_FRACTION=0.8 SURPLUS_MARGIN=1.4 GENERATION_PER_POP=50
+
+VALIDATION:
+  sampled boundary ticks: 500 (first 24, last 12000)
+  t=24: hook eligible=520  independent developed-market count=520  MATCH
+  t=6024: hook eligible=15132  independent developed-market count=15132  MATCH
+  t=12000: hook eligible=15132  independent developed-market count=15132  MATCH
+  ramp whole-run total: 586588  expected 586588  MATCH
+  closed whole-run total: 160732  expected 160732  MATCH
+  engine real-mode deficits: 2820188  call-site recount: 2820188  MATCH
+  cf-mode deficits: 2820188  (must equal real: same states)  MATCH
+  engine real-mode transfers: 1307758  processor match.transfers: 1307758  MATCH
+
+STARTUP (≤ t=1008)
+  deficits: 56339 over 840 faction-evaluations  shortfall 265616466
+  real: served 5008270 (1.9% of shortfall)  U_real 260608196
+        outcomes: fully 24642  partial 2239  unserved 29458  funding-bound 0 (residual 0)
+        budget: total 244122749  spent 12538659 (5.1%)  first-bound at rank n/a (0/840 evals bound)
+        served by severity quartile (worst→least): 1.6%  2.3%  3.4%  4.6%
+  cf:   served 5008270 (1.9%)  U_inf 260608196  cf spend 12538659 (0.05× the real budget)
+        U_inf ≤ U_real: OK
+  BUDGET-OWNED: 0 = 0.0% of U_real
+  U_inf decomposition: single-source 0.5%  drained-by-order 0.4%  thin 12.2%  unreachable 0.4%  no-donor 86.4%
+
+STATIONARITY CHECK (t=7200–9600)
+  deficits: 469369 over 2000 faction-evaluations  shortfall 14662284270
+  real: served 312581578 (2.1% of shortfall)  U_real 14349702691
+        outcomes: fully 33538  partial 258485  unserved 177346  funding-bound 0 (residual 0)
+        budget: total 7692102616  spent 552415618 (7.2%)  first-bound at rank n/a (0/2000 evals bound)
+        served by severity quartile (worst→least): 1.7%  3.8%  6.7%  11.0%
+  cf:   served 312581578 (2.1%)  U_inf 14349702691  cf spend 552415618 (0.07× the real budget)
+        U_inf ≤ U_real: OK
+  BUDGET-OWNED: 0 = 0.0% of U_real
+  U_inf decomposition: single-source 29.5%  drained-by-order 0.4%  thin 69.2%  unreachable 1.0%  no-donor 0.0%
+
+EQUILIBRIUM (t=9600–12000)
+  deficits: 340550 over 2000 faction-evaluations  shortfall 10857548232
+  real: served 290665041 (2.7% of shortfall)  U_real 10566883192
+        outcomes: fully 37611  partial 193938  unserved 109001  funding-bound 0 (residual 0)
+        budget: total 7998196647  spent 476636019 (6.0%)  first-bound at rank n/a (0/2000 evals bound)
+        served by severity quartile (worst→least): 2.1%  5.3%  9.0%  18.6%
+  cf:   served 290665041 (2.7%)  U_inf 10566883192  cf spend 476636019 (0.06× the real budget)
+        U_inf ≤ U_real: OK
+  BUDGET-OWNED: 0 = 0.0% of U_real
+  U_inf decomposition: single-source 42.0%  drained-by-order 0.2%  thin 56.8%  unreachable 1.0%  no-donor 0.0%
+
+WHOLE RUN
+  deficits: 2820188 over 10000 faction-evaluations  shortfall 49160971608
+  real: served 1100829507 (2.2% of shortfall)  U_real 48060142101
+        outcomes: fully 168632  partial 1139126  unserved 1512430  funding-bound 0 (residual 0)
+        budget: total 25142369474  spent 2024801923 (8.1%)  first-bound at rank n/a (0/10000 evals bound)
+        served by severity quartile (worst→least): 1.8%  3.8%  6.0%  7.5%
+  cf:   served 1100829507 (2.2%)  U_inf 48060142101  cf spend 2024801923 (0.08× the real budget)
+        U_inf ≤ U_real: OK
+  BUDGET-OWNED: 0 = 0.0% of U_real
+  U_inf decomposition: single-source 23.1%  drained-by-order 0.7%  thin 73.7%  unreachable 2.0%  no-donor 0.6%
+
+CLAIM (equilibrium): budget-owned ≥ 50% of U_real: 0.0% → FALSIFIED
+
+PER-GOOD (whole run, top 12 by real residual):
+  gas              U_real=  5356872078  U_inf=  5356872078  owned=  0.0%  cf: ss 46.4% dr 0.8% th 52.3% un 0.3% nd 0.3%
+  ore              U_real=  5172838770  U_inf=  5172838770  owned=  0.0%  cf: ss 21.9% dr 0.4% th 76.3% un 0.8% nd 0.6%
+  consumer_goods   U_real=  4350788948  U_inf=  4350788948  owned=  0.0%  cf: ss 10.6% dr 0.7% th 84.5% un 3.8% nd 0.5%
+  minerals         U_real=  3688334243  U_inf=  3688334243  owned=  0.0%  cf: ss 35.5% dr 0.5% th 62.0% un 1.6% nd 0.4%
+  electronics      U_real=  3432814678  U_inf=  3432814678  owned=  0.0%  cf: ss 4.6% dr 0.6% th 90.6% un 3.4% nd 0.8%
+  textiles         U_real=  3267564027  U_inf=  3267564027  owned=  0.0%  cf: ss 14.3% dr 0.6% th 82.1% un 2.5% nd 0.5%
+  chemicals        U_real=  3222095726  U_inf=  3222095726  owned=  0.0%  cf: ss 24.7% dr 0.6% th 73.2% un 0.9% nd 0.6%
+  polymers         U_real=  2911069393  U_inf=  2911069393  owned=  0.0%  cf: ss 20.6% dr 0.6% th 76.5% un 1.9% nd 0.4%
+  metals           U_real=  2454777612  U_inf=  2454777612  owned=  0.0%  cf: ss 23.4% dr 0.6% th 74.4% un 0.9% nd 0.7%
+  components       U_real=  2156825737  U_inf=  2156825737  owned=  0.0%  cf: ss 21.1% dr 0.6% th 74.8% un 2.5% nd 1.0%
+  biomass          U_real=  2097179695  U_inf=  2097179695  owned=  0.0%  cf: ss 17.5% dr 1.0% th 78.3% un 2.7% nd 0.5%
+  water            U_real=  2019537864  U_inf=  2019537864  owned=  0.0%  cf: ss 36.1% dr 0.3% th 62.5% un 0.8% nd 0.3%
+
+SINKS BY POPULATION QUARTILE (equilibrium; end-of-run population):
+  Q1 pop 20–223 (146 sinks): served 19.2%  U_real 47852571  U_inf 47852571  budget-owned 0.0%
+  Q2 pop 224–2118 (146 sinks): served 8.5%  U_real 583423472  U_inf 583423472  budget-owned 0.0%
+  Q3 pop 2118–3860 (146 sinks): served 4.1%  U_real 2056835225  U_inf 2056835225  budget-owned 0.0%
+  Q4 pop 3900–21766 (144 sinks): served 1.7%  U_real 7878771923  U_inf 7878771923  budget-owned 0.0%
+```
+
+</details>
 
 **Definitions.** At each logistics evaluation (the matcher's own loop, same read point and
 conditions as the prior three runs), every deficit (matcher membership: `classifyMarketState`
@@ -738,6 +882,12 @@ finding). Secondary colour, not claim-bound: budget utilisation and the required
 (counterfactual spend ÷ real budget), severity-quartile service profile, per-good decomposition,
 residuals cohorted by sink population. Both lib/ patches are measuring patches, reverted before
 write-up.
+
+All validations passed (see raw output). The funding-bound **zero** got its own second signal — a
+counter that never fires and a mechanism that never fires look identical — via a forced-bind check
+(`.superpowers/attrib-bind-check.ts`: budget 100 against a 1000-unit shortfall through the patched
+matcher) which produced exactly one funding-bound event, quantity 100, funding residual 900: PASS.
+The 0-of-10,000 reading is the mechanism, not the instrument.
 
 ## Related roadmap items
 
