@@ -1100,7 +1100,8 @@ independent capacity computation, which is how the panel and the matcher drift a
 Consumes:   Tasks 1, 2.
 
 ### Task 7 — harness: cohort comparability + stage-1 detectors
-Files:      `lib/tick-harness/cohort-analysis.ts`; `lib/tick-harness/types.ts`;
+Files:      `lib/tick-harness/cohort-analysis.ts`; `lib/tick-harness/market-analysis.ts` (the
+hunting detector — a market-classification reading, not a role/cohort one); `lib/tick-harness/types.ts`;
 `lib/tick-harness/build-analysis.ts`; `lib/tick-harness/runner.ts`; `lib/tick/types.ts`;
 `lib/tick/processors/directed-build.ts`; `lib/world/tick.ts`; `scripts/simulate.ts`
 Interface:
@@ -1113,11 +1114,13 @@ Interface:
   cycle-over-cycle deficit↔surplus flips on industrial-input goods, and delivered-then-re-donated
   tonnage ÷ delivered. Both horizons.
 - `TickProcessorResult` / `TickInstrumentation` gain
-  `foundingManifests?: Array<{ systemId: string; sourceSystemId: string; tonnage: number }>`
-  (from `SystemDevelopment.stockManifest`, which already carries `sourceSystemId`);
+  `foundingManifests?: Array<{ systemId: string; sourceSystemId: string; tonnage: number; goodIds: string[] }>`
+  (from `SystemDevelopment.stockManifest`, which already carries `sourceSystemId`; `goodIds` scopes
+  the cover read to the goods the manifest actually touched);
   `FoundedColonyRecord` gains `manifestTonnage` and `founderCoverAfter` (founder's post-manifest stock
-  ÷ its `donorReserve`, sampled at the founding tick); `FoundingStockSummary` gains
-  `meanManifestTonnage` and `medianFounderCoverAfter`.
+  ÷ its `donorReserve`, the **minimum across the manifest's goods** — the binding good, since the
+  metric exists to catch a founder drawn under its own floor; sampled at the founding tick);
+  `FoundingStockSummary` gains `meanManifestTonnage` and `medianFounderCoverAfter`.
 Figure:     all of it reads **use** by construction (`GoodMarketState.demand`, `donorReserve`). No
 harness metric reads the draw figure.
 Proves:     the hunting detector fires on a deliberately-crossed build (warehousing thresholds wired
