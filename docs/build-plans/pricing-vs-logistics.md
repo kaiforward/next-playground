@@ -694,6 +694,51 @@ prior runs (12,000 ticks, 600 systems, seed 42), aggregate counters only. Valida
 must equal the independent developed-market count, and the ramp/closed totals must reproduce the
 brake-cohort run's 586,588 / 160,732 exactly (deterministic seed).
 
+## Evidence: deficit persistence attribution (claim committed before the instrument ran)
+
+**Status: claim committed, instrument not yet run.**
+
+**Definitions.** At each logistics evaluation (the matcher's own loop, same read point and
+conditions as the prior three runs), every deficit (matcher membership: `classifyMarketState`
+deficit, shortfall > 0, production < demand) is served worst-severity-first from its single
+nearest reachable drawable donor, within the faction's haul budget (Σ population-scaled
+generation × funding). A deficit's *residual* is `shortfall − delivered` at the evaluation's end;
+**U_real** is the summed residual tonnage. The *counterfactual match* re-runs the same states
+through the same `matchFactionTransfers` with the budget made effectively infinite (per-system
+generation 1e15); **U_inf** is its residual tonnage. **Budget-owned tonnage = U_real − U_inf** —
+the shortfall that would have been served this same evaluation had the work budget not run out.
+The counterfactual's own residual decomposes per deficit at its turn: *single-source* (other
+reachable donors still held drawable stock — only the one-donor-per-evaluation structure left it
+short), *drained-by-order* (reachable initial drawable ≥ shortfall, but more-severe deficits took
+it first), *thin-reachable-stock* (reachable initial drawable < shortfall — never enough within
+reach this cycle), *unreachable* (drawable exists in the faction, none of it within this sink's
+route neighbourhood), *no-donor* (no drawable stock faction-wide in the good).
+
+**Claim.** The haul budget owns the served-last pattern: at equilibrium, budget-owned tonnage
+(U_real − U_inf) is at least 50% of U_real — the majority of the deficit shortfall left standing
+at the end of a logistics evaluation would have been served in that same evaluation with an
+unlimited work budget.
+
+**Falsifier.** If budget-owned tonnage is under 50% of U_real at equilibrium (startup also read),
+the claim is false: the standing constraint on persisting deficits is the matcher's structure
+(single-donor turns, severity-order drainage) or genuine reachable-stock scarcity, not the free
+haul budget — row 10's budget monetisation would not by itself materially change the served-last
+pattern, and the brake behavioural A/B must not treat persisting deficits as budget noise.
+
+**Instrument.** Measuring patch inside `matchFactionTransfers` itself
+(`lib/engine/directed-logistics.ts`) — the matcher's own loop annotates each deficit's outcome —
+plus a call-site hook in the processor that re-runs each faction's states with the inflated budget
+under a collector mode flag. Scratch runner `.superpowers/deficit-attribution-diag.ts`, 12,000
+ticks, 600 systems, seed 42, scale 100, aggregate counters only. Validation before reading:
+eligible must equal the independent developed-market count; ramp/closed whole-run totals must
+reproduce the brake-cohort run's 586,588 / 160,732 exactly (the patch must not perturb the
+trajectory); the real-mode collector's transfer count must equal the processor's own
+`match.transfers` total; U_inf ≤ U_real in every window (a violation is an instrument fault, not a
+finding). Secondary colour, not claim-bound: budget utilisation and the required-budget multiple
+(counterfactual spend ÷ real budget), severity-quartile service profile, per-good decomposition,
+residuals cohorted by sink population. Both lib/ patches are measuring patches, reverted before
+write-up.
+
 ## Related roadmap items
 
 Item 4 (exporter price pinning) moved to the unqueued goods-pricing revisit on 2026-08-03 — pricing
