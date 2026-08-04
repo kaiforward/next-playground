@@ -225,6 +225,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   numbers, and either re-measure the survivors with `npm run simulate` or delete it.
 
 **Deferred / conditional**
+- **[S] Relations' trade-volume drift driver is dead code** — `getTradeVolumeBetween` counts only
+  cross-faction flows (`lib/tick/adapters/memory/relations.ts:191`) and every flow row is
+  same-faction by construction, so the "recent trade" drift term has never fired. Found at the
+  honest-demand-and-flow spec review (2026-08-04); pre-existing, untouched by that spec. Wire it
+  (or delete the term) when inter-faction trade / shared markets ship.
 - **[M] Switchable faction relation model** — `FactionRelation` stores one symmetric `score` per pair. If
   asymmetric opinion matters (one-sided grudges, vassalage), switch to per-direction scores. Reevaluate when
   diplomacy or war is specced.
