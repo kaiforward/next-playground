@@ -50,6 +50,7 @@ function ctxWithRealized(tick: number, realized: Map<string, Map<string, number>
           supplyStateBySystem: new Map(),
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: realized,
+          productionSuppressBySystem: new Map(),
         },
       }],
     ]),

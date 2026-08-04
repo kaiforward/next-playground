@@ -53,6 +53,11 @@ export interface MarketUpdate {
   realizedProductionRate: number;
   /** Whether strike or maintenance reduced production during this assessment. */
   productionSuppressed: boolean;
+  /** The system's strike × maintenance production scalar this assessment, ∈ (0,1] — the same value on
+   *  every row the system owns, unlike the per-market `productionSuppressed` bool above. */
+  productionSuppressRate: number;
+  /** Aggregated event production multiplier applied this assessment (1 = none). */
+  productionMult: number;
   /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced per
    *  assessment by the economy interval's catchUpFactor (2 = two reference cycles). */
   squeezeCycles: number;

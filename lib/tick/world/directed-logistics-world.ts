@@ -24,6 +24,10 @@ export interface MarketRowForLogistics {
   realizedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
   productionSuppressed?: boolean;
+  /** The owning system's strike × maintenance production scalar, ∈ (0,1]; missing ⇒ 1. */
+  productionSuppressRate?: number;
+  /** Aggregated event production multiplier applied last cycle; missing ⇒ 1. */
+  productionMult?: number;
   /** Rationed-economy persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
   squeezeCycles?: number;
   /** Structural-deficit persistence clock: advanced by the cycle's reference-time span, saturated at 2. */

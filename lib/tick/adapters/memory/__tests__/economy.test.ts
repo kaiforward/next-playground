@@ -108,6 +108,8 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       satisfaction: 1,
       realizedProductionRate: Number.NaN,
       productionSuppressed: false,
+      productionSuppressRate: 1,
+      productionMult: 1,
       squeezeCycles: 4.8,
     }]);
     expect(world.markets[0].realizedProductionRate).toBe(0);
@@ -131,6 +133,8 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       satisfaction: 1,
       realizedProductionRate: 0,
       productionSuppressed: false,
+      productionSuppressRate: 1,
+      productionMult: 1,
       squeezeCycles: 1.5,
     }]);
     expect(world.markets[0].squeezeCycles).toBe(1.5); // not floored to 1

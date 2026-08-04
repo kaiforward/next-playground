@@ -276,6 +276,8 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       satisfaction: m.satisfaction,
       realizedProductionRate: m.realizedProductionRate,
       productionSuppressed: m.productionSuppressed,
+      productionSuppressRate: m.productionSuppressRate,
+      productionMult: m.productionMult,
       squeezeCycles: m.squeezeCycles,
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,

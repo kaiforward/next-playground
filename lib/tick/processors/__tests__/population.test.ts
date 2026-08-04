@@ -73,6 +73,7 @@ function ctxWithD(d: Map<string, number>, regimes: Map<string, SupplyRegime> = n
           supplyStateBySystem: states,
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
         },
       }],
     ]),

@@ -64,6 +64,13 @@ export interface EconomySignals {
   /** Per-system, per-good physical output actually produced this cycle (post
    *  input-gate and operating-ceiling) — the production-tax base. Absent system ⇒ produced nothing. */
   realizedProductionBySystem: Map<string, Map<string, number>>;
+  /**
+   * Per-system strike × maintenance production scalar ∈ (0,1] this cycle applied. Emitted rather
+   * than recomputed downstream: the strike params and the treasury-fed maintenance malus reach
+   * only this processor, and a recompute at population time would read the just-written unrest.
+   * Absent system ⇒ 1.
+   */
+  productionSuppressBySystem: Map<string, number>;
 }
 
 /** Result returned by each processor. */

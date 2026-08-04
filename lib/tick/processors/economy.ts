@@ -168,6 +168,8 @@ export async function runEconomyProcessor(
   // aggregated the system's modifiers, so there's no second aggregation pass.
   const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
     const realizedProductionRate = simulated[i].realized / catchUp;
+    const productionSuppressRate = productionSuppressBySystem.get(m.systemId) ?? 1;
+    const productionMult = resolved[i].entry.productionMult ?? 1;
     // Advance by this cycle's reference-time (catchUpFactor), not a flat +1, so "two reference cycles
     // rationed" is the same wall-clock latency at any economy cadence. Fractional, finite, clamped [0,2].
     const squeezeCycles = satisfactionByIndex[i] < 1
@@ -182,6 +184,12 @@ export async function runEconomyProcessor(
         ? realizedProductionRate
         : 0,
       productionSuppressed: marketSuppressed(m),
+      // Both are draw-figure inputs the logistics read derives urgency from, so they carry the same
+      // finite guard as the realized rate above; a non-finite scalar reads as "no gate", never 0.
+      productionSuppressRate: Number.isFinite(productionSuppressRate) && productionSuppressRate >= 0
+        ? productionSuppressRate
+        : 1,
+      productionMult: Number.isFinite(productionMult) && productionMult >= 0 ? productionMult : 1,
       squeezeCycles,
     };
   });
@@ -233,6 +241,7 @@ export async function runEconomyProcessor(
     supplyStateBySystem,
     sellingFactorBySystem,
     realizedProductionBySystem,
+    productionSuppressBySystem,
   };
 
   const modCount = rawModifiers.length;
