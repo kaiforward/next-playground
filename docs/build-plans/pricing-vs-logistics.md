@@ -918,3 +918,525 @@ roles) shipped: the founding fill target is `FOUNDING_STOCK_COVER` cycles of raw
 harness surplus metric reads the donor line, and no logistics or planner code touches the anchor.
 `productionCeiling`'s `HOLD_COVER × targetStock` is now the *only* physical mechanism measured
 against the price anchor, and question 1 above reduces to it alone.
+
+## Build plan
+
+Spec: [economy-honest-demand-and-flow.md](../planned/economy-honest-demand-and-flow.md) (`/spec-review`
+passed 2026-08-04; all 21 amendments applied). This section is files, order and the contracts between
+tasks — the code is written at implementation, against the spec.
+
+**Branch and PR shape.** Three sub-PRs into the existing `feat/band-reconciliation` shared branch —
+one per stage, each reviewed going in and merged only after its own A/B against the previous stage's
+head. The stage boundaries are the merge boundaries; the tasks inside a stage are check-in pauses, not
+PRs. Ship order is 1 → 2 → 3 (the matcher ships before the brake so released stock lands on a matcher
+that can distribute it).
+
+### The two-figure contract
+
+Every interface below that carries demand states which figure it is. Getting this wrong is the
+single most likely way the plan fails, so it is stated once here and repeated per task.
+
+| Figure | What it means | Moves with | Who reads it |
+|---|---|---|---|
+| **use** | what this world's industry draws *when it runs* — staffing- and strike-gated, civilian at full rate | buildings, population, strike state | `logisticsTarget`, `donorReserve`, exporter reserve, the self-supply/exporter test, the build planner (rate-deficit + capacity sizing), the harness role classifier, the founding cap, the stage-3 knee, the Logistics tab |
+| **draw** | how urgently this world needs a delivery *right now* — the use figure further gated by each consuming factory's own output brake and live event production multipliers | the above, plus stock and events | `matchFactionTransfers` severity weight. Nothing else. |
+
+Two invariants the tests exist to protect:
+
+- **No warehousing quantity may read the draw figure.** A target that follows the momentary state of
+  the yard it stocks is the drain/refill oscillation `DONOR_RESERVE_COVER`'s docstring exists to
+  prevent (spec-review finding 1).
+- **No brake quantity may read a price-anchor figure.** Not `targetStock`, not `maxStock`, not
+  `MIN_DEMAND`. The stage-3 taper cap is physical built storage.
+
+The persisted pricing `demandRate` is untouched by every task below.
+
+---
+
+## Stage 1 — demand honesty (the two figures)
+
+### Task 1 — one pure engine module produces both figures
+Files:      `lib/engine/honest-demand.ts` (new); `lib/engine/__tests__/honest-demand.test.ts` (new)
+Interface:
+```ts
+export interface UseRate { civilian: number; industrial: number; total: number }
+export interface HonestDemandInput {
+  buildings: Record<string, number>;
+  population: number;
+  yields: ResourceVector;
+  /** Strike × maintenance scalar the economy applied this cycle, ∈ (0,1]. */
+  productionSuppress: number;
+}
+/** THE USE FIGURE, per good. `industrial` is exposed separately for the Logistics tab. */
+export function useRatesByGood(input: HonestDemandInput): Map<string, UseRate>
+
+export interface DrawRateInput extends HonestDemandInput {
+  /** Each consumer good's own live production-brake ceiling ∈ [0,1], at its current stock. */
+  brakeCeilingOf: (goodId: string) => number;
+  /** Each consumer good's live event production multiplier (clamp 0.1–3.0); absent ⇒ 1. */
+  productionMultOf: (goodId: string) => number;
+}
+/** THE DRAW FIGURE, per good. Single sum over `GOOD_RECIPE_CONSUMERS` — no topological pass. */
+export function drawRatesByGood(input: DrawRateInput): Map<string, number>
+```
+Both figures multiply the industrial term by `INPUT_DEMAND_MULTIPLIER` and take civilian want at full
+rate. Neither applies an input gate (a scarce input must not deflate its own demand signal).
+Proves:     `lib/engine/__tests__/honest-demand.test.ts` — (a) `productionSuppress` scales the
+industrial half and leaves `civilian` untouched; (b) with `brakeCeilingOf` returning 0 for every
+consumer, `drawRatesByGood` collapses to civilian-only while `useRatesByGood` is unchanged — the test
+that fails the moment the two figures are collapsed into one; (c) at `productionSuppress = 1`,
+`useRatesByGood(...).industrial` equals today's `inputDemandFromProduction` for the same system (the
+no-op baseline that fails if the use figure silently changed shape). Break the split deliberately —
+feed a brake ceiling into `useRatesByGood` — and (b) must fail.
+Consumes:   —
+
+### Task 2 — the economy processor persists the draw figure's two live inputs and emits the strike scalar
+Files:      `lib/world/types.ts`; `lib/world/save.ts`; `lib/tick/world/economy-world.ts`;
+`lib/tick/types.ts`; `lib/tick/processors/economy.ts`; `lib/tick/adapters/memory/economy.ts`;
+`lib/world/tick.ts` (`marketRowsBySystem`); `lib/tick/world/directed-logistics-world.ts`;
+`lib/tick/processors/__tests__/economy.test.ts`
+Interface:
+- `WorldMarket` gains `productionSuppressRate?: number` and `productionMult?: number` (absent ⇒ 1).
+  `productionSuppressRate` is the **system** scalar the economy applied — not the per-market
+  `productionSuppressed` bool, which stays as it is.
+- `MarketUpdate` gains `productionSuppressRate: number`, `productionMult: number`, both
+  finite-guarded on write exactly as `realizedProductionRate` is (`economy.ts:181-183`).
+- `EconomySignals` gains `productionSuppressBySystem: Map<string, number>` — the map the processor
+  already builds at `economy.ts:116-122`, emitted rather than recomputed downstream.
+- `MarketRowForLogistics` gains the same two optional fields.
+- `SAVE_FORMAT_VERSION` → 11 (per the spec's save-shape bump; pre-1.0 saves break by policy).
+Figure:     neither — these are **draw**-figure inputs only. Nothing here touches the use figure.
+Proves:     `lib/tick/processors/__tests__/economy.test.ts` — a system above the strike threshold
+writes `productionSuppressRate < 1` on **every** market row it owns while a calm system writes
+exactly 1, and a live `production_rate` modifier writes the `productionMult` the tick actually
+applied. Fails if the scalar is taken per-market from `productionSuppressed` (which is false on every
+good the system does not produce) instead of per-system.
+Consumes:   —
+
+### Task 3 — the population processor writes the use figure
+Files:      `lib/world/types.ts`; `lib/tick/world/population-world.ts`;
+`lib/tick/processors/population.ts`; `lib/tick/adapters/memory/population.ts`;
+`lib/tick/processors/__tests__/population.test.ts`
+Interface:
+- `WorldMarket` gains `honestUseRate?: number` — **the USE figure**. Absent ⇒ live recompute, never
+  0 (a 0 makes the row an un-sinkable, fully-drawable donor: `classifyMarketState` target ≤ 0,
+  `surplusDrawable` reserve 0).
+- `PopulationWorld.rewriteDemandRates(rows: Array<{ systemId: string; population: number; productionSuppress: number }>): Promise<void>`
+  — the method name is kept; the row shape and docstring are extended. It now writes two figures in
+  one pass: `demandRate` (pricing, `totalDemandRateForGood`, **unchanged**) and `honestUseRate`
+  (use figure, from `useRatesByGood`).
+- The processor reads `productionSuppressBySystem` off `ctx.results.get("economy")?.economySignals`,
+  exactly as it reads `dissatisfactionBySystem`; a missing system reads 1.
+Figure:     **use**.
+Proves:     `lib/tick/processors/__tests__/population.test.ts` — for a struck system, `demandRate` is
+identical to today's value while `honestUseRate` is strictly lower, and `honestUseRate`'s civilian
+component equals `consumptionRate` at full rate. Fails if the two writers are crossed, if the
+suppress scalar leaks into `demandRate`, or if the civilian half is gated.
+Consumes:   Task 1 (`useRatesByGood`), Task 2 (`EconomySignals.productionSuppressBySystem`).
+
+### Task 4 — seed the use figure at market creation
+Files:      `lib/world/markets.ts`; `lib/world/__tests__/markets.test.ts` (new)
+Interface:  `createSystemMarkets` — the single constructor world-gen and colony-establish share —
+writes `honestUseRate` on every row from `useRatesByGood` at `productionSuppress = 1`. Civilian-only
+at a founding colony, which has no industry.
+Figure:     **use**.
+Proves:     `lib/world/__tests__/markets.test.ts` — a row from `createSystemMarkets` at
+`seedStock: false` carries `honestUseRate > 0`, and at zero stock classifies as a deficit sink and
+**not** as a fully-drawable donor when run through `classifyMarketState`/`surplusDrawable`. Fails if
+the field is seeded 0 or left absent with no fallback — the founding-era pathology class
+`WAREHOUSE_COVER`'s docstring documents.
+Consumes:   Task 1.
+
+### Task 5 — `toGoodMarketStates` publishes both figures; matcher severity moves to the draw figure
+Files:      `lib/tick/processors/good-market-state.ts`; `lib/engine/directed-logistics.ts`;
+`lib/engine/directed-build.ts` (comment at the queued-output term, `:255-266`);
+`lib/tick/processors/directed-build.ts` (`planFoundingStock` comment);
+`lib/tick/processors/__tests__/good-market-state.test.ts`;
+`lib/engine/__tests__/directed-logistics.test.ts`
+Interface:
+- `GoodMarketState.demand` **is the USE figure** — read from the row's `honestUseRate`, falling back
+  to a live `useRatesByGood` recompute when absent. Docstring rewritten to say so. Every existing
+  reader is unchanged and keeps reading it: `logisticsTarget`, `donorReserve`, the exporter reserve
+  inside `surplusDrawable`, the self-supply gate, every planner call site
+  (`directed-build.ts:307, :316, :387, :468-471, :1022`), the harness role classifier
+  (`cohort-analysis.ts:44`), the founding cap (`processors/directed-build.ts:110`).
+- `GoodMarketState.drawDemand: number` (new) — **the DRAW figure**, derived live from
+  `drawRatesByGood`, with `brakeCeilingOf` = the live production brake at each consumer good's own
+  current stock — its **real, anchor-shifted** knee, so an anchor-shift event re-weights urgency down
+  the chain (bounded by the modifier clamps, and confined to queue ordering because the warehousing
+  figure carries no ceilings) — and `productionMultOf` = that good's persisted `productionMult`. Its
+  **only** reader is the severity weight.
+- `matchFactionTransfers`: severity becomes `shortfall × drawDemand`. Signature unchanged. Deficit
+  membership, self-supply gate, donor selection, reserves, budget accounting and the dead-band are
+  untouched at this stage.
+- **Stage-1 note, load-bearing:** `brakeCeilingOf` is *the live brake*, which at stage 1 is still the
+  anchor-based `productionCeiling(stock, targetStock, HOLD_COVER)` off `marketBandForRow`. Stage 3
+  swaps the brake's body and the draw figure inherits the change with no logistics edit — that is
+  exactly the second-order ripple stage 3's third A/B arm isolates.
+- Two deliberate mixtures recorded in comments, not changed: the planner's queued-output increment
+  (`directed-build.ts:263`) stays raw capacity (queued capacity has no stock, strike or brake state);
+  the founding manifest's *want* line stays raw civilian while its *cap* now flows through
+  use-figure-denominated `donorReserve`.
+Proves:     `lib/engine/__tests__/directed-logistics.test.ts` — two deficits with identical shortfall
+and identical `demand` but different `drawDemand` (one's consuming industry braked shut) are served in
+draw order; and a companion assertion that `logisticsTarget`, `donorReserve` and `surplusDrawable` are
+bit-identical across those two states. The second half fails the moment a warehousing quantity starts
+reading the draw figure; the first fails if severity keeps reading `demand`.
+Consumes:   Tasks 1, 2, 3, 4.
+
+### Task 6 — the trade-flow read service reads the shared use figure
+Files:      `lib/services/trade-flow.ts`; `lib/services/__tests__/trade-flow.test.ts`
+Interface:  `getSystemLogistics`'s per-good industrial input-demand column comes from
+`useRatesByGood(...).industrial` instead of its own `capacityGoodRates` + `inputDemandFromProduction`
+pair (`trade-flow.ts:77-87`), with `productionSuppress` from the row's persisted
+`productionSuppressRate`. This is a change, not an inheritance — the service computes its own
+capacity figure today.
+Figure:     **use** (a display of standing draw, never urgency).
+Proves:     `lib/services/__tests__/trade-flow.test.ts` — for a struck system the panel's input-demand
+column equals `honestUseRate − civilian` for the same market. Fails if the service keeps an
+independent capacity computation, which is how the panel and the matcher drift apart.
+Consumes:   Tasks 1, 2.
+
+### Task 7 — harness: cohort comparability + stage-1 detectors
+Files:      `lib/tick-harness/cohort-analysis.ts`; `lib/tick-harness/types.ts`;
+`lib/tick-harness/build-analysis.ts`; `lib/tick-harness/runner.ts`; `lib/tick/types.ts`;
+`lib/tick/processors/directed-build.ts`; `lib/world/tick.ts`; `scripts/simulate.ts`
+Interface:
+- `computeRoleCoverLevels(systems, markets, pinnedRoles?: ReadonlyMap<string, MarketRole>)` — when
+  supplied, every cover/price read is taken against the baseline arm's role partition, held fixed.
+  `RoleCoverEntry.countByRole` already exists and is printed per arm as the membership table.
+  Mandatory because the role classifier reads `state.demand` in its exporter branch
+  (`cohort-analysis.ts:44`), so cohort membership moves in stages 1 and 3 by construction.
+- `HarnessResults.demandHunting: { flipRate: number; haulChurnRatio: number }` — per-market
+  cycle-over-cycle deficit↔surplus flips on industrial-input goods, and delivered-then-re-donated
+  tonnage ÷ delivered. Both horizons.
+- `TickProcessorResult` / `TickInstrumentation` gain
+  `foundingManifests?: Array<{ systemId: string; sourceSystemId: string; tonnage: number }>`
+  (from `SystemDevelopment.stockManifest`, which already carries `sourceSystemId`);
+  `FoundedColonyRecord` gains `manifestTonnage` and `founderCoverAfter` (founder's post-manifest stock
+  ÷ its `donorReserve`, sampled at the founding tick); `FoundingStockSummary` gains
+  `meanManifestTonnage` and `medianFounderCoverAfter`.
+Figure:     all of it reads **use** by construction (`GoodMarketState.demand`, `donorReserve`). No
+harness metric reads the draw figure.
+Proves:     the hunting detector fires on a deliberately-crossed build (warehousing thresholds wired
+to the draw figure) and reads ~0 on the shipped one; the pinned-partition read reproduces the baseline
+arm's cover exactly when both arms are the same build — a null A/B that must come back byte-identical,
+which fails if the pin is not actually applied.
+Consumes:   Task 5.
+
+### Gate — stage-1 A/B
+Arms: stage-1 head vs its base. Seed 42, 600 systems, `ECONOMY_SCALE=100`, **both horizons**
+(1000 t founding, 10,000 t equilibrium), cohorted, per-arm role-membership table published, primary
+cover/price reads pinned to the baseline arm's partition.
+Primary reads: camping cohort (dwell anchors); threshold sizes; planner build mix; the hunting
+detector; founding-horizon new-colony deficit counts, `meanManifestTonnage`,
+`medianFounderCoverAfter`.
+Expected: campers unlock; aggregate flows near-unchanged (the fiction is concentrated, ×1.18); no
+threshold hunting; colonies still validly provisioned.
+Merge condition: no hunting, no founding regression, coarse health bar clean, `npx vitest run` and
+`npx next build --webpack` green.
+
+---
+
+## Stage 2 — multi-donor matching
+
+### Task 8 — every willing donor serves a deficit
+Files:      `lib/engine/directed-logistics.ts`; `lib/engine/__tests__/directed-logistics.test.ts`
+Interface:  `matchFactionTransfers` signature and return type unchanged. Per deficit, the body
+changes from "pick the single nearest reachable donor" to: collect the reachable donors of the good
+with drawable stock and a valid route; order by ascending per-unit route cost (tie: the existing
+stable system order); draw from each in turn until the shortfall is met, donors are exhausted, or the
+budget is spent; one `PlannedTransfer` row per donor-draw. Unchanged: severity-first triage across
+deficits (severity from **drawDemand**), donor reserves as hard floors, fill-to-target semantics,
+`work = quantity × routeCost`, the dead-band.
+Proves:     `lib/engine/__tests__/directed-logistics.test.ts` — a deficit whose shortfall exceeds
+every individual donor's drawable is filled from N donors in cost order within one call, and no donor
+is drawn past its reserve; plus a budget-exhaustion case where the run stops mid-deficit rather than
+skipping to the next. Fails on any re-introduction of the one-donor cap.
+Consumes:   Task 5.
+
+### Task 9 — the funding-bound recording rule under multi-donor
+Files:      `lib/constants/directed-logistics.ts`; `lib/engine/directed-logistics.ts`;
+`lib/engine/__tests__/directed-logistics.test.ts`; `lib/tick/processors/directed-logistics.ts`
+Interface:  new `DIRECTED_LOGISTICS.FUNDING_BOUND_RESIDUAL_FRACTION = 0.1` — a first-cut hypothesis,
+docstringed as such and validated only by this stage's A/B. A deficit contributes to
+`TransferMatchResult.fundingBound` only when the budget stopped a draw **and** the remaining shortfall
+after all affordable donors exceeds that fraction of the original shortfall. `FundingBoundMatch` shape
+and the processor's endpoint marking are unchanged.
+Why it is not telemetry: `logisticsFundingBound` suppresses the planner's capacity proposals
+(`lib/engine/directed-build.ts:317`) and exempts producers from idle decay
+(`lib/engine/industry.ts:435-438`, `lib/engine/infrastructure-decay.ts:63`). It must keep meaning
+"this market's shortfall persists because of money", not "the last donor attempted was unaffordable".
+Proves:     matcher test — a deficit 95%-filled by earlier donors whose final draw is unaffordable
+does **not** set the flag; the same deficit at 50% filled does. Fails on a naive per-draw recording,
+which is what would flip both gameplay gates across a large market population at once.
+Consumes:   Task 8.
+
+### Task 10 — harness: budget, treasury-ladder and flow-volume instruments
+Files:      `lib/tick-harness/logistics-analysis.ts`; `lib/tick-harness/types.ts`;
+`lib/tick-harness/runner.ts`; `lib/tick/types.ts`; `lib/tick/processors/directed-logistics.ts`;
+`lib/world/tick.ts`; `scripts/simulate.ts`
+Interface:
+- `TickProcessorResult` / `TickInstrumentation` gain
+  `logisticsBudget?: Map<string, { total: number; spent: number; fundingBoundCount: number }>` per
+  faction.
+- `LogisticsActivitySummary` gains `budgetSpentFrac`, `fundingBoundEvents`,
+  `fundingBoundFlagSetRate`, `flowRowsPerCycle`.
+- Read (no change) from the existing summaries: `TreasurySummary`'s `funded.logistics` (must stay 1)
+  and `funded.construction` distribution — the treasury ladder pays logistics **above** construction
+  (`lib/engine/treasury.ts:101`, `BAND_LADDER`), so an inflated haul bill starves construction first;
+  `BuildBurstSummary` and `ColonisationSummary` for build levels and colonies founded per cycle.
+Proves:     with the matcher temporarily pinned back to a single donor, `budgetSpentFrac` reproduces
+the attribution run's measured 6–8% — the instrument is validated against a known number before it is
+allowed to gate a merge. Fails if the counter double-counts fan-out rows.
+Consumes:   Tasks 8, 9.
+
+### Gate — stage-2 A/B
+Arms: stage-2 head vs stage-1 head. Same conditions and cohort discipline as stage 1.
+Primary reads: single-source residual share; service by severity quartile and sink-population
+quartile; U_real; `budgetSpentFrac`; funding-bound event count and flag set-rate;
+`funded.logistics` / `funded.construction`; builds and colonies per cycle; `flowRowsPerCycle`
+(the row multiplier).
+Pre-check before the long reads: a 16,000-tick harness run smoke-checks flow-log volume — rows fan
+out per donor-draw, the world log is a 200-tick window with no row cap (`world/tick.ts:1142-1143`) and
+the harness accumulates all rows for a whole run (`runner.ts:94, 133-135`).
+Expected: single-source → ~0; service up broadly.
+Merge condition: **budget-capped delivery count 0.** If any deliveries are budget-capped, raise
+`DIRECTED_LOGISTICS.GENERATION_PER_POP` and re-run (pre-called by Kai 2026-08-04 — prove the
+mechanics against an ample budget; pricing the budget is roadmap row 10's work). If flow-row volume is
+a problem, a per-deficit donor cap is the stated fallback — a design limit, recorded, never silent.
+Also: cadence-invariance pair, coarse health bar, `npx vitest run`, `npx next build --webpack`.
+
+---
+
+## Stage 3 — the brake leaves the price anchor
+
+### Task 11 — brake constants and the shared knee function
+Files:      `lib/constants/economy.ts`; `lib/engine/tick.ts`; `lib/engine/__tests__/tick.test.ts`
+Interface:
+- `ECONOMY_CONSTANTS`: `HOLD_COVER` deleted. Added `BRAKE_USE_COVER = 40`, `BRAKE_RAMP = 1.3` (both
+  preserve today's geometry where the use figure equals the old floored `demandRate`) and
+  `BRAKE_OUTPUT_COVER = 8` (the working-inventory term and the answer to the pure-exporter trap —
+  first-cut, docstringed as a hypothesis, tuned only by this stage's A/B).
+- `EconomySimParams`: `holdCover` replaced by `brakeUseCover`, `brakeRamp`, `brakeOutputCover`, so
+  `lib/engine/tick.ts` stays constant-free.
+- New in `lib/engine/tick.ts`:
+```ts
+export type KneeBindingTerm = "use" | "output" | "storage";
+export interface BrakeKneeInput {
+  /** THE USE FIGURE — never the draw figure, never a price-anchor quantity. */
+  useRate: number;
+  /** Reference-cycle rate: un-catch-up-scaled, un-strike-suppressed, un-event-multiplied. */
+  capacityProduction: number;
+  anchorMult: number;
+  /** `facilityStorageForGood` — physical built storage. Never `maxStock`. */
+  storageCapacity: number;
+}
+export interface BrakeKnee { knee: number; rampEnd: number; bindingTerm: KneeBindingTerm }
+export function brakeKnee(input: BrakeKneeInput, params: EconomySimParams): BrakeKnee
+export function productionCeiling(stock: number, knee: BrakeKnee): number
+```
+- `productionCeiling`'s old `(stock, targetStock, holdCover)` signature is retired. `anchorMult` rides
+  the use term only; the output term and the taper cap carry no price-anchor quantity of any kind.
+Figure:     **use**. The knee contains no ceilings, so knee computation has no recursion and no
+ordering constraints.
+Proves:     `lib/engine/__tests__/tick.test.ts` — with `useRate` equal to today's floored
+`demandRate`, knee and ramp reproduce today's geometry exactly (the no-op anchor); a pure exporter
+with negligible local use still gets a positive knee from the output term (the trap the old brake
+fell into); a market whose physical storage sits below `BRAKE_RAMP × knee` hard-stops at storage and
+reports `bindingTerm: "storage"`. Fails if `maxStock` or `targetStock` is reintroduced anywhere.
+Consumes:   —
+
+### Task 12 — thread the knee's inputs to the tick, re-point every live call site, delete the flat tick
+Files:      `lib/engine/tick.ts`; `lib/engine/market-tick-builder.ts`; `lib/engine/supply-chain.ts`;
+`lib/tick/world/economy-world.ts`; `lib/tick/processors/economy.ts`;
+`lib/tick/adapters/memory/economy.ts`; `lib/world/tick.ts`; `lib/engine/industry.ts`;
+`lib/engine/__tests__/tick.test.ts`; `lib/tick/processors/__tests__/economy.test.ts`
+Interface:
+- `MarketTickEntry` and `TickEntryInput` gain `honestUseRate: number` (**the USE figure**),
+  `capacityProduction: number` and `anchorMult: number`; `MarketTickInput` /
+  `resolveMarketTickEntry` gain the same three and thread them.
+- `MarketView` gains `honestUseRate: number`. `capacityProduction` is `MarketView.baseProductionRate`
+  — already exactly the reference-cycle rate (`buildingProduction` at the adapter,
+  `adapters/memory/economy.ts:78, 89`). The processor must pass the pre-catchUp, pre-suppress value:
+  `entry.productionRate` is catch-up-scaled (`economy.ts:145`) and strike-suppressed
+  (`tick.ts:153-156`) and would make the knee cadence-dependent.
+- The three live brake call sites all call the one knee function: `supply-chain.ts:122` (the coupled
+  tick), `economy.ts:205` (selling-factor signal → decay), `industry.ts:707`
+  (`buildIndustryReadout`'s selling factor, via Task 13).
+- `simulateEconomyTick` (`tick.ts:92-117`) is production-dead and is **deleted**, with all six
+  `simulateEconomyTick — *` suites (`— production` / `— operating ceiling` / `— consumption` /
+  `— consumption multipliers` / `— immutability` / `— per-entry band` — every suite in
+  `lib/engine/__tests__/tick.test.ts` calls it). The ceiling suites die with the old knee; the
+  consumption and immutability behaviours are engine code the coupled tick still exercises
+  (`consumptionFactor`, `supply-chain.ts`) — confirm the coupled-tick suites hold that coverage
+  before deleting, adding equivalents there if not.
+Figure:     **use**.
+Proves:     the cadence-invariance pair (`experiments/examples/cadence-invariance-12.yaml` /
+`cadence-invariance-24.yaml`, plus `lib/world/__tests__/cadence-invariance.test.ts`) must still agree
+— the check that fails if the knee is fed `entry.productionRate` instead of `capacityProduction`;
+plus an economy-processor test that the selling factor carried on the decay signal equals the ceiling
+the tick actually applied for the same market.
+Consumes:   Task 3 (`honestUseRate` on the row), Task 11.
+
+### Task 13 — the Industry-panel readout agrees with the tick
+Files:      `lib/engine/industry.ts`; `lib/services/universe.ts`;
+`lib/engine/__tests__/industry.test.ts`; `lib/services/__tests__/system-industry.test.ts`
+Interface:  `buildIndustryReadout` gains `honestUseRateOf: (goodId: string) => number` and
+`anchorMultOf: (goodId: string) => number`, threaded from `getSystemIndustry`
+(`universe.ts:187-192`, which already reads both off its market rows). `capacityProduction` is
+derived in scope via `buildingProduction`. `bandOf` stays for `maxStock` and display, but `maxStock`
+is no longer a brake input anywhere.
+Figure:     **use**.
+Proves:     readout test — the `selling` idle reason and a producer's `used` match the ceiling the
+tick applies for the same market state. Fails if the readout keeps the anchor knee, which would make
+the panel and the simulation disagree about which producers are idle.
+Consumes:   Tasks 11, 12.
+
+### Task 14 — band invariants restated in one unit family, and the docstring sweep
+Files:      `lib/constants/__tests__/band-constants.test.ts`; `lib/constants/economy.ts`;
+`lib/constants/directed-logistics.ts`; `lib/constants/industry.ts`; `lib/engine/tick.ts`;
+`lib/engine/supply-chain.ts`
+Interface:
+- `band-constants.test.ts` rewritten at **both** `HOLD_COVER` sites: the `:63-72` invariant becomes
+  `BRAKE_RAMP × BRAKE_USE_COVER ≤ SURPLUS_MARGIN × DONOR_RESERVE_COVER` (52 vs 56 — the dead-band,
+  now stated in one unit family), and the `:83` sanity assertion becomes `BRAKE_RAMP > 1`.
+- A new invariant pins `INPUT_DEMAND_MULTIPLIER === 1`, with the reason recorded: both honest figures
+  multiply by it while the physical draw (`supply-chain.ts:66, 134`) does not, so the "what it would
+  actually pull" identity holds only at 1.0.
+- Docstrings rewritten: `TARGET_COVER` (`constants/economy.ts:14-19` — the physical rider removed,
+  pricing only); `DONOR_RESERVE_COVER` (`directed-logistics.ts:66-68`, which asserts the anchor
+  coupling); the three storage constants (`industry.ts:288-295`) now named as brake readers; the
+  `lib/engine/tick.ts` module and field docstrings; `lib/engine/supply-chain.ts:9-15`.
+Proves:     the dead-band invariant fails when either constant is moved across the other — verify by
+temporarily setting `BRAKE_RAMP = 1.5`, watching it fail, reverting.
+Consumes:   Task 11.
+
+### Task 15 — harness: the knee-binding-term table and the third-arm switch
+Files:      `lib/tick-harness/market-analysis.ts`; `lib/tick-harness/types.ts`;
+`lib/tick-harness/runner.ts`; `scripts/simulate.ts`
+Interface:  `HarnessResults.kneeBinding: Array<{ goodId: string; use: number; output: number; storage: number }>`
+— per good, the share of producing markets whose knee was set by each term, at both horizons. This is
+the evidence the storage-constant sizing decision is later taken on.
+The **third A/B arm** is produced by a temporary local edit pinning `toGoodMarketStates`'s
+`brakeCeilingOf` to the old anchor-based ceiling — the measuring-patch pattern the four measurements
+used (`.superpowers/diag-hooks.md`), reverted before merge and never committed.
+Proves:     the three shares sum to the producing-market count per good (an instrument self-check),
+and the storage share is non-zero on metals, fuel and gas — matching the arithmetic the spec's
+finding 2 derived. Fails if the binding term is recorded after the taper rather than at the knee.
+Consumes:   Tasks 11, 12.
+
+### Gate — stage-3 A/B (three arms)
+Arms: (A) stage-2 head; (B) stage-3 head; (C) stage-3 head with the draw figure's `brakeCeiling`
+pinned to the old anchor ceiling — so the brake's direct effect and the logistics-urgency ripple are
+attributable separately.
+Reads taken at **12,000+ ticks or as a trajectory** — the 10,000 label sits inside the high-tier
+startup transient — plus the 1000-tick founding horizon, cohorted, membership tables published,
+primary reads pinned to arm A's partition.
+Primary reads: exporter throttle share; thin-reachable-stock residual; consumer cover at 12k+; price
+health bar; building counts and idle-reason mix (read against the stage-2 head, since stage 2 already
+shifts decay via the funding-bound exemption); the per-good knee-binding-term table; the
+cadence-invariance pair.
+Expected: exporter throttling falls hard; cover rises; prices move without pinning or runaway; the
+binding-term table feeds the storage-constant decision.
+Merge condition: coarse health bar only on price (this stage moves price by design — never tuned
+against here); no NaN/runaway/pinning; cadence invariance holds; `npx vitest run` and
+`npx next build --webpack` green; the ROADMAP row for storage-constant sizing added, carrying the
+binding-term table.
+
+---
+
+## Verification
+
+**Unit** — `npx vitest run` green at every task. Each task's `Proves` line names a test that fails
+when *that task's premise* breaks, not a happy path; where the failure mode is a silent collapse
+(the two figures merging, the warehousing side reading draw, the knee reading `entry.productionRate`)
+the cheapest proof is to break it deliberately, watch the test fail, revert.
+
+**Build gate** — `npx next build --webpack` once per stage. `npm run build` uses Turbopack and has
+other quirks.
+
+**Simulation** — `npm run simulate`, seed 42, 600 systems, `ECONOMY_SCALE=100`, read at **both
+horizons every time**: 1000 t answers founding/provisioning (the startup transient is ~300+ cycles at
+`CYCLE_LENGTH` 24), 10,000 t is the only valid basis for tuning; brake reads additionally at 12,000+
+or as a trajectory. Neither horizon is ever quoted at the other's question.
+
+**Cohort discipline, every A/B** — the harness role classifier reads `state.demand`
+(`cohort-analysis.ts:44`) and `realizedProductionRate`, so cohort membership moves in stages 1 and 3
+by construction. Every cohorted metric is published beside a per-arm role-membership count table, and
+the primary cover/price reads are taken against the **baseline arm's role partition, held fixed**
+(Task 7). A cover shift caused by re-cohorting must never read as a flow change — the fuel-cover
+precedent.
+
+**Cross-stage regression, every A/B** — coarse health bar (no NaN, no runaway, no pinning;
+dispersion; liquidity), unrest and population aggregates cohorted, interval invariance. The
+cadence-invariance gate runs at stages 2 **and** 3.
+
+**New harness metrics, and why each is needed** — every one exists because the symptom hides inside
+an aggregate: the hunting detector (a drain/refill oscillation nets to zero in flow totals); founding
+manifest tonnage and founder cover (a handful of new colonies cannot move a galaxy median); budget
+spend, funding-bound count and flag set-rate (the flag is a gameplay gate, and a counter that never
+fires looks identical to a mechanism that never fires); flow rows per cycle (a volume problem shows up
+as memory, not as a metric); the knee-binding-term table (which term bound is invisible in cover).
+
+**Annotated movers** — the harness surplus metric is donor-line denominated and moves with the use
+figure in stage 1 even if flows barely change; `logisticsTarget`/`donorReserve`/severity move under
+stage 3 with no logistics code change (the draw-figure ripple, attributed by the third arm).
+
+## Doc fold
+
+On the branch, before each stage's final review — not after.
+
+- **`docs/planned/economy-honest-demand-and-flow.md`** — folded into the two active docs at stage 3's
+  merge and deleted from `docs/planned/`. Its demand-figure and matcher content goes to
+  `docs/active/gameplay/economy-autonomic-agency.md` (whose `:115` and `:119` state the brake runs at
+  `HOLD_COVER × targetStock`); its brake content to
+  `docs/active/gameplay/economy-equilibrium-rework.md` (`:73`, `:81`, `:102`, `:172`, `:187`, all of
+  which name `HOLD_COVER`). No third active doc is added — these two already own the systems, and the
+  spec's own docstring sweep names both.
+- **`docs/SPEC.md`** — §Economy (line 40, `demandRate` as *the* demand figure) and §Directed Logistics
+  and Autonomic Build (line 46, "deficit/surplus against the cycles-of-supply anchor", "greedy
+  nearest-surplus matching") are both made stale. Restated at the stage that makes each stale: line 40
+  at stage 1, line 46 at stages 1 and 2.
+- **`docs/active/gameplay/economy.md`** — its brake paragraph (`:115`, `:129`, `:201`, still
+  describing `outputUptake` and a `sqrt` ceiling) is corrected at stage 3. Cheap, in a file the change
+  already forces; the rest of that doc's known staleness stays with ROADMAP item 7 (PR6's doc fold,
+  which already names it).
+- **This file (`docs/build-plans/pricing-vs-logistics.md`)** is deleted when stage 3 ships, after the
+  fold — its direction and the five measurements are carried by the promoted spec content and by
+  memory `killed-designs`.
+- No `docs/archive/`. Git is the history.
+
+## Not covered
+
+- **Pricing — `demandRate`, `targetStock`, `MIN_DEMAND`, the price curve.** **Booked:** ROADMAP
+  Unqueued, "[L] Goods-pricing revisit" (trigger: pop wages or inter-faction trade).
+- **The haul budget's nature — free, generation-based.** **Booked:** ROADMAP Queued–economy row 10
+  (colonisation economics, which absorbs the remove-everything-free audit). Stage 2 may *raise*
+  `GENERATION_PER_POP`; pricing it is row 10's work.
+- **Re-sizing the storage constants** (`EXTRACTOR_STORAGE_PER_UNIT` 40 / `PRODUCTION_STORAGE_PER_UNIT`
+  15 / `POP_CENTRE_STORAGE` 2-12, all first-draft, all now brake readers). **Booked:** a ROADMAP row
+  added at stage-3 merge, carrying the knee-binding-term table — named in the stage-3 gate's merge
+  condition so the booking is checkable rather than intended. It is not booked now because naming the
+  decision before the evidence exists is what the table is for.
+- **Sink ordering (severity-first) and player-facing flow priority.** **Dropped:** Kai's design space,
+  explicitly untouched by the spec. Stage 1 changes severity's *weight*, never its *rule*.
+- **Hub/chain logistics depth — propagated demand, entrepôt roles, per-route capacity.** **Dropped:**
+  a later pass. `docs/planned/negative-space-economy.md`'s "make the base efficient — NOT OK" bullet
+  is reconciled *there*, by the spec's own decision; this pass's stance (negative space emerges from
+  budget, infrastructure and scarcity, never from designed algorithmic inefficiency) is recorded in
+  the spec and in Kai's 2026-08-04 input above.
+- **Relations' dead trade-volume driver** (`getTradeVolumeBetween` counts only cross-faction flows;
+  none exist). **Booked:** ROADMAP Deferred/conditional, added 2026-08-04. Pre-existing, untouched.
+- **Renaming `GoodMarketState.demand` to something that says "use".** **Dropped:** a rename touches
+  the matcher, the whole planner, the harness classifier and ~30 test references for no behaviour
+  change; the docstring and the per-task figure labels carry the contract instead.
+- **The dead-band's width.** **Dropped:** chosen conservatism — restated in one unit family
+  (Task 14), never resized.
+- **The `consumptionMult` event channel.** **Dropped:** the channel exists but no shipped event uses
+  it, and civilian want counts at full rate in both figures by design.
+- **A per-deficit donor cap.** **Dropped unless the stage-2 flow-volume smoke check demands it**, in
+  which case it is taken as a stated design limit at that gate — never a silent one.
+- **UI beyond the two surfaces the change forces** (the Logistics tab's input-demand column, Task 6;
+  the Industry panel's selling factor and idle reason, Task 13). **Dropped:** no spec scope. Nothing
+  surfaces the two figures to the player as figures.
