@@ -1074,7 +1074,8 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
     // The founding-cost readout the harness samples: one record per provisioned founding, its
     // tonnage the manifest's own line sum, attributed to the founder that paid it.
     expect(result.foundingManifests).toHaveLength(1);
-    const [record] = result.foundingManifests;
+    const record = result.foundingManifests?.[0];
+    if (record === undefined) throw new Error("Expected a founding manifest record");
     expect(record.systemId).toBe("c1");
     expect(record.sourceSystemId).toBe("home");
     const manifestTonnage = w.developments[0].stockManifest

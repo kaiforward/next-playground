@@ -16,8 +16,11 @@ import type { DemandHuntingSummary } from "./market-analysis";
 
 // ── Market role classification ──────────────────────────────────
 
-/** Which role a market (system × good) plays for that good. Mutually exclusive. */
-export type MarketRole = "exporter" | "self-supplier" | "consumer" | "inert";
+/** Which role a market (system × good) plays for that good. Mutually exclusive. The tuple is
+ *  the single source for every roster iteration/validation, so a fifth role added to it grows
+ *  the union and every consumer together. */
+export const MARKET_ROLES = ["exporter", "self-supplier", "consumer", "inert"] as const;
+export type MarketRole = (typeof MARKET_ROLES)[number];
 
 // ── Calibration harness config ──────────────────────────────────
 
@@ -285,10 +288,12 @@ export interface FoundingStockSummary {
   /** Mean manifest tonnage per colony founded — what founding costs a founder in goods. The
    *  manifest's cap is use-figure denominated, so this moves when a founder's stated draw does. */
   meanManifestTonnage: number;
-  /** Median, over colonies that drew a manifest, of the founder's own remaining cover on the
-   *  binding good (post-manifest stock ÷ that good's donor floor). Below 1 means founding is
-   *  drawing founders under the floor they are meant to keep. */
-  medianFounderCoverAfter: number;
+  /** Median, over colonies that drew a manifest with a measurable cover reading, of the founder's
+   *  own remaining cover on the binding good (post-manifest stock ÷ that good's donor floor).
+   *  Below 1 means founding is drawing founders under the floor they are meant to keep. Null when
+   *  no founding produced a measurable reading — the median of nothing must not print as a
+   *  founder drained to 0.00×. */
+  medianFounderCoverAfter: number | null;
 }
 
 // ── Region overview ─────────────────────────────────────────────

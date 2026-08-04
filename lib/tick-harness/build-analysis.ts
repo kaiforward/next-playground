@@ -78,7 +78,8 @@ export interface FoundedColonyRecord {
   manifestTonnage?: number;
   /** The founder's own remaining cover on the manifest's BINDING good — post-manifest stock ÷ that
    *  good's donor floor, minimum across the manifest — sampled at the founding tick. Below 1 means
-   *  founding drew the founder under the floor it is meant to keep for itself. */
+   *  founding drew the founder under the floor it is meant to keep for itself. Absent when the
+   *  manifest gave no measurable reading (no shipped good with a positive donor floor). */
   founderCoverAfter?: number;
 }
 
@@ -91,12 +92,17 @@ export function recordFoundingManifest(
   tracker: Map<string, FoundedColonyRecord>,
   systemId: string,
   manifestTonnage: number,
-  founderCoverAfter: number,
+  founderCoverAfter: number | undefined,
 ): void {
   const record = tracker.get(systemId);
   if (!record || !(manifestTonnage > 0)) return;
   record.manifestTonnage = manifestTonnage;
-  record.founderCoverAfter = Number.isFinite(founderCoverAfter) ? Math.max(0, founderCoverAfter) : 0;
+  // A cover with nothing measurable behind it stays absent — folding a placeholder 0 into the
+  // median would read as a founder drained flat, the opposite of "there was no floor to draw
+  // under". Same rule for a corrupt (non-finite) reading.
+  if (founderCoverAfter !== undefined && Number.isFinite(founderCoverAfter)) {
+    record.founderCoverAfter = Math.max(0, founderCoverAfter);
+  }
 }
 
 /** Opening satisfaction below this reads as a colony that arrived deprived. */
@@ -204,7 +210,7 @@ export function summarizeFoundingStock(
     // Denominated over every colony founded, so a run that ships nothing reads 0 rather than
     // hiding behind a shrunken denominator.
     meanManifestTonnage: tracker.size > 0 ? manifestTonnageSum / tracker.size : 0,
-    medianFounderCoverAfter: median(founderCovers),
+    medianFounderCoverAfter: founderCovers.length > 0 ? median(founderCovers) : null,
   };
 }
 

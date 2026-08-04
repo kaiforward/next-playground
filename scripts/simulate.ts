@@ -46,6 +46,7 @@ import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { toTickSystems } from "../lib/world/tick";
+import { MARKET_ROLES } from "../lib/tick-harness/types";
 import type { HarnessConfig, HarnessResults, MarketRole } from "../lib/tick-harness/types";
 
 /**
@@ -60,8 +61,6 @@ const EQUILIBRIUM_TICKS = 10000;
 
 type HorizonLabel = "startup" | "equilibrium";
 
-/** Roles the per-arm membership line totals, in report order. */
-const MEMBERSHIP_ROLES: MarketRole[] = ["exporter", "self-supplier", "consumer", "inert"];
 
 /** What `--json` reports per horizon: the full results minus the market trajectory. */
 type HorizonReport = Omit<HarnessResults, "marketSnapshots">;
@@ -148,6 +147,16 @@ function loadPinnedRoles(pinPath: string): PinnedRolesDocument {
   const parsed = parsePinnedRoles(fs.readFileSync(resolved, "utf-8"));
   if (!parsed.ok) {
     console.error(`Cannot pin roles from ${resolved}: ${parsed.error}`);
+    process.exit(1);
+  }
+  // An empty partition would "pin" zero markets while the report prints PINNED — refuse it here,
+  // where the filename is still in hand.
+  const partitions = [parsed.document.single, ...Object.values(parsed.document.byHorizon)];
+  if (partitions.every((p) => p === null || Object.keys(p).length === 0)) {
+    console.error(
+      `Cannot pin roles from ${resolved}: every marketRoles partition in the file is empty — ` +
+        `there is nothing to pin to.`,
+    );
     process.exit(1);
   }
   return parsed.document;
@@ -288,7 +297,7 @@ function formatTable(results: HarnessResults): string {
       exporter: 0, "self-supplier": 0, consumer: 0, inert: 0,
     };
     for (const entry of roleCoverLevels) {
-      for (const role of MEMBERSHIP_ROLES) membership[role] += entry.countByRole[role];
+      for (const role of MARKET_ROLES) membership[role] += entry.countByRole[role];
     }
     lines.push(
       `  membership: exporter ${membership.exporter}, self-supplier ${membership["self-supplier"]}, ` +
@@ -451,7 +460,10 @@ function formatTable(results: HarnessResults): string {
     if (fs.foundedCount > 0) {
       lines.push(
         `  cost to founders: mean manifest ${fmtNum(fs.meanManifestTonnage)} t/colony | ` +
-          `median founder cover after (binding good) ${fs.medianFounderCoverAfter.toFixed(2)}×`,
+          `median founder cover after (binding good) ` +
+          (fs.medianFounderCoverAfter !== null
+            ? `${fs.medianFounderCoverAfter.toFixed(2)}×`
+            : "n/a (no measurable manifest)"),
       );
     }
     const cp = summarizeConstructionPool(finalTickSystems, finalWorld.constructionProjects);
@@ -602,7 +614,21 @@ async function runExperiment(
   }
 
   const { config, label } = experimentToHarnessConfig(validated.data);
-  const pinnedRoles = pinned ? pinnedRolesFor(pinned) : undefined;
+  // `loadPinnedRoles` promises to exit on any problem — and a pin that silently applies to
+  // nothing is exactly such a problem. A horizon-keyed document (the quick run's shape) carries
+  // no single partition, and a --config run cannot choose a horizon on the user's behalf.
+  let pinnedRoles: Record<string, MarketRole> | undefined;
+  if (pinned) {
+    pinnedRoles = pinnedRolesFor(pinned);
+    if (pinnedRoles === undefined) {
+      console.error(
+        "The pin file is keyed by horizon (a quick-run --json report) and carries no single " +
+          "partition, so a --config run cannot use it. Pin to a saved --config result " +
+          "(experiments/*.json) or a bare --config --json document instead.",
+      );
+      process.exit(1);
+    }
+  }
 
   // Status goes to stderr so `--json > file` stays valid JSON, matching the quick-run path.
   console.error(

@@ -10,6 +10,7 @@
 
 import { z } from "zod";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
+import { MARKET_ROLES } from "./types";
 import type { HarnessConfig, HarnessResults, MarketRole } from "./types";
 import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 
@@ -59,6 +60,11 @@ export interface ExperimentResult {
   /** The role partition this run classified — what a later arm pins to, so two arms' cover reads
    *  are taken over the same cohort membership rather than over whatever each classified. */
   marketRoles: HarnessResults["marketRoles"];
+  /** The hunting detector's two readings — a stage-gate primary read. `haulChurnRatio` is the
+   *  A/B-comparable half; `flipRate` is an absolute read on arms that persist the use figure. */
+  demandHunting: HarnessResults["demandHunting"];
+  /** Founding-cost readings — manifest tonnage and founder cover — a stage-gate primary read. */
+  foundingStock: HarnessResults["foundingStock"];
   /** Per-cohort supply and unrest — the same separation on the population axis. */
   worldCohorts: HarnessResults["worldCohorts"];
   eventImpacts: HarnessResults["eventImpacts"];
@@ -83,6 +89,8 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     marketHealth: results.marketHealth,
     roleCoverLevels: results.roleCoverLevels,
     marketRoles: results.marketRoles,
+    demandHunting: results.demandHunting,
+    foundingStock: results.foundingStock,
     worldCohorts: results.worldCohorts,
     eventImpacts: results.eventImpacts,
     treasurySummary: results.treasurySummary,
@@ -111,8 +119,6 @@ export interface PinnedRolesDocument {
 export type ParsePinnedRolesResult =
   | { ok: true; document: PinnedRolesDocument }
   | { ok: false; error: string };
-
-const MARKET_ROLES: MarketRole[] = ["exporter", "self-supplier", "consumer", "inert"];
 
 function isMarketRole(value: string): value is MarketRole {
   // Widened deliberately: `.includes` on the union array would not narrow a plain string.

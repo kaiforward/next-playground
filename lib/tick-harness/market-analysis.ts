@@ -288,16 +288,23 @@ function computeCoverLevels(
  *     whose stated appetite tracks its yard oscillates: it reads starved, gets filled, immediately
  *     reads glutted, gets drained, reads starved again. Balanced readings inside the dead band are
  *     not reversals and are skipped; a reversal is counted when a decided reading differs from that
- *     market's previous decided one, so an oscillation THROUGH the dead band still registers.
+ *     market's previous decided one, so an oscillation THROUGH the dead band still registers. A
+ *     market's FIRST decided reading has nothing to reverse and sits outside the denominator.
  *   - `haulChurnRatio` — the share of delivered tonnage that leaves again as a donation. Capped per
- *     market at what was delivered into it, so a structural exporter's own output is never counted
- *     as churn.
+ *     market at what was delivered into it — a cap on the amount, not a provenance match: a market
+ *     that both receives and donates the same good over the run books up to its received tonnage
+ *     as churn whichever came first, so an exporter that once imported reads a little churn.
  *
- * Both should fall as demand becomes honest. Neither is a health bar on its own — a busy network
- * moves goods on legitimately — which is why they are read as an A/B delta, not against a target.
+ * Both should fall as demand becomes honest, but they are read differently. `haulChurnRatio`
+ * reads off the flow log, which every arm has, so it is an A/B delta. `flipRate` classifies off
+ * the persisted use figure, which only arms that PERSIST that field carry — an arm predating it
+ * yields no decided readings at all — so it is an absolute read on the shipped arm (expected to
+ * sit low once demand is honest), never a delta against a base arm. Neither is a health bar on
+ * its own — a busy network moves goods on legitimately.
  */
 export interface DemandHuntingSummary {
-  /** Share of decided readings that reversed the market's previous decided reading. */
+  /** Share of comparable decided readings — those with a previous decided reading to reverse —
+   *  that reversed it. Each market's first decided reading is excluded from the denominator. */
   flipRate: number;
   /** Delivered tonnage that was donated back out, over all delivered tonnage. */
   haulChurnRatio: number;
@@ -370,8 +377,12 @@ export function summarizeDemandHunting(
     churned += Math.min(inTonnage, donatedByKey.get(key) ?? 0);
   }
 
+  // Each market in the accumulator contributed exactly one first reading, which structurally
+  // cannot reverse — leaving those in the denominator dilutes the rate, and unevenly: the
+  // dilution grows as decided readings per market fall, which is what the honest arm does.
+  const comparable = acc.decidedReadings - acc.lastDecidedByKey.size;
   return {
-    flipRate: acc.decidedReadings > 0 ? acc.reversals / acc.decidedReadings : 0,
+    flipRate: comparable > 0 ? acc.reversals / comparable : 0,
     haulChurnRatio: delivered > 0 ? churned / delivered : 0,
   };
 }

@@ -408,12 +408,14 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(summary.openingDeprivedCount).toBe(1);
   });
 
-  it("reports zeroed means rather than NaN when no colony was ever founded", () => {
+  it("reports zeroed means — and a NULL cover median — when no colony was ever founded", () => {
+    // The cover median must be null, not 0: a printed "0.00×" reads as founders drained flat
+    // when the truth is that nothing was measured.
     const summary = summarizeFoundingStock(new Map());
     expect(summary).toEqual({
       foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
       meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
-      meanManifestTonnage: 0, medianFounderCoverAfter: 0,
+      meanManifestTonnage: 0, medianFounderCoverAfter: null,
     });
   });
 
@@ -428,6 +430,29 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
 
     expect(tracker.get("c1")?.manifestTonnage).toBe(300);
     expect(tracker.get("c1")?.founderCoverAfter).toBeCloseTo(0.75, 9);
+  });
+
+  it("guards every recording edge: zero tonnage, unknown colony, unmeasurable cover", () => {
+    const tracker = new Map<string, FoundedColonyRecord>();
+    trackFoundedColonies([sys("c1", "developed")], 24, new Set(), tracker);
+
+    // A zero-tonnage manifest cost the founder nothing — recording it would drag the tonnage
+    // mean and invite a cover reading where nothing shipped.
+    recordFoundingManifest(tracker, "c1", 0, 0.5);
+    expect(tracker.get("c1")?.manifestTonnage).toBeUndefined();
+    expect(tracker.get("c1")?.founderCoverAfter).toBeUndefined();
+
+    // A colony the tracker never saw is a no-op, not a crash or a phantom record.
+    recordFoundingManifest(tracker, "nope", 100, 0.5);
+    expect(tracker.has("nope")).toBe(false);
+
+    // An unmeasurable cover (undefined, or corrupt) records the tonnage but leaves the cover
+    // absent — never 0, which reads as a founder drained flat.
+    recordFoundingManifest(tracker, "c1", 100, undefined);
+    expect(tracker.get("c1")?.manifestTonnage).toBe(100);
+    expect(tracker.get("c1")?.founderCoverAfter).toBeUndefined();
+    recordFoundingManifest(tracker, "c1", 100, Number.NaN);
+    expect(tracker.get("c1")?.founderCoverAfter).toBeUndefined();
   });
 
   it("folds manifest tonnage and founder cover into the founding summary", () => {

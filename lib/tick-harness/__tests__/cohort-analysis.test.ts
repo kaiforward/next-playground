@@ -107,17 +107,30 @@ describe("computeRoleCoverLevels", () => {
   it("holds cohort membership fixed against the pinned partition, not the live classification", () => {
     // The classifier reads `state.demand` in its exporter branch, so membership moves in any stage
     // that changes the demand figure — and a cover median then moves with the cohort MIX rather than
-    // with anything about supply. Pinning is what makes two arms comparable.
-    const systems = [sys("s1", { buildings: { water: 4 } })];
+    // with anything about supply. Pinning is what makes two arms comparable. The fixture is a
+    // staffed extractor on a live water deposit — a genuine exporter (the scoping test below pins
+    // the arithmetic) — so the pin demonstrably overrides a real producer classification.
+    const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
+    const systems = [sys("s1", { population: 10, buildings: { water: 1 }, yields: producerYields })];
+    const markets = [mkt("s1", "water", 50, 1)];
+
+    const liveInfo = marketRolesByKey(systems, markets).get("s1|water");
+    expect(liveInfo?.role).toBe("exporter"); // non-vacuous: the pin overrides a role really held
+
+    const pinned = computeRoleCoverLevels(systems, markets, new Map([["s1|water", "consumer"]]));
+    expect(pinned[0].countByRole.consumer).toBe(1);
+    expect(pinned[0].countByRole.exporter).toBe(0);
+  });
+
+  it("refuses a pin that matches no live market — another world's partition", () => {
+    // Sequential system ids collide across seeds, so a wrong-world pin usually half-matches; a
+    // zero-match pin (different systemCount, renamed goods) would otherwise classify everything
+    // live while the report prints PINNED.
+    const systems = [sys("s1")];
     const markets = [mkt("s1", "water", 50, 10)];
-
-    const live = computeRoleCoverLevels(systems, markets);
-    const liveRole = live[0].countByRole.exporter > 0 ? "exporter" : "self-supplier";
-    const flipped: MarketRole = liveRole === "exporter" ? "consumer" : "exporter";
-
-    const pinned = computeRoleCoverLevels(systems, markets, new Map([["s1|water", flipped]]));
-    expect(pinned[0].countByRole[flipped]).toBe(1);
-    expect(pinned[0].countByRole[liveRole]).toBe(0);
+    expect(() =>
+      computeRoleCoverLevels(systems, markets, new Map<string, MarketRole>([["other|ore", "consumer"]])),
+    ).toThrow(/matched 0/);
   });
 
   it("falls back to the live role for a market the pinned partition never saw", () => {

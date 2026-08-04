@@ -125,13 +125,32 @@ export function logisticsTargetsByKey(
  * with the cohort mix rather than with anything about supply. A market the pinned partition
  * never saw (a colony founded after the baseline) is classified live, so the later arm's
  * population is never silently smaller. `countByRole` is the membership table to print per arm.
+ *
+ * `precomputedRoles` reuses a `marketRolesByKey` pass the caller already ran (the runner builds
+ * one to publish the live partition); absent, the pass runs here.
  */
 export function computeRoleCoverLevels(
   systems: TickSystem[],
   markets: WorldMarket[],
   pinnedRoles?: ReadonlyMap<string, MarketRole>,
+  precomputedRoles?: Map<string, MarketRoleInfo>,
 ): RoleCoverEntry[] {
-  const roles = marketRolesByKey(systems, markets);
+  const roles = precomputedRoles ?? marketRolesByKey(systems, markets);
+
+  // A pin that matches nothing is another world's partition (different seed or system count).
+  // Proceeding would classify every market live while the report labels itself pinned — the one
+  // lie this instrument exists to prevent — so it fails loudly instead.
+  if (pinnedRoles && pinnedRoles.size > 0) {
+    let matched = 0;
+    for (const key of roles.keys()) if (pinnedRoles.has(key)) matched++;
+    if (matched === 0) {
+      throw new Error(
+        `Pinned partition matched 0 of ${roles.size} live markets — the pin file was written ` +
+          `by a different world (seed or system count). A pinned report over a live-classified ` +
+          `cohort would be a lie; refusing to produce one.`,
+      );
+    }
+  }
 
   const counts = new Map<string, Record<MarketRole, number>>();
   const covers = new Map<string, Record<StockedRole, number[]>>();

@@ -50,16 +50,18 @@ import type { TickEvent, TickSystem } from "@/lib/tick/rows";
  * minimum, across the manifest's goods, of post-manifest stock over that good's donor floor.
  * Below 1 means founding drew the founder under the floor it is meant to keep for itself, which
  * is the reading the manifest cap's use-figure denominator can move.
+ *
+ * Undefined when there is nothing to measure — the founder is unknown, it has no market rows,
+ * the manifest names no goods, or no shipped good carries a positive donor floor. "Could not
+ * measure" and "measured a founder drained to 0" are opposite readings and must never share a
+ * value. Exported for its own tests; the runner is its only production caller.
  */
-function founderCoverAfter(
-  systems: TickSystem[],
-  rowsBySystem: Map<string, MarketRowForLogistics[]>,
-  sourceSystemId: string,
+export function founderCoverAfter(
+  source: TickSystem | undefined,
+  rows: MarketRowForLogistics[] | undefined,
   goodIds: ReadonlyArray<string>,
-): number {
-  const source = systems.find((s) => s.id === sourceSystemId);
-  const rows = rowsBySystem.get(sourceSystemId);
-  if (!source || !rows || goodIds.length === 0) return 0;
+): number | undefined {
+  if (!source || !rows || goodIds.length === 0) return undefined;
   const shipped = new Set(goodIds);
   let binding = Infinity;
   const states = toGoodMarketStates({
@@ -69,9 +71,7 @@ function founderCoverAfter(
     if (!shipped.has(state.goodId) || state.donorReserve <= 0) continue;
     binding = Math.min(binding, state.stock / state.donorReserve);
   }
-  // No measurable good on the manifest (every reserve zero) reads 0 — it shipped from a
-  // founder with no floor to be drawn under.
-  return Number.isFinite(binding) ? binding : 0;
+  return Number.isFinite(binding) ? binding : undefined;
 }
 
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
@@ -183,19 +183,28 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     }
 
     trackFoundedColonies(world.systems, world.meta.currentTick, developedAtStart, foundedColonies);
-    // What the founding cost its founder, read at the founding tick — the founder's stock still
-    // reflects this manifest and no other. Foundings are rare, so the founder's market state is
-    // rebuilt only on the ticks that actually have one.
+    // The founding-cost read and the colony opening sample both need full tick rows (buildings +
+    // government drive the demand weights). Foundings and due colonies are rare — and land on the
+    // same cycle ticks — so the rows are built once, only on the ticks that need them.
     const manifests = result.instrumentation.foundingManifests ?? [];
-    if (manifests.length > 0) {
-      const manifestSystems = toTickSystems(world);
-      const manifestRows = marketRowsBySystem(currentMarkets);
+    const colonyDue =
+      cycleLength > 0 && world.meta.currentTick % cycleLength === 0 &&
+      hasColonyAwaitingSample(foundedColonies, world.meta.currentTick);
+    const tickSystems = manifests.length > 0 || colonyDue ? toTickSystems(world) : undefined;
+    if (tickSystems && manifests.length > 0) {
       for (const manifest of manifests) {
+        // What the founding cost its founder, read at the founding tick — the founder's stock
+        // still reflects this manifest and no other. Only the founder's own rows are grouped;
+        // a galaxy-wide row build to look up one system is the cost this avoids.
+        const source = tickSystems.find((s) => s.id === manifest.sourceSystemId);
+        const rows = marketRowsBySystem(
+          currentMarkets.filter((m) => m.systemId === manifest.sourceSystemId),
+        ).get(manifest.sourceSystemId);
         recordFoundingManifest(
           foundedColonies,
           manifest.systemId,
           manifest.tonnage,
-          founderCoverAfter(manifestSystems, manifestRows, manifest.sourceSystemId, manifest.goodIds),
+          founderCoverAfter(source, rows, manifest.goodIds),
         );
       }
     }
@@ -205,13 +214,8 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     if (cycleLength > 0 && world.meta.currentTick % cycleLength === 0) {
       sampleDemandHunting(demandHunting, currentMarkets);
     }
-    // The reading needs full tick rows (buildings + government drive the demand weights), so build
-    // them only on the cycle that actually has a colony to read — not every tick of the run.
-    if (
-      cycleLength > 0 && world.meta.currentTick % cycleLength === 0 &&
-      hasColonyAwaitingSample(foundedColonies, world.meta.currentTick)
-    ) {
-      sampleFoundedColonies(toTickSystems(world), currentMarkets, world.meta.currentTick, foundedColonies);
+    if (tickSystems && colonyDue) {
+      sampleFoundedColonies(tickSystems, currentMarkets, world.meta.currentTick, foundedColonies);
     }
 
     if (world.meta.currentTick % SNAPSHOT_INTERVAL === 0) {
@@ -259,14 +263,16 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // The live partition — what this arm actually classified — published so a later arm can pin to
   // it. Taken before the pin is applied below, so a pinned run still reports its own membership
   // and the drift between arms stays visible.
+  const roleInfoByKey = marketRolesByKey(finalTickSystems, currentMarkets);
   const marketRoles: Record<string, MarketRole> = {};
-  for (const [key, info] of marketRolesByKey(finalTickSystems, currentMarkets)) {
+  for (const [key, info] of roleInfoByKey) {
     marketRoles[key] = info.role;
   }
   const roleCoverLevels = computeRoleCoverLevels(
     finalTickSystems,
     currentMarkets,
     config.pinnedRoles ? new Map(Object.entries(config.pinnedRoles)) : undefined,
+    roleInfoByKey,
   );
   const worldCohorts = computeWorldCohorts(
     finalTickSystems, currentMarkets, homeworldIds, STRIKE_PARAMS.threshold, world.events,
