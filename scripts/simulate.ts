@@ -604,7 +604,8 @@ async function runExperiment(
   const { config, label } = experimentToHarnessConfig(validated.data);
   const pinnedRoles = pinned ? pinnedRolesFor(pinned) : undefined;
 
-  console.log(
+  // Status goes to stderr so `--json > file` stays valid JSON, matching the quick-run path.
+  console.error(
     `Running experiment${label ? ` "${label}"` : ""}: ` +
     `${config.tickCount} ticks, seed ${config.seed}, ${config.systemCount} systems, ` +
     `economy scale ${ECONOMY_SCALE}` +
@@ -635,7 +636,7 @@ async function runExperiment(
 
   const result = buildExperimentResult(results);
   fs.writeFileSync(outFile, JSON.stringify(result, null, 2));
-  console.log(`\nResult saved to ${path.relative(process.cwd(), outFile)}`);
+  console.error(`\nResult saved to ${path.relative(process.cwd(), outFile)}`);
 }
 
 // ── Main ────────────────────────────────────────────────────────
