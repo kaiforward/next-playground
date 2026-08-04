@@ -165,12 +165,21 @@ cannot reach.
   carried in as the falsifier git-history check; validating it against the item-2 working file
   exposed that a file-scoped `git log` reads a migration commit as authorship — the check searches
   `docs/` history-wide and compares the falsifier's first-committed text against the spec's current
-  text.
+  text. **Dogfooded 2026-08-04** on the honest-demand-and-flow spec: 21 findings (4 critical), all
+  accepted; the biggest (the use/draw two-figure split) was 3-lens convergent, and mechanism A ran
+  clean on the five pre-committed falsifiers.
 - **`/build-plan`** — rank 2 by format: four required task fields (`Files / Interface / Proves /
   Consumes`) and three required plan sections (Verification, Doc fold, Not covered), so a skipped
   part is a visible hole rather than an absence. Mechanism B carried in as **Not covered** — every
   exclusion booked or reasoned, attached to finishing the plan. Self-review is the final step:
-  minutes, a checklist, no agent dispatch.
+  minutes, a checklist, no agent dispatch. **Dogfooded 2026-08-04** on the same spec — authored by
+  a directed Opus agent from the on-disk artifacts alone (the handoff-is-a-file design working as
+  intended) and verified by the session, which caught one gap the self-review missed (three of six
+  orphaned test suites named at a deletion). The self-review itself caught two wrong-directory
+  `file:line` citations inherited from the spec. Six frictions folded back into `SKILL.md` same
+  day: `### Gate` blocks for staged plans; `Proves` runnable at the task's own position; quoting a
+  spec-authored formula is not deriving one; `file:line` verified by reading, not grepping;
+  the spec's impact table is the licence; **booked at a gate** as a third Not-covered state.
 
 ## Left to do
 
@@ -180,8 +189,9 @@ cannot reach.
 3. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
    separate task — a checklist item on items 1-2. The test of whether it worked is the same as for
    `/measure`: dogfood the skill on a real queue item and see whether the mechanism catches something.
-   `/spec-review` and `/build-plan` both still await that dogfood — the natural moment is roadmap
-   item 6, whose next step is the spec-review gate itself, with planning right behind it.
+   `/spec-review` and `/build-plan` both passed that test on 2026-08-04 (details in their Done
+   bullets above) — the honest-demand-and-flow spec arrived before roadmap item 6 and became the
+   dogfood for both.
 
 The plain-language-before-numbers question is closed — Kai called it yes on 2026-08-03: a required
 `Meaning` line now leads `/measure`'s report frame (rank 2). The rank-3 preference in

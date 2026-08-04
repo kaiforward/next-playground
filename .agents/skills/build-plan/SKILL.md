@@ -33,7 +33,13 @@ The `Interface` field is the plan's actual content. "Add the donor gate" plans n
 "`donorDrawable(market, good): number`, replacing the `surplusDrawable` read in
 `matchFactionTransfers`" is a contract one session can build and another can build against.
 
-Phases are check-in pauses on one branch, never PRs — `AGENTS.md` owns the PR unit.
+`Proves` must be runnable at the task's own position in the order — a sim metric a later harness
+task builds belongs to that stage's gate, not to an earlier task's `Proves`.
+
+Phases are check-in pauses on one branch, never PRs — `AGENTS.md` owns the PR unit. A staged plan
+(stage → A/B → stage) interleaves `### Gate` blocks between task groups — Arms / Reads / Merge
+condition. A gate is not a task: it has no Files and no Interface, and it is where a
+booking-at-a-gate lives (see Not covered).
 
 ## Plan-level fields
 
@@ -48,8 +54,10 @@ note that this working file is deleted at ship. The fold happens on the branch, 
 review. Seven of fourteen planned docs rotted because this was left to "later".
 
 **Not covered** — the negative statement, in the same breath as the plan. What the plan deliberately
-leaves out, and for each item: **booked** (a roadmap row, named) or **dropped** (a reason, written).
-An exclusion with neither is a finding against the plan. The field is attached to finishing the plan
+leaves out, and for each item: **booked** (a roadmap row, named), **dropped** (a reason, written),
+or **booked at a gate** — when the booking's own evidence is produced by a stage gate, name the
+booking in that gate's merge condition, so the check is still text.
+An exclusion with none of the three is a finding against the plan. The field is attached to finishing the plan
 because producing text beats doing the check — this way the check is the text.
 
 ## Self-review — the final step, not a second gate
@@ -59,14 +67,20 @@ Minutes, by the author, before committing the plan. No agent dispatch.
 - **Every named identifier, grep-verified.** Each existing file, function, constant or field the plan
   references exists (`grep` / `npm run impact`); each `(new)` name does not already exist. A plan
   naming things that aren't there is hazard 5 at plan level — a whole roadmap item was once written
-  against a threshold that did not exist.
+  against a threshold that did not exist. A `file:line` citation is verified by **reading the
+  range** — grep proves the name exists somewhere, not that the line is where the plan says (two
+  same-named engine/processor files have already produced wrong-directory citations).
 - **Nothing dropped between spec and plan.** Every interaction row and accepted amendment in the spec
   lands in some task. The difference between spec scope and plan scope is either empty or listed in
   **Not covered**.
 - **No code.** A task containing a function body, an `if`, or a derived formula is implementing —
-  move the decision into the spec or cut it. Signatures and types are the ceiling.
+  move the decision into the spec or cut it. Signatures and types are the ceiling. Quoting a
+  spec-authored formula, invariant or constant value is not deriving one — those carry verbatim;
+  deriving something the spec never wrote is.
 - **Shared quantities stay inside the spec's evidence.** A task touching a symbol the spec's row-1
-  table never analysed is not a planning detail; it is missed spec scope. Go back.
+  table never analysed is not a planning detail; it is missed spec scope. Go back. The spec's own
+  `npm run impact` table is the licence for the symbols it covers — re-run the tool only for symbols
+  the plan leans on beyond it.
 
 Fix what the self-review finds, note anything material in the plan, move on. It is a checklist, not
 a review cycle.
