@@ -208,8 +208,10 @@ ceiling = 1 while stock ≤ min(knee, rampEnd);
 - The knee reads the **use figure**, which contains no ceilings — so knee computation has no
   recursion and no ordering constraints.
 - **Call sites and shapes:** the tick (`supply-chain.ts:122`), the decay/selling signal
-  (`economy.ts:205`) and the Industry-panel readout (`industry.ts:707`) all call the one knee
-  function. `MarketTickEntry` (+ `TickEntryInput`/`resolveMarketTickEntry`/`MarketView`) gains
+  (`economy.ts:205`), the Industry-panel readout (`industry.ts:707`) and the draw figure's
+  per-market brake pass (`lib/tick/processors/good-market-state.ts` — a fourth live site stage 1
+  added; the knee's new signature forces an edit there too, and the third A/B arm's
+  `drawBrakeCeiling` switch selects exactly that site's ceiling) all call the one knee function. `MarketTickEntry` (+ `TickEntryInput`/`resolveMarketTickEntry`/`MarketView`) gains
   `honestUseRate`, `capacityProduction` and `anchorMult`; `EconomySimParams.holdCover` is replaced
   by the three brake constants. `capacityProduction` is the **reference-cycle** rate —
   un-catch-up-scaled, un-strike-suppressed, un-event-multiplied (i.e. `GoodMarketState.

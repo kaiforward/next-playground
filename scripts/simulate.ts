@@ -61,7 +61,6 @@ const EQUILIBRIUM_TICKS = 10000;
 
 type HorizonLabel = "startup" | "equilibrium";
 
-
 /** What `--json` reports per horizon: the full results minus the market trajectory. */
 type HorizonReport = Omit<HarnessResults, "marketSnapshots">;
 
