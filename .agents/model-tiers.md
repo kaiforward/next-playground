@@ -5,7 +5,7 @@ Resolve each tier to the best available model or agent at dispatch time.
 
 | Tier | Use for | Claude family | OpenAI family |
 |------|---------|---------------|---------------|
-| `frontier` | Orchestration, design specifications, adversarial review, architecture, validation of blocker or major findings | Fable when available; otherwise Opus | `review-frontier`: `gpt-5.6-sol` with `xhigh` reasoning |
+| `frontier` | Orchestration, design specifications, adversarial review, architecture, validation of blocker or major findings | Opus — **never Fable.** Fable is the main-session model: it orchestrates, designs, writes the per-agent briefs, and verifies every critical/major finding itself. It is never dispatched as a subagent (cost; and the brief-attack-verify sandwich is what makes Opus lenses safe on hard reviews). | `review-frontier`: `gpt-5.6-sol` with `xhigh` reasoning |
 | `strong` | Substantive implementation where the scope is bounded. **Never review work** — review agents (any lens, any effort level, including a skill's quick/light mode) resolve to `frontier`; a light review scales the dispatch shape down, not the model. | Sonnet | `review-strong`: `gpt-5.6-terra` with `high` reasoning |
 | `fast` | Mechanical checks, simple implementations, and validation of clear minor findings | Haiku | `review-fast`: `gpt-5.6-luna` with `medium` reasoning |
 
