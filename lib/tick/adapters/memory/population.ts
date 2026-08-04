@@ -7,6 +7,8 @@ import type { ResourceVector } from "@/lib/types/game";
 import { totalDemandRateForGood } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
+import { useRatesByGood } from "@/lib/engine/honest-demand";
+import type { UseRate } from "@/lib/engine/honest-demand";
 import { unitResourceVector } from "@/lib/engine/resources";
 
 /** In-memory adapter for the population processor (harness + unit tests). */
@@ -44,29 +46,49 @@ export class InMemoryPopulationWorld implements PopulationWorld {
     return Promise.resolve();
   }
 
-  rewriteDemandRates(pops: Array<{ systemId: string; population: number }>): Promise<void> {
+  rewriteDemandRates(
+    pops: Array<{ systemId: string; population: number; productionSuppress: number }>,
+  ): Promise<void> {
     if (pops.length === 0) return Promise.resolve();
-    const popBySystem = new Map(pops.map((p) => [p.systemId, p.population]));
+    const rowBySystem = new Map(pops.map((p) => [p.systemId, p]));
     const buildingsBySystemId = new Map<string, Record<string, number>>();
     const yieldsBySystemId = new Map<string, ResourceVector>();
     for (const s of this.systems) {
       buildingsBySystemId.set(s.id, s.buildings);
       yieldsBySystemId.set(s.id, s.yields);
     }
-    // Cache the labour snapshot per system — shared across all of a system's markets
-    // computeSystemLabourSnapshot scans the whole building set.
+    // Cache the labour snapshot and the whole-system use map per system — both scan the
+    // building set once and are shared across all of that system's markets.
     const labourBySystem = new Map<string, SystemLabourSnapshot>();
+    const useBySystem = new Map<string, Map<string, UseRate>>();
     this.markets = this.markets.map((m) => {
-      const population = popBySystem.get(m.systemId);
-      if (population == null) return m;
+      const row = rowBySystem.get(m.systemId);
+      if (row == null) return m;
       const buildings = buildingsBySystemId.get(m.systemId) ?? {};
       const yields = yieldsBySystemId.get(m.systemId) ?? unitResourceVector();
       let snap = labourBySystem.get(m.systemId);
       if (snap === undefined) {
-        snap = computeSystemLabourSnapshot(buildings, population);
+        snap = computeSystemLabourSnapshot(buildings, row.population);
         labourBySystem.set(m.systemId, snap);
       }
-      return { ...m, demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state) };
+      let uses = useBySystem.get(m.systemId);
+      if (uses === undefined) {
+        uses = useRatesByGood({
+          buildings,
+          population: row.population,
+          yields,
+          productionSuppress: row.productionSuppress,
+        });
+        useBySystem.set(m.systemId, uses);
+      }
+      const honestUseRate = uses.get(m.goodId)?.total ?? 0;
+      return {
+        ...m,
+        // Two figures, two jobs: the floored capacity anchor prices the good, the unfloored
+        // use figure sizes its warehousing. Neither is derived from the other.
+        demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state),
+        honestUseRate: Number.isFinite(honestUseRate) ? Math.max(0, honestUseRate) : 0,
+      };
     });
     return Promise.resolve();
   }

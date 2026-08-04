@@ -228,6 +228,17 @@ export interface WorldMarket {
    * civilian+industrial total on the first cycle.
    */
   demandRate: number;
+  /**
+   * What this system's population and industry actually USE of this good per reference cycle:
+   * civilian want at full rate plus the local recipe draw, staffing- and strike-gated. Every
+   * warehousing quantity — logistics targets, donor floors, consumer/producer classification —
+   * is denominated in it, so it must move only as buildings, population and strike state move,
+   * never with stock. Distinct from `demandRate` above, which is the floored, capacity-based
+   * pricing anchor. Rewritten each economy cycle by the population processor and seeded at
+   * market creation. **Missing reads as a live recompute, never 0** — a 0 would make the row an
+   * un-sinkable, fully-drawable donor.
+   */
+  honestUseRate?: number;
   /** Infrastructure storage capacity for this good from the system's built buildings. */
   storageCapacity: number;
   /**

@@ -40,7 +40,7 @@ export async function runPopulationProcessor(
   };
 
   const popUpdates: PopulationUpdate[] = [];
-  const demandPops: Array<{ systemId: string; population: number }> = [];
+  const demandPops: Array<{ systemId: string; population: number; productionSuppress: number }> = [];
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
     const supply = signals.supplyStateBySystem.get(s.systemId)
@@ -63,7 +63,14 @@ export async function runPopulationProcessor(
     // cycle while crowding lags it by one.
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
     popUpdates.push({ systemId: s.systemId, population, unrest });
-    demandPops.push({ systemId: s.systemId, population });
+    // The scalar the economy actually applied this cycle, not a recompute: the strike params and
+    // the treasury-fed maintenance malus never reach this processor, and the unrest just written
+    // above is the wrong half of the input anyway. A system the signal omits was unsuppressed.
+    demandPops.push({
+      systemId: s.systemId,
+      population,
+      productionSuppress: signals.productionSuppressBySystem.get(s.systemId) ?? 1,
+    });
   }
 
   await world.applyPopulationUpdates(popUpdates);

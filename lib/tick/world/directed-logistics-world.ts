@@ -17,6 +17,9 @@ export interface MarketRowForLogistics {
   stock: number;
   anchorMult: number;
   demandRate: number;
+  /** Persisted use figure — what this system's population and industry draw when running.
+   *  Missing ⇒ recompute live; never read a missing field as 0. */
+  honestUseRate?: number;
   storageCapacity: number;
   /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1). */
   satisfaction?: number;

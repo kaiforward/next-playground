@@ -272,6 +272,7 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       stock: m.stock,
       anchorMult: m.anchorMult,
       demandRate: m.demandRate,
+      honestUseRate: m.honestUseRate,
       storageCapacity: m.storageCapacity,
       satisfaction: m.satisfaction,
       realizedProductionRate: m.realizedProductionRate,
