@@ -68,6 +68,17 @@ export const DIRECTED_LOGISTICS = {
    * against it. Nothing here moves it.
    */
   DONOR_RESERVE_COVER: 40,
+  /**
+   * A budget-stopped deficit is recorded as funding-bound only when the shortfall still standing
+   * after every affordable donor-draw exceeds this fraction of its original shortfall. The flag is
+   * a gameplay gate, not telemetry — it suppresses the build planner's capacity proposals and
+   * exempts producers from idle decay — so it must keep meaning "this market's shortfall persists
+   * because of money": with donors filling a deficit in turn, "the last donor attempted was
+   * unaffordable" would otherwise set it on a market that was in fact almost fully served,
+   * flipping both gameplay gates across a large market population at once. First-draft
+   * hypothesis, validated by simulator A/B only.
+   */
+  FUNDING_BOUND_RESIDUAL_FRACTION: 0.1,
   /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */
   MAX_HOPS: 4,
   /** Per-unit route cost = quantity × (hops × HOP_WEIGHT + totalFuelCost × FUEL_WEIGHT). */

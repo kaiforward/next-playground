@@ -254,7 +254,6 @@ export function matchFactionTransfers(
 
   const transfers: PlannedTransfer[] = [];
   const fundingBound: FundingBoundMatch[] = [];
-  const fundingBoundKeys = new Set<string>();
   for (const d of deficits) {
     const sources = surplusesByGood.get(d.goodId);
     if (!sources) continue;
@@ -276,6 +275,7 @@ export function matchFactionTransfers(
     );
 
     let remaining = d.shortfall;
+    let stoppedDonorId: string | null = null;
     for (const { source, perUnit } of candidates) {
       if (remaining <= 0) break;
 
@@ -285,17 +285,6 @@ export function matchFactionTransfers(
       const wanted = Math.min(remaining, source.drawable);
       const affordable = budget > 0 ? budget / perUnit : 0;
       const quantity = Math.min(wanted, affordable);
-      if (affordable < wanted) {
-        const key = `${d.goodId}|${source.systemId}|${d.systemId}`;
-        if (!fundingBoundKeys.has(key)) {
-          fundingBoundKeys.add(key);
-          fundingBound.push({
-            goodId: d.goodId,
-            fromSystemId: source.systemId,
-            toSystemId: d.systemId,
-          });
-        }
-      }
       if (Number.isFinite(quantity) && quantity > 0) {
         const cost = quantity * perUnit;
         transfers.push({
@@ -311,7 +300,24 @@ export function matchFactionTransfers(
       }
       // A budget-stopped draw ends this deficit's fill: later donors are unaffordable too, and
       // iterating them would only fan out epsilon-sized transfers from float residue.
-      if (affordable < wanted) break;
+      if (affordable < wanted) {
+        stoppedDonorId = source.systemId;
+        break;
+      }
+    }
+
+    // Funding-bound is a gameplay gate (planner suppression, idle-decay exemption), so it records
+    // "this shortfall persists because of money" — a budget-stopped draw alone is not enough when
+    // earlier donors already served the deficit to within the materiality line.
+    if (
+      stoppedDonorId !== null
+      && remaining > d.shortfall * DIRECTED_LOGISTICS.FUNDING_BOUND_RESIDUAL_FRACTION
+    ) {
+      fundingBound.push({
+        goodId: d.goodId,
+        fromSystemId: stoppedDonorId,
+        toSystemId: d.systemId,
+      });
     }
   }
 

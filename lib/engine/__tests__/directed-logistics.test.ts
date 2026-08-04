@@ -349,6 +349,38 @@ describe("matchFactionTransfers", () => {
     expect(result.fundingBound).toHaveLength(1);
   });
 
+  it("does not mark a deficit left only trivially short by a budget-stopped final draw", () => {
+    // D1 affordably delivers 95 of the shortfall of 100; the budget then stops D2's draw with a
+    // residual of 5 — 5% of the original shortfall, under FUNDING_BOUND_RESIDUAL_FRACTION (10%).
+    // The flag means "this market's shortfall persists because of money" — it suppresses the
+    // planner's capacity proposals and exempts producers from idle decay — so a 95%-served market
+    // must not set it. A naive per-draw recording (any unaffordable draw ⇒ flag) fails here.
+    const d1 = sys("D1", 95, { goodId: "food", stock: 105, logisticsTarget: 10, demand: 5 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 100, demand: 5 });
+
+    const result = matchFactionTransfers([d1, d2, deficit], oneHop);
+    expect(result.transfers).toHaveLength(1);
+    expect(result.transfers[0]).toMatchObject({ fromSystemId: "D1", quantity: 95 });
+    expect(result.fundingBound).toEqual([]);
+  });
+
+  it("marks a deficit the budget left materially short, naming the stopped donor", () => {
+    // Same shape at budget 50: D1's draw itself is budget-stopped at 50 of the wanted 95, leaving
+    // a residual of 50% — far over the 10% materiality line, so the flag is set and carries the
+    // donor whose draw the budget stopped.
+    const d1 = sys("D1", 50, { goodId: "food", stock: 105, logisticsTarget: 10, demand: 5 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 100, demand: 5 });
+
+    const result = matchFactionTransfers([d1, d2, deficit], oneHop);
+    expect(result.transfers).toHaveLength(1);
+    expect(result.transfers[0]).toMatchObject({ fromSystemId: "D1", quantity: 50 });
+    expect(result.fundingBound).toEqual([
+      { goodId: "food", fromSystemId: "D1", toSystemId: "B" },
+    ]);
+  });
+
   it("does not mark an ample-budget or drawable-bound transfer", () => {
     const donor = sys("A", 100, { goodId: "food", stock: 14, logisticsTarget: 10, demand: 5, production: 0 });
     const receiver = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
