@@ -346,12 +346,17 @@ restated in new units, Q4 explicitly deferred to the pricing pass.
 **Next steps, in order:**
 - ~~`/measure` who the brake currently bites~~ — done 2026-08-03, claim falsified (below): the
   brake is a live exporter governor; the brake change carries its own behavioural A/B.
-- `/measure` the size of the demand fiction — nominal (capacity-based) vs realized industrial input
-  draw, galaxy-wide census. The full behavioural A/B (honest vs nominal) runs at implementation
-  time, when an honest figure exists to A/B.
-- `/measure` (for the spec): of the throttled exporters, how many face unmet reachable demand
-  (governor wrongly engaged) vs none (sated — the mechanism working as intended)?
-- Then the spec, then `/spec-review`.
+- ~~`/measure` the size of the demand fiction~~ — done 2026-08-04, claim confirmed via the share
+  bar (below): concentrated fiction, 1-in-7 checks at ≤ half-draw, aggregate nearly honest.
+  The behavioural A/B (honest vs nominal) still runs at implementation time.
+- ~~`/measure` throttled exporters: unmet vs sated~~ — done 2026-08-04, claim falsified (below):
+  71.8% face reachable deficits; the standing constraint is haul budget / matching, not
+  production volume.
+- `/measure` (new, from the B falsification): why do reachable deficits persist beside drawable
+  stock — budget exhaustion vs route cost vs matching order? Sizes how much of the served-last
+  pattern the haul budget owns before any brake conclusions are drawn. Adjoins row 10's
+  remove-everything-free audit; sequencing with row 10 is Kai's call.
+- Then the spec (demand honesty + brake denominators), then `/spec-review`.
 
 ## Evidence: who does the brake bite (claim committed before the instrument ran)
 
@@ -498,7 +503,42 @@ again equal the independent developed-market count.
 
 ## Evidence: size of the demand fiction (claim committed before the instrument ran)
 
-**Status: falsifier committed, instrument not yet run.**
+**Status: measured 2026-08-04 — claim CONFIRMED, via the share bar only.** Falsifier committed as
+`05ed9768` before the run.
+
+```
+Meaning:  The demand fiction is real but CONCENTRATED, not uniform: for three-quarters of
+          industrial-demand market-checks the stated figure is close to what factories actually
+          draw, but one check in seven overstates by 2× or more — most of those by 4×+ — and that
+          cohort is stationary at equilibrium. The aggregate overstatement is modest (×1.18), so
+          the fiction misprices individual markets' thresholds without much biasing galaxy totals.
+Claim:    ≥ 10% of industrial-demand checks at ratio ≤ 0.5, OR galaxy overstatement ≥ 1.25×.
+Number:   equilibrium: ratio ≤ 0.5 share 14.8% (9.0% of checks under 0.25); overstatement ×1.18
+          (bar was 1.25 — this half FAILED); buckets 9.0 / 5.8 / 9.9 / 52.9 / 22.5%.
+          Startup: 5.1% and ×1.06 — the fiction GROWS with galaxy maturation.
+Horizon:  both, one 12,000-tick run; stationarity clean (share 14.8% in both late windows,
+          overstatement ×1.15 → ×1.18).
+Cohort:   industrial-demand checks = 42.5% of all developed-market checks (643,474 of 1,513,200
+          at equilibrium), same conditions as the prior runs (600 systems, seed 42, scale 100).
+          Per-good whole-run overstatement clusters at ×1.10–1.19 — the extreme cohort is spread
+          across goods, not concentrated in one.
+Licenses: Supports: demand honesty keeps its lead-item status via the share bar — the harm is
+          per-market threshold mispricing in a material, stationary cohort (the campers were its
+          extreme tail). Notably the aggregate bar alone would NOT have justified the work.
+          Also measured: realized-based EXCEEDS nominal in 22.5% of checks (realized output can
+          run above base capacity under event multipliers / population shifts) — the honest
+          figure must handle both directions, not just deflation.
+          Does NOT support: expecting large aggregate-flow changes from the fix (totals are
+          nearly honest); reading realized-based as the true honest figure (it understates want
+          exactly where the measured input itself is the binding constraint — honest sits
+          between the two bounds).
+```
+
+<details><summary>Raw output — see the combined run below (shared with the sated-exporter measurement)</summary>
+
+See the raw block under "are throttled exporters sated?".
+
+</details>
 
 **Definitions.** At each logistics evaluation, for every developed-system market whose demand
 includes an industrial component: *nominal* industrial input demand is what the state carries today
@@ -519,7 +559,121 @@ the spec re-scopes it accordingly.
 
 ## Evidence: are throttled exporters sated? (claim committed before the instrument ran)
 
-**Status: falsifier committed, instrument not yet run.**
+**Status: measured 2026-08-04 — claim FALSIFIED.** Falsifier committed as `05ed9768` before the run.
+
+```
+Meaning:  Throttled exporters are NOT sated — over 70% of throttled exporter-path checks face a
+          live reachable same-faction deficit in the very good they are throttled on. But the
+          same reading shows those deficits persisting while drawable stock stands at the
+          exporter, so the STANDING constraint on the deficits is the haul budget / route cost /
+          matching order — not production volume. The brake engages while need exists, which
+          kills the benign "idle saturated farm" reading; its causal share in the undersupply is
+          unmeasured.
+Claim:    under 25% of throttled exporter-path checks face a reachable same-faction deficit.
+Number:   equilibrium: 71.8% (71,002 of 98,831). Whole run 70.4%; startup 52.9%. Per-good
+          (whole run): ore 93.3%, gas 90.0%, radioactives 88.7%, minerals 86.9%, chemicals
+          84.7%; the closest to genuinely sated are food 46.3% and water 56.5%.
+Horizon:  both; stationary across the late windows (73.5% → 71.8%).
+Cohort:   exporter-path checks above the anchor, matcher's own membership and reachability, same
+          run/conditions as measurement A (600 systems, seed 42, scale 100, single seed).
+Licenses: Supports: the "sated exporter idling" model is the minority case even for farms; the
+          governor engages while faction need exists, so exporter throttling cannot be read as
+          the mechanism working benignly.
+          Does NOT support: the brake as the BINDING cause of those deficits. 100% of
+          throttled-unmet exporters held drawable stock at the same evaluation — structurally
+          guaranteed (throttled ⇒ stock > anchor ≥ exporter reserve), so this is not a finding
+          in itself, but it means deliveries were available and something else (budget
+          exhaustion, route cost, matching order) left the deficits standing. More production
+          does not serve a budget-bound deficit; whether opening the brake changes outcomes is
+          exactly what the booked behavioural A/B must answer.
+```
+
+**New question this opens (booked in next steps):** why do reachable deficits persist beside
+drawable stock — budget exhaustion vs route cost vs matching order? This is the served-last /
+leech-colony thread showing up in the exporter data, and it adjoins the "remove everything free"
+audit (the haul work-budget is free, population-scaled v1) owned by roadmap row 10's territory.
+
+<details><summary>Raw output (combined 12,000-tick run, measurements A + B)</summary>
+
+```
+scale=100 systems=600 seed=42 ticks=12000 cycle=24 logisticsInterval=24
+(A) nominal = demand − civilianDemand (capacity-based); realized-based = inputDemandFromProduction(realized rates); ratio = realized/nominal
+(B) throttled exporter = exporter-path ∧ stock > target(40); unmet = reachable same-faction deficit sink in the good (matcher membership)
+    ramp/closed split at HOLD_COVER(1.3)×target
+
+VALIDATION:
+  sampled boundary ticks: 500 (first 24, last 12000)
+  t=24: hook eligible=520  independent developed-market count=520  MATCH
+  t=6024: hook eligible=15132  independent developed-market count=15132  MATCH
+  t=12000: hook eligible=15132  independent developed-market count=15132  MATCH
+  ramp whole-run total: 586588  expected 586588  MATCH
+  closed whole-run total: 160732  expected 160732  MATCH
+
+STARTUP (≤ t=1008)
+  (A) industrial-demand checks: 12875 of 116324
+      ratio buckets: [0,.25) 3.3%  [.25,.5) 1.9%  [.5,.75) 4.5%  [.75,1) 25.0%  ≥1 65.4%
+      ratio ≤ 0.5 share: 660/12875 = 5.1%
+      galaxy nominal 21224130 vs realized-based 19997875 → overstatement ×1.06
+  (B) throttled exporter checks: 3767 (with drawable stock: 100.0%)
+      facing reachable same-faction deficit: 1993/3767 = 52.9%
+
+STATIONARITY CHECK (t=7200–9600)
+  (A) industrial-demand checks: 638134 of 1513200
+      ratio buckets: [0,.25) 8.9%  [.25,.5) 5.9%  [.5,.75) 8.1%  [.75,1) 45.8%  ≥1 31.2%
+      ratio ≤ 0.5 share: 94454/638134 = 14.8%
+      galaxy nominal 856943486 vs realized-based 746979930 → overstatement ×1.15
+  (B) throttled exporter checks: 74808 (with drawable stock: 100.0%)
+      facing reachable same-faction deficit: 55021/74808 = 73.5%
+
+EQUILIBRIUM (t=9600–12000)
+  (A) industrial-demand checks: 643474 of 1513200
+      ratio buckets: [0,.25) 9.0%  [.25,.5) 5.8%  [.5,.75) 9.9%  [.75,1) 52.9%  ≥1 22.5%
+      ratio ≤ 0.5 share: 94946/643474 = 14.8%
+      galaxy nominal 893422795 vs realized-based 755450612 → overstatement ×1.18
+  (B) throttled exporter checks: 98831 (with drawable stock: 100.0%)
+      facing reachable same-faction deficit: 71002/98831 = 71.8%
+
+WHOLE RUN
+  (A) industrial-demand checks: 2506621 of 6921460
+      ratio buckets: [0,.25) 9.2%  [.25,.5) 5.3%  [.5,.75) 8.0%  [.75,1) 38.8%  ≥1 38.6%
+      ratio ≤ 0.5 share: 363415/2506621 = 14.5%
+      galaxy nominal 2745355890 vs realized-based 2398011508 → overstatement ×1.14
+  (B) throttled exporter checks: 296465 (with drawable stock: 100.0%)
+      facing reachable same-faction deficit: 208665/296465 = 70.4%
+
+CLAIM A (equilibrium): fiction is broad — ratio≤0.5 share ≥10%: 14.8%; overstatement ≥1.25×: ×1.18 → CLAIM HOLDS
+CLAIM B (equilibrium): throttled exporters mostly sated — unmet share <25%: 71.8% → FALSIFIED
+
+(A) PER-GOOD nominal vs realized-based (whole run, top 12 by nominal):
+  gas              nominal= 426462164  realized= 358210035  ×1.19
+  ore              nominal= 387493771  realized= 353429574  ×1.10
+  minerals         nominal= 351602991  realized= 306145947  ×1.15
+  metals           nominal= 278366246  realized= 245436229  ×1.13
+  biomass          nominal= 243114330  realized= 207918336  ×1.17
+  chemicals        nominal= 229442207  realized= 200953286  ×1.14
+  polymers         nominal= 207368955  realized= 181546425  ×1.14
+  textiles         nominal= 207368955  realized= 181546425  ×1.14
+  components       nominal= 200941663  realized= 178836759  ×1.12
+  electronics      nominal=  84975631  realized=  72864212  ×1.17
+  consumer_goods   nominal=  64195990  realized=  55137016  ×1.16
+  alloys           nominal=  31165119  realized=  27776632  ×1.12
+
+(B) PER-GOOD throttled exporters (whole run, top 12 by throttled):
+  food             throttled=  65532  unmet=  30332 (46.3%)
+  water            throttled=  43473  unmet=  24557 (56.5%)
+  munitions        throttled=  23542  unmet=  16804 (71.4%)
+  gas              throttled=  15743  unmet=  14173 (90.0%)
+  radioactives     throttled=  14897  unmet=  13219 (88.7%)
+  ore              throttled=  13263  unmet=  12376 (93.3%)
+  fuel             throttled=  12497  unmet=  10357 (82.9%)
+  minerals         throttled=  11596  unmet=  10080 (86.9%)
+  hull_plating     throttled=   8951  unmet=   6777 (75.7%)
+  machinery        throttled=   8472  unmet=   6870 (81.1%)
+  chemicals        throttled=   8161  unmet=   6913 (84.7%)
+  polymers         throttled=   7734  unmet=   6207 (80.3%)
+```
+
+</details>
 
 **Definitions.** A *throttled exporter* check is an exporter-path market (matcher's own test)
 above its anchor (ramp or closed). It *faces reachable unmet demand* when, at the same
