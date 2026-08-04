@@ -4,8 +4,10 @@ import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
-import { MIN_DEMAND } from "@/lib/constants/market-economy";
+import { computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
+import { surplusDrawable } from "@/lib/engine/directed-logistics";
+import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
@@ -192,5 +194,110 @@ describe("toGoodMarketStates", () => {
       satisfaction: 0.5, productionSuppressed: true, squeezeCycles: 2,
       proposalCycles: 1, logisticsFundingBound: true,
     });
+  });
+});
+
+// ── The use figure and the draw figure ────────────────────────────
+
+describe("toGoodMarketStates: the two demand figures", () => {
+  // A smelter world. `ore` is the input under test; `metals` is the consumer whose own
+  // output brake and event multiplier gate ore's urgency without touching ore's warehousing.
+  const BUILDINGS = { metals: 3, vocational_school: 1 };
+  const POPULATION = 100;
+
+  function metalsRow(overrides: Partial<MarketRowForLogistics> = {}): MarketRowForLogistics {
+    return {
+      id: "A|metals", goodId: "metals", stock: 0, anchorMult: 1,
+      demandRate: 5, storageCapacity: 0, ...overrides,
+    };
+  }
+  function oreRow(overrides: Partial<MarketRowForLogistics> = {}): MarketRowForLogistics {
+    return {
+      id: "A|ore", goodId: "ore", stock: 10, anchorMult: 1,
+      demandRate: 5, storageCapacity: 0, ...overrides,
+    };
+  }
+  const statesOf = (markets: MarketRowForLogistics[]) =>
+    toGoodMarketStates({ buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets });
+
+  const stateOf = (markets: MarketRowForLogistics[], goodId: string) => {
+    const state = statesOf(markets).find((g) => g.goodId === goodId);
+    if (state === undefined) throw new Error(`Expected a ${goodId} state`);
+    return state;
+  };
+
+  // metals: targetStock = TARGET_COVER × demandRate 5 = 200; the brake shuts at HOLD_COVER × 200 = 260.
+  const METALS_BRAKE_SHUT = TARGET_COVER * 5 * ECONOMY_CONSTANTS.HOLD_COVER + 1;
+
+  it("takes demand from the row's persisted use figure rather than recomputing it", () => {
+    // A figure no recompute would produce, so reading it back proves the row is the source.
+    const state = stateOf([oreRow({ honestUseRate: 12.5 }), metalsRow()], "ore");
+    expect(state.demand).toBe(12.5);
+    expect(state.logisticsTarget).toBeCloseTo(DIRECTED_LOGISTICS.WAREHOUSE_COVER * 12.5, 9);
+    expect(state.donorReserve).toBeCloseTo(DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * 12.5, 9);
+  });
+
+  it("recomputes the use figure live when the row carries none, gated by the row's suppress rate", () => {
+    // The legacy-save path. It must never fall back to 0, which would make the row un-sinkable
+    // and its whole yard drawable.
+    const basis = computeSystemLabourSnapshot(BUILDINGS, POPULATION).basis;
+    const snap = computeSystemLabourSnapshot(BUILDINGS, POPULATION);
+    const civilian = consumptionRate("ore", basis);
+    const industrial = inputDemandForGood(BUILDINGS, "ore", snap.state, unitResourceVector());
+    expect(industrial).toBeGreaterThan(0);
+
+    const plain = stateOf([oreRow(), metalsRow()], "ore");
+    expect(plain.demand).toBeCloseTo(civilian + industrial, 9);
+    expect(plain.demand).toBeGreaterThan(0);
+
+    const struck = stateOf([oreRow({ productionSuppressRate: 0.4 }), metalsRow()], "ore");
+    expect(struck.demand).toBeCloseTo(civilian + industrial * 0.4, 9);
+  });
+
+  it("leaves drawDemand equal to the use figure when nothing is braked and no event runs", () => {
+    const state = stateOf([oreRow({ honestUseRate: 12.5 }), metalsRow({ stock: 0 })], "ore");
+    // The use figure is the row's; the draw figure is derived from this system's own industry, so
+    // they coincide only in shape here — assert the draw against its own components.
+    const basis = computeSystemLabourSnapshot(BUILDINGS, POPULATION).basis;
+    const snap = computeSystemLabourSnapshot(BUILDINGS, POPULATION);
+    const ungated = consumptionRate("ore", basis)
+      + inputDemandForGood(BUILDINGS, "ore", snap.state, unitResourceVector());
+    expect(state.drawDemand).toBeCloseTo(ungated, 9);
+  });
+
+  it("collapses drawDemand to civilian want when the consuming industry is braked shut", () => {
+    const basis = computeSystemLabourSnapshot(BUILDINGS, POPULATION).basis;
+    const running = stateOf([oreRow(), metalsRow({ stock: 0 })], "ore");
+    const braked = stateOf([oreRow(), metalsRow({ stock: METALS_BRAKE_SHUT })], "ore");
+
+    expect(braked.drawDemand).toBeLessThan(running.drawDemand);
+    expect(braked.drawDemand).toBeCloseTo(consumptionRate("ore", basis), 9);
+  });
+
+  it("keeps every warehousing quantity bit-identical across two states that differ only in draw", () => {
+    // The invariant the whole split exists to protect: a target that followed the momentary state
+    // of the yard it stocks is the drain/refill oscillation the donor reserve is written to prevent.
+    const ore = oreRow({ honestUseRate: 12.5 });
+    const running = stateOf([ore, metalsRow({ productionMult: 1 })], "ore");
+    const evented = stateOf([ore, metalsRow({ productionMult: 0.25 })], "ore");
+
+    expect(evented.drawDemand).toBeLessThan(running.drawDemand);
+    expect(evented.demand).toBe(running.demand);
+    expect(evented.logisticsTarget).toBe(running.logisticsTarget);
+    expect(evented.donorReserve).toBe(running.donorReserve);
+    expect(evented.civilianDemand).toBe(running.civilianDemand);
+    expect(
+      surplusDrawable(ore.stock, evented.donorReserve, evented.demand, evented.production),
+    ).toBe(
+      surplusDrawable(ore.stock, running.donorReserve, running.demand, running.production),
+    );
+  });
+
+  it("reads a consumer good with no market row as unbraked rather than as stopped", () => {
+    // A missing row carries no stock and no band; treating that as a shut brake would silently
+    // erase the draw it explains.
+    const withMetals = stateOf([oreRow(), metalsRow({ stock: 0 })], "ore");
+    const withoutMetals = stateOf([oreRow()], "ore");
+    expect(withoutMetals.drawDemand).toBeCloseTo(withMetals.drawDemand, 9);
   });
 });

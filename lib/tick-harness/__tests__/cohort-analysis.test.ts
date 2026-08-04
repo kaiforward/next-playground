@@ -12,6 +12,8 @@ function state(over: Partial<GoodMarketState> = {}): GoodMarketState {
     logisticsTarget: 100,
     donorReserve: 100,
     demand: 10,
+    // Nothing braked and no event running, which is what these role fixtures state.
+    drawDemand: 10,
     civilianDemand: 10,
     production: 0,
     capacityProduction: 0,

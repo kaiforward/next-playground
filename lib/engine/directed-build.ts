@@ -260,6 +260,9 @@ function effectiveBuildSystems(
       const production = standingProduction + Math.max(0, capacityProduction - good.capacityProduction);
       return {
         ...good,
+        // The queued increment counts at raw capacity, deliberately unlike `good.demand` itself
+        // (the staffing- and strike-gated use figure): capacity still in the build queue has no
+        // stock, no strike and no brake state to gate it by.
         demand: good.demand + inputDemandFromProduction(good.goodId, queuedOutput),
         capacityProduction,
         production,
