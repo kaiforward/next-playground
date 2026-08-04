@@ -46,14 +46,16 @@ export function createSystemMarkets(seed: SystemMarketSeed): WorldMarket[] {
       : 0;
     const honestUseRate = useRates.get(goodId)?.total ?? 0;
     // Guard: JSON.stringify silently turns NaN/Infinity into null, which would break the
-    // save/load round-trip — clamp defensively.
+    // save/load round-trip — clamp defensively. The use figure is the exception: a corrupt seed
+    // leaves it ABSENT so the first read recomputes live, never 0 — a seeded 0 would make the
+    // founding row un-sinkable and fully drawable at once, defeating what the seeding is for.
     return {
       systemId: seed.systemId,
       goodId,
       stock: Number.isFinite(stock) ? stock : 0,
       anchorMult: 1,
       demandRate: civilianDemandRateForGood(goodId, basis),
-      honestUseRate: Number.isFinite(honestUseRate) ? Math.max(0, honestUseRate) : 0,
+      ...(Number.isFinite(honestUseRate) ? { honestUseRate: Math.max(0, honestUseRate) } : {}),
       storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
       satisfaction: 1,
       squeezeCycles: 0,

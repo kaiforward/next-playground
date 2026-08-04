@@ -15,7 +15,12 @@
  *
  * Everything here divides by REAL demand — deliberately not the row's `demandRate`, which floors at
  * `MIN_DEMAND` (a divide-by-zero guard on *pricing*) and below that floor describes the guard rather
- * than anything consumed locally. The price anchor does not reach logistics at all.
+ * than anything consumed locally. Two anchor-derived quantities are read deliberately, and only two:
+ * `anchorMult` scales the warehousing target and the donor floor together (an anchor-shifting event
+ * moves both), and the draw figure's brake measures each consumer's stock against the same
+ * anchor-based operating ceiling (`marketBandForRow(...).targetStock` × `HOLD_COVER`) the economy
+ * actually brakes production with — urgency mirrors the brake as applied. The pricing `demandRate`
+ * itself reaches nothing here.
  */
 import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
@@ -37,7 +42,10 @@ export interface MarketStateSource {
   markets: MarketRowForLogistics[];
 }
 
-export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
+export function toGoodMarketStates(
+  row: MarketStateSource,
+  opts?: { withDraw?: boolean },
+): GoodMarketState[] {
   const rates = capacityGoodRates(row.buildings, row.population, row.yields);
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
   const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
@@ -47,28 +55,31 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
   const suppressRow = row.markets.find((m) => typeof m.productionSuppressRate === "number");
   const productionSuppress = suppressRow?.productionSuppressRate ?? 1;
 
-  // Each good's own output brake at its own current stock, plus its live event multiplier — the two
-  // gates that separate "wants this eventually" from "could use this right now". A good with no row
-  // here reads as unbraked: no row means no stock and no band, which is not a stopped factory.
-  const brakeByGood = new Map<string, number>();
-  const multByGood = new Map<string, number>();
-  for (const m of row.markets) {
-    const good = GOODS[m.goodId];
-    const band = marketBandForRow(m, {
-      priceFloor: good?.priceFloor ?? 0.5,
-      priceCeiling: good?.priceCeiling ?? 2.0,
+  // The draw figure has exactly one reader — the matcher's severity weight — so only the logistics
+  // caller pays for the per-market brake pass and the second recipe sum behind it.
+  let drawRates: Map<string, number> | undefined;
+  if (opts?.withDraw) {
+    // Each good's own output brake at its own current stock, plus its live event multiplier — the
+    // two gates that separate "wants this eventually" from "could use this right now". A good with
+    // no row here reads as unbraked: no row means no stock and no band, which is not a stopped
+    // factory.
+    const brakeByGood = new Map<string, number>();
+    const multByGood = new Map<string, number>();
+    for (const m of row.markets) {
+      const band = marketBandForRow(m, GOODS[m.goodId]);
+      brakeByGood.set(m.goodId, productionCeiling(m.stock, band.targetStock, ECONOMY_CONSTANTS.HOLD_COVER));
+      multByGood.set(m.goodId, m.productionMult ?? 1);
+    }
+    drawRates = drawRatesByGood({
+      buildings: row.buildings,
+      population: row.population,
+      yields: row.yields,
+      productionSuppress,
+      rates,
+      brakeCeilingOf: (goodId) => brakeByGood.get(goodId) ?? 1,
+      productionMultOf: (goodId) => multByGood.get(goodId) ?? 1,
     });
-    brakeByGood.set(m.goodId, productionCeiling(m.stock, band.targetStock, ECONOMY_CONSTANTS.HOLD_COVER));
-    multByGood.set(m.goodId, m.productionMult ?? 1);
   }
-  const drawRates = drawRatesByGood({
-    buildings: row.buildings,
-    population: row.population,
-    yields: row.yields,
-    productionSuppress,
-    brakeCeilingOf: (goodId) => brakeByGood.get(goodId) ?? 1,
-    productionMultOf: (goodId) => multByGood.get(goodId) ?? 1,
-  });
 
   // Only a row with no persisted use figure needs the recompute, so it is paid for lazily.
   let useRates: Map<string, UseRate> | undefined;
@@ -78,6 +89,7 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
       population: row.population,
       yields: row.yields,
       productionSuppress,
+      rates,
     });
     return useRates.get(goodId)?.total ?? 0;
   };
@@ -99,8 +111,8 @@ export function toGoodMarketStates(row: MarketStateSource): GoodMarketState[] {
       donorReserve: DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * Math.max(0, demand) * m.anchorMult,
       demand,
       // A good with no draw entry keeps its standing want as its urgency rather than sinking to
-      // the back of the import queue.
-      drawDemand: drawRates.get(m.goodId) ?? demand,
+      // the back of the import queue; callers that never read urgency get the same fallback.
+      drawDemand: drawRates?.get(m.goodId) ?? demand,
       civilianDemand: civ,
       // An explicit zero is a completed assessment and must remain a sink. Capacity is
       // only a legacy-save fallback while the persisted rate is genuinely absent.

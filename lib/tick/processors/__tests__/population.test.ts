@@ -508,4 +508,20 @@ describe("population processor: the honest use figure", () => {
     const calm = await runAt(new Map([["s", 1]]));
     expect(rowOf(absent, "ore").honestUseRate).toBeCloseTo(rowOf(calm, "ore").honestUseRate ?? 0, 9);
   });
+
+  it("leaves the use figure absent — never 0 — when the compute is corrupt", async () => {
+    // A NaN population poisons the whole use computation. The write side's one guarantee is that
+    // the poison never lands as 0: the readers' contract is absent ⇒ live recompute, while a
+    // persisted 0 is a completed assessment that makes the row un-sinkable and fully drawable
+    // at once. The stale prior figure must not survive either — absence is the recompute signal.
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("s", Number.NaN, 1000, 0, BUILDINGS)],
+      markets: [{ ...market("s", "ore"), honestUseRate: 12.5 }],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map([["s", 0]])), PARAMS);
+
+    const row = rowOf(world, "ore");
+    expect(row.honestUseRate).toBeUndefined();
+    expect("honestUseRate" in row).toBe(false);
+  });
 });

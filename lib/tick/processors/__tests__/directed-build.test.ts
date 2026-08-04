@@ -1060,7 +1060,7 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
   it("weights the manifest like the colony's own basket, not a flat share", async () => {
     // Ample stock of each, so the COLONY's want is what binds rather than the founder's spare.
     const w = new MemoryDirectedBuildWorld([stockedHome({ food: 5_000, water: 5_000, luxuries: 5_000 })]);
-    await developColony(w, [colonyCand("c1")]);
+    const result = await developColony(w, [colonyCand("c1")]);
 
     const manifest = new Map(w.developments[0].stockManifest.map((l) => [l.goodId, l.quantity]));
     for (const goodId of ["food", "water", "luxuries"]) {
@@ -1070,6 +1070,17 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
     // yet consumes much of. Water and food are the biggest per-capita needs; luxuries the smallest.
     expect(manifest.get("water")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
     expect(manifest.get("food")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
+
+    // The founding-cost readout the harness samples: one record per provisioned founding, its
+    // tonnage the manifest's own line sum, attributed to the founder that paid it.
+    expect(result.foundingManifests).toHaveLength(1);
+    const [record] = result.foundingManifests;
+    expect(record.systemId).toBe("c1");
+    expect(record.sourceSystemId).toBe("home");
+    const manifestTonnage = w.developments[0].stockManifest
+      .reduce((sum, line) => sum + line.quantity, 0);
+    expect(record.tonnage).toBeCloseTo(manifestTonnage, 9);
+    expect(record.goodIds).toEqual(w.developments[0].stockManifest.map((l) => l.goodId));
   });
 
   it("never draws the founder below its own drawable surplus", async () => {
@@ -1095,11 +1106,14 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
 
   it("sends nothing from a source that holds nothing, and the colony still lands", async () => {
     const w = new MemoryDirectedBuildWorld([stockedHome({ food: 0, water: 0 })]);
-    await developColony(w, [colonyCand("c1")]);
+    const result = await developColony(w, [colonyCand("c1")]);
 
     expect(w.developments).toHaveLength(1);       // the colony is founded regardless
     expect(w.developments[0].seedPop).toBe(EXPANSION.COLONY_SEED_POP);
     expect(w.developments[0].stockManifest).toEqual([]);
+    // An unprovisioned founding cost its founder nothing — it must not appear in the
+    // founding-cost readout at all, or the harness reads it as a founder drained flat.
+    expect(result.foundingManifests).toEqual([]);
   });
 
   it("draws two colonies from one shrinking source balance, never twice from the opening stock", async () => {

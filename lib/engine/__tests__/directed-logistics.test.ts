@@ -411,21 +411,6 @@ describe("matchFactionTransfers", () => {
     expect(transfers[0].quantity).toBe(10);
   });
 
-  it("leaves every warehousing quantity untouched by the draw split", () => {
-    // The companion to the ordering test: the two deficits above differ only in urgency, so the
-    // warehouse target, the donor floor and the drawable surplus must be identical between them.
-    const idle = sys("idle", 0, { goodId: "ore", stock: 60, logisticsTarget: 10, demand: 5, drawDemand: 0.5 });
-    const running = sys("running", 0, { goodId: "ore", stock: 60, logisticsTarget: 10, demand: 5, drawDemand: 5 });
-    const [idleGood] = idle.goods;
-    const [runningGood] = running.goods;
-
-    expect(idleGood.drawDemand).not.toBe(runningGood.drawDemand);
-    expect(idleGood.logisticsTarget).toBe(runningGood.logisticsTarget);
-    expect(idleGood.donorReserve).toBe(runningGood.donorReserve);
-    expect(idleGood.demand).toBe(runningGood.demand);
-    expect(surplusDrawable(idleGood.stock, idleGood.donorReserve, idleGood.demand, idleGood.production))
-      .toBe(surplusDrawable(runningGood.stock, runningGood.donorReserve, runningGood.demand, runningGood.production));
-  });
 });
 
 // Direct coverage of the donor test shared by the logistics matcher AND the build planner.

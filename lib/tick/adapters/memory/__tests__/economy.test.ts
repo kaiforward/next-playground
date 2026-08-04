@@ -108,11 +108,15 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       satisfaction: 1,
       realizedProductionRate: Number.NaN,
       productionSuppressed: false,
-      productionSuppressRate: 1,
-      productionMult: 1,
+      productionSuppressRate: Number.NaN,
+      productionMult: Number.NaN,
       squeezeCycles: 4.8,
     }]);
     expect(world.markets[0].realizedProductionRate).toBe(0);
+    // Opposite polarities, both deliberate: a corrupt realized rate reads as "produced nothing",
+    // but a corrupt gate reads as "no gate" — a NaN scalar must never stop a factory's draw.
+    expect(world.markets[0].productionSuppressRate).toBe(1);
+    expect(world.markets[0].productionMult).toBe(1);
     expect(world.markets[0].productionSuppressed).toBe(false);
     expect(world.markets[0].squeezeCycles).toBe(2);
     world.markets[0] = { ...world.markets[0], squeezeCycles: -1 };

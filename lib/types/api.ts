@@ -81,10 +81,13 @@ export interface LogisticsGoodRow {
   goodId: string;
   goodName: string;
   tier: GoodTier;
+  /** Staffed production capacity scaled by the strike/maintenance suppression the economy
+   *  applied — the operating rate, on the same basis as `inputDemand`. */
   production: number;
-  /** Civilian consumption (per-capita baseline + skilled baskets). */
+  /** Civilian consumption (per-capita baseline + skilled baskets). Not strike-gated: pops eat. */
   consumption: number;
-  /** Manufacturing input demand — recipe draw from local factories. Also local consumption. */
+  /** Manufacturing input demand — recipe draw from local factories at their operating rate
+   *  (strike-gated, same basis as `production`). Also local consumption. */
   inputDemand: number;
   /** production − (consumption + inputDemand). */
   internalNet: number;

@@ -23,6 +23,7 @@
  * use figure, capacity and storage, so there is no topological evaluation pass here.
  */
 import type { ResourceVector } from "@/lib/types/game";
+import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 import { GOOD_NAMES } from "@/lib/constants/goods";
 import { capacityGoodRates, inputDemandFromProduction } from "@/lib/engine/industry";
 
@@ -42,6 +43,12 @@ export interface HonestDemandInput {
   yields: ResourceVector;
   /** Strike × maintenance scalar the economy applied this cycle, ∈ (0,1]. */
   productionSuppress: number;
+  /**
+   * Precomputed `capacityGoodRates(buildings, population, yields)` when the caller already holds
+   * it. The capacity scan is the dominant cost of both figures, and every tick-path caller has
+   * already run it for the same system — passing it in keeps the scan at once per system.
+   */
+  rates?: SubstrateGoodRate[];
 }
 
 export interface DrawRateInput extends HonestDemandInput {
@@ -71,7 +78,7 @@ function steadyRates(input: HonestDemandInput): {
   steadyByGood: Map<string, number>;
 } {
   const suppress = gate(input.productionSuppress);
-  const rates = capacityGoodRates(input.buildings, input.population, input.yields);
+  const rates = input.rates ?? capacityGoodRates(input.buildings, input.population, input.yields);
   const civilianByGood = new Map<string, number>();
   const steadyByGood = new Map<string, number>();
   for (const rate of rates) {

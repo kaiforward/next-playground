@@ -217,8 +217,12 @@ describe("toGoodMarketStates: the two demand figures", () => {
       demandRate: 5, storageCapacity: 0, ...overrides,
     };
   }
+  // The matcher's call shape: it is the draw figure's only reader, so it alone opts in.
   const statesOf = (markets: MarketRowForLogistics[]) =>
-    toGoodMarketStates({ buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets });
+    toGoodMarketStates(
+      { buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets },
+      { withDraw: true },
+    );
 
   const stateOf = (markets: MarketRowForLogistics[], goodId: string) => {
     const state = statesOf(markets).find((g) => g.goodId === goodId);
@@ -299,5 +303,18 @@ describe("toGoodMarketStates: the two demand figures", () => {
     const withMetals = stateOf([oreRow(), metalsRow({ stock: 0 })], "ore");
     const withoutMetals = stateOf([oreRow()], "ore");
     expect(withoutMetals.drawDemand).toBeCloseTo(withMetals.drawDemand, 9);
+  });
+
+  it("skips the draw computation for callers that never read urgency", () => {
+    // The build planner and the harness classification read warehousing quantities only, so
+    // they do not pay for the brake pass: drawDemand falls back to the standing want even
+    // where the brake would bite — the collapse test above shows the same fixture braked.
+    const markets = [oreRow({ honestUseRate: 12.5 }), metalsRow({ stock: METALS_BRAKE_SHUT })];
+    const ore = toGoodMarketStates(
+      { buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets },
+    ).find((g) => g.goodId === "ore");
+    if (ore === undefined) throw new Error("Expected an ore state");
+    expect(ore.drawDemand).toBe(12.5);
+    expect(ore.drawDemand).toBe(ore.demand);
   });
 });

@@ -82,13 +82,18 @@ export class InMemoryPopulationWorld implements PopulationWorld {
         useBySystem.set(m.systemId, uses);
       }
       const honestUseRate = uses.get(m.goodId)?.total ?? 0;
-      return {
+      const next: WorldMarket = {
         ...m,
         // Two figures, two jobs: the floored capacity anchor prices the good, the unfloored
         // use figure sizes its warehousing. Neither is derived from the other.
         demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state),
-        honestUseRate: Number.isFinite(honestUseRate) ? Math.max(0, honestUseRate) : 0,
       };
+      // A corrupt compute leaves the field absent — the readers' documented live-recompute path —
+      // never 0 (which would make the row un-sinkable and fully drawable at once), and never the
+      // stale prior figure the spread above would otherwise keep.
+      delete next.honestUseRate;
+      if (Number.isFinite(honestUseRate)) next.honestUseRate = Math.max(0, honestUseRate);
+      return next;
     });
     return Promise.resolve();
   }

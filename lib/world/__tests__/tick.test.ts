@@ -1,11 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { runWorldTick, toTickSystems, applyBuildingIncreases } from "../tick";
+import { runWorldTick, toTickSystems, applyBuildingIncreases, marketRowsBySystem } from "../tick";
 import { serializeWorld, deserializeWorld } from "../save";
+import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { unitResourceVector } from "@/lib/engine/resources";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { computeSystemLabourSnapshot, housingPopCap } from "@/lib/engine/industry";
+import { computeSystemLabourSnapshot, housingPopCap, inputDemandForGood } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import {
   BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, labourTotal,
@@ -993,4 +995,57 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     );
     expect(reliefLevels).toBeGreaterThan(preGrowthLevels);
   }, 60_000);
+});
+
+// ── marketRowsBySystem: the persisted-figure seam ───────────────────
+// marketRowsBySystem is the single seam carrying the persisted demand-honesty fields
+// (`honestUseRate`, `productionSuppressRate`, `productionMult`) from `World` rows into the
+// planners' shared market derivation. Each test round-trips one field through
+// marketRowsBySystem → toGoodMarketStates and asserts the derivation used the PERSISTED
+// figure: dropping any one pass-through line makes the tick fall back to a live recompute
+// that produces plausible, ungated numbers — the silent disconnection these exist to catch.
+
+describe("marketRowsBySystem → toGoodMarketStates: the persisted-figure seam", () => {
+  // A smelter world: metals draws ore, the vocational school licenses the technicians.
+  const SEAM_BUILDINGS = { metals: 3, vocational_school: 1 };
+  const SEAM_POPULATION = 100;
+  const seamSnap = computeSystemLabourSnapshot(SEAM_BUILDINGS, SEAM_POPULATION);
+  const seamCivilian = consumptionRate("ore", seamSnap.basis);
+  const seamIndustrial = inputDemandForGood(SEAM_BUILDINGS, "ore", seamSnap.state, unitResourceVector());
+
+  function seamMarket(goodId: string, overrides: Partial<WorldMarket> = {}): WorldMarket {
+    return { systemId: "s1", goodId, stock: 10, anchorMult: 1, demandRate: 5, storageCapacity: 0, ...overrides };
+  }
+
+  const seamOreState = (markets: WorldMarket[], withDraw = false) => {
+    const rows = marketRowsBySystem(markets).get("s1");
+    if (rows === undefined) throw new Error("Expected rows for s1");
+    const state = toGoodMarketStates(
+      { buildings: SEAM_BUILDINGS, population: SEAM_POPULATION, yields: unitResourceVector(), markets: rows },
+      { withDraw },
+    ).find((g) => g.goodId === "ore");
+    if (state === undefined) throw new Error("Expected an ore state");
+    return state;
+  };
+
+  it("carries the persisted use figure through — demand is the row's, not a recompute", () => {
+    // A figure no recompute at this basis would produce, proven against the recompute itself.
+    expect(seamCivilian + seamIndustrial).not.toBeCloseTo(7.5, 6);
+    const state = seamOreState([seamMarket("ore", { honestUseRate: 7.5 })]);
+    expect(state.demand).toBe(7.5);
+  });
+
+  it("carries the strike scalar through — the recompute path is gated by the row's suppress", () => {
+    expect(seamIndustrial).toBeGreaterThan(0); // or the gating assertion is vacuous
+    const state = seamOreState([seamMarket("ore", { productionSuppressRate: 0.4 })]);
+    expect(state.demand).toBeCloseTo(seamCivilian + seamIndustrial * 0.4, 9);
+  });
+
+  it("carries the event multiplier through — the draw figure sees the consumer's live mult", () => {
+    const state = seamOreState(
+      [seamMarket("ore"), seamMarket("metals", { stock: 0, productionMult: 0.25 })],
+      true,
+    );
+    expect(state.drawDemand).toBeCloseTo(seamCivilian + seamIndustrial * 0.25, 9);
+  });
 });

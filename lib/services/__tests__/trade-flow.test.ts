@@ -5,9 +5,8 @@ import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
-import { computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
+import { capacityGoodRates, computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { useRatesByGood } from "@/lib/engine/honest-demand";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 
 /** The system's per-resource yield vector, assembled exactly as the read service assembles it. */
@@ -153,34 +152,17 @@ describe("getSystemLogistics", () => {
     }
     // Non-vacuous: this world genuinely has industry drawing recipe inputs.
     expect(data.rows.some((r) => r.inputDemand > 0)).toBe(true);
-  });
 
-  it("matches the persisted use figure's industrial half on the same market row", () => {
-    // The panel's column and the row the logistics matcher reads are two views of one number.
-    const suppress = 0.6;
-    const buildings: Record<string, number> = {};
-    for (const b of world.buildings) {
-      if (b.systemId === system.id) buildings[b.buildingType] = b.count;
-    }
-    const uses = useRatesByGood({
-      buildings, population: system.population, yields: yieldsOf(system), productionSuppress: suppress,
-    });
-    setWorld({
-      ...world,
-      markets: world.markets.map((m) =>
-        m.systemId === system.id
-          ? { ...m, productionSuppressRate: suppress, honestUseRate: uses.get(m.goodId)?.total ?? 0 }
-          : m,
-      ),
-    });
-
-    const data = getSystemLogistics(system.id);
-    if (data.visibility !== "visible") throw new Error("expected visible");
+    // Production carries the same suppress scalar, so both halves of internalNet describe the
+    // same operating state — a striking world must not show full output beside a gated draw.
+    const capacity = new Map(
+      capacityGoodRates(buildings, system.population, yieldsOf(system))
+        .map((r) => [r.goodId, r.production]),
+    );
     for (const row of data.rows) {
-      const use = uses.get(row.goodId);
-      if (use === undefined) continue;
-      expect(row.inputDemand, row.goodId).toBeCloseTo(use.total - use.civilian, 9);
+      expect(row.production, row.goodId).toBeCloseTo((capacity.get(row.goodId) ?? 0) * suppress, 9);
     }
+    expect(data.rows.some((r) => r.production > 0)).toBe(true);
   });
 
   it("excludes flows older than the history window", () => {
