@@ -205,6 +205,14 @@ function formatTable(results: HarnessResults): string {
     );
   }
 
+  // Whether the network is chasing a demand signal that moves under it. Read as an A/B delta,
+  // not against a target — a busy network legitimately moves goods on.
+  const dh = results.demandHunting;
+  lines.push(
+    `  demand hunting: ${(dh.flipRate * 100).toFixed(1)}% of decided industrial-input readings ` +
+      `reversed the previous one | ${(dh.haulChurnRatio * 100).toFixed(1)}% of delivered tonnage left again`,
+  );
+
   const pl = marketHealth.priceLevels;
   lines.push("");
   lines.push(
@@ -392,6 +400,12 @@ function formatTable(results: HarnessResults): string {
         `  opening satisfaction (demand-weighted): mean ${fs.meanOpeningSatisfaction.toFixed(2)}, ` +
           `dissatisfaction ${fs.meanOpeningDissatisfaction.toFixed(3)} | ` +
           `opened deprived (<0.50): ${fs.openingDeprivedCount}`,
+      );
+    }
+    if (fs.foundedCount > 0) {
+      lines.push(
+        `  cost to founders: mean manifest ${fmtNum(fs.meanManifestTonnage)} t/colony | ` +
+          `median founder cover after (binding good) ${fs.medianFounderCoverAfter.toFixed(2)}×`,
       );
     }
     const cp = summarizeConstructionPool(finalTickSystems, finalWorld.constructionProjects);

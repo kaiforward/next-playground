@@ -12,6 +12,7 @@ import type { GovernmentType } from "@/lib/types/game";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
+import type { DemandHuntingSummary } from "./market-analysis";
 
 // ── Market role classification ──────────────────────────────────
 
@@ -273,6 +274,13 @@ export interface FoundingStockSummary {
   meanOpeningDissatisfaction: number;
   /** Sampled colonies that opened below half satisfaction. Should read ~0. */
   openingDeprivedCount: number;
+  /** Mean manifest tonnage per colony founded — what founding costs a founder in goods. The
+   *  manifest's cap is use-figure denominated, so this moves when a founder's stated draw does. */
+  meanManifestTonnage: number;
+  /** Median, over colonies that drew a manifest, of the founder's own remaining cover on the
+   *  binding good (post-manifest stock ÷ that good's donor floor). Below 1 means founding is
+   *  drawing founders under the floor they are meant to keep. */
+  medianFounderCoverAfter: number;
 }
 
 // ── Region overview ─────────────────────────────────────────────
@@ -300,6 +308,9 @@ export interface HarnessResults {
   marketHealth: MarketHealthSummary;
   /** Per-good cover and price split by market role. */
   roleCoverLevels: RoleCoverEntry[];
+  /** Whether the network is chasing a demand signal that moves under it — deficit↔surplus
+   *  reversals on industrial-input markets, and delivered tonnage that leaves again. */
+  demandHunting: DemandHuntingSummary;
   /** Supply and unrest per world cohort. Cohorts overlap; each row carries its own denominator. */
   worldCohorts: WorldCohortEntry[];
   /** Impact measurement for each event that occurred. */

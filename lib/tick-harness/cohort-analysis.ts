@@ -118,10 +118,18 @@ export function logisticsTargetsByKey(
  * Per good, cover and price split by market role. This is what separates "every producer is
  * drained flat" from "consumers are never served" — a distinction the galaxy-wide median
  * cannot make, because it medians both populations together.
+ *
+ * `pinnedRoles` holds cohort MEMBERSHIP fixed against a partition measured elsewhere — the
+ * baseline arm of an A/B. The classifier reads `state.demand` in its exporter branch, so any
+ * change to the demand figure moves membership by construction, and a cover median then moves
+ * with the cohort mix rather than with anything about supply. A market the pinned partition
+ * never saw (a colony founded after the baseline) is classified live, so the later arm's
+ * population is never silently smaller. `countByRole` is the membership table to print per arm.
  */
 export function computeRoleCoverLevels(
   systems: TickSystem[],
   markets: WorldMarket[],
+  pinnedRoles?: ReadonlyMap<string, MarketRole>,
 ): RoleCoverEntry[] {
   const roles = marketRolesByKey(systems, markets);
 
@@ -134,9 +142,11 @@ export function computeRoleCoverLevels(
   for (const m of markets) {
     const good = GOODS[m.goodId];
     if (!good) continue;
-    const info = roles.get(`${m.systemId}|${m.goodId}`);
+    const key = `${m.systemId}|${m.goodId}`;
+    const info = roles.get(key);
     if (!info) continue;
-    const { role } = info;
+    // `demand` stays live — only the partition is held fixed.
+    const role = pinnedRoles?.get(key) ?? info.role;
 
     let count = counts.get(m.goodId);
     if (!count) {

@@ -7,14 +7,16 @@
  */
 
 import { spotPrice, curveForRow, marketBandForRow, midPriceAt } from "@/lib/engine/market-pricing";
+import { classifyMarketState } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { GOODS } from "@/lib/constants/goods";
+import { GOOD_RECIPE_CONSUMERS } from "@/lib/constants/recipes";
 import { median, quantile } from "@/lib/utils/math";
 import type {
   MarketSnapshot, MarketHealthSummary,
   PriceLevelSummary, CoverLevelEntry,
 } from "./types";
-import type { WorldMarket } from "@/lib/world/types";
+import type { WorldFlowEvent, WorldMarket } from "@/lib/world/types";
 
 /** Default: sample every 50 ticks. */
 export const SNAPSHOT_INTERVAL = 50;
@@ -273,4 +275,103 @@ function computeCoverLevels(
     });
   }
   return result.sort((a, b) => b.medianCover - a.medianCover);
+}
+
+// ── Demand hunting ────────────────────────────────────────────────
+
+/**
+ * Whether the network keeps chasing a demand signal that moves under it. Two readings, both on
+ * industrial-input goods — the ones whose demand used to be stated at full capacity whatever the
+ * factory was actually doing:
+ *
+ *   - `flipRate` — how often a market's reading REVERSES between deficit and surplus. A world
+ *     whose stated appetite tracks its yard oscillates: it reads starved, gets filled, immediately
+ *     reads glutted, gets drained, reads starved again. Balanced readings inside the dead band are
+ *     not reversals and are skipped; a reversal is counted when a decided reading differs from that
+ *     market's previous decided one, so an oscillation THROUGH the dead band still registers.
+ *   - `haulChurnRatio` — the share of delivered tonnage that leaves again as a donation. Capped per
+ *     market at what was delivered into it, so a structural exporter's own output is never counted
+ *     as churn.
+ *
+ * Both should fall as demand becomes honest. Neither is a health bar on its own — a busy network
+ * moves goods on legitimately — which is why they are read as an A/B delta, not against a target.
+ */
+export interface DemandHuntingSummary {
+  /** Share of decided readings that reversed the market's previous decided reading. */
+  flipRate: number;
+  /** Delivered tonnage that was donated back out, over all delivered tonnage. */
+  haulChurnRatio: number;
+}
+
+/** Cross-sample state for the flip half — one entry per market that has produced a decided reading. */
+export interface DemandHuntingAccumulator {
+  lastDecidedByKey: Map<string, "deficit" | "surplus">;
+  decidedReadings: number;
+  reversals: number;
+}
+
+export function newDemandHuntingAccumulator(): DemandHuntingAccumulator {
+  return { lastDecidedByKey: new Map(), decidedReadings: 0, reversals: 0 };
+}
+
+/** Goods some recipe consumes — the population the hunting reading is taken over. */
+const INDUSTRIAL_INPUT_GOODS = new Set(
+  Object.keys(GOOD_RECIPE_CONSUMERS).filter((goodId) => (GOOD_RECIPE_CONSUMERS[goodId] ?? []).length > 0),
+);
+
+/**
+ * Fold one cycle's market rows into the flip reading. Classification runs straight off the
+ * persisted use figure — the same warehousing target the matcher measures against — so this costs
+ * a pass over the rows rather than a galaxy-wide state rebuild. A row with no use figure is skipped
+ * rather than classified against a zero target, which would read as permanently balanced.
+ */
+export function sampleDemandHunting(
+  acc: DemandHuntingAccumulator,
+  markets: ReadonlyArray<WorldMarket>,
+): void {
+  for (const m of markets) {
+    if (!INDUSTRIAL_INPUT_GOODS.has(m.goodId)) continue;
+    const useRate = m.honestUseRate;
+    if (typeof useRate !== "number" || !Number.isFinite(useRate) || useRate <= 0) continue;
+
+    const target = DIRECTED_LOGISTICS.WAREHOUSE_COVER * useRate * m.anchorMult;
+    const { kind } = classifyMarketState(m.stock, target);
+    if (kind === "balanced") continue;
+
+    const key = `${m.systemId}|${m.goodId}`;
+    acc.decidedReadings++;
+    const previous = acc.lastDecidedByKey.get(key);
+    if (previous !== undefined && previous !== kind) acc.reversals++;
+    acc.lastDecidedByKey.set(key, kind);
+  }
+}
+
+/** Fold the sampled flips and the run's whole flow log into the two hunting readings. */
+export function summarizeDemandHunting(
+  acc: DemandHuntingAccumulator,
+  flows: ReadonlyArray<Pick<WorldFlowEvent, "fromSystemId" | "toSystemId" | "goodId" | "quantity">>,
+): DemandHuntingSummary {
+  const deliveredByKey = new Map<string, number>();
+  const donatedByKey = new Map<string, number>();
+  for (const f of flows) {
+    if (!(f.quantity > 0)) continue;
+    const into = `${f.toSystemId}|${f.goodId}`;
+    const outOf = `${f.fromSystemId}|${f.goodId}`;
+    deliveredByKey.set(into, (deliveredByKey.get(into) ?? 0) + f.quantity);
+    donatedByKey.set(outOf, (donatedByKey.get(outOf) ?? 0) + f.quantity);
+  }
+
+  let delivered = 0;
+  let churned = 0;
+  for (const [key, inTonnage] of deliveredByKey) {
+    delivered += inTonnage;
+    // Only what a market both received AND sent on can be re-donated tonnage; anything beyond
+    // that is its own production leaving.
+    churned += Math.min(inTonnage, donatedByKey.get(key) ?? 0);
+  }
+
+  return {
+    flipRate: acc.decidedReadings > 0 ? acc.reversals / acc.decidedReadings : 0,
+    haulChurnRatio: delivered > 0 ? churned / delivered : 0,
+  };
 }

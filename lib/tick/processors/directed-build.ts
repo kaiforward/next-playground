@@ -410,5 +410,16 @@ export async function runDirectedBuildProcessor(
   // Persist the construction proposal-pressure counters last — independent of ROI/funding outcome.
   if (proposalPersistence.length > 0) await world.applyProposalPersistenceUpdates(proposalPersistence);
 
-  return { workPerformedByFaction, buildCommitmentsByGood };
+  // What each founding cost its founder, for the calibration harness only. Read here because the
+  // manifest lines are gone by the time `applyDevelopments` has folded them into stock.
+  const foundingManifests = developments
+    .filter((d) => d.stockManifest.length > 0)
+    .map((d) => ({
+      systemId: d.systemId,
+      sourceSystemId: d.sourceSystemId,
+      tonnage: d.stockManifest.reduce((sum, line) => sum + Math.max(0, line.quantity), 0),
+      goodIds: d.stockManifest.map((line) => line.goodId),
+    }));
+
+  return { workPerformedByFaction, buildCommitmentsByGood, foundingManifests };
 }

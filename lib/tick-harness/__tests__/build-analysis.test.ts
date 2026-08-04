@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   summarizeColonisation, summarizeConstructionPool, summarizeBuildBursts,
   trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summarizeFoundingStock,
+  recordFoundingManifest,
 } from "../build-analysis";
 import type { BuildCommitmentRecord, FoundedColonyRecord, FoundedColonySystem } from "../build-analysis";
 import { EXPANSION } from "@/lib/constants/expansion";
@@ -412,6 +413,45 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(summary).toEqual({
       foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
       meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
+      meanManifestTonnage: 0, medianFounderCoverAfter: 0,
     });
+  });
+
+  it("records what the founding cost its founder, at the founding tick", () => {
+    // The manifest's cap is use-figure denominated, so a founder whose own draw was overstated
+    // now parts with more per colony. Both halves are read where it happens: the tonnage that
+    // left, and the founder's own remaining cover against the floor it is supposed to keep.
+    const tracker = new Map<string, FoundedColonyRecord>();
+    trackFoundedColonies([sys("c1", "developed")], 24, new Set(), tracker);
+
+    recordFoundingManifest(tracker, "c1", 300, 0.75);
+
+    expect(tracker.get("c1")?.manifestTonnage).toBe(300);
+    expect(tracker.get("c1")?.founderCoverAfter).toBeCloseTo(0.75, 9);
+  });
+
+  it("folds manifest tonnage and founder cover into the founding summary", () => {
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["a", { ...rec("a", 0.9, 0.01), manifestTonnage: 100, founderCoverAfter: 1.0 }],
+      ["b", { ...rec("b", 0.5, 0.25), manifestTonnage: 300, founderCoverAfter: 0.4 }],
+      ["c", { ...rec("c", 0.5, 0.25), manifestTonnage: 200, founderCoverAfter: 0.6 }],
+    ]);
+
+    const summary = summarizeFoundingStock(tracker);
+    expect(summary.meanManifestTonnage).toBeCloseTo(200, 9);
+    expect(summary.medianFounderCoverAfter).toBeCloseTo(0.6, 9);
+  });
+
+  it("excludes a colony that shipped no manifest from the founder-cover reading", () => {
+    // A colony founded with an empty manifest cost its founder nothing; folding a 0 cover in
+    // would read as a founder drained flat.
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["a", { ...rec("a", 0.9, 0.01), manifestTonnage: 100, founderCoverAfter: 0.8 }],
+      ["b", rec("b", 0.9, 0.01)], // never recorded a manifest
+    ]);
+
+    const summary = summarizeFoundingStock(tracker);
+    expect(summary.medianFounderCoverAfter).toBeCloseTo(0.8, 9);
+    expect(summary.meanManifestTonnage).toBeCloseTo(50, 9); // 100 over both founded colonies
   });
 });

@@ -115,6 +115,7 @@ describe("ExperimentConfig", () => {
           coverLevels: [],
         },
         roleCoverLevels: [],
+        demandHunting: { flipRate: 0, haulChurnRatio: 0 },
         worldCohorts: [],
         eventImpacts: [],
         logisticsActivity: {
@@ -132,6 +133,7 @@ describe("ExperimentConfig", () => {
         foundingStock: {
           foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
           meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
+          meanManifestTonnage: 0, medianFounderCoverAfter: 0,
         },
         treasurySummary: {
           factionCount: 0, meanBalance: 0, minBalance: 0, maxBalance: 0,

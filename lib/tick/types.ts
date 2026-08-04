@@ -90,13 +90,22 @@ export interface TickProcessorResult {
   /** People moved this cycle start (colonist delivery + edge diffusion), conserved flows only.
    *  Calibration instrumentation — surfaced via runWorldTick().instrumentation, never broadcast. */
   migrationMoved?: { colonists: number; diffusion: number };
+  /** Founding-stock manifests shipped this cycle, one per colony established: what left the
+   *  founder's warehouses and which goods it came out of. Calibration instrumentation — the cost
+   *  side of colonisation, invisible to any galaxy-wide average because foundings are rare. */
+  foundingManifests?: Array<{
+    systemId: string;
+    sourceSystemId: string;
+    tonnage: number;
+    goodIds: string[];
+  }>;
 }
 
 /** Transient, calibration-only signals a tick produced — never broadcast (`TickBroadcastRaw`)
  *  or folded into `World`. The calibration harness is the only reader. Derived from the processor
  *  result so the shared field can't drift. */
 export type TickInstrumentation =
-  Pick<TickProcessorResult, "buildCommitmentsByGood" | "migrationMoved">;
+  Pick<TickProcessorResult, "buildCommitmentsByGood" | "migrationMoved" | "foundingManifests">;
 
 /** The full payload one tick's run hands to the broadcast layer. */
 export interface TickBroadcastRaw {

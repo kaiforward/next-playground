@@ -860,6 +860,8 @@ export async function runWorldTick(
   // Calibration-only: migration's per-cycle people-moved totals (colonist delivery + edge
   // diffusion). Declared here for the same reason as buildCommitmentsByGood above.
   let migrationMoved: TickInstrumentation["migrationMoved"];
+  // Calibration-only: what each founding-stock manifest cost its founder. Same reason.
+  let foundingManifests: TickInstrumentation["foundingManifests"];
   const migrationResolves = isCycleStart(tick, cadence.cycle);
   const logisticsResolves = isCycleStart(tick, cadence.logistics);
   const buildResolves = isCycleStart(tick, cadence.construction);
@@ -1085,6 +1087,7 @@ export async function runWorldTick(
       markets = applyFoundingStock(markets, dbWorld.developments);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
       buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
+      foundingManifests = dbResult.foundingManifests;
       processorsRun.push("directed-build");
     }
 
@@ -1232,6 +1235,6 @@ export async function runWorldTick(
     world: nextWorld,
     events: tickEvents,
     markets,
-    instrumentation: { buildCommitmentsByGood, migrationMoved },
+    instrumentation: { buildCommitmentsByGood, migrationMoved, foundingManifests },
   };
 }

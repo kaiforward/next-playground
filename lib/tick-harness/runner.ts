@@ -8,8 +8,11 @@
  */
 
 import { generateWorld } from "@/lib/world/gen";
-import { runWorldTick, toTickSystems } from "@/lib/world/tick";
-import { takeMarketSnapshot, computeMarketHealth, SNAPSHOT_INTERVAL } from "./market-analysis";
+import { runWorldTick, toTickSystems, marketRowsBySystem } from "@/lib/world/tick";
+import {
+  takeMarketSnapshot, computeMarketHealth, SNAPSHOT_INTERVAL,
+  newDemandHuntingAccumulator, sampleDemandHunting, summarizeDemandHunting,
+} from "./market-analysis";
 import {
   trackEventLifecycles,
   flushActiveEvents,
@@ -18,7 +21,7 @@ import {
 import { summarizeLogistics } from "./logistics-analysis";
 import {
   summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
-  summarizeFoundingStock,
+  summarizeFoundingStock, recordFoundingManifest,
 } from "./build-analysis";
 import type { BuildCommitmentRecord, FoundedColonyRecord } from "./build-analysis";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
@@ -37,7 +40,38 @@ import type {
   RegionOverviewEntry,
   MigrationThroughputSummary,
 } from "./types";
-import type { TickEvent } from "@/lib/tick/rows";
+import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
+import type { TickEvent, TickSystem } from "@/lib/tick/rows";
+
+/**
+ * The founder's own remaining cover on the BINDING good of a manifest it just shipped — the
+ * minimum, across the manifest's goods, of post-manifest stock over that good's donor floor.
+ * Below 1 means founding drew the founder under the floor it is meant to keep for itself, which
+ * is the reading the manifest cap's use-figure denominator can move.
+ */
+function founderCoverAfter(
+  systems: TickSystem[],
+  rowsBySystem: Map<string, MarketRowForLogistics[]>,
+  sourceSystemId: string,
+  goodIds: ReadonlyArray<string>,
+): number {
+  const source = systems.find((s) => s.id === sourceSystemId);
+  const rows = rowsBySystem.get(sourceSystemId);
+  if (!source || !rows || goodIds.length === 0) return 0;
+  const shipped = new Set(goodIds);
+  let binding = Infinity;
+  const states = toGoodMarketStates({
+    buildings: source.buildings, population: source.population, yields: source.yields, markets: rows,
+  });
+  for (const state of states) {
+    if (!shipped.has(state.goodId) || state.donorReserve <= 0) continue;
+    binding = Math.min(binding, state.stock / state.donorReserve);
+  }
+  // No measurable good on the manifest (every reserve zero) reads 0 — it shipped from a
+  // founder with no floor to be drawn under.
+  return Number.isFinite(binding) ? binding : 0;
+}
 
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
 interface ActiveEventRecord {
@@ -110,6 +144,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     tickSystemsAtStart.filter((s) => s.control === "developed").map((s) => s.id),
   );
   const foundedColonies = new Map<string, FoundedColonyRecord>();
+  const demandHunting = newDemandHuntingAccumulator();
   const cycleLength = config.cadence?.cycle ?? CYCLE_LENGTH;
 
   const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
@@ -147,6 +182,28 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     }
 
     trackFoundedColonies(world.systems, world.meta.currentTick, developedAtStart, foundedColonies);
+    // What the founding cost its founder, read at the founding tick — the founder's stock still
+    // reflects this manifest and no other. Foundings are rare, so the founder's market state is
+    // rebuilt only on the ticks that actually have one.
+    const manifests = result.instrumentation.foundingManifests ?? [];
+    if (manifests.length > 0) {
+      const manifestSystems = toTickSystems(world);
+      const manifestRows = marketRowsBySystem(currentMarkets);
+      for (const manifest of manifests) {
+        recordFoundingManifest(
+          foundedColonies,
+          manifest.systemId,
+          manifest.tonnage,
+          founderCoverAfter(manifestSystems, manifestRows, manifest.sourceSystemId, manifest.goodIds),
+        );
+      }
+    }
+
+    // The flip half of the hunting reading is a per-cycle observation; the churn half comes off
+    // the whole flow log at the end.
+    if (cycleLength > 0 && world.meta.currentTick % cycleLength === 0) {
+      sampleDemandHunting(demandHunting, currentMarkets);
+    }
     // The reading needs full tick rows (buildings + government drive the demand weights), so build
     // them only on the cycle that actually has a colony to read — not every tick of the run.
     if (
@@ -222,6 +279,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     marketSnapshots,
     marketHealth,
     roleCoverLevels,
+    demandHunting: summarizeDemandHunting(demandHunting, logisticsFlows),
     worldCohorts,
     eventImpacts,
     logisticsActivity: summarizeLogistics(logisticsFlows),
