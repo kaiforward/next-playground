@@ -198,9 +198,11 @@ interface Surplus { systemId: string; goodId: string; drawable: number; order: n
 
 /**
  * Greedy surplus→deficit matching for ONE faction's systems (or all independents).
- * Budget = Σ system.generation, spent as quantity × routeCost. Worst-deficit-first;
- * nearest reachable surplus first. Transfers stop when budget is exhausted, while bounded-neighbour
- * classification continues so wanted-but-unfunded endpoints remain observable.
+ * Budget = Σ system.generation, spent as quantity × routeCost. Worst-deficit-first; each deficit
+ * then fills from every reachable donor in ascending route-cost order until its shortfall is met,
+ * donors are exhausted, or the budget is spent — one transfer row per donor-draw. Transfers stop
+ * when budget is exhausted, while bounded-neighbour classification continues so
+ * wanted-but-unfunded endpoints remain observable.
  */
 export function matchFactionTransfers(
   systems: SystemLogisticsState[],
@@ -257,53 +259,60 @@ export function matchFactionTransfers(
     const sources = surplusesByGood.get(d.goodId);
     if (!sources) continue;
 
-    // Nearest reachable source first.
-    let best: { source: Surplus; perUnit: number } | null = null;
+    // Every willing donor serves the deficit, cheapest route first (tie: stable system order) —
+    // one PlannedTransfer per donor-draw. A single-donor cap here left reachable stock unshipped
+    // beside standing deficits (~42% of equilibrium unmet tonnage in the attribution run).
+    const candidates: Array<{ source: Surplus; perUnit: number }> = [];
     for (const sourceSystemId of reachableSystemIds(d.systemId, allSystemIds)) {
       const source = sources.get(sourceSystemId);
       if (source === undefined) continue;
       if (source.drawable <= 0) continue;
       const perUnit = routeCost(source.systemId, d.systemId);
       if (perUnit === null || perUnit <= 0) continue;
-      if (
-        best === null
-        || perUnit < best.perUnit
-        || (perUnit === best.perUnit && source.order < best.source.order)
-      ) {
-        best = { source, perUnit };
-      }
+      candidates.push({ source, perUnit });
     }
-    if (!best) continue;
+    candidates.sort(
+      (a, b) => a.perUnit - b.perUnit || a.source.order - b.source.order,
+    );
 
-    // Continuous goods — no quantization to whole units (rounding down loses up to one
-    // unit per transfer, negligible at high ECONOMY_SCALE but a large fraction of a small
-    // budget at low scale, breaking scale-invariance of budget-bound transfers).
-    const wanted = Math.min(d.shortfall, best.source.drawable);
-    const affordable = budget > 0 ? budget / best.perUnit : 0;
-    const quantity = Math.min(wanted, affordable);
-    if (affordable < wanted) {
-      const key = `${d.goodId}|${best.source.systemId}|${d.systemId}`;
-      if (!fundingBoundKeys.has(key)) {
-        fundingBoundKeys.add(key);
-        fundingBound.push({
+    let remaining = d.shortfall;
+    for (const { source, perUnit } of candidates) {
+      if (remaining <= 0) break;
+
+      // Continuous goods — no quantization to whole units (rounding down loses up to one
+      // unit per transfer, negligible at high ECONOMY_SCALE but a large fraction of a small
+      // budget at low scale, breaking scale-invariance of budget-bound transfers).
+      const wanted = Math.min(remaining, source.drawable);
+      const affordable = budget > 0 ? budget / perUnit : 0;
+      const quantity = Math.min(wanted, affordable);
+      if (affordable < wanted) {
+        const key = `${d.goodId}|${source.systemId}|${d.systemId}`;
+        if (!fundingBoundKeys.has(key)) {
+          fundingBoundKeys.add(key);
+          fundingBound.push({
+            goodId: d.goodId,
+            fromSystemId: source.systemId,
+            toSystemId: d.systemId,
+          });
+        }
+      }
+      if (Number.isFinite(quantity) && quantity > 0) {
+        const cost = quantity * perUnit;
+        transfers.push({
           goodId: d.goodId,
-          fromSystemId: best.source.systemId,
+          fromSystemId: source.systemId,
           toSystemId: d.systemId,
+          quantity,
+          cost,
         });
+        source.drawable -= quantity;
+        remaining -= quantity;
+        budget -= cost;
       }
+      // A budget-stopped draw ends this deficit's fill: later donors are unaffordable too, and
+      // iterating them would only fan out epsilon-sized transfers from float residue.
+      if (affordable < wanted) break;
     }
-    if (!Number.isFinite(quantity) || quantity <= 0) continue;
-
-    const cost = quantity * best.perUnit;
-    transfers.push({
-      goodId: d.goodId,
-      fromSystemId: best.source.systemId,
-      toSystemId: d.systemId,
-      quantity,
-      cost,
-    });
-    best.source.drawable -= quantity;
-    budget -= cost;
   }
 
   return { transfers, fundingBound };

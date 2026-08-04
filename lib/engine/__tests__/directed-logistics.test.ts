@@ -393,6 +393,40 @@ describe("matchFactionTransfers", () => {
     ]);
   });
 
+  it("fills one deficit from every willing donor in route-cost order, stopping each at its reserve", () => {
+    // Two donors, each clearing the 1.4× margin on its reserve of 10 (stock 24 ≥ 14) with
+    // 24 − 10 = 14 to spare. The deficit's shortfall of 30 exceeds either donor's drawable, so a
+    // one-donor-per-deficit matcher leaves 16 standing beside reachable stock. The dear donor is
+    // listed first: serving cheap before dear proves the fill is ordered by per-unit route cost,
+    // not by input order.
+    const dear = sys("dear", 1000, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
+    const cheap = sys("cheap", 0, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 30, demand: 5 });
+    const costByDonor: RouteCost = (from) => (from === "cheap" ? 1 : 2);
+
+    const { transfers } = matchFactionTransfers([dear, cheap, deficit], costByDonor);
+    expect(transfers).toHaveLength(2);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "cheap", toSystemId: "B", quantity: 14, cost: 14 });
+    expect(transfers[1]).toMatchObject({ fromSystemId: "dear", toSystemId: "B", quantity: 14, cost: 28 });
+    // Neither donor is drawn past its reserve: each gave exactly stock 24 − reserve 10.
+  });
+
+  it("spends the remaining budget completing the current deficit before any later one", () => {
+    // Budget 20 at 1 hop. The severe deficit's shortfall of 30 needs both donors (14 each); after
+    // the first full draw (cost 14) the remaining 6 must go to the SAME deficit's second donor,
+    // not skip ahead to the mild deficit — a budget-exhausted run stops mid-deficit.
+    const d1 = sys("D1", 20, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
+    const severe = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 30, demand: 10 });
+    const mild = sys("C", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 1 });
+
+    const { transfers } = matchFactionTransfers([d1, d2, severe, mild], oneHop);
+    expect(transfers).toHaveLength(2);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "D1", toSystemId: "B", quantity: 14 });
+    expect(transfers[1]).toMatchObject({ fromSystemId: "D2", toSystemId: "B", quantity: 6 });
+    expect(transfers.some((t) => t.toSystemId === "C")).toBe(false);
+  });
+
   it("ranks the import queue by draw urgency, not by standing use", () => {
     // Two deficits with identical shortfall and identical use figures; only their ability to
     // consume the delivery right now differs. `idle`'s consuming industry is braked shut, so
