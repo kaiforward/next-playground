@@ -119,4 +119,19 @@ describe("runTickHarness: logistics instruments", () => {
     expect(lg.budgetSpentFrac).toBeGreaterThan(0);
     expect(lg.flowRowsPerCycle).toBeGreaterThanOrEqual(1);
   }, 30_000);
+
+  it("wires the third-arm drawBrakeCeiling pin through to a measurable divergence", async () => {
+    // A silently dropped wire is invisible on every OTHER counter — both arms would just run the
+    // live game twice and agree everywhere — so the guard has to be a same-seed A/B. The pin only
+    // reaches the draw figure's brake, which only ever moves an outcome by reordering which of two
+    // COMPETING deficits a budget-limited cycle services first — a small 20-system/800-tick world
+    // never happens to raise that competition (verified: byte-identical logistics activity), so
+    // this needs a bigger, longer run for the reordering to actually bite. Measured non-zero on
+    // every seed tried at this scale.
+    const config: HarnessConfig = { systemCount: 60, seed: 7, tickCount: 3000 };
+    const live = await runTickHarness(config);
+    const pinned = await runTickHarness({ ...config, drawBrakeCeiling: "anchor" });
+    expect(live.logisticsActivity.transferCount).toBeGreaterThan(0);
+    expect(pinned.logisticsActivity.totalQuantity).not.toBeCloseTo(live.logisticsActivity.totalQuantity, 6);
+  }, 60_000);
 });

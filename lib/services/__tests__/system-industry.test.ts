@@ -138,6 +138,41 @@ describe("getSystemIndustry", () => {
     expect(protectedProducer.idleReason).toBeUndefined();
   });
 
+  it("recomputes a producer's selling factor live when its market row carries no persisted use figure", () => {
+    // A legacy-save fallback: generateWorld always persists honestUseRate (lib/world/markets.ts),
+    // so this simulates the one case that field can be missing. The live recompute must reproduce
+    // the SAME value the persisted field holds here — never fall to 0, which would weld the
+    // producer's brake knee shut and read it as idle for the wrong reason.
+    const producer = world.buildings.find((building) => {
+      const definition = BUILDING_TYPES[building.buildingType];
+      const owner = world.systems.find((candidate) => candidate.id === building.systemId);
+      return building.count > 0 && definition?.resource !== undefined && owner?.control === "developed";
+    })!;
+    const definition = BUILDING_TYPES[producer.buildingType];
+    if (definition?.outputGood === undefined) throw new Error("expected an extractor fixture");
+    const goodId = definition.outputGood;
+
+    const baseline = getSystemIndustry(producer.systemId);
+    if (baseline.visibility !== "visible") throw new Error("expected visible industry");
+    const baselineBuilding = baseline.buildings.find((b) => b.buildingType === producer.buildingType)!;
+
+    const stripped: World = {
+      ...world,
+      markets: world.markets.map((market) =>
+        market.systemId === producer.systemId && market.goodId === goodId
+          ? { ...market, honestUseRate: undefined }
+          : market,
+      ),
+    };
+    setWorld(stripped);
+    const strippedData = getSystemIndustry(producer.systemId);
+    if (strippedData.visibility !== "visible") throw new Error("expected visible industry");
+    const strippedBuilding = strippedData.buildings.find((b) => b.buildingType === producer.buildingType)!;
+
+    expect(strippedBuilding.used).toBeCloseTo(baselineBuilding.used, 9);
+    expect(strippedBuilding.idleReason).toBe(baselineBuilding.idleReason);
+  });
+
   it("throws ServiceError(404) for an unknown system", () => {
     expect(() => getSystemIndustry("does-not-exist")).toThrow(ServiceError);
     try {

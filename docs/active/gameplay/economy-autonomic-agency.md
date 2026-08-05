@@ -69,14 +69,24 @@ civilian crowd-out — emergent, target-protected).
 
 ## The shared reading: market state per good
 
-Both halves read the same per-system, per-good numbers — stock, `production`, `demand` (civilian
-consumption + industrial input draw), the **cycles-of-supply price anchor** (`targetStock = TARGET_COVER
-× demandRate`, the same number the supply/demand UI shows), and the **warehousing target**
-(`logisticsTarget = WAREHOUSE_COVER × demand`) — but they ask **different questions of them**,
-because they do different jobs. **Logistics moves the running-balance stock**, so it classifies against a
-stock target; **build sizes sustainable capacity**, so it reads the per-tick flow (`production` vs
-`demand`). The price anchor drives pricing and satisfaction; it no longer sizes builds, and it no longer
-sizes hauls.
+Both halves read the same per-system, per-good numbers — stock, `production`, the two honest demand
+figures, and the **warehousing target** (`logisticsTarget = WAREHOUSE_COVER × demand`) — but they ask
+**different questions of them**, because they do different jobs. **Logistics moves the running-balance
+stock**, so it classifies against a stock target; **build sizes sustainable capacity**, so it reads the
+per-tick flow (`production` vs `demand`). The price anchor (`targetStock = TARGET_COVER × demandRate`,
+the number the supply/demand UI shows) drives pricing and satisfaction; it sizes nothing here.
+
+**Demand is two figures with two jobs** (`lib/engine/honest-demand.ts`, one producer so no reader can
+diverge). The **use figure** (`demand`, persisted as `honestUseRate`) is what this world draws *when it
+runs*: civilian want at full rate plus each local factory's staffing- and strike-gated input draw. It
+moves only as buildings, population and strike state move, which is what every *warehousing* quantity
+requires — targets, donor floors, consumer/producer classification must not twitch with the momentary
+state of the yard they stock. The **draw figure** (`drawDemand`, derived live at the matcher's read
+point) is the same want further gated by each consuming factory's own output brake and live event
+production multipliers — *how urgently does this world need a delivery right now* — and its only reader
+is the matcher's severity weight. Neither figure applies an input gate: a scarce input must not deflate
+its own demand signal, or rationing spirals into starvation. Civilian want counts at full rate in both —
+a starving town must never read as a low-demand town.
 
 The two figures share a shape and differ in their denominator, which is the whole point. The price
 anchor divides by `demandRate`, floored at `MIN_DEMAND` so a near-empty market still yields a finite
@@ -104,20 +114,27 @@ at and the target a sink fills to together.
 **Logistics classification** (stock-based):
 
 - **Deficit** — `stock < logisticsTarget × DEFICIT_FRACTION` (below the warehousing target, with a
-  dead-band). Severity = shortfall × demand.
+  dead-band). Severity = shortfall × the **draw figure** — a factory stopped by its own full yard does
+  not head the import queue, while its warehousing target stands unchanged.
 - **Surplus** — a source of drawable stock by either path, and the two paths stop at different
   floors: **(a)** `stock ≥ donorReserve × SURPLUS_MARGIN` — any holder of excess inventory (margin > 1
   leaves the deliberate residual) — donating only `stock − donorReserve`, never below the reserve it
   keeps for itself; or **(b)** a **structural producer** (`production > demand`) shipping down to
   `EXPORT_RESERVE_COVER` cycles of its own demand, which sits far *below* the reserve and is where
   96.5% of hauls come from — an exporter is drained to its reserve, not to par. Path (b)
-  mirrors the deficit-side self-supply gate and is required because the economy's production throttle
-  caps a producer at `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin — without it a
-  structural exporter could never form a surplus, and directed logistics went dead for every good its
-  producers also consume (food, water, biomass).
-  Both ends of the match are denominated in real demand: the price anchor does not reach logistics
-  at all — the production brake (`productionCeiling` at `HOLD_COVER × targetStock`) is the one
-  physical mechanism still measured against it. Moving the donor side was measured
+  mirrors the deficit-side self-supply gate and is required because the production brake rests a
+  producer's stock at its warehouse knee, and the knee is not one fixed number: at most `BRAKE_RAMP ×
+  BRAKE_USE_COVER` = 52 cycles of the use figure *where the use term binds the knee* — below the
+  56-cycle donation line (`SURPLUS_MARGIN × DONOR_RESERVE_COVER`) — but an output-bound exporter's
+  knee is sized off its own capacity instead (`BRAKE_OUTPUT_COVER × capacityProduction`) and can sit
+  *above* the donation line. That is the intended outcome of path (b), not a gap in it: a dedicated
+  exporter with negligible local use rests above the line on capacity alone, and (b) is what still lets
+  it form a surplus there. Without path (b) at all, a structural exporter could never form a surplus,
+  and directed logistics went dead for every good its producers also consume (food, water, biomass).
+  Both ends of the match are denominated in real demand, and no price-anchor quantity reaches
+  logistics or the brake: a producer idles against its **warehouse knee** — the larger of 40 cycles
+  of its use figure and 8 cycles of its own capacity (see
+  [economy-equilibrium-rework](./economy-equilibrium-rework.md)). Moving the donor side was measured
   end to end first: equilibrium is unchanged on every tracked good, galaxy production −0.3%, and the
   accepted cost is transient — stock the anchor used to over-shelter on small markets now feeds the
   front of the severity queue, so mid-game consumer shelves fill ~1,000–2,000 ticks later.
@@ -161,14 +178,19 @@ This one choice does triple duty:
 
 ### The matching engine
 
-Per faction, per cycle: rank deficits worst-first (shortfall × demand), and for each, find the nearest
-same-faction surplus of that good within a hop budget. Allocate
-`transfer = min(deficit shortfall, surplus drawable, remaining pool / route cost)`, spend the pool, advance,
-and stop when it's exhausted. The donor never drops below its own retained cover — the demand reserve
-for an ordinary holder, the export reserve for a structural producer — so moving goods never creates a
-new deficit. Deficits left unserved — pool spent, or no surplus in reach — are the residual.
+Per faction, per cycle: rank deficits worst-first (shortfall × the draw figure), and for each, collect
+the reachable same-faction donors of that good with drawable stock within the hop budget and draw from
+them in **per-unit route-cost order** — `min(remaining shortfall, donor drawable, remaining pool /
+route cost)` from each in turn — until the shortfall is met, the donors are exhausted, or the pool is
+spent. One flow row per donor→deficit draw. The donor never drops below its own retained cover — the
+demand reserve for an ordinary holder, the export reserve for a structural producer — so moving goods
+never creates a new deficit. Deficits left unserved — pool spent, or no drawable stock in reach — are
+the residual. A deficit is recorded **funding-bound** only when the budget stopped a draw *and* the
+shortfall still standing exceeds 10% of the original (`FUNDING_BOUND_RESIDUAL_FRACTION`): the flag
+suppresses the build planner's capacity proposals and exempts producers from idle decay, so it must
+keep meaning "short because of money", never "the last donor attempted was unaffordable".
 
-Who carries the residual is not uniform: severity ranks by shortfall × demand, so mid-size pure
+Who carries the residual is not uniform: severity ranks by shortfall × draw, so mid-size pure
 consumers of the highest-floor goods (ship_frames above all) are served last from the thinnest
 margins, and at some seeds a persistently larger share of them sits empty than under the old
 price-anchor donor rule (~9 points at one measured seed, cover medians and every aggregate at

@@ -35,6 +35,9 @@ export interface MarketView {
   /** Stored local demand rate, read from `WorldMarket.demandRate`: civilian + industrial draw, the
    *  cycles-of-supply pricing denominator (see that field's doc — not the civilian-only footprint). */
   demandRate: number;
+  /** THE USE FIGURE — the brake knee's warehousing denominator. The adapter resolves it from the
+   *  persisted `WorldMarket.honestUseRate`, live-recomputing (never 0) where a legacy row lacks it. */
+  honestUseRate: number;
   /** Built infrastructure storage capacity from the station market row. */
   storageCapacity: number;
   /** Reference-cycles the previous rationed economy streak had persisted (finite, [0,2]); missing reads as 0. */
@@ -88,7 +91,7 @@ export interface EconomyWorld {
 export interface EconomyProcessorParams {
   /** Ticks for the shard to refresh every system once (fixed gameplay cadence). */
   interval: number;
-  /** Economy simulation params (production operating-ceiling cover). */
+  /** Economy simulation params (brake-knee covers + ration cover). */
   simParams: EconomySimParams;
   /** Caps applied when aggregating event modifiers per market. */
   modifierCaps: ModifierCaps;

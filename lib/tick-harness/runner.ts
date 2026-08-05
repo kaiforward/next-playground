@@ -10,7 +10,7 @@
 import { generateWorld } from "@/lib/world/gen";
 import { runWorldTick, toTickSystems, marketRowsBySystem } from "@/lib/world/tick";
 import {
-  takeMarketSnapshot, computeMarketHealth, SNAPSHOT_INTERVAL,
+  takeMarketSnapshot, computeMarketHealth, computeKneeBinding, SNAPSHOT_INTERVAL,
   newDemandHuntingAccumulator, sampleDemandHunting, summarizeDemandHunting,
 } from "./market-analysis";
 import {
@@ -165,10 +165,17 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // across the loop boundary rather than re-read per use.
   let currentMarkets: WorldMarket[] = world.markets;
 
+  // The two per-run override channels, both dev/measurement surfaces: the cadence, and the
+  // third-arm pin for the draw figure's brake. Absent both, the live loop's own defaults run.
+  const tickOpts =
+    config.cadence || config.drawBrakeCeiling
+      ? { cadence: config.cadence, drawBrakeCeiling: config.drawBrakeCeiling }
+      : undefined;
+
   for (let t = 0; t < config.tickCount; t++) {
     const preTickMarkets = currentMarkets;
 
-    const result = await runWorldTick(world, config.cadence ? { cadence: config.cadence } : undefined);
+    const result = await runWorldTick(world, tickOpts);
     world = result.world;
     currentMarkets = result.markets;
 
@@ -291,6 +298,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const worldCohorts = computeWorldCohorts(
     finalTickSystems, currentMarkets, homeworldIds, STRIKE_PARAMS.threshold, world.events,
   );
+  const kneeBinding = computeKneeBinding(finalTickSystems, currentMarkets);
 
   const systemNames = new Map(world.systems.map((s) => [s.id, s.name]));
   const eventImpacts = computeEventImpacts(completedEvents, systemNames);
@@ -322,6 +330,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     marketSnapshots,
     marketHealth,
     roleCoverLevels,
+    kneeBinding,
     marketRoles,
     demandHunting: summarizeDemandHunting(demandHunting, logisticsFlows),
     worldCohorts,

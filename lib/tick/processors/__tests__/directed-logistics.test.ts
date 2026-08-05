@@ -6,6 +6,11 @@ import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { allSystemIdsReachable } from "@/lib/engine/directed-logistics";
 import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
 import { consumptionRate } from "@/lib/engine/physical-economy";
+import {
+  computeSystemLabourSnapshot, inputDemandForGood, buildingProduction,
+} from "@/lib/engine/industry";
+import { brakeKnee } from "@/lib/engine/tick";
+import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
 
 describe("MemoryDirectedLogisticsWorld", () => {
@@ -495,5 +500,104 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     });
     expect(world.flows).toHaveLength(1);
     expect(world.flows[0]).toMatchObject({ fromSystemId: "B", toSystemId: "A", goodId: "food" });
+  });
+
+  describe("drawBrakeCeiling third-arm pin", () => {
+    // Mirrors good-market-state.test.ts's third-arm fixture: a metals producer whose OWN brake
+    // gates ore's urgency. At METALS_STOCK the live knee reads metals as braked shut (ore's draw
+    // collapses to civilian want alone); the retired anchor ceiling, pinned to a far larger price
+    // anchor, reads the same stock as unbraked (ore's draw stays at its full civilian+industrial
+    // want). A second, plain ore consumer with no industry sits at a fixed severity in between, so
+    // which recipient a budget-limited donor services first flips with the switch — the only way
+    // urgency (never a stock or target) can change what the processor actually moves.
+    const METALS_BUILDINGS = { metals: 3, vocational_school: 1 };
+    const METALS_POP = 100;
+    const snap = computeSystemLabourSnapshot(METALS_BUILDINGS, METALS_POP);
+    const metalsUse = consumptionRate("metals", snap.basis)
+      + inputDemandForGood(METALS_BUILDINGS, "metals", snap.state, emptyResourceVector());
+    const metalsCapacity = buildingProduction(METALS_BUILDINGS, "metals", snap.state, emptyResourceVector());
+    const METALS_STOCK = brakeKnee(
+      { useRate: metalsUse, capacityProduction: metalsCapacity, anchorMult: 1 },
+      ECONOMY_SIM_PARAMS,
+    ).rampEnd + 1;
+    // A price-anchor demandRate far above METALS_STOCK/TARGET_COVER keeps the anchor ceiling at 1
+    // (unbraked) at this stock, whatever TARGET_COVER is tuned to.
+    const METALS_DEMAND_RATE = 100_000;
+
+    const oreCivilianR1 = consumptionRate("ore", snap.basis);
+    const oreFullR1 = oreCivilianR1 + inputDemandForGood(METALS_BUILDINGS, "ore", snap.state, emptyResourceVector());
+
+    const R2_POP = METALS_POP * 4;
+    const oreCivilianR2 = consumptionRate(
+      "ore",
+      computeSystemLabourSnapshot({}, R2_POP).basis,
+    );
+
+    // The ordering the whole fixture rests on: R2's fixed want sits strictly between R1's two
+    // possible readings, so the switch alone decides which recipient outranks the other.
+    expect(oreCivilianR1).toBeLessThan(oreCivilianR2);
+    expect(oreCivilianR2).toBeLessThan(oreFullR1);
+
+    const SHORTFALL = 200;
+    const oreWant = SHORTFALL / DIRECTED_LOGISTICS.WAREHOUSE_COVER;
+    const ROUTE_COST = 10;
+
+    function buildWorld(): MemoryDirectedLogisticsWorld {
+      return new MemoryDirectedLogisticsWorld([
+        {
+          systemId: "D", factionId: "f1", population: 0, buildings: {},
+          yields: emptyResourceVector(),
+          markets: [{ id: "mD", goodId: "ore", stock: 100_000, anchorMult: 1, demandRate: 1, storageCapacity: 0 }],
+        },
+        {
+          systemId: "R1", factionId: "f1", population: METALS_POP, buildings: METALS_BUILDINGS,
+          yields: emptyResourceVector(),
+          markets: [
+            // demandRate is set well above oreWant so the PRICING band's maxStock (a different,
+            // demandRate-denominated ceiling) never clips a delivery below the logistics shortfall
+            // this fixture is sized on — the two figures deliberately measure different things.
+            { id: "mR1ore", goodId: "ore", stock: 0, anchorMult: 1, demandRate: 1000, storageCapacity: 0, honestUseRate: oreWant },
+            { id: "mR1metals", goodId: "metals", stock: METALS_STOCK, anchorMult: 1, demandRate: METALS_DEMAND_RATE, storageCapacity: 0 },
+          ],
+        },
+        {
+          systemId: "R2", factionId: "f1", population: R2_POP, buildings: {},
+          yields: emptyResourceVector(),
+          markets: [
+            { id: "mR2ore", goodId: "ore", stock: 0, anchorMult: 1, demandRate: 1000, storageCapacity: 0, honestUseRate: oreWant },
+          ],
+        },
+      ]);
+    }
+
+    const oreReceivedBy = (world: MemoryDirectedLogisticsWorld, systemId: string): number =>
+      world.flows.filter((f) => f.toSystemId === systemId && f.goodId === "ore")
+        .reduce((sum, f) => sum + f.quantity, 0);
+
+    it("services the higher-severity recipient first, live vs pinned to the retired anchor", async () => {
+      const live = buildWorld();
+      await runDirectedLogisticsProcessor(live, { tick: DUE_TICK }, {
+        interval: LOGISTICS_INTERVAL, routeCost: () => ROUTE_COST, reachableSystemIds: allSystemIdsReachable,
+      });
+      // Live: R1's ore draw is braked to civilian-only (lower than R2's), so R2 outranks it and is
+      // serviced in full first; the budget-limited remainder to R1 is a partial fill.
+      expect(oreReceivedBy(live, "R2")).toBeCloseTo(SHORTFALL, 6);
+      expect(oreReceivedBy(live, "R1")).toBeGreaterThan(0);
+      expect(oreReceivedBy(live, "R1")).toBeLessThan(SHORTFALL);
+
+      const pinned = buildWorld();
+      await runDirectedLogisticsProcessor(pinned, { tick: DUE_TICK }, {
+        interval: LOGISTICS_INTERVAL, routeCost: () => ROUTE_COST, reachableSystemIds: allSystemIdsReachable,
+        drawBrakeCeiling: "anchor",
+      });
+      // Pinned: the anchor ceiling reads the same metals stock as unbraked, so R1's ore draw rises
+      // to its full civilian+industrial want (above R2's) and the priority flips.
+      expect(oreReceivedBy(pinned, "R1")).toBeCloseTo(SHORTFALL, 6);
+      expect(oreReceivedBy(pinned, "R2")).toBeGreaterThan(0);
+      expect(oreReceivedBy(pinned, "R2")).toBeLessThan(SHORTFALL);
+
+      // The divergence the fix exists to protect: identical fixture, only the switch differs.
+      expect(oreReceivedBy(live, "R1")).not.toBeCloseTo(oreReceivedBy(pinned, "R1"), 3);
+    });
   });
 });

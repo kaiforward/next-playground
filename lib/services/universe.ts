@@ -13,8 +13,8 @@ import {
   summariseDeposits,
 } from "@/lib/engine/industry";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
-import { marketBandForRow, type MarketBand } from "@/lib/engine/market-pricing";
-import { GOODS } from "@/lib/constants/goods";
+import { useRatesByGood } from "@/lib/engine/honest-demand";
+import type { UseRate } from "@/lib/engine/honest-demand";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { deriveRegionDominantFaction } from "@/lib/utils/region";
 
@@ -178,16 +178,24 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
 
-  // marketStock + per-good stock band keyed by good KEY (world market rows
+  // marketStock + per-good brake inputs keyed by good KEY (world market rows
   // already use good keys as goodId).
   const marketStock: Record<string, number> = {};
-  const bandByGood: Record<string, MarketBand> = {};
   const demandRateByGood: Record<string, number> = {};
+  // Map, not Record: key absence (no persisted/no market row) must be type-visible to its readers
+  // rather than resolving through an implicit `undefined` index.
+  const honestUseRateByGood = new Map<string, number>();
+  const anchorMultByGood = new Map<string, number>();
   const logisticsFundingBoundByGood: Record<string, boolean> = {};
+  let rowSuppressRate: number | undefined;
   for (const row of marketsBySystem().get(systemId) ?? []) {
-    bandByGood[row.goodId] = marketBandForRow(row, GOODS[row.goodId]);
     marketStock[row.goodId] = row.stock;
     demandRateByGood[row.goodId] = row.demandRate;
+    if (typeof row.honestUseRate === "number" && Number.isFinite(row.honestUseRate)) {
+      honestUseRateByGood.set(row.goodId, row.honestUseRate);
+    }
+    anchorMultByGood.set(row.goodId, row.anchorMult);
+    rowSuppressRate ??= row.productionSuppressRate;
     logisticsFundingBoundByGood[row.goodId] = row.logisticsFundingBound ?? false;
   }
 
@@ -209,17 +217,29 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   );
   const worked = extractorsByResource(buildings);
 
+  // A row with no persisted use figure (a legacy save) recomputes live — never 0, which
+  // would weld its brake knee to the output term alone. Same fallback the tick adapters use.
+  let recomputedUse: Map<string, UseRate> | undefined;
+  const honestUseRateOf = (goodKey: string): number => {
+    const persisted = honestUseRateByGood.get(goodKey);
+    if (persisted !== undefined) return persisted;
+    recomputedUse ??= useRatesByGood({
+      buildings,
+      population: system.population,
+      yields,
+      productionSuppress: rowSuppressRate ?? 1,
+    });
+    return recomputedUse.get(goodKey)?.total ?? 0;
+  };
+
   // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
   // but feed the deposit-fill rows and the production/consumption profile below.
-  const readout = buildIndustryReadout(
-    buildings,
-    system.population,
-    marketStock,
-    (goodKey) => bandByGood[goodKey],
-    yields,
-    (goodKey) => demandRateByGood[goodKey] ?? 0,
-    (goodKey) => logisticsFundingBoundByGood[goodKey] ?? false,
-  );
+  const readout = buildIndustryReadout(buildings, system.population, marketStock, yields, {
+    demandRateOf: (goodKey) => demandRateByGood[goodKey] ?? 0,
+    honestUseRateOf,
+    anchorMultOf: (goodKey) => anchorMultByGood.get(goodKey) ?? 1,
+    logisticsFundingBoundOf: (goodKey) => logisticsFundingBoundByGood[goodKey] ?? false,
+  });
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.
   const popNeeds = systemPopNeeds(systemId, readout.labourAllocation);

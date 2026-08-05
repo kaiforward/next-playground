@@ -19,6 +19,8 @@ import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { brakeKnee } from "@/lib/engine/tick";
+import { buildingProduction, computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { GOODS } from "@/lib/constants/goods";
 import type { EconomySignals, TickContext } from "@/lib/tick/types";
 import type { TickSystem } from "@/lib/tick/rows";
@@ -40,7 +42,9 @@ const FIXTURE_BAND = marketBandForRow({ demandRate: 1, storageCapacity: 120 }, G
 const ECON_PARAMS = {
   interval: 1,
   simParams: {
-    holdCover: 1.3,
+    brakeUseCover: 40,
+    brakeRamp: 1.3,
+    brakeOutputCover: 8,
     rationCover: 2,
   },
   modifierCaps: MODIFIER_CAPS,
@@ -123,6 +127,10 @@ function makeMarket(systemId: string, goodId: string, stock: number): WorldMarke
     stock,
     anchorMult: 1,
     demandRate: 1,
+    // The persisted use figure — the brake knee's warehousing denominator. 1 puts the
+    // knee's use term at brakeUseCover × 1 = 40, so any active-production fixture stock
+    // below 40 sits in the full-rate zone whatever the fixture's output term computes to.
+    honestUseRate: 1,
     // storageCapacity widens the per-market band's maxStock:
     //   maxStock = TARGET_COVER/priceFloor + storageCapacity = 40/0.5 + 120 = 200
     //   minStock = TARGET_COVER/priceCeiling = 40/2 = 20
@@ -132,15 +140,32 @@ function makeMarket(systemId: string, goodId: string, stock: number): WorldMarke
   };
 }
 
+// The brake knee the processor derives for the producer fixture's food market — computed
+// from the same primitives the adapter feeds it (the row's use figure, buildingProduction
+// as capacity), so geometry probe stocks always sit where each test intends whatever
+// OUTPUT_PER_UNIT resolves to.
+const PRODUCER_BUILDINGS = { food: 2 }; // makeProducerSystem's built base
+const FOOD_CAPACITY = buildingProduction(
+  PRODUCER_BUILDINGS,
+  "food",
+  computeSystemLabourSnapshot(PRODUCER_BUILDINGS, 50).state, // makeProducerSystem's population
+  unitResourceVector(),
+);
+const FIXTURE_KNEE = brakeKnee(
+  { useRate: 1, capacityProduction: FOOD_CAPACITY, anchorMult: 1 },
+  ECON_PARAMS.simParams,
+);
+const KNEE_MID = (FIXTURE_KNEE.knee + FIXTURE_KNEE.rampEnd) / 2;
+
 // ── Strike suppression ────────────────────────────────────────────
 
 describe("economy processor: strike suppression", () => {
   it("high unrest (≥ threshold) produces lower post-tick stock than unrest=0", async () => {
     const goodId = "food";
-    // Active-production zone: below the operating ceiling (targetStock × holdCover = 40 × 1.3 = 52)
+    // Active-production zone: below the brake knee (≥ brakeUseCover × honestUseRate 1 = 40)
     // and well above the floor (minStock=20) so both production factors are positive and the
     // strike multiplier's suppression is observable.
-    const prodStock = FIXTURE_BAND.targetStock - 2; // ≈ 38 — below operating ceiling
+    const prodStock = FIXTURE_BAND.targetStock - 2; // ≈ 38 — inside the full-rate zone
 
     // Run with unrest=0 (no strike).
     const calmSystem = makeProducerSystem("sys-calm", 0);
@@ -164,7 +189,7 @@ describe("economy processor: strike suppression", () => {
 
   it("unrest below threshold leaves production unchanged", async () => {
     const goodId = "food";
-    // Active-production zone: below the operating ceiling (≈ 52) so production is active
+    // Active-production zone: below the brake knee (≥ 40) so production is active
     // and unrest=0 vs below-threshold unrest can be compared meaningfully.
     const prodStock = FIXTURE_BAND.targetStock - 2; // ≈ 38 — same zone as strike test above
 
@@ -470,11 +495,10 @@ describe("economy processor: supply-chain input-gating", () => {
    * buildings are included — ore stock is set directly and does not grow.
    */
   it("throttles metals production when local ore is scarce", async () => {
-    // Active-production zone for metals: below the operating ceiling (targetStock × 1.3 ≈ 52)
-    // so production can occur when ore is available and be fully blocked when gate = 0.
-    // The band that matters here is metals' OWN (GOODS.metals priceCeiling 2.5
-    // ⇒ floor=16), not food's — FIXTURE_BAND just supplies a convenient scalar.
-    const MID_METALS = FIXTURE_BAND.minStock + 10; // 30 — well within [floor=16, ceiling≈52]
+    // Active-production zone for metals: below the brake knee (≥ brakeUseCover ×
+    // honestUseRate 1 = 40) so production can occur when ore is available and be
+    // fully blocked when gate = 0. FIXTURE_BAND just supplies a convenient scalar.
+    const MID_METALS = FIXTURE_BAND.minStock + 10; // 30 — inside the full-rate zone
 
     function makeSmeltingSystem(id: string): TickSystem {
       return {
@@ -544,9 +568,9 @@ describe("economy processor: supply-chain input-gating", () => {
 describe("economy processor: realized production signal", () => {
   it("exports realized production per (system, good) in economySignals", async () => {
     const systems = [makeProducerSystem("sys-1", 0)];
-    // Active-production zone (below the operating ceiling, targetStock × holdCover
-    // ≈ 52) — same reasoning as the strike-suppression tests above. Stock at the
-    // fixture's default 100 sits above the ceiling and yields zero output.
+    // Active-production zone (below the brake knee, ≥ 40) — same reasoning as the
+    // strike-suppression tests above. Stock at the fixture's default 100 sits past
+    // the ramp end and yields zero output.
     const markets = [makeMarket("sys-1", "food", FIXTURE_BAND.targetStock - 2)];
     const world = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
@@ -568,7 +592,10 @@ describe("economy processor: realized production signal", () => {
 
 describe("economy processor: selling factor signal", () => {
   it("emits the production-knee geometry from start stock", async () => {
-    const stocks = [40, 46, 52];
+    // Probes derived from the fixture's own computed knee: at the knee full rate, at the
+    // taper midpoint half, at the ramp end zero — the same shape the retired anchor brake
+    // had, now anchored on the use figure and capacity instead of targetStock.
+    const stocks = [FIXTURE_KNEE.knee, KNEE_MID, FIXTURE_KNEE.rampEnd];
     const expected = [1, 0.5, 0];
     for (let index = 0; index < stocks.length; index++) {
       const id = `p-${index}`;
@@ -585,21 +612,48 @@ describe("economy processor: selling factor signal", () => {
   it("uses start stock even when the cycle materially changes final stock", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("p", 0)],
-      markets: [makeMarket("p", "food", 40)],
+      markets: [makeMarket("p", "food", FIXTURE_KNEE.knee)],
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), {
       ...ECON_PARAMS,
       interval: 24,
     });
-    expect(world.markets[0].stock).not.toBe(40);
+    expect(world.markets[0].stock).not.toBe(FIXTURE_KNEE.knee);
     expect(requireSellingFactor(result.economySignals, "p", "food")).toBe(1);
   });
 
+  it("keeps the knee cadence-invariant — the same start state yields the same factor at any interval", async () => {
+    // The knee's output denominator must be the reference-cycle rate: fed the catch-up-scaled
+    // entry.productionRate instead, a finer cadence would shrink the knee and re-brake the same
+    // physical state. An output-bound market (an explicit zero use figure) exposes exactly that —
+    // the general cadence-invariance sim stays green through this fault because its braked
+    // markets are use-term-bound, so this probe is the premise's only cheap failing test.
+    const outputKnee = brakeKnee(
+      { useRate: 0, capacityProduction: FOOD_CAPACITY, anchorMult: 1 },
+      ECON_PARAMS.simParams,
+    );
+    const probe = (outputKnee.knee + outputKnee.rampEnd) / 2;
+    const factors: number[] = [];
+    for (const interval of [12, 24]) {
+      const world = new InMemoryEconomyWorld({
+        systems: [makeProducerSystem("p", 0)],
+        markets: [{ ...makeMarket("p", "food", probe), honestUseRate: 0 }],
+        modifiers: [],
+      });
+      const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval });
+      factors.push(requireSellingFactor(result.economySignals, "p", "food"));
+    }
+    expect(factors[0]).toBeCloseTo(0.5, 6);
+    expect(factors[1]).toBeCloseTo(factors[0], 9);
+  });
+
   it("is invariant to strike and maintenance flow suppression", async () => {
+    // capacityProduction is the pre-suppress reference rate, so the knee — and the
+    // mid-taper factor probed here — must not move with strike or maintenance state.
     const world = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("calm", 0), makeProducerSystem("suppressed", 1)],
-      markets: [makeMarket("calm", "food", 46), makeMarket("suppressed", "food", 46)],
+      markets: [makeMarket("calm", "food", KNEE_MID), makeMarket("suppressed", "food", KNEE_MID)],
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), {
@@ -613,7 +667,7 @@ describe("economy processor: selling factor signal", () => {
   it("is invariant to a production-rate event multiplier", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("plain", 0), makeProducerSystem("event", 0)],
-      markets: [makeMarket("plain", "food", 46), makeMarket("event", "food", 46)],
+      markets: [makeMarket("plain", "food", KNEE_MID), makeMarket("event", "food", KNEE_MID)],
       modifiers: [{
         domain: "economy",
         type: "rate_multiplier",

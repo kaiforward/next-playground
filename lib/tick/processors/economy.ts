@@ -5,6 +5,7 @@ import type {
   GlobalEventMap,
 } from "../types";
 import {
+  brakeKnee,
   productionCeiling,
   type MarketTickEntry,
 } from "@/lib/engine/tick";
@@ -141,6 +142,10 @@ export async function runEconomyProcessor(
       goodId: m.goodId,
       stock: m.stock,
       demandRate: m.demandRate,
+      honestUseRate: m.honestUseRate,
+      // The knee's output denominator is the reference-cycle rate — deliberately NOT the
+      // catch-up-scaled, strike-suppressed productionRate the entry carries for flow.
+      capacityProduction: m.baseProductionRate ?? 0,
       storageCapacity: m.storageCapacity,
       baseProductionRate: m.baseProductionRate != null ? m.baseProductionRate * catchUp : undefined,
       baseConsumptionRate: m.baseConsumptionRate != null ? m.baseConsumptionRate * catchUp : undefined,
@@ -212,8 +217,14 @@ export async function runEconomyProcessor(
     if (m.baseProductionRate !== undefined) {
       const factor = productionCeiling(
         tickEntries[i].stock,
-        tickEntries[i].targetStock,
-        simParams.holdCover,
+        brakeKnee(
+          {
+            useRate: tickEntries[i].honestUseRate,
+            capacityProduction: tickEntries[i].capacityProduction,
+            anchorMult: tickEntries[i].anchorMult,
+          },
+          simParams,
+        ),
       );
       const map = sellingFactorBySystem.get(m.systemId) ?? new Map<string, number>();
       map.set(m.goodId, factor);

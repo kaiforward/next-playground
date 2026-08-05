@@ -20,24 +20,36 @@ Parse the user's command for these flags:
 
 ## Effort dial
 
-| Effort | Architect | Reasoning reviewers | Mechanical reviewers |
-|--------|-----------|---------------------|----------------------|
-| `quick` | `strong` | `fast` | `fast` |
-| `standard` (default) | `frontier` | `strong` | `fast` |
-| `deep` | `frontier` | `strong` (`frontier` for data-contract and boundary-safety) | `fast` |
+**Model AND reasoning effort are stated explicitly on every dispatch — never inherited from the session.** A session running at high/xhigh silently multiplies its effort across 8+ agents otherwise.
 
-Resolve tiers through `.agents/model-tiers.md`. If the harness cannot choose a model per subagent, preserve reviewer independence and give architectural and high-severity validation work back to the frontier orchestrator.
+Per-lens assignment at `standard` (Claude family shown; resolve tier names through `.agents/model-tiers.md` for other providers):
+
+| Lens | Model | Effort | Why this tier |
+|------|-------|--------|---------------|
+| Architect | Opus | high | Full-diff gating + spec conformance — the deepest cross-cutting judgment in the pipeline |
+| Data contract | Opus | high | Cross-layer shape/semantics drift; the source of the subtlest confirmed findings (judgment, not checklist) |
+| Silent failures | Opus | high | Fallback-masking / denominator / guard-polarity class; top producer of confirmed real bugs |
+| Tests | Sonnet | high | Consumes the mutation survivor report (step 1.8) — discovery of vacuous coverage is mechanical now; the lens triages survivors and reviews changed tests for meaningfulness. **Escalate to Opus `high` if the sweep could not run** |
+| World integrity | Sonnet | high | Explicit invariant checklist (JSON-serializable, determinism, save surface). **Escalate to Opus when the diff touches `lib/world/save*` or the `World` type shape** — the miss cost there is save corruption |
+| Boundary safety | Sonnet | high | Checklist-driven: env reads, cache headers, Zod at the boundary, save paths |
+| Performance | Sonnet | high | Benching is procedural; findings have been minor/info. Escalate to Opus only for a perf-focused PR |
+| User journey | Sonnet | medium | UI-flow reasoning; rarely fires in this codebase |
+| Conventions | Haiku | medium | Rule-matching against `rules/code-standards.md`; held up on Haiku (PR 213) |
+
+Validator batches: blocker/major → Opus `high`, or the orchestrator verifies those findings directly (per the tier map, that verification is frontier work either way); mixed → Sonnet `medium`; all-minor → Haiku `low`.
+
+`quick`: same table with every Opus row capped at Sonnet `high`.
+`deep`: same table with architect, data-contract and silent-failures raised to `xhigh`. Opt-in only — never the default.
+
+If the harness cannot choose a model per subagent, preserve reviewer independence and give architectural and high-severity validation work back to the frontier orchestrator.
 
 When Codex custom agents are available, route through the project profiles in `.codex/agents/`:
 
-- `review-frontier` — `gpt-5.6-sol`, `xhigh`
+- `review-frontier` — `gpt-5.6-sol`, `high` (`xhigh` only on `deep`)
 - `review-strong` — `gpt-5.6-terra`, `high`
 - `review-fast` — `gpt-5.6-luna`, `medium`
 
-Verify the selected profile in spawn metadata when `features.multi_agent_v2.hide_spawn_agent_metadata = false`. If a requested profile is unavailable, report the fallback in the dispatch preview rather than silently claiming the intended tier ran.
-
-Reasoning reviewers: world-integrity, data-contract, boundary-safety, silent-failures, user-journey, tests, performance.
-Mechanical reviewer: conventions.
+Verify the selected profile in spawn metadata when `features.multi_agent_v2.hide_spawn_agent_metadata = false`. If a requested profile is unavailable, report the fallback in the dispatch preview rather than silently claiming the intended tier ran. Record each lens's model and effort in the report's dispatch log.
 
 ## Pipeline
 
@@ -167,6 +179,18 @@ Planned dispatch: <N> architect + <M> reviewer passes across <C> chunks; validat
 ```
 
 If the plan exceeds 20 downstream reviewer passes, pause and require explicit user confirmation before launching the architect. Suggest a larger `--chunk-size`, a narrower `--only` set, or better cluster coalescing. A user who already approved this exact dispatch count in the current conversation does not need to confirm it again.
+
+### 1.8. Mutation sweep — input for the tests lens
+
+If the diff contains source files under `lib/` (tests excluded), obtain a mutation survivor report
+before dispatching reviewers: reuse the author's sweep if the PR notes carry one for this head sha,
+otherwise run it now — `npm run mutation -- --mutate "<comma-separated changed lib .ts files>"`
+(scoped runs take seconds to minutes). Pass the surviving mutants (file:line, mutator, code diff)
+into the tests reviewer's payload under a `## Mutation survivors` heading. The tests lens triages
+each survivor (real coverage gap vs equivalent mutant vs dev-harness-only weight) instead of
+hand-building mutation experiments; it still reviews changed test files for meaningfulness and
+missing premise coverage. If the sweep fails to run, dispatch the tests lens on Opus `high` (per
+the effort dial's escalation) and record the fallback in the report.
 
 ### 2. Dispatch the architect
 

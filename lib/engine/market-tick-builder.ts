@@ -28,6 +28,10 @@ export interface MarketTickInput {
   stock: number;
   /** Stored local demand rate (civilian demand — per-capita baseline + skilled baskets — floored at seed). */
   demandRate: number;
+  /** THE USE FIGURE — the brake knee's warehousing denominator (see MarketTickEntry.honestUseRate). */
+  honestUseRate: number;
+  /** Reference-cycle production rate: pre-catchUp, pre-suppress, pre-event — the knee's output denominator. */
+  capacityProduction: number;
   /** Built infrastructure storage capacity from StationMarket.storageCapacity. */
   storageCapacity: number;
   /** Base production rate for this good (undefined = not a producer). */
@@ -82,8 +86,9 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
   const entry = buildMarketTickEntry({
     goodId: input.goodId,
     stock: input.stock,
-    minStock: band.minStock,
-    targetStock: band.targetStock,
+    honestUseRate: input.honestUseRate,
+    capacityProduction: input.capacityProduction,
+    anchorMult,
     demandRate: input.demandRate,
     maxStock: band.maxStock,
     baseProductionRate: input.baseProductionRate,

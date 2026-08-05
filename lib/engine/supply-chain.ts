@@ -6,16 +6,18 @@
  * order so a freshly-produced input feeds its consumer the same tick.
  *
  * Draws run toward empty on the shared emergency-ration ramp — there
- * is no reserve floor: production decelerates from the anchor to the hold ceiling
- * and stock clamps to [0, maxStock]. Civilian and industrial draws of one good
- * share the ramp at their moment of draw (civilian in the good's own entry pass,
- * industrial when downstream producers process). Because processing is
- * topological, a scarce good rations every drawer at the same consumptionFactor
- * curve. Curve geometry is identical to the flat tick (lib/engine/tick.ts), whose
- * consumptionFactor/productionCeiling this engine reuses.
+ * is no reserve floor: production decelerates from the brake knee (the larger
+ * of use-figure warehousing and working inventory — see `brakeKnee`) and
+ * stock clamps to [0, maxStock]. Civilian and
+ * industrial draws of one good share the ramp at their moment of draw
+ * (civilian in the good's own entry pass, industrial when downstream producers
+ * process). Because processing is topological, a scarce good rations every
+ * drawer at the same consumptionFactor curve, reused from lib/engine/tick.ts
+ * along with the brake.
  */
 import { clamp } from "@/lib/utils/math";
 import {
+  brakeKnee,
   consumptionFactor,
   productionCeiling,
   type EconomySimParams,
@@ -81,7 +83,7 @@ export function simulateSystemEconomyTick(
   entries: MarketTickEntry[],
   params: EconomySimParams,
 ): SimulatedMarketEntry[] {
-  const { holdCover, rationCover } = params;
+  const { rationCover } = params;
 
   // Realized (actually produced, post input-gate and operating-ceiling) output
   // per good this run — the production-tax base. Absent good ⇒ produced nothing.
@@ -119,7 +121,15 @@ export function simulateSystemEconomyTick(
     const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
     if (effectiveProduction > 0) {
       const gate = inputGate(entry.goodId, effectiveProduction, stockOf, rationStockOf);
-      const ceiling = productionCeiling(s, entry.targetStock, holdCover);
+      const knee = brakeKnee(
+        {
+          useRate: entry.honestUseRate,
+          capacityProduction: entry.capacityProduction,
+          anchorMult: entry.anchorMult,
+        },
+        params,
+      );
+      const ceiling = productionCeiling(s, knee);
       const actualOutput = effectiveProduction * gate * ceiling;
       realizedByGood.set(entry.goodId, (realizedByGood.get(entry.goodId) ?? 0) + actualOutput);
       s += actualOutput;

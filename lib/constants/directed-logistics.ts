@@ -14,7 +14,10 @@ export const DIRECTED_LOGISTICS = {
    * enough that funding-bound outcomes are rare, deliberate signals rather than an ambient brake.
    */
   GENERATION_PER_POP: scaleValue(5),
-  /** A good is a surplus when stock ≥ targetStock × this (held above its cycles-of-supply price anchor). Margin > 1 leaves a deliberate residual (negative space). */
+  /** A good is a surplus when stock ≥ its warehousing target × this (`classifyMarketState`), and an
+   *  ordinary donor gives only once stock clears donorReserve × this (`surplusDrawable`) — both
+   *  demand-denominated since the role split; no price-anchor quantity. Margin > 1 leaves a
+   *  deliberate residual (negative space). */
   SURPLUS_MARGIN: 1.4,
   /**
    * Cycles of its own demand a structural exporter keeps on hand before shipping the rest — a
@@ -70,9 +73,11 @@ export const DIRECTED_LOGISTICS = {
    * that has no business riding the price anchor, while the ordinary donor's floor is deliberately
    * tied to the same anchor movement as the deficit line it faces across the match.
    *
-   * The production brake is deliberately separate: `productionCeiling` throttles at
-   * `HOLD_COVER × targetStock`, the price anchor — the one physical mechanism still measured
-   * against it. Nothing here moves it.
+   * The production brake is a separate mechanism in the same unit family: `brakeKnee` runs off
+   * the use figure and own-output capacity (`BRAKE_USE_COVER`/`BRAKE_RAMP`/`BRAKE_OUTPUT_COVER`),
+   * and its ceiling sits at or below this reserve's donation line (`BRAKE_RAMP × BRAKE_USE_COVER`
+   * = 52 vs `SURPLUS_MARGIN × DONOR_RESERVE_COVER` = 56 — the dead-band, asserted in
+   * band-constants.test.ts). Nothing here moves it.
    */
   DONOR_RESERVE_COVER: 40,
   /**

@@ -12,7 +12,7 @@ import { INITIAL_RESERVE_ANCHOR_FRAC } from "@/lib/constants/market-economy";
 import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING, UNREST_PARAMS } from "@/lib/constants/population";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { VACANCY_SLACK, INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, INPUT_DEMAND_MULTIPLIER } from "@/lib/constants/industry";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
@@ -65,9 +65,10 @@ describe("band constant dependencies", () => {
     // the brake ceiling (production halted) and the donation line (giving refused) can only drain
     // back down — a world that produces less than it uses should not dump stock it cannot replace.
     // Flip the two lines and every self-sufficient world becomes a continuous exporter instead.
-    // Compared in the same units (cycles of demand, at markets where the anchor and donor
-    // denominators coincide): moving either constant across the other should land here.
-    expect(ECONOMY_CONSTANTS.HOLD_COVER * TARGET_COVER)
+    // Both sides are now cycles of the same use figure (BRAKE_RAMP × BRAKE_USE_COVER = 52 vs
+    // SURPLUS_MARGIN × DONOR_RESERVE_COVER = 56, on the knee's use term): moving either constant
+    // across the other should land here.
+    expect(ECONOMY_CONSTANTS.BRAKE_RAMP * ECONOMY_CONSTANTS.BRAKE_USE_COVER)
       .toBeLessThanOrEqual(DIRECTED_LOGISTICS.SURPLUS_MARGIN * DIRECTED_LOGISTICS.DONOR_RESERVE_COVER);
   });
   it("holds the founding endowment at world-gen's reserve share of a full anchor cover", () => {
@@ -78,13 +79,23 @@ describe("band constant dependencies", () => {
     // other is a deliberate act that should land here.
     expect(COLONISATION.FOUNDING_STOCK_COVER).toBe(INITIAL_RESERVE_ANCHOR_FRAC * TARGET_COVER);
   });
-  it("keeps rationing close to empty and the hold ceiling above the anchor", () => {
+  it("keeps rationing close to empty and the brake's taper past its knee", () => {
     expect(ECONOMY_CONSTANTS.RATION_COVER).toBeLessThan(TARGET_COVER);
-    expect(ECONOMY_CONSTANTS.HOLD_COVER).toBeGreaterThan(1);
+    // A ramp at or below 1 would stop production AT the knee (or before it) — the
+    // deceleration zone that absorbs shocks would not exist.
+    expect(ECONOMY_CONSTANTS.BRAKE_RAMP).toBeGreaterThan(1);
   });
   it("keeps the shortage line a proper interior satisfaction level", () => {
     expect(SHORTAGE_SATISFACTION).toBeGreaterThan(0);
     expect(SHORTAGE_SATISFACTION).toBeLessThan(1);
+  });
+  it("pins the input-demand magnitude knob at neutral", () => {
+    // Both honest demand figures multiply their industrial term by this knob, while the
+    // physical input draw (lib/engine/supply-chain.ts) does not — so "what this industry
+    // would actually pull" and "what the demand figures claim" are the same quantity only
+    // at exactly 1.0. Turning the knob requires threading it into the physical draw too;
+    // this pin makes that a deliberate act rather than a silent divergence.
+    expect(INPUT_DEMAND_MULTIPLIER).toBe(1);
   });
 });
 

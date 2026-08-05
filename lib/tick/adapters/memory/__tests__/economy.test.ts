@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { buildingProduction, computeLabourState } from "@/lib/engine/industry";
+import { useRatesByGood } from "@/lib/engine/honest-demand";
 import { makeResourceVector, unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
@@ -122,6 +123,37 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
     world.markets[0] = { ...world.markets[0], squeezeCycles: -1 };
     const views = await world.getMarketsForSystems(["s1"]);
     expect(views[0].squeezeCycles).toBe(0);
+  });
+
+  // The absent-field fallback must never read as 0 — a 0 knee would weld the market's brake shut
+  // AND make it fully drawable at the same time. Both a genuinely-missing field (a legacy save)
+  // and a corrupt one (NaN) route through the same live recompute.
+  it("recomputes honestUseRate live when the row carries no persisted field", async () => {
+    const world = new InMemoryEconomyWorld(
+      { systems: [sys({})], markets: [market("ore")], modifiers: [] },
+    );
+    const views = await world.getMarketsForSystems(["s1"]);
+    const ore = views.find((v) => v.goodId === "ore")!;
+    const expected = useRatesByGood({
+      buildings: { ore: 5 }, population: 1000, yields: unitResourceVector(), productionSuppress: 1,
+    }).get("ore")?.total ?? 0;
+    expect(ore.honestUseRate).toBeCloseTo(expected, 9);
+    expect(ore.honestUseRate).toBeGreaterThan(0);
+  });
+
+  it("recomputes honestUseRate live when the persisted field is NaN", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [sys({})],
+      markets: [{ ...market("ore"), honestUseRate: Number.NaN }],
+      modifiers: [],
+    });
+    const views = await world.getMarketsForSystems(["s1"]);
+    const ore = views.find((v) => v.goodId === "ore")!;
+    const expected = useRatesByGood({
+      buildings: { ore: 5 }, population: 1000, yields: unitResourceVector(), productionSuppress: 1,
+    }).get("ore")?.total ?? 0;
+    expect(ore.honestUseRate).toBeCloseTo(expected, 9);
+    expect(ore.honestUseRate).toBeGreaterThan(0);
   });
 
   it("preserves a fractional squeeze counter (reference-time, not an integer assessment count)", async () => {

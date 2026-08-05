@@ -38,7 +38,7 @@
 
 import { mulberry32, type RNG } from "@/lib/engine/universe-gen";
 import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
@@ -74,6 +74,7 @@ import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastru
 import { runPopulationProcessor } from "@/lib/tick/processors/population";
 import { runMigrationProcessor } from "@/lib/tick/processors/migration";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
+import type { DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
 import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build";
 import { createSystemMarkets } from "@/lib/world/markets";
 import { runRelationsProcessor } from "@/lib/tick/processors/relations";
@@ -634,7 +635,12 @@ let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number
 
 export async function runWorldTick(
   world: World,
-  opts?: { cadence?: TickCadence },
+  opts?: {
+    cadence?: TickCadence;
+    /** Harness-only third-arm pin for the draw figure's brake — the second per-run override
+     *  channel after `cadence`. The live game never sets it (absent ⇒ "live"). */
+    drawBrakeCeiling?: DrawBrakeCeiling;
+  },
 ): Promise<{
   world: World;
   events: TickBroadcastRaw;
@@ -777,7 +783,7 @@ export async function runWorldTick(
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.cycle,
-      simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER, rationCover: ECONOMY_CONSTANTS.RATION_COVER },
+      simParams: ECONOMY_SIM_PARAMS,
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
       maintenanceMalusBySystem,
@@ -940,6 +946,7 @@ export async function runWorldTick(
         reachableSystemIds,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
+        drawBrakeCeiling: opts?.drawBrakeCeiling,
       });
       markets = applyLogisticsMarketUpdates(
         markets,

@@ -1,13 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, anchorCeiling } from "@/lib/tick/processors/good-market-state";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
+import { computeSystemLabourSnapshot, inputDemandForGood, buildingProduction } from "@/lib/engine/industry";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
+import { brakeKnee } from "@/lib/engine/tick";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
@@ -35,6 +36,33 @@ function rowAtPopulation(goodId: string, population: number, stock: number, anch
 
 const statesFor = (row: MarketRowForLogistics, population: number) =>
   toGoodMarketStates({ buildings: {}, population, yields: unitResourceVector(), markets: [row] });
+
+// ── anchorCeiling — the retired third-arm control ──────────────────
+// Full rate to the price anchor, taper to 0 at RETIRED_HOLD_COVER(1.3) × anchor — a fixed
+// historical literal (see the good-market-state.ts docstring), never ECONOMY_CONSTANTS.BRAKE_RAMP.
+
+describe("anchorCeiling", () => {
+  const target = 100; // taper runs [100, 130]
+
+  it("runs at full rate at and below the price anchor", () => {
+    expect(anchorCeiling(0, target)).toBe(1);
+    expect(anchorCeiling(target, target)).toBe(1);
+  });
+
+  it("reaches exactly 0.5 at the taper midpoint", () => {
+    expect(anchorCeiling(115, target)).toBeCloseTo(0.5, 10);
+  });
+
+  it("reaches 0 at and above RETIRED_HOLD_COVER × the price anchor", () => {
+    expect(anchorCeiling(130, target)).toBe(0);
+    expect(anchorCeiling(200, target)).toBe(0);
+  });
+
+  it("is 0 for a non-positive target — no anchor means no band to hold", () => {
+    expect(anchorCeiling(0, 0)).toBe(0);
+    expect(anchorCeiling(0, -5)).toBe(0);
+  });
+});
 
 describe("toGoodMarketStates", () => {
   it("passes stock + goodId through and derives demand from the system's own basis", () => {
@@ -230,8 +258,18 @@ describe("toGoodMarketStates: the two demand figures", () => {
     return state;
   };
 
-  // metals: targetStock = TARGET_COVER × demandRate 5 = 200; the brake shuts at HOLD_COVER × 200 = 260.
-  const METALS_BRAKE_SHUT = TARGET_COVER * 5 * ECONOMY_CONSTANTS.HOLD_COVER + 1;
+  // The stock at which metals' own brake is fully shut — computed from the same warehouse knee
+  // the derivation applies (use figure + capacity), so the fixture tracks the geometry.
+  const METALS_SNAP = computeSystemLabourSnapshot(BUILDINGS, POPULATION);
+  const METALS_BRAKE_SHUT = brakeKnee(
+    {
+      useRate: consumptionRate("metals", METALS_SNAP.basis)
+        + inputDemandForGood(BUILDINGS, "metals", METALS_SNAP.state, unitResourceVector()),
+      capacityProduction: buildingProduction(BUILDINGS, "metals", METALS_SNAP.state, unitResourceVector()),
+      anchorMult: 1,
+    },
+    ECONOMY_SIM_PARAMS,
+  ).rampEnd + 1;
 
   it("takes demand from the row's persisted use figure rather than recomputing it", () => {
     // A figure no recompute would produce, so reading it back proves the row is the source.
@@ -295,6 +333,31 @@ describe("toGoodMarketStates: the two demand figures", () => {
     ).toBe(
       surplusDrawable(ore.stock, running.donorReserve, running.demand, running.production),
     );
+  });
+
+  it("the third-arm switch pins the draw figure's brake to the retired anchor ceiling", () => {
+    // At the live warehouse knee's stop the metals yard reads full (ore's draw collapses to
+    // civilian want), but that stock sits far below the price anchor (TARGET_COVER ×
+    // demandRate 5 = 200) — so the pinned arm reads the same fixture as unbraked and the two
+    // arms genuinely disagree. Warehousing quantities must not move with the switch: it
+    // reaches nothing but the draw figure.
+    expect(METALS_BRAKE_SHUT).toBeLessThan(TARGET_COVER * 5);
+    const markets = [oreRow(), metalsRow({ stock: METALS_BRAKE_SHUT })];
+    const live = stateOf(markets, "ore");
+    const pinned = toGoodMarketStates(
+      { buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets },
+      { withDraw: true, drawBrakeCeiling: "anchor" },
+    ).find((g) => g.goodId === "ore");
+    if (pinned === undefined) throw new Error("Expected an ore state");
+
+    const ungated = consumptionRate("ore", METALS_SNAP.basis)
+      + inputDemandForGood(BUILDINGS, "ore", METALS_SNAP.state, unitResourceVector());
+    expect(live.drawDemand).toBeCloseTo(consumptionRate("ore", METALS_SNAP.basis), 9);
+    expect(pinned.drawDemand).toBeCloseTo(ungated, 9);
+    expect(pinned.drawDemand).toBeGreaterThan(live.drawDemand);
+    expect(pinned.demand).toBe(live.demand);
+    expect(pinned.logisticsTarget).toBe(live.logisticsTarget);
+    expect(pinned.donorReserve).toBe(live.donorReserve);
   });
 
   it("reads a consumer good with no market row as unbraked rather than as stopped", () => {

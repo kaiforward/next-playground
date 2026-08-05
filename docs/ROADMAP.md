@@ -34,8 +34,9 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 Ordered. These gate PR6: its presentation layer must sit on an economy that is settled, or the
 numbers it presents are re-tuned underneath it. (Items 1 and 5 — the `surplusDrawable` donor side,
 #212, and the `TARGET_COVER` role split — shipped; rows keep their numbers when one ships, so
-references stay stable. The one mechanism still measured against the price anchor is
-`productionCeiling`'s throttle knee, owned by the pricing-vs-logistics session.)
+references stay stable. The honest-demand-and-flow arc — the two demand figures, multi-donor
+matching, and the brake off the price anchor — shipped on the branch; no physical mechanism reads
+the price anchor any more.)
 
 10. **[L] Colonisation economics — founding stops being free.** Now that monetary mechanics exist,
     colonisation becomes a major, resource-intensive undertaking (Stellaris-scale): claims,
@@ -44,8 +45,9 @@ references stay stable. The one mechanism still measured against the price ancho
     by ~t500. Absorbs the **remove-everything-free audit**: the logistics work budget ("free,
     population-scaled in v1"), the per-pop construction pool base, cheap claims — sweep for the
     rest. Aim: fewer, deliberate colonies — the structural fix for the leech-colony / served-last
-    pattern (the #212 documented cost, noted in `economy-autonomic-agency.md`). Design inputs:
-    [pricing-vs-logistics.md](./build-plans/pricing-vs-logistics.md) "Inputs noted". The parked
+    pattern (the #212 documented cost, noted in `economy-autonomic-agency.md`). One measured input
+    (2026-08-04): the haul budget never binds today (~6–8% spent) — pricing it changes no flow
+    unless deliberately authored to bind. The parked
     "colony seed size vs housing unit" item parked *because* it changes founding pacing — it may
     un-park here, deliberately.
     Sits before Provision by explicit ordering decision (2026-08-03): Provision's struck-world
@@ -105,6 +107,20 @@ references stay stable. The one mechanism still measured against the price ancho
 No order. Pull from here when the queue empties, or fold one in when a PR is already in the file.
 
 **Economy / simulation**
+- **[L] Physical warehouse model — storage as a real, brake-relevant limit.** Today's storage
+  constants (`EXTRACTOR/PRODUCTION_STORAGE_PER_UNIT`, `POP_CENTRE_STORAGE`) only deepen `maxStock`;
+  they are authored per *producing* building while the brake knee is 40 cycles of *system-wide*
+  draw — measured at the stage-3 gate 16×–843× apart per good (~143× at the median producing
+  market), which is why capping the brake's taper with them hard-stopped production galaxy-wide
+  and the cap was removed (Kai 2026-08-05). A real model makes warehouses something the game
+  *builds*: the brake knee (40 cycles of use / 8 of output) is the natural capacity target the
+  autonomic build works toward — storage becomes a build product balanced against production and
+  consumption, not a seeded constant. Evidence preserved: gate report §7/§7.1 per-good tables
+  (`.superpowers/stage3-gate-report.md`).
+  *Next step:* design pass + `/spec-review` (cross-mechanic: brake, pricing band `maxStock`,
+  autonomic build, decay, Industry UI).
+  *Don't:* re-size the existing constants to make a brake cap work — no single multiplier fits a
+  16–843× per-good spread, and inflating them inflates every pricing band with them.
 - **[L] Goods-pricing revisit** — moved way back from the economy queue by explicit decision
   (2026-08-03): pricing is only worth reworking when demand becomes partly monetary — pop wages
   and real goods purchase, or inter-faction trade agreements / shared markets. Carries the former
@@ -191,7 +207,8 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   (cut), `GOODS.volatility` (still present as unread metadata since the noise path was removed in #170).
 - **[M] Logistics-pillar depth check** — the pillar is still shallow; e.g. penalised cross-unowned-space
   logistics was inherited from a retired umbrella and never built. Its own pass before calling the
-  pillar done.
+  pillar done. Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
+  coarse in-fiction valve at most) are preserved in memory `design-logistics-depth-inputs`.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 

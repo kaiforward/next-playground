@@ -8,14 +8,20 @@
 
 import { spotPrice, curveForRow, marketBandForRow, midPriceAt } from "@/lib/engine/market-pricing";
 import { classifyMarketState } from "@/lib/engine/directed-logistics";
+import { brakeKnee } from "@/lib/engine/tick";
+import { isEconomicallyActive } from "@/lib/engine/control";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { GOOD_RECIPE_CONSUMERS } from "@/lib/constants/recipes";
 import { median, quantile } from "@/lib/utils/math";
+import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { marketRowsBySystem } from "@/lib/world/tick";
 import type {
   MarketSnapshot, MarketHealthSummary,
-  PriceLevelSummary, CoverLevelEntry,
+  PriceLevelSummary, CoverLevelEntry, KneeBindingEntry,
 } from "./types";
+import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldFlowEvent, WorldMarket } from "@/lib/world/types";
 
 /** Default: sample every 50 ticks. */
@@ -385,4 +391,54 @@ export function summarizeDemandHunting(
     flipRate: comparable > 0 ? acc.reversals / comparable : 0,
     haulChurnRatio: delivered > 0 ? churned / delivered : 0,
   };
+}
+
+// ── Knee-binding census ─────────────────────────────────────────
+
+/**
+ * Per good, which term set each producing market's brake geometry — "use" (warehousing) or
+ * "output" (working inventory) — computed from the same warehouse knee the tick applies:
+ * `brakeKnee` at `ECONOMY_SIM_PARAMS`, use figure and reference-cycle capacity via
+ * `toGoodMarketStates`, the row's own `anchorMult`. A producing market is one with
+ * reference-cycle capacity > 0 at an economically active system — the population the knee's
+ * output term describes. Counts per good sum to that producing-market count (the instrument
+ * self-check its tests assert); goods nobody produces are absent. This census is the evidence
+ * `BRAKE_OUTPUT_COVER` is tuned on.
+ */
+export function computeKneeBinding(
+  systems: TickSystem[],
+  markets: WorldMarket[],
+): KneeBindingEntry[] {
+  const rowsBySystem = marketRowsBySystem(markets);
+  const byGood = new Map<string, { use: number; output: number }>();
+  for (const s of systems) {
+    if (!isEconomicallyActive(s.control)) continue;
+    const rows = rowsBySystem.get(s.id);
+    if (!rows) continue;
+    const rowByGood = new Map(rows.map((r) => [r.goodId, r]));
+    const states = toGoodMarketStates({
+      buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
+    });
+    for (const state of states) {
+      // `!(x > 0)` rather than `x <= 0`: a NaN capacityProduction fails BOTH comparisons, and the
+      // `<=` form let it fall through into the "producing" branch the census sizes itself against.
+      if (!(state.capacityProduction > 0)) continue;
+      const row = rowByGood.get(state.goodId);
+      if (!row) continue;
+      const knee = brakeKnee(
+        {
+          useRate: state.demand,
+          capacityProduction: state.capacityProduction,
+          anchorMult: row.anchorMult,
+        },
+        ECONOMY_SIM_PARAMS,
+      );
+      const counts = byGood.get(state.goodId) ?? { use: 0, output: 0 };
+      counts[knee.bindingTerm]++;
+      byGood.set(state.goodId, counts);
+    }
+  }
+  return [...byGood.entries()]
+    .map(([goodId, counts]) => ({ goodId, ...counts }))
+    .sort((a, b) => a.goodId.localeCompare(b.goodId));
 }

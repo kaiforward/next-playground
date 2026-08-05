@@ -40,13 +40,10 @@ import {
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { inputGate, inputDrawRatio } from "@/lib/engine/supply-chain";
-import { productionCeiling } from "@/lib/engine/tick";
+import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
 import { USED_SLACK, VACANCY_SLACK } from "@/lib/constants/infrastructure";
-// Type-only: market-pricing imports constants/market-economy, which imports this module —
-// a value import would cycle, but the type erases at compile time.
-import type { MarketBand } from "@/lib/engine/market-pricing";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
@@ -655,6 +652,18 @@ const TECHNICIAN_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL1_CONSUMPT
 const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTION);
 
 /**
+ * The four per-good accessors `buildIndustryReadout` reads its callers' market/event state
+ * through — named rather than positional, so a permutation of three structurally identical
+ * `(goodId) => number` functions cannot compile clean and silently re-denominate the brake.
+ */
+export interface IndustryReadoutAccessors {
+  demandRateOf: (goodId: string) => number;
+  honestUseRateOf: (goodId: string) => number;
+  anchorMultOf: (goodId: string) => number;
+  logisticsFundingBoundOf?: (goodId: string) => boolean;
+}
+
+/**
  * Builds an industry readout for one system from its current industrial base and
  * market stock. Pure — no DB dependency. Reuses the existing helpers for all
  * derived quantities. (Space-partition headroom is assembled separately via
@@ -667,13 +676,14 @@ const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTIO
  *   inputGate < 1 means the good is throttled by at least one short input.
  *   throttledBy lists the inputs whose draw rations on the scarcity ramp.
  *
- * `marketStock` and `bandOf` are keyed by good KEY (world market rows use good
- * keys as goodId). `bandOf` returns each good's per-market band, or undefined for
- * a good with no market row. Input draws ration on the shared scarcity ramp below
+ * `marketStock` and the accessors are keyed by good KEY (world market rows use
+ * good keys as goodId). Input draws ration on the shared scarcity ramp below
  * each input's emergency stock (RATION_COVER × demandRate) — there is no reserve
  * floor, so a starved input draws toward empty rather than gating hard at a floor.
- * The seller-side factor reads the same production ceiling as the economy tick;
- * a good with no market band sells freely.
+ * The seller-side factor reads the same brake knee as the economy tick
+ * (`brakeKnee` at ECONOMY_SIM_PARAMS: `honestUseRateOf`/`anchorMultOf` feed the
+ * use term, `buildingProduction` the output term), so the panel and the
+ * simulation cannot disagree about which producers are idle.
  *
  * `yields` threads through to `buildingProduction` but is inert for this readout:
  * supplyChain covers only tier-1+ goods, whose production is yield-independent.
@@ -682,11 +692,10 @@ export function buildIndustryReadout(
   buildings: Record<string, number>,
   population: number,
   marketStock: Record<string, number>,
-  bandOf: (goodId: string) => MarketBand | undefined,
   yields: ResourceVector,
-  demandRateOf: (goodId: string) => number,
-  logisticsFundingBoundOf?: (goodId: string) => boolean,
+  accessors: IndustryReadoutAccessors,
 ): SystemIndustryReadout {
+  const { demandRateOf, honestUseRateOf, anchorMultOf, logisticsFundingBoundOf } = accessors;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
   const pop = Math.max(0, population);
@@ -699,13 +708,18 @@ export function buildIndustryReadout(
   // The caller provides the authoritative aggregate draw rate — the ration threshold is
   // demand-denominated, never recovered from the pricing band.
   const rationStockOf = (g: string): number => ECONOMY_CONSTANTS.RATION_COVER * demandRateOf(g);
-  // Isolated selling factor for a produced good ∈ [0,1]; a good with no market band sells freely (1).
-  // Shared by buildingUsed and the producer idleReason.
+  // Isolated selling factor for a produced good ∈ [0,1] — the tick's own brake knee at this
+  // system's use figure and capacity. Shared by buildingUsed and the producer idleReason.
   const sellingFactorOf = (g: string): number => {
-    const band = bandOf(g);
-    return band !== undefined
-      ? productionCeiling(stockOf(g), band.targetStock, ECONOMY_CONSTANTS.HOLD_COVER)
-      : 1;
+    const knee = brakeKnee(
+      {
+        useRate: honestUseRateOf(g),
+        capacityProduction: buildingProduction(buildings, g, state, yields),
+        anchorMult: anchorMultOf(g),
+      },
+      ECONOMY_SIM_PARAMS,
+    );
+    return productionCeiling(stockOf(g), knee);
   };
   const ctx: UtilizationContext = {
     buildings,

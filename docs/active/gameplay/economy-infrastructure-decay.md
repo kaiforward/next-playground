@@ -42,7 +42,7 @@ and needs **no treasury**.
 
 The capstone is a **rework of the Industry panel** so the three quantities the decay loop runs on —
 **available** (shared land headroom), **built** (`count`), and **in-use** (occupancy for housing,
-staffed-and-selling `count × min(labourFulfillment, outputUptake)` for production) — read clearly at a glance,
+staffed-and-selling `count × min(labourFulfillment, sellingFactor)` for production) — read clearly at a glance,
 per land pool and per building, health-coloured. The panel was deferred until the economy *moved*; this slice
 is what makes it move.
 
@@ -89,13 +89,15 @@ one pass, never per-row.
 | Building class | "Used" level | Decays toward | Maintained by |
 |---|---|---|---|
 | **Housing** | occupancy | `population / POP_CENTRE_DENSITY` (units the current population fills) | the people living in it — full housing never rots |
-| **Production / extraction** | staffed *and* selling | `count × min(labourFulfillment, outputUptake)` | active workers + a market for the output |
+| **Production / extraction** | staffed *and* selling | `count × min(labourFulfillment, sellingFactor)` | active workers + a market for the output |
 
 - **`labourFulfillment`** is the existing system-wide `min(1, pop / labourDemand)` ratio.
-- **`outputUptake`** is a new, cheap per-good signal: is this output finding buyers, or piling up? Measured
-  off market stock (chronically pinned near `storageCapacity` ⇒ overproduction ⇒ low uptake), the seller-side
-  mirror of the consume-side `satisfaction` signal the economy processor already computes. This is exactly the
-  overproduction case observed in play (systems making far more than sells) — the rule makes that excess shed.
+- **`sellingFactor`** (`signals.sellingFactorBySystem`) is the production brake's knee ceiling at
+  start-of-cycle stock: 1 while stock sits at or below the knee (cycles of the use figure or of the
+  system's own working inventory, whichever sizes the larger band), tapering linearly to 0 by the
+  ramp end. The seller-side mirror of the consume-side `satisfaction` signal the economy processor
+  already computes — this is exactly the overproduction case observed in play (systems making far
+  more than sells): a producer sitting deep in its own taper reads as not-selling here too.
 
 ### Two decay channels
 
@@ -222,7 +224,7 @@ health glyph per row, gold-when-rich yield, and per-input `needs` lines for prod
 the decay engine's exact triggers via `buildingHealth`/`industryHealth` (`lib/engine/industry.ts`): a row is
 **collapsing** under unrest teardown, **contracting** when a WHOLE level is idle (`floor(built − used) ≥ 1`,
 the marginal level the engine sheds), else **stable** — so the label can never contradict what actually
-decays. Fed by live `used` + `outputUptake`. Honours the Foundry theme and reuses `components/ui` primitives.
+decays. Fed by live `used` + `sellingFactor`. Honours the Foundry theme and reuses `components/ui` primitives.
 It landed **last**, so it renders the finished, moving substrate.
 
 ---
@@ -245,7 +247,7 @@ Phases 1–4 are the economy-engine PR(s); phase 5 is the UI PR. Split per the 2
 
 ## Scope boundaries
 
-**In:** downward-only `WorldBuilding.count` mutation; disuse + unrest decay channels; `outputUptake` signal;
+**In:** downward-only `WorldBuilding.count` mutation; disuse + unrest decay channels; `sellingFactor` signal;
 live `popCap` recompute; housing-overshoot population displacement (migration ⊕ death, naming the existing
 decline term as the non-conserved death sink); Industry panel rework.
 
@@ -262,7 +264,8 @@ decline term as the non-conserved death sink); Industry panel rework.
 
 - `idleBufferCycles` (how many sustained-idle runs before the marginal idle level sheds — the buffer's stickiness).
 - `θ_decay` (unrest-teardown onset — how failed a system must be before it sheds working levels).
-- The `outputUptake` curve (how "chronically unsold" maps to a decay-eligible idle fraction).
+- The `sellingFactor` taper (`BRAKE_USE_COVER`/`BRAKE_RAMP`/`BRAKE_OUTPUT_COVER` — how "chronically
+  unsold" maps to a decay-eligible idle fraction).
 - Housing-overshoot displacement rate and the unrest-weighted migration-vs-death split (low unrest → flee,
   high unrest → perish).
 - Symmetry check against the population rates (`growthRate`/`declineRate` = 0.015): decay should be slow

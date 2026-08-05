@@ -11,6 +11,7 @@ import type { EventTypeId } from "@/lib/constants/events";
 import type { GovernmentType } from "@/lib/types/game";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
+import type { DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
 import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 import type { DemandHuntingSummary } from "./market-analysis";
 
@@ -30,6 +31,13 @@ export interface HarnessConfig {
   tickCount: number;
   /** Optional per-run cycle-cadence override; absent ⇒ the live-loop constants. */
   cadence?: TickCadence;
+  /**
+   * Third-arm pin for the draw figure's brake ceiling (see `DrawBrakeCeiling`): `"anchor"` pins
+   * the matcher's urgency gate to the retired anchor-based ceiling while the tick's own brake
+   * stays live, so a stage-gate A/B can attribute the brake's direct effect and its
+   * logistics-urgency ripple separately. Absent ⇒ `"live"`, the game's only behaviour.
+   */
+  drawBrakeCeiling?: DrawBrakeCeiling;
   /**
    * A baseline arm's role partition (`marketRoles` off its results), keyed `systemId|goodId`.
    * Supplied, this run's cover and price reads are cohorted against THAT membership instead of
@@ -78,6 +86,18 @@ export interface CoverLevelEntry {
 
 /** Roles that hold stock — `inert` is excluded: a median cover over pricing-artifact markets means nothing. */
 export type StockedRole = Exclude<MarketRole, "inert">;
+
+/**
+ * Which knee term set each producing market's brake geometry — the evidence
+ * `BRAKE_OUTPUT_COVER` is tuned on. Counts, not fractions: the two columns sum to the good's
+ * producing-market count (the instrument's self-check), recorded at the knee, never inferred
+ * from post-taper behaviour.
+ */
+export interface KneeBindingEntry {
+  goodId: string;
+  use: number;
+  output: number;
+}
 
 /** One good's cover and price, split by the role each of its markets plays. */
 export interface RoleCoverEntry {
@@ -336,6 +356,8 @@ export interface HarnessResults {
   marketHealth: MarketHealthSummary;
   /** Per-good cover and price split by market role. */
   roleCoverLevels: RoleCoverEntry[];
+  /** Per good, which knee term bound each producing market at run end — the brake's geometry census. */
+  kneeBinding: KneeBindingEntry[];
   /**
    * The role this run classified each market into, keyed `systemId|goodId` — the partition a
    * later arm pins to via `HarnessConfig.pinnedRoles`. Always the LIVE classification, even on a
