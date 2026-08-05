@@ -90,6 +90,10 @@ stripped of the conditions it was taken under is what turns into a false premise
 - **Memory pruned** from 20 files to the ones that still change what gets done; shipped-work narrative
   deleted, recurring traps consolidated.
 
+- **`docs/active/engineering/feature-process.md`** — the durable home of the pipeline sequence, the
+  ranks of guarantee, mechanisms A/B and the per-task implementation gates; `AGENTS.md` links to it
+  instead of carrying the narrative. When this build plan is deleted, that doc is where the
+  survivors live.
 - **`docs/planned/` corrected.** Seven of fourteen docs described shipped code, in the tense of work
   still outstanding. Five fixed in place; two (`necessity-weighted-unrest.md`,
   `economy-rationing-amendment.md`) have shipped in full and are booked into PR6's doc fold.

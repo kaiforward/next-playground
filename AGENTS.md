@@ -12,6 +12,9 @@ Single-player grand-strategy game in a procedurally generated galaxy — colonis
 - `/build-plan <feature>` — implementation plan from a reviewed spec: files, task order and the interfaces between tasks — not the code
 - `/uber-review [PR#]` — multi-agent code review of a branch or PR
 
+**The end-to-end pipeline these skills compose — brainstorm → evidence → spec → spec review →
+build plan → implementation gates → code review → merge — is `docs/active/engineering/feature-process.md`.**
+
 Design-stage hazards (the six ways a design here has been wrong, as a worksheet) live in
 `.agents/skills/shared/design-hazards.md`. Fill it at design, check it at spec review.
 
@@ -24,6 +27,7 @@ Skills are authored in `.agents/skills/` (canonical). `.claude/skills/` holds di
 - `npx vitest run` — unit tests
 - `npm run simulate` — headless run of the real tick, reporting economy health at two horizons: 1000 ticks (startup/founding behaviour) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`.
 - `npm run impact -- <SYMBOL>` — every module that reads a constant, field or signal, which tick processors declare it, which ones write it without declaring it, and their position in the run order. Run it before leaning on any shared quantity.
+- `npm run mutation -- --mutate "<changed lib files>"` — scoped StrykerJS run; a surviving mutant is a code change no test notices. Part of the pre-review gates. **Always scoped, never bare.**
 
 ## Tech Stack
 
@@ -164,12 +168,9 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 - **A "ruled out" is a claim with the same evidence bar as a finding** — both horizons, and record which horizon and cohort it was measured at. Nobody re-tests a negative, so a wrong one steers every later investigation away from the cause.
 - **Read an aggregate cohorted before diagnosing it** (`npm run simulate` splits by market role and world cohort). A galaxy-wide median moves with cohort *mix*, not just with the thing it measures.
 - **Write the test that fails when the task's own premise breaks**, not one that confirms the happy path.
-- **The red-proof gate: a new or changed test is not done until it has been seen red.** Before
-  committing, break the premise it protects (revert the change, or mutate the seam it pins), run the
-  test, watch it fail, restore green. Say in the response that the gate ran and on what. A test never
-  seen red is presumed vacuous — the recurring review finding is tests whose fixtures coincide with
-  the old behaviour or that assert a function against itself; every one of those passes on first
-  write. If you can't make it fail, it isn't covering the thing.
+- **Red-proof + mutation gates before review** — every new/changed test seen red once (break the
+  premise, watch it fail, restore); a scoped `npm run mutation` sweep on the changed `lib/` files
+  with every survivor killed or justified. Procedure: `docs/active/engineering/feature-process.md`.
 - Calibrate to a coarse health bar only (no NaN/runaway/pinning; dispersion; liquidity) until all mechanisms ship — precision tuning is perishable.
 
 **Before building a mechanic**
