@@ -1,4 +1,4 @@
-import type { TickContext, TickProcessorResult } from "../types";
+import type { TickContext, TickProcessorResult, LogisticsBudgetLedger } from "../types";
 import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
@@ -106,15 +106,13 @@ export async function runDirectedLogisticsProcessor(
   }
 
   const workPerformedByFaction = new Map<string, number>();
+  const logisticsBudget = new Map<string, LogisticsBudgetLedger>();
   const allTransfers: PlannedTransfer[] = [];
   const fundingBoundMarketIds = new Set<string>();
   for (const [factionId, group] of byFaction) {
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
-    const match = matchFactionTransfers(
-      group.map((r) => toLogisticsState(r, catchUp, funded)),
-      params.routeCost,
-      params.reachableSystemIds,
-    );
+    const states = group.map((r) => toLogisticsState(r, catchUp, funded));
+    const match = matchFactionTransfers(states, params.routeCost, params.reachableSystemIds);
     allTransfers.push(...match.transfers);
     for (const bound of match.fundingBound) {
       const from = marketByKey.get(`${bound.fromSystemId}|${bound.goodId}`);
@@ -123,9 +121,18 @@ export async function runDirectedLogisticsProcessor(
       if (to) fundingBoundMarketIds.add(to.id);
     }
     if (factionId === null) continue;
+    // Spent is summed over per-donor draws, so a fan-out is billed once — it must stay equal
+    // to the treasury's work figure, never a per-flow-row recount.
     let work = 0;
     for (const t of match.transfers) work += t.cost;
     if (work > 0) workPerformedByFaction.set(factionId, work);
+    let total = 0;
+    for (const s of states) total += s.generation;
+    logisticsBudget.set(factionId, {
+      total,
+      spent: work,
+      fundingBoundCount: match.fundingBound.length,
+    });
   }
 
   // Apply: clamp both endpoints, accumulate absolute writes, record flow rows.
@@ -188,5 +195,5 @@ export async function runDirectedLogisticsProcessor(
   if (fundingUpdates.length > 0) await world.applyFundingBoundUpdates(fundingUpdates);
   if (flows.length > 0) await world.appendLogisticsFlows(flows);
 
-  return { workPerformedByFaction };
+  return { workPerformedByFaction, logisticsBudget };
 }

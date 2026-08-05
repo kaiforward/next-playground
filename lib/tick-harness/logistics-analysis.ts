@@ -27,7 +27,30 @@ import type { LogisticsActivitySummary } from "./types";
  */
 export const LOGISTICS_WARMUP_TICKS = 600;
 
-export function summarizeLogistics(flows: WorldFlowEvent[]): LogisticsActivitySummary {
+/** Haul-budget ledger totals, accumulated by the runner from `LOGISTICS_WARMUP_TICKS` onward —
+ *  before that, budget is granted every cycle while nothing can transfer (see the constant's
+ *  docstring), and the warm-up grants would only dilute the spend fraction's denominator.
+ *  Faction-owned groups only; independents haul but are not ledgered. */
+export interface LogisticsBudgetTotals {
+  /** Σ budget granted (post catch-up and funding). */
+  total: number;
+  /** Σ transfer cost actually paid. */
+  spent: number;
+  /** Deficits recorded funding-bound. */
+  fundingBoundEvents: number;
+}
+
+/** Funding-bound flag census over developed-system markets in the final world. */
+export interface FundingBoundFlagCensus {
+  flagged: number;
+  marketCount: number;
+}
+
+export function summarizeLogistics(
+  flows: WorldFlowEvent[],
+  budget: LogisticsBudgetTotals,
+  flags: FundingBoundFlagCensus,
+): LogisticsActivitySummary {
   const activeTicks = new Set<number>();
   const participants = new Set<string>();
   const byGood = new Map<string, { transferCount: number; quantity: number }>();
@@ -56,5 +79,15 @@ export function summarizeLogistics(flows: WorldFlowEvent[]): LogisticsActivitySu
     byGood: [...byGood.entries()]
       .map(([goodId, totals]) => ({ goodId, ...totals }))
       .sort((a, b) => b.quantity - a.quantity),
+    // Finite-and-positive, not just non-zero: a poisoned accumulator must also report 0, per
+    // the NaN contract above — for a merge-gate metric, "not measured" must never look "healthy".
+    budgetSpentFrac:
+      Number.isFinite(budget.total) && budget.total > 0 ? budget.spent / budget.total : 0,
+    fundingBoundEvents: budget.fundingBoundEvents,
+    fundingBoundFlagSetRate:
+      Number.isFinite(flags.marketCount) && flags.marketCount > 0
+        ? flags.flagged / flags.marketCount
+        : 0,
+    flowRowsPerCycle: activeTicks.size === 0 ? 0 : flows.length / activeTicks.size,
   };
 }

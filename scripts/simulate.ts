@@ -533,6 +533,10 @@ function formatTable(results: HarnessResults): string {
       ["Mean transfer size", lg.meanTransferSize.toFixed(1)],
       ["Systems participating", String(lg.participatingSystems)],
       ["Goods moved", String(lg.byGood.length)],
+      ["Budget spent frac", lg.budgetSpentFrac.toFixed(3)],
+      ["Funding-bound events", fmtNum(lg.fundingBoundEvents)],
+      ["Funding-bound set rate", lg.fundingBoundFlagSetRate.toFixed(3)],
+      ["Flow rows per cycle", lg.flowRowsPerCycle.toFixed(1)],
     ];
     lines.push(...renderTable(["Metric", "Value"], [24, 16], lRows.map(([l, v]) => [l, v])));
     if (lg.byGood.length > 0) {

@@ -106,3 +106,17 @@ describe("founderCoverAfter", () => {
     expect(founderCoverAfter(founder, rows, [])).toBeUndefined();
   });
 });
+
+describe("runTickHarness: logistics instruments", () => {
+  it("wires the budget ledger and flow counters end to end", async () => {
+    // A silent wiring break reads 0.000 on every new counter — exactly the healthy-looking
+    // value an ample budget produces — so the guard is a live run asserting non-zero. 800
+    // ticks: past LOGISTICS_WARMUP_TICKS (where ledger accumulation starts) with cycles to
+    // spare on a small world that transfers well before then.
+    const results = await runTickHarness({ systemCount: 20, seed: 7, tickCount: 800 });
+    const lg = results.logisticsActivity;
+    expect(lg.transferCount).toBeGreaterThan(0);
+    expect(lg.budgetSpentFrac).toBeGreaterThan(0);
+    expect(lg.flowRowsPerCycle).toBeGreaterThanOrEqual(1);
+  }, 30_000);
+});

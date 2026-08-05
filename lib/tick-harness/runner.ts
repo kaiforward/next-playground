@@ -18,7 +18,8 @@ import {
   flushActiveEvents,
   computeEventImpacts,
 } from "./event-analysis";
-import { summarizeLogistics } from "./logistics-analysis";
+import { summarizeLogistics, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
+import type { LogisticsBudgetTotals, FundingBoundFlagCensus } from "./logistics-analysis";
 import {
   summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summarizeFoundingStock, recordFoundingManifest,
@@ -127,6 +128,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // window every tick, so a run longer than that window can only be totalled by
   // taking each tick's transfers as they happen.
   const logisticsFlows: WorldFlowEvent[] = [];
+  // Haul-budget ledger — Σ granted / Σ spent / funding-bound events, accumulated per tick like
+  // the flow log (transient instrumentation), but only from LOGISTICS_WARMUP_TICKS onward:
+  // logistics is colonisation-gated, so earlier cycles grant budget nothing can spend and would
+  // dilute budgetSpentFrac's denominator (~46% of a 1000-tick run predates the first transfer).
+  const logisticsBudgetTotals: LogisticsBudgetTotals = { total: 0, spent: 0, fundingBoundEvents: 0 };
   // Whole-run directed-build commitments, one record per (tick, good) this cycle committed new
   // autonomic levels for. Transient instrumentation (`runWorldTick().instrumentation`) — never
   // persisted in `World` — so, like flowEvents, it must be captured as each tick happens.
@@ -168,6 +174,14 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
 
     for (const f of world.flowEvents) {
       if (f.tick === world.meta.currentTick) logisticsFlows.push(f);
+    }
+
+    if (result.instrumentation.logisticsBudget && world.meta.currentTick >= LOGISTICS_WARMUP_TICKS) {
+      for (const b of result.instrumentation.logisticsBudget.values()) {
+        logisticsBudgetTotals.total += b.total;
+        logisticsBudgetTotals.spent += b.spent;
+        logisticsBudgetTotals.fundingBoundEvents += b.fundingBoundCount;
+      }
     }
 
     if (result.instrumentation.buildCommitmentsByGood) {
@@ -281,6 +295,17 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const systemNames = new Map(world.systems.map((s) => [s.id, s.name]));
   const eventImpacts = computeEventImpacts(completedEvents, systemNames);
 
+  // Funding-bound flag census at run end, over developed-system markets only — undeveloped
+  // systems never enter the logistics assessment, so counting them would dilute the rate.
+  const developedIds = new Set(
+    finalTickSystems.filter((s) => s.control === "developed").map((s) => s.id),
+  );
+  const developedMarkets = currentMarkets.filter((m) => developedIds.has(m.systemId));
+  const fundingBoundFlags: FundingBoundFlagCensus = {
+    flagged: developedMarkets.filter((m) => m.logisticsFundingBound ?? false).length,
+    marketCount: developedMarkets.length,
+  };
+
   const migrationThroughput: MigrationThroughputSummary = {
     totalColonists: migrationColonistsTotal,
     totalDiffusion: migrationDiffusionTotal,
@@ -301,7 +326,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     demandHunting: summarizeDemandHunting(demandHunting, logisticsFlows),
     worldCohorts,
     eventImpacts,
-    logisticsActivity: summarizeLogistics(logisticsFlows),
+    logisticsActivity: summarizeLogistics(logisticsFlows, logisticsBudgetTotals, fundingBoundFlags),
     buildBurstSummary: summarizeBuildBursts(buildCommitments),
     regionOverview,
     label,

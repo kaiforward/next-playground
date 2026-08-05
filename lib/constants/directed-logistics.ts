@@ -5,8 +5,15 @@ import { scaleValue } from "@/lib/constants/economy-scale";
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 export const DIRECTED_LOGISTICS = {
-  /** Work-budget a system contributes per cycle = population × this. Free in v1 (no treasury). */
-  GENERATION_PER_POP: scaleValue(0.5),
+  /**
+   * Work-budget a system contributes per cycle = population × this. Deliberately ample: the budget
+   * is a capacity ceiling the matcher accounts against, and at this value it stops essentially no
+   * draw (aggregate spend sits under ~2% of it at equilibrium), so deficits persist only for
+   * physical reasons — thin or unreachable stock — never for money. Pricing the budget as a real
+   * economic constraint is a separate, open design question; until it is answered this stays high
+   * enough that funding-bound outcomes are rare, deliberate signals rather than an ambient brake.
+   */
+  GENERATION_PER_POP: scaleValue(5),
   /** A good is a surplus when stock ≥ targetStock × this (held above its cycles-of-supply price anchor). Margin > 1 leaves a deliberate residual (negative space). */
   SURPLUS_MARGIN: 1.4,
   /**
@@ -68,6 +75,17 @@ export const DIRECTED_LOGISTICS = {
    * against it. Nothing here moves it.
    */
   DONOR_RESERVE_COVER: 40,
+  /**
+   * A budget-stopped deficit is recorded as funding-bound only when the shortfall still standing
+   * after every affordable donor-draw exceeds this fraction of its original shortfall. The flag is
+   * a gameplay gate, not telemetry — it suppresses the build planner's capacity proposals and
+   * exempts producers from idle decay — so it must keep meaning "this market's shortfall persists
+   * because of money": with donors filling a deficit in turn, "the last donor attempted was
+   * unaffordable" would otherwise set it on a market that was in fact almost fully served,
+   * flipping both gameplay gates across a large market population at once. First-draft
+   * hypothesis, validated by simulator A/B only.
+   */
+  FUNDING_BOUND_RESIDUAL_FRACTION: 0.1,
   /** Max hops a logistics transfer may span (beyond this, route cost is treated as unreachable). */
   MAX_HOPS: 4,
   /** Per-unit route cost = quantity × (hops × HOP_WEIGHT + totalFuelCost × FUEL_WEIGHT). */

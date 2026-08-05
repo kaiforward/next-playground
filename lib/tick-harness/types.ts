@@ -209,6 +209,21 @@ export interface LogisticsActivitySummary {
   participatingSystems: number;
   /** Per-good totals, heaviest first. A good that never moved is absent. */
   byGood: LogisticsGoodActivity[];
+  /** Haul-budget spend fraction: Σ spent / Σ granted, accumulated from `LOGISTICS_WARMUP_TICKS`
+   *  onward (earlier cycles grant budget nothing can spend, which would dilute the denominator).
+   *  Near 1 means the money brake binds; the attribution run measured 6–8% single-donor — at the
+   *  pre-raise `GENERATION_PER_POP` (0.5), so reproducing that anchor needs the constant pinned
+   *  back too. */
+  budgetSpentFrac: number;
+  /** Deficits recorded funding-bound from `LOGISTICS_WARMUP_TICKS` onward (events, not markets —
+   *  a market recurring every cycle counts every time). */
+  fundingBoundEvents: number;
+  /** Fraction of developed-system markets carrying the funding-bound flag at run end —
+   *  the gameplay blast radius (planner suppression + idle-decay exemption). */
+  fundingBoundFlagSetRate: number;
+  /** transferCount / activeTicks — flow-log rows per resolving cycle, the row-volume canary
+   *  for the multi-donor fan-out (one row per donor-draw). 0 when nothing moved. */
+  flowRowsPerCycle: number;
 }
 
 // ── Construction burst pacing ───────────────────────────────────
