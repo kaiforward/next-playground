@@ -46,8 +46,8 @@ const rateFor = (goodId: string) =>
 // mOther (ore) @ 200 pop → demandRate = 0.4, target 16; stock 40 clears both thresholds as a donor
 // with no matching deficit, so it stays out of every assertion below.
 // tick=0 (cycle start boundary): cycleStartShard(1, 0, 24) → start=0, end=1 (all factions redistribute).
-// budget = 2 systems × 200 pop × GENERATION_PER_POP 0.5 = 200.
-// engine quantity=min(shortfall 38, drawable 47, affordable 200)=38. A logistics delivery is a level-fill
+// budget = 2 systems × 200 pop × GENERATION_PER_POP 5 = 2000.
+// engine quantity=min(shortfall 38, drawable 47, affordable 2000)=38. A logistics delivery is a level-fill
 // toward the target, so the body moves exactly that (no catch-up) → mB lands at 48 (=target).
 const FOOD_TARGET = 48;
 
@@ -116,7 +116,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
 
   it("reports the per-faction haul budget beside the work performed", async () => {
     // Same surplus/deficit pair as the happy path. Budget total = Σ pop × GENERATION_PER_POP
-    // × catchUp (1 at the reference interval) = 2 × 200 × 0.5 = 200; spent = the one transfer's
+    // × catchUp (1 at the reference interval) = 2 × 200 × 5 = 2000; spent = the one transfer's
     // cost (route cost 1 × quantity 38); nothing funding-bound.
     const systems = [
       {
@@ -135,7 +135,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
     );
     const budget = result.logisticsBudget?.get("f1");
-    expect(budget?.total).toBeCloseTo(200, 6);
+    expect(budget?.total).toBeCloseTo(2000, 6);
     expect(budget?.spent).toBeCloseTo(38, 6);
     expect(budget?.fundingBoundCount).toBe(0);
   });
@@ -167,7 +167,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     );
     expect(world.flows).toHaveLength(2);
     const budget = result.logisticsBudget?.get("f1");
-    expect(budget?.total).toBeCloseTo(300, 6);
+    expect(budget?.total).toBeCloseTo(3000, 6);
     expect(budget?.spent).toBeCloseTo(38, 6);
     expect(result.workPerformedByFaction?.get("f1")).toBeCloseTo(38, 6);
   });
@@ -291,7 +291,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
 
   it("haul budget scales with the interval; deliveries stay gap-fills", async () => {
     // Budget-bound: an ample donor and an expensive route, so the per-cycle work budget
-    // (Σ pop × generation = 200) binds well before the 38-unit gap does — moved = budget ÷ route
+    // (Σ pop × generation = 2000) binds well before the 38-unit gap does — moved = budget ÷ route
     // cost = 10. Halving the interval halves the budget, so it moves half as much per cycle (same
     // wall-clock haul capacity when run twice as often).
     //
@@ -299,7 +299,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // longer works and never described a real world: the deficit is measured against demand the
     // population actually has, so a market's target cannot be raised without raising the population
     // that funds the budget alongside it.
-    const EXPENSIVE = 20;
+    const EXPENSIVE = 200;
     const budgetBound = () => [
       { systemId: "A", factionId: "f1", population: FIXTURE_POP, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 100000, 0)] },
       { systemId: "B", factionId: "f1", population: FIXTURE_POP, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 0)] },

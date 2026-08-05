@@ -5,8 +5,15 @@ import { scaleValue } from "@/lib/constants/economy-scale";
  * See docs/active/gameplay/economy-autonomic-agency.md.
  */
 export const DIRECTED_LOGISTICS = {
-  /** Work-budget a system contributes per cycle = population × this. Free in v1 (no treasury). */
-  GENERATION_PER_POP: scaleValue(0.5),
+  /**
+   * Work-budget a system contributes per cycle = population × this. Deliberately ample: the budget
+   * is a capacity ceiling the matcher accounts against, and at this value it stops essentially no
+   * draw (aggregate spend sits under ~2% of it at equilibrium), so deficits persist only for
+   * physical reasons — thin or unreachable stock — never for money. Pricing the budget as a real
+   * economic constraint is a separate, open design question; until it is answered this stays high
+   * enough that funding-bound outcomes are rare, deliberate signals rather than an ambient brake.
+   */
+  GENERATION_PER_POP: scaleValue(5),
   /** A good is a surplus when stock ≥ targetStock × this (held above its cycles-of-supply price anchor). Margin > 1 leaves a deliberate residual (negative space). */
   SURPLUS_MARGIN: 1.4,
   /**
