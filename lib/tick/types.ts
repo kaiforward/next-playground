@@ -99,13 +99,20 @@ export interface TickProcessorResult {
     tonnage: number;
     goodIds: string[];
   }>;
+  /** Per-faction haul-budget ledger for this cycle's directed-logistics resolution: the budget
+   *  granted (post catch-up and funding), the transfer cost it actually paid, and how many
+   *  deficits were recorded funding-bound. Calibration instrumentation — surfaced via
+   *  `runWorldTick().instrumentation`, never broadcast or persisted. */
+  logisticsBudget?: Map<string, { total: number; spent: number; fundingBoundCount: number }>;
 }
 
 /** Transient, calibration-only signals a tick produced — never broadcast (`TickBroadcastRaw`)
  *  or folded into `World`. The calibration harness is the only reader. Derived from the processor
  *  result so the shared field can't drift. */
-export type TickInstrumentation =
-  Pick<TickProcessorResult, "buildCommitmentsByGood" | "migrationMoved" | "foundingManifests">;
+export type TickInstrumentation = Pick<
+  TickProcessorResult,
+  "buildCommitmentsByGood" | "migrationMoved" | "foundingManifests" | "logisticsBudget"
+>;
 
 /** The full payload one tick's run hands to the broadcast layer. */
 export interface TickBroadcastRaw {

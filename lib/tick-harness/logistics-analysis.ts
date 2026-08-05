@@ -27,7 +27,27 @@ import type { LogisticsActivitySummary } from "./types";
  */
 export const LOGISTICS_WARMUP_TICKS = 600;
 
-export function summarizeLogistics(flows: WorldFlowEvent[]): LogisticsActivitySummary {
+/** Whole-run haul-budget ledger totals, accumulated by the runner across every resolved cycle. */
+export interface LogisticsBudgetTotals {
+  /** Σ budget granted (post catch-up and funding) across all factions and cycles. */
+  total: number;
+  /** Σ transfer cost actually paid. */
+  spent: number;
+  /** Deficits recorded funding-bound, summed across the run. */
+  fundingBoundEvents: number;
+}
+
+/** Funding-bound flag census over developed-system markets in the final world. */
+export interface FundingBoundFlagCensus {
+  flagged: number;
+  marketCount: number;
+}
+
+export function summarizeLogistics(
+  flows: WorldFlowEvent[],
+  budget: LogisticsBudgetTotals,
+  flags: FundingBoundFlagCensus,
+): LogisticsActivitySummary {
   const activeTicks = new Set<number>();
   const participants = new Set<string>();
   const byGood = new Map<string, { transferCount: number; quantity: number }>();
@@ -56,5 +76,9 @@ export function summarizeLogistics(flows: WorldFlowEvent[]): LogisticsActivitySu
     byGood: [...byGood.entries()]
       .map(([goodId, totals]) => ({ goodId, ...totals }))
       .sort((a, b) => b.quantity - a.quantity),
+    budgetSpentFrac: budget.total === 0 ? 0 : budget.spent / budget.total,
+    fundingBoundEvents: budget.fundingBoundEvents,
+    fundingBoundFlagSetRate: flags.marketCount === 0 ? 0 : flags.flagged / flags.marketCount,
+    flowRowsPerCycle: activeTicks.size === 0 ? 0 : flows.length / activeTicks.size,
   };
 }

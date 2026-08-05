@@ -114,6 +114,87 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(result.workPerformedByFaction?.get("f1")).toBeCloseTo(world.flows[0].quantity, 6);
   });
 
+  it("reports the per-faction haul budget beside the work performed", async () => {
+    // Same surplus/deficit pair as the happy path. Budget total = Σ pop × GENERATION_PER_POP
+    // × catchUp (1 at the reference interval) = 2 × 200 × 0.5 = 200; spent = the one transfer's
+    // cost (route cost 1 × quantity 38); nothing funding-bound.
+    const systems = [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    const result = await runDirectedLogisticsProcessor(
+      world,
+      { tick: DUE_TICK },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
+    );
+    const budget = result.logisticsBudget?.get("f1");
+    expect(budget?.total).toBeCloseTo(200, 6);
+    expect(budget?.spent).toBeCloseTo(38, 6);
+    expect(budget?.fundingBoundCount).toBe(0);
+  });
+
+  it("counts a multi-donor fan-out's spend once, as the sum of its draws", async () => {
+    // One deficit (shortfall 38) filled from two donors of drawable 22 each (stock 70 − target 48),
+    // so the run emits two flow rows (draws of 22 and 16). Spent must equal the summed draw costs
+    // — 38 at route cost 1 — and agree with the treasury's work figure; a ledger that also counted
+    // per-row would read 76 and bill the faction twice for one haul.
+    const systems = [
+      {
+        systemId: "A1", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA1", "food", 70, 20)],
+      },
+      {
+        systemId: "A2", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA2", "food", 70, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    const result = await runDirectedLogisticsProcessor(
+      world,
+      { tick: DUE_TICK },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
+    );
+    expect(world.flows).toHaveLength(2);
+    const budget = result.logisticsBudget?.get("f1");
+    expect(budget?.total).toBeCloseTo(300, 6);
+    expect(budget?.spent).toBeCloseTo(38, 6);
+    expect(result.workPerformedByFaction?.get("f1")).toBeCloseTo(38, 6);
+  });
+
+  it("counts funding-bound deficits in the budget ledger", async () => {
+    // funded 0 → a zero budget the one reachable deficit cannot draw against: total 0, spent 0,
+    // and exactly one funding-bound record.
+    const systems = [
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    const result = await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL,
+      routeCost: () => 1,
+      reachableSystemIds: allSystemIdsReachable,
+      fundingByFaction: new Map([["f1", 0]]),
+    });
+    expect(result.logisticsBudget?.get("f1")).toEqual({ total: 0, spent: 0, fundingBoundCount: 1 });
+  });
+
   it("fills a deficit toward its anchor in one delivery — never overshoots into surplus", async () => {
     // Regression for the catch-up overshoot: a single delivery is a level-fill toward the
     // cycles-of-supply target (logisticsTarget), NOT a rate that scales with the shard interval.

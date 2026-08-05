@@ -862,6 +862,8 @@ export async function runWorldTick(
   let migrationMoved: TickInstrumentation["migrationMoved"];
   // Calibration-only: what each founding-stock manifest cost its founder. Same reason.
   let foundingManifests: TickInstrumentation["foundingManifests"];
+  // Calibration-only: directed-logistics' per-faction haul-budget ledger. Same reason.
+  let logisticsBudget: TickInstrumentation["logisticsBudget"];
   const migrationResolves = isCycleStart(tick, cadence.cycle);
   const logisticsResolves = isCycleStart(tick, cadence.logistics);
   const buildResolves = isCycleStart(tick, cadence.construction);
@@ -949,6 +951,7 @@ export async function runWorldTick(
       const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
       flowEvents = [...flowEvents, ...newLogisticsFlows];
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
+      logisticsBudget = dlResult.logisticsBudget;
       processorsRun.push("directed-logistics");
     }
 
@@ -1235,6 +1238,6 @@ export async function runWorldTick(
     world: nextWorld,
     events: tickEvents,
     markets,
-    instrumentation: { buildCommitmentsByGood, migrationMoved, foundingManifests },
+    instrumentation: { buildCommitmentsByGood, migrationMoved, foundingManifests, logisticsBudget },
   };
 }
