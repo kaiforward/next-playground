@@ -53,11 +53,16 @@ the price anchor any more.)
     Sits before Provision by explicit ordering decision (2026-08-03): Provision's struck-world
     resolution and band calibration would otherwise be tuned against a galaxy of cheap colonies
     this row then removes.
-    *Next step:* `/measure` the founding-economics baseline (founding rate and timing, per-colony
-    cost today, treasury headroom at founding scale) before any design; then spec + `/spec-review`
+    Baseline measured (2026-08-05): [colonisation-economics.md](./build-plans/colonisation-economics.md)
+    — no monetary cost exists anywhere on the founding path; founding-era treasuries hold ~9.4 cycles
+    of spend; founding is a startup burst (57.7% by t=1,000, done by t≈3,700, zero after); the
+    founder's goods cost is transient. **The leech-colony motivation is falsified** — chronic struck
+    share of in-run colonies is ~3%, not the assumed quarter.
+    *Next step:* Kai re-grounds the row's aim (the "fewer, deliberate colonies" justification lost
+    its measured basis; realism/pacing grounds still stand) — then spec + `/spec-review`
     (heavy cross-mechanic: treasury, build planner, colonisation-value, migration, events).
     *Don't:* precision-tune anything Provision will re-define (its own Don't), and don't design the
-    cost model from intuition — the treasury balances and founding cadence are measurable first.
+    cost model from intuition — the baseline numbers above are the design's scale anchors.
 
 ---
 
