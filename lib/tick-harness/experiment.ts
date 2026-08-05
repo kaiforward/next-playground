@@ -70,6 +70,9 @@ export interface ExperimentResult {
   eventImpacts: HarnessResults["eventImpacts"];
   treasurySummary: TreasurySummary;
   treasurySnapshots: TreasurySnapshot[];
+  /** Whole-run logistics activity incl. the budget/flow instruments (`budgetSpentFrac`,
+   *  funding-bound events/set-rate, `flowRowsPerCycle`) — stage-gate primary reads. */
+  logisticsActivity: HarnessResults["logisticsActivity"];
   /** Directed-build burst pacing — proves the construction rate cap bounds per-cycle proposal velocity. */
   buildBurstSummary: HarnessResults["buildBurstSummary"];
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
@@ -95,6 +98,7 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     eventImpacts: results.eventImpacts,
     treasurySummary: results.treasurySummary,
     treasurySnapshots: results.treasurySnapshots,
+    logisticsActivity: results.logisticsActivity,
     buildBurstSummary: results.buildBurstSummary,
     migrationThroughput: results.migrationThroughput,
     elapsedMs: results.elapsedMs,

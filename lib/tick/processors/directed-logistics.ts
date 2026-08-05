@@ -1,4 +1,4 @@
-import type { TickContext, TickProcessorResult } from "../types";
+import type { TickContext, TickProcessorResult, LogisticsBudgetLedger } from "../types";
 import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
@@ -106,7 +106,7 @@ export async function runDirectedLogisticsProcessor(
   }
 
   const workPerformedByFaction = new Map<string, number>();
-  const logisticsBudget = new Map<string, { total: number; spent: number; fundingBoundCount: number }>();
+  const logisticsBudget = new Map<string, LogisticsBudgetLedger>();
   const allTransfers: PlannedTransfer[] = [];
   const fundingBoundMarketIds = new Set<string>();
   for (const [factionId, group] of byFaction) {

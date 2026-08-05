@@ -27,13 +27,16 @@ import type { LogisticsActivitySummary } from "./types";
  */
 export const LOGISTICS_WARMUP_TICKS = 600;
 
-/** Whole-run haul-budget ledger totals, accumulated by the runner across every resolved cycle. */
+/** Haul-budget ledger totals, accumulated by the runner from `LOGISTICS_WARMUP_TICKS` onward —
+ *  before that, budget is granted every cycle while nothing can transfer (see the constant's
+ *  docstring), and the warm-up grants would only dilute the spend fraction's denominator.
+ *  Faction-owned groups only; independents haul but are not ledgered. */
 export interface LogisticsBudgetTotals {
-  /** Σ budget granted (post catch-up and funding) across all factions and cycles. */
+  /** Σ budget granted (post catch-up and funding). */
   total: number;
   /** Σ transfer cost actually paid. */
   spent: number;
-  /** Deficits recorded funding-bound, summed across the run. */
+  /** Deficits recorded funding-bound. */
   fundingBoundEvents: number;
 }
 
@@ -76,9 +79,15 @@ export function summarizeLogistics(
     byGood: [...byGood.entries()]
       .map(([goodId, totals]) => ({ goodId, ...totals }))
       .sort((a, b) => b.quantity - a.quantity),
-    budgetSpentFrac: budget.total === 0 ? 0 : budget.spent / budget.total,
+    // Finite-and-positive, not just non-zero: a poisoned accumulator must also report 0, per
+    // the NaN contract above — for a merge-gate metric, "not measured" must never look "healthy".
+    budgetSpentFrac:
+      Number.isFinite(budget.total) && budget.total > 0 ? budget.spent / budget.total : 0,
     fundingBoundEvents: budget.fundingBoundEvents,
-    fundingBoundFlagSetRate: flags.marketCount === 0 ? 0 : flags.flagged / flags.marketCount,
+    fundingBoundFlagSetRate:
+      Number.isFinite(flags.marketCount) && flags.marketCount > 0
+        ? flags.flagged / flags.marketCount
+        : 0,
     flowRowsPerCycle: activeTicks.size === 0 ? 0 : flows.length / activeTicks.size,
   };
 }

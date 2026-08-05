@@ -167,6 +167,10 @@ export interface PlannedTransfer {
   cost: number;
 }
 
+/** One deficit the budget left materially short. With donors filling a deficit in turn,
+ *  `fromSystemId` names the donor whose draw the budget stopped — NOT the only donor tried;
+ *  cheaper donors may already have shipped in full and are not named. The processor flags
+ *  both endpoints' markets `logisticsFundingBound` off this row. */
 export interface FundingBoundMatch {
   goodId: string;
   fromSystemId: string;
@@ -299,9 +303,13 @@ export function matchFactionTransfers(
         budget -= cost;
       }
       // A budget-stopped draw ends this deficit's fill: later donors are unaffordable too, and
-      // iterating them would only fan out epsilon-sized transfers from float residue.
+      // iterating them would only fan out epsilon-sized transfers from float residue. The budget
+      // is clamped to exactly 0 for the same reason — `(budget / perUnit) * perUnit` can round
+      // below `budget`, and the residue would leak one sub-epsilon transfer into every remaining
+      // deficit. Classification continues either way (see the docstring).
       if (affordable < wanted) {
         stoppedDonorId = source.systemId;
+        budget = 0;
         break;
       }
     }

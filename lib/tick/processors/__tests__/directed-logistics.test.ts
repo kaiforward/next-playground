@@ -170,6 +170,47 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(budget?.total).toBeCloseTo(3000, 6);
     expect(budget?.spent).toBeCloseTo(38, 6);
     expect(result.workPerformedByFaction?.get("f1")).toBeCloseTo(38, 6);
+    // Conservation across the fan-out: the second draw lands on a recipient the first draw
+    // already topped up, so the apply loop must carry mB's updated stock forward —
+    // 10 + 22 + 16 = 48 — with each donor down by exactly its own draw.
+    expect(world.flows[0]).toMatchObject({ fromSystemId: "A1", quantity: 22 });
+    expect(world.flows[1]).toMatchObject({ fromSystemId: "A2", quantity: 16 });
+    expect(world.stockUpdates.get("mB")).toBeCloseTo(FOOD_TARGET, 6);
+    expect(world.stockUpdates.get("mA1")).toBeCloseTo(48, 6);
+    expect(world.stockUpdates.get("mA2")).toBeCloseTo(54, 6);
+  });
+
+  it("hauls for independents but keeps them off the budget ledger", async () => {
+    // The ledger mirrors workPerformedByFaction: faction-owned groups only. Independents'
+    // transfers still move — their haul just isn't billed or counted into budgetSpentFrac.
+    const systems = [
+      {
+        systemId: "A", factionId: null, population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: null, population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+      {
+        systemId: "C", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mC", "food", 95, 20)],
+      },
+      {
+        systemId: "D", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mD", "food", 10, 20)],
+      },
+    ];
+    const world = new MemoryDirectedLogisticsWorld(systems);
+    const result = await runDirectedLogisticsProcessor(
+      world,
+      { tick: DUE_TICK },
+      { interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable },
+    );
+    expect(world.flows).toHaveLength(2);
+    expect(world.flows.some((f) => f.fromSystemId === "A" && f.toSystemId === "B")).toBe(true);
+    expect(result.logisticsBudget?.size).toBe(1);
+    expect(result.logisticsBudget?.get("f1")?.total).toBeCloseTo(2000, 6);
   });
 
   it("counts funding-bound deficits in the budget ledger", async () => {

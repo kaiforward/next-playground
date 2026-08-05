@@ -99,11 +99,21 @@ export interface TickProcessorResult {
     tonnage: number;
     goodIds: string[];
   }>;
-  /** Per-faction haul-budget ledger for this cycle's directed-logistics resolution: the budget
-   *  granted (post catch-up and funding), the transfer cost it actually paid, and how many
-   *  deficits were recorded funding-bound. Calibration instrumentation — surfaced via
+  /** Per-faction haul-budget ledger for this cycle's directed-logistics resolution.
+   *  Faction-owned systems only — the independent (null-faction) group hauls but is not
+   *  ledgered, matching `workPerformedByFaction`. Calibration instrumentation — surfaced via
    *  `runWorldTick().instrumentation`, never broadcast or persisted. */
-  logisticsBudget?: Map<string, { total: number; spent: number; fundingBoundCount: number }>;
+  logisticsBudget?: Map<string, LogisticsBudgetLedger>;
+}
+
+/** One faction's haul-budget ledger for a single directed-logistics resolution: the budget
+ *  granted (post catch-up and funding), the transfer cost it actually paid, and how many
+ *  deficits were recorded funding-bound. Shared by the processor that builds it and the
+ *  result field that carries it, so the two cannot drift. */
+export interface LogisticsBudgetLedger {
+  total: number;
+  spent: number;
+  fundingBoundCount: number;
 }
 
 /** Transient, calibration-only signals a tick produced — never broadcast (`TickBroadcastRaw`)

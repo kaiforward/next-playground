@@ -6,6 +6,7 @@ import {
   surplusDrawable,
   type SystemLogisticsState,
   type RouteCost,
+  type ReachableSystemIds,
 } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { ECONOMY_CONSTANTS, TARGET_COVER } from "@/lib/constants/economy";
@@ -381,6 +382,24 @@ describe("matchFactionTransfers", () => {
     ]);
   });
 
+  it("names the donor the budget stopped, not the cheaper donors that already served", () => {
+    // D1's whole drawable of 30 ships affordably (budget 60, cost 30); the budget then stops D2
+    // at 30 of the wanted 70, leaving a 40% residual. The row must carry D2 — the stopped donor —
+    // because the processor sets the funding-bound flag on the named donor's market (idle-decay
+    // exemption + planner suppression), and D1's market earned no such flag.
+    const d1 = sys("D1", 60, { goodId: "food", stock: 40, logisticsTarget: 10, demand: 5 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 80, logisticsTarget: 10, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 100, demand: 5 });
+
+    const result = matchFactionTransfers([d1, d2, deficit], oneHop);
+    expect(result.transfers).toHaveLength(2);
+    expect(result.transfers[0]).toMatchObject({ fromSystemId: "D1", quantity: 30 });
+    expect(result.transfers[1]).toMatchObject({ fromSystemId: "D2", quantity: 30 });
+    expect(result.fundingBound).toEqual([
+      { goodId: "food", fromSystemId: "D2", toSystemId: "B" },
+    ]);
+  });
+
   it("does not mark an ample-budget or drawable-bound transfer", () => {
     const donor = sys("A", 100, { goodId: "food", stock: 14, logisticsTarget: 10, demand: 5, production: 0 });
     const receiver = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
@@ -457,6 +476,22 @@ describe("matchFactionTransfers", () => {
     expect(transfers[0]).toMatchObject({ fromSystemId: "D1", toSystemId: "B", quantity: 14 });
     expect(transfers[1]).toMatchObject({ fromSystemId: "D2", toSystemId: "B", quantity: 6 });
     expect(transfers.some((t) => t.toSystemId === "C")).toBe(false);
+  });
+
+  it("breaks route-cost ties by stable system order, not enumeration order", () => {
+    // In production `reachableSystemIds` enumerates the hop-BFS neighbourhood — NOT system
+    // order — and a whole hop ring ties exactly on route cost, so the sort's order tie-break is
+    // the only thing deciding which ring member ships first. Enumerate donors out of order to
+    // prove the tie-break, not the enumeration, picks the winner.
+    const d1 = sys("D1", 1000, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
+    const d2 = sys("D2", 0, { goodId: "food", stock: 24, logisticsTarget: 10, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 30, demand: 5 });
+    const enumeratesD2First: ReachableSystemIds = () => ["D2", "D1"];
+
+    const { transfers } = matchFactionTransfers([d1, d2, deficit], oneHop, enumeratesD2First);
+    expect(transfers).toHaveLength(2);
+    expect(transfers[0]).toMatchObject({ fromSystemId: "D1", quantity: 14 });
+    expect(transfers[1]).toMatchObject({ fromSystemId: "D2", quantity: 14 });
   });
 
   it("ranks the import queue by draw urgency, not by standing use", () => {
