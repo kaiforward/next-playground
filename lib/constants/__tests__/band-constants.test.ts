@@ -65,9 +65,10 @@ describe("band constant dependencies", () => {
     // the brake ceiling (production halted) and the donation line (giving refused) can only drain
     // back down — a world that produces less than it uses should not dump stock it cannot replace.
     // Flip the two lines and every self-sufficient world becomes a continuous exporter instead.
-    // Compared in the same units (cycles of demand, at markets where the anchor and donor
-    // denominators coincide): moving either constant across the other should land here.
-    expect(ECONOMY_CONSTANTS.HOLD_COVER * TARGET_COVER)
+    // Both sides are now cycles of the same use figure (BRAKE_RAMP × BRAKE_USE_COVER = 52 vs
+    // SURPLUS_MARGIN × DONOR_RESERVE_COVER = 56, on the knee's use term): moving either constant
+    // across the other should land here.
+    expect(ECONOMY_CONSTANTS.BRAKE_RAMP * ECONOMY_CONSTANTS.BRAKE_USE_COVER)
       .toBeLessThanOrEqual(DIRECTED_LOGISTICS.SURPLUS_MARGIN * DIRECTED_LOGISTICS.DONOR_RESERVE_COVER);
   });
   it("holds the founding endowment at world-gen's reserve share of a full anchor cover", () => {
@@ -78,9 +79,11 @@ describe("band constant dependencies", () => {
     // other is a deliberate act that should land here.
     expect(COLONISATION.FOUNDING_STOCK_COVER).toBe(INITIAL_RESERVE_ANCHOR_FRAC * TARGET_COVER);
   });
-  it("keeps rationing close to empty and the hold ceiling above the anchor", () => {
+  it("keeps rationing close to empty and the brake's taper past its knee", () => {
     expect(ECONOMY_CONSTANTS.RATION_COVER).toBeLessThan(TARGET_COVER);
-    expect(ECONOMY_CONSTANTS.HOLD_COVER).toBeGreaterThan(1);
+    // A ramp at or below 1 would stop production AT the knee (or before it) — the
+    // deceleration zone that absorbs shocks would not exist.
+    expect(ECONOMY_CONSTANTS.BRAKE_RAMP).toBeGreaterThan(1);
   });
   it("keeps the shortage line a proper interior satisfaction level", () => {
     expect(SHORTAGE_SATISFACTION).toBeGreaterThan(0);

@@ -7,22 +7,33 @@ import {
 } from "@/lib/engine/supply-chain";
 import type { MarketTickEntry, EconomySimParams } from "@/lib/engine/tick";
 
-const PARAMS: EconomySimParams = { holdCover: 1.3, rationCover: 2 };
+const PARAMS: EconomySimParams = { brakeUseCover: 40, brakeRamp: 1.3, brakeOutputCover: 8, rationCover: 2 };
 
-// Convenience: build a full MarketTickEntry with per-entry band defaults.
-// minStock is left on the entry (0.05×T here) but the engine no longer floors on
-// it — it remains part of the market's price geometry.
+// Convenience: build a full MarketTickEntry whose brake geometry matches the retired
+// anchor fixtures: honestUseRate 2.5 puts the knee at 40 × 2.5 = 100 with the taper
+// ending at 130. The output term is zeroed and storage is ample so the use term alone
+// sets the knee — output/storage geometry is covered in tick.test.ts.
 function entry(
   goodId: string,
   stock: number,
   prod?: number,
   cons?: number,
-  minStock = 5,
   maxStock = 200,
-  targetStock = 100,
+  honestUseRate = 2.5,
   demandRate = 1,
 ): MarketTickEntry {
-  return { goodId, stock, minStock, targetStock, demandRate, maxStock, productionRate: prod, consumptionRate: cons };
+  return {
+    goodId,
+    stock,
+    honestUseRate,
+    capacityProduction: 0,
+    anchorMult: 1,
+    storageCapacity: 10_000,
+    demandRate,
+    maxStock,
+    productionRate: prod,
+    consumptionRate: cons,
+  };
 }
 
 describe("inputGate", () => {
@@ -167,43 +178,14 @@ describe("simulateSystemEconomyTick", () => {
 
   it("clamps to the PER-ENTRY maxStock, not a global band", () => {
     // ore has a tight ceiling (50); stock seeded above its own ceiling must clamp to 50.
-    const oreEntry: MarketTickEntry = {
-      goodId: "ore",
-      stock: 60, // above this entry's maxStock (50)
-      minStock: 10,
-      targetStock: 30,
-      demandRate: 1,
-      maxStock: 50,
-      productionRate: 0,
-      consumptionRate: 0,
-    };
-    const out = simulateSystemEconomyTick([oreEntry], PARAMS);
+    const out = simulateSystemEconomyTick([entry("ore", 60, 0, 0, 50)], PARAMS);
     expect(out[0].stock).toBe(50); // clamped down to the per-entry ceiling
   });
 
-  it("input draw ignores the INPUT good's old minStock — drains on the comfort ramp", () => {
-    // ore has minStock=20; the engine no longer treats it as a draw floor.
-    // ore stock 25, comfort 0.75×100 = 75 ⇒ ramp √(25/75) ≈ 0.577; metals wants 10 ore.
-    // The draw pulls ore below its old floor of 20 — never to it.
-    const oreEntry: MarketTickEntry = {
-      goodId: "ore",
-      stock: 25,
-      minStock: 20,
-      targetStock: 100,
-      demandRate: 1,
-      maxStock: 200,
-      productionRate: 0,
-    };
-    const metalsEntry: MarketTickEntry = {
-      goodId: "metals",
-      stock: 50,
-      minStock: 5,
-      targetStock: 100,
-      demandRate: 1,
-      maxStock: 200,
-      productionRate: 10,
-    };
-    const out = simulateSystemEconomyTick([oreEntry, metalsEntry], PARAMS);
+  it("input draw drains an input on the comfort ramp toward empty — no reserve floor", () => {
+    // ore stock 25 sits above its ration threshold (2 × demandRate 1), so the ramp does not
+    // bind; metals wants 10 ore and the draw pulls ore to 15 — past any old floor, never to it.
+    const out = simulateSystemEconomyTick([entry("ore", 25, 0), entry("metals", 50, 10)], PARAMS);
     const oreOut = out.find((e) => e.goodId === "ore")!;
     expect(oreOut.stock).toBeLessThan(20); // below the old per-input floor
     expect(oreOut.stock).toBeGreaterThanOrEqual(0);
@@ -211,13 +193,37 @@ describe("simulateSystemEconomyTick", () => {
 });
 
 describe("simulateSystemEconomyTick — operating ceiling", () => {
-  it("idles production at the operating ceiling in the coupled tick", () => {
-    // tier-0 good (no recipe) → input gate 1. holdCover 1.3 × targetStock 100 = 130.
-    const out = simulateSystemEconomyTick(
-      [{ goodId: "ore", stock: 130, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 10 }],
+  it("idles production at the brake's ramp end in the coupled tick", () => {
+    // tier-0 good (no recipe) → input gate 1. Knee 100 (use term), taper ends at 130.
+    const out = simulateSystemEconomyTick([entry("ore", 130, 10)], PARAMS);
+    expect(out[0].stock).toBeCloseTo(130, 5); // throttled to ~0 at the ramp end
+  });
+});
+
+describe("simulateSystemEconomyTick — event multipliers + immutability", () => {
+  // The flat tick carried these behaviours' tests; the coupled tick is the only engine
+  // left applying productionMult/consumptionMult, so the coverage lives here now.
+  it("applies event production multipliers", () => {
+    const base = simulateSystemEconomyTick([entry("ore", 50, 10)], PARAMS);
+    const boosted = simulateSystemEconomyTick([{ ...entry("ore", 50, 10), productionMult: 2 }], PARAMS);
+    expect(base[0].stock).toBeCloseTo(60, 6);
+    expect(boosted[0].stock - 50).toBeCloseTo(2 * (base[0].stock - 50), 6);
+  });
+
+  it("applies event consumption multipliers", () => {
+    const base = simulateSystemEconomyTick([entry("water", 100, undefined, 8)], PARAMS);
+    const boosted = simulateSystemEconomyTick(
+      [{ ...entry("water", 100, undefined, 8), consumptionMult: 2 }],
       PARAMS,
     );
-    expect(out[0].stock).toBeCloseTo(130, 5); // throttled to ~0 at the operating ceiling
+    expect(100 - boosted[0].stock).toBeCloseTo(2 * (100 - base[0].stock), 6);
+  });
+
+  it("does not mutate the input entries", () => {
+    const input = [entry("ore", 50, 10)];
+    const snapshot = input[0].stock;
+    simulateSystemEconomyTick(input, PARAMS);
+    expect(input[0].stock).toBe(snapshot);
   });
 });
 
@@ -254,7 +260,7 @@ describe("simulateSystemEconomyTick — delivered flow", () => {
 
   it("reports rationed delivered below the threshold and 0 at empty", () => {
     // demandRate 8 → ration threshold 16; stock 4 gives factor 0.5 and delivers 4.
-    const below = simulateSystemEconomyTick([entry("water", 4, undefined, 8, 5, 200, 100, 8)], PARAMS);
+    const below = simulateSystemEconomyTick([entry("water", 4, undefined, 8, 200, 2.5, 8)], PARAMS);
     expect(below.find((e) => e.goodId === "water")!.delivered).toBeCloseTo(4, 6);
     // at empty: nothing to deliver.
     const empty = simulateSystemEconomyTick([entry("water", 0, undefined, 8)], PARAMS);
@@ -282,10 +288,10 @@ describe("simulateCoupledEconomyTick", () => {
   it("isolates systems — system A's ore does not feed system B's metals", () => {
     // A: ore-rich + metals. B: ore-starved + metals. Same flat array.
     const entries: MarketTickEntry[] = [
-      { goodId: "ore", stock: 150, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 0 },   // A
-      { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 20 }, // A
-      { goodId: "ore", stock: 6, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 0 },      // B
-      { goodId: "metals", stock: 50, minStock: 5, targetStock: 100, demandRate: 1, maxStock: 200, productionRate: 20 }, // B
+      entry("ore", 150, 0), // A
+      entry("metals", 50, 20), // A
+      entry("ore", 6, 0), // B
+      entry("metals", 50, 20), // B
     ];
     const systemIds = ["A", "A", "B", "B"];
     const out = simulateCoupledEconomyTick(entries, systemIds, PARAMS);

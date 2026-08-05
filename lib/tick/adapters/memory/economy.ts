@@ -7,6 +7,8 @@ import type { ModifierRow } from "@/lib/engine/events";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { computeSystemLabourSnapshot, buildingProduction } from "@/lib/engine/industry";
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
+import { useRatesByGood } from "@/lib/engine/honest-demand";
+import type { UseRate } from "@/lib/engine/honest-demand";
 import { economyShardOrder } from "@/lib/engine/shard-order";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { TickSystem } from "@/lib/tick/rows";
@@ -55,6 +57,27 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     const wanted = new Set(systemIds);
     const labourBySystem = new Map<string, SystemLabourSnapshot>();
     const producedGoodsBySystem = new Map<string, Set<string>>();
+    // Lazy per-system recompute for rows written before the use figure existed — the
+    // absent-field fallback is a live recompute, never 0 (a 0 knee would weld the brake
+    // shut on the exact markets the fallback exists to keep honest). Cold path: every
+    // row the population processor or the market seeder has touched carries the field.
+    const recomputedUseBySystem = new Map<string, Map<string, UseRate>>();
+    const recomputedUseRate = (sys: TickSystem, goodId: string): number => {
+      let bySystem = recomputedUseBySystem.get(sys.id);
+      if (bySystem === undefined) {
+        const suppressRow = this.markets.find(
+          (m) => m.systemId === sys.id && typeof m.productionSuppressRate === "number",
+        );
+        bySystem = useRatesByGood({
+          buildings: sys.buildings,
+          population: sys.population,
+          yields: sys.yields,
+          productionSuppress: suppressRow?.productionSuppressRate ?? 1,
+        });
+        recomputedUseBySystem.set(sys.id, bySystem);
+      }
+      return bySystem.get(goodId)?.total ?? 0;
+    };
     const views: MarketView[] = [];
     for (const m of this.markets) {
       if (!wanted.has(m.systemId)) continue;
@@ -89,6 +112,10 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         baseProductionRate: producedGoods.has(m.goodId) ? production : undefined,
         baseConsumptionRate: consumption > 0 ? consumption : undefined,
         demandRate: m.demandRate,
+        honestUseRate:
+          typeof m.honestUseRate === "number" && Number.isFinite(m.honestUseRate)
+            ? m.honestUseRate
+            : recomputedUseRate(sys, m.goodId),
         storageCapacity: m.storageCapacity,
         squeezeCycles,
       });

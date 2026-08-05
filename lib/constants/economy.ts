@@ -11,29 +11,46 @@
  * Per-good imbalances are tuned via each good's production coeff / per-capita need
  * (see physical-economy.ts); this stays the whole-roster knob.
  *
- * A PRICING constant, plus one deliberate physical rider: `productionCeiling`'s
- * throttle knee runs off the anchor this defines (`HOLD_COVER × targetStock`).
- * Warehouse/logistics policy is denominated in cycles of real demand by its own
- * constants (`EXPORT_RESERVE_COVER`, `WAREHOUSE_COVER`, `DONOR_RESERVE_COVER`,
- * `FOUNDING_STOCK_COVER`) — held equal to or authored against this value where
- * noted in their docstrings, never derived from it.
+ * A PRICING constant, with no physical rider: the production brake is
+ * denominated in the use figure and physical storage (`BRAKE_USE_COVER` /
+ * `BRAKE_RAMP` / `BRAKE_OUTPUT_COVER` below), and warehouse/logistics policy in
+ * cycles of real demand by its own constants (`EXPORT_RESERVE_COVER`,
+ * `WAREHOUSE_COVER`, `DONOR_RESERVE_COVER`, `FOUNDING_STOCK_COVER`) — held
+ * equal to or authored against this value where noted in their docstrings,
+ * never derived from it.
  */
 export const TARGET_COVER = 40;
+
+import type { EconomySimParams } from "@/lib/engine/tick";
 
 /** Economy simulation constants — used by the economy tick. */
 export const ECONOMY_CONSTANTS = {
   /**
-   * Operating-ceiling cover: a producer holds up to HOLD_COVER × the cycles-of-supply
-   * anchor (targetStock) before idling spare capacity. The production ceiling factor
-   * runs at full rate to the anchor, then ramps linearly to 0 over
-   * [targetStock, HOLD_COVER × targetStock] instead of at the storage ceiling, so
-   * equilibrium stock rests just above the anchor (price near base) rather than at
-   * maxStock (price floored). Calibrated against the simulator's coarse health
-   * bar: 1.3 lifts the galaxy-wide price median to ~1.08x base (from a floored ~0.63x),
-   * keeps an up-the-chain spread (advanced goods dear, raws near base), no ceiling
-   * pinning, with population growth and unrest sane. See experiments/examples/equilibrium-calibration.yaml.
+   * Cycles of the USE figure (`honestUseRate` — what this system's population
+   * and industry draw when running) the brake knee's warehousing term covers:
+   * `knee ≥ BRAKE_USE_COVER × honestUseRate × anchorMult`. With BRAKE_RAMP it
+   * preserves the retired anchor brake's geometry exactly on markets where the
+   * use figure equals the old floored `demandRate` — the deliberate no-op
+   * anchor for the brake's move off the price curve.
    */
-  HOLD_COVER: 1.3,
+  BRAKE_USE_COVER: 40,
+  /**
+   * Taper width: production runs at full rate to the knee, then ramps linearly
+   * to 0 at BRAKE_RAMP × knee — capped by physical built storage
+   * (`facilityStorageForGood`), never by any price-anchor quantity. The
+   * deceleration zone that absorbs shocks; a self-supplier with margin
+   * capacity rests just above its knee.
+   */
+  BRAKE_RAMP: 1.3,
+  /**
+   * Cycles of reference-cycle capacity the knee's working-inventory term
+   * covers: `knee ≥ BRAKE_OUTPUT_COVER × capacityProduction`. The answer to
+   * the pure-exporter trap — a producer with negligible local use keeps a
+   * working yard sized to its own output instead of a near-zero knee. A
+   * FIRST-CUT HYPOTHESIS: tuned only by the stage-3 A/B (the per-good
+   * knee-binding-term table is the evidence it is tuned on).
+   */
+  BRAKE_OUTPUT_COVER: 8,
   /**
    * Emergency stock cover in demand cycles. Civilian delivery and industrial
    * input draws remain full while stock covers at least this many cycles of
@@ -49,6 +66,19 @@ export const ECONOMY_CONSTANTS = {
    */
   RATION_COVER: 2,
 } as const;
+
+/**
+ * ECONOMY_CONSTANTS in the engine's param shape — the one definition every live
+ * brake call site (the tick, the decay/selling signal, the Industry readout,
+ * the draw figure's brake pass) passes to `brakeKnee`, so they cannot disagree
+ * about where a producer idles.
+ */
+export const ECONOMY_SIM_PARAMS: EconomySimParams = {
+  brakeUseCover: ECONOMY_CONSTANTS.BRAKE_USE_COVER,
+  brakeRamp: ECONOMY_CONSTANTS.BRAKE_RAMP,
+  brakeOutputCover: ECONOMY_CONSTANTS.BRAKE_OUTPUT_COVER,
+  rationCover: ECONOMY_CONSTANTS.RATION_COVER,
+};
 
 /**
  * Civilian satisfaction (delivered/demanded) below which a demanded good counts as a Shortage rather

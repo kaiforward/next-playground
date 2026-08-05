@@ -1,29 +1,42 @@
 /**
  * Economy simulation tick engine — single-stock model.
  *
- * Each market holds one `stock` value. Producers add stock at the full rate at and
- * below the anchor (targetStock), then decelerate linearly to zero at the operating
- * ceiling (holdCover × targetStock). Consumers deliver in full at and above the
- * emergency ration threshold (rationCover × demandRate), then ration below
- * it. Stock is clamped to [0, maxStock]. There is no mean-reversion and no `demand`
- * axis — equilibrium emerges spatially via the trade-flow processor.
+ * Each market holds one `stock` value. Producers add stock at the full rate up to
+ * the brake knee — the larger of "cycles of what this system uses" (the use
+ * figure) and "cycles of what it makes" (working inventory) — then decelerate
+ * linearly to zero at the ramp end, which physical built storage caps. Consumers
+ * deliver in full at and above the emergency ration threshold
+ * (rationCover × demandRate), then ration below it. Stock is clamped to
+ * [0, maxStock]. There is no mean-reversion and no `demand` axis — equilibrium
+ * emerges spatially via directed logistics.
  * See docs/active/gameplay/economy.md (Per-Tick Simulation).
+ *
+ * No price-anchor quantity reaches the brake: the knee is denominated in the
+ * use figure and the system's own output, and the taper cap is physical
+ * storage — never `targetStock`, never `maxStock`, never `MIN_DEMAND`.
  *
  * All functions are pure — no DB or constant imports.
  */
 
-import { clamp } from "@/lib/utils/math";
-
 export interface MarketTickEntry {
   goodId: string;
   stock: number;
-  /** Price-saturation point (price hits its ceiling here). Not a draw floor. */
-  minStock: number;
   /**
-   * Cycles-of-supply anchor (price === basePrice). The produce throttle saturates at
-   * holdCover × targetStock; current access is independently demand-rate based.
+   * THE USE FIGURE — what this system's population and industry draw when
+   * running (staffing- and strike-gated, civilian at full rate). The brake
+   * knee's warehousing denominator. Never the draw figure, never `demandRate`.
    */
-  targetStock: number;
+  honestUseRate: number;
+  /**
+   * Reference-cycle production rate: un-catch-up-scaled, un-strike-suppressed,
+   * un-event-multiplied. The brake knee's working-inventory denominator —
+   * `productionRate` below is none of those things and must not be used here.
+   */
+  capacityProduction: number;
+  /** Pricing-anchor multiplier from events (1 = none). Rides the knee's use term only. */
+  anchorMult: number;
+  /** Physical built storage (`facilityStorageForGood`) — the brake taper's cap. Never `maxStock`. */
+  storageCapacity: number;
   /**
    * Total local draw-rate denominator used to express emergency stock in
    * demand cycles. Independent of pricing anchor shifts.
@@ -43,11 +56,15 @@ export interface MarketTickEntry {
 
 export interface EconomySimParams {
   /**
-   * Operating-ceiling cover multiple on targetStock: the production ceiling
-   * ramps from full rate at the anchor to 0 at holdCover × targetStock.
-   * Passed in (not imported) so this module stays constant-free.
+   * Cycles of the use figure the knee's warehousing term covers
+   * (BRAKE_USE_COVER). Passed in (not imported) so this module stays
+   * constant-free.
    */
-  holdCover: number;
+  brakeUseCover: number;
+  /** Taper width: the ramp ends at brakeRamp × knee, capped at physical storage (BRAKE_RAMP). */
+  brakeRamp: number;
+  /** Cycles of reference-cycle capacity the working-inventory term covers (BRAKE_OUTPUT_COVER). */
+  brakeOutputCover: number;
   /** Emergency-access cover in demand cycles. */
   rationCover: number;
 }
@@ -67,53 +84,72 @@ export function consumptionFactor(stock: number, rationStock: number): number {
   return Math.sqrt(Math.max(0, stock) / rationStock);
 }
 
-/**
- * Production ceiling factor ∈ [0,1] with a knee at the anchor. Full rate (1)
- * while stock ≤ targetStock; ramps linearly to 0 across
- * [targetStock, holdCover × targetStock] — the deceleration zone that absorbs
- * shocks. A self-supplier with margin capacity rests just above the anchor, so
- * a healthy price sits near base.
- */
-export function productionCeiling(stock: number, targetStock: number, holdCover: number): number {
-  if (targetStock <= 0) return 0;
-  const ceiling = targetStock * holdCover;
-  if (stock <= targetStock) return 1;
-  if (stock >= ceiling) return 0;
-  return (ceiling - stock) / (ceiling - targetStock);
+/** Which term set a market's brake geometry — the stage-gate evidence for storage-constant sizing. */
+export type KneeBindingTerm = "use" | "output" | "storage";
+
+export interface BrakeKneeInput {
+  /** THE USE FIGURE — never the draw figure, never a price-anchor quantity. */
+  useRate: number;
+  /** Reference-cycle rate: un-catch-up-scaled, un-strike-suppressed, un-event-multiplied. */
+  capacityProduction: number;
+  /** Event anchor multiplier (1 = none). Rides the use term only. */
+  anchorMult: number;
+  /** `facilityStorageForGood` — physical built storage. Never `maxStock`. */
+  storageCapacity: number;
+}
+
+export interface BrakeKnee {
+  /** Stock level where full-rate production ends (subject to the storage cap). */
+  knee: number;
+  /** Stock level where production reaches 0 — min(brakeRamp × knee, physical storage). */
+  rampEnd: number;
+  /**
+   * Which term bound the geometry: "storage" when physical storage clips the
+   * ramp below brakeRamp × knee, else whichever of the use/output terms set the
+   * knee. Recorded at the knee, not observed after the taper.
+   */
+  bindingTerm: KneeBindingTerm;
 }
 
 /**
- * Simulate one economy tick across all market entries. For each entry: producers
- * add stock at full rate to the anchor and decelerate linearly to zero at the
- * operating ceiling; consumers deliver in full above the ration threshold and ration
- * on the scarcity ramp below it, capped by available stock; stock clamps to [0, maxStock].
- * Returns a new array without mutating input.
+ * The production brake's knee for one producing market — the single definition
+ * every call site (the coupled tick, the decay/selling signal, the Industry
+ * readout, the draw figure's brake pass) derives its ceiling from.
+ *
+ *   knee    = max(brakeUseCover × useRate × anchorMult,   // cycles of what this system uses
+ *                 brakeOutputCover × capacityProduction)  // cycles of what it makes
+ *   rampEnd = min(brakeRamp × knee, storageCapacity)      // physical built storage ONLY
+ *
+ * The output term answers the pure-exporter trap: a producer with negligible
+ * local use still gets a working-inventory band instead of a zero knee. It uses
+ * capacity, not realized output — realized contains the ceiling and a
+ * self-referential denominator can latch shut.
  */
-export function simulateEconomyTick(
-  markets: MarketTickEntry[],
-  params: EconomySimParams,
-): MarketTickEntry[] {
-  const { holdCover, rationCover } = params;
+export function brakeKnee(input: BrakeKneeInput, params: EconomySimParams): BrakeKnee {
+  const useTerm = params.brakeUseCover * Math.max(0, input.useRate) * Math.max(0, input.anchorMult);
+  const outputTerm = params.brakeOutputCover * Math.max(0, input.capacityProduction);
+  const knee = Math.max(useTerm, outputTerm);
+  const storage = Math.max(0, input.storageCapacity);
+  const uncappedRampEnd = params.brakeRamp * knee;
+  const rampEnd = Math.min(uncappedRampEnd, storage);
+  const bindingTerm: KneeBindingTerm =
+    storage < uncappedRampEnd ? "storage" : useTerm >= outputTerm ? "use" : "output";
+  return { knee, rampEnd, bindingTerm };
+}
 
-  return markets.map((entry) => {
-    let stock = entry.stock;
-    const { maxStock, targetStock } = entry;
-
-    const effectiveProduction = (entry.productionRate ?? 0) * (entry.productionMult ?? 1);
-    if (effectiveProduction > 0) {
-      stock += effectiveProduction * productionCeiling(stock, targetStock, holdCover);
-    }
-
-    const effectiveConsumption = (entry.consumptionRate ?? 0) * (entry.consumptionMult ?? 1);
-    if (effectiveConsumption > 0) {
-      const factor = consumptionFactor(stock, rationCover * entry.demandRate);
-      stock -= Math.min(effectiveConsumption * factor, Math.max(0, stock));
-    }
-
-    stock = clamp(stock, 0, maxStock);
-
-    return { ...entry, stock };
-  });
+/**
+ * Production ceiling factor ∈ [0,1] against the brake knee. Full rate (1) while
+ * stock ≤ min(knee, rampEnd); linear taper to 0 over [knee, rampEnd] when the
+ * ramp extends past the knee; a hard stop at rampEnd otherwise (physical
+ * storage genuinely smaller than the knee — an honest physical limit).
+ */
+export function productionCeiling(stock: number, knee: BrakeKnee): number {
+  const fullRateEnd = Math.min(knee.knee, knee.rampEnd);
+  if (stock <= fullRateEnd) return 1;
+  if (stock >= knee.rampEnd) return 0;
+  // Reaching here requires fullRateEnd < stock < rampEnd, so the taper exists
+  // (rampEnd > knee) and its denominator is strictly positive.
+  return (knee.rampEnd - stock) / (knee.rampEnd - knee.knee);
 }
 
 // ── Tick entry builder ──────────────────────────────────────────
@@ -126,13 +162,14 @@ export function simulateEconomyTick(
 export interface TickEntryInput {
   goodId: string;
   stock: number;
-  /** Stock floor for this market entry — resolved upstream from the pricing-band. */
-  minStock: number;
-  /**
-   * Cycles-of-supply anchor (price === basePrice) — resolved upstream from the pricing-band.
-   * The production throttle saturates at holdCover × targetStock (operating ceiling).
-   */
-  targetStock: number;
+  /** THE USE FIGURE for this good at this system (see MarketTickEntry.honestUseRate). */
+  honestUseRate: number;
+  /** Reference-cycle production rate — pre-catchUp, pre-suppress, pre-event. */
+  capacityProduction: number;
+  /** Event anchor multiplier (1 = none). */
+  anchorMult: number;
+  /** Physical built storage for this good — the brake taper's cap. */
+  storageCapacity: number;
   /** Total local demand rate used to derive the ration threshold. */
   demandRate: number;
   /** Stock ceiling for this market entry — resolved upstream from the pricing-band. */
@@ -160,8 +197,10 @@ export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
   return {
     goodId: input.goodId,
     stock: input.stock,
-    minStock: input.minStock,
-    targetStock: input.targetStock,
+    honestUseRate: input.honestUseRate,
+    capacityProduction: input.capacityProduction,
+    anchorMult: input.anchorMult,
+    storageCapacity: input.storageCapacity,
     demandRate: input.demandRate,
     maxStock: input.maxStock,
     productionRate,

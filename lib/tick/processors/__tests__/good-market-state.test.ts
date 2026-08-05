@@ -4,10 +4,11 @@ import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector } from "@/lib/engine/resources";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
+import { computeSystemLabourSnapshot, inputDemandForGood, buildingProduction } from "@/lib/engine/industry";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
-import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { brakeKnee } from "@/lib/engine/tick";
+import { MIN_DEMAND } from "@/lib/constants/market-economy";
+import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 
@@ -205,10 +206,13 @@ describe("toGoodMarketStates: the two demand figures", () => {
   const BUILDINGS = { metals: 3, vocational_school: 1 };
   const POPULATION = 100;
 
+  // Ample storage so the brake keeps its full taper — a zero-storage row would hard-stop
+  // at any positive stock and every fixture below would read as braked shut.
+  const METALS_STORAGE = 10_000;
   function metalsRow(overrides: Partial<MarketRowForLogistics> = {}): MarketRowForLogistics {
     return {
       id: "A|metals", goodId: "metals", stock: 0, anchorMult: 1,
-      demandRate: 5, storageCapacity: 0, ...overrides,
+      demandRate: 5, storageCapacity: METALS_STORAGE, ...overrides,
     };
   }
   function oreRow(overrides: Partial<MarketRowForLogistics> = {}): MarketRowForLogistics {
@@ -230,8 +234,19 @@ describe("toGoodMarketStates: the two demand figures", () => {
     return state;
   };
 
-  // metals: targetStock = TARGET_COVER × demandRate 5 = 200; the brake shuts at HOLD_COVER × 200 = 260.
-  const METALS_BRAKE_SHUT = TARGET_COVER * 5 * ECONOMY_CONSTANTS.HOLD_COVER + 1;
+  // The stock at which metals' own brake is fully shut — computed from the same warehouse knee
+  // the derivation applies (use figure + capacity + storage), so the fixture tracks the geometry.
+  const METALS_SNAP = computeSystemLabourSnapshot(BUILDINGS, POPULATION);
+  const METALS_BRAKE_SHUT = brakeKnee(
+    {
+      useRate: consumptionRate("metals", METALS_SNAP.basis)
+        + inputDemandForGood(BUILDINGS, "metals", METALS_SNAP.state, unitResourceVector()),
+      capacityProduction: buildingProduction(BUILDINGS, "metals", METALS_SNAP.state, unitResourceVector()),
+      anchorMult: 1,
+      storageCapacity: METALS_STORAGE,
+    },
+    ECONOMY_SIM_PARAMS,
+  ).rampEnd + 1;
 
   it("takes demand from the row's persisted use figure rather than recomputing it", () => {
     // A figure no recompute would produce, so reading it back proves the row is the source.

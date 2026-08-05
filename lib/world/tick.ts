@@ -38,7 +38,7 @@
 
 import { mulberry32, type RNG } from "@/lib/engine/universe-gen";
 import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
@@ -777,7 +777,7 @@ export async function runWorldTick(
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.cycle,
-      simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER, rationCover: ECONOMY_CONSTANTS.RATION_COVER },
+      simParams: ECONOMY_SIM_PARAMS,
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
       maintenanceMalusBySystem,
