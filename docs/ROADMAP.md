@@ -55,10 +55,12 @@ the price anchor any more.)
     of spend (~600/cycle per faction — the bite anchor); founding is a startup burst (57.7% by
     t=1,000, done by t≈3,700, zero after); the founder's goods cost is transient. The old
     leech-colony motivation is falsified (chronic struck share ~3%, not >25%) — do not cite it.
-    *Next step:* spec + `/spec-review` (heavy cross-mechanic: treasury, build planner,
-    colonisation-value, migration, events).
-    *Don't:* precision-tune anything Provision will re-define (its own Don't), and don't design the
-    cost model from intuition — the baseline numbers above are the design's scale anchors.
+    Spec written and `/spec-review`ed (2026-08-05, all 25 findings accepted + applied, `d70d1cd6`):
+    [colonisation-economics spec](./planned/colonisation-economics.md).
+    *Next step:* `/build-plan docs/planned/colonisation-economics.md`.
+    *Don't:* precision-tune anything Provision will re-define (its own Don't), and don't quote the
+    old `founderCoverAfter` unit against the redefined one — the spec's harness row restarts that
+    baseline.
 
 ---
 
