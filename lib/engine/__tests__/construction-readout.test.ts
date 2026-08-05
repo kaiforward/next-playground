@@ -133,7 +133,7 @@ describe("computeFactionConstruction", () => {
     { id: "ctrl", name: "Kepler Reach", control: "controlled", population: 0, buildings: {} },
   ];
   const projects: WorldConstructionProject[] = [
-    { kind: "colony_establish", id: "c1", origin: "auto", factionId: "f1", systemId: "ctrl", sourceSystemId: "dev1", seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62 },
+    { kind: "colony_establish", id: "c1", origin: "auto", factionId: "f1", systemId: "ctrl", sourceSystemId: "dev1", seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
     { kind: "build", id: "b1", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 4, workTotal: 40, workDone: 32 },
   ];
 

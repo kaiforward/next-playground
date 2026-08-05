@@ -812,7 +812,8 @@ describe("player orders in the funding queue", () => {
   it("never drops an unfunded player order (persist-if-funded is auto-only)", async () => {
     const playerColony: WorldConstructionProject = { kind: "colony_establish", id: "player-c1",
       factionId: "f1", systemId: "s9", origin: "player", sourceSystemId: "s1",
-      seedPop: 100, housingLevels: 1, workTotal: 60, workDone: 0 };
+      seedPop: 100, housingLevels: 1, workTotal: 60, workDone: 0,
+      stagedManifest: [], charterPaid: false, stalledCycles: 0 };
     const w = new MemoryDirectedBuildWorld(scenario(0, 0), [playerColony]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,

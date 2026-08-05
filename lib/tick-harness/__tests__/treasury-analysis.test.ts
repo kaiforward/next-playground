@@ -8,10 +8,12 @@ function makeTreasury(overrides: Partial<WorldFactionTreasury>): WorldFactionTre
     bands: { maintenance: 1, logistics: 1, construction: 1 },
     funded: { maintenance: 1, logistics: 1, construction: 1 },
     pendingWork: { logistics: 0, construction: 0 },
+    pendingFounding: 0,
     lastSettlement: {
       tick: 24, headsIncome: 6, productionIncome: 4, incomeBySystem: [],
       maintenanceBill: 2, maintenanceByType: [], logisticsBill: 1, constructionBill: 1,
       paid: { maintenance: 2, logistics: 1, construction: 1 },
+      foundingExpense: 0,
     },
     updatedAtTick: 24,
     ...overrides,
@@ -57,6 +59,7 @@ describe("treasury analysis", () => {
         tick: 24, headsIncome: NaN, productionIncome: 4, incomeBySystem: [],
         maintenanceBill: 2, maintenanceByType: [], logisticsBill: 1, constructionBill: 1,
         paid: { maintenance: 2, logistics: 1, construction: 1 },
+        foundingExpense: 0,
       },
     });
     expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);

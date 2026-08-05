@@ -180,6 +180,12 @@ export interface WorldBuildProject extends WorldConstructionProjectBase {
   levels: number;
 }
 
+/** One founding-manifest line: a quantity of one good moving with a colony seed. */
+export interface WorldFoundingStockLine {
+  goodId: string;
+  quantity: number;
+}
+
 /**
  * A queued order to establish a colony at controlled `systemId` (docs/planned/economy-colonisation-cost.md
  * §1-2). On completion the system flips `developed`, receives the conserved `seedPop` transferred from
@@ -195,6 +201,16 @@ export interface WorldColonyEstablishProject extends WorldConstructionProjectBas
   seedPop: number;
   /** Housing levels placed with the colony (houses the seed pop; land-bounded). */
   housingLevels: number;
+  /**
+   * Goods already drawn from the source and paid for, awaiting delivery — real in-transit inventory
+   * that is in no market row at either end until the colony opens. Cancellation returns it to the
+   * source; completion credits it to the colony.
+   */
+  stagedManifest: WorldFoundingStockLine[];
+  /** The one-off charter fee has been debited. False → the project absorbs no work and stages nothing. */
+  charterPaid: boolean;
+  /** Consecutive cycles that staged nothing, counted only once the charter is paid. */
+  stalledCycles: number;
 }
 
 /**
@@ -343,6 +359,12 @@ export interface WorldTreasurySettlement {
   logisticsBill: number;
   constructionBill: number;
   paid: TreasuryBands;
+  /**
+   * Colony charter fees and staged founding materials settled this cycle. Its own field, never a
+   * fourth band: `TreasuryBands` is shared by the sliders, the bills and the latched funding
+   * fractions, and founding is none of those — it is taken off the top, ahead of the ladder.
+   */
+  foundingExpense: number;
 }
 
 /** One faction's treasury — the only persisted per-faction tick-mutable state. */
@@ -357,6 +379,14 @@ export interface WorldFactionTreasury {
   funded: TreasuryBands;
   /** Work performed since the last settlement (logistics S-normalised at accrual); billed then cleared. */
   pendingWork: { logistics: number; construction: number };
+  /**
+   * Founding money committed since the last settlement — charter fees and staged materials, already
+   * valued. Accrued by directed build on its own cycle, drained and zeroed at settlement, exactly as
+   * `pendingWork` is. Directed build also READS it: `balance − pendingFounding` is the working
+   * balance its affordability checks spend against, which is what makes several commitments in one
+   * cycle sum correctly.
+   */
+  pendingFounding: number;
   lastSettlement: WorldTreasurySettlement | null;
   updatedAtTick: number;
 }

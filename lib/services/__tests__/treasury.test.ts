@@ -36,6 +36,7 @@ const settlementFixture: WorldTreasurySettlement = {
   logisticsBill: 20,
   constructionBill: 50,
   paid: { maintenance: 90, logistics: 20, construction: 30 },
+  foundingExpense: 0,
 };
 
 describe("getFactionTreasury", () => {

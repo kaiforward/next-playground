@@ -198,6 +198,7 @@ describe("summarizeColonisation — construction queue split", () => {
     const colony: WorldConstructionProject = {
       kind: "colony_establish", id: "c1:establish", origin: "auto", factionId: "f1", systemId: "c1",
       sourceSystemId: "hw", seedPop: 50, housingLevels: 3, workTotal: 84, workDone: 40,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
     };
     const summary = summarizeColonisation([], new Set(["hw"]), [
       project("hw", "ore", { levels: 4, workTotal: 100, workDone: 50 }),

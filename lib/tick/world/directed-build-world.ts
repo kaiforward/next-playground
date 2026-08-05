@@ -5,7 +5,11 @@
  * at once), matching logistics.
  */
 import type { ResourceVector } from "@/lib/types/game";
-import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
+import type {
+  SystemControl,
+  WorldConstructionProject,
+  WorldFoundingStockLine,
+} from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
 
@@ -51,11 +55,8 @@ export interface ProposalPersistenceUpdate {
   proposalCycles: number;
 }
 
-/** One founding-stock line: goods moved from the founding system's market to the colony's. */
-export interface FoundingStockLine {
-  goodId: string;
-  quantity: number;
-}
+/** Processor-facing name for a founding-manifest line — one shape across the world boundary. */
+export type FoundingStockLine = WorldFoundingStockLine;
 
 /** One development: a controlled system flips to developed and receives a conserved colony seed + bundled housing. */
 export interface SystemDevelopment {

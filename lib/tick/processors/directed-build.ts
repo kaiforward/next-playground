@@ -349,6 +349,9 @@ export async function runDirectedBuildProcessor(
           housingLevels: p.housingLevels,
           workTotal: p.work,
           workDone: 0,
+          stagedManifest: [],
+          charterPaid: false,
+          stalledCycles: 0,
         });
       }
     }

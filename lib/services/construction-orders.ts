@@ -161,6 +161,9 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
     housingLevels: sizing.housingLevels,
     workTotal: sizing.work,
     workDone: 0,
+    stagedManifest: [],
+    charterPaid: false,
+    stalledCycles: 0,
   };
   setWorld({
     ...seat.world,

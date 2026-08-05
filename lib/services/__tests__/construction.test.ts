@@ -29,7 +29,7 @@ beforeEach(() => {
 
   world.constructionProjects = [
     { kind: "build", id: "b1", origin: "auto", factionId, systemId: dev.id, buildingType: "housing", levels: 4, workTotal: 40, workDone: 32 },
-    { kind: "colony_establish", id: "c1", origin: "auto", factionId, systemId: ctrlWithColony.id, sourceSystemId: dev.id, seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62 },
+    { kind: "colony_establish", id: "c1", origin: "auto", factionId, systemId: ctrlWithColony.id, sourceSystemId: dev.id, seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
   ];
   setWorld(world);
 });

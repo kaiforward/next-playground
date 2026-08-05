@@ -141,6 +141,7 @@ export async function runTreasuryProcessor(
       logisticsBill: bills.logistics,
       constructionBill: bills.construction,
       paid: settled.paid,
+      foundingExpense: 0,
     };
 
     updates.push({
