@@ -305,6 +305,15 @@ describe("fundQueueWithFloor", () => {
       fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony"),
     );
   });
+
+  it("only ever lowers: a ceiling above the scalar cap is clamped back to it", () => {
+    // The per-build cap is the minimum-build-time floor (workTotal ÷ cap cycles). A caller that
+    // could raise its own ceiling would buy past that floor — so a raise reads as the plain cap.
+    const cap = 10;
+    const ordered = [projectAt("c", "colony", "food", 1, 0, 1000)];
+    const raised = fundQueueWithFloor(ordered, 500, cap, 0, () => false, () => cap * 5);
+    expect(raised.projects[0].workDone).toBe(cap);
+  });
 });
 
 /** Build a proposal with explicit value/work; `role` defaults to industry. */

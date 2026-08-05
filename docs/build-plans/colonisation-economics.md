@@ -781,6 +781,13 @@ Interface:
 - `TickProcessorResult` gains `foundingDebitsByFaction?: Map<string, number>`, returned by the
   processor and threaded to `runTreasuryProcessor` exactly as `workPerformedByFaction` is
   (`tick.ts:1098` → `:1136`). Not instrumentation — a settlement input.
+- **The tick body's own `hasWork` guard gains the founding term too** (`tick.ts:1109-1110`), not just
+  the params. That guard decides whether `runTreasuryProcessor` is *called at all*, so the
+  processor's internal guard (Task 4) is unreachable when this one refuses. It can be false on a tick
+  that produces founding debits: `directed-build.ts` only writes `workPerformedByFaction` when
+  `absorbed > 0`, and a cycle where every due faction absorbed zero work is exactly what this task's
+  own `capFor: 0` for an unpaid charter produces. Off a settlement tick — the
+  `CONSTRUCTION_INTERVAL ≠ CYCLE_LENGTH` case — the charter debit would be silently dropped.
 - Per faction, before the queue is funded: `workingBalance = balance − pendingFounding`, decremented
   by each charter paid this cycle. The charter phase walks the colony rows in queue order; for each
   with `charterPaid === false`, if the working balance covers `charterFee` **re-quoted from the
@@ -1130,3 +1137,13 @@ Run by the author before committing this plan. What it changed or is worth carry
    spec's hazard-1 table (`FOUNDING_STOCK_COVER`, `surplusDrawable`, `basePrice`, `ECONOMY_SCALE`,
    `COLONY_ESTABLISH_WORK`, `balance`, `CONSTRUCTION_RATE_PER_WORK`), so its `npm run impact` output
    is the licence. No task leans on a symbol outside it, so the tool was not re-run.
+
+Found while building Phase A and folded back in, rather than left for a later reader:
+
+10. **The tick body's outer `hasWork` guard was missing from Task 7** — this plan's own miss, not the
+    spec's. `tick.ts:1109-1110` gates whether the treasury processor runs at all, so Task 4's fix to
+    the processor's internal guard is unreachable when it refuses. It goes false on exactly the
+    workless construction cycles an unpaid charter creates. Task 7's interface now names it.
+11. **`capFor` can only lower, never raise.** The scalar `cap` is the minimum-build-time floor; a
+    callback able to return more than it would let a caller buy past that floor. Clamped inside
+    `fundQueueWithFloor`, with a test.

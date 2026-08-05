@@ -149,11 +149,13 @@ export function developmentFloorShare(development: number, base: number, knee: n
  * A reserve is a *minimum* slice, never a max-spend cap: an eligible build can still win more from the
  * general pool on ROI, and the homeworld's builds drain whatever the reserve leaves.
  *
- * `capFor` replaces the scalar `cap` for one project — the seam through which a caller that knows
- * something this function cannot (whether a colony's materials can be bought this cycle) lowers a
+ * `capFor` lowers the scalar `cap` for one project — the seam through which a caller that knows
+ * something this function cannot (whether a colony's materials can be bought this cycle) tightens a
  * single project's ceiling without giving the queue market or treasury access. It binds in BOTH
- * passes, so a ceiling of 0 cannot be routed around by the reserved floor. Omitted → every project
- * takes the scalar `cap`, exactly today's behaviour.
+ * passes, so a ceiling of 0 cannot be routed around by the reserved floor, and it can only ever
+ * lower: a callback returning more than `cap` is clamped back to it, so the minimum build time
+ * (`workTotal ÷ cap` cycles) stays a property no caller can buy its way past. Omitted → every
+ * project takes the scalar `cap`, exactly today's behaviour.
  */
 export function fundQueueWithFloor(
   ordered: WorldConstructionProject[],
@@ -173,7 +175,7 @@ export function fundQueueWithFloor(
     const cached = ceilings.get(p.id);
     if (cached !== undefined) return cached;
     const raw = capFor === undefined ? safeCap : capFor(p);
-    const resolved = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+    const resolved = Number.isFinite(raw) ? clamp(raw, 0, safeCap) : 0;
     ceilings.set(p.id, resolved);
     return resolved;
   };
