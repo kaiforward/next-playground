@@ -163,7 +163,13 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 - **Read both horizons, always.** Startup (1000 t) answers founding/provisioning questions; equilibrium (10,000 t) is the only valid basis for tuning a constant. The startup transient is ~300+ cycles (`CYCLE_LENGTH` 24). Never quote one at the other's question: a short read is not evidence of an equilibrium fault, and an equilibrium read is not evidence a founding fault does not exist.
 - **A "ruled out" is a claim with the same evidence bar as a finding** — both horizons, and record which horizon and cohort it was measured at. Nobody re-tests a negative, so a wrong one steers every later investigation away from the cause.
 - **Read an aggregate cohorted before diagnosing it** (`npm run simulate` splits by market role and world cohort). A galaxy-wide median moves with cohort *mix*, not just with the thing it measures.
-- **Write the test that fails when the task's own premise breaks**, not one that confirms the happy path. Cheapest proof: break the property deliberately, watch the test fail, revert. If you can't make it fail, it isn't covering the thing.
+- **Write the test that fails when the task's own premise breaks**, not one that confirms the happy path.
+- **The red-proof gate: a new or changed test is not done until it has been seen red.** Before
+  committing, break the premise it protects (revert the change, or mutate the seam it pins), run the
+  test, watch it fail, restore green. Say in the response that the gate ran and on what. A test never
+  seen red is presumed vacuous — the recurring review finding is tests whose fixtures coincide with
+  the old behaviour or that assert a function against itself; every one of those passes on first
+  write. If you can't make it fail, it isn't covering the thing.
 - Calibrate to a coarse health bar only (no NaN/runaway/pinning; dispersion; liquidity) until all mechanisms ship — precision tuning is perishable.
 
 **Before building a mechanic**
