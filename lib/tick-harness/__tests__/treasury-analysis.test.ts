@@ -65,6 +65,24 @@ describe("treasury analysis", () => {
     expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);
   });
 
+  it("counts a non-finite founding expense as an invalid row", () => {
+    const bad = makeTreasury({
+      factionId: "f6",
+      lastSettlement: {
+        tick: 24, headsIncome: 6, productionIncome: 4, incomeBySystem: [],
+        maintenanceBill: 2, maintenanceByType: [], logisticsBill: 1, constructionBill: 1,
+        paid: { maintenance: 2, logistics: 1, construction: 1 },
+        foundingExpense: NaN,
+      },
+    });
+    expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);
+  });
+
+  it("counts a negative pending-founding accumulator as an invalid row", () => {
+    const bad = makeTreasury({ factionId: "f7", pendingFounding: -5 });
+    expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);
+  });
+
   it("reports an empty roster as zeroes, not NaN", () => {
     const snap = sampleTreasuries(0, []);
     expect(snap).toEqual({ tick: 0, meanBalance: 0, minBalance: 0, shortedFactions: 0 });

@@ -77,6 +77,27 @@ describe("getFactionTreasury", () => {
     expect(data.lastSettlement).toEqual(settlementFixture);
   });
 
+  it("reconciles net with the balance delta across a settlement carrying a founding expense", () => {
+    // Founding never passes through a band, so a `net` built only from `paid.*` reports a surplus
+    // (+20 here) for a faction whose balance actually fell by 25.
+    const factionId = playerFactionId();
+    const opening = 500;
+    const settlement: WorldTreasurySettlement = { ...settlementFixture, foundingExpense: 45 };
+    const income = settlement.headsIncome + settlement.productionIncome;
+    const paid =
+      settlement.paid.maintenance + settlement.paid.logistics + settlement.paid.construction;
+    const closing = opening + income - paid - settlement.foundingExpense;
+
+    const w = getWorld();
+    setWorld({
+      ...w,
+      treasuries: w.treasuries.map((t) =>
+        t.factionId === factionId ? { ...t, balance: closing, lastSettlement: settlement } : t,
+      ),
+    });
+    expect(getFactionTreasury(factionId).net).toBeCloseTo(closing - opening, 6);
+  });
+
   it("reads AI factions too (god-view; only writes are seat-gated)", () => {
     const other = getWorld().factions.find((f) => f.id !== playerFactionId())!;
     expect(getFactionTreasury(other.id).factionId).toBe(other.id);
