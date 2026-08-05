@@ -36,9 +36,8 @@ export const ECONOMY_CONSTANTS = {
   BRAKE_USE_COVER: 40,
   /**
    * Taper width: production runs at full rate to the knee, then ramps linearly
-   * to 0 at BRAKE_RAMP × knee — capped by physical built storage
-   * (`facilityStorageForGood`), never by any price-anchor quantity. The
-   * deceleration zone that absorbs shocks; a self-supplier with margin
+   * to 0 at BRAKE_RAMP × knee. No price-anchor quantity and no storage term —
+   * the deceleration zone that absorbs shocks; a self-supplier with margin
    * capacity rests just above its knee.
    */
   BRAKE_RAMP: 1.3,

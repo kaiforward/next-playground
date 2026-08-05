@@ -88,17 +88,15 @@ export interface CoverLevelEntry {
 export type StockedRole = Exclude<MarketRole, "inert">;
 
 /**
- * Which knee term bound each producing market of one good — the evidence the storage-constant
- * re-sizing decision is later taken on. Counts, not fractions: the three columns sum to the
- * good's producing-market count (the instrument's self-check), and `storage` counts markets
- * whose physical yard clipped the ramp below `BRAKE_RAMP × knee` — recorded at the knee, never
- * inferred from post-taper behaviour.
+ * Which knee term set each producing market's brake geometry — the evidence
+ * `BRAKE_OUTPUT_COVER` is tuned on. Counts, not fractions: the two columns sum to the good's
+ * producing-market count (the instrument's self-check), recorded at the knee, never inferred
+ * from post-taper behaviour.
  */
 export interface KneeBindingEntry {
   goodId: string;
   use: number;
   output: number;
-  storage: number;
 }
 
 /** One good's cover and price, split by the role each of its markets plays. */

@@ -46,20 +46,18 @@ describe("computeKneeBinding", () => {
     honestUseRate, storageCapacity,
   });
 
-  it("classifies each producing market by the term that bound its knee, counts summing to the producer count", () => {
-    const systems = [producerSystem("s-use"), producerSystem("s-output"), producerSystem("s-storage")];
+  it("classifies each producing market by the term that set its knee, counts summing to the producer count", () => {
+    const systems = [producerSystem("s-use"), producerSystem("s-output")];
     const markets = [
-      // Use term 40 × 1000 dominates any 2-building output term; storage ample → "use".
+      // Use term 40 × 1000 dominates any 2-building output term → "use".
       bindingRow("s-use", 1000, 1e9),
       // An explicit zero use figure → only the working-inventory term can set the knee → "output".
       bindingRow("s-output", 0, 1e9),
-      // A 10-unit yard far below BRAKE_RAMP × knee clips the ramp → "storage".
-      bindingRow("s-storage", 1000, 10),
     ];
-    // The self-check the instrument exists to keep honest: three producing markets, and the
-    // three term counts sum to exactly that — recorded at the knee, not read off the taper.
+    // The self-check the instrument exists to keep honest: two producing markets, and the
+    // two term counts sum to exactly that — recorded at the knee, not read off the taper.
     expect(computeKneeBinding(systems, markets)).toEqual([
-      { goodId: "food", use: 1, output: 1, storage: 1 },
+      { goodId: "food", use: 1, output: 1 },
     ]);
   });
 

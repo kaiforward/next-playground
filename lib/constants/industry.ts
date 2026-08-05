@@ -285,12 +285,12 @@ export const SUPPORT_TYPES: string[] = Object.entries(BUILDING_TYPES)
   .filter(([, def]) => def.output.kind === "none")
   .map(([type]) => type);
 
-// The three storage constants below are BRAKE READERS as well as maxStock inputs: physical built
-// storage (`facilityStorageForGood`) caps the production brake's taper (`brakeKnee.rampEnd`), so a
-// producer whose yard is smaller than its knee hard-stops at the yard. All three are first-draft;
-// re-sizing them is a deliberate later decision taken on the stage gate's per-good
-// knee-binding-term evidence, not a tuning knob to nudge.
-/** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). */
+// The three storage constants below feed maxStock depth (`facilityStorageForGood`) ONLY — they are
+// deliberately NOT a brake input: authored per producing building, they sit ~2 orders of magnitude
+// below 40 cycles of system-wide draw (measured 16×–843× per good at the stage-3 gate), so capping
+// the brake with them hard-stopped production galaxy-wide. A brake-relevant physical warehouse is
+// its own future design pass (see ROADMAP), with the brake knee as the capacity autonomy builds toward.
+/** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). First-draft; subject to calibration. */
 export const EXTRACTOR_STORAGE_PER_UNIT = scaleValue(40);
 /** Storage one tier-1+ factory adds for its output good (output buffer). */
 export const PRODUCTION_STORAGE_PER_UNIT = scaleValue(15);

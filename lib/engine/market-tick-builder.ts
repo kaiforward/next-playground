@@ -89,7 +89,6 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
     honestUseRate: input.honestUseRate,
     capacityProduction: input.capacityProduction,
     anchorMult,
-    storageCapacity: input.storageCapacity,
     demandRate: input.demandRate,
     maxStock: band.maxStock,
     baseProductionRate: input.baseProductionRate,

@@ -4,7 +4,7 @@
  * Each market holds one `stock` value. Producers add stock at the full rate up to
  * the brake knee — the larger of "cycles of what this system uses" (the use
  * figure) and "cycles of what it makes" (working inventory) — then decelerate
- * linearly to zero at the ramp end, which physical built storage caps. Consumers
+ * linearly to zero at the ramp end (brakeRamp × knee). Consumers
  * deliver in full at and above the emergency ration threshold
  * (rationCover × demandRate), then ration below it. Stock is clamped to
  * [0, maxStock]. There is no mean-reversion and no `demand` axis — equilibrium
@@ -12,8 +12,8 @@
  * See docs/active/gameplay/economy.md (Per-Tick Simulation).
  *
  * No price-anchor quantity reaches the brake: the knee is denominated in the
- * use figure and the system's own output, and the taper cap is physical
- * storage — never `targetStock`, never `maxStock`, never `MIN_DEMAND`.
+ * use figure and the system's own output — never `targetStock`, never
+ * `maxStock`, never `MIN_DEMAND`.
  *
  * All functions are pure — no DB or constant imports.
  */
@@ -35,8 +35,6 @@ export interface MarketTickEntry {
   capacityProduction: number;
   /** Pricing-anchor multiplier from events (1 = none). Rides the knee's use term only. */
   anchorMult: number;
-  /** Physical built storage (`facilityStorageForGood`) — the brake taper's cap. Never `maxStock`. */
-  storageCapacity: number;
   /**
    * Total local draw-rate denominator used to express emergency stock in
    * demand cycles. Independent of pricing anchor shifts.
@@ -84,8 +82,8 @@ export function consumptionFactor(stock: number, rationStock: number): number {
   return Math.sqrt(Math.max(0, stock) / rationStock);
 }
 
-/** Which term set a market's brake geometry — the stage-gate evidence for storage-constant sizing. */
-export type KneeBindingTerm = "use" | "output" | "storage";
+/** Which term set a market's brake knee — the stage-gate evidence BRAKE_OUTPUT_COVER is tuned on. */
+export type KneeBindingTerm = "use" | "output";
 
 export interface BrakeKneeInput {
   /** THE USE FIGURE — never the draw figure, never a price-anchor quantity. */
@@ -94,20 +92,14 @@ export interface BrakeKneeInput {
   capacityProduction: number;
   /** Event anchor multiplier (1 = none). Rides the use term only. */
   anchorMult: number;
-  /** `facilityStorageForGood` — physical built storage. Never `maxStock`. */
-  storageCapacity: number;
 }
 
 export interface BrakeKnee {
-  /** Stock level where full-rate production ends (subject to the storage cap). */
+  /** Stock level where full-rate production ends. */
   knee: number;
-  /** Stock level where production reaches 0 — min(brakeRamp × knee, physical storage). */
+  /** Stock level where production reaches 0 — brakeRamp × knee. */
   rampEnd: number;
-  /**
-   * Which term bound the geometry: "storage" when physical storage clips the
-   * ramp below brakeRamp × knee, else whichever of the use/output terms set the
-   * knee. Recorded at the knee, not observed after the taper.
-   */
+  /** Which of the two terms set the knee. Recorded at the knee, not observed after the taper. */
   bindingTerm: KneeBindingTerm;
 }
 
@@ -118,37 +110,40 @@ export interface BrakeKnee {
  *
  *   knee    = max(brakeUseCover × useRate × anchorMult,   // cycles of what this system uses
  *                 brakeOutputCover × capacityProduction)  // cycles of what it makes
- *   rampEnd = min(brakeRamp × knee, storageCapacity)      // physical built storage ONLY
+ *   rampEnd = brakeRamp × knee
  *
  * The output term answers the pure-exporter trap: a producer with negligible
  * local use still gets a working-inventory band instead of a zero knee. It uses
  * capacity, not realized output — realized contains the ceiling and a
  * self-referential denominator can latch shut.
+ *
+ * Deliberately NO physical-storage term: today's storage constants are a
+ * maxStock depth model authored per producing building, ~2 orders of magnitude
+ * below 40 cycles of system-wide draw (measured 16×–843× per good), so capping
+ * the ramp with them hard-stopped production galaxy-wide. A brake-relevant
+ * warehouse limit is a future design pass of its own — with this knee as the
+ * capacity the autonomic build would build storage toward.
  */
 export function brakeKnee(input: BrakeKneeInput, params: EconomySimParams): BrakeKnee {
   const useTerm = params.brakeUseCover * Math.max(0, input.useRate) * Math.max(0, input.anchorMult);
   const outputTerm = params.brakeOutputCover * Math.max(0, input.capacityProduction);
   const knee = Math.max(useTerm, outputTerm);
-  const storage = Math.max(0, input.storageCapacity);
-  const uncappedRampEnd = params.brakeRamp * knee;
-  const rampEnd = Math.min(uncappedRampEnd, storage);
-  const bindingTerm: KneeBindingTerm =
-    storage < uncappedRampEnd ? "storage" : useTerm >= outputTerm ? "use" : "output";
-  return { knee, rampEnd, bindingTerm };
+  return {
+    knee,
+    rampEnd: params.brakeRamp * knee,
+    bindingTerm: useTerm >= outputTerm ? "use" : "output",
+  };
 }
 
 /**
  * Production ceiling factor ∈ [0,1] against the brake knee. Full rate (1) while
- * stock ≤ min(knee, rampEnd); linear taper to 0 over [knee, rampEnd] when the
- * ramp extends past the knee; a hard stop at rampEnd otherwise (physical
- * storage genuinely smaller than the knee — an honest physical limit).
+ * stock ≤ knee; linear taper to 0 over [knee, rampEnd].
  */
 export function productionCeiling(stock: number, knee: BrakeKnee): number {
-  const fullRateEnd = Math.min(knee.knee, knee.rampEnd);
-  if (stock <= fullRateEnd) return 1;
+  if (stock <= knee.knee) return 1;
   if (stock >= knee.rampEnd) return 0;
-  // Reaching here requires fullRateEnd < stock < rampEnd, so the taper exists
-  // (rampEnd > knee) and its denominator is strictly positive.
+  // Reaching here requires knee < stock < rampEnd, so the taper exists
+  // (brakeRamp > 1, knee > 0) and its denominator is strictly positive.
   return (knee.rampEnd - stock) / (knee.rampEnd - knee.knee);
 }
 
@@ -168,8 +163,6 @@ export interface TickEntryInput {
   capacityProduction: number;
   /** Event anchor multiplier (1 = none). */
   anchorMult: number;
-  /** Physical built storage for this good — the brake taper's cap. */
-  storageCapacity: number;
   /** Total local demand rate used to derive the ration threshold. */
   demandRate: number;
   /** Stock ceiling for this market entry — resolved upstream from the pricing-band. */
@@ -200,7 +193,6 @@ export function buildMarketTickEntry(input: TickEntryInput): MarketTickEntry {
     honestUseRate: input.honestUseRate,
     capacityProduction: input.capacityProduction,
     anchorMult: input.anchorMult,
-    storageCapacity: input.storageCapacity,
     demandRate: input.demandRate,
     maxStock: input.maxStock,
     productionRate,

@@ -128,8 +128,8 @@ at and the target a sink fills to together.
   a structural exporter could never form a surplus, and directed logistics went dead for every good its
   producers also consume (food, water, biomass).
   Both ends of the match are denominated in real demand, and no price-anchor quantity reaches
-  logistics or the brake: a producer idles against its **warehouse** — the larger of 40 cycles of its
-  use figure and 8 cycles of its own capacity, tapering to a stop at physical built storage (see
+  logistics or the brake: a producer idles against its **warehouse knee** — the larger of 40 cycles
+  of its use figure and 8 cycles of its own capacity (see
   [economy-equilibrium-rework](./economy-equilibrium-rework.md)). Moving the donor side was measured
   end to end first: equilibrium is unchanged on every tracked good, galaxy production −0.3%, and the
   accepted cost is transient — stock the anchor used to over-shelter on small markets now feeds the

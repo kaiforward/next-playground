@@ -307,30 +307,29 @@ function formatTable(results: HarnessResults): string {
     lines.push("  as no demand: a small world can floor for real. Inert n = total (of which 0-demand).");
   }
 
-  // Which term set each producing market's brake geometry — the storage-constant sizing
+  // Which term set each producing market's brake geometry — BRAKE_OUTPUT_COVER's tuning
   // evidence. Counts per good sum to the good's producing-market count.
   if (results.kneeBinding.length > 0) {
     lines.push("");
     lines.push("Brake knee binding term (producing markets, end of simulation):");
     lines.push(...renderTable(
-      ["Good", "Use", "Output", "Storage", "Storage %"],
-      [16, 8, 8, 9, 10],
+      ["Good", "Use", "Output", "Output %"],
+      [16, 8, 8, 9],
       [...results.kneeBinding]
         .sort((a, b) => byDispersion(a.goodId, b.goodId))
         .map((e) => {
-          const total = e.use + e.output + e.storage;
+          const total = e.use + e.output;
           return [
             e.goodId,
             String(e.use),
             String(e.output),
-            String(e.storage),
-            total > 0 ? `${((e.storage / total) * 100).toFixed(0)}%` : "-",
+            total > 0 ? `${((e.output / total) * 100).toFixed(0)}%` : "-",
           ];
         }),
-      ["l", "r", "r", "r", "r"],
+      ["l", "r", "r", "r"],
     ));
-    lines.push("  storage = the physical yard clips the brake's ramp below BRAKE_RAMP × knee; re-sizing");
-    lines.push("  the storage constants is a deliberate decision taken on this table, not a tuning knob.");
+    lines.push("  output = the working-inventory term (BRAKE_OUTPUT_COVER × capacity) exceeds 40 cycles");
+    lines.push("  of the system's use figure — the dedicated-exporter cohort the term exists for.");
   }
 
   // Population and unrest summary

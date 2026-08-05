@@ -670,9 +670,8 @@ const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTIO
  * floor, so a starved input draws toward empty rather than gating hard at a floor.
  * The seller-side factor reads the same brake knee as the economy tick
  * (`brakeKnee` at ECONOMY_SIM_PARAMS: `honestUseRateOf`/`anchorMultOf` feed the
- * use term, `buildingProduction` the output term, `facilityStorageForGood` the
- * taper cap), so the panel and the simulation cannot disagree about which
- * producers are idle.
+ * use term, `buildingProduction` the output term), so the panel and the
+ * simulation cannot disagree about which producers are idle.
  *
  * `yields` threads through to `buildingProduction` but is inert for this readout:
  * supplyChain covers only tier-1+ goods, whose production is yield-independent.
@@ -700,15 +699,13 @@ export function buildIndustryReadout(
   // demand-denominated, never recovered from the pricing band.
   const rationStockOf = (g: string): number => ECONOMY_CONSTANTS.RATION_COVER * demandRateOf(g);
   // Isolated selling factor for a produced good ∈ [0,1] — the tick's own brake knee at this
-  // system's use figure, capacity and physical storage. Shared by buildingUsed and the
-  // producer idleReason.
+  // system's use figure and capacity. Shared by buildingUsed and the producer idleReason.
   const sellingFactorOf = (g: string): number => {
     const knee = brakeKnee(
       {
         useRate: honestUseRateOf(g),
         capacityProduction: buildingProduction(buildings, g, state, yields),
         anchorMult: anchorMultOf(g),
-        storageCapacity: facilityStorageForGood(buildings, g),
       },
       ECONOMY_SIM_PARAMS,
     );

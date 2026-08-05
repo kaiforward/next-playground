@@ -66,7 +66,7 @@ export interface ExperimentResult {
   /** Per-good cover and price split by market role — the cohort decomposition of `marketHealth`,
    *  without which a saved run's galaxy-wide medians cannot be compared against another's. */
   roleCoverLevels: HarnessResults["roleCoverLevels"];
-  /** Per good, which knee term bound each producing market — the storage-constant sizing evidence. */
+  /** Per good, which knee term set each producing market's geometry — BRAKE_OUTPUT_COVER's tuning evidence. */
   kneeBinding: HarnessResults["kneeBinding"];
   /** The role partition this run classified — what a later arm pins to, so two arms' cover reads
    *  are taken over the same cohort membership rather than over whatever each classified. */

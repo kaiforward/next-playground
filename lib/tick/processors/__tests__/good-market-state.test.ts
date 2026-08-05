@@ -206,13 +206,10 @@ describe("toGoodMarketStates: the two demand figures", () => {
   const BUILDINGS = { metals: 3, vocational_school: 1 };
   const POPULATION = 100;
 
-  // Ample storage so the brake keeps its full taper — a zero-storage row would hard-stop
-  // at any positive stock and every fixture below would read as braked shut.
-  const METALS_STORAGE = 10_000;
   function metalsRow(overrides: Partial<MarketRowForLogistics> = {}): MarketRowForLogistics {
     return {
       id: "A|metals", goodId: "metals", stock: 0, anchorMult: 1,
-      demandRate: 5, storageCapacity: METALS_STORAGE, ...overrides,
+      demandRate: 5, storageCapacity: 0, ...overrides,
     };
   }
   function oreRow(overrides: Partial<MarketRowForLogistics> = {}): MarketRowForLogistics {
@@ -235,7 +232,7 @@ describe("toGoodMarketStates: the two demand figures", () => {
   };
 
   // The stock at which metals' own brake is fully shut — computed from the same warehouse knee
-  // the derivation applies (use figure + capacity + storage), so the fixture tracks the geometry.
+  // the derivation applies (use figure + capacity), so the fixture tracks the geometry.
   const METALS_SNAP = computeSystemLabourSnapshot(BUILDINGS, POPULATION);
   const METALS_BRAKE_SHUT = brakeKnee(
     {
@@ -243,7 +240,6 @@ describe("toGoodMarketStates: the two demand figures", () => {
         + inputDemandForGood(BUILDINGS, "metals", METALS_SNAP.state, unitResourceVector()),
       capacityProduction: buildingProduction(BUILDINGS, "metals", METALS_SNAP.state, unitResourceVector()),
       anchorMult: 1,
-      storageCapacity: METALS_STORAGE,
     },
     ECONOMY_SIM_PARAMS,
   ).rampEnd + 1;

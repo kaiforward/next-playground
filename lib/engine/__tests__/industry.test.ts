@@ -55,7 +55,8 @@ import {
   CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
+import { brakeKnee } from "@/lib/engine/tick";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
@@ -67,6 +68,19 @@ import { SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical
 const FULL: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
 /** Half-staffed on headcount only; skill ceilings unconstrained. */
 const half: LabourState = { labourFulfil: 0.5, skill1Fulfil: 1, skill2Fulfil: 1 };
+
+/** A stock just past the brake's ramp end for `good` at this built base — the brake fully shut.
+ *  Computed from the same knee the readout derives (use term 2.5 × 40 = 100, real capacity), so
+ *  fixtures track the geometry whatever OUTPUT_PER_UNIT resolves to. */
+const shutStock = (buildings: Record<string, number>, pop: number, good = "metals", useRate = 2.5): number =>
+  brakeKnee(
+    {
+      useRate,
+      capacityProduction: buildingProduction(buildings, good, computeLabourState(buildings, pop), unitResourceVector()),
+      anchorMult: 1,
+    },
+    ECONOMY_SIM_PARAMS,
+  ).rampEnd + 1;
 
 describe("labour vector", () => {
   it("every production type carries a 3-grade labour vector whose shares partition a positive total", () => {
@@ -392,10 +406,10 @@ describe("buildIndustryReadout", () => {
 
 describe("buildIndustryReadout — per-building used + idleReason", () => {
   const MIN = 5;
-  // useRate 2.5 puts the knee's use term at 100, but physical storage caps the brake first:
-  // a 4-building producer stores 4 × PRODUCTION_STORAGE_PER_UNIT = 60, so the full-rate zone
-  // ends at 60 — stock 5 sells freely, stock 130 is past the stop. The ration threshold is
-  // irrelevant to used/idleReason.
+  // useRate 2.5 puts the knee's use term at 100; the output term can exceed it, so tests
+  // that need a shut brake compute the stop from the same knee the readout derives.
+  // Stock 5 is always inside the full-rate zone. The ration threshold is irrelevant to
+  // used/idleReason.
   const honestUseRateOf = (): number => 2.5;
   const one = (): number => 1;
   const demandRateOf = (): number => 2.5;
@@ -435,8 +449,8 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   it("'selling' when selling factor binds (stock past the brake's stop)", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings); // fully staffed
-    // stock 130 > the 60-unit yard → output piling up (factor 0), so selling is the binding constraint.
-    const readout = buildIndustryReadout(buildings, pop, { metals: 130 }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    // stock past the ramp end → output piling up (factor 0), so selling is the binding constraint.
+    const readout = buildIndustryReadout(buildings, pop, { metals: shutStock(buildings, pop) }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeLessThan(4 * 0.2);
     expect(metals.idleReason).toBe("selling");
@@ -448,7 +462,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const readout = buildIndustryReadout(
       buildings,
       pop,
-      { metals: 130 },
+      { metals: shutStock(buildings, pop) },
       unitResourceVector(),
       demandRateOf,
       honestUseRateOf,
@@ -730,9 +744,9 @@ describe("buildIndustryReadout — labour block", () => {
 
 describe("buildIndustryReadout — staffedFraction + output", () => {
   const MIN = 5;
-  // Same brake fixture as the used+idleReason suite (knee capped by 60 storage on a
-  // 4-building producer); the ration threshold (RATION_COVER × demand rate) sits above
-  // the low input stocks these tests use.
+  // Same brake fixture as the used+idleReason suite (use term 100, shut stocks computed via
+  // shutStock); the ration threshold (RATION_COVER × demand rate) sits above the low input
+  // stocks these tests use.
   const honestUseRateOf = (): number => 2.5;
   const one = (): number => 1;
   const demandRateOf = (): number => 2.5;
@@ -741,7 +755,7 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     // fully staffed + licensed, but stock pinned past the brake's stop (not selling).
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { metals: 130 }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { metals: shutStock(buildings, pop) }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.staffedFraction).toBeCloseTo(1, 6); // pure staffing full even though used (selling) is ~0
     expect(metals.used).toBeLessThan(4 * 0.2);         // used still folds the selling factor (unchanged)

@@ -75,9 +75,12 @@ A producer runs at full rate until its stock reaches the **warehouse knee** — 
 use figure; see [economy-autonomic-agency](./economy-autonomic-agency.md) for the figure itself) and
 `BRAKE_OUTPUT_COVER (8) × capacityProduction` (cycles of its own reference-cycle output — the working
 inventory that keeps a pure exporter with negligible local use producing instead of halting) — then
-decelerates linearly to zero at `BRAKE_RAMP (1.3) × knee`, capped by **physical built storage**
-(`facilityStorageForGood`; where the yard is genuinely smaller than the knee, storage binds with a
-hard stop). No price-anchor quantity — `targetStock`, `maxStock`, `MIN_DEMAND` — reaches the brake.
+decelerates linearly to zero at `BRAKE_RAMP (1.3) × knee`. No price-anchor quantity — `targetStock`,
+`maxStock`, `MIN_DEMAND` — reaches the brake, and deliberately no storage quantity either: the
+storage constants are a `maxStock` depth model authored per producing building, measured 16×–843×
+below 40 cycles of system-wide draw, so capping the ramp with them hard-stopped production
+galaxy-wide (a brake-relevant physical warehouse is its own future design pass — see ROADMAP — with
+this knee as the capacity the autonomic build would build storage toward).
 One knee function (`brakeKnee`/`productionCeiling`, `lib/engine/tick.ts`) feeds every call site: the
 coupled tick, the decay/selling signal, the Industry readout and the draw figure's urgency gate.
 

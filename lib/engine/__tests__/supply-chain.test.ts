@@ -11,8 +11,8 @@ const PARAMS: EconomySimParams = { brakeUseCover: 40, brakeRamp: 1.3, brakeOutpu
 
 // Convenience: build a full MarketTickEntry whose brake geometry matches the retired
 // anchor fixtures: honestUseRate 2.5 puts the knee at 40 × 2.5 = 100 with the taper
-// ending at 130. The output term is zeroed and storage is ample so the use term alone
-// sets the knee — output/storage geometry is covered in tick.test.ts.
+// ending at 130. The output term is zeroed so the use term alone sets the knee —
+// output-term geometry is covered in tick.test.ts.
 function entry(
   goodId: string,
   stock: number,
@@ -28,7 +28,6 @@ function entry(
     honestUseRate,
     capacityProduction: 0,
     anchorMult: 1,
-    storageCapacity: 10_000,
     demandRate,
     maxStock,
     productionRate: prod,

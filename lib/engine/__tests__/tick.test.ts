@@ -19,10 +19,7 @@ describe("brakeKnee — the warehouse knee", () => {
   it("reproduces the retired anchor geometry where the use figure equals the old floored demandRate", () => {
     // The old brake kneed at targetStock = TARGET_COVER(40) × demandRate and stopped at
     // HOLD_COVER(1.3) × that. useRate 5 → knee 200, rampEnd 260 — the deliberate no-op anchor.
-    const knee = brakeKnee(
-      { useRate: 5, capacityProduction: 1, anchorMult: 1, storageCapacity: 10_000 },
-      PARAMS,
-    );
+    const knee = brakeKnee({ useRate: 5, capacityProduction: 1, anchorMult: 1 }, PARAMS);
     expect(knee).toEqual({ knee: 200, rampEnd: 260, bindingTerm: "use" });
     expect(productionCeiling(200, knee)).toBe(1);
     expect(productionCeiling(230, knee)).toBeCloseTo(0.5);
@@ -32,58 +29,33 @@ describe("brakeKnee — the warehouse knee", () => {
   it("gives a pure exporter a positive working-inventory knee (the trap the anchor brake fell into)", () => {
     // Negligible local use once meant a knee welded to the MIN_DEMAND pricing floor; a
     // demand-derived knee of 0 would have halted production outright at any stock.
-    const knee = brakeKnee(
-      { useRate: 0, capacityProduction: 10, anchorMult: 1, storageCapacity: 10_000 },
-      PARAMS,
-    );
+    const knee = brakeKnee({ useRate: 0, capacityProduction: 10, anchorMult: 1 }, PARAMS);
     expect(knee.knee).toBe(80); // 8 cycles of its own output
     expect(knee.bindingTerm).toBe("output");
     expect(productionCeiling(50, knee)).toBe(1);
   });
 
   it("rides anchorMult on the use term only", () => {
-    const useBound = brakeKnee(
-      { useRate: 5, capacityProduction: 1, anchorMult: 2, storageCapacity: 100_000 },
-      PARAMS,
-    );
+    const useBound = brakeKnee({ useRate: 5, capacityProduction: 1, anchorMult: 2 }, PARAMS);
     expect(useBound.knee).toBe(400); // 40 × 5 × 2
 
-    const outputBound = brakeKnee(
-      { useRate: 0.1, capacityProduction: 10, anchorMult: 2, storageCapacity: 100_000 },
-      PARAMS,
-    );
+    const outputBound = brakeKnee({ useRate: 0.1, capacityProduction: 10, anchorMult: 2 }, PARAMS);
     expect(outputBound.knee).toBe(80); // 8 × 10 — no anchor quantity in the output term
     expect(outputBound.bindingTerm).toBe("output");
   });
 
-  it("hard-stops at physical storage when the yard is smaller than the knee", () => {
-    // knee 200 from the use term, storage 150 < knee → no taper: full rate to the yard, zero beyond.
-    const knee = brakeKnee(
-      { useRate: 5, capacityProduction: 0, anchorMult: 1, storageCapacity: 150 },
-      PARAMS,
-    );
-    expect(knee).toEqual({ knee: 200, rampEnd: 150, bindingTerm: "storage" });
-    expect(productionCeiling(150, knee)).toBe(1);
-    expect(productionCeiling(151, knee)).toBe(0);
-  });
-
-  it("clips the taper at storage between the knee and the full ramp", () => {
-    // knee 200, uncapped ramp 260, storage 230 → taper over [200, 230], storage-bound.
-    const knee = brakeKnee(
-      { useRate: 5, capacityProduction: 0, anchorMult: 1, storageCapacity: 230 },
-      PARAMS,
-    );
-    expect(knee).toEqual({ knee: 200, rampEnd: 230, bindingTerm: "storage" });
-    expect(productionCeiling(200, knee)).toBe(1);
-    expect(productionCeiling(215, knee)).toBeCloseTo(0.5);
-    expect(productionCeiling(230, knee)).toBe(0);
+  it("carries no storage term — the yard never clips the ramp", () => {
+    // The stage-3 gate falsified the physical-storage taper cap: the storage constants are a
+    // maxStock depth model ~2 orders of magnitude below 40 cycles of system draw, and capping
+    // the ramp with them hard-stopped production galaxy-wide. The knee's geometry is set by
+    // its own two terms alone; this pins the removal so the cap cannot quietly return.
+    const knee = brakeKnee({ useRate: 5, capacityProduction: 0, anchorMult: 1 }, PARAMS);
+    expect(knee.rampEnd).toBe(PARAMS.brakeRamp * knee.knee);
+    expect(productionCeiling(230, knee)).toBeCloseTo(0.5); // full taper, whatever any yard holds
   });
 
   it("treats a zero knee (no use, no capacity) as no production band above empty", () => {
-    const knee = brakeKnee(
-      { useRate: 0, capacityProduction: 0, anchorMult: 1, storageCapacity: 100 },
-      PARAMS,
-    );
+    const knee = brakeKnee({ useRate: 0, capacityProduction: 0, anchorMult: 1 }, PARAMS);
     expect(knee.knee).toBe(0);
     expect(productionCeiling(0, knee)).toBe(1);
     expect(productionCeiling(1, knee)).toBe(0);
@@ -91,10 +63,7 @@ describe("brakeKnee — the warehouse knee", () => {
 });
 
 describe("productionCeiling — full rate to the knee, taper to the ramp end", () => {
-  const knee = brakeKnee(
-    { useRate: 2.5, capacityProduction: 0, anchorMult: 1, storageCapacity: 10_000 },
-    PARAMS,
-  ); // knee 100, rampEnd 130
+  const knee = brakeKnee({ useRate: 2.5, capacityProduction: 0, anchorMult: 1 }, PARAMS); // knee 100, rampEnd 130
 
   it("runs at full rate at and below the knee", () => {
     expect(productionCeiling(0, knee)).toBe(1);
@@ -113,7 +82,6 @@ describe("buildMarketTickEntry", () => {
     honestUseRate: 2.5,
     capacityProduction: 10,
     anchorMult: 1,
-    storageCapacity: 500,
     demandRate: 1,
     maxStock: 200,
   };
@@ -131,7 +99,6 @@ describe("buildMarketTickEntry", () => {
     expect(e.honestUseRate).toBe(2.5);
     expect(e.capacityProduction).toBe(10);
     expect(e.anchorMult).toBe(1);
-    expect(e.storageCapacity).toBe(500);
     expect(e.maxStock).toBe(200);
   });
 

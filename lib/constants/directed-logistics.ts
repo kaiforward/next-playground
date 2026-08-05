@@ -74,7 +74,7 @@ export const DIRECTED_LOGISTICS = {
    * tied to the same anchor movement as the deficit line it faces across the match.
    *
    * The production brake is a separate mechanism in the same unit family: `brakeKnee` runs off
-   * the use figure and physical storage (`BRAKE_USE_COVER`/`BRAKE_RAMP`/`BRAKE_OUTPUT_COVER`),
+   * the use figure and own-output capacity (`BRAKE_USE_COVER`/`BRAKE_RAMP`/`BRAKE_OUTPUT_COVER`),
    * and its ceiling sits at or below this reserve's donation line (`BRAKE_RAMP × BRAKE_USE_COVER`
    * = 52 vs `SURPLUS_MARGIN × DONOR_RESERVE_COVER` = 56 — the dead-band, asserted in
    * band-constants.test.ts). Nothing here moves it.

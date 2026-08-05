@@ -135,22 +135,15 @@ function makeMarket(systemId: string, goodId: string, stock: number): WorldMarke
     //   maxStock = TARGET_COVER/priceFloor + storageCapacity = 40/0.5 + 120 = 200
     //   minStock = TARGET_COVER/priceCeiling = 40/2 = 20
     // Tests derive their stock values from FIXTURE_BAND, so they always fall
-    // within this market's own [minStock, maxStock] band. It also caps the brake's
-    // taper (120 ≥ any knee these fixtures reach at 1.3 × knee only when the knee
-    // stays under ~92 — geometry-sensitive tests use makeAmpleMarket instead).
+    // within this market's own [minStock, maxStock] band.
     storageCapacity: 120,
   };
 }
 
 // The brake knee the processor derives for the producer fixture's food market — computed
 // from the same primitives the adapter feeds it (the row's use figure, buildingProduction
-// as capacity, the row's storage), so geometry probe stocks always sit where each test
-// intends whatever OUTPUT_PER_UNIT resolves to.
-const AMPLE_STORAGE = 100_000;
-const makeAmpleMarket = (systemId: string, goodId: string, stock: number): WorldMarket => ({
-  ...makeMarket(systemId, goodId, stock),
-  storageCapacity: AMPLE_STORAGE,
-});
+// as capacity), so geometry probe stocks always sit where each test intends whatever
+// OUTPUT_PER_UNIT resolves to.
 const PRODUCER_BUILDINGS = { food: 2 }; // makeProducerSystem's built base
 const FOOD_CAPACITY = buildingProduction(
   PRODUCER_BUILDINGS,
@@ -159,7 +152,7 @@ const FOOD_CAPACITY = buildingProduction(
   unitResourceVector(),
 );
 const FIXTURE_KNEE = brakeKnee(
-  { useRate: 1, capacityProduction: FOOD_CAPACITY, anchorMult: 1, storageCapacity: AMPLE_STORAGE },
+  { useRate: 1, capacityProduction: FOOD_CAPACITY, anchorMult: 1 },
   ECON_PARAMS.simParams,
 );
 const KNEE_MID = (FIXTURE_KNEE.knee + FIXTURE_KNEE.rampEnd) / 2;
@@ -608,7 +601,7 @@ describe("economy processor: selling factor signal", () => {
       const id = `p-${index}`;
       const world = new InMemoryEconomyWorld({
         systems: [makeProducerSystem(id, 0)],
-        markets: [makeAmpleMarket(id, "food", stocks[index])],
+        markets: [makeMarket(id, "food", stocks[index])],
         modifiers: [],
       });
       const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
@@ -619,7 +612,7 @@ describe("economy processor: selling factor signal", () => {
   it("uses start stock even when the cycle materially changes final stock", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("p", 0)],
-      markets: [makeAmpleMarket("p", "food", FIXTURE_KNEE.knee)],
+      markets: [makeMarket("p", "food", FIXTURE_KNEE.knee)],
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), {
@@ -637,7 +630,7 @@ describe("economy processor: selling factor signal", () => {
     // the general cadence-invariance sim stays green through this fault because its braked
     // markets are use-term-bound, so this probe is the premise's only cheap failing test.
     const outputKnee = brakeKnee(
-      { useRate: 0, capacityProduction: FOOD_CAPACITY, anchorMult: 1, storageCapacity: AMPLE_STORAGE },
+      { useRate: 0, capacityProduction: FOOD_CAPACITY, anchorMult: 1 },
       ECON_PARAMS.simParams,
     );
     const probe = (outputKnee.knee + outputKnee.rampEnd) / 2;
@@ -645,7 +638,7 @@ describe("economy processor: selling factor signal", () => {
     for (const interval of [12, 24]) {
       const world = new InMemoryEconomyWorld({
         systems: [makeProducerSystem("p", 0)],
-        markets: [{ ...makeAmpleMarket("p", "food", probe), honestUseRate: 0 }],
+        markets: [{ ...makeMarket("p", "food", probe), honestUseRate: 0 }],
         modifiers: [],
       });
       const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval });
@@ -660,7 +653,7 @@ describe("economy processor: selling factor signal", () => {
     // mid-taper factor probed here — must not move with strike or maintenance state.
     const world = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("calm", 0), makeProducerSystem("suppressed", 1)],
-      markets: [makeAmpleMarket("calm", "food", KNEE_MID), makeAmpleMarket("suppressed", "food", KNEE_MID)],
+      markets: [makeMarket("calm", "food", KNEE_MID), makeMarket("suppressed", "food", KNEE_MID)],
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), {
@@ -674,7 +667,7 @@ describe("economy processor: selling factor signal", () => {
   it("is invariant to a production-rate event multiplier", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("plain", 0), makeProducerSystem("event", 0)],
-      markets: [makeAmpleMarket("plain", "food", KNEE_MID), makeAmpleMarket("event", "food", KNEE_MID)],
+      markets: [makeMarket("plain", "food", KNEE_MID), makeMarket("event", "food", KNEE_MID)],
       modifiers: [{
         domain: "economy",
         type: "rate_multiplier",

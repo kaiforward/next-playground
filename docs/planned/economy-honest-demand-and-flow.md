@@ -176,6 +176,24 @@ volume is a problem — a design limit, never a silent one.
 
 ## Stage 3 — the brake leaves the price anchor
 
+> **Amendment (Kai, 2026-08-05, at the stage gate):** the physical-storage taper cap below —
+> the review's finding-2 resolution — was **falsified by the first three-arm gate run**. The
+> storage constants are a `maxStock` depth model authored per producing building; measured
+> against the knee's use term they sit 16×–843× below it per good (median producing market
+> ~143× below the ramp end), so the cap degenerated to a hard production stop at the yard on
+> 97.4% of producing checks and the galaxy collapsed (supplied 71.3% → 0.2%; arm C proved the
+> effect entirely the brake's). Decision: **the cap is removed** — `rampEnd = BRAKE_RAMP × knee`,
+> no storage term — and a brake-relevant physical warehouse becomes its own design pass (ROADMAP),
+> with this knee as the capacity the autonomic build would build storage toward. Storage-cap
+> language below is retained as written history; the shipped formula is:
+>
+> ```
+> knee    = max( BRAKE_USE_COVER × honestUseRate × anchorMult,
+>                BRAKE_OUTPUT_COVER × capacityProduction )
+> rampEnd = BRAKE_RAMP × knee
+> ceiling = 1 while stock ≤ knee; linear taper to 0 over [knee, rampEnd]
+> ```
+
 Per producing market, one shared knee function used by every call site:
 
 ```

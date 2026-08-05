@@ -396,22 +396,21 @@ export function summarizeDemandHunting(
 // ── Knee-binding census ─────────────────────────────────────────
 
 /**
- * Per good, which term set each producing market's brake geometry — "use" (warehousing),
- * "output" (working inventory) or "storage" (the physical yard clipped the ramp) — computed
- * from the same warehouse knee the tick applies: `brakeKnee` at `ECONOMY_SIM_PARAMS`, use
- * figure and reference-cycle capacity via `toGoodMarketStates`, the row's own `anchorMult`
- * and `storageCapacity`. A producing market is one with reference-cycle capacity > 0 at an
- * economically active system — the population the knee's output term describes. Counts per
- * good sum to that producing-market count (the instrument self-check its tests assert);
- * goods nobody produces are absent. This census is the evidence the storage-constant
- * re-sizing decision is later taken on.
+ * Per good, which term set each producing market's brake geometry — "use" (warehousing) or
+ * "output" (working inventory) — computed from the same warehouse knee the tick applies:
+ * `brakeKnee` at `ECONOMY_SIM_PARAMS`, use figure and reference-cycle capacity via
+ * `toGoodMarketStates`, the row's own `anchorMult`. A producing market is one with
+ * reference-cycle capacity > 0 at an economically active system — the population the knee's
+ * output term describes. Counts per good sum to that producing-market count (the instrument
+ * self-check its tests assert); goods nobody produces are absent. This census is the evidence
+ * `BRAKE_OUTPUT_COVER` is tuned on.
  */
 export function computeKneeBinding(
   systems: TickSystem[],
   markets: WorldMarket[],
 ): KneeBindingEntry[] {
   const rowsBySystem = marketRowsBySystem(markets);
-  const byGood = new Map<string, { use: number; output: number; storage: number }>();
+  const byGood = new Map<string, { use: number; output: number }>();
   for (const s of systems) {
     if (!isEconomicallyActive(s.control)) continue;
     const rows = rowsBySystem.get(s.id);
@@ -429,11 +428,10 @@ export function computeKneeBinding(
           useRate: state.demand,
           capacityProduction: state.capacityProduction,
           anchorMult: row.anchorMult,
-          storageCapacity: row.storageCapacity,
         },
         ECONOMY_SIM_PARAMS,
       );
-      const counts = byGood.get(state.goodId) ?? { use: 0, output: 0, storage: 0 };
+      const counts = byGood.get(state.goodId) ?? { use: 0, output: 0 };
       counts[knee.bindingTerm]++;
       byGood.set(state.goodId, counts);
     }

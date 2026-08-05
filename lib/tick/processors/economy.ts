@@ -222,7 +222,6 @@ export async function runEconomyProcessor(
             useRate: tickEntries[i].honestUseRate,
             capacityProduction: tickEntries[i].capacityProduction,
             anchorMult: tickEntries[i].anchorMult,
-            storageCapacity: tickEntries[i].storageCapacity,
           },
           simParams,
         ),

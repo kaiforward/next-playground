@@ -18,8 +18,8 @@
  * than anything consumed locally. One anchor-derived quantity is read deliberately, and only one:
  * `anchorMult` scales the warehousing target and the donor floor together (an anchor-shifting event
  * moves both) and rides the brake knee's use term. The draw figure's brake measures each consumer's
- * stock against the same warehouse knee (`brakeKnee` — use figure, capacity, physical storage) the
- * economy actually brakes production with — urgency mirrors the brake as applied. The pricing
+ * stock against the same warehouse knee (`brakeKnee` — use figure and capacity) the economy
+ * actually brakes production with — urgency mirrors the brake as applied. The pricing
  * `demandRate` itself reaches nothing here.
  */
 import type { ResourceVector } from "@/lib/types/game";
@@ -121,7 +121,6 @@ export function toGoodMarketStates(
             useRate: useRateOf(m),
             capacityProduction: prodByKey.get(m.goodId) ?? 0,
             anchorMult: m.anchorMult,
-            storageCapacity: m.storageCapacity,
           },
           ECONOMY_SIM_PARAMS,
         );

@@ -7,8 +7,8 @@
  *
  * Draws run toward empty on the shared emergency-ration ramp — there
  * is no reserve floor: production decelerates from the brake knee (the larger
- * of use-figure warehousing and working inventory, tapering to physical
- * storage — see `brakeKnee`) and stock clamps to [0, maxStock]. Civilian and
+ * of use-figure warehousing and working inventory — see `brakeKnee`) and
+ * stock clamps to [0, maxStock]. Civilian and
  * industrial draws of one good share the ramp at their moment of draw
  * (civilian in the good's own entry pass, industrial when downstream producers
  * process). Because processing is topological, a scarce good rations every
@@ -126,7 +126,6 @@ export function simulateSystemEconomyTick(
           useRate: entry.honestUseRate,
           capacityProduction: entry.capacityProduction,
           anchorMult: entry.anchorMult,
-          storageCapacity: entry.storageCapacity,
         },
         params,
       );
