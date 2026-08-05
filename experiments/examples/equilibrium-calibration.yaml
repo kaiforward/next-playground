@@ -1,9 +1,10 @@
 # Equilibrium calibration: a long run to settle the anchor-relative economy and
-# confirm HOLD_COVER against the coarse health bar (prices off the floor, cover
-# near the anchor, unrest/growth sane, no pinning).
+# confirm the brake constants (BRAKE_USE_COVER / BRAKE_RAMP / BRAKE_OUTPUT_COVER)
+# against the coarse health bar (prices off the floor, cover near the anchor,
+# unrest/growth sane, no pinning).
 # Read the "Price levels" + "Cover" + "Population & Unrest" blocks in the report.
-# HOLD_COVER comes from lib/constants/economy.ts, not from this file — a config
-# cannot override a constant — so this run validates whatever it is set to.
+# The brake constants come from lib/constants/economy.ts, not from this file — a
+# config cannot override a constant — so this run validates whatever they are set to.
 label: equilibrium-calibration
 seed: 42
 ticks: 3000

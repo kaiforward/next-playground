@@ -285,7 +285,12 @@ export const SUPPORT_TYPES: string[] = Object.entries(BUILDING_TYPES)
   .filter(([, def]) => def.output.kind === "none")
   .map(([type]) => type);
 
-/** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). First-draft; subject to calibration. */
+// The three storage constants below are BRAKE READERS as well as maxStock inputs: physical built
+// storage (`facilityStorageForGood`) caps the production brake's taper (`brakeKnee.rampEnd`), so a
+// producer whose yard is smaller than its knee hard-stops at the yard. All three are first-draft;
+// re-sizing them is a deliberate later decision taken on the stage gate's per-good
+// knee-binding-term evidence, not a tuning knob to nudge.
+/** Storage one tier-0 extractor adds for its own resource's good (mined on-site, held for shipment). */
 export const EXTRACTOR_STORAGE_PER_UNIT = scaleValue(40);
 /** Storage one tier-1+ factory adds for its output good (output buffer). */
 export const PRODUCTION_STORAGE_PER_UNIT = scaleValue(15);

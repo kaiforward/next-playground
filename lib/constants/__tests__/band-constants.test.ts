@@ -12,7 +12,7 @@ import { INITIAL_RESERVE_ANCHOR_FRAC } from "@/lib/constants/market-economy";
 import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING, UNREST_PARAMS } from "@/lib/constants/population";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { VACANCY_SLACK, INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
+import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, INPUT_DEMAND_MULTIPLIER } from "@/lib/constants/industry";
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
@@ -88,6 +88,14 @@ describe("band constant dependencies", () => {
   it("keeps the shortage line a proper interior satisfaction level", () => {
     expect(SHORTAGE_SATISFACTION).toBeGreaterThan(0);
     expect(SHORTAGE_SATISFACTION).toBeLessThan(1);
+  });
+  it("pins the input-demand magnitude knob at neutral", () => {
+    // Both honest demand figures multiply their industrial term by this knob, while the
+    // physical input draw (lib/engine/supply-chain.ts) does not — so "what this industry
+    // would actually pull" and "what the demand figures claim" are the same quantity only
+    // at exactly 1.0. Turning the knob requires threading it into the physical draw too;
+    // this pin makes that a deliberate act rather than a silent divergence.
+    expect(INPUT_DEMAND_MULTIPLIER).toBe(1);
   });
 });
 
