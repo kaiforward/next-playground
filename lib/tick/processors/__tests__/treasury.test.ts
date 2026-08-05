@@ -21,6 +21,7 @@ function makeParams(overrides: Partial<TreasuryProcessorParams> = {}): TreasuryP
     economyScale: 1,
     constructionWorkByFaction: new Map(),
     logisticsWorkByFaction: new Map(),
+    foundingDebitsByFaction: new Map(),
     rates: RATES,
     ...overrides,
   };
@@ -158,5 +159,76 @@ describe("treasury processor", () => {
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
     await runTreasuryProcessor(world, { tick: 7, results: new Map() }, makeParams());
     expect(world.treasuries[0].updatedAtTick).toBe(0);
+  });
+
+  it("carries a founding debit accrued on a WORKLESS mid-cycle tick through to settlement", async () => {
+    // A colony can be committed on a cycle where the queue absorbed nothing at all. Both the early
+    // return and the mid-cycle write branch key on pending WORK by default, so either one still
+    // reading only work drops this debit on the floor and the colony is founded for free.
+    const world = new InMemoryTreasuryWorld({
+      treasuries: [makeTreasury({ balance: 500 })],
+      systems: [SYSTEM],
+    });
+    await runTreasuryProcessor(world, { tick: 12, results: new Map() }, makeParams({
+      foundingDebitsByFaction: new Map([["faction-1", 120]]),
+    }));
+    expect(world.treasuries[0].pendingWork).toEqual({ logistics: 0, construction: 0 });
+    expect(world.treasuries[0].pendingFounding).toBe(120);
+    expect(world.treasuries[0].lastSettlement).toBeNull();
+
+    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams());
+    const settled = world.treasuries[0].lastSettlement;
+    if (settled === null) throw new Error("expected a settlement on the cycle start");
+    expect(settled.foundingExpense).toBe(120);
+    expect(world.treasuries[0].pendingFounding).toBe(0);
+  });
+
+  it("reconciles the balance across a settlement carrying a founding expense", async () => {
+    const opening = 1000;
+    const world = new InMemoryTreasuryWorld({
+      treasuries: [makeTreasury({ balance: opening })],
+      systems: [SYSTEM],
+    });
+    await runTreasuryProcessor(
+      world,
+      ctxWithRealized(24, new Map([["sys-1", new Map([["food", 10]])]])),
+      makeParams({ foundingDebitsByFaction: new Map([["faction-1", 200]]) }),
+    );
+    const t = world.treasuries[0];
+    const s = t.lastSettlement;
+    if (s === null) throw new Error("expected a settlement on the cycle start");
+    expect(s.foundingExpense).toBe(200);
+    const income = s.headsIncome + s.productionIncome;
+    const paid = s.paid.maintenance + s.paid.logistics + s.paid.construction;
+    expect(t.balance).toBeCloseTo(opening + income - paid - s.foundingExpense, 6);
+  });
+
+  it("takes founding off the top, so a tight ladder pays less than it would without it", async () => {
+    // The deliberate ordering choice: founding lands BEFORE settleLadder, so it can push even the
+    // maintenance floor down. Settle the same faction twice — the only difference is the debit.
+    // No systems: zero income and a zero maintenance bill, so the only bill is the 50 the
+    // construction backlog owes and the only money is the opening balance.
+    const seed = () =>
+      new InMemoryTreasuryWorld({
+        treasuries: [makeTreasury({ balance: 60, pendingWork: { logistics: 0, construction: 100 } })],
+        systems: [],
+      });
+    const free = seed();
+    await runTreasuryProcessor(free, ctxWithRealized(24, new Map()), makeParams());
+    const charged = seed();
+    await runTreasuryProcessor(
+      charged,
+      ctxWithRealized(24, new Map()),
+      makeParams({ foundingDebitsByFaction: new Map([["faction-1", 40]]) }),
+    );
+
+    const a = free.treasuries[0];
+    const b = charged.treasuries[0];
+    // The bills are identical; only what was available to pay them moved.
+    expect(a.lastSettlement?.constructionBill).toBeCloseTo(50, 6);
+    expect(b.lastSettlement?.constructionBill).toBeCloseTo(50, 6);
+    expect(a.funded.construction).toBeCloseTo(1, 6); // 60 covers the 50 bill
+    expect(b.funded.construction).toBeCloseTo(0.4, 6); // 40 left for founding ⇒ 20 of 50
+    expect(b.balance).toBe(0);
   });
 });

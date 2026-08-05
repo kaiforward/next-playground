@@ -28,6 +28,12 @@ export interface TreasuryProcessorParams {
   constructionWorkByFaction: ReadonlyMap<string, number>;
   /** Logistics work-budget consumed per faction this tick (raw, S-scaled). Empty map mid-cycle. */
   logisticsWorkByFaction: ReadonlyMap<string, number>;
+  /**
+   * Founding money committed per faction this tick — charter fees and staged materials, already
+   * valued in money (directed-build's export). A settlement input, not instrumentation: it is
+   * charged off the top at the next settlement, ahead of the funding ladder.
+   */
+  foundingDebitsByFaction: ReadonlyMap<string, number>;
   rates: {
     headsTaxPerCycle: number;
     headsWeights: { unskilled: number; technicians: number; engineers: number };

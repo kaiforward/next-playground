@@ -25,7 +25,10 @@ const EMPTY_REALIZED: ReadonlyMap<string, ReadonlyMap<string, number>> = new Map
  * construction; the paid fraction per band latches as that band's effective
  * funding for the following cycle. Off the cycle start the body only accrues
  * work performed by band cycles (bills charge work performed, not standing
- * capacity — the standing-cost job belongs to maintenance).
+ * capacity — the standing-cost job belongs to maintenance), plus the founding
+ * money directed build has committed. Founding is not a band: it is charged
+ * off the top, before the ladder runs, so it outranks every bill including the
+ * maintenance floor.
  *
  * Heads tax and maintenance are per-cycle rates → scaled by catchUpFactor here;
  * realized production and work quantities arrive already catchUp-scaled from
@@ -41,9 +44,13 @@ export async function runTreasuryProcessor(
   if (treasuries.length === 0) return {};
 
   const settles = isCycleStart(ctx.tick, params.interval);
-  const hasWork =
-    params.constructionWorkByFaction.size > 0 || params.logisticsWorkByFaction.size > 0;
-  if (!settles && !hasWork) return {};
+  // Founding money is an accrual like the two work bands — a debit committed on a tick with no
+  // work at all must still reach the next settlement, so it belongs in this guard.
+  const hasAccruals =
+    params.constructionWorkByFaction.size > 0 ||
+    params.logisticsWorkByFaction.size > 0 ||
+    params.foundingDebitsByFaction.size > 0;
+  if (!settles && !hasAccruals) return {};
 
   const scale =
     Number.isFinite(params.economyScale) && params.economyScale > 0 ? params.economyScale : 1;
@@ -73,15 +80,22 @@ export async function runTreasuryProcessor(
     const pendingLogistics = safeMoney(
       t.pendingWork.logistics + (params.logisticsWorkByFaction.get(t.factionId) ?? 0) / scale,
     );
+    // Founding debits arrive already valued in money, so they are never S-normalised here — the
+    // valuation seam did that when it priced the goods.
+    const pendingFounding = safeMoney(
+      t.pendingFounding + (params.foundingDebitsByFaction.get(t.factionId) ?? 0),
+    );
 
     if (!settles) {
       if (
         pendingConstruction !== t.pendingWork.construction ||
-        pendingLogistics !== t.pendingWork.logistics
+        pendingLogistics !== t.pendingWork.logistics ||
+        pendingFounding !== t.pendingFounding
       ) {
         updates.push({
           ...t,
           pendingWork: { construction: pendingConstruction, logistics: pendingLogistics },
+          pendingFounding,
           updatedAtTick: ctx.tick,
         });
       }
@@ -129,7 +143,11 @@ export async function runTreasuryProcessor(
     }));
 
     const income = headsIncome + productionIncome;
-    const settled = settleLadder(t.balance, income, bills, t.bands);
+    // Founding is taken off the top: what the faction already committed to colonies leaves before
+    // the ladder divides anything, so the charter keeps biting during the founding burst instead of
+    // becoming a residual claimant. The floor is a guard only — directed build commits against
+    // `balance − pendingFounding`, so the subtraction cannot legitimately go negative.
+    const settled = settleLadder(safeMoney(t.balance - pendingFounding), income, bills, t.bands);
 
     const lastSettlement: WorldTreasurySettlement = {
       tick: ctx.tick,
@@ -141,7 +159,7 @@ export async function runTreasuryProcessor(
       logisticsBill: bills.logistics,
       constructionBill: bills.construction,
       paid: settled.paid,
-      foundingExpense: 0,
+      foundingExpense: pendingFounding,
     };
 
     updates.push({
@@ -149,6 +167,7 @@ export async function runTreasuryProcessor(
       balance: settled.balance,
       funded: settled.funded,
       pendingWork: { construction: 0, logistics: 0 },
+      pendingFounding: 0,
       lastSettlement,
       updatedAtTick: ctx.tick,
     });

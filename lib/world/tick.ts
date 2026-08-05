@@ -1135,6 +1135,7 @@ export async function runWorldTick(
           economyScale: ECONOMY_SCALE,
           constructionWorkByFaction: constructionWorkByFaction ?? new Map(),
           logisticsWorkByFaction: logisticsWorkByFaction ?? new Map(),
+          foundingDebitsByFaction: new Map(),
           rates: {
             headsTaxPerCycle: TREASURY.HEADS_TAX_PER_CYCLE,
             headsWeights: { ...TREASURY.HEADS_WEIGHTS },

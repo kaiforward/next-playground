@@ -49,13 +49,25 @@ interface RunTotals {
   population: number;
   buildings: number;
   treasuryBalance: number;
+  /** Founding money settled over the WHOLE run — a flow, so it must be accumulated, not read off
+   *  the last settlement. The settlement clock is not the construction clock, so this is the total
+   *  the `build12` arm (construction 12, cycle 24) actually tests for interval invariance. */
+  foundingExpense: number;
 }
 
 async function runAtCadence(cadence?: TickCadence): Promise<RunTotals> {
   let world = generateWorld({ systemCount: SYSTEM_COUNT, seed: SEED });
+  let foundingExpense = 0;
+  const countedSettlement = new Map<string, number>();
   for (let t = 0; t < TICKS; t++) {
     const result = await runWorldTick(world, cadence ? { cadence } : undefined);
     world = result.world;
+    for (const treasury of world.treasuries) {
+      const s = treasury.lastSettlement;
+      if (s === null || countedSettlement.get(treasury.factionId) === s.tick) continue;
+      countedSettlement.set(treasury.factionId, s.tick);
+      foundingExpense += s.foundingExpense;
+    }
   }
   let population = 0;
   for (const s of world.systems) population += s.population;
@@ -63,7 +75,7 @@ async function runAtCadence(cadence?: TickCadence): Promise<RunTotals> {
   for (const b of world.buildings) buildings += Math.max(0, b.count);
   let treasuryBalance = 0;
   for (const t of world.treasuries) treasuryBalance += t.balance;
-  return { population, buildings, treasuryBalance };
+  return { population, buildings, treasuryBalance, foundingExpense };
 }
 
 function relDiff(a: number, b: number): number {
@@ -85,7 +97,10 @@ describe("cadence interval invariance", () => {
         const dPop = relDiff(base.population, v.population);
         const dBld = relDiff(base.buildings, v.buildings);
         expect(
-          Number.isFinite(v.population) && Number.isFinite(v.buildings) && Number.isFinite(v.treasuryBalance),
+          Number.isFinite(v.population) &&
+            Number.isFinite(v.buildings) &&
+            Number.isFinite(v.treasuryBalance) &&
+            Number.isFinite(v.foundingExpense),
           `${name} totals finite`,
         ).toBe(true);
         expect(
@@ -100,6 +115,11 @@ describe("cadence interval invariance", () => {
         expect(
           dTre,
           `${name}: treasury balance rate diverges — base ${base.treasuryBalance.toFixed(1)} vs ${v.treasuryBalance.toFixed(1)} (rel ${dTre.toExponential(2)})`,
+        ).toBeLessThan(TREASURY_TOL);
+        const dFnd = relDiff(base.foundingExpense, v.foundingExpense);
+        expect(
+          dFnd,
+          `${name}: founding expense rate diverges — base ${base.foundingExpense.toFixed(1)} vs ${v.foundingExpense.toFixed(1)} (rel ${dFnd.toExponential(2)})`,
         ).toBeLessThan(TREASURY_TOL);
       }
     },
