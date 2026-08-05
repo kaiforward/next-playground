@@ -28,6 +28,9 @@ export const ExperimentConfigSchema = z.object({
   ticks: z.number().int().min(1).default(500),
   systemCount: z.number().int().min(1).default(DEFAULT_SYSTEM_COUNT),
   cadence: CadenceSchema.optional(),
+  /** Third-arm pin: "anchor" pins the DRAW FIGURE's brake ceiling to the retired anchor
+   *  geometry while the tick's own brake stays live. Omit for the game's real behaviour. */
+  drawBrakeCeiling: z.enum(["live", "anchor"]).optional(),
 });
 
 export type ExperimentConfig = z.infer<typeof ExperimentConfigSchema>;
@@ -40,7 +43,13 @@ export function experimentToHarnessConfig(exp: ExperimentConfig): {
   label?: string;
 } {
   return {
-    config: { systemCount: exp.systemCount, seed: exp.seed, tickCount: exp.ticks, cadence: exp.cadence },
+    config: {
+      systemCount: exp.systemCount,
+      seed: exp.seed,
+      tickCount: exp.ticks,
+      cadence: exp.cadence,
+      drawBrakeCeiling: exp.drawBrakeCeiling,
+    },
     label: exp.label,
   };
 }
@@ -57,6 +66,8 @@ export interface ExperimentResult {
   /** Per-good cover and price split by market role — the cohort decomposition of `marketHealth`,
    *  without which a saved run's galaxy-wide medians cannot be compared against another's. */
   roleCoverLevels: HarnessResults["roleCoverLevels"];
+  /** Per good, which knee term bound each producing market — the storage-constant sizing evidence. */
+  kneeBinding: HarnessResults["kneeBinding"];
   /** The role partition this run classified — what a later arm pins to, so two arms' cover reads
    *  are taken over the same cohort membership rather than over whatever each classified. */
   marketRoles: HarnessResults["marketRoles"];
@@ -91,6 +102,7 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     economyScale: results.economyScale,
     marketHealth: results.marketHealth,
     roleCoverLevels: results.roleCoverLevels,
+    kneeBinding: results.kneeBinding,
     marketRoles: results.marketRoles,
     demandHunting: results.demandHunting,
     foundingStock: results.foundingStock,

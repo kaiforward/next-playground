@@ -2,12 +2,15 @@ import { describe, it, expect } from "vitest";
 import {
   takeMarketSnapshot,
   computeMarketHealth,
+  computeKneeBinding,
   newDemandHuntingAccumulator,
   sampleDemandHunting,
   summarizeDemandHunting,
 } from "../market-analysis";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
+import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
+import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
@@ -22,6 +25,52 @@ function market(
 
 /** Warehousing targets only feed `deficitFrac`; the suites below assert other metrics. */
 const NO_TARGETS = new Map<string, number>();
+
+/** A staffed food producer — 2 extractors, ample population, developed unless overridden. */
+function producerSystem(id: string, control: TickSystem["control"] = "developed"): TickSystem {
+  return {
+    id, name: id, economyType: "agricultural", regionId: "r1", factionId: "f1", control,
+    governmentType: "federation", population: 1000, popCap: 2000, unrest: 0,
+    buildings: { food: 2 }, buildingIdleCycles: {}, collapseDebt: 0,
+    yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+  };
+}
+
+describe("computeKneeBinding", () => {
+  const bindingRow = (
+    systemId: string,
+    honestUseRate: number,
+    storageCapacity: number,
+  ): WorldMarket => ({
+    systemId, goodId: "food", stock: 0, anchorMult: 1, demandRate: 1,
+    honestUseRate, storageCapacity,
+  });
+
+  it("classifies each producing market by the term that bound its knee, counts summing to the producer count", () => {
+    const systems = [producerSystem("s-use"), producerSystem("s-output"), producerSystem("s-storage")];
+    const markets = [
+      // Use term 40 × 1000 dominates any 2-building output term; storage ample → "use".
+      bindingRow("s-use", 1000, 1e9),
+      // An explicit zero use figure → only the working-inventory term can set the knee → "output".
+      bindingRow("s-output", 0, 1e9),
+      // A 10-unit yard far below BRAKE_RAMP × knee clips the ramp → "storage".
+      bindingRow("s-storage", 1000, 10),
+    ];
+    // The self-check the instrument exists to keep honest: three producing markets, and the
+    // three term counts sum to exactly that — recorded at the knee, not read off the taper.
+    expect(computeKneeBinding(systems, markets)).toEqual([
+      { goodId: "food", use: 1, output: 1, storage: 1 },
+    ]);
+  });
+
+  it("counts only producing markets at economically active systems", () => {
+    // A consumer system (no capacity) and a frozen controlled system both fall out of the census.
+    const consumer: TickSystem = { ...producerSystem("s-cons"), buildings: {} };
+    const frozen = producerSystem("s-frozen", "controlled");
+    const markets = [bindingRow("s-cons", 5, 100), bindingRow("s-frozen", 5, 100)];
+    expect(computeKneeBinding([consumer, frozen], markets)).toEqual([]);
+  });
+});
 
 describe("takeMarketSnapshot", () => {
   it("emits one snapshot per market with the spot price at its stock", () => {

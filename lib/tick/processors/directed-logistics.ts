@@ -10,7 +10,7 @@ import {
   type ReachableSystemIds,
   type PlannedTransfer,
 } from "@/lib/engine/directed-logistics";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, type DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
 import type {
   DirectedLogisticsWorld,
   SystemLogisticsRow,
@@ -29,6 +29,9 @@ export interface DirectedLogisticsProcessorParams {
   /** Latched funded.logistics per faction (0–1) — scales the haul budget. Missing
    *  faction or omitted map → 1 (ungated: engine tests, independents). */
   fundingByFaction?: ReadonlyMap<string, number>;
+  /** Harness-only third-arm pin for the draw figure's brake (see `DrawBrakeCeiling`);
+   *  absent ⇒ "live", the only value the live game ever passes. */
+  drawBrakeCeiling?: DrawBrakeCeiling;
 }
 
 /**
@@ -36,13 +39,18 @@ export interface DirectedLogisticsProcessorParams {
  * Generation is per-cycle income and scales by the catch-up factor and funding; the per-good gap-fills
  * deliberately do NOT (see the processor doc below).
  */
-function toLogisticsState(row: SystemLogisticsRow, catchUp: number, funded: number): SystemLogisticsState {
+function toLogisticsState(
+  row: SystemLogisticsRow,
+  catchUp: number,
+  funded: number,
+  drawBrakeCeiling?: DrawBrakeCeiling,
+): SystemLogisticsState {
   return {
     systemId: row.systemId,
     factionId: row.factionId,
     generation: systemLogisticsGeneration(row.population) * catchUp * funded,
     // The matcher is the draw figure's only reader, so this is the one call site that computes it.
-    goods: toGoodMarketStates(row, { withDraw: true }),
+    goods: toGoodMarketStates(row, { withDraw: true, drawBrakeCeiling }),
   };
 }
 
@@ -111,7 +119,7 @@ export async function runDirectedLogisticsProcessor(
   const fundingBoundMarketIds = new Set<string>();
   for (const [factionId, group] of byFaction) {
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
-    const states = group.map((r) => toLogisticsState(r, catchUp, funded));
+    const states = group.map((r) => toLogisticsState(r, catchUp, funded, params.drawBrakeCeiling));
     const match = matchFactionTransfers(states, params.routeCost, params.reachableSystemIds);
     allTransfers.push(...match.transfers);
     for (const bound of match.fundingBound) {

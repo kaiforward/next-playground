@@ -24,13 +24,38 @@
  */
 import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
-import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
+import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
+import { GOODS } from "@/lib/constants/goods";
 import { capacityGoodRates } from "@/lib/engine/industry";
 import { drawRatesByGood, useRatesByGood } from "@/lib/engine/honest-demand";
 import type { UseRate } from "@/lib/engine/honest-demand";
+import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
+
+/**
+ * Which brake the draw figure's `brakeCeilingOf` reads. `"live"` (the default and the only value
+ * the live game ever uses) is the warehouse knee the economy actually brakes production with;
+ * `"anchor"` pins it to the retired anchor-based ceiling — a committed harness override for the
+ * stage-gate's third A/B arm, so the brake's direct effect and its logistics-urgency ripple are
+ * attributable separately. It rides `runWorldTick`'s opts channel exactly as the cadence override
+ * does, and reaches nothing but the draw figure.
+ */
+export type DrawBrakeCeiling = "live" | "anchor";
+
+/**
+ * The retired anchor brake, kept ONLY as the third-arm pin: full rate to the price anchor, linear
+ * taper to 0 at BRAKE_RAMP × anchor (the geometry the warehouse knee replaced — its hold cover
+ * equalled BRAKE_RAMP at retirement). A measurement arm, never a gameplay path.
+ */
+function anchorCeiling(stock: number, targetStock: number): number {
+  if (targetStock <= 0) return 0;
+  const end = targetStock * ECONOMY_CONSTANTS.BRAKE_RAMP;
+  if (stock <= targetStock) return 1;
+  if (stock >= end) return 0;
+  return (end - stock) / (end - targetStock);
+}
 
 /** Minimal per-system shape both processors derive market state from. */
 export interface MarketStateSource {
@@ -42,7 +67,7 @@ export interface MarketStateSource {
 
 export function toGoodMarketStates(
   row: MarketStateSource,
-  opts?: { withDraw?: boolean },
+  opts?: { withDraw?: boolean; drawBrakeCeiling?: DrawBrakeCeiling },
 ): GoodMarketState[] {
   const rates = capacityGoodRates(row.buildings, row.population, row.yields);
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
@@ -81,19 +106,27 @@ export function toGoodMarketStates(
     // two gates that separate "wants this eventually" from "could use this right now". A good with
     // no row here reads as unbraked: no row means no stock and no yard, which is not a stopped
     // factory.
+    const pinToAnchor = opts.drawBrakeCeiling === "anchor";
     const brakeByGood = new Map<string, number>();
     const multByGood = new Map<string, number>();
     for (const m of row.markets) {
-      const knee = brakeKnee(
-        {
-          useRate: useRateOf(m),
-          capacityProduction: prodByKey.get(m.goodId) ?? 0,
-          anchorMult: m.anchorMult,
-          storageCapacity: m.storageCapacity,
-        },
-        ECONOMY_SIM_PARAMS,
-      );
-      brakeByGood.set(m.goodId, productionCeiling(m.stock, knee));
+      if (pinToAnchor) {
+        brakeByGood.set(
+          m.goodId,
+          anchorCeiling(m.stock, marketBandForRow(m, GOODS[m.goodId]).targetStock),
+        );
+      } else {
+        const knee = brakeKnee(
+          {
+            useRate: useRateOf(m),
+            capacityProduction: prodByKey.get(m.goodId) ?? 0,
+            anchorMult: m.anchorMult,
+            storageCapacity: m.storageCapacity,
+          },
+          ECONOMY_SIM_PARAMS,
+        );
+        brakeByGood.set(m.goodId, productionCeiling(m.stock, knee));
+      }
       multByGood.set(m.goodId, m.productionMult ?? 1);
     }
     drawRates = drawRatesByGood({

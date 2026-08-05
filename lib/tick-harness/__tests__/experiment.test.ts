@@ -117,6 +117,7 @@ describe("ExperimentConfig", () => {
           coverLevels: [],
         },
         roleCoverLevels: [],
+        kneeBinding: [],
         marketRoles: {},
         demandHunting: { flipRate: 0, haulChurnRatio: 0 },
         worldCohorts: [],

@@ -7,7 +7,7 @@ import { consumptionRate } from "@/lib/engine/physical-economy";
 import { computeSystemLabourSnapshot, inputDemandForGood, buildingProduction } from "@/lib/engine/industry";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { brakeKnee } from "@/lib/engine/tick";
-import { MIN_DEMAND } from "@/lib/constants/market-economy";
+import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
 import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
@@ -310,6 +310,31 @@ describe("toGoodMarketStates: the two demand figures", () => {
     ).toBe(
       surplusDrawable(ore.stock, running.donorReserve, running.demand, running.production),
     );
+  });
+
+  it("the third-arm switch pins the draw figure's brake to the retired anchor ceiling", () => {
+    // At the live warehouse knee's stop the metals yard reads full (ore's draw collapses to
+    // civilian want), but that stock sits far below the price anchor (TARGET_COVER ×
+    // demandRate 5 = 200) — so the pinned arm reads the same fixture as unbraked and the two
+    // arms genuinely disagree. Warehousing quantities must not move with the switch: it
+    // reaches nothing but the draw figure.
+    expect(METALS_BRAKE_SHUT).toBeLessThan(TARGET_COVER * 5);
+    const markets = [oreRow(), metalsRow({ stock: METALS_BRAKE_SHUT })];
+    const live = stateOf(markets, "ore");
+    const pinned = toGoodMarketStates(
+      { buildings: BUILDINGS, population: POPULATION, yields: unitResourceVector(), markets },
+      { withDraw: true, drawBrakeCeiling: "anchor" },
+    ).find((g) => g.goodId === "ore");
+    if (pinned === undefined) throw new Error("Expected an ore state");
+
+    const ungated = consumptionRate("ore", METALS_SNAP.basis)
+      + inputDemandForGood(BUILDINGS, "ore", METALS_SNAP.state, unitResourceVector());
+    expect(live.drawDemand).toBeCloseTo(consumptionRate("ore", METALS_SNAP.basis), 9);
+    expect(pinned.drawDemand).toBeCloseTo(ungated, 9);
+    expect(pinned.drawDemand).toBeGreaterThan(live.drawDemand);
+    expect(pinned.demand).toBe(live.demand);
+    expect(pinned.logisticsTarget).toBe(live.logisticsTarget);
+    expect(pinned.donorReserve).toBe(live.donorReserve);
   });
 
   it("reads a consumer good with no market row as unbraked rather than as stopped", () => {

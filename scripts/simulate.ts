@@ -307,6 +307,32 @@ function formatTable(results: HarnessResults): string {
     lines.push("  as no demand: a small world can floor for real. Inert n = total (of which 0-demand).");
   }
 
+  // Which term set each producing market's brake geometry — the storage-constant sizing
+  // evidence. Counts per good sum to the good's producing-market count.
+  if (results.kneeBinding.length > 0) {
+    lines.push("");
+    lines.push("Brake knee binding term (producing markets, end of simulation):");
+    lines.push(...renderTable(
+      ["Good", "Use", "Output", "Storage", "Storage %"],
+      [16, 8, 8, 9, 10],
+      [...results.kneeBinding]
+        .sort((a, b) => byDispersion(a.goodId, b.goodId))
+        .map((e) => {
+          const total = e.use + e.output + e.storage;
+          return [
+            e.goodId,
+            String(e.use),
+            String(e.output),
+            String(e.storage),
+            total > 0 ? `${((e.storage / total) * 100).toFixed(0)}%` : "-",
+          ];
+        }),
+      ["l", "r", "r", "r", "r"],
+    ));
+    lines.push("  storage = the physical yard clips the brake's ramp below BRAKE_RAMP × knee; re-sizing");
+    lines.push("  the storage constants is a deliberate decision taken on this table, not a tuning knob.");
+  }
+
   // Population and unrest summary
   {
     const pop = summarizePopulation(
