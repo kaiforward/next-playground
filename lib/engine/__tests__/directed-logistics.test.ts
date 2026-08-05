@@ -46,6 +46,21 @@ describe("classifyMarketState", () => {
     expect(c.kind).toBe("balanced");
     expect(c.drawable).toBe(0);
   });
+
+  it("treats stock exactly at the deficit threshold as balanced, not a deficit", () => {
+    // threshold = target(10) × DEFICIT_FRACTION(0.8) = 8 exactly — the boundary itself must sit in
+    // the dead-band, not the deficit side of the `<` comparison.
+    const c = classifyMarketState(8, 10);
+    expect(c.kind).toBe("balanced");
+    expect(c.shortfall).toBe(0);
+  });
+
+  it("treats stock exactly at the surplus margin as a surplus", () => {
+    // threshold = target(50) × SURPLUS_MARGIN(1.4) = 70 exactly — the `>=` comparison's own boundary.
+    const c = classifyMarketState(70, 50);
+    expect(c.kind).toBe("surplus");
+    expect(c.drawable).toBe(20);
+  });
 });
 
 describe("systemLogisticsGeneration", () => {
@@ -493,6 +508,46 @@ describe("matchFactionTransfers", () => {
     expect(transfers[0]).toMatchObject({ fromSystemId: "D1", quantity: 14 });
     expect(transfers[1]).toMatchObject({ fromSystemId: "D2", quantity: 14 });
   });
+
+  it("treats production exactly equal to demand as self-supplying (not a deficit sink) — the exact boundary", () => {
+    // The self-supply gate's own equality boundary: production === demand exactly (not the
+    // comfortably-above-demand 20-vs-5 the other self-supply test uses).
+    const surplus = sys("A", 100, { goodId: "ore", stock: 100, logisticsTarget: 50, demand: 5, production: 0 });
+    const producer = sys("B", 0, { goodId: "ore", stock: 2, logisticsTarget: 10, demand: 5, production: 5 });
+    expect(matchFactionTransfers([surplus, producer], oneHop).transfers).toHaveLength(0);
+  });
+
+  it("excludes a donor whose route cost is exactly zero, like an unreachable one", () => {
+    // perUnit === 0 sits on the `perUnit <= 0` boundary — a free-cost route must be rejected the
+    // same way a negative one would be, not treated as reachable-and-free.
+    const donor = sys("A", 100, { goodId: "food", stock: 100, logisticsTarget: 50, demand: 5 });
+    const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 10, demand: 5 });
+    const zeroCost: RouteCost = () => 0;
+    expect(matchFactionTransfers([donor, deficit], zeroCost).transfers).toHaveLength(0);
+  });
+
+  it(
+    "does not blame the donor whose own affordable share exactly matched what it owed (affordable === wanted)",
+    () => {
+      // D1's stock-limited share of the deficit (10, at 1/unit) exactly exhausts the faction's whole
+      // budget (10) — D1 delivered everything it was asked for, so it is not the "stopped" donor.
+      // D2 — genuinely unaffordable with nothing left — is the one the flag must name. A `<=`
+      // softening of the boundary would instead blame D1 for a fully-served draw and never even
+      // look at D2.
+      const d1 = sys("D1", 10, { goodId: "food", stock: 10, logisticsTarget: 0, donorReserve: 0, demand: 0 });
+      const d2 = sys("D2", 0, { goodId: "food", stock: 20, logisticsTarget: 0, donorReserve: 0, demand: 0 });
+      const deficit = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 25, demand: 5 });
+      const costByDonor: RouteCost = (from) => (from === "D1" ? 1 : 2);
+
+      const result = matchFactionTransfers([d1, d2, deficit], costByDonor);
+      expect(result.transfers).toEqual([
+        { goodId: "food", fromSystemId: "D1", toSystemId: "B", quantity: 10, cost: 10 },
+      ]);
+      expect(result.fundingBound).toEqual([
+        { goodId: "food", fromSystemId: "D2", toSystemId: "B" },
+      ]);
+    },
+  );
 
   it("ranks the import queue by draw urgency, not by standing use", () => {
     // Two deficits with identical shortfall and identical use figures; only their ability to
