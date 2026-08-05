@@ -100,6 +100,12 @@ export function toGoodMarketStates(
 
   // The draw figure has exactly one reader — the matcher's severity weight — so only the logistics
   // caller pays for the per-market brake pass and the second recipe sum behind it.
+  //
+  // This brake pass is LOAD-BEARING for welfare, not a refinement: the stage-3 gate's third arm
+  // (draw figure pinned to the old anchor ceiling, tick brake identical) measured the brake's
+  // direct effect on consumers as mildly negative and the ripple through this gate as the entire
+  // net gain (pop 100-1K supplied +11.8pp, electronics cover +0.43, B′−C′). Simplifying
+  // `brakeCeilingOf` out of the draw figure would silently give those gains back.
   let drawRates: Map<string, number> | undefined;
   if (opts?.withDraw) {
     // Each good's own output brake at its own current stock, plus its live event multiplier — the
