@@ -12,6 +12,7 @@ import { z } from "zod";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { MARKET_ROLES } from "./types";
 import type { HarnessConfig, HarnessResults, MarketRole } from "./types";
+import { DRAW_BRAKE_CEILINGS } from "@/lib/tick/processors/good-market-state";
 import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 
 // ── Zod schema ───────────────────────────────────────────────────
@@ -30,7 +31,7 @@ export const ExperimentConfigSchema = z.object({
   cadence: CadenceSchema.optional(),
   /** Third-arm pin: "anchor" pins the DRAW FIGURE's brake ceiling to the retired anchor
    *  geometry while the tick's own brake stays live. Omit for the game's real behaviour. */
-  drawBrakeCeiling: z.enum(["live", "anchor"]).optional(),
+  drawBrakeCeiling: z.enum(DRAW_BRAKE_CEILINGS).optional(),
 });
 
 export type ExperimentConfig = z.infer<typeof ExperimentConfigSchema>;

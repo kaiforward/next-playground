@@ -131,8 +131,8 @@ output_g = Σ count × outputPerUnit × effectiveFulfilment(tier_g) × yieldMult
   inputs → is a bigger *importer* of its family's intermediates. Opposing flows for free.
 - The buff does **not** change a factory's staffing ratio (`effectiveFulfilment`) — an anchor makes each
   factory *yield more*, not *be more staffed*. Factory decay `used` is unchanged. (A buffed hub can glut its
-  family locally faster, dropping `outputUptake` until exports carry it away — the correct self-regulation,
-  handled by the existing selling/decay path.)
+  family locally faster, pushing stock past its brake's knee and dropping `sellingFactor` until exports
+  carry it away — the correct self-regulation, handled by the existing selling/decay path.)
 
 ---
 

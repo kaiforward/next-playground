@@ -123,10 +123,14 @@ at and the target a sink fills to together.
   `EXPORT_RESERVE_COVER` cycles of its own demand, which sits far *below* the reserve and is where
   96.5% of hauls come from — an exporter is drained to its reserve, not to par. Path (b)
   mirrors the deficit-side self-supply gate and is required because the production brake rests a
-  producer's stock at its warehouse knee — at most `BRAKE_RAMP × BRAKE_USE_COVER` = 52 cycles of the
-  use figure, *below* the 56-cycle donation line (`SURPLUS_MARGIN × DONOR_RESERVE_COVER`) — without it
-  a structural exporter could never form a surplus, and directed logistics went dead for every good its
-  producers also consume (food, water, biomass).
+  producer's stock at its warehouse knee, and the knee is not one fixed number: at most `BRAKE_RAMP ×
+  BRAKE_USE_COVER` = 52 cycles of the use figure *where the use term binds the knee* — below the
+  56-cycle donation line (`SURPLUS_MARGIN × DONOR_RESERVE_COVER`) — but an output-bound exporter's
+  knee is sized off its own capacity instead (`BRAKE_OUTPUT_COVER × capacityProduction`) and can sit
+  *above* the donation line. That is the intended outcome of path (b), not a gap in it: a dedicated
+  exporter with negligible local use rests above the line on capacity alone, and (b) is what still lets
+  it form a surplus there. Without path (b) at all, a structural exporter could never form a surplus,
+  and directed logistics went dead for every good its producers also consume (food, water, biomass).
   Both ends of the match are denominated in real demand, and no price-anchor quantity reaches
   logistics or the brake: a producer idles against its **warehouse knee** — the larger of 40 cycles
   of its use figure and 8 cycles of its own capacity (see

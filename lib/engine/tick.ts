@@ -59,7 +59,7 @@ export interface EconomySimParams {
    * constant-free.
    */
   brakeUseCover: number;
-  /** Taper width: the ramp ends at brakeRamp × knee, capped at physical storage (BRAKE_RAMP). */
+  /** Taper width: the ramp ends at brakeRamp × knee (BRAKE_RAMP). */
   brakeRamp: number;
   /** Cycles of reference-cycle capacity the working-inventory term covers (BRAKE_OUTPUT_COVER). */
   brakeOutputCover: number;
@@ -125,8 +125,17 @@ export interface BrakeKnee {
  * capacity the autonomic build would build storage toward.
  */
 export function brakeKnee(input: BrakeKneeInput, params: EconomySimParams): BrakeKnee {
-  const useTerm = params.brakeUseCover * Math.max(0, input.useRate) * Math.max(0, input.anchorMult);
-  const outputTerm = params.brakeOutputCover * Math.max(0, input.capacityProduction);
+  // A corrupt scalar must never silently erase a real need (the same polarity honest-demand's
+  // `gate()` documents): a non-finite rate drops out of its own max() term rather than turning
+  // the whole knee NaN and welding every market's brake shut, while a non-finite anchorMult reads
+  // as unshifted (1) rather than as zero, which would erase the use term it multiplies.
+  const useRate = Number.isFinite(input.useRate) ? Math.max(0, input.useRate) : 0;
+  const capacityProduction = Number.isFinite(input.capacityProduction)
+    ? Math.max(0, input.capacityProduction)
+    : 0;
+  const anchorMult = Number.isFinite(input.anchorMult) ? Math.max(0, input.anchorMult) : 1;
+  const useTerm = params.brakeUseCover * useRate * anchorMult;
+  const outputTerm = params.brakeOutputCover * capacityProduction;
   const knee = Math.max(useTerm, outputTerm);
   return {
     knee,

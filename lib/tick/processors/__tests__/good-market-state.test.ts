@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { toGoodMarketStates, anchorCeiling } from "@/lib/tick/processors/good-market-state";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
 import { GOODS } from "@/lib/constants/goods";
 import { unitResourceVector } from "@/lib/engine/resources";
@@ -36,6 +36,33 @@ function rowAtPopulation(goodId: string, population: number, stock: number, anch
 
 const statesFor = (row: MarketRowForLogistics, population: number) =>
   toGoodMarketStates({ buildings: {}, population, yields: unitResourceVector(), markets: [row] });
+
+// ── anchorCeiling — the retired third-arm control ──────────────────
+// Full rate to the price anchor, taper to 0 at RETIRED_HOLD_COVER(1.3) × anchor — a fixed
+// historical literal (see the good-market-state.ts docstring), never ECONOMY_CONSTANTS.BRAKE_RAMP.
+
+describe("anchorCeiling", () => {
+  const target = 100; // taper runs [100, 130]
+
+  it("runs at full rate at and below the price anchor", () => {
+    expect(anchorCeiling(0, target)).toBe(1);
+    expect(anchorCeiling(target, target)).toBe(1);
+  });
+
+  it("reaches exactly 0.5 at the taper midpoint", () => {
+    expect(anchorCeiling(115, target)).toBeCloseTo(0.5, 10);
+  });
+
+  it("reaches 0 at and above RETIRED_HOLD_COVER × the price anchor", () => {
+    expect(anchorCeiling(130, target)).toBe(0);
+    expect(anchorCeiling(200, target)).toBe(0);
+  });
+
+  it("is 0 for a non-positive target — no anchor means no band to hold", () => {
+    expect(anchorCeiling(0, 0)).toBe(0);
+    expect(anchorCeiling(0, -5)).toBe(0);
+  });
+});
 
 describe("toGoodMarketStates", () => {
   it("passes stock + goodId through and derives demand from the system's own basis", () => {

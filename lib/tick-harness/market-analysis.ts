@@ -420,7 +420,9 @@ export function computeKneeBinding(
       buildings: s.buildings, population: s.population, yields: s.yields, markets: rows,
     });
     for (const state of states) {
-      if (state.capacityProduction <= 0) continue;
+      // `!(x > 0)` rather than `x <= 0`: a NaN capacityProduction fails BOTH comparisons, and the
+      // `<=` form let it fall through into the "producing" branch the census sizes itself against.
+      if (!(state.capacityProduction > 0)) continue;
       const row = rowByGood.get(state.goodId);
       if (!row) continue;
       const knee = brakeKnee(

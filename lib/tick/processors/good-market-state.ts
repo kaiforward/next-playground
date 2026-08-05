@@ -24,7 +24,7 @@
  */
 import type { ResourceVector } from "@/lib/types/game";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
-import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
+import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { GOODS } from "@/lib/constants/goods";
 import { capacityGoodRates } from "@/lib/engine/industry";
 import { drawRatesByGood, useRatesByGood } from "@/lib/engine/honest-demand";
@@ -41,17 +41,31 @@ import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-
  * stage-gate's third A/B arm, so the brake's direct effect and its logistics-urgency ripple are
  * attributable separately. It rides `runWorldTick`'s opts channel exactly as the cadence override
  * does, and reaches nothing but the draw figure.
+ *
+ * The single source for both the type and the Zod boundary (`experiment.ts`) — a third arm added
+ * here is a compile error everywhere else until named, rather than a schema that silently rejects
+ * (or silently accepts) whatever the type union no longer agrees with.
  */
-export type DrawBrakeCeiling = "live" | "anchor";
+export const DRAW_BRAKE_CEILINGS = ["live", "anchor"] as const;
+export type DrawBrakeCeiling = (typeof DRAW_BRAKE_CEILINGS)[number];
+
+/**
+ * The retired anchor brake's hold cover at retirement — BRAKE_RAMP's value on the day this brake
+ * was pinned as the third-arm control. Deliberately a fixed historical literal, NOT a live read of
+ * `ECONOMY_CONSTANTS.BRAKE_RAMP`: the two happen to agree today, but the control must stay fixed
+ * while the treatment (the live knee's own ramp) is retuned, or a later BRAKE_RAMP change would
+ * silently move the A/B baseline along with the arm it is meant to be a fixed comparison against.
+ */
+const RETIRED_HOLD_COVER = 1.3;
 
 /**
  * The retired anchor brake, kept ONLY as the third-arm pin: full rate to the price anchor, linear
- * taper to 0 at BRAKE_RAMP × anchor (the geometry the warehouse knee replaced — its hold cover
- * equalled BRAKE_RAMP at retirement). A measurement arm, never a gameplay path.
+ * taper to 0 at RETIRED_HOLD_COVER × anchor (the geometry the warehouse knee replaced). A
+ * measurement arm, never a gameplay path.
  */
-function anchorCeiling(stock: number, targetStock: number): number {
+export function anchorCeiling(stock: number, targetStock: number): number {
   if (targetStock <= 0) return 0;
-  const end = targetStock * ECONOMY_CONSTANTS.BRAKE_RAMP;
+  const end = targetStock * RETIRED_HOLD_COVER;
   if (stock <= targetStock) return 1;
   if (stock >= end) return 0;
   return (end - stock) / (end - targetStock);

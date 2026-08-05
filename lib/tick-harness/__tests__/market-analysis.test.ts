@@ -68,6 +68,19 @@ describe("computeKneeBinding", () => {
     const markets = [bindingRow("s-cons", 5, 100), bindingRow("s-frozen", 5, 100)];
     expect(computeKneeBinding([consumer, frozen], markets)).toEqual([]);
   });
+
+  it("sorts entries alphabetically by goodId", () => {
+    // A single-good fixture cannot observe the sort at all — two goods, deliberately inserted in
+    // REVERSE alphabetical order (water's system processed first), so only an actual sort — not
+    // insertion order — can produce the expected result.
+    const waterProducer: TickSystem = { ...producerSystem("s-water"), buildings: { water: 2 } };
+    const systems = [waterProducer, producerSystem("s-food")];
+    const markets = [
+      { ...bindingRow("s-water", 5, 100), goodId: "water" },
+      { ...bindingRow("s-food", 5, 100), goodId: "food" },
+    ];
+    expect(computeKneeBinding(systems, markets).map((e) => e.goodId)).toEqual(["food", "water"]);
+  });
 });
 
 describe("takeMarketSnapshot", () => {

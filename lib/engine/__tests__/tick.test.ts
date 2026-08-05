@@ -57,8 +57,26 @@ describe("brakeKnee — the warehouse knee", () => {
   it("treats a zero knee (no use, no capacity) as no production band above empty", () => {
     const knee = brakeKnee({ useRate: 0, capacityProduction: 0, anchorMult: 1 }, PARAMS);
     expect(knee.knee).toBe(0);
+    // An exact tie (0 === 0) resolves to "use" — the >= tie-break, pinned so it cannot silently
+    // flip to "output" and change which cohort an all-zero market counts against in the census.
+    expect(knee.bindingTerm).toBe("use");
     expect(productionCeiling(0, knee)).toBe(1);
     expect(productionCeiling(1, knee)).toBe(0);
+  });
+
+  it("sanitizes a NaN-fed input instead of propagating NaN through the whole knee", () => {
+    // A corrupt useRate must not weld every market's brake shut via a NaN knee/rampEnd — it drops
+    // out of its own term (reads as 0) while the output term still sets a usable knee.
+    const useCorrupt = brakeKnee({ useRate: NaN, capacityProduction: 10, anchorMult: 1 }, PARAMS);
+    expect(useCorrupt.knee).toBe(80); // 8 × 10 — the output term alone
+    expect(Number.isFinite(useCorrupt.rampEnd)).toBe(true);
+    expect(Number.isFinite(productionCeiling(50, useCorrupt))).toBe(true);
+
+    // A corrupt anchorMult must read as unshifted (1), not as 0, which would erase the use term
+    // it multiplies.
+    const anchorCorrupt = brakeKnee({ useRate: 5, capacityProduction: 0, anchorMult: NaN }, PARAMS);
+    expect(anchorCorrupt.knee).toBe(200); // 40 × 5 × 1
+    expect(Number.isFinite(anchorCorrupt.rampEnd)).toBe(true);
   });
 });
 

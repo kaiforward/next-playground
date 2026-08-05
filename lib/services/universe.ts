@@ -182,17 +182,19 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   // already use good keys as goodId).
   const marketStock: Record<string, number> = {};
   const demandRateByGood: Record<string, number> = {};
-  const honestUseRateByGood: Record<string, number> = {};
-  const anchorMultByGood: Record<string, number> = {};
+  // Map, not Record: key absence (no persisted/no market row) must be type-visible to its readers
+  // rather than resolving through an implicit `undefined` index.
+  const honestUseRateByGood = new Map<string, number>();
+  const anchorMultByGood = new Map<string, number>();
   const logisticsFundingBoundByGood: Record<string, boolean> = {};
   let rowSuppressRate: number | undefined;
   for (const row of marketsBySystem().get(systemId) ?? []) {
     marketStock[row.goodId] = row.stock;
     demandRateByGood[row.goodId] = row.demandRate;
     if (typeof row.honestUseRate === "number" && Number.isFinite(row.honestUseRate)) {
-      honestUseRateByGood[row.goodId] = row.honestUseRate;
+      honestUseRateByGood.set(row.goodId, row.honestUseRate);
     }
-    anchorMultByGood[row.goodId] = row.anchorMult;
+    anchorMultByGood.set(row.goodId, row.anchorMult);
     rowSuppressRate ??= row.productionSuppressRate;
     logisticsFundingBoundByGood[row.goodId] = row.logisticsFundingBound ?? false;
   }
@@ -219,7 +221,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   // would weld its brake knee to the output term alone. Same fallback the tick adapters use.
   let recomputedUse: Map<string, UseRate> | undefined;
   const honestUseRateOf = (goodKey: string): number => {
-    const persisted = honestUseRateByGood[goodKey];
+    const persisted = honestUseRateByGood.get(goodKey);
     if (persisted !== undefined) return persisted;
     recomputedUse ??= useRatesByGood({
       buildings,
@@ -232,16 +234,12 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
 
   // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
   // but feed the deposit-fill rows and the production/consumption profile below.
-  const readout = buildIndustryReadout(
-    buildings,
-    system.population,
-    marketStock,
-    yields,
-    (goodKey) => demandRateByGood[goodKey] ?? 0,
+  const readout = buildIndustryReadout(buildings, system.population, marketStock, yields, {
+    demandRateOf: (goodKey) => demandRateByGood[goodKey] ?? 0,
     honestUseRateOf,
-    (goodKey) => anchorMultByGood[goodKey] ?? 1,
-    (goodKey) => logisticsFundingBoundByGood[goodKey] ?? false,
-  );
+    anchorMultOf: (goodKey) => anchorMultByGood.get(goodKey) ?? 1,
+    logisticsFundingBoundOf: (goodKey) => logisticsFundingBoundByGood[goodKey] ?? false,
+  });
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.
   const popNeeds = systemPopNeeds(systemId, readout.labourAllocation);

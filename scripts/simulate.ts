@@ -44,6 +44,7 @@ import { renderTable } from "../lib/tick-harness/table";
 import { STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
+import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { toTickSystems } from "../lib/world/tick";
 import { MARKET_ROLES } from "../lib/tick-harness/types";
@@ -308,28 +309,39 @@ function formatTable(results: HarnessResults): string {
   }
 
   // Which term set each producing market's brake geometry — BRAKE_OUTPUT_COVER's tuning
-  // evidence. Counts per good sum to the good's producing-market count.
-  if (results.kneeBinding.length > 0) {
+  // evidence. Counts per good sum to the good's producing-market count. Printed unconditionally
+  // (even empty) — a silently-skipped section reads identically to a broken instrument.
+  {
     lines.push("");
     lines.push("Brake knee binding term (producing markets, end of simulation):");
-    lines.push(...renderTable(
-      ["Good", "Use", "Output", "Output %"],
-      [16, 8, 8, 9],
-      [...results.kneeBinding]
-        .sort((a, b) => byDispersion(a.goodId, b.goodId))
-        .map((e) => {
-          const total = e.use + e.output;
-          return [
-            e.goodId,
-            String(e.use),
-            String(e.output),
-            total > 0 ? `${((e.output / total) * 100).toFixed(0)}%` : "-",
-          ];
-        }),
-      ["l", "r", "r", "r"],
-    ));
-    lines.push("  output = the working-inventory term (BRAKE_OUTPUT_COVER × capacity) exceeds 40 cycles");
-    lines.push("  of the system's use figure — the dedicated-exporter cohort the term exists for.");
+    if (results.kneeBinding.length === 0) {
+      lines.push("  n = 0 producing markets (census empty — check the control/capacity filters).");
+    } else {
+      lines.push(...renderTable(
+        ["Good", "Use", "Output", "Output %"],
+        [16, 8, 8, 9],
+        [...results.kneeBinding]
+          .sort((a, b) => byDispersion(a.goodId, b.goodId))
+          .map((e) => {
+            const total = e.use + e.output;
+            return [
+              e.goodId,
+              String(e.use),
+              String(e.output),
+              total > 0 ? `${((e.output / total) * 100).toFixed(0)}%` : "-",
+            ];
+          }),
+        ["l", "r", "r", "r"],
+      ));
+      lines.push(
+        `  output = the working-inventory term (BRAKE_OUTPUT_COVER × capacity) exceeds ` +
+          `${ECONOMY_CONSTANTS.BRAKE_USE_COVER} cycles`,
+      );
+      lines.push(
+        `  of the system's use figure (× the event anchor multiplier the use term rides) — the ` +
+          `dedicated-exporter cohort BRAKE_OUTPUT_COVER (${ECONOMY_CONSTANTS.BRAKE_OUTPUT_COVER}) exists for.`,
+      );
+    }
   }
 
   // Population and unrest summary

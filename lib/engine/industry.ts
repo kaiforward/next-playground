@@ -652,6 +652,18 @@ const TECHNICIAN_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL1_CONSUMPT
 const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTION);
 
 /**
+ * The four per-good accessors `buildIndustryReadout` reads its callers' market/event state
+ * through — named rather than positional, so a permutation of three structurally identical
+ * `(goodId) => number` functions cannot compile clean and silently re-denominate the brake.
+ */
+export interface IndustryReadoutAccessors {
+  demandRateOf: (goodId: string) => number;
+  honestUseRateOf: (goodId: string) => number;
+  anchorMultOf: (goodId: string) => number;
+  logisticsFundingBoundOf?: (goodId: string) => boolean;
+}
+
+/**
  * Builds an industry readout for one system from its current industrial base and
  * market stock. Pure — no DB dependency. Reuses the existing helpers for all
  * derived quantities. (Space-partition headroom is assembled separately via
@@ -681,11 +693,9 @@ export function buildIndustryReadout(
   population: number,
   marketStock: Record<string, number>,
   yields: ResourceVector,
-  demandRateOf: (goodId: string) => number,
-  honestUseRateOf: (goodId: string) => number,
-  anchorMultOf: (goodId: string) => number,
-  logisticsFundingBoundOf?: (goodId: string) => boolean,
+  accessors: IndustryReadoutAccessors,
 ): SystemIndustryReadout {
+  const { demandRateOf, honestUseRateOf, anchorMultOf, logisticsFundingBoundOf } = accessors;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
   const pop = Math.max(0, population);

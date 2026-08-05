@@ -62,17 +62,30 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     // shut on the exact markets the fallback exists to keep honest). Cold path: every
     // row the population processor or the market seeder has touched carries the field.
     const recomputedUseBySystem = new Map<string, Map<string, UseRate>>();
+    // Built once, on first use, in a single pass over `this.markets` — replaces a `.find()` that
+    // rescanned the whole galaxy's markets per system needing the live recompute. First-writer-wins
+    // per system, matching the `.find()`'s array-order semantics.
+    let suppressRateBySystem: Map<string, number> | undefined;
+    const suppressRateFor = (systemId: string): number => {
+      if (suppressRateBySystem === undefined) {
+        suppressRateBySystem = new Map<string, number>();
+        for (const m of this.markets) {
+          if (suppressRateBySystem.has(m.systemId)) continue;
+          if (typeof m.productionSuppressRate === "number") {
+            suppressRateBySystem.set(m.systemId, m.productionSuppressRate);
+          }
+        }
+      }
+      return suppressRateBySystem.get(systemId) ?? 1;
+    };
     const recomputedUseRate = (sys: TickSystem, goodId: string): number => {
       let bySystem = recomputedUseBySystem.get(sys.id);
       if (bySystem === undefined) {
-        const suppressRow = this.markets.find(
-          (m) => m.systemId === sys.id && typeof m.productionSuppressRate === "number",
-        );
         bySystem = useRatesByGood({
           buildings: sys.buildings,
           population: sys.population,
           yields: sys.yields,
-          productionSuppress: suppressRow?.productionSuppressRate ?? 1,
+          productionSuppress: suppressRateFor(sys.id),
         });
         recomputedUseBySystem.set(sys.id, bySystem);
       }

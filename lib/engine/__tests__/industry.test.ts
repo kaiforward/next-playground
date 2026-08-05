@@ -282,14 +282,14 @@ describe("buildIndustryReadout", () => {
   const demandRateOf = (): number => 2.5;
 
   it("labourFulfillment matches the helper formula", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const demand = labourDemand(buildings);
     const expected = labourFulfillment(pop, demand);
     expect(readout.labourFulfillment).toBeCloseTo(expected, 6);
   });
 
   it("housing appears with tier -1 and no outputGood", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing).toBeDefined();
     expect(housing.tier).toBe(-1);
@@ -298,7 +298,7 @@ describe("buildIndustryReadout", () => {
   });
 
   it("production buildings have outputGood and correct tier", () => {
-    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals).toBeDefined();
     expect(metals.outputGood).toBe("metals");
@@ -309,7 +309,7 @@ describe("buildIndustryReadout", () => {
   it("supplyChain entry is throttled (inputGate < 1) inside the ration zone", () => {
     // Ore stock strictly below the ration threshold (RATION_COVER × 2.5 = 5) makes the ramp bite.
     const marketStock = { ore: 2 };
-    const readout = buildIndustryReadout(buildings, pop, marketStock, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, marketStock, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeLessThan(1);
@@ -322,7 +322,7 @@ describe("buildIndustryReadout", () => {
     const oreNeeded = fullyStaffedProduction * GOOD_RECIPES["metals"]["ore"];
     const marketStock = { ore: oreNeeded * 10 };
     const ampleDemand = (): number => oreNeeded / 40; // ration threshold oreNeeded/20 — far below the ample stock
-    const readout = buildIndustryReadout(buildings, pop, marketStock, unitResourceVector(), ampleDemand, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, marketStock, unitResourceVector(), { demandRateOf: ampleDemand, honestUseRateOf, anchorMultOf: one });
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry).toBeDefined();
     expect(entry.inputGate).toBeCloseTo(1, 6);
@@ -334,7 +334,7 @@ describe("buildIndustryReadout", () => {
     // shared ramp a starved producer still draws toward empty, so its displayed output stays > 0.
     const producer = { metals: 3, vocational_school: 1 };
     const producerPop = labourDemand(producer);
-    const readout = buildIndustryReadout(producer, producerPop, { ore: 2 }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(producer, producerPop, { ore: 2 }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     const gross = buildingProduction(producer, "metals", computeLabourState(producer, producerPop), unitResourceVector());
     const out = metals.output;
@@ -349,10 +349,10 @@ describe("buildIndustryReadout", () => {
     const gross = buildingProduction(producer, "metals", FULL, unitResourceVector());
     const oreDraw = gross * GOOD_RECIPES["metals"]["ore"];
     const rampDemand = (): number => oreDraw / 40; // ration threshold oreDraw/20 — never the binding line here
-    const ample = buildIndustryReadout(producer, producerPop, { ore: oreDraw * 2 }, unitResourceVector(), rampDemand, honestUseRateOf, one);
+    const ample = buildIndustryReadout(producer, producerPop, { ore: oreDraw * 2 }, unitResourceVector(), { demandRateOf: rampDemand, honestUseRateOf, anchorMultOf: one });
     expect(ample.supplyChain.find((e) => e.goodId === "metals")!.throttledBy).toHaveLength(0);
     // Input below comfort ⇒ the ramp binds even though stock > 0.
-    const scarce = buildIndustryReadout(producer, producerPop, { ore: oreDraw * 0.3 }, unitResourceVector(), rampDemand, honestUseRateOf, one);
+    const scarce = buildIndustryReadout(producer, producerPop, { ore: oreDraw * 0.3 }, unitResourceVector(), { demandRateOf: rampDemand, honestUseRateOf, anchorMultOf: one });
     expect(scarce.supplyChain.find((e) => e.goodId === "metals")!.throttledBy).toContain("ore");
   });
 
@@ -366,14 +366,14 @@ describe("buildIndustryReadout", () => {
     const oreDraw = gross * GOOD_RECIPES["metals"]["ore"];
     const stock = oreDraw * 2; // covers the draw, so availability never binds — the ramp alone decides
     expect(stock).toBeGreaterThan(5); // strictly above the band-derived threshold: the old rule reads 1 here
-    const readout = buildIndustryReadout(buildings, pop, { ore: stock }, unitResourceVector(), () => stock, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { ore: stock }, unitResourceVector(), { demandRateOf: () => stock, honestUseRateOf, anchorMultOf: one });
     const entry = readout.supplyChain.find((e) => e.goodId === "metals")!;
     expect(entry.inputGate).toBeCloseTo(Math.sqrt(1 / ECONOMY_CONSTANTS.RATION_COVER), 6);
     expect(entry.throttledBy).toContain("ore");
   });
 
   it("tier-0 goods (no recipe) are absent from supplyChain", () => {
-    const readout = buildIndustryReadout({ ore: 5 }, 1000, {}, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout({ ore: 5 }, 1000, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     expect(readout.supplyChain.find((e) => e.goodId === "ore")).toBeUndefined();
   });
 
@@ -392,9 +392,7 @@ describe("buildIndustryReadout", () => {
       pop + 2 * labourTotal(BUILDING_TYPES.fuel!.labour!) + labourTotal(BUILDING_TYPES.vocational_school!.labour!),
       stock,
       unitResourceVector(),
-      sortDemand,
-      honestUseRateOf,
-      one,
+      { demandRateOf: sortDemand, honestUseRateOf, anchorMultOf: one },
     );
     const gates = readout.supplyChain.map((e) => e.inputGate);
     for (let i = 1; i < gates.length; i++) {
@@ -415,7 +413,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   const demandRateOf = (): number => 2.5;
 
   it("housing used = occupancy (population / POP_CENTRE_DENSITY); 'occupancy' when under-filled", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing.used).toBeCloseTo(6.6, 6);
     expect(housing.idleReason).toBe("occupancy");
@@ -428,7 +426,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const demand = labourDemand(buildings);
     const pop = demand * 0.5; // labour fulfillment 0.5
     // Stock below the anchor sells freely (factor 1), so labour is the binding constraint.
-    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeCloseTo(4 * 0.5, 6);
     expect(metals.idleReason).toBe("labour");
@@ -440,7 +438,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     // though headcount is fully staffed. Stock below the anchor keeps selling from confounding it.
     const buildings = { electronics: 4 };
     const pop = labourDemand(buildings); // headcount fully staffed
-    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const electronics = readout.buildings.find((b) => b.buildingType === "electronics")!;
     expect(electronics.used).toBeLessThan(4);
     expect(electronics.idleReason).toBe("skill1"); // neither academy → lower grade wins the tie
@@ -450,7 +448,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings); // fully staffed
     // stock past the ramp end → output piling up (factor 0), so selling is the binding constraint.
-    const readout = buildIndustryReadout(buildings, pop, { metals: shutStock(buildings, pop) }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { metals: shutStock(buildings, pop) }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeLessThan(4 * 0.2);
     expect(metals.idleReason).toBe("selling");
@@ -464,10 +462,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
       pop,
       { metals: shutStock(buildings, pop) },
       unitResourceVector(),
-      demandRateOf,
-      honestUseRateOf,
-      one,
-      (goodId) => goodId === "metals",
+      { demandRateOf, honestUseRateOf, anchorMultOf: one, logisticsFundingBoundOf: (goodId) => goodId === "metals" },
     );
     const metals = readout.buildings.find((building) => building.buildingType === "metals")!;
     expect(metals.used).toBe(4);
@@ -477,7 +472,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   it("no idleReason when fully staffed and selling", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeCloseTo(4, 6);
     expect(metals.idleReason).toBeUndefined();
@@ -486,7 +481,7 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
   it("sells freely at an empty yard even with no stated use (knee from the output term alone)", () => {
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.used).toBeCloseTo(4, 6); // selling factor 1, headcount + skill1 both fulfilled
   });
@@ -502,7 +497,7 @@ describe("buildIndustryReadout — skill idle reason split", () => {
   it("'skill1' when a tier-1 good is fully staffed but no school licenses it", () => {
     const buildings = { metals: 4 }; // tier-1 needs skill1; no vocational_school
     const pop = labourDemand(buildings); // headcount fully staffed
-    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     expect(readout.buildings.find((b) => b.buildingType === "metals")!.idleReason).toBe("skill1");
   });
 
@@ -510,14 +505,14 @@ describe("buildIndustryReadout — skill idle reason split", () => {
     // enough schools to cover skill1 demand, zero institutes → skill2 is the binding pool.
     const buildings = { electronics: 1, vocational_school: 5 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     expect(readout.buildings.find((b) => b.buildingType === "electronics")!.idleReason).toBe("skill2");
   });
 
   it("'skill1' on a tier-2 good with neither academy (lower grade wins the tie)", () => {
     const buildings = { electronics: 4 }; // skill1Fulfil === skill2Fulfil === 0
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { electronics: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     expect(readout.buildings.find((b) => b.buildingType === "electronics")!.idleReason).toBe("skill1");
   });
 });
@@ -717,7 +712,7 @@ describe("buildIndustryReadout — labour block", () => {
     // 3 electronics (tier-2: unskilled 30, skill1 20, skill2 10) + 1 school + 1 institute.
     const buildings = { electronics: 3, vocational_school: 1, research_institute: 1 };
     const pop = 100;
-    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
 
     const demand = labourDemand(buildings);
     expect(readout.labour.workforce.have).toBeCloseTo(pop, 6);
@@ -735,7 +730,7 @@ describe("buildIndustryReadout — labour block", () => {
 
   it("a demand-with-zero-cap skill pool reads fulfil 0 (no academy)", () => {
     const buildings = { metals: 2 }; // tier-1 needs skill1; no school built
-    const readout = buildIndustryReadout(buildings, 1000, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const readout = buildIndustryReadout(buildings, 1000, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
     expect(readout.labour.skill1.need).toBeGreaterThan(0);
     expect(readout.labour.skill1.have).toBe(0);
     expect(readout.labour.skill1.fulfil).toBe(0);
@@ -755,14 +750,14 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     // fully staffed + licensed, but stock pinned past the brake's stop (not selling).
     const buildings = { metals: 4, vocational_school: 1 };
     const pop = labourDemand(buildings);
-    const readout = buildIndustryReadout(buildings, pop, { metals: shutStock(buildings, pop) }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { metals: shutStock(buildings, pop) }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     expect(metals.staffedFraction).toBeCloseTo(1, 6); // pure staffing full even though used (selling) is ~0
     expect(metals.used).toBeLessThan(4 * 0.2);         // used still folds the selling factor (unchanged)
   });
 
   it("housing staffedFraction stays literal while used includes vacancy protection", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 10 }, 6 * POP_CENTRE_DENSITY, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const housing = readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
     expect(housing.used).toBeCloseTo(6.6, 6);
     expect(housing.staffedFraction).toBeCloseTo(0.6, 6);
@@ -772,7 +767,7 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     const buildings = { metals: 3, vocational_school: 1 };
     const pop = labourDemand(buildings);
     // ore below comfort → inputGate < 1; metals fully staffed.
-    const readout = buildIndustryReadout(buildings, pop, { ore: MIN }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, { ore: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
     const gate = readout.supplyChain.find((e) => e.goodId === "metals")!.inputGate;
     const gross = buildingProduction(buildings, "metals", computeLabourState(buildings, pop), unitResourceVector());
@@ -782,12 +777,12 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
 
   it("output is 0 for a tier-1 good with no academy (skill-gated to zero)", () => {
     const buildings = { metals: 4 }; // no school → skill1Fulfil 0 → production 0
-    const readout = buildIndustryReadout(buildings, labourDemand(buildings), { metals: MIN }, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, labourDemand(buildings), { metals: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     expect(readout.buildings.find((b) => b.buildingType === "metals")!.output).toBe(0);
   });
 
   it("housing and academies carry no output", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 3, vocational_school: 1 }, 100, {}, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 3, vocational_school: 1 }, 100, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     expect(readout.buildings.find((b) => b.buildingType === HOUSING_TYPE)!.output).toBeUndefined();
     expect(readout.buildings.find((b) => b.buildingType === "vocational_school")!.output).toBeUndefined();
   });
@@ -797,7 +792,7 @@ describe("buildIndustryReadout — staffedFraction + output", () => {
     // its licensing sits idle — the readout must match decay (licence-draw), not the old staffing proxy.
     const buildings = { metals: 1, vocational_school: 1 };
     const pop = labourDemand(buildings) * 10; // plentiful → fully staffed on headcount
-    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), demandRateOf, honestUseRateOf, one);
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const school = readout.buildings.find((b) => b.buildingType === "vocational_school")!;
     const s1 = BUILDING_TYPES.metals!.labour!.skill1;
     // used = 1 × min(1, skill1Demand / skill1Cap): mostly idle, well below the built count of 1.
@@ -882,7 +877,7 @@ describe("skillLicensing", () => {
 
 describe("buildIndustryReadout labourAllocation", () => {
   it("surfaces the population decomposition alongside the labour pools", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
     // Housing-only system: no jobs, so everyone is unemployed and the buckets are empty.
     expect(readout.labourAllocation).toEqual({
       population: 100, unskilled: 0, technicians: 0, engineers: 0, unemployed: 100,
@@ -892,7 +887,7 @@ describe("buildIndustryReadout labourAllocation", () => {
 
 describe("buildIndustryReadout skillBaskets", () => {
   it("technicians and engineers baskets are non-empty, sorted descending by perHead, and drawn from the matching constant", () => {
-    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const readout = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
     const { technicians, engineers } = readout.skillBaskets;
 
     expect(technicians.length).toBeGreaterThan(0);
@@ -909,8 +904,8 @@ describe("buildIndustryReadout skillBaskets", () => {
   });
 
   it("skillBaskets are the same for every readout (static per-grade catalogue, not system-dependent)", () => {
-    const a = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, unitResourceVector(), () => 0, () => 0, () => 1);
-    const b = buildIndustryReadout({ metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 }, 1000, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const a = buildIndustryReadout({ [HOUSING_TYPE]: 5 }, 100, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
+    const b = buildIndustryReadout({ metals: 3, [HOUSING_TYPE]: 5, vocational_school: 1 }, 1000, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
     expect(a.skillBaskets).toEqual(b.skillBaskets);
   });
 });
@@ -980,7 +975,7 @@ describe("computeSystemLabourSnapshot", () => {
 describe("buildIndustryReadout — complex row", () => {
   it("emits a complex entry with family-utilisation used (not labour-based)", () => {
     const buildings = { [HEAVY_INDUSTRY_COMPLEX]: 1 }; // orphaned: no metals factories
-    const r = buildIndustryReadout(buildings, 1e9, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const r = buildIndustryReadout(buildings, 1e9, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
     const row = r.buildings.find((b) => b.buildingType === HEAVY_INDUSTRY_COMPLEX)!;
     expect(row.used).toBe(0);            // orphaned → 0, despite population being huge
     expect(row.output).toBeUndefined();  // produces no good
@@ -991,7 +986,7 @@ describe("buildIndustryReadout — support row (kind 'none')", () => {
   it("emits a fully-staffed centre entry shaped like an academy: tier 0, no output, used = count × labourFulfil", () => {
     const buildings = { [CONSTRUCTION_CENTRE_TYPE]: 2 };
     const pop = labourDemand(buildings); // exactly enough heads to fully staff it
-    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
     const centre = readout.buildings.find((b) => b.buildingType === CONSTRUCTION_CENTRE_TYPE)!;
     expect(centre.tier).toBe(0);
     expect(centre.outputGood).toBeUndefined();
@@ -1003,7 +998,7 @@ describe("buildIndustryReadout — support row (kind 'none')", () => {
   it("staffedFraction tracks labour fulfilment, not a producer's effectiveFulfilment, when understaffed", () => {
     const buildings = { [CONSTRUCTION_CENTRE_TYPE]: 4 };
     const pop = labourDemand(buildings) / 2; // half the required heads
-    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), () => 0, () => 0, () => 1);
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf: () => 0, honestUseRateOf: () => 0, anchorMultOf: () => 1 });
     const centre = readout.buildings.find((b) => b.buildingType === CONSTRUCTION_CENTRE_TYPE)!;
     expect(centre.used).toBeCloseTo(2, 6); // count × labourFulfil = 4 × 0.5
     expect(centre.staffedFraction).toBeCloseTo(0.5, 6);

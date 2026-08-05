@@ -68,6 +68,18 @@ describe("ExperimentConfig", () => {
       });
       expect(result.success).toBe(false);
     });
+
+    it("accepts a drawBrakeCeiling override", () => {
+      const result = ExperimentConfigSchema.safeParse({ drawBrakeCeiling: "anchor" });
+      expect(result.success).toBe(true);
+      if (!result.success) return;
+      expect(result.data.drawBrakeCeiling).toBe("anchor");
+    });
+
+    it("rejects a drawBrakeCeiling value outside the two named arms", () => {
+      const result = ExperimentConfigSchema.safeParse({ drawBrakeCeiling: "capacity" });
+      expect(result.success).toBe(false);
+    });
   });
 
   describe("experimentToHarnessConfig", () => {
@@ -94,6 +106,12 @@ describe("ExperimentConfig", () => {
       const { config } = experimentToHarnessConfig(exp);
 
       expect(config.cadence).toEqual({ cycle: 12, construction: 24, logistics: 48 });
+    });
+
+    it("forwards a drawBrakeCeiling override onto the harness config", () => {
+      const exp = ExperimentConfigSchema.parse({ seed: 7, drawBrakeCeiling: "anchor" });
+      const { config } = experimentToHarnessConfig(exp);
+      expect(config.drawBrakeCeiling).toBe("anchor");
     });
 
     it("omits label when none is specified", () => {

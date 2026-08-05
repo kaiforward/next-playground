@@ -1,3 +1,5 @@
+import type { EconomySimParams } from "@/lib/engine/tick";
+
 /**
  * Cycles of cover (stock ÷ local demand rate) at which a good's mid price equals
  * its basePrice — the pricing reference (`targetStock = TARGET_COVER × demandRate
@@ -12,7 +14,7 @@
  * (see physical-economy.ts); this stays the whole-roster knob.
  *
  * A PRICING constant, with no physical rider: the production brake is
- * denominated in the use figure and physical storage (`BRAKE_USE_COVER` /
+ * denominated in the use figure and the system's own output (`BRAKE_USE_COVER` /
  * `BRAKE_RAMP` / `BRAKE_OUTPUT_COVER` below), and warehouse/logistics policy in
  * cycles of real demand by its own constants (`EXPORT_RESERVE_COVER`,
  * `WAREHOUSE_COVER`, `DONOR_RESERVE_COVER`, `FOUNDING_STOCK_COVER`) — held
@@ -20,8 +22,6 @@
  * never derived from it.
  */
 export const TARGET_COVER = 40;
-
-import type { EconomySimParams } from "@/lib/engine/tick";
 
 /** Economy simulation constants — used by the economy tick. */
 export const ECONOMY_CONSTANTS = {
@@ -72,7 +72,7 @@ export const ECONOMY_CONSTANTS = {
  * the draw figure's brake pass) passes to `brakeKnee`, so they cannot disagree
  * about where a producer idles.
  */
-export const ECONOMY_SIM_PARAMS: EconomySimParams = {
+export const ECONOMY_SIM_PARAMS: Readonly<EconomySimParams> = {
   brakeUseCover: ECONOMY_CONSTANTS.BRAKE_USE_COVER,
   brakeRamp: ECONOMY_CONSTANTS.BRAKE_RAMP,
   brakeOutputCover: ECONOMY_CONSTANTS.BRAKE_OUTPUT_COVER,
