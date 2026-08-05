@@ -57,7 +57,8 @@ the price anchor any more.)
     leech-colony motivation is falsified (chronic struck share ~3%, not >25%) — do not cite it.
     Spec written and `/spec-review`ed (2026-08-05, all 25 findings accepted + applied, `d70d1cd6`):
     [colonisation-economics spec](./planned/colonisation-economics.md).
-    *Next step:* `/build-plan docs/planned/colonisation-economics.md`.
+    Build plan written (2026-08-06): 14 tasks in three phases + a calibration gate, in the working
+    file. *Next step:* implement Phase A (Tasks 1-5 — the priced quantities and the save shape).
     *Don't:* precision-tune anything Provision will re-define (its own Don't), and don't quote the
     old `founderCoverAfter` unit against the redefined one — the spec's harness row restarts that
     baseline.

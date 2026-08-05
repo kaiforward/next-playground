@@ -598,3 +598,535 @@ Things a later reader must not re-derive, and traps this campaign hit.
   in any processor body mean a checkpoint at t=N is identical to a separate N-tick run's endpoint —
   proven here by the diag's t=1,000 and t=10,000 checkpoints reproducing the harness's two separate
   runs exactly.
+
+---
+
+## Build plan
+
+Spec: `docs/planned/colonisation-economics.md` (spec-reviewed 2026-08-05, all 25 findings applied,
+`d70d1cd6`). The spec owns every decision below; this plan owns files, order and the contracts
+between tasks. Phases are check-in pauses on one branch — the PR unit is the whole row.
+
+**Phase A — the priced quantities exist (Tasks 1-5).** Nothing founds differently yet: the debit
+channel is wired but always empty.
+**Phase B — the mechanism (Tasks 6-10).** The gate, the charter, staging, delivery, the settler gate.
+**Phase C — surfaces and instruments (Tasks 11-14)**, then the calibration gate.
+
+### Task 1 — One seam values founding, and the four new constants exist
+
+Files: `lib/constants/colonisation.ts`; `lib/engine/founding-cost.ts` **(new)**;
+`lib/engine/__tests__/founding-cost.test.ts` **(new)**.
+
+Interface:
+- `COLONISATION` gains `CHARTER_FEE_SPEND_MULT` (6.5), `CHARTER_FEE_MIN` (100),
+  `FOUNDING_GATE_HEADROOM` (2.0), `FOUNDING_STALL_COMPLETE_CYCLES` (8) — meanings and anchors
+  verbatim from the spec's constants table. `COLONY_ESTABLISH_WORK`'s docstring drops "a temporary
+  construction stand-in until a treasury prices expansion" (this row is that pricing).
+- `foundingGoodsValue(lines: ReadonlyArray<{ goodId: string; quantity: number }>, economyScale: number): number`
+  — the single valuation seam, `Σ (quantity / ECONOMY_SCALE) × GOODS[goodId].basePrice`. Takes the
+  scale as a parameter, matching `productionTaxIncome` (`lib/engine/treasury.ts:68-83`) — the engine
+  graph never imports the env-resolved constant. Never reads `REFERENCE_VALUE`.
+- `charterFee(maintenanceBill: number, params: { mult: number; min: number }): number`
+  = `max(min, mult × maintenanceBill)` — a real floor, not a null-fallback.
+- `projectedManifestWant(sourceGoods: ReadonlyArray<GoodMarketState>, seedPop: number, cover: number): FoundingStockLine[]`
+  — the **uncapped** want, one line per good the seed consumes, on the same want expression
+  `planFoundingStock` uses (`lib/tick/processors/directed-build.ts:109-111`) with no
+  `surplusDrawable` cap. Deliberately an upper bound (spec: over-reserving is the safe direction).
+- `foundingCommitmentCost(charter: number, projectedBillValue: number, headroom: number): number`
+  = `charter + headroom × projectedBillValue` — the gate quantity, one function so the planner, the
+  player service and the staging check can never read three different numbers.
+
+Proves: `founding-cost.test.ts` — total founding cost for a fixed seed pop is **equal** at
+`ECONOMY_SCALE` 1 and 100, via `vi.resetModules()` + `vi.stubEnv` re-import (the
+`lib/engine/__tests__/economy-scale-invariance.test.ts` pattern; the re-import is required because
+the *quantity* rides S through `scaleRecord`). Drop the `/ economyScale` divisor and this is the only
+test in the suite that fails — everything else is pinned at S=1 (`vitest.config.ts:29`).
+
+Consumes: —
+
+### Task 2 — World shape carries the ledger, the charter flag and the purse line
+
+Files: `lib/world/types.ts`; `lib/world/save.ts`; `lib/world/gen.ts`;
+`lib/world/__tests__/save.test.ts`.
+
+Interface:
+- `WorldFoundingStockLine { goodId: string; quantity: number }` in `lib/world/types.ts`;
+  `FoundingStockLine` in `lib/tick/world/directed-build-world.ts:55` becomes an alias of it (the
+  `TreasuryMaintenanceLine = MaintenanceBillLine` pattern at `types.ts:333`), so one shape crosses
+  the processor/world boundary.
+- `WorldColonyEstablishProject` (`types.ts:190`) gains **required** `stagedManifest:
+  WorldFoundingStockLine[]`, `charterPaid: boolean`, `stalledCycles: number`.
+- `WorldFactionTreasury` (`types.ts:349`) gains **required** `pendingFounding: number`;
+  `gen.ts:209`'s init writes `pendingFounding: 0`.
+- `WorldTreasurySettlement` (`types.ts:336`) gains **required** `foundingExpense: number` — its own
+  field, never a fourth member of `TreasuryBands`.
+- `SAVE_FORMAT_VERSION` 10 → 11 (`save.ts:29`).
+
+Required, not optional, is the point: `tsc` then fails at both project creation sites (the autonomic
+planner and `orderColony`) until Tasks 7 and 11 supply them.
+
+Proves: `save.test.ts` — the version pin moves to 11 and a world holding a staged manifest
+round-trips; a `formatVersion: 10` payload is rejected by `deserializeWorld` (`save.ts:78-83`). The
+premise that breaks if a field is made optional is caught by `tsc`, not by this test — that is why
+they are required.
+
+Consumes: Task 1 (shape only).
+
+### Task 3 — The queue funder accepts a per-project ceiling
+
+Files: `lib/engine/construction.ts`; `lib/engine/__tests__/construction.test.ts`.
+
+Interface: `fundQueueWithFloor(ordered, pool, cap, reserved, isFloorEligible, capFor?: (p:
+WorldConstructionProject) => number)` — `capFor` returns this project's absorption ceiling for the
+cycle; omitted → the scalar `cap` for every project, exactly today's behaviour. It binds in **both**
+passes (`construction.ts:167-177` and `:184-193`), so the reserved floor cannot route around a
+ceiling of 0. `fundQueue` is untouched — the ETA forecasters (`forecastEtaCycles`,
+`forecastIndependentEtaCycles`, `nextCycleGains`) keep reading the scalar cap.
+
+Proves: `construction.test.ts` — a project whose `capFor` returns 0 absorbs nothing while its queue
+neighbours fund normally *and* the reserve does not fund it either (the floor-pass bypass is the
+regression); a project at half cap takes twice the cycles. The existing suite is the identity proof
+for the omitted-callback path.
+
+Consumes: —
+
+### Task 4 — The treasury accrues and settles founding expense
+
+Files: `lib/tick/world/treasury-world.ts`; `lib/tick/processors/treasury.ts`; `lib/world/tick.ts`
+(params wiring only); `lib/tick/processors/__tests__/treasury.test.ts`;
+`lib/world/__tests__/cadence-invariance.test.ts`.
+
+Interface:
+- `TreasuryProcessorParams` gains `foundingDebitsByFaction: ReadonlyMap<string, number>` — same
+  shape and same threading as `constructionWorkByFaction`.
+- Mid-cycle: accrue into `pendingFounding` through `safeMoney`, exactly as `pendingWork` is accrued
+  (`treasury.ts:70-88`). The early return `if (!settles && !hasWork)` (`:44-46`) and the mid-cycle
+  write branch (`:77-88`) both gain the founding term.
+- At settlement: `foundingExpense = pendingFounding` (post-accrual), subtracted from `balance`
+  through `safeMoney` **before** `settleLadder` (`:132`), `pendingFounding` reset to 0, and
+  `foundingExpense` written onto `lastSettlement`. `balance` keeps exactly one writer (`:148`).
+- `RunTotals` in `cadence-invariance.test.ts:48-52` gains a founding-expense total.
+
+The `build12` arm of that test (`cycle: 24, construction: 12`) **already is** the
+`CONSTRUCTION_INTERVAL ≠ CYCLE_LENGTH` configuration the spec asks for — what is missing is a
+founding term in the totals it compares, not a new arm.
+
+Proves: `processors/__tests__/treasury.test.ts` — a founding debit accrued on a **workless**
+mid-cycle tick still reaches the next settlement (fails the moment either guard keeps keying on
+pending *work* only), and `balance_after = balance_before + income − paid − foundingExpense`.
+
+Consumes: Task 2.
+
+### Task 5 — Every reader of a settlement learns about the new expense
+
+Files: `lib/services/treasury.ts`; `components/factions/treasury-card.tsx`;
+`lib/tick-harness/treasury-analysis.ts`; `lib/services/__tests__/treasury.test.ts`;
+`lib/tick-harness/__tests__/treasury-analysis.test.ts`.
+
+Interface:
+- `getFactionTreasury`'s `net` (`services/treasury.ts:22-26`) gains the founding term:
+  `net = headsIncome + productionIncome − (paid.maintenance + paid.logistics + paid.construction +
+  foundingExpense)`.
+- `treasury-card.tsx` gains a `Founding` `LedgerRow` alongside the Logistics and Construction expense
+  rows (`:101-102`).
+- `treasury-analysis.ts` `moneyFields` (`:65-75`) gains `t.pendingFounding` and
+  `t.lastSettlement.foundingExpense`, so a non-finite or negative value increments `invalidRows`
+  instead of silently corrupting the summary.
+
+Proves: `services/__tests__/treasury.test.ts` — `net` reconciles with the balance delta across a
+settlement carrying a founding expense (fails if the term is dropped: today's formula would report a
+surplus a faction did not have). Harness test: a row with `foundingExpense: NaN` counts as invalid.
+
+Consumes: Tasks 2, 4.
+
+### Task 6 — The planner prices each candidate against a running balance
+
+Files: `lib/engine/directed-build.ts`; `lib/engine/__tests__/directed-build.test.ts`.
+
+Interface:
+- `ColonyEstablishParams` gains `charterMult`, `charterMin`, `gateHeadroom`, `foundingStockCover`,
+  `economyScale`.
+- `planFactionColonyProposals(factionId, developed, candidates, openColonyProjects, params, budget)`
+  — new final argument `budget: { balance: number; maintenanceBill: number }`, the faction's working
+  balance and the charter's scale base. Omitted/undefined → no money gate (the engine-test and
+  independents path, matching how `develop` is already optional at the processor).
+- The gate runs per candidate **after** `sizeColonyEstablish` + source lookup (`:1115-1136`), beside
+  the existing physical gates, over the **value-ordered** candidate list: a candidate is proposed
+  only while the running budget covers `foundingCommitmentCost(charterFee(budget.maintenanceBill),
+  foundingGoodsValue(projectedManifestWant(source.goods, seedPop, cover), economyScale),
+  gateHeadroom)`; each acceptance decrements the running budget by its own cost; the first failure
+  ends the list.
+- The ROI value axis and the `work` denominator are untouched — no money enters `colonyValue`.
+
+Ordering note: the money gate and the settler-supply gate (`:1153-1164`) are both prefix truncations
+of the same value order, so composing them is order-independent — the result is the shorter prefix
+either way. No decision needed about which runs first.
+
+Proves: `directed-build.test.ts` — a faction whose balance covers exactly one candidate's commitment
+cost proposes **one**, not N (today's code emits every eligible candidate — `:1081` "There is NO
+per-cycle cap"), and the dropped candidates reappear on a later cycle once the balance recovers.
+
+Consumes: Task 1.
+
+### Task 7 — The charter is paid atomically with queue persistence
+
+Files: `lib/tick/processors/directed-build.ts`; `lib/tick/types.ts`; `lib/world/tick.ts`;
+`lib/tick/processors/__tests__/directed-build.test.ts`.
+
+Interface:
+- `DirectedBuildProcessorParams` gains
+  `treasuryByFaction?: ReadonlyMap<string, { balance: number; pendingFounding: number; maintenanceBill: number }>`
+  — built in `runWorldTick` from `treasuries` beside the existing `fundingByFaction` map
+  (`tick.ts:1084-1085`). Omitted → founding is unpriced (the build-only engine/adapter path).
+- `TickProcessorResult` gains `foundingDebitsByFaction?: Map<string, number>`, returned by the
+  processor and threaded to `runTreasuryProcessor` exactly as `workPerformedByFaction` is
+  (`tick.ts:1098` → `:1136`). Not instrumentation — a settlement input.
+- Per faction, before the queue is funded: `workingBalance = balance − pendingFounding`, decremented
+  by each charter paid this cycle. The charter phase walks the colony rows in queue order; for each
+  with `charterPaid === false`, if the working balance covers `charterFee` **re-quoted from the
+  current `lastSettlement.maintenanceBill`**, debit it into `foundingDebitsByFaction` and set
+  `charterPaid: true`; otherwise leave it unpaid (it absorbs no work this cycle — Task 8's ceiling).
+- Persist-if-funded (`directed-build.ts:368-371`) gains: a `colony_establish` with `charterPaid` is
+  exempt from the `workDone <= 0` drop, the same treatment player rows already get.
+- New colony rows are minted with `charterPaid: false, stagedManifest: [], stalledCycles: 0`
+  (`:341-352`).
+
+Proves: `processors/__tests__/directed-build.test.ts`, two falsifiers from the spec's acceptance bar —
+(a) over a multi-cycle run, Σ charter debits == the number of projects that ever reached
+`charterPaid`, never more (drop the persist exemption and a stalled row is deleted and re-emitted
+with a fresh id, charging twice); (b) Σ charters committed by one faction in one cycle ≤ that
+faction's opening balance (drop the running decrement and a faction that can afford one commits
+several).
+
+Consumes: Tasks 1, 2, 4, 6.
+
+### Task 8 — Materials stage per cycle, and gate the work
+
+Files: `lib/tick/processors/directed-build.ts`; `lib/tick/world/directed-build-world.ts`;
+`lib/world/tick.ts`; `lib/tick/processors/__tests__/directed-build.test.ts`.
+
+Interface:
+- `FoundingStagingDraw { sourceSystemId: string; goodId: string; quantity: number }` — the per-cycle
+  source debit, collected on `DirectedBuildWorld` alongside `developments`.
+- `planStagingDraw(source: SystemBuildRow, project: WorldColonyEstablishProject, workShare: number,
+  stockBalance: Map<string, number>, moneyLeft: number, economyScale: number): { lines:
+  FoundingStockLine[]; cost: number; achievableFraction: number }` — lives beside `planFoundingStock`
+  (`directed-build.ts:96-121`), which is where the source's market rows are. `workShare` is this
+  cycle's share of the manifest, matched to the work the ordinary cap would absorb. Per good the draw
+  is the minimum of (remaining want, live `surplusDrawable` headroom under the running per-(source,
+  good) balance, what `moneyLeft` pays for through the seam). Money is checked against
+  `balance − pendingFounding` less what earlier projects already committed this cycle, so two
+  projects cannot spend the same money.
+  **A good the source cannot supply this cycle counts as satisfied** in `achievableFraction` — the
+  achievable-want rule; without it the median colony never completes.
+- `capFor(p)` passed into `fundQueueWithFloor`: an ordinary `build` → the scalar cap; a colony with
+  `charterPaid === false` → `0`; a written-off colony → the scalar cap; otherwise the scalar cap
+  scaled by `achievableFraction`.
+- After funding, absorbed work per project is recovered by diffing `workDone` by id (the
+  `nextCycleGains` pattern, `construction-readout.ts:119-131`); the matching manifest share is
+  appended to `stagedManifest`, its value accrued into `foundingDebitsByFaction`, and its lines
+  emitted as `FoundingStagingDraw`s. Nothing stages for work that was not funded.
+- `stalledCycles` increments on any cycle that stages nothing, and only once `charterPaid` is true;
+  it resets on any staging. The write-off is `stalledCycles ≥ FOUNDING_STALL_COMPLETE_CYCLES` —
+  **no fourth persisted field**, because a written-off project stages nothing thereafter, so the
+  counter latches by construction.
+- `applyFoundingStagingDraws(markets: WorldMarket[], draws: FoundingStagingDraw[]): WorldMarket[]` in
+  `lib/world/tick.ts` — the source debit, clamped at debit time to live stock so conservation is this
+  function's own property, mirroring `applyFoundingStock`'s clamp (`tick.ts:549-573`). Runs
+  immediately after the processor, before `addMarketsForSettledSystems`.
+
+Proves: `processors/__tests__/directed-build.test.ts` — (a) a colony whose founder can spare
+*nothing* for the whole establish still completes and opens with an empty ledger (remove the
+achievable-want rule and the project persists at `workDone > 0` forever with its target stuck
+`inFlight` — the deadlock the spec names); (b) a colony whose founder is rich stages across many
+cycles to a larger total than today's single draw; (c) a project that stages nothing for
+`FOUNDING_STALL_COMPLETE_CYCLES` consecutive cycles completes on work alone.
+
+Consumes: Tasks 1, 2, 3, 7.
+
+### Task 9 — Delivery is credit-only; cancellation returns the goods
+
+Files: `lib/world/tick.ts`; `lib/tick/world/directed-build-world.ts`;
+`lib/services/construction-orders.ts`; `lib/world/__tests__/apply-developments.test.ts`;
+`lib/services/__tests__/construction-orders.test.ts`.
+
+Interface:
+- `SystemDevelopment.stockManifest` (`directed-build-world.ts:61-74`) now carries the completed
+  project's `stagedManifest` — the goods already out of the founder's markets. Its docstring stops
+  describing a conserved move.
+- `applyStagedManifestDelivery(markets: WorldMarket[], developments: SystemDevelopment[]): WorldMarket[]`
+  replaces `applyFoundingStock` at `tick.ts:1097`: **credit-only**, target rows only, run after
+  `addMarketsForSettledSystems` (`:1096`) because the colony has no market rows before then.
+- `applyFoundingStock` (`tick.ts:549`) is **deleted** with its tests — it is stranded by this change,
+  and re-using it would double-debit the founder and credit `min(staged, founder's remaining stock)`.
+- `cancelOrder` (`construction-orders.ts:177-190`) gains: a cancelled `colony_establish` credits its
+  `stagedManifest` back to `sourceSystemId`'s market rows, **uncapped** (returning stock cannot
+  breach a reserve). Work and the charter stay forfeit.
+
+Proves: `construction-orders.test.ts` — total founder stock is unchanged across order → stage →
+cancel (the spec's conservation bar). `apply-developments.test.ts` — a completed colony opens holding
+exactly its `stagedManifest` and the founder's stock is unchanged at the completion tick (swap the
+credit-only delivery back to the conserving move and the founder is debited twice).
+
+Consumes: Tasks 2, 8.
+
+### Task 10 — The settler gate stops loosening as establishes lengthen
+
+Files: `lib/engine/directed-build.ts`; `lib/engine/__tests__/directed-build.test.ts`.
+
+Interface: the `hungry` count in `planFactionColonyProposals` (`:1156-1161`) adds one per in-flight
+`colony_establish` — `openColonyProjects` is already a parameter, so no new plumbing. A forming
+colony is `controlled` and therefore invisible to the developed-systems loop today, so lengthening
+the forming window would silently admit more concurrent foundings.
+
+Proves: `directed-build.test.ts` — with the same releasable settler supply, the admitted-proposal
+count is unchanged when the number of in-flight establishes doubles (fails on today's code, where it
+doubles too).
+
+Consumes: —
+
+### Task 11 — The player's colony verb pays the same price
+
+Files: `lib/services/colony-eligibility.ts`; `lib/services/construction-orders.ts`;
+`lib/services/build-options.ts`; `lib/types/colonisation.ts`; `lib/types/api.ts`;
+`components/construction/colony-section.tsx`; `lib/services/__tests__/construction-orders.test.ts`;
+`lib/services/__tests__/build-options.test.ts`.
+
+Interface:
+- `ColonyBlockReason` (`types/colonisation.ts:10`) gains `"insufficient_funds"`, with its
+  `COLONY_BLOCK_COPY` line.
+- `colonyEligibility` (`colony-eligibility.ts:49`) gains the money check as its last gate, against
+  the faction's `balance − pendingFounding` and exactly `foundingCommitmentCost(...)` — the same
+  function the planner calls. Its eligible branch returns `{ eligible: true; sourceSystemId; charter:
+  number; projectedBill: number }` so the caller displays the price without recomputing it. It reads
+  `ECONOMY_SCALE` from `lib/constants/economy-scale.ts` (a server-only service; the client-safe copy
+  module stays import-free of it).
+- `SystemBuildOptionsData`'s colony `preview` (`types/api.ts:329-336`) gains `charter` and
+  `projectedBill`; `colony-section.tsx` labels the material figure **"up to"** (it is the
+  uncapped-want upper bound).
+- `orderColony` (`construction-orders.ts:137`) re-checks at the mutation boundary — a **hard** block —
+  and mints the row with `charterPaid: false, stagedManifest: [], stalledCycles: 0`.
+
+Proves: `construction-orders.test.ts` — a player faction short of `charter + headroom × bill` is
+refused even though every physical gate passes (put the check only in the read service and the
+mutation still succeeds, which is the exact failure: with colonisation automation off the planner
+gate never runs for the player, so they would be the one faction founding free).
+
+Consumes: Tasks 1, 2, 6.
+
+### Task 12 — The construction readout shows why a colony is stuck
+
+Files: `lib/engine/construction-readout.ts`; `lib/services/construction.ts`;
+`components/construction/construction-row.tsx`; `lib/engine/__tests__/construction-readout.test.ts`.
+
+Interface:
+- `ConstructionProjectColonyRow` (`construction-readout.ts:54-60`) gains
+  `stalledReason: "awaiting_charter" | "awaiting_funds" | "awaiting_materials" | null` (derived, not
+  persisted) and `stagedFraction: number` (staged ÷ target want).
+- `computeFactionConstruction` gains a `founding` argument carrying what the derivation needs: the
+  faction's working balance and, per colony row, its source's market rows. `services/construction.ts`
+  `readoutForFaction` supplies it from the world.
+- Discrimination, one-to-one with the spec's three stall causes: `charterPaid === false` →
+  `awaiting_charter`; else a stalled row (`stalledCycles > 0`) whose next share the working balance
+  cannot pay → `awaiting_funds`; else stalled → `awaiting_materials`; else `null`.
+- `etaCycles` reads `null` whenever `stalledReason !== null` — the field already documents null as
+  the stalled signal.
+
+Proves: `construction-readout.test.ts` — a charter-unpaid colony reads `awaiting_charter` with
+`etaCycles === null`, and a normally-progressing one reads `null` with a finite ETA. Without this the
+readout forecasts steady progress for a project structurally unable to make any.
+
+Consumes: Tasks 1, 2, 8.
+
+### Task 13 — Instrumentation survives per-cycle staging
+
+Files: `lib/tick/types.ts`; `lib/tick/processors/directed-build.ts`;
+`lib/tick-harness/build-analysis.ts`; `lib/tick-harness/runner.ts`;
+`lib/tick-harness/__tests__/build-analysis.test.ts`.
+
+Interface:
+- `TickProcessorResult.foundingManifests` (`tick/types.ts:96-101`) becomes **per staging event**:
+  `{ systemId, sourceSystemId, tonnage, goodIds, moneyCost, founderCover }`, with `founderCover`
+  computed **at emission** inside the processor — post-tick reconstruction cannot attribute two
+  colonies drawing from one founder in one cycle.
+- `recordFoundingManifest` (`build-analysis.ts:91`) gains a **staging accumulator keyed by target
+  system, independent of `foundedColonies`**, folded into the record when the colony is first
+  tracked. Today it early-returns for untracked systems (`:98`) and every staging event fires while
+  the target is still `controlled`, so it would drop every draw but the last.
+- `FoundedColonyRecord.founderCoverAfter` is **redefined** as the minimum across staging draws (a
+  unit change — A/B reads must not compare it to the baseline); the record gains
+  `foundingMoneyCost`. `FoundingStockSummary` gains the mean money cost per colony.
+- `runner.ts:215-231` drops its per-manifest `founderCoverAfter(...)` recomputation, since the cover
+  now arrives with the event.
+
+Proves: `build-analysis.test.ts` — one founder supplying two colonies in one cycle records two
+distinct covers, and a colony staged across N cycles records N draws folded into one record (on
+today's recorder both collapse to a single reading).
+
+Consumes: Tasks 8, 9.
+
+### Task 14 — The report prints what the acceptance bar reads
+
+Files: `scripts/simulate.ts`; `lib/tick-harness/build-analysis.ts`;
+`lib/tick-harness/treasury-analysis.ts`; `lib/tick-harness/runner.ts`; harness tests.
+
+Interface, new reported rows (each named on the spec's acceptance bar and absent today):
+- founding money cost per colony, and cumulative founding spend as a share of founding-era income —
+  beside the existing `cost to founders:` line (`simulate.ts:495-503`);
+- **cycles from commitment to completion**, per colony — the metric that separates "the gate refused"
+  from "the construction pool got smaller";
+- **stall cycles attributed by cause** (charter / funds / materials), with founder-event-driven
+  material stalls counted separately (accepted flavour, not a fault);
+- **concurrent in-flight establish count**, so Task 10's invariance is visible;
+- `isShorted` reported founding-cycle-separated, so a charter-caused shortfall is distinguishable
+  from the ambient startup tail;
+- founder-cohort production and disuse-decay read, for the `sellingFactor` side of the sustained
+  draw.
+
+Proves: harness tests on each new aggregate (finite, non-negative, correct denominator over a
+seeded fixture). The stall-attribution counter is the one that fails if Task 8's three stall causes
+are collapsed into one.
+
+Consumes: Tasks 8, 12, 13.
+
+### Gate — calibration
+
+Not a task: no files, no interface.
+
+**Arms:** baseline = `main` at this branch point; treatment = Tasks 1-14 complete. Same seed (42),
+600 systems, `ECONOMY_SCALE=100`, both horizons (1,000 and 10,000 ticks), cohorted.
+
+**Reads** (all from the spec's acceptance section, all now printed by Task 14): founding cadence with
+the 80% mark (baseline t≈1,500) alongside cycles-from-commitment-to-completion; cumulative founding
+spend vs founding-era income and the balance trajectory (baseline 587 → 12,026); shorted
+faction-cycle share over t>400 (baseline 1.95%) and minimum `funded.construction` (bar: ≥0.5); the
+**distribution** of `funded.maintenance` across founding-era faction-cycles; opened-deprived count
+(baseline 385/562) and colony rationing share (baseline 48%), with strike% split by pop cohort, never
+galaxy-wide; mean manifest tonnage per colony and the founder `surplusDrawable`-suppressed cycle
+share; the four pass/fail conservation identities.
+
+**Merge condition:** founding still saturates the galaxy with a measurably later 80% mark; the
+funding and maintenance-distribution bars hold; colonies open at or above baseline endowment (a worse
+endowment is a bug, not a tradeoff — the staging target is unchanged and the aggregate draw rises);
+all conservation identities exact. The four constants get their single coarse adjustment here and
+values then stay coarse — **booked at this gate:** precision tuning of `CHARTER_FEE_SPEND_MULT` /
+`FOUNDING_GATE_HEADROOM` waits for the sibling cost mechanics (priced logistics, military, industry
+pricing) to land on the same treasury, per the standing calibration rule. If the gate over-reserves
+enough to freeze founding, the spec's named fallback is to clip the projection by the source's live
+`surplusDrawable` at proposal time — a spec-authored fallback, not a new design.
+
+---
+
+## Verification
+
+**In the galaxy, not in fixtures.** `npm run simulate` at **both horizons**, cohorted, per the gate
+above. Startup (1,000 t) answers the founding-era question this row exists for; equilibrium
+(10,000 t) is the only valid basis for any constant. Neither is quoted at the other's question.
+
+**New harness metrics are part of the feature** (Task 14), not follow-ups: cycles-from-commitment-to-
+completion, stall attribution by cause, concurrent in-flight establishes, founding-cycle-separated
+`isShorted`, and per-colony founding money cost. Each exists because its symptom hides inside an
+aggregate the harness already prints — cadence alone cannot separate "the gate refused" from "the
+construction pool shrank", and the median funding fraction reads 1.000 while the shorted tail triples.
+
+**Gates before review**, per `docs/active/engineering/feature-process.md`:
+`npx vitest run` · `npx next build --webpack` (the build gate — not `npm run build`) ·
+red-proof on every new or changed test (break the premise, watch it fail, restore) ·
+`npm run mutation -- --mutate "<changed lib files>"` scoped to this row's `lib/` files, every
+survivor killed or justified.
+
+**The S-invariance check is load-bearing and cannot be delegated to the suite.** Every unit test runs
+pinned at S=1, where a missing `/ ECONOMY_SCALE` reads ≈115 and looks correct; at the live S=100 the
+same bill reads ≈11,479 and freezes founding galaxy-wide. Task 1's re-import test is the only thing
+standing between those two.
+
+## Doc fold
+
+On the branch, before the final review.
+
+- **Promote** `docs/planned/colonisation-economics.md` into `docs/active/gameplay/colonisation.md` —
+  present tense, no phase numbers, the mechanics headline first. The planned doc is then deleted.
+- **`docs/SPEC.md`** — the Construction & Colonisation section (`:48-51`) and the
+  **Directed Build → Colonisation → Economy** interaction row (`:169`) both still describe founding
+  as costing only pool work; add the charter, the staged materials and the treasury edge. The Purse
+  section gains the founding expense line.
+- **`docs/active/gameplay/player-seat.md`** — the colony verb's new `insufficient_funds` block and
+  the priced preview. **`docs/active/gameplay/player-seat-purse.md`** — the Founding ledger row and
+  the `net` change.
+- **`docs/active/gameplay/economy-autonomic-agency.md`** — the AI founding policy now prices
+  candidates against a running balance.
+- **`docs/ROADMAP.md`** — delete row 10 at ship.
+- **`docs/build-plans/colonisation-economics.md`** (this file) — deleted at ship, after the fold.
+- **Dead-doc citations.** The spec names two files citing the deleted
+  `docs/planned/economy-colonisation-cost.md`; there are actually **six**:
+  `lib/constants/colonisation.ts:3`, `lib/constants/expansion.ts:11`,
+  `lib/engine/colonisation-value.ts:3`, `lib/engine/construction.ts:227`,
+  `lib/engine/directed-build.ts:582`, `lib/engine/directed-build.ts:1077`. All six re-point at
+  `docs/active/gameplay/colonisation.md` in this fold.
+
+## Not covered
+
+- **Live local market prices in the valuation seam.** *Booked* — the **Goods-pricing revisit**
+  roadmap row (which already records "row 10 routes around live prices because of this"). The seam is
+  built so the swap is a one-function change with no redesign.
+- **Separating `surplusDrawable`'s triple duty** (logistics donor cap / build input gate / founding
+  manifest cap). *Booked* to the same Goods-pricing revisit row. The coupling is deliberate here: a
+  founder's willingness to part with stock stays one number.
+- **Hauling founding freight with real ships.** *Booked* — the logistics-depth pass (memory
+  `design-logistics-depth-inputs`). v1 stages source-local exactly as today's manifest does.
+- **Un-parking the colony seed size vs the housing unit.** *Booked* — roadmap
+  "[S] Colony seed size scaled against the housing unit". It un-parks **after** this ships and is
+  measured; compounding two pacing changes in one measurement is what the spec forbids.
+- **The equilibrium treasury hoard** (487-759× cycles of spend). *Dropped* — a one-time founding-era
+  sink is ~1% of an equilibrium balance and cannot move that multiple. Recurring sinks are the
+  sibling mechanics' job; claiming this row addresses hoarding would be false.
+- **Pricing claims.** *Dropped* — a claim is a territorial intention; pricing it slows map paint
+  without adding decision weight (spec, "What deliberately does not change").
+- **Per-colony billing of establish work.** *Dropped* — the construction band stays one generic bill
+  by design; the colony-specific money is the charter and the materials.
+- **Old-save migration.** *Dropped* — `SAVE_FORMAT_VERSION` bumps and old saves fail cleanly. There
+  is no field-defaulting path to write a grandfathering rule into (`lib/world/save.ts:78-83`), and any
+  default would be a lie about whether an in-flight colony was paid for.
+- **Precision tuning of the four new constants.** *Booked at the calibration gate* (see its merge
+  condition), per the standing coarse-until-siblings-ship rule.
+
+## Self-review record
+
+Run by the author before committing this plan. What it changed or is worth carrying:
+
+1. **Every named identifier grep-verified**, and every `file:line` citation verified by reading the
+   range — not by grep alone. Two-same-named-module hazards checked: `surplusDrawable` is
+   `lib/engine/directed-logistics.ts:87` (not the processor), and `planFoundingStock` is
+   `lib/tick/processors/directed-build.ts:96` (not the engine). Every `(new)` name
+   (`lib/engine/founding-cost.ts`, `applyFoundingStagingDraws`, `applyStagedManifestDelivery`,
+   `FoundingStagingDraw`, `planStagingDraw`, `projectedManifestWant`, `foundingCommitmentCost`)
+   confirmed absent from the tree.
+2. **The `CONSTRUCTION_INTERVAL ≠ CYCLE_LENGTH` test configuration already exists** — the `build12`
+   arm of `cadence-invariance.test.ts:79`. The spec reads as if it must be added; what is actually
+   missing is a founding term in the compared totals. Recorded in Task 4 rather than silently
+   building a duplicate arm.
+3. **`applyFoundingStock` is deleted, not left behind.** The credit-only delivery strands it; its
+   removal (with its tests) is inside Task 9, not a follow-up.
+4. **The write-off needs no fourth persisted field** — `stalledCycles ≥
+   FOUNDING_STALL_COMPLETE_CYCLES` latches by construction, because a written-off project stages
+   nothing thereafter. Stated in Task 8 so nobody adds a fifth save field for it.
+5. **Gate ordering is a non-decision.** The money gate and the settler-supply gate are both prefix
+   truncations of the same value-ordered list, so their composition is order-independent. Recorded in
+   Task 6 so it is not re-litigated at implementation.
+6. **The dead-doc citation count is six, not two** (Doc fold). The spec undercounted; the extra four
+   are engine modules.
+7. **Nothing dropped between spec and plan.** Every row of the spec's hazard-3 interaction table
+   lands in a task: events → Tasks 8 + 14 (stall attribution); population/migration → Task 10;
+   unrest → Task 14's founder-cohort read; decay → Task 14; logistics → Task 8; directed build /
+   planner → Tasks 6-8; colonisation manifest → Tasks 8-9; player orders → Tasks 9, 11; treasury →
+   Tasks 4-5; save format → Task 2; harness metrics → Tasks 13-14. Factions/relations and
+   industry/staffing are "none" in the spec and appear nowhere here, correctly. The only spec/plan
+   scope difference is the list under **Not covered**.
+8. **No code.** No task body carries a function body, a branch or a derived formula. The three
+   formulas quoted (`value = (quantity / S) × basePrice`, `charter = max(min, mult × maintenanceBill)`,
+   `commitment = charter + headroom × bill`) are quoted verbatim from the spec, which is the licence
+   the skill grants.
+9. **Shared quantities stay inside the spec's evidence.** Every symbol these tasks touch is in the
+   spec's hazard-1 table (`FOUNDING_STOCK_COVER`, `surplusDrawable`, `basePrice`, `ECONOMY_SCALE`,
+   `COLONY_ESTABLISH_WORK`, `balance`, `CONSTRUCTION_RATE_PER_WORK`), so its `npm run impact` output
+   is the licence. No task leans on a symbol outside it, so the tool was not re-run.
