@@ -63,27 +63,32 @@ band — landing at **~2× the anchor** (the audit's median cover of 2.0–2.5 c
 `price = base × (anchor/stock)^k` pins toward the 0.50× floor. The satisfaction mirror floors unrest.
 **One root cause — equilibrium stock settles at the ceiling, not the anchor — drives both symptoms.**
 
-The production throttle is also reused by infrastructure-decay as its "is this capacity selling?" signal
-(`outputUptake`, `lib/engine/tick.ts:67`). That coupling is a key interaction (see below).
+The production brake's ceiling is also reused by infrastructure-decay as its "is this capacity
+selling?" signal. That coupling is a key interaction (see below).
 
 ## The change
 
-### 1. Anchor-relative production throttle (fixes overstocking)
+### 1. The production brake — the warehouse knee (fixes overstocking)
 
-Introduce an **operating ceiling** `operatingCeiling = HOLD_COVER × targetStock`, where `HOLD_COVER` is a
-small multiple (initial guess **1.2–1.5**, calibrated). The production self-limiting factor operates over
-`[minStock, operatingCeiling]` instead of `[minStock, maxStock]`.
+A producer runs at full rate until its stock reaches the **warehouse knee** — the larger of
+`BRAKE_USE_COVER (40) × honestUseRate × anchorMult` (cycles of what this system actually uses — the
+use figure; see [economy-autonomic-agency](./economy-autonomic-agency.md) for the figure itself) and
+`BRAKE_OUTPUT_COVER (8) × capacityProduction` (cycles of its own reference-cycle output — the working
+inventory that keeps a pure exporter with negligible local use producing instead of halting) — then
+decelerates linearly to zero at `BRAKE_RAMP (1.3) × knee`, capped by **physical built storage**
+(`facilityStorageForGood`; where the yard is genuinely smaller than the knee, storage binds with a
+hard stop). No price-anchor quantity — `targetStock`, `maxStock`, `MIN_DEMAND` — reaches the brake.
+One knee function (`brakeKnee`/`productionCeiling`, `lib/engine/tick.ts`) feeds every call site: the
+coupled tick, the decay/selling signal, the Industry readout and the draw figure's urgency gate.
 
-- **Effect:** equilibrium stock rests just above the anchor → producer prices rise from the floor toward
+- **Effect:** equilibrium stock rests just above the knee → producer prices rise from the floor toward
   base; excess capacity simply idles.
 - **Exports are preserved** because export drainage holds a producer's stock *low* — while directed
-  logistics keeps pulling, stock stays below `operatingCeiling`, the throttle stays high, and the producer
-  keeps making goods to export. With `HOLD_COVER = 1.3`, a producer sitting *at* its anchor still runs at
-  ~61% capacity (≈1.04× local consumption for a 1.70×-capacity exporter), so it makes a small export
-  surplus and holds near the anchor; drained harder, it makes more. It idles only when nobody wants the
-  good.
+  logistics keeps pulling, stock stays below the knee and the producer keeps making goods to export;
+  the output term gives a dedicated exporter a working yard sized to its own production. It idles only
+  when nothing draws its stock down.
 - **`maxStock` is demoted** from "throttle ceiling" to what it should be: the absolute storage clamp and
-  the price-curve's floor-reach. Stock is still clamped to `[minStock, maxStock]` (a market *can*
+  the price-curve's floor-reach. Stock is still clamped to `[0, maxStock]` (a market *can*
   physically pile up in a demand collapse), but in normal operation it never approaches `maxStock`.
 
 ### 2. Anchor-relative satisfaction (fixes the unrest floor)
@@ -99,8 +104,9 @@ The consume-side self-limiting factor saturates at the **anchor**:
   **pulled forward** because it is the *same mechanism* as the pricing fix — both are "measure against the
   anchor, not the ceiling."
 
-`HOLD_COVER` (produce) and the satisfaction cover (=1.0, saturate at anchor) are separate knobs: a
-producer holds a little *above* cycles-of-supply before idling; a population is content *at* cycles-of-supply.
+The brake covers (produce: `BRAKE_USE_COVER`/`BRAKE_RAMP`/`BRAKE_OUTPUT_COVER`) and the satisfaction
+cover (=1.0, saturate at anchor) are separate knobs: a producer holds a little *above* its
+cycles-of-use before idling; a population is content *at* its cycles-of-supply.
 
 ### 3. Pick `S` (`ECONOMY_SCALE`) — last, on the settled economy
 
@@ -143,21 +149,15 @@ This becomes a **permanent, wired instrument** for this change and every future 
 
 ## Key interactions to reconcile (the risky bits)
 
-- **Infra-decay's `outputUptake` signal** (`tick.ts:67`) is currently the *same* call as the production
-  throttle (`selfLimitingFactor(stock, min, max, "produce")`), feeding decay's "used" for production:
-  `used = count × min(labourFulfillment, outputUptake)`, with disuse decay `count ← count − disuseRate ·
-  max(0, count − used)`. **Resolution: split them.** The throttle adopts the operating ceiling
-  `[minStock, operatingCeiling]`; `outputUptake` (and thus decay) **stays on the storage band
-  `[minStock, maxStock]`**. The two answer different questions — throttle: "make more now?" (anchor-
-  relative); decay's uptake: "is output genuinely stuck against the physical wall?" (storage-relative).
-  Moving uptake to the operating ceiling reads a healthy producer resting *at* that ceiling as ~0 uptake →
-  `used ≈ 0` → catastrophic teardown. Kept on the storage band, that producer sits well below `maxStock`
-  → ~0.85+ uptake → correctly "selling"; `min(labourFulfillment, outputUptake)` then resolves to the
-  **staffing** term, so decay is staffing-driven in steady state. **Bonus correctness:** because the
-  throttle now prevents normal stock pile-up, the selling signal fires only on a genuine glut /
-  demand-collapse (stock truly pinned at `maxStock`) — exactly when pruning capacity is right. Pruning
-  *normal* over-capacity stays deferred to SP5. **Validate in the sim:** no teardown of healthy exporters;
-  genuinely collapsed/unstaffed systems still decay; persisting over-capacity causes no instability.
+- **Infra-decay's "selling" signal** is the brake's own ceiling: the economy processor emits each
+  producer's `productionCeiling` at its start-of-cycle stock (`sellingFactorBySystem`), and decay's
+  "used" for production is `count × min(labourFulfillment, sellingFactor)`, with disuse decay
+  `count ← count − disuseRate · max(0, count − used)`. The Industry readout derives the same knee, so
+  the tick, decay and the panel cannot disagree about which producers idle. A producer resting inside
+  its full-rate band reads as selling; the signal falls only as the yard genuinely fills toward the
+  ramp end — exactly when pruning capacity is right. Pruning *normal* over-capacity stays deferred to
+  the cost-of-capacity layer. **Validated in the sim:** no teardown of healthy exporters; genuinely
+  collapsed/unstaffed systems still decay; persisting over-capacity causes no instability.
 - **Equilibrium stock roughly halves** (from ~2× anchor to ~anchor). This is why `S` is picked *last* —
   the baseline magnitudes move. Also re-check the absolute-term seams from SP1 and any test fixtures.
 - **Unrest recalibration (coarse).** Well-supplied systems get calmer; confirm growth/decline still reads
@@ -169,7 +169,7 @@ This becomes a **permanent, wired instrument** for this change and every future 
 ## Testing & validation
 
 - **Simulator-primary.** Extend the metric (4), run long enough to equilibrate (a config with a higher
-  tick count than the 500-tick quick run), and iterate `HOLD_COVER` + the satisfaction cover until:
+  tick count than the 500-tick quick run), and iterate the brake covers + the satisfaction cover until:
   prices come off the floor (median moves toward base, dispersion appears), unrest stays calm (no
   striking), no floor/ceiling pinning, growth/decline sane.
 - **Coarse health bar** (standing preference): no NaN / runaway / pinning, greedy ≫ random, dispersion
@@ -182,9 +182,9 @@ This becomes a **permanent, wired instrument** for this change and every future 
 ## Sequencing within the phase
 
 1. Add the simulator dispersion metric (4) — gives us eyes.
-2. Anchor-relative production throttle (1) + reconcile infra-decay's uptake signal.
+2. The production brake (1) + reconcile infra-decay's selling signal.
 3. Anchor-relative satisfaction (2).
-4. Iterate `HOLD_COVER` + satisfaction cover against the sim to the coarse health bar.
+4. Iterate the brake covers + satisfaction cover against the sim to the coarse health bar.
 5. Pick `S` (3) on the settled economy; decide stage-vs-flip.
 6. DB-audit cross-check.
 
