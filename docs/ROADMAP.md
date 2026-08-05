@@ -41,8 +41,9 @@ the price anchor any more.)
 10. **[L] Colonisation economics — founding stops being free.** Aim (settled 2026-08-05, Kai):
     colonisation becomes a priced strategic decision competing for the same treasury and goods as
     everything else, with pacing emerging from the cost rather than an authored rate — costs derived
-    from physical quantities (manifest at market prices, establish work at real rates, a charter fee
-    scaled to cycle spend) so later drains (priced logistics, military, industry pricing) rescale
+    from physical quantities (manifest valued at base/reference prices — NOT live market prices,
+    which misbehave today; establish work at real rates; a charter fee scaled to cycle spend) so
+    later drains (priced logistics, military, industry pricing) rescale
     them for free. Absorbs the **remove-everything-free audit** — the 12-flow enumeration is done
     (zero flows carry a per-colony price). The parked "colony seed size vs housing unit" item parked
     *because* it changes founding pacing — it may un-park here, deliberately.
@@ -125,7 +126,10 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   16–843× per-good spread, and inflating them inflates every pricing band with them.
 - **[L] Goods-pricing revisit** — moved way back from the economy queue by explicit decision
   (2026-08-03): pricing is only worth reworking when demand becomes partly monetary — pop wages
-  and real goods purchase, or inter-faction trade agreements / shared markets. Carries the former
+  and real goods purchase, or inter-faction trade agreements / shared markets. Kai's observation
+  (2026-08-05, unmeasured): lots of edge cases with producers/consumers not reading the price based
+  on type properly — row 10 routes around live prices because of this; `/measure` it when this row
+  comes forward. Carries the former
   queue item 4 unresolved: an exporter's resting price pins at its ceiling (measured at
   equilibrium: 3.00× / 3.00× / 2.50× for `electronics` / `luxuries` / `fuel` — a drawn exporter
   rests at `EXPORT_RESERVE_COVER`, below the curve's saturation point, so the curve clamps, and

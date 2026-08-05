@@ -13,13 +13,18 @@ docs or `killed-designs`.
 Colonisation becomes a **priced strategic decision** competing for the same treasury and goods as
 everything else; pacing emerges from the cost, never from an authored rate. The original
 leech-colony motivation is falsified (C5) — the trivialisation problem is the absence of tradeoff,
-not the speed. Costs are derived from physical quantities (manifest bought at market prices,
-establish work billed at real rates, a charter fee scaled to cycle spend) rather than flat
-constants, so the later drains on the same treasury — priced logistics, military, industry pricing
+not the speed. Costs are derived from physical quantities (manifest valued at the goods' base /
+reference prices, establish work billed at real rates, a charter fee scaled to cycle spend) rather
+than flat constants, so the later drains on the same treasury — priced logistics, military, industry pricing
 (leaning: lands with the warehouse/storage row) — rescale them without retuning. Values stay coarse
 until those sibling mechanics ship. Bite anchor from C3: founding-era spend is ~600/cycle per
 faction against a ~5,600 median balance; a price at cycle-of-spend scale is where founding starts
 sequencing against construction.
+
+Kai's constraint (2026-08-05): do NOT value the manifest at **live local market prices** — the live
+pricing layer misbehaves today (producers/consumers not reading price by type properly; see the
+goods-pricing revisit row). Use base/reference prices, behind one valuation seam that upgrades to
+live prices when the pricing revisit ships.
 
 ## Claims and falsifiers
 
