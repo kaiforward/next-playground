@@ -59,6 +59,11 @@ The wrong instrument is the second most common failure here, and it produces con
 **The anti-instrument:** an isolated engine fixture. Fixtures pass while the galaxy is 100% broken.
 If the claim is about outcomes, the simulator measuring the actual outcome is the only evidence.
 
+**Before authoring any instrument, spend an `npm run impact -- <SYMBOL>` on the quantity** — who
+writes it, who reads it, where it sits in the run order. The expensive loop in this skill is
+Inconclusive → back here → re-instrument → re-run; most wrong-instrument picks (wrong function,
+wrong scope, measured outside the tick) are visible in that one cheap read.
+
 Scratch diagnostics live in `.superpowers/` (gitignored) and are never committed. `lock-diag.ts`
 (anchor funding, per-producer stock) and `floor-diag.ts` (per-good floored share, requested vs
 delivered at the moment of transfer) already exist and take `DIAG_TICKS`/`DIAG_SYSTEMS`/`DIAG_SEED`.
@@ -72,6 +77,11 @@ mechanism that never fires look identical, and only a second signal tells you wh
 
 Then paste the actual output into the working file. Not your summary of it — the output. A summary is
 where the horizon and the cohort quietly fall off.
+
+A full `npm run simulate` report is large and mostly not about your claim. Run it in the background
+and grep out only the rows the claim names — the good, the cohort, both horizons — rather than
+reading the whole report into context. "The actual output" means those raw rows verbatim, horizon
+and cohort labels intact; it does not mean the full dump.
 
 **Then revert your instrumentation, in the same turn.** Counting "inside the processor" means editing
 tracked code under `lib/`. That patch is a measuring tool, not a change, and it must never reach a
