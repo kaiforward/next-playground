@@ -38,29 +38,24 @@ references stay stable. The honest-demand-and-flow arc — the two demand figure
 matching, and the brake off the price anchor — shipped on the branch; no physical mechanism reads
 the price anchor any more.)
 
-10. **[L] Colonisation economics — founding stops being free.** Now that monetary mechanics exist,
-    colonisation becomes a major, resource-intensive undertaking (Stellaris-scale): claims,
-    establish projects and founding manifests carry real monetary and goods cost, and the AI
-    founding policy prices colonies against its treasury instead of founding essentially everything
-    by ~t500. Absorbs the **remove-everything-free audit**: the logistics work budget ("free,
-    population-scaled in v1"), the per-pop construction pool base, cheap claims — sweep for the
-    rest. Aim: fewer, deliberate colonies — the structural fix for the leech-colony / served-last
-    pattern (the #212 documented cost, noted in `economy-autonomic-agency.md`). One measured input
-    (2026-08-04): the haul budget never binds today (~6–8% spent) — pricing it changes no flow
-    unless deliberately authored to bind. The parked
-    "colony seed size vs housing unit" item parked *because* it changes founding pacing — it may
-    un-park here, deliberately.
+10. **[L] Colonisation economics — founding stops being free.** Aim (settled 2026-08-05, Kai):
+    colonisation becomes a priced strategic decision competing for the same treasury and goods as
+    everything else, with pacing emerging from the cost rather than an authored rate — costs derived
+    from physical quantities (manifest at market prices, establish work at real rates, a charter fee
+    scaled to cycle spend) so later drains (priced logistics, military, industry pricing) rescale
+    them for free. Absorbs the **remove-everything-free audit** — the 12-flow enumeration is done
+    (zero flows carry a per-colony price). The parked "colony seed size vs housing unit" item parked
+    *because* it changes founding pacing — it may un-park here, deliberately.
     Sits before Provision by explicit ordering decision (2026-08-03): Provision's struck-world
     resolution and band calibration would otherwise be tuned against a galaxy of cheap colonies
     this row then removes.
     Baseline measured (2026-08-05): [colonisation-economics.md](./build-plans/colonisation-economics.md)
     — no monetary cost exists anywhere on the founding path; founding-era treasuries hold ~9.4 cycles
-    of spend; founding is a startup burst (57.7% by t=1,000, done by t≈3,700, zero after); the
-    founder's goods cost is transient. **The leech-colony motivation is falsified** — chronic struck
-    share of in-run colonies is ~3%, not the assumed quarter.
-    *Next step:* Kai re-grounds the row's aim (the "fewer, deliberate colonies" justification lost
-    its measured basis; realism/pacing grounds still stand) — then spec + `/spec-review`
-    (heavy cross-mechanic: treasury, build planner, colonisation-value, migration, events).
+    of spend (~600/cycle per faction — the bite anchor); founding is a startup burst (57.7% by
+    t=1,000, done by t≈3,700, zero after); the founder's goods cost is transient. The old
+    leech-colony motivation is falsified (chronic struck share ~3%, not >25%) — do not cite it.
+    *Next step:* spec + `/spec-review` (heavy cross-mechanic: treasury, build planner,
+    colonisation-value, migration, events).
     *Don't:* precision-tune anything Provision will re-define (its own Don't), and don't design the
     cost model from intuition — the baseline numbers above are the design's scale anchors.
 
