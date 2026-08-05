@@ -148,6 +148,12 @@ export function developmentFloorShare(development: number, base: number, knee: n
  *    (the build-time floor is preserved across both passes).
  * A reserve is a *minimum* slice, never a max-spend cap: an eligible build can still win more from the
  * general pool on ROI, and the homeworld's builds drain whatever the reserve leaves.
+ *
+ * `capFor` replaces the scalar `cap` for one project — the seam through which a caller that knows
+ * something this function cannot (whether a colony's materials can be bought this cycle) lowers a
+ * single project's ceiling without giving the queue market or treasury access. It binds in BOTH
+ * passes, so a ceiling of 0 cannot be routed around by the reserved floor. Omitted → every project
+ * takes the scalar `cap`, exactly today's behaviour.
  */
 export function fundQueueWithFloor(
   ordered: WorldConstructionProject[],
@@ -155,10 +161,22 @@ export function fundQueueWithFloor(
   cap: number,
   reserved: number,
   isFloorEligible: (p: WorldConstructionProject) => boolean,
+  capFor?: (p: WorldConstructionProject) => number,
 ): FundQueueResult {
   const safeCap = Number.isFinite(cap) ? Math.max(0, cap) : 0;
   const safePool = Number.isFinite(pool) ? Math.max(0, pool) : 0;
   const cappedReserve = clamp(Number.isFinite(reserved) ? reserved : 0, 0, safePool);
+
+  // Resolved once per project so both passes see one ceiling even if the callback is not pure.
+  const ceilings = new Map<string, number>();
+  const ceilingFor = (p: WorldConstructionProject): number => {
+    const cached = ceilings.get(p.id);
+    if (cached !== undefined) return cached;
+    const raw = capFor === undefined ? safeCap : capFor(p);
+    const resolved = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+    ceilings.set(p.id, resolved);
+    return resolved;
+  };
 
   // Pass A: eligible builds absorb the reserved slice, front-first.
   const absorbed = new Map<string, number>();
@@ -168,7 +186,7 @@ export function fundQueueWithFloor(
     if (reserveLeft <= 0) break;
     if (!isFloorEligible(p)) continue;
     const remaining = Math.max(0, p.workTotal - p.workDone);
-    const take = Math.min(safeCap, remaining, reserveLeft);
+    const take = Math.min(ceilingFor(p), remaining, reserveLeft);
     if (take > 0) {
       absorbed.set(p.id, take);
       reserveLeft -= take;
@@ -184,7 +202,7 @@ export function fundQueueWithFloor(
   for (const p of ordered) {
     const already = absorbed.get(p.id) ?? 0;
     const remaining = Math.max(0, p.workTotal - p.workDone - already);
-    const take = Math.min(Math.max(0, safeCap - already), remaining, generalLeft);
+    const take = Math.min(Math.max(0, ceilingFor(p) - already), remaining, generalLeft);
     generalLeft -= take;
     absorbedTotal += take;
     const workDone = p.workDone + already + take;

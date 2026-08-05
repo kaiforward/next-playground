@@ -253,6 +253,58 @@ describe("fundQueueWithFloor", () => {
     expect(r.absorbed).toBeCloseTo(workDelta);
     expect(r.absorbed).toBeLessThanOrEqual(10);
   });
+
+  it("holds a project at a per-project ceiling of 0 — through the reserve pass too", () => {
+    // The regression this guards: pass A funds the floor-eligible slice on the SCALAR cap, so a
+    // ceiling that only binds in pass B lets a reserved project absorb work it cannot pay for.
+    const cap = 10;
+    const blocked = projectAt("c", "colony", "food", 1, 0, 1000);
+    const neighbour = projectAt("h", "home", "food", 1, 0, 1000);
+    const r = fundQueueWithFloor(
+      [blocked, neighbour],
+      100,
+      cap,
+      50, // a reserve big enough to fund the blocked project several times over
+      (p) => p.id === "c", // …and it is the only project the reserve is for
+      (p) => (p.id === "c" ? 0 : cap),
+    );
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(0);
+    expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(cap);
+    expect(r.absorbed).toBe(cap);
+  });
+
+  it("makes a project at half its ceiling take twice the cycles", () => {
+    const cap = 10;
+    let full = projectAt("f", "s", "food", 1, 0, 40);
+    let half = projectAt("g", "s", "food", 1, 0, 40);
+    let fullCycles = 0;
+    let halfCycles = 0;
+    while (fullCycles < 20) {
+      const r = fundQueueWithFloor([full], 100, cap, 0, () => false);
+      fullCycles++;
+      if (r.landed.length > 0) break;
+      full = r.projects[0];
+    }
+    while (halfCycles < 20) {
+      const r = fundQueueWithFloor([half], 100, cap, 0, () => false, () => cap / 2);
+      halfCycles++;
+      if (r.landed.length > 0) break;
+      half = r.projects[0];
+    }
+    expect(fullCycles).toBe(4);
+    expect(halfCycles).toBe(8);
+  });
+
+  it("is identical to the scalar cap when capFor returns it", () => {
+    const cap = 10;
+    const ordered = [
+      projectAt("h", "home", "food", 1, 0, 1000),
+      projectAt("c", "colony", "food", 1, 0, 1000),
+    ];
+    expect(fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony", () => cap)).toEqual(
+      fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony"),
+    );
+  });
 });
 
 /** Build a proposal with explicit value/work; `role` defaults to industry. */
