@@ -24,13 +24,18 @@ This file is your playbook. Lens prompts live in `prompts/` next to it.
 
 ## Effort dial
 
-| Effort | Dispatch | Capability tier |
-|--------|----------|-----------------|
-| `quick` | 1 agent carrying all three lens briefs concatenated | `strong` |
-| `standard` (default) | 3 parallel agents, one per lens | `frontier` |
-| `deep` | 3 parallel agents, one per lens | `frontier`, with the highest available reasoning effort |
+| Effort | Dispatch | Model / effort |
+|--------|----------|----------------|
+| `quick` | 1 agent carrying all three lens briefs concatenated | per surface tier, capped at Sonnet `high` |
+| `standard` (default) | 3 parallel agents, one per lens | per surface tier, at `high` |
+| `deep` | 3 parallel agents, one per lens | Opus at `xhigh` — opt-in escalation only |
 
-Resolve tiers through `.agents/model-tiers.md`. If the harness cannot choose a model per subagent, preserve the dispatch shape and verification requirements with the available agents.
+**Surface tier** — decided from the spec before dispatch, stated in the report header:
+
+- **Cross-mechanic** — the spec touches two or more tick processors, or adds/changes/removes any signal, formula, threshold or constant that a shipped mechanic consumes: all three lenses on **Opus**. This is the surface the skill exists for; never downgrade it to save tokens.
+- **Bounded** — one mechanic, or harness/instrument-only work, with no shared-signal changes: lenses on **Sonnet**. (Pure-UI and tooling specs skip the review entirely — see "When to run".)
+
+**State model and reasoning effort explicitly on every dispatch — never inherit the session's effort.** Resolve tier names through `.agents/model-tiers.md`. If the harness cannot choose a model per subagent, preserve the dispatch shape and verification requirements with the available agents.
 
 ## Severity rubric
 

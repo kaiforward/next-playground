@@ -20,24 +20,36 @@ Parse the user's command for these flags:
 
 ## Effort dial
 
-| Effort | Architect | Reasoning reviewers | Mechanical reviewers |
-|--------|-----------|---------------------|----------------------|
-| `quick` | `strong` | `fast` | `fast` |
-| `standard` (default) | `frontier` | `strong` | `fast` |
-| `deep` | `frontier` | `strong` (`frontier` for data-contract and boundary-safety) | `fast` |
+**Model AND reasoning effort are stated explicitly on every dispatch — never inherited from the session.** A session running at high/xhigh silently multiplies its effort across 8+ agents otherwise.
 
-Resolve tiers through `.agents/model-tiers.md`. If the harness cannot choose a model per subagent, preserve reviewer independence and give architectural and high-severity validation work back to the frontier orchestrator.
+Per-lens assignment at `standard` (Claude family shown; resolve tier names through `.agents/model-tiers.md` for other providers):
+
+| Lens | Model | Effort | Why this tier |
+|------|-------|--------|---------------|
+| Architect | Opus | high | Full-diff gating + spec conformance — the deepest cross-cutting judgment in the pipeline |
+| Data contract | Opus | high | Cross-layer shape/semantics drift; the source of the subtlest confirmed findings (judgment, not checklist) |
+| Silent failures | Opus | high | Fallback-masking / denominator / guard-polarity class; top producer of confirmed real bugs |
+| Tests | Opus | high | Top producer of majors three reviews running. **Drop to Sonnet `high` once the author-side red-proof gate has held for two consecutive reviews** (each new test proven to fail under its premise-break before commit) |
+| World integrity | Sonnet | high | Explicit invariant checklist (JSON-serializable, determinism, save surface). **Escalate to Opus when the diff touches `lib/world/save*` or the `World` type shape** — the miss cost there is save corruption |
+| Boundary safety | Sonnet | high | Checklist-driven: env reads, cache headers, Zod at the boundary, save paths |
+| Performance | Sonnet | high | Benching is procedural; findings have been minor/info. Escalate to Opus only for a perf-focused PR |
+| User journey | Sonnet | medium | UI-flow reasoning; rarely fires in this codebase |
+| Conventions | Haiku | medium | Rule-matching against `rules/code-standards.md`; held up on Haiku (PR 213) |
+
+Validator batches: blocker/major → Opus `high`, or the orchestrator verifies those findings directly (per the tier map, that verification is frontier work either way); mixed → Sonnet `medium`; all-minor → Haiku `low`.
+
+`quick`: same table with every Opus row capped at Sonnet `high`.
+`deep`: same table with architect, data-contract and silent-failures raised to `xhigh`. Opt-in only — never the default.
+
+If the harness cannot choose a model per subagent, preserve reviewer independence and give architectural and high-severity validation work back to the frontier orchestrator.
 
 When Codex custom agents are available, route through the project profiles in `.codex/agents/`:
 
-- `review-frontier` — `gpt-5.6-sol`, `xhigh`
+- `review-frontier` — `gpt-5.6-sol`, `high` (`xhigh` only on `deep`)
 - `review-strong` — `gpt-5.6-terra`, `high`
 - `review-fast` — `gpt-5.6-luna`, `medium`
 
-Verify the selected profile in spawn metadata when `features.multi_agent_v2.hide_spawn_agent_metadata = false`. If a requested profile is unavailable, report the fallback in the dispatch preview rather than silently claiming the intended tier ran.
-
-Reasoning reviewers: world-integrity, data-contract, boundary-safety, silent-failures, user-journey, tests, performance.
-Mechanical reviewer: conventions.
+Verify the selected profile in spawn metadata when `features.multi_agent_v2.hide_spawn_agent_metadata = false`. If a requested profile is unavailable, report the fallback in the dispatch preview rather than silently claiming the intended tier ran. Record each lens's model and effort in the report's dispatch log.
 
 ## Pipeline
 
