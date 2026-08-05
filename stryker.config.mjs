@@ -13,6 +13,11 @@ export default {
   vitest: {
     configFile: "vitest.mutation.config.ts",
   },
+  // Cache mutant results (reports/stryker-incremental.json, gitignored): a re-sweep
+  // after writing killing tests only re-runs mutants whose code or covering tests
+  // changed — minutes instead of the full price. Delete the cache file to force a
+  // cold run. The first sweep of any new file set is always full price.
+  incremental: true,
   coverageAnalysis: "perTest",
   reporters: ["clear-text"],
   concurrency: 4,
