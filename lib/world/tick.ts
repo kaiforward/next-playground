@@ -92,7 +92,8 @@ import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
 import { InMemoryTreasuryWorld } from "@/lib/tick/adapters/memory/treasury";
 
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
-import { isCycleStart, catchUpFactor } from "@/lib/tick/shard";
+import { referenceMaintenanceBill } from "@/lib/engine/founding-cost";
+import { isCycleStart } from "@/lib/tick/shard";
 import type {
   TickContext,
   TickBroadcastRaw,
@@ -1140,11 +1141,8 @@ export async function runWorldTick(
         // committed since. No maintenance bill yet (pre-first-settlement) reads as 0 — the charter
         // floor is what prices a colony then.
         //
-        // The bill is de-scaled back to a REFERENCE cycle. `maintenanceBill` is a per-settlement flow
-        // (`upkeep.total × catchUp`), but a charter is a one-off charge on an event, not a per-cycle
-        // rate: quoting it off the raw stored figure would halve what a colony costs whenever the
-        // settlement cadence halves, which is granularity leaking into price. At the shipped cadence
-        // this divides by 1.
+        // The bill is de-scaled back to a REFERENCE cycle (see `referenceMaintenanceBill`), the same
+        // way the player's colony verb quotes it.
         treasuryByFaction:
           treasuries.length > 0
             ? new Map(
@@ -1153,7 +1151,9 @@ export async function runWorldTick(
                   {
                     balance: t.balance,
                     pendingFounding: t.pendingFounding,
-                    maintenanceBill: (t.lastSettlement?.maintenanceBill ?? 0) / catchUpFactor(cadence.cycle),
+                    maintenanceBill: referenceMaintenanceBill(
+                      t.lastSettlement?.maintenanceBill, cadence.cycle,
+                    ),
                   },
                 ]),
               )

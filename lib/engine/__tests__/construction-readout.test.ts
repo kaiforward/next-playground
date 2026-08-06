@@ -3,9 +3,13 @@ import { forecastEtaCycles, forecastIndependentEtaCycles } from "@/lib/engine/co
 import type { WorldBuildProject } from "@/lib/world/types";
 import {
   computeFactionConstruction, buildingLabel, describeBuildProject, nextCycleGains,
-  type ConstructionSystemInfo,
+  type ConstructionSystemInfo, type FoundingReadoutInputs,
 } from "@/lib/engine/construction-readout";
-import type { WorldConstructionProject } from "@/lib/world/types";
+import {
+  foundingGoodsValue, projectedManifestWant, type FoundingSourceSupply,
+} from "@/lib/engine/founding-cost";
+import type { WorldColonyEstablishProject, WorldConstructionProject } from "@/lib/world/types";
+import { COLONISATION } from "@/lib/constants/colonisation";
 import {
   RESEARCH_INSTITUTE_TYPE, COMPLEX_BY_TYPE, HEAVY_INDUSTRY_COMPLEX, CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE,
 } from "@/lib/constants/industry";
@@ -13,6 +17,22 @@ import { GOODS } from "@/lib/constants/goods";
 
 function build(id: string, workTotal: number, workDone: number): WorldBuildProject {
   return { kind: "build", id, origin: "auto", factionId: "f1", systemId: "s1", buildingType: "housing", levels: 1, workTotal, workDone };
+}
+
+/** A faction with money and a source that can spare anything — the "nothing is holding it up" case. */
+function founded(over: Partial<FoundingReadoutInputs> = {}): FoundingReadoutInputs {
+  return {
+    workingBalance: 1_000_000,
+    supplyBySource: new Map(),
+    cover: COLONISATION.FOUNDING_STOCK_COVER,
+    economyScale: 1,
+    ...over,
+  };
+}
+
+/** A source's rows, all of them drawable up to `sparable` (0 = it can spare nothing). */
+function supply(sparable: number, goodIds = ["water", "food"]): FoundingSourceSupply[] {
+  return goodIds.map((goodId) => ({ goodId, sparable }));
 }
 
 describe("forecastEtaCycles", () => {
@@ -138,7 +158,7 @@ describe("computeFactionConstruction", () => {
   ];
 
   it("pools only economically-active systems and splits expansion vs build-out", () => {
-    const r = computeFactionConstruction(projects, systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4);
+    const r = computeFactionConstruction(projects, systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
     expect(r.pool).toBeCloseTo((100 + 50) * 0.05, 6); // controlled pop 0 contributes nothing
     expect(r.expandCount).toBe(1);
     expect(r.buildCount).toBe(1);
@@ -160,7 +180,7 @@ describe("computeFactionConstruction", () => {
       { kind: "build", id: "front", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
       { kind: "build", id: "back", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
     ];
-    const r = computeFactionConstruction(twoBuilds, oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4);
+    const r = computeFactionConstruction(twoBuilds, oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
     expect(r.pool).toBeCloseTo(4, 6);
     const front = r.all.find((p) => p.id === "front");
     const back = r.all.find((p) => p.id === "back");
@@ -177,7 +197,7 @@ describe("computeFactionConstruction", () => {
       { id: "s1", name: "Only System", control: "developed", population: 400, buildings: {} },
     ];
     const slowThenFast: WorldConstructionProject[] = [build("slow", 16, 0), build("fast", 8, 0)];
-    const r = computeFactionConstruction(slowThenFast, oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4);
+    const r = computeFactionConstruction(slowThenFast, oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
     expect(r.pool).toBeCloseTo(20, 6);
     expect(r.buildOut.map((p) => p.id)).toEqual(["fast", "slow"]);
   });
@@ -193,7 +213,7 @@ describe("computeFactionConstruction", () => {
       { kind: "build", id: "pA", origin: "auto", factionId: "f1", systemId: "sysA", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
     ];
     // throughputPerPop 0 zeroes the pool regardless of population — every project stalls (etaCycles null).
-    const r = computeFactionConstruction(zetaThenAlpha, twoNamedSystems, { throughputPerPop: 0, pointsPerLevel: 0 }, 4);
+    const r = computeFactionConstruction(zetaThenAlpha, twoNamedSystems, { throughputPerPop: 0, pointsPerLevel: 0 }, 4, founded());
     expect(r.pool).toBe(0);
     expect(r.buildOut.every((p) => p.etaCycles === null)).toBe(true);
     expect(r.buildOut.map((p) => p.systemName)).toEqual(["Alpha System", "Zeta System"]);
@@ -204,7 +224,7 @@ describe("computeFactionConstruction", () => {
       { id: "s1", name: "Alpha", control: "developed" as const, population: 200,
         buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1, [VOCATIONAL_SCHOOL_TYPE]: 1 } },
     ];
-    const r = computeFactionConstruction([], systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4);
+    const r = computeFactionConstruction([], systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
     expect(r.poolCentres).toBeCloseTo(5);          // fully staffed centre
     expect(r.poolBase).toBeCloseTo((200 - 7) * 0.05); // its technicians left the base
     expect(r.pool).toBeCloseTo(r.poolBase + r.poolCentres);
@@ -222,8 +242,108 @@ describe("computeFactionConstruction", () => {
       { kind: "build", id: "b", factionId: "f1", systemId: "dev1", origin: "player",
         buildingType: "housing", levels: 1, workTotal: 10, workDone: 0 },
     ];
-    const r = computeFactionConstruction(originProjects, systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4);
+    const r = computeFactionConstruction(originProjects, systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
     expect(r.all.map((row) => row.origin)).toEqual(["auto", "player"]);
     expect(r.all.every((row) => row.kind === "build" && row.buildingType === "housing")).toBe(true);
+  });
+});
+
+describe("computeFactionConstruction — why a founding is stuck", () => {
+  // A source with pool to spare (20/cycle against a cap of 4), so nothing a colony waits on here is
+  // ever the construction pool: every stall below is priced, and every finite ETA is a real forecast.
+  const systems: ConstructionSystemInfo[] = [
+    { id: "src", name: "Vela Prime", control: "developed", population: 400, buildings: {} },
+    { id: "ctrl", name: "Kepler Reach", control: "controlled", population: 0, buildings: {} },
+  ];
+  const SEED_POP = 2;
+
+  function colony(over: Partial<WorldColonyEstablishProject> = {}): WorldColonyEstablishProject {
+    return {
+      kind: "colony_establish", id: "c1", origin: "auto", factionId: "f1", systemId: "ctrl",
+      sourceSystemId: "src", seedPop: SEED_POP, housingLevels: 1, workTotal: 100, workDone: 40,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0, ...over,
+    };
+  }
+
+  function readColony(p: WorldColonyEstablishProject, founding: FoundingReadoutInputs) {
+    const r = computeFactionConstruction(
+      [p], systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founding,
+    );
+    const row = r.expansion[0];
+    if (row === undefined) throw new Error("fixture: expected one colony row");
+    return row;
+  }
+
+  const fromSource = (rows: FoundingSourceSupply[]) => new Map([["src", rows]]);
+
+  it("reads an unpaid charter as awaiting_charter, with no ETA to promise", () => {
+    // Money and materials are both abundant — only the charter is outstanding, and until it is paid
+    // the project absorbs no work at all, so any ETA the pool implies would be a fiction.
+    const row = readColony(
+      colony({ charterPaid: false }),
+      founded({ supplyBySource: fromSource(supply(1000)) }),
+    );
+    expect(row.stalledReason).toBe("awaiting_charter");
+    expect(row.etaCycles).toBeNull();
+    // The rate is a pool figure too: an unpaid charter absorbs nothing, whatever the pool offers.
+    expect(row.nextCycleGain).toBe(0);
+  });
+
+  it("reads a colony that nothing is holding up as unstalled, with a finite ETA", () => {
+    const row = readColony(colony(), founded({ supplyBySource: fromSource(supply(1000)) }));
+    expect(row.stalledReason).toBeNull();
+    expect(row.etaCycles).not.toBeNull();
+    expect(row.etaCycles).toBeGreaterThan(0);
+    expect(row.nextCycleGain).toBeGreaterThan(0);
+  });
+
+  it("reads a stall the working balance cannot pay for as awaiting_funds", () => {
+    const row = readColony(
+      colony({ stalledCycles: 3 }),
+      founded({ workingBalance: 0, supplyBySource: fromSource(supply(1000)) }),
+    );
+    expect(row.stalledReason).toBe("awaiting_funds");
+    expect(row.etaCycles).toBeNull();
+  });
+
+  it("reads a stall at a source with nothing to spare as awaiting_materials, however rich the faction", () => {
+    const row = readColony(
+      colony({ stalledCycles: 3 }),
+      founded({ workingBalance: 10_000_000, supplyBySource: fromSource(supply(0)) }),
+    );
+    expect(row.stalledReason).toBe("awaiting_materials");
+    expect(row.etaCycles).toBeNull();
+  });
+
+  it("does not call a colony merely out-competed for the pool stalled", () => {
+    // The counter only advances on a MATERIALS or MONEY stall; a cycle the construction pool never
+    // reached leaves it at 0. Such a colony's story is a long ETA, not a reason it cannot proceed —
+    // reading "awaiting funds" off a penniless faction that was never asked to pay would be a lie.
+    const row = readColony(
+      colony({ stalledCycles: 0 }),
+      founded({ workingBalance: 0, supplyBySource: fromSource(supply(0)) }),
+    );
+    expect(row.stalledReason).toBeNull();
+    expect(row.etaCycles).not.toBeNull();
+  });
+
+  it("reports the staged share of the manifest, weighted by what the goods cost", () => {
+    const cover = COLONISATION.FOUNDING_STOCK_COVER;
+    const rows = supply(1000);
+    const want = projectedManifestWant(rows, SEED_POP, cover);
+    const waterOnly = want.filter((l) => l.goodId === "water");
+    const inputs = founded({ supplyBySource: fromSource(rows) });
+
+    expect(readColony(colony(), inputs).stagedFraction).toBe(0);
+    expect(readColony(colony({ stagedManifest: want }), inputs).stagedFraction).toBeCloseTo(1, 6);
+
+    // One of the two goods carried in full is NOT half the manifest — water and food cost different
+    // money, and the share is what has been bought, not how many lines are ticked off.
+    const partial = readColony(colony({ stagedManifest: waterOnly }), inputs).stagedFraction;
+    expect(partial).toBeCloseTo(
+      foundingGoodsValue(waterOnly, 1) / foundingGoodsValue(want, 1), 6,
+    );
+    expect(partial).toBeGreaterThan(0);
+    expect(partial).toBeLessThan(1);
   });
 });

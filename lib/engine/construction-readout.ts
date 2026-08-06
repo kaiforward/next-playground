@@ -4,10 +4,16 @@
  * itself lives in `construction.ts`. Two consumers read this: the faction roll-up (whole readout,
  * grouped) and the per-system section (filtered to one system via `all`).
  */
-import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
+import type {
+  SystemControl, WorldColonyEstablishProject, WorldConstructionProject,
+} from "@/lib/world/types";
 import {
   factionConstructionPool, forecastEtaCycles, fundQueue, type ConstructionPoolRates,
 } from "@/lib/engine/construction";
+import {
+  foundingStagedFraction, nextStagingShareCost, type FoundingSourceSupply,
+} from "@/lib/engine/founding-cost";
+import type { ColonyStallReason } from "@/lib/types/colonisation";
 import { GOODS } from "@/lib/constants/goods";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, CONSTRUCTION_CENTRE_TYPE, COMPLEX_BY_TYPE,
@@ -57,6 +63,26 @@ export interface ConstructionProjectColonyRow extends ConstructionRowBase {
   sourceSystemName: string;
   seedPop: number;
   housingLevels: number;
+  /** What is holding this founding up, or null when nothing is. Derived at read time — the world
+   *  stores how long a project has been stalled, never why. */
+  stalledReason: ColonyStallReason | null;
+  /** Share of the seed's manifest already staged and paid for, in [0,1] (value-weighted). */
+  stagedFraction: number;
+}
+
+/**
+ * What the colony rows need from outside the construction queue to say WHY a founding is stuck: the
+ * money the founding path actually spends from, and what each colony's source can spare it.
+ */
+export interface FoundingReadoutInputs {
+  /** `balance − pendingFounding` — the working balance the tick commits founding against. */
+  workingBalance: number;
+  /** Per source system id, what that source can spare this cycle, good by good. */
+  supplyBySource: ReadonlyMap<string, ReadonlyArray<FoundingSourceSupply>>;
+  /** Cycles of the seed's own consumption a full manifest carries. */
+  cover: number;
+  /** The quantity→money normaliser the valuation seam divides by. */
+  economyScale: number;
 }
 
 export type ConstructionProjectRow = ConstructionProjectBuildRow | ConstructionProjectColonyRow;
@@ -131,15 +157,42 @@ export function nextCycleGains(
 }
 
 /**
+ * Why a founding is making no progress, or null when nothing is holding it back.
+ *
+ * An unpaid charter binds first and absorbs no work at all. Past that the stall counter is the
+ * world's own record that a cycle bought nothing, and what the working balance could have covered
+ * separates a founder with no money from one whose source has nothing to spare. A colony merely
+ * queued behind higher-ROI builds is NOT stalled — the counter deliberately ignores a cycle the
+ * construction pool never reached — so such a row reads null with a finite, possibly distant, ETA.
+ */
+function colonyStallReason(
+  p: WorldColonyEstablishProject,
+  founding: FoundingReadoutInputs,
+  cap: number,
+): ColonyStallReason | null {
+  if (!p.charterPaid) return "awaiting_charter";
+  if (p.stalledCycles <= 0) return null;
+  const plannedWork = Math.min(cap, Math.max(0, p.workTotal - p.workDone));
+  const workShare = p.workTotal > 0 ? plannedWork / p.workTotal : 0;
+  const shareCost = nextStagingShareCost(
+    founding.supplyBySource.get(p.sourceSystemId) ?? [],
+    p.stagedManifest, p.seedPop, workShare, founding.cover, founding.economyScale,
+  );
+  return shareCost > founding.workingBalance ? "awaiting_funds" : "awaiting_materials";
+}
+
+/**
  * Build the faction readout: pool from the developed systems, ETA forecast over the queue as stored
  * (in-flight first — the order the tick funds it), then rows split into Expansion (colonies) and
- * Build-out (builds), each sorted soonest-first. `projects` must be one faction's open projects.
+ * Build-out (builds), each sorted soonest-first. `projects` must be one faction's open projects,
+ * and `founding` that faction's money and sources — a colony's progress is priced, not just worked.
  */
 export function computeFactionConstruction(
   projects: WorldConstructionProject[],
   systems: ConstructionSystemInfo[],
   rates: ConstructionPoolRates,
   cap: number,
+  founding: FoundingReadoutInputs,
 ): FactionConstructionReadout {
   const nameById = new Map(systems.map((s) => [s.id, s.name]));
   const poolParts = factionConstructionPool(systems, rates);
@@ -164,13 +217,22 @@ export function computeFactionConstruction(
       nextCycleGain: gains[i],
     };
     if (p.kind === "colony_establish") {
+      const stalledReason = colonyStallReason(p, founding, cap);
+      const supply = founding.supplyBySource.get(p.sourceSystemId) ?? [];
       const row: ConstructionProjectColonyRow = {
         ...base,
+        // A priced stall is a stall: the work forecast reads the pool, which knows nothing about a
+        // project that will absorb no points until its money or its materials arrive. Both the ETA
+        // and the next-cycle rate are pool figures, and both would read as steady progress.
+        etaCycles: stalledReason === null ? base.etaCycles : null,
+        nextCycleGain: stalledReason === null ? base.nextCycleGain : 0,
         kind: "colony_establish",
         sourceSystemId: p.sourceSystemId,
         sourceSystemName: nameById.get(p.sourceSystemId) ?? p.sourceSystemId,
         seedPop: p.seedPop,
         housingLevels: p.housingLevels,
+        stalledReason,
+        stagedFraction: foundingStagedFraction(supply, p.stagedManifest, p.seedPop, founding.cover),
       };
       all.push(row);
       expansion.push(row);

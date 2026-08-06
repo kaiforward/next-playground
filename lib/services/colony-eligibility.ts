@@ -14,9 +14,9 @@ import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import { boundedHopsFromOrigin } from "@/lib/engine/pathfinding";
 import {
   charterFee, foundingCommitmentCost, foundingGoodsValue, projectedManifestWant,
+  referenceMaintenanceBill,
 } from "@/lib/engine/founding-cost";
 import { safeMoney } from "@/lib/engine/treasury";
-import { catchUpFactor } from "@/lib/tick/shard";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { COLONISATION } from "@/lib/constants/colonisation";
@@ -90,11 +90,9 @@ export function colonyEligibility(
   if (source === null) return { eligible: false, reason: "no_seed_source" };
 
   const treasury = world.treasuries.find((t) => t.factionId === factionId);
-  // De-scaled to a REFERENCE cycle exactly as the tick quotes it: the stored bill is a per-settlement
-  // flow, a charter is a one-off charge on an event, and CYCLE_LENGTH is a real knob — quoting off
-  // the raw figure would let a cadence change move the player's price and not the planner's.
-  const referenceBill =
-    (treasury?.lastSettlement?.maintenanceBill ?? 0) / catchUpFactor(CYCLE_LENGTH);
+  // De-scaled to a REFERENCE cycle through the same helper the tick quotes the planner's charter
+  // with, so a cadence change can never move the player's price and not the planner's.
+  const referenceBill = referenceMaintenanceBill(treasury?.lastSettlement?.maintenanceBill, CYCLE_LENGTH);
   const charter = charterFee(referenceBill, {
     mult: COLONISATION.CHARTER_FEE_SPEND_MULT, min: COLONISATION.CHARTER_FEE_MIN,
   });

@@ -5,10 +5,13 @@ import { getWorld } from "@/lib/world/store";
 import { orderBuild, orderColony, cancelOrder, setAutomation } from "@/lib/services/construction-orders";
 import { colonyEligibility } from "@/lib/services/colony-eligibility";
 import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
+import { runWorldTick } from "@/lib/world/tick";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
-import type { World, WorldBuildProject, WorldColonyEstablishProject } from "@/lib/world/types";
+import type {
+  World, WorldBuildProject, WorldColonyEstablishProject, WorldTreasurySettlement,
+} from "@/lib/world/types";
 
 /** A small authored world: the player faction owns a developed homeworld. */
 function seatWorld() {
@@ -39,6 +42,18 @@ function fundPlayer(balance: number) {
       t.factionId === w.player?.controlledFactionId ? { ...t, balance } : t,
     ),
   });
+}
+
+/** A settled cycle whose only figure of interest is the maintenance bill the charter is quoted off. */
+function settlementWithBill(maintenanceBill: number): WorldTreasurySettlement {
+  return {
+    tick: 0,
+    headsIncome: 0, productionIncome: 0, incomeBySystem: [],
+    maintenanceBill, maintenanceByType: [],
+    logisticsBill: 0, constructionBill: 0,
+    paid: { maintenance: 0, logistics: 0, construction: 0 },
+    foundingExpense: 0,
+  };
 }
 
 /** A controlled, amply-landed player system next to the homeworld — eligibility manufactured, not rolled. */
@@ -190,6 +205,56 @@ describe("construction order services", () => {
     expect(row.charterPaid).toBe(false);
     expect(row.stagedManifest).toEqual([]);
     expect(row.stalledCycles).toBe(0);
+  });
+
+  it("quotes the charter as the spend multiple of the settled bill, and charges exactly that", async () => {
+    // The charter is priced off how much faction there is to administer, so the quote has to move
+    // with the last settlement's maintenance bill rather than resting on its floor — and the number
+    // the player is shown has to be the number the tick's charter phase actually debits.
+    const target = controlledNeighbour(50);
+    const w = getWorld();
+    if (!w.player) throw new Error("fixture: expected a player seat");
+    const pid = w.player.controlledFactionId;
+    const BILL = 10_000; // × the spend multiple, far clear of the floor
+    setWorld({
+      ...w,
+      // Colonisation automation off, so the only colony bought is the one ordered below; every
+      // construction band unfunded, so no work — and therefore no staged materials — joins the
+      // charter in the same accumulator.
+      player: { ...w.player, automation: { ...w.player.automation, colonisation: false } },
+      treasuries: w.treasuries.map((t) => ({
+        ...t,
+        funded: { ...t.funded, construction: 0 },
+        ...(t.factionId === pid
+          ? { balance: 5_000_000, lastSettlement: settlementWithBill(BILL) }
+          : {}),
+      })),
+    });
+
+    const quote = colonyEligibility(getWorld(), pid, target);
+    expect(quote.eligible).toBe(true);
+    if (!quote.eligible) return;
+    expect(quote.charter).toBeCloseTo(COLONISATION.CHARTER_FEE_SPEND_MULT * BILL, 6);
+    expect(quote.charter).toBeGreaterThan(COLONISATION.CHARTER_FEE_MIN); // a real multiple, not the floor
+
+    expect(orderColony({ systemId: target.id }).ok).toBe(true);
+
+    // The shipped cadence, because that is the one the read service quotes against: it reads the
+    // CYCLE_LENGTH constant, while the tick de-scales by whatever cadence it was handed. A
+    // non-shipped cadence would compare the two prices at two different reference cycles.
+    let world = getWorld();
+    const cadence = { cycle: 24, construction: 24, logistics: 24 };
+    for (let tick = 1; tick <= 24; tick++) world = (await runWorldTick(world, { cadence })).world;
+
+    const row = world.constructionProjects.find(
+      (p): p is WorldColonyEstablishProject =>
+        p.kind === "colony_establish" && p.systemId === target.id,
+    );
+    expect(row?.charterPaid).toBe(true);
+    // The charter is the whole founding expense of that cycle: an unfunded construction band means
+    // no work was absorbed, so no materials were staged alongside it.
+    const treasury = world.treasuries.find((t) => t.factionId === pid)!;
+    expect(treasury.lastSettlement?.foundingExpense).toBeCloseTo(quote.charter, 6);
   });
 
   it("returns a cancelled colony's staged goods to its founder, conserving total stock", () => {

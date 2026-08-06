@@ -126,6 +126,38 @@ describe("getSystemConstruction", () => {
     if (!unclaimed) throw new Error("fixture: expected an unclaimed system in the generated world");
     expect(getSystemConstruction(unclaimed.id)).toEqual({ visibility: "hidden" });
   });
+  it("reads a stalled colony's reason from the faction's purse and its source's shelves", () => {
+    // `stalledCycles` records only THAT a cycle bought nothing, never why: the reason is derived at
+    // read time from the working balance and what the source can actually spare, so this is the
+    // service's marshalling under test as much as the derivation's.
+    const stalled = world.constructionProjects.map((p) =>
+      p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
+    );
+    // A founder with shelves to spare, so "no money" and "no goods" are genuinely distinguishable.
+    const markets = world.markets.map((m) =>
+      m.systemId === dev.id ? { ...m, stock: 100_000 } : m,
+    );
+    const purse = (balance: number) =>
+      world.treasuries.map((t) =>
+        t.factionId === factionId ? { ...t, balance, pendingFounding: 0 } : t,
+      );
+
+    setWorld({ ...world, constructionProjects: stalled, markets, treasuries: purse(0) });
+    const broke = getSystemConstruction(ctrlWithColony.id);
+    if (broke.visibility !== "visible") throw new Error("expected visible");
+    const brokeRow = broke.projects[0];
+    if (brokeRow.kind !== "colony_establish") throw new Error("expected a colony row");
+    expect(brokeRow.stalledReason).toBe("awaiting_funds");
+    expect(brokeRow.etaCycles).toBeNull();
+
+    setWorld({ ...world, constructionProjects: stalled, markets, treasuries: purse(10_000_000) });
+    const rich = getSystemConstruction(ctrlWithColony.id);
+    if (rich.visibility !== "visible") throw new Error("expected visible");
+    const richRow = rich.projects[0];
+    if (richRow.kind !== "colony_establish") throw new Error("expected a colony row");
+    expect(richRow.stalledReason).toBe("awaiting_materials");
+  });
+
   it("throws ServiceError(404) naming the id for an unknown system", () => {
     expect(() => getSystemConstruction("nope")).toThrow(ServiceError);
     try {

@@ -117,6 +117,26 @@ describe("charterFee", () => {
   });
 });
 
+describe("referenceMaintenanceBill", () => {
+  it("de-scales the stored per-settlement bill to one reference cycle", async () => {
+    const { referenceMaintenanceBill } = await import("@/lib/engine/founding-cost");
+    const { REFERENCE_INTERVAL } = await import("@/lib/constants/tick-cadence");
+    // At the reference cadence the stored figure IS the reference figure.
+    expect(referenceMaintenanceBill(600, REFERENCE_INTERVAL)).toBeCloseTo(600, 6);
+    // Settle half as often and each settlement's bill covers twice the ground — a charter quoted
+    // off the raw figure would double for no reason but granularity.
+    expect(referenceMaintenanceBill(600, REFERENCE_INTERVAL * 2)).toBeCloseTo(300, 6);
+    expect(referenceMaintenanceBill(600, REFERENCE_INTERVAL / 2)).toBeCloseTo(1200, 6);
+  });
+
+  it("reads no settlement yet as zero, and never divides by a zero cadence", async () => {
+    const { referenceMaintenanceBill } = await import("@/lib/engine/founding-cost");
+    expect(referenceMaintenanceBill(undefined, 24)).toBe(0);
+    // An Infinity here would reach world state as null and corrupt the save.
+    expect(referenceMaintenanceBill(600, 0)).toBe(600);
+  });
+});
+
 describe("foundingCommitmentCost", () => {
   it("reserves headroom on the projected bill on top of the charter", async () => {
     const { foundingCommitmentCost } = await import("@/lib/engine/founding-cost");
