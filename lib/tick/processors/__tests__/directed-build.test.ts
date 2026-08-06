@@ -1215,6 +1215,9 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(run.draws).toEqual([]);                            // nothing drawn…
     expect(run.ledgerByCycle.every((n) => n === 0)).toBe(true); // …and nothing conjured into the ledger
     expect(run.committed).toBe(FEE);                          // the charter is all it ever cost
+    // An unprovisioned founding cost its founder nothing — it must not appear in the founding-cost
+    // readout at all, or the harness reads it as a founder drained flat.
+    expect(run.manifestRecord).toEqual([]);
   });
 
   it("stages over the whole establish, past what a single completion draw could take", async () => {
@@ -1346,5 +1349,28 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(served + leftovers).toBeCloseTo(drawable, 6); // …and the pile is spent exactly once
     // The ledgers are the debits: nothing was recorded that did not leave the founder.
     expect(w.foundingStagingDraws.reduce((sum, d) => sum + d.quantity, 0)).toBeCloseTo(drawable, 6);
+  });
+
+  it("lands an unpriced founding with an empty ledger — no charter, no materials", async () => {
+    // A faction with no treasury entry founds UNPRICED (the build-only engine path): no charter is
+    // charged, so nothing is ever staged, so the colony opens holding nothing however full its
+    // founder's warehouses are. A distinct branch from the empty-source case above, which has money
+    // and a founder with nothing to give.
+    const w = new MemoryDirectedBuildWorld([stockedHome({ food: 5_000, water: 5_000 })]);
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1),
+      develop: {
+        candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS,
+      },
+      // no treasuryByFaction — this is the whole point of the case
+    });
+
+    expect(w.developments).toHaveLength(1);              // the colony is founded regardless
+    expect(w.developments[0].systemId).toBe("c1");
+    expect(w.developments[0].seedPop).toBe(EXPANSION.COLONY_SEED_POP);
+    expect(w.developments[0].stockManifest).toEqual([]); // nothing staged ⇒ nothing delivered
+    expect(w.foundingStagingDraws).toEqual([]);          // …and the founder was never drawn on
+    expect(result.foundingDebitsByFaction?.get("f1") ?? 0).toBe(0);
+    expect(result.foundingManifests).toEqual([]);
   });
 });

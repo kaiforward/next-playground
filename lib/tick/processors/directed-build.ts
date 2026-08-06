@@ -164,9 +164,9 @@ function planStagingDraw(
     const key = `${source.systemId}|${good.goodId}`;
     // Bounded by the row's LIVE stock as well as by the export rule, because this plan is written
     // straight into the project's ledger and that ledger is what the colony is credited on delivery.
-    // The debit itself clamps to live stock (`applyFoundingStagingDraws`), so a plan promising more
-    // than the row physically holds would record goods that never left the founder — and deliver
-    // them anyway. Bounding here keeps the ledger equal to what was actually debited.
+    // A plan promising more than the row physically holds would record goods that never left the
+    // founder; `applyFoundingStagingDraws` refuses such a draw outright rather than shorten it, so
+    // overshooting here fails the tick. Bounding keeps the ledger equal to what is actually debited.
     const remaining = stockBalance.get(key)
       ?? Math.min(
         surplusDrawable(good.stock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed),
@@ -299,7 +299,7 @@ export async function runDirectedBuildProcessor(
   }
 
   // Full rows by id — current building counts turn a landed whole-level increment into an absolute
-  // write, and a landed colony reads its SOURCE's markets to size the founding endowment.
+  // write, and an in-flight colony reads its SOURCE's markets to size each cycle's staging draw.
   const rowBySystem = new Map(rows.map((r) => [r.systemId, r]));
 
   const landedBySystem = new Map<string, Map<string, number>>();

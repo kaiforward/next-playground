@@ -542,8 +542,10 @@ export function addMarketsForSettledSystems(
  * the founder still happened to hold — possibly nothing.
  *
  * Conservation is therefore a property of the pair, not of this function alone: every quantity
- * credited here was debited when it was staged, because the staging plan is bounded by the same
- * live market row the debit clamps against (`planStagingDraw`, lib/tick/processors/directed-build.ts).
+ * credited here was debited when it was staged. The staging plan is bounded by the same live market
+ * row the debit reads (`planStagingDraw`, lib/tick/processors/directed-build.ts), and
+ * `applyFoundingStagingDraws` throws rather than shorten a draw — so a ledger line that was never
+ * paid for cannot reach this function to be minted.
  *
  * Credits land only on rows the colony already has — `addMarketsForSettledSystems` must run first, or
  * a colony has no row to receive anything. Non-finite or non-positive lines are skipped rather than
@@ -578,12 +580,14 @@ export function applyStagedManifestDelivery(
  * colony opens and receives them. The founder is therefore drawn down over the life of an establish
  * instead of in one raid at completion.
  *
- * Every line is clamped to what its source still holds across the pass, so a draw can never take
- * stock that is not there whatever the caller's caps said. That clamp is a floor, not the working
- * rule: the planner already bounds each draw by the same live market row (`planStagingDraw`), so a
- * bound clamp here would mean the ledger recorded more than left the founder and the delivery would
- * mint the difference. Non-finite or non-positive lines are skipped rather than trusted: stock is
- * world state, and `JSON.stringify` turns a NaN into null.
+ * Every draw is moved in FULL or the tick fails. A draw the source cannot cover is not a cap doing
+ * its job — the planner already bounds each draw by this same live market row (`planStagingDraw`)
+ * and by a running per-(source, good) balance, so a short draw means the ledger recorded goods that
+ * never left the founder, and `applyStagedManifestDelivery` would mint them onto the colony when it
+ * opens. Clamping silently would make that a world-state corruption no test could see; throwing
+ * makes it a hard pause with no broken world committed, which is what the store's tick atomicity is
+ * for. Non-finite or non-positive lines are skipped rather than trusted: stock is world state, and
+ * `JSON.stringify` turns a NaN into null.
  */
 export function applyFoundingStagingDraws(
   markets: WorldMarket[],
@@ -595,14 +599,18 @@ export function applyFoundingStagingDraws(
   for (const draw of draws) {
     if (!Number.isFinite(draw.quantity) || draw.quantity <= 0) continue;
     const key = `${draw.sourceSystemId}|${draw.goodId}`;
-    const moved = Math.min(draw.quantity, available.get(key) ?? 0);
-    if (!(moved > 0)) continue;
-    available.set(key, (available.get(key) ?? 0) - moved);
-    delta.set(key, (delta.get(key) ?? 0) - moved);
+    const stock = available.get(key) ?? 0;
+    if (draw.quantity > stock) {
+      throw new Error(
+        `Founding staging draw exceeds live stock at ${key}: drawing ${draw.quantity}, holding ${stock}`,
+      );
+    }
+    available.set(key, stock - draw.quantity);
+    delta.set(key, (delta.get(key) ?? 0) - draw.quantity);
   }
   if (delta.size === 0) return markets;
-  // No `Math.max(0, …)` floor on the write, deliberately: the clamp above already bounds every debit
-  // by what its own row holds, so a floor here could only ever hide a draw that had escaped it.
+  // No `Math.max(0, …)` floor on the write, deliberately: every debit is bounded above by what its
+  // own row held, so a floor here could only ever hide a draw that had escaped that bound.
   return markets.map((m) => {
     const change = delta.get(`${m.systemId}|${m.goodId}`);
     if (change === undefined || change === 0) return m;

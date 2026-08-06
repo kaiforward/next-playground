@@ -279,24 +279,40 @@ describe("applyFoundingStagingDraws", () => {
     expect(totalStock(after, "food")).toBe(totalStock(markets, "food") - 17);
   });
 
-  it("takes only what the source still holds across the whole pass", () => {
-    // Two draws on one source in one cycle: the second sees what the first left, so the pair can
-    // never take more than the row held however the caller sized them.
+  it("draws down one source across the whole pass, so the pair fits what the row held", () => {
+    // Two draws on one source in one cycle: the second sees what the first left.
     const markets = [market("source", "food", 10)];
     const after = applyFoundingStagingDraws(markets, [
-      { sourceSystemId: "source", goodId: "food", quantity: 8 },
-      { sourceSystemId: "source", goodId: "food", quantity: 8 },
+      { sourceSystemId: "source", goodId: "food", quantity: 6 },
+      { sourceSystemId: "source", goodId: "food", quantity: 4 },
     ]);
     expect(stockAt(after, "source", "food")).toBe(0); // emptied, never negative
   });
 
-  it("skips non-finite, non-positive and unknown-row draws rather than writing them", () => {
+  it("throws rather than shorten a draw its source cannot cover", () => {
+    // Shortening is what would make this silent: the ledger keeps the full quantity, the colony is
+    // credited it at delivery, and goods that never left the founder are minted with every test
+    // green. A throw fails the tick instead, and the store commits only a fully-successful tick.
+    const markets = [market("source", "food", 10)];
+    expect(() =>
+      applyFoundingStagingDraws(markets, [
+        { sourceSystemId: "source", goodId: "food", quantity: 8 },
+        { sourceSystemId: "source", goodId: "food", quantity: 8 }, // only 2 left by now
+      ]),
+    ).toThrow(/source\|food: drawing 8, holding 2/);
+    // A draw whose source row has gone is the same fault at its extreme — all of it was never paid.
+    expect(() =>
+      applyFoundingStagingDraws(markets, [{ sourceSystemId: "gone", goodId: "food", quantity: 5 }]),
+    ).toThrow(/gone\|food: drawing 5, holding 0/);
+    expect(stockAt(markets, "source", "food")).toBe(10); // and nothing was mutated on the way out
+  });
+
+  it("skips non-finite and non-positive draws rather than writing them", () => {
     const markets = [market("source", "food", 100)];
     const after = applyFoundingStagingDraws(markets, [
       { sourceSystemId: "source", goodId: "food", quantity: Number.NaN },
       { sourceSystemId: "source", goodId: "food", quantity: Number.POSITIVE_INFINITY },
       { sourceSystemId: "source", goodId: "food", quantity: -5 },
-      { sourceSystemId: "gone", goodId: "food", quantity: 5 },
     ]);
     expect(after).toBe(markets); // no delta at all — the same array, not a rebuilt copy
     for (const m of after) expect(Number.isFinite(m.stock)).toBe(true);
