@@ -4,7 +4,9 @@ import {
   trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summarizeFoundingStock,
   recordFoundingManifest,
 } from "../build-analysis";
-import type { BuildCommitmentRecord, FoundedColonyRecord, FoundedColonySystem } from "../build-analysis";
+import type {
+  BuildCommitmentRecord, FoundedColonyRecord, FoundedColonySystem, FoundingStagingTotals,
+} from "../build-analysis";
 import { EXPANSION } from "@/lib/constants/expansion";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, HEAVY_INDUSTRY_COMPLEX,
@@ -332,13 +334,19 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
   const rec = (
     systemId: string, openingSatisfaction: number | null, openingDissatisfaction: number | null,
   ): FoundedColonyRecord => ({ systemId, foundedTick: 0, openingSatisfaction, openingDissatisfaction });
+  /** No staging draws behind these colonies — the detection cases are about who is tracked, not cost. */
+  const NO_STAGING = new Map<string, FoundingStagingTotals>();
+  /** One staging draw as the processor emits it. */
+  const draw = (
+    systemId: string, tonnage: number, moneyCost: number, founderCover?: number,
+  ) => ({ systemId, tonnage, moneyCost, founderCover });
 
   it("tracks only systems developed after tick 0, not world-gen's own", () => {
     const tracker = new Map<string, FoundedColonyRecord>();
     const developedAtStart = new Set(["home"]);
     trackFoundedColonies(
       [sys("home", "developed"), sys("c1", "developed"), sys("c2", "controlled")],
-      12, developedAtStart, tracker,
+      12, developedAtStart, tracker, NO_STAGING,
     );
 
     expect([...tracker.keys()]).toEqual(["c1"]);
@@ -349,7 +357,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     const tracker = new Map<string, FoundedColonyRecord>();
     const systems = [sys("c1", "developed")];
     const markets = [mkt("c1", "food", 1), mkt("c1", "water", 1)];
-    trackFoundedColonies(systems, 24, new Set(), tracker);
+    trackFoundedColonies(systems, 24, new Set(), tracker, NO_STAGING);
 
     // Founded ON a cycle-start tick: that same cycle assessed a system that did not exist for the cycle.
     expect(hasColonyAwaitingSample(tracker, 24)).toBe(false);
@@ -370,11 +378,11 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     const systems = [sys("c1", "developed")];
 
     const noLuxuries = new Map<string, FoundedColonyRecord>();
-    trackFoundedColonies(systems, 24, new Set(), noLuxuries);
+    trackFoundedColonies(systems, 24, new Set(), noLuxuries, NO_STAGING);
     sampleFoundedColonies(systems, [mkt("c1", "water", 1), mkt("c1", "luxuries", 0)], 48, noLuxuries);
 
     const noWater = new Map<string, FoundedColonyRecord>();
-    trackFoundedColonies(systems, 24, new Set(), noWater);
+    trackFoundedColonies(systems, 24, new Set(), noWater, NO_STAGING);
     sampleFoundedColonies(systems, [mkt("c1", "water", 0), mkt("c1", "luxuries", 1)], 48, noWater);
 
     expect(noLuxuries.get("c1")!.openingSatisfaction!).toBeGreaterThan(0.9);
@@ -387,7 +395,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
   it("keeps the opening reading, ignoring later cycles", () => {
     const tracker = new Map<string, FoundedColonyRecord>();
     const systems = [sys("c1", "developed")];
-    trackFoundedColonies(systems, 24, new Set(), tracker);
+    trackFoundedColonies(systems, 24, new Set(), tracker, NO_STAGING);
     sampleFoundedColonies(systems, [mkt("c1", "food", 0.9)], 48, tracker);
     sampleFoundedColonies(systems, [mkt("c1", "food", 0.1)], 72, tracker); // later famine
 
@@ -416,64 +424,88 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(summary).toEqual({
       foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
       meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
-      meanManifestTonnage: 0, medianFounderCoverAfter: null,
+      meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
     });
   });
 
-  it("records what the founding cost its founder, at the founding tick", () => {
-    // The manifest's cap is use-figure denominated, so a founder whose own draw was overstated
-    // now parts with more per colony. Both halves are read where it happens: the tonnage that
-    // left, and the founder's own remaining cover against the floor it is supposed to keep.
+  it("folds every cycle's draw into the one colony, not just the draw it was founded on", () => {
+    // A manifest arrives in slices over the whole establish, and every slice is drawn while the
+    // target is still `controlled` — invisible to the founded-colony tracker. Only the accumulator
+    // keeps them, so the record has to be built from it at tracking time: read the tracker as the
+    // draws happen instead and a colony records its last cycle alone.
+    const staging = new Map<string, FoundingStagingTotals>();
+    recordFoundingManifest(staging, draw("c1", 40, 12, 0.9));
+    recordFoundingManifest(staging, draw("c1", 30, 9, 0.4));   // the deepest draw…
+    recordFoundingManifest(staging, draw("c1", 30, 9, 0.7));   // …is not the last one
+
     const tracker = new Map<string, FoundedColonyRecord>();
-    trackFoundedColonies([sys("c1", "developed")], 24, new Set(), tracker);
+    trackFoundedColonies([sys("c1", "developed")], 24, new Set(), tracker, staging);
 
-    recordFoundingManifest(tracker, "c1", 300, 0.75);
-
-    expect(tracker.get("c1")?.manifestTonnage).toBe(300);
-    expect(tracker.get("c1")?.founderCoverAfter).toBeCloseTo(0.75, 9);
+    expect(tracker.get("c1")?.manifestTonnage).toBeCloseTo(100, 9); // all three slices
+    expect(tracker.get("c1")?.foundingMoneyCost).toBeCloseTo(30, 9);
+    expect(tracker.get("c1")?.founderCoverAfter).toBeCloseTo(0.4, 9); // the minimum across draws
   });
 
-  it("guards every recording edge: zero tonnage, unknown colony, unmeasurable cover", () => {
+  it("keeps two colonies drawing on one founder in one cycle as two distinct covers", () => {
+    // The founder is left at a different level by each of them, so the second colony's cover is
+    // not the first's. Keyed by anything but the TARGET system, the two collapse into one reading.
+    const staging = new Map<string, FoundingStagingTotals>();
+    recordFoundingManifest(staging, draw("c1", 40, 10, 0.8));
+    recordFoundingManifest(staging, draw("c2", 10, 3, 0.2));
+
     const tracker = new Map<string, FoundedColonyRecord>();
-    trackFoundedColonies([sys("c1", "developed")], 24, new Set(), tracker);
+    trackFoundedColonies(
+      [sys("c1", "developed"), sys("c2", "developed")], 24, new Set(), tracker, staging,
+    );
 
-    // A zero-tonnage manifest cost the founder nothing — recording it would drag the tonnage
+    expect(tracker.get("c1")?.founderCoverAfter).toBeCloseTo(0.8, 9);
+    expect(tracker.get("c2")?.founderCoverAfter).toBeCloseTo(0.2, 9);
+    expect(tracker.get("c1")?.manifestTonnage).toBeCloseTo(40, 9);
+    expect(tracker.get("c2")?.manifestTonnage).toBeCloseTo(10, 9);
+  });
+
+  it("guards every recording edge: zero tonnage, unmeasurable cover, corrupt money", () => {
+    const staging = new Map<string, FoundingStagingTotals>();
+
+    // A draw that moved nothing cost the founder nothing — recording it would drag the tonnage
     // mean and invite a cover reading where nothing shipped.
-    recordFoundingManifest(tracker, "c1", 0, 0.5);
-    expect(tracker.get("c1")?.manifestTonnage).toBeUndefined();
-    expect(tracker.get("c1")?.founderCoverAfter).toBeUndefined();
-
-    // A colony the tracker never saw is a no-op, not a crash or a phantom record.
-    recordFoundingManifest(tracker, "nope", 100, 0.5);
-    expect(tracker.has("nope")).toBe(false);
+    recordFoundingManifest(staging, draw("c1", 0, 5, 0.5));
+    expect(staging.has("c1")).toBe(false);
 
     // An unmeasurable cover (undefined, or corrupt) records the tonnage but leaves the cover
     // absent — never 0, which reads as a founder drained flat.
-    recordFoundingManifest(tracker, "c1", 100, undefined);
-    expect(tracker.get("c1")?.manifestTonnage).toBe(100);
-    expect(tracker.get("c1")?.founderCoverAfter).toBeUndefined();
-    recordFoundingManifest(tracker, "c1", 100, Number.NaN);
-    expect(tracker.get("c1")?.founderCoverAfter).toBeUndefined();
+    recordFoundingManifest(staging, draw("c1", 100, 10, undefined));
+    recordFoundingManifest(staging, draw("c1", 100, 10, Number.NaN));
+    expect(staging.get("c1")?.tonnage).toBeCloseTo(200, 9);
+    expect(staging.get("c1")?.minFounderCover).toBeUndefined();
+
+    // A corrupt money cost is dropped rather than summed — one NaN would poison the whole run's
+    // mean — while the tonnage it moved still counts.
+    recordFoundingManifest(staging, draw("c1", 50, Number.NaN, 0.5));
+    expect(staging.get("c1")?.tonnage).toBeCloseTo(250, 9);
+    expect(staging.get("c1")?.moneyCost).toBeCloseTo(20, 9);
+    expect(staging.get("c1")?.minFounderCover).toBeCloseTo(0.5, 9);
   });
 
-  it("folds manifest tonnage and founder cover into the founding summary", () => {
+  it("folds manifest tonnage, money and founder cover into the founding summary", () => {
     const tracker = new Map<string, FoundedColonyRecord>([
-      ["a", { ...rec("a", 0.9, 0.01), manifestTonnage: 100, founderCoverAfter: 1.0 }],
-      ["b", { ...rec("b", 0.5, 0.25), manifestTonnage: 300, founderCoverAfter: 0.4 }],
-      ["c", { ...rec("c", 0.5, 0.25), manifestTonnage: 200, founderCoverAfter: 0.6 }],
+      ["a", { ...rec("a", 0.9, 0.01), manifestTonnage: 100, foundingMoneyCost: 30, founderCoverAfter: 1.0 }],
+      ["b", { ...rec("b", 0.5, 0.25), manifestTonnage: 300, foundingMoneyCost: 90, founderCoverAfter: 0.4 }],
+      ["c", { ...rec("c", 0.5, 0.25), manifestTonnage: 200, foundingMoneyCost: 60, founderCoverAfter: 0.6 }],
     ]);
 
     const summary = summarizeFoundingStock(tracker);
     expect(summary.meanManifestTonnage).toBeCloseTo(200, 9);
+    expect(summary.meanFoundingMoneyCost).toBeCloseTo(60, 9);
     expect(summary.medianFounderCoverAfter).toBeCloseTo(0.6, 9);
   });
 
-  it("excludes a colony that shipped no manifest from the founder-cover reading", () => {
+  it("excludes a colony that staged nothing from the founder-cover reading", () => {
     // A colony founded with an empty manifest cost its founder nothing; folding a 0 cover in
     // would read as a founder drained flat.
     const tracker = new Map<string, FoundedColonyRecord>([
       ["a", { ...rec("a", 0.9, 0.01), manifestTonnage: 100, founderCoverAfter: 0.8 }],
-      ["b", rec("b", 0.9, 0.01)], // never recorded a manifest
+      ["b", rec("b", 0.9, 0.01)], // never staged a draw
     ]);
 
     const summary = summarizeFoundingStock(tracker);

@@ -1174,7 +1174,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     const ledgerByCycle: number[] = [];
     const stalledByCycle: number[] = [];
     let delivered: FoundingStockLine[] = [];
-    let manifestRecord: TickProcessorResult["foundingManifests"] = undefined;
+    const manifestEvents: NonNullable<TickProcessorResult["foundingManifests"]> = [];
     let cycles = 0;
     for (; cycles < maxCycles && !developed; cycles++) {
       const w = new MemoryDirectedBuildWorld([home], projects);
@@ -1196,11 +1196,11 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
       const development = w.developments.find((d) => d.systemId === "c1");
       developed = development !== undefined;
       delivered = development?.stockManifest ?? [];
-      manifestRecord = r.foundingManifests;
+      manifestEvents.push(...(r.foundingManifests ?? []));
     }
     return {
       developed, cycles, committed, draws, workDoneByCycle, ledgerByCycle, stalledByCycle,
-      delivered, manifestRecord,
+      delivered, manifestEvents,
     };
   }
 
@@ -1217,7 +1217,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(run.committed).toBe(FEE);                          // the charter is all it ever cost
     // An unprovisioned founding cost its founder nothing — it must not appear in the founding-cost
     // readout at all, or the harness reads it as a founder drained flat.
-    expect(run.manifestRecord).toEqual([]);
+    expect(run.manifestEvents).toEqual([]);
   });
 
   it("stages over the whole establish, past what a single completion draw could take", async () => {
@@ -1294,15 +1294,20 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(manifest.get("water")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
     expect(manifest.get("food")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
 
-    // The founding-cost readout the harness samples: one record per provisioned founding, its
-    // tonnage the delivered ledger's own line sum, attributed to the founder that paid it.
-    expect(run.manifestRecord).toHaveLength(1);
-    const record = run.manifestRecord?.[0];
-    if (record === undefined) throw new Error("Expected a founding manifest record");
-    expect(record.systemId).toBe("c1");
-    expect(record.sourceSystemId).toBe("home");
-    expect(record.tonnage).toBeCloseTo(run.delivered.reduce((sum, l) => sum + l.quantity, 0), 9);
-    expect(record.goodIds).toEqual(run.delivered.map((l) => l.goodId));
+    // The founding-cost readout the harness samples: one event per DRAW, not one per colony, or
+    // every slice but the last is lost. Together they add up to the ledger the colony opened with,
+    // priced at what the faction paid for it beyond the charter.
+    expect(run.manifestEvents).toHaveLength(STAGE_CYCLES);
+    for (const event of run.manifestEvents) {
+      expect(event.systemId).toBe("c1");
+      expect(event.sourceSystemId).toBe("home");
+      expect([...event.goodIds].sort()).toEqual(run.delivered.map((l) => l.goodId).sort());
+      expect(event.founderCover).toBeGreaterThan(0); // a measurable reading, taken as it staged
+    }
+    const tonnage = run.manifestEvents.reduce((sum, e) => sum + e.tonnage, 0);
+    expect(tonnage).toBeCloseTo(run.delivered.reduce((sum, l) => sum + l.quantity, 0), 9);
+    const money = run.manifestEvents.reduce((sum, e) => sum + e.moneyCost, 0);
+    expect(money).toBeCloseTo(run.committed - FEE, 9);
   });
 
   it("stages two colonies from one founder against a single shrinking pile", async () => {
@@ -1328,7 +1333,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
       [stockedHome({ food: stock }, { food: exportRate })],
       [paid("colA", "c1"), paid("colB", "c2")],
     );
-    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable,
       construction: mkConstruction(STAGE_CAP, 0.05),
       develop: { candidateProvider: () => [], params: STAGING_PARAMS },
@@ -1349,6 +1354,20 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(served + leftovers).toBeCloseTo(drawable, 6); // …and the pile is spent exactly once
     // The ledgers are the debits: nothing was recorded that did not leave the founder.
     expect(w.foundingStagingDraws.reduce((sum, d) => sum + d.quantity, 0)).toBeCloseTo(drawable, 6);
+
+    // Each draw reports the founder as IT left him — the second colony draws from what the first
+    // left behind, so the two readings are different depths of the same pile. Reconstructed after
+    // the tick, both would read the one post-cycle stock and the attribution would be gone.
+    const events = result.foundingManifests ?? [];
+    expect(events).toHaveLength(2);
+    expect(events.map((e) => e.systemId).sort()).toEqual(["c1", "c2"]);
+    const [coverServed, coverLeftovers] = events
+      .sort((a, b) => b.tonnage - a.tonnage)
+      .map((e) => e.founderCover ?? Number.NaN);
+    expect(coverServed).toBeGreaterThan(coverLeftovers);
+    // Stated as a ratio, the donor floor cancels: the two covers are the same founder at
+    // (stock − served) and at (stock − the whole pile).
+    expect(coverServed / coverLeftovers).toBeCloseTo((stock - served) / (stock - drawable), 6);
   });
 
   it("lands an unpriced founding with an empty ledger — no charter, no materials", async () => {

@@ -156,7 +156,7 @@ describe("ExperimentConfig", () => {
         foundingStock: {
           foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
           meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
-          meanManifestTonnage: 0, medianFounderCoverAfter: null,
+          meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
         },
         treasurySummary: {
           factionCount: 0, meanBalance: 0, minBalance: 0, maxBalance: 0,
@@ -249,7 +249,7 @@ describe("ExperimentConfig", () => {
       results.foundingStock = {
         foundedCount: 4, sampledCount: 3, meanOpeningSatisfaction: 0.9,
         meanOpeningDissatisfaction: 0.02, openingDeprivedCount: 0,
-        meanManifestTonnage: 250, medianFounderCoverAfter: 1.4,
+        meanManifestTonnage: 250, meanFoundingMoneyCost: 75, medianFounderCoverAfter: 1.4,
       };
       const saved = buildExperimentResult(results);
       expect(saved.demandHunting).toEqual(results.demandHunting);

@@ -95,20 +95,42 @@ export interface TickProcessorResult {
   /** People moved this cycle start (colonist delivery + edge diffusion), conserved flows only.
    *  Calibration instrumentation — surfaced via runWorldTick().instrumentation, never broadcast. */
   migrationMoved?: { colonists: number; diffusion: number };
-  /** Founding-stock manifests shipped this cycle, one per colony established: what left the
-   *  founder's warehouses and which goods it came out of. Calibration instrumentation — the cost
-   *  side of colonisation, invisible to any galaxy-wide average because foundings are rare. */
-  foundingManifests?: Array<{
-    systemId: string;
-    sourceSystemId: string;
-    tonnage: number;
-    goodIds: string[];
-  }>;
+  /** Founding materials staged this cycle, one entry per draw a colony made on its founder.
+   *  Calibration instrumentation — the cost side of colonisation, invisible to any galaxy-wide
+   *  average because foundings are rare. */
+  foundingManifests?: FoundingStagingEvent[];
   /** Per-faction haul-budget ledger for this cycle's directed-logistics resolution.
    *  Faction-owned systems only — the independent (null-faction) group hauls but is not
    *  ledgered, matching `workPerformedByFaction`. Calibration instrumentation — surfaced via
    *  `runWorldTick().instrumentation`, never broadcast or persisted. */
   logisticsBudget?: Map<string, LogisticsBudgetLedger>;
+}
+
+/**
+ * One colony's materials draw on its founder in a single cycle: what left the founder's warehouses,
+ * which goods it came out of, what the faction paid for it, and how much cover the founder was left
+ * holding on the good that draw bound hardest.
+ *
+ * One event per DRAW, not per colony: a manifest is staged in slices over the whole establish, so a
+ * colony contributes as many events as it had funded cycles, and a founder supplying two colonies in
+ * one cycle emits one event each. `founderCover` is computed by the processor as it stages, because
+ * post-tick reconstruction reads the founder after every draw and cannot tell those two apart.
+ */
+export interface FoundingStagingEvent {
+  /** The colony the goods are staged for — still `controlled` until the establish completes. */
+  systemId: string;
+  /** The developed system the goods left. */
+  sourceSystemId: string;
+  /** Total quantity staged by this draw, across its goods. */
+  tonnage: number;
+  goodIds: string[];
+  /** What the faction paid for this draw through the founding valuation seam (charter excluded). */
+  moneyCost: number;
+  /** The founder's post-draw stock ÷ donor floor, minimum across the goods this draw moved. Below 1
+   *  means the draw left the founder under the floor it keeps for itself. Absent when nothing was
+   *  measurable — no good this draw moved carries a positive donor floor — because "could not
+   *  measure" and "drained to nothing" are opposite readings and must never share a value. */
+  founderCover?: number;
 }
 
 /** One faction's haul-budget ledger for a single directed-logistics resolution: the budget

@@ -1,4 +1,4 @@
-import type { TickContext, TickProcessorResult } from "../types";
+import type { FoundingStagingEvent, TickContext, TickProcessorResult } from "../types";
 import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
@@ -8,7 +8,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
-import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
+import { surplusDrawable, type GoodMarketState, type RouteCost } from "@/lib/engine/directed-logistics";
 import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { charterFee, foundingGoodsValue } from "@/lib/engine/founding-cost";
@@ -310,6 +310,25 @@ export async function runDirectedBuildProcessor(
   const foundingStockBalance = new Map<string, number>();
   // This cycle's materials debits at the founding sources — applied to the markets by the tick body.
   const stagingDraws: FoundingStagingDraw[] = [];
+  // Quantity already staged out of each (source system, good) THIS cycle. The source's row still
+  // reads its opening stock — the debits land on the markets only after the whole cycle is planned —
+  // so this running total is what makes each draw's founder cover its own reading rather than the
+  // first draw's, and what separates two colonies drawing on one founder in one cycle.
+  const founderDrawn = new Map<string, number>();
+  // Per-source good state, derived once per cycle: the opening stock and donor floor every draw on
+  // that founder is measured against.
+  const founderStates = new Map<string, Map<string, GoodMarketState>>();
+  const founderGoodState = (row: SystemBuildRow, goodId: string): GoodMarketState | undefined => {
+    let byGood = founderStates.get(row.systemId);
+    if (byGood === undefined) {
+      byGood = new Map(toGoodMarketStates(row).map((g) => [g.goodId, g]));
+      founderStates.set(row.systemId, byGood);
+    }
+    return byGood.get(goodId);
+  };
+  // Each cycle's staging draws, for the calibration harness only — the cost side of colonisation,
+  // recorded as it happens because a slice is gone from every ledger the moment the tick returns.
+  const foundingManifests: FoundingStagingEvent[] = [];
   const nextOpen: WorldConstructionProject[] = [];
   const workPerformedByFaction = new Map<string, number>();
   // Money committed to founding this cycle, per faction — the treasury's settlement input. Directed
@@ -563,13 +582,34 @@ export async function runDirectedBuildProcessor(
           plan !== undefined && plan.plannedWork > 0 && plan.ceiling > 0 && absorbedWork <= 0;
         return starvedOfPool ? p : { ...p, stalledCycles: p.stalledCycles + 1 };
       }
+      const source = rowBySystem.get(p.sourceSystemId);
+      let tonnage = 0;
+      // The founder's own remaining cover on the good this draw binds hardest: post-draw stock over
+      // that good's donor floor, minimum across the goods it moved. A good the founder has no use
+      // for has no floor to be drawn under, so it is skipped rather than counted as a cover of 0.
+      let binding = Infinity;
       for (const line of staged) {
         stagingDraws.push({ sourceSystemId: p.sourceSystemId, goodId: line.goodId, quantity: line.quantity });
+        tonnage += line.quantity;
+        const key = `${p.sourceSystemId}|${line.goodId}`;
+        const drawn = (founderDrawn.get(key) ?? 0) + line.quantity;
+        founderDrawn.set(key, drawn);
+        const good = source === undefined ? undefined : founderGoodState(source, line.goodId);
+        if (good === undefined || !(good.donorReserve > 0)) continue;
+        binding = Math.min(binding, (good.stock - drawn) / good.donorReserve);
       }
       const spent = (plan?.cost ?? 0) * share;
       if (spent > 0 && factionId !== null) {
         foundingDebitsByFaction.set(factionId, (foundingDebitsByFaction.get(factionId) ?? 0) + spent);
       }
+      foundingManifests.push({
+        systemId: p.systemId,
+        sourceSystemId: p.sourceSystemId,
+        tonnage,
+        goodIds: staged.map((l) => l.goodId),
+        moneyCost: spent,
+        founderCover: Number.isFinite(binding) ? binding : undefined,
+      });
       return { ...p, stagedManifest: mergeStaged(p.stagedManifest, staged), stalledCycles: 0 };
     };
 
@@ -629,18 +669,6 @@ export async function runDirectedBuildProcessor(
 
   // Persist the construction proposal-pressure counters last — independent of ROI/funding outcome.
   if (proposalPersistence.length > 0) await world.applyProposalPersistenceUpdates(proposalPersistence);
-
-  // What each founding cost its founder, for the calibration harness only — the whole staged ledger
-  // the colony opens with, read here because the lines are gone by the time the tick body has
-  // delivered them onto the colony's market rows.
-  const foundingManifests = developments
-    .filter((d) => d.stockManifest.length > 0)
-    .map((d) => ({
-      systemId: d.systemId,
-      sourceSystemId: d.sourceSystemId,
-      tonnage: d.stockManifest.reduce((sum, line) => sum + Math.max(0, line.quantity), 0),
-      goodIds: d.stockManifest.map((line) => line.goodId),
-    }));
 
   return { workPerformedByFaction, foundingDebitsByFaction, buildCommitmentsByGood, foundingManifests };
 }

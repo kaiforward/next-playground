@@ -320,14 +320,20 @@ export interface FoundingStockSummary {
   meanOpeningDissatisfaction: number;
   /** Sampled colonies that opened below half satisfaction. Should read ~0. */
   openingDeprivedCount: number;
-  /** Mean manifest tonnage per colony founded — what founding costs a founder in goods. The
+  /** Mean tonnage staged per colony founded — what founding costs a founder in goods. The
    *  manifest's cap is use-figure denominated, so this moves when a founder's stated draw does. */
   meanManifestTonnage: number;
-  /** Median, over colonies that drew a manifest with a measurable cover reading, of the founder's
-   *  own remaining cover on the binding good (post-manifest stock ÷ that good's donor floor).
-   *  Below 1 means founding is drawing founders under the floor they are meant to keep. Null when
-   *  no founding produced a measurable reading — the median of nothing must not print as a
-   *  founder drained to 0.00×. */
+  /** Mean money per colony founded paid for those staged materials, through the founding valuation
+   *  seam. The charter fee is a separate charge and is not in it. */
+  meanFoundingMoneyCost: number;
+  /** Median, over colonies with a measurable cover reading, of the founder's own remaining cover on
+   *  the binding good — the deepest any one of that colony's staging draws left it (post-draw stock
+   *  ÷ that good's donor floor, minimum across draws). Below 1 means founding is drawing founders
+   *  under the floor they are meant to keep. Null when no founding produced a measurable reading —
+   *  the median of nothing must not print as a founder drained to 0.00×.
+   *
+   *  Not comparable with a run measured before materials were staged per cycle, where the same name
+   *  meant one whole manifest taken in a single draw. */
   medianFounderCoverAfter: number | null;
 }
 

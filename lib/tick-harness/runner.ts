@@ -8,7 +8,7 @@
  */
 
 import { generateWorld } from "@/lib/world/gen";
-import { runWorldTick, toTickSystems, marketRowsBySystem } from "@/lib/world/tick";
+import { runWorldTick, toTickSystems } from "@/lib/world/tick";
 import {
   takeMarketSnapshot, computeMarketHealth, computeKneeBinding, SNAPSHOT_INTERVAL,
   newDemandHuntingAccumulator, sampleDemandHunting, summarizeDemandHunting,
@@ -24,7 +24,7 @@ import {
   summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summarizeFoundingStock, recordFoundingManifest,
 } from "./build-analysis";
-import type { BuildCommitmentRecord, FoundedColonyRecord } from "./build-analysis";
+import type { BuildCommitmentRecord, FoundedColonyRecord, FoundingStagingTotals } from "./build-analysis";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
 import type { TreasurySnapshot } from "./treasury-analysis";
@@ -42,38 +42,7 @@ import type {
   RegionOverviewEntry,
   MigrationThroughputSummary,
 } from "./types";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
-import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
-import type { TickEvent, TickSystem } from "@/lib/tick/rows";
-
-/**
- * The founder's own remaining cover on the BINDING good of a manifest it just shipped — the
- * minimum, across the manifest's goods, of post-manifest stock over that good's donor floor.
- * Below 1 means founding drew the founder under the floor it is meant to keep for itself, which
- * is the reading the manifest cap's use-figure denominator can move.
- *
- * Undefined when there is nothing to measure — the founder is unknown, it has no market rows,
- * the manifest names no goods, or no shipped good carries a positive donor floor. "Could not
- * measure" and "measured a founder drained to 0" are opposite readings and must never share a
- * value. Exported for its own tests; the runner is its only production caller.
- */
-export function founderCoverAfter(
-  source: TickSystem | undefined,
-  rows: MarketRowForLogistics[] | undefined,
-  goodIds: ReadonlyArray<string>,
-): number | undefined {
-  if (!source || !rows || goodIds.length === 0) return undefined;
-  const shipped = new Set(goodIds);
-  let binding = Infinity;
-  const states = toGoodMarketStates({
-    buildings: source.buildings, population: source.population, yields: source.yields, markets: rows,
-  });
-  for (const state of states) {
-    if (!shipped.has(state.goodId) || state.donorReserve <= 0) continue;
-    binding = Math.min(binding, state.stock / state.donorReserve);
-  }
-  return Number.isFinite(binding) ? binding : undefined;
-}
+import type { TickEvent } from "@/lib/tick/rows";
 
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
 interface ActiveEventRecord {
@@ -151,6 +120,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     tickSystemsAtStart.filter((s) => s.control === "developed").map((s) => s.id),
   );
   const foundedColonies = new Map<string, FoundedColonyRecord>();
+  // What each in-flight colony has staged from its founder so far, keyed by TARGET system. Kept
+  // apart from `foundedColonies` because a colony stages for cycles before it is one: keyed by the
+  // tracker, every draw but the last would be dropped as belonging to an unknown system.
+  const foundingStaging = new Map<string, FoundingStagingTotals>();
   const demandHunting = newDemandHuntingAccumulator();
   const cycleLength = config.cadence?.cycle ?? CYCLE_LENGTH;
 
@@ -203,32 +176,21 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
     }
 
-    trackFoundedColonies(world.systems, world.meta.currentTick, developedAtStart, foundedColonies);
-    // The founding-cost read and the colony opening sample both need full tick rows (buildings +
-    // government drive the demand weights). Foundings and due colonies are rare — and land on the
-    // same cycle ticks — so the rows are built once, only on the ticks that need them.
-    const manifests = result.instrumentation.foundingManifests ?? [];
+    // This cycle's staging draws, accumulated BEFORE the founding sweep: a colony that completes
+    // this tick stages its last slice on the same tick it develops, and the accumulator is what
+    // carries every earlier slice — all of them made while the target was still `controlled`.
+    for (const draw of result.instrumentation.foundingManifests ?? []) {
+      recordFoundingManifest(foundingStaging, draw);
+    }
+    trackFoundedColonies(
+      world.systems, world.meta.currentTick, developedAtStart, foundedColonies, foundingStaging,
+    );
+    // The colony opening sample needs full tick rows (buildings + government drive the demand
+    // weights). Due colonies are rare, so the rows are built only on the ticks that need them.
     const colonyDue =
       cycleLength > 0 && world.meta.currentTick % cycleLength === 0 &&
       hasColonyAwaitingSample(foundedColonies, world.meta.currentTick);
-    const tickSystems = manifests.length > 0 || colonyDue ? toTickSystems(world) : undefined;
-    if (tickSystems && manifests.length > 0) {
-      for (const manifest of manifests) {
-        // What the founding cost its founder, read at the founding tick — the founder's stock
-        // still reflects this manifest and no other. Only the founder's own rows are grouped;
-        // a galaxy-wide row build to look up one system is the cost this avoids.
-        const source = tickSystems.find((s) => s.id === manifest.sourceSystemId);
-        const rows = marketRowsBySystem(
-          currentMarkets.filter((m) => m.systemId === manifest.sourceSystemId),
-        ).get(manifest.sourceSystemId);
-        recordFoundingManifest(
-          foundedColonies,
-          manifest.systemId,
-          manifest.tonnage,
-          founderCoverAfter(source, rows, manifest.goodIds),
-        );
-      }
-    }
+    const tickSystems = colonyDue ? toTickSystems(world) : undefined;
 
     // The flip half of the hunting reading is a per-cycle observation; the churn half comes off
     // the whole flow log at the end.

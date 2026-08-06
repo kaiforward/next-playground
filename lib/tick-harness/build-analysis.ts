@@ -21,6 +21,7 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { median } from "@/lib/utils/math";
+import type { FoundingStagingEvent } from "@/lib/tick/types";
 import type { BuildBurstSummary, FoundingStockSummary } from "./types";
 
 /** How a developed system's built base breaks down by role/tier. */
@@ -74,35 +75,68 @@ export interface FoundedColonyRecord {
   openingSatisfaction: number | null;
   /** The convex fold unrest itself reads (`dissatisfaction`) at that cycle; null until sampled. */
   openingDissatisfaction: number | null;
-  /** Total tonnage the founding manifest shipped from the founder; absent until recorded. */
+  /** Total tonnage the colony staged from its founder over the whole establish; absent when it
+   *  staged nothing. */
   manifestTonnage?: number;
-  /** The founder's own remaining cover on the manifest's BINDING good — post-manifest stock ÷ that
-   *  good's donor floor, minimum across the manifest — sampled at the founding tick. Below 1 means
-   *  founding drew the founder under the floor it is meant to keep for itself. Absent when the
-   *  manifest gave no measurable reading (no shipped good with a positive donor floor). */
+  /** What the faction paid for those materials through the founding valuation seam, over the whole
+   *  establish (the charter is not part of it); absent when it staged nothing. */
+  foundingMoneyCost?: number;
+  /** The founder's remaining cover on the binding good — post-draw stock ÷ that good's donor floor —
+   *  taken as the MINIMUM ACROSS THE COLONY'S STAGING DRAWS, i.e. the deepest any one cycle's draw
+   *  left it. Below 1 means founding drew the founder under the floor it is meant to keep for
+   *  itself. Absent when no draw gave a measurable reading (no staged good with a positive donor
+   *  floor).
+   *
+   *  A different unit from the pre-staging reading of the same name, which measured one whole
+   *  manifest taken in a single draw at the founding tick: a run's figure here is not comparable
+   *  with one measured before materials were staged per cycle. */
   founderCoverAfter?: number;
 }
 
 /**
- * Record what one founding cost its founder. Called at the founding tick, where the founder's
- * post-manifest stock still reflects this manifest and no other. A colony with no manifest is
- * never recorded, so it contributes no cover reading rather than a 0 one.
+ * What one colony has staged from its founder so far — the running total behind its record.
+ *
+ * Kept keyed by TARGET SYSTEM and independent of the founded-colony tracker, because every staging
+ * draw fires while the target is still `controlled`: a tracker-keyed recorder would drop every draw
+ * made before the colony existed, which is all of them but the last.
+ */
+export interface FoundingStagingTotals {
+  tonnage: number;
+  moneyCost: number;
+  /** Minimum cover across the draws that had a measurable one; absent while none has. */
+  minFounderCover?: number;
+}
+
+/** One cycle's staging draw as the processor emits it (`instrumentation.foundingManifests`). */
+export type FoundingStagingRecord = Pick<
+  FoundingStagingEvent, "systemId" | "tonnage" | "moneyCost" | "founderCover"
+>;
+
+/**
+ * Accumulate one staging draw against its target colony. Called for every draw as it happens; the
+ * totals are folded into the colony's record when `trackFoundedColonies` first sees it developed.
+ * A draw that moved nothing is ignored, so a colony that never staged has no entry at all and
+ * contributes no cover reading rather than a 0 one.
  */
 export function recordFoundingManifest(
-  tracker: Map<string, FoundedColonyRecord>,
-  systemId: string,
-  manifestTonnage: number,
-  founderCoverAfter: number | undefined,
+  staging: Map<string, FoundingStagingTotals>,
+  draw: FoundingStagingRecord,
 ): void {
-  const record = tracker.get(systemId);
-  if (!record || !(manifestTonnage > 0)) return;
-  record.manifestTonnage = manifestTonnage;
+  if (!(draw.tonnage > 0)) return;
+  const totals = staging.get(draw.systemId) ?? { tonnage: 0, moneyCost: 0 };
+  totals.tonnage += draw.tonnage;
+  // A non-finite money cost is a corrupt reading, not a free draw — counting it would poison every
+  // later sum with a NaN. The tonnage still stands.
+  if (Number.isFinite(draw.moneyCost)) totals.moneyCost += Math.max(0, draw.moneyCost);
   // A cover with nothing measurable behind it stays absent — folding a placeholder 0 into the
   // median would read as a founder drained flat, the opposite of "there was no floor to draw
   // under". Same rule for a corrupt (non-finite) reading.
-  if (founderCoverAfter !== undefined && Number.isFinite(founderCoverAfter)) {
-    record.founderCoverAfter = Math.max(0, founderCoverAfter);
+  if (draw.founderCover !== undefined && Number.isFinite(draw.founderCover)) {
+    const cover = Math.max(0, draw.founderCover);
+    totals.minFounderCover =
+      totals.minFounderCover === undefined ? cover : Math.min(totals.minFounderCover, cover);
   }
+  staging.set(draw.systemId, totals);
 }
 
 /** Opening satisfaction below this reads as a colony that arrived deprived. */
@@ -120,17 +154,26 @@ export type FoundedColonySystem =
  * Detection only; the reading itself is `sampleFoundedColonies` at the first economy cycle STRICTLY
  * after the founding tick, so it covers a whole assessed cycle of the colony's life rather than
  * however much of one remained when it landed.
+ *
+ * This is also where a colony's staging totals join its record — every draw it made happened before
+ * it existed as a colony, so the accumulator is the only place they can have been kept. Feed the
+ * tick's draws in before calling this, or the founding cycle's own draw misses the fold.
  */
 export function trackFoundedColonies(
   systems: ReadonlyArray<Pick<TickSystem, "id" | "control">>,
   tick: number,
   developedAtStart: ReadonlySet<string>,
   tracker: Map<string, FoundedColonyRecord>,
+  staging: ReadonlyMap<string, FoundingStagingTotals>,
 ): void {
   for (const s of systems) {
     if (s.control !== "developed" || developedAtStart.has(s.id) || tracker.has(s.id)) continue;
+    const staged = staging.get(s.id);
     tracker.set(s.id, {
       systemId: s.id, foundedTick: tick, openingSatisfaction: null, openingDissatisfaction: null,
+      manifestTonnage: staged?.tonnage,
+      foundingMoneyCost: staged?.moneyCost,
+      founderCoverAfter: staged?.minFounderCover,
     });
   }
 }
@@ -190,9 +233,11 @@ export function summarizeFoundingStock(
   let dissatisfactionSum = 0;
   let openingDeprivedCount = 0;
   let manifestTonnageSum = 0;
+  let moneyCostSum = 0;
   const founderCovers: number[] = [];
   for (const r of tracker.values()) {
     manifestTonnageSum += r.manifestTonnage ?? 0;
+    moneyCostSum += r.foundingMoneyCost ?? 0;
     // Only a colony that actually drew a manifest says anything about the cost to its founder.
     if (r.founderCoverAfter !== undefined) founderCovers.push(r.founderCoverAfter);
     if (r.openingSatisfaction === null || r.openingDissatisfaction === null) continue;
@@ -210,6 +255,7 @@ export function summarizeFoundingStock(
     // Denominated over every colony founded, so a run that ships nothing reads 0 rather than
     // hiding behind a shrunken denominator.
     meanManifestTonnage: tracker.size > 0 ? manifestTonnageSum / tracker.size : 0,
+    meanFoundingMoneyCost: tracker.size > 0 ? moneyCostSum / tracker.size : 0,
     medianFounderCoverAfter: founderCovers.length > 0 ? median(founderCovers) : null,
   };
 }

@@ -495,8 +495,9 @@ function formatTable(results: HarnessResults): string {
     }
     if (fs.foundedCount > 0) {
       lines.push(
-        `  cost to founders: mean manifest ${fmtNum(fs.meanManifestTonnage)} t/colony | ` +
-          `median founder cover after (binding good) ` +
+        `  cost to founders: mean manifest ${fmtNum(fs.meanManifestTonnage)} t/colony, ` +
+          `materials ${fmtNum(fs.meanFoundingMoneyCost)} cr/colony | ` +
+          `median founder cover after (binding good, worst staging draw) ` +
           (fs.medianFounderCoverAfter !== null
             ? `${fs.medianFounderCoverAfter.toFixed(2)}×`
             : "n/a (no measurable manifest)"),
