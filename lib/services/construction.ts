@@ -99,6 +99,7 @@ function readoutForFaction(factionId: string): FactionConstructionReadout {
         : safeMoney(safeMoney(treasury.balance) - safeMoney(treasury.pendingFounding)),
     supplyBySource: foundingSupplyBySource(world, projects, buildings),
     cover: COLONISATION.FOUNDING_STOCK_COVER,
+    writeOffCycles: COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES,
     economyScale: ECONOMY_SCALE,
   };
 

@@ -25,6 +25,7 @@ function founded(over: Partial<FoundingReadoutInputs> = {}): FoundingReadoutInpu
     workingBalance: 1_000_000,
     supplyBySource: new Map(),
     cover: COLONISATION.FOUNDING_STOCK_COVER,
+    writeOffCycles: COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES,
     economyScale: 1,
     ...over,
   };
@@ -325,6 +326,20 @@ describe("computeFactionConstruction — why a founding is stuck", () => {
     );
     expect(row.stalledReason).toBeNull();
     expect(row.etaCycles).not.toBeNull();
+  });
+
+  it("does not call a colony that has written off its manifest stalled", () => {
+    // Past the write-off threshold the remainder is given up, the materials ceiling stops binding
+    // and the project finishes on construction work alone — while its counter stays latched above
+    // the threshold for ever. Reading that counter as a stall would report a permanent standstill
+    // for the rest of a build that is in fact the only one still moving.
+    const row = readColony(
+      colony({ stalledCycles: COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES }),
+      founded({ workingBalance: 0, supplyBySource: fromSource(supply(0)) }),
+    );
+    expect(row.stalledReason).toBeNull();
+    expect(row.etaCycles).not.toBeNull();
+    expect(row.nextCycleGain).toBeGreaterThan(0);
   });
 
   it("reports the staged share of the manifest, weighted by what the goods cost", () => {

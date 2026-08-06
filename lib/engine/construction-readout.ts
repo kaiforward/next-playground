@@ -81,6 +81,9 @@ export interface FoundingReadoutInputs {
   supplyBySource: ReadonlyMap<string, ReadonlyArray<FoundingSourceSupply>>;
   /** Cycles of the seed's own consumption a full manifest carries. */
   cover: number;
+  /** Consecutive stalled cycles after which a founding writes off the rest of its manifest and
+   *  finishes on work alone — past it, nothing is waiting on money or goods any more. */
+  writeOffCycles: number;
   /** The quantity→money normaliser the valuation seam divides by. */
   economyScale: number;
 }
@@ -164,6 +167,11 @@ export function nextCycleGains(
  * separates a founder with no money from one whose source has nothing to spare. A colony merely
  * queued behind higher-ROI builds is NOT stalled — the counter deliberately ignores a cycle the
  * construction pool never reached — so such a row reads null with a finite, possibly distant, ETA.
+ *
+ * A counter at the write-off threshold is not a stall either, and reads as the opposite of one: the
+ * project has given up the rest of its manifest, so nothing gates its work any more and it runs to
+ * completion on construction points alone. Its counter stays latched there by construction, so
+ * without this it would report a permanent stall for the rest of a build that is actually moving.
  */
 function colonyStallReason(
   p: WorldColonyEstablishProject,
@@ -171,7 +179,7 @@ function colonyStallReason(
   cap: number,
 ): ColonyStallReason | null {
   if (!p.charterPaid) return "awaiting_charter";
-  if (p.stalledCycles <= 0) return null;
+  if (p.stalledCycles <= 0 || p.stalledCycles >= founding.writeOffCycles) return null;
   const plannedWork = Math.min(cap, Math.max(0, p.workTotal - p.workDone));
   const workShare = p.workTotal > 0 ? plannedWork / p.workTotal : 0;
   const shareCost = nextStagingShareCost(
