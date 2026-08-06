@@ -1076,6 +1076,11 @@ export async function runWorldTick(
             popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
             minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
             employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
+            charterMult: COLONISATION.CHARTER_FEE_SPEND_MULT,
+            charterMin: COLONISATION.CHARTER_FEE_MIN,
+            gateHeadroom: COLONISATION.FOUNDING_GATE_HEADROOM,
+            foundingStockCover: COLONISATION.FOUNDING_STOCK_COVER,
+            economyScale: ECONOMY_SCALE,
           },
         },
         player: world.player

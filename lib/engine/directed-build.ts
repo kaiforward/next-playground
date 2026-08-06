@@ -24,6 +24,7 @@ import {
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { workCostPerLevel } from "@/lib/constants/construction";
+import { charterFee, foundingCommitmentCost, foundingGoodsValue, projectedManifestWant } from "@/lib/engine/founding-cost";
 import {
   colonyValue, factionMissingResources, factionSaturation, unblockedDemandByResource,
   type FactionSystemState, type GoodDeficit, type ColonyValueParams,
@@ -986,6 +987,25 @@ export interface ColonyEstablishParams extends ColonyValueParams {
   minSettlerSupply: number;
   /** Fraction of a source's staffed workers drawable as settlers (mirrors MIGRATION_PARAMS.employedLeakFraction). */
   employedLeakFraction: number;
+  /** Multiplier on the faction's maintenance bill setting the charter fee (COLONISATION.CHARTER_FEE_SPEND_MULT). */
+  charterMult: number;
+  /** Hard floor under the charter fee (COLONISATION.CHARTER_FEE_MIN). */
+  charterMin: number;
+  /** Multiplier on a candidate's projected material bill in the affordability gate (COLONISATION.FOUNDING_GATE_HEADROOM). */
+  gateHeadroom: number;
+  /** Cycles of the seed's raw consumption the projected manifest covers (COLONISATION.FOUNDING_STOCK_COVER). */
+  foundingStockCover: number;
+  /** Goods quantities ride ECONOMY_SCALE and money does not — the valuation seam's normaliser. */
+  economyScale: number;
+}
+
+/** A faction's spending position as the affordability gate reads it: what it has free to commit, and
+ *  the last settlement's maintenance bill the charter is quoted off. */
+export interface ColonyFoundingBudget {
+  /** Working balance — for the tick path, `balance − pendingFounding`. */
+  balance: number;
+  /** `lastSettlement.maintenanceBill`; 0 before a faction has ever settled (the charter floor covers it). */
+  maintenanceBill: number;
 }
 
 /**
@@ -1078,11 +1098,18 @@ export function sizeColonyEstablish(
  * (territory saturation σ, and the unmet demand each missing resource unblocks) are computed once from the
  * faction's DEVELOPED systems; each candidate is then valued with `colonyValue` and sized to its land —
  * seed capped to the whole-level habitable capacity and housing sized to house it, so the landed colony has
- * `popCap ≥ seedPop` (viable by construction). There is NO per-cycle cap: every eligible candidate is
- * proposed; the pool decides which advance (a proposal persists as an in-flight project only once funded —
- * enforced by the processor's persist-if-funded). A candidate already being established (open project) or
+ * `popCap ≥ seedPop` (viable by construction). A candidate already being established (open project) or
  * below the habitable floor / lacking a whole housing level is skipped. The `Map`/`Set` aggregates are
  * transient — nothing here reaches `World` state.
+ *
+ * Two budgets then truncate the value-ordered list, and both are prefix truncations of that one order,
+ * so composing them is order-independent — the result is the shorter prefix either way. The MONEY gate
+ * (`budget`, omitted ⇒ founding is unpriced: the engine-test and independents path) walks the order with
+ * a running balance, spending each acceptance's own `charter + headroom × projected material bill` and
+ * ending the list at the first candidate it cannot cover. The SETTLER-SUPPLY gate below it caps the
+ * count against drawable labour. Beyond those there is no per-cycle cap: every affordable candidate is
+ * proposed and the pool decides which advance (a proposal persists as an in-flight project only once
+ * funded — enforced by the processor's persist-if-funded).
  */
 export function planFactionColonyProposals(
   factionId: string,
@@ -1090,6 +1117,7 @@ export function planFactionColonyProposals(
   candidates: ColonyEstablishCandidate[],
   openColonyProjects: WorldColonyEstablishProject[],
   params: ColonyEstablishParams,
+  budget?: ColonyFoundingBudget,
 ): ColonyProposal[] {
   if (candidates.length === 0) return [];
 
@@ -1104,6 +1132,16 @@ export function planFactionColonyProposals(
   const bySystemId = new Map(developed.map((s) => [s.systemId, s]));
 
   const inFlight = new Set(openColonyProjects.map((p) => p.systemId));
+
+  // What committing to each candidate would cost in money, by target system. The charter is the same
+  // for every candidate a faction weighs (it is quoted off the faction's own maintenance bill), so only
+  // the material projection varies. Built during the loop below because it needs the land-capped
+  // `seedPop` and the source's market rows, neither of which exists before sizing.
+  const commitmentCostBySystem = new Map<string, number>();
+  const charter =
+    budget === undefined
+      ? 0
+      : charterFee(budget.maintenanceBill, { mult: params.charterMult, min: params.charterMin });
 
   const proposals: ColonyProposal[] = [];
   for (const c of candidates) {
@@ -1137,11 +1175,46 @@ export function planFactionColonyProposals(
     const value = colonyValue(c, unblocked, sigma, params) - popCost;
     if (value <= 0) continue; // net-negative — the labour it would drain outweighs the colony's worth
 
+    if (budget !== undefined) {
+      // The projection is deliberately the UNCAPPED want: what the founder will actually be able to
+      // spare over the establish's life is not knowable here, and over-reserving is the safe
+      // direction. A source outside the developed set contributes no material projection — its market
+      // rows are not visible — leaving the charter as the whole quote for that candidate.
+      const projectedBill = foundingGoodsValue(
+        projectedManifestWant(source?.goods ?? [], seedPop, params.foundingStockCover),
+        params.economyScale,
+      );
+      commitmentCostBySystem.set(
+        c.systemId,
+        foundingCommitmentCost(charter, projectedBill, params.gateHeadroom),
+      );
+    }
+
     proposals.push({
       kind: "colony_establish", factionId, systemId: c.systemId,
       sourceSystemId: c.sourceSystemId, seedPop, housingLevels, value, work,
     });
   }
+
+  // Affordability gate: a candidate is proposed only while the faction's working balance still covers
+  // committing to it — the charter it pays at commitment plus headroom for the materials it will owe
+  // as it builds. The balance is a REAL running budget down the value order: each acceptance spends
+  // its own commitment cost and the first candidate the remainder cannot cover ends the list. Without
+  // the running decrement a faction that can afford one colony commits several and pays several
+  // charters — the same problem the per-source stock balance solves on the goods side. Money never
+  // enters `colonyValue`: an enabler gates eligibility, it does not change what a colony is worth.
+  const affordable = ((): ColonyProposal[] => {
+    if (budget === undefined || proposals.length === 0) return proposals;
+    let remaining = Number.isFinite(budget.balance) ? budget.balance : 0;
+    const kept: ColonyProposal[] = [];
+    for (const p of [...proposals].sort((a, b) => b.value - a.value)) {
+      const cost = commitmentCostBySystem.get(p.systemId) ?? 0;
+      if (cost > remaining) break;
+      remaining -= cost;
+      kept.push(p);
+    }
+    return kept;
+  })();
 
   // Settler-supply founding gate: a faction only opens new colonies while it can still deliver its
   // minimum settler supply to each colony it is ALREADY trying to fill (+ each new one). Releasable
@@ -1154,7 +1227,7 @@ export function planFactionColonyProposals(
   // `floor(releasable / minSettlerSupply) − hungry` best-valued candidates, so a faction fills what
   // it has before it sprawls into colonies it can never populate. `minSettlerSupply ≤ 0` disables
   // the gate.
-  if (params.minSettlerSupply <= 0 || proposals.length === 0) return proposals;
+  if (params.minSettlerSupply <= 0 || affordable.length === 0) return affordable;
   let releasable = 0;
   let hungry = openColonyProjects.length;
   for (const s of developed) {
@@ -1163,7 +1236,7 @@ export function planFactionColonyProposals(
     releasable += Math.max(0, s.population - ld) + params.employedLeakFraction * staffed;
     if (s.population < housingPopCap(s.buildings)) hungry++;
   }
-  const budget = Math.max(0, Math.floor(releasable / params.minSettlerSupply) - hungry);
-  if (budget >= proposals.length) return proposals;
-  return [...proposals].sort((a, b) => b.value - a.value).slice(0, budget);
+  const settlerBudget = Math.max(0, Math.floor(releasable / params.minSettlerSupply) - hungry);
+  if (settlerBudget >= affordable.length) return affordable;
+  return [...affordable].sort((a, b) => b.value - a.value).slice(0, settlerBudget);
 }

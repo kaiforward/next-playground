@@ -13,7 +13,6 @@
 import { GOODS } from "@/lib/constants/goods";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
-import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { FoundingStockLine } from "@/lib/tick/world/directed-build-world";
 
 /** A treasury balance and the charter's scale base, as one candidate's affordability check sees them. */
@@ -73,10 +72,11 @@ export function charterFee(maintenanceBill: number, params: FoundingChargeParams
  * time, so the projection is an upper bound and over-reserving is the safe direction.
  *
  * `sourceGoods` decides which goods are on the list — a colony can only ever be provisioned with
- * goods its source system has a market row for.
+ * goods its source system has a market row for. Only the good ids are read, so any of the several
+ * per-good market shapes in the tree can be handed straight in.
  */
 export function projectedManifestWant(
-  sourceGoods: ReadonlyArray<GoodMarketState>,
+  sourceGoods: ReadonlyArray<{ goodId: string }>,
   seedPop: number,
   cover: number,
 ): FoundingStockLine[] {

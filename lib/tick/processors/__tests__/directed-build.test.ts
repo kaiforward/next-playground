@@ -459,6 +459,11 @@ const COLONY_PARAMS: ColonyEstablishParams = {
   popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
   minSettlerSupply: 0, // gate disabled — these cases exercise proposal/funding wiring, not founding pace
   employedLeakFraction: 0,
+  charterMult: COLONISATION.CHARTER_FEE_SPEND_MULT,
+  charterMin: COLONISATION.CHARTER_FEE_MIN,
+  gateHeadroom: COLONISATION.FOUNDING_GATE_HEADROOM,
+  foundingStockCover: COLONISATION.FOUNDING_STOCK_COVER,
+  economyScale: 1,
 };
 
 /** A developed home with housing filling all its habitable land (σ = 1) and no build deficits — so the

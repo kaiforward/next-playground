@@ -1491,6 +1491,11 @@ const COLONY_PARAMS: ColonyEstablishParams = {
   popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
   minSettlerSupply: 0, // gate disabled by default — the valuation cases below isolate scoring, not founding pace
   employedLeakFraction: 0,
+  charterMult: COLONISATION.CHARTER_FEE_SPEND_MULT,
+  charterMin: COLONISATION.CHARTER_FEE_MIN,
+  gateHeadroom: COLONISATION.FOUNDING_GATE_HEADROOM,
+  foundingStockCover: COLONISATION.FOUNDING_STOCK_COVER,
+  economyScale: 1,
 };
 
 /** A developed home system for the σ/missing/deficit aggregates. `housing` sets built pop-cap; `habitable`
@@ -1628,6 +1633,65 @@ describe("planFactionColonyProposals", () => {
     expect(p.factionId).toBe("f1");
     expect(p.systemId).toBe("c1");
     expect(p.sourceSystemId).toBe("home");
+  });
+});
+
+describe("planFactionColonyProposals: affordability gate", () => {
+  // Ten candidates of increasing land, so their values are distinct and strictly increasing in the
+  // index — which pins that the gate keeps the BEST-valued prefix, not just the right number.
+  const candidates = Array.from({ length: 10 }, (_, i) =>
+    candidate({ systemId: `c${i}`, habitableSpace: (i + 1) * 100 }),
+  );
+
+  it("spends a running balance down the value order, so one colony's worth of money commits one", () => {
+    // charterMult 0 + charterMin 100 + headroom 0 ⇒ every candidate costs exactly 100 to commit to,
+    // stated here rather than recomputed through the pricing functions the code under test uses.
+    const flatFee = { ...COLONY_PARAMS, charterMult: 0, charterMin: 100, gateHeadroom: 0 };
+    const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
+    const propose = (balance: number) =>
+      planFactionColonyProposals("f1", developed, candidates, [], flatFee, { balance, maintenanceBill: 0 });
+
+    expect(propose(99)).toHaveLength(0);   // cannot afford even the best one
+    expect(propose(100)).toHaveLength(1);  // exactly one colony's worth of money commits exactly one
+    const three = propose(350);
+    expect(three).toHaveLength(3);         // 3 × 100 spent, 50 left — not enough for a fourth
+    expect(new Set(three.map((p) => p.systemId))).toEqual(new Set(["c9", "c8", "c7"]));
+
+    // A later cycle with a recovered balance re-proposes what the poor cycle dropped: nothing is
+    // remembered, the candidate simply became affordable again.
+    const rich = propose(1000);
+    expect(rich).toHaveLength(10);
+    expect(rich.some((p) => p.systemId === "c0")).toBe(true);
+  });
+
+  it("quotes the charter off the faction's maintenance bill and reserves headroom for the materials", () => {
+    // The source holds market rows the seed consumes, so the candidate carries a real material
+    // projection on top of its charter. Both calls see the same faction, the same candidates and the
+    // same balance — only whether the material headroom is reserved differs.
+    const developed = [homeState({
+      systemId: "home", housing: 1, habitableSpace: 1000,
+      goods: [
+        { goodId: "food", stock: 500, demand: 10, production: 10, capacityProduction: 10 },
+        { goodId: "water", stock: 500, demand: 10, production: 10, capacityProduction: 10 },
+      ],
+    })];
+    // charterMult 2 × maintenanceBill 50 = 100, above the 0 floor.
+    const priced = { ...COLONY_PARAMS, charterMult: 2, charterMin: 0 };
+    const purse = { balance: 100, maintenanceBill: 50 };
+
+    const charterOnly = planFactionColonyProposals(
+      "f1", developed, candidates, [], { ...priced, gateHeadroom: 0 }, purse,
+    );
+    const withMaterials = planFactionColonyProposals(
+      "f1", developed, candidates, [], { ...priced, gateHeadroom: 2 }, purse,
+    );
+    expect(charterOnly).toHaveLength(1);    // the charter alone is exactly affordable
+    expect(withMaterials).toHaveLength(0);  // the goods it will have to buy are not
+  });
+
+  it("prices nothing when no budget is supplied (independents and the build-only path)", () => {
+    const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
+    expect(planFactionColonyProposals("f1", developed, candidates, [], COLONY_PARAMS)).toHaveLength(10);
   });
 });
 
