@@ -125,6 +125,8 @@ describe("treasury analysis", () => {
     // The funded fractions are read off the settlement that latched them, so a shortfall belongs
     // to the cycle that caused it rather than to whichever cycle happened to be last.
     expect(out[1]).toMatchObject({ tick: 48, foundingExpense: 60, shorted: true, fundedConstruction: 0.4 });
+    // The construction bill rides along: without it a latched 0 cannot be told from a slider at 0.
+    expect(out[1].constructionBill).toBe(1);
   });
 
   it("skips a faction that has never settled", () => {
@@ -137,10 +139,13 @@ describe("treasury analysis", () => {
 describe("summarizeFoundingEra", () => {
   const cycle = (
     tick: number,
-    { income = 100, foundingExpense = 0, shorted = false, maintenance = 1, construction = 1 } = {},
+    {
+      income = 100, foundingExpense = 0, shorted = false, maintenance = 1, construction = 1,
+      constructionBill = 1,
+    } = {},
   ): FactionCycleRecord => ({
     tick, income, foundingExpense, shorted,
-    fundedMaintenance: maintenance, fundedConstruction: construction,
+    fundedMaintenance: maintenance, fundedConstruction: construction, constructionBill,
   });
 
   it("shares founding spend against the income of the SAME faction-cycles", () => {
@@ -184,6 +189,83 @@ describe("summarizeFoundingEra", () => {
     expect(summary.eraEndTick).toBeNull();
     expect(summary.factionCycles).toBe(2);
     expect(summary.spendShare).toBe(0);
+  });
+
+  it("measures the fixed window over the same ticks whatever the arm's own era did", () => {
+    // Two arms of one seed: the treatment founds a single straggler far later. Their endogenous
+    // eras are different windows, so their endogenous shares are not comparable — the fixed window
+    // is the same ticks for both, which is what makes an A/B claim mean anything.
+    const shared = [
+      cycle(500, { income: 100, foundingExpense: 20 }),
+      cycle(900, { income: 100, foundingExpense: 20 }),
+      cycle(2000, { income: 900 }),
+    ];
+    const baseline = summarizeFoundingEra(shared);
+    const treatment = summarizeFoundingEra([...shared, cycle(2000, { income: 900, foundingExpense: 4 })]);
+
+    expect(baseline.eraEndTick).toBe(900);
+    expect(treatment.eraEndTick).toBe(2000);
+    expect(baseline.spendShare).not.toBeCloseTo(treatment.spendShare, 3); // the trap this avoids
+    // Same window, same denominator, comparable numbers.
+    expect(baseline.fixedWindow).toMatchObject({ startTick: 401, endTick: 1000, factionCycles: 2 });
+    expect(treatment.fixedWindow.factionCycles).toBe(2);
+    expect(baseline.fixedWindow.spendShare).toBeCloseTo(0.2, 9);
+    expect(treatment.fixedWindow.spendShare).toBeCloseTo(0.2, 9);
+  });
+
+  it("flags an era still open at run end as censored, not bounded", () => {
+    // The startup horizon reads this way whenever founding is still going at t=1000: the window
+    // stopped because the run did, so its share is "spend so far", not a closed era's figure.
+    const censored = summarizeFoundingEra([
+      cycle(500, { foundingExpense: 10 }),
+      cycle(984, { foundingExpense: 10 }),
+    ]);
+    expect(censored.eraCensored).toBe(true);
+
+    const closed = summarizeFoundingEra([
+      cycle(500, { foundingExpense: 10 }),
+      cycle(984, { foundingExpense: 10 }),
+      cycle(9984),
+    ]);
+    expect(closed.eraCensored).toBe(false);
+  });
+
+  it("reports post-era faction-cycles in their own slice, in no bar", () => {
+    // They are in `totalFoundingSpend`'s span but in none of the shorted slices. Unreported, a
+    // post-era shortfall would simply be missing from a report whose counts otherwise add up.
+    const summary = summarizeFoundingEra([
+      cycle(100, { shorted: true }),
+      cycle(500, { foundingExpense: 10 }),
+      cycle(2000, { shorted: true }),
+      cycle(3000),
+    ]);
+
+    expect(summary.postEra).toEqual({ cycles: 2, shorted: 1, share: 0.5 });
+    expect(summary.withFounding.cycles + summary.withoutFounding.cycles).toBe(summary.factionCycles);
+    // Tail + era + post-era account for every valid row.
+    expect(
+      summary.startupTail.cycles + summary.factionCycles + summary.postEra.cycles,
+    ).toBe(4);
+  });
+
+  it("takes the construction minimum over BILLED cycles, so a slider at 0 is not starvation", () => {
+    // `settleLadder` latches the SLIDER when a band is billed nothing. A faction with nothing to
+    // build therefore reads 0.000 while being perfectly funded, and would fail the ≥0.5 bar for it.
+    const summary = summarizeFoundingEra([
+      cycle(500, { construction: 0, constructionBill: 0 }),  // nothing to build — not starvation
+      cycle(600, { construction: 0.8, constructionBill: 5 }),
+      cycle(700, { construction: 1, constructionBill: 5 }),
+      cycle(800, { foundingExpense: 1, construction: 1, constructionBill: 5 }),
+    ]);
+
+    expect(summary.minFundedConstruction).toBeCloseTo(0.8, 9);
+    expect(summary.billedConstructionCycles).toBe(3);
+  });
+
+  it("reports no billed construction cycle as null, not as a starved zero", () => {
+    const summary = summarizeFoundingEra([cycle(500, { construction: 0, constructionBill: 0 })]);
+    expect(summary.minFundedConstruction).toBeNull();
+    expect(summary.billedConstructionCycles).toBe(0);
   });
 
   it("splits shorted faction-cycles by whether the cycle carried a founding charge", () => {

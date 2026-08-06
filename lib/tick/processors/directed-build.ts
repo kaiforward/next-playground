@@ -227,21 +227,32 @@ interface ColonyStagingPlan {
  * project (`pool`), or nothing at all.
  *
  * The order is the binding order: an unpaid charter absorbs nothing whatever else is true, a ceiling
- * money held at zero comes next, and only then can absorbing nothing be blamed on the queue. A colony
- * with no plan — written off, or its source gone — buys nothing more and runs on work alone, so the
- * queue is the only thing left that can hold it up.
+ * money held at zero comes next, and only then can a shortfall be blamed on the queue. A colony with
+ * no plan — written off, or its source gone — buys nothing more and runs on work alone, so the queue
+ * is the only thing left that can hold it up.
+ *
+ * The queue's test is against what the cycle COULD have absorbed (its planned work, under whatever
+ * ceiling the materials bought), not against zero. Front-first funding runs out mid-project: the one
+ * colony the pool reached partway reads as absorbing something, and testing for zero would file
+ * exactly that marginal project — the "the pool got smaller" case this record exists to isolate — as
+ * ungated.
  */
 function colonyWorkGate(
   p: WorldColonyEstablishProject,
   plan: ColonyStagingPlan | undefined,
   absorbedWork: number,
+  cap: number,
 ): FoundingStallEvent["gate"] {
   if (!p.charterPaid) return "charter";
-  if (plan === undefined) return absorbedWork > 0 ? null : "pool";
-  if (plan.plannedWork <= 0) return null;
-  if (!(plan.ceiling > 0)) return "funds";
-  if (absorbedWork <= 0) return "pool";
-  return plan.fundsShort ? "funds" : null;
+  // A project with no plan was never given one, so its allowance is the ordinary cap against the
+  // work it had left when the cycle opened (`workDone` already carries this cycle's absorption).
+  const plannedWork =
+    plan?.plannedWork ?? Math.min(cap, Math.max(0, p.workTotal - (p.workDone - absorbedWork)));
+  if (plannedWork <= 0) return null;
+  const ceiling = plan?.ceiling ?? cap;
+  if (!(ceiling > 0)) return "funds";
+  if (absorbedWork < Math.min(ceiling, plannedWork) - 1e-9) return "pool";
+  return (plan?.fundsShort ?? false) ? "funds" : null;
 }
 
 /** Fold this cycle's staged lines into a project's ledger, summing per good. */
@@ -640,7 +651,7 @@ export async function runDirectedBuildProcessor(
       foundingStalls.push({
         systemId: p.systemId,
         sourceSystemId: p.sourceSystemId,
-        gate: colonyWorkGate(p, plan, absorbedWork),
+        gate: colonyWorkGate(p, plan, absorbedWork, cap),
         materialsShort: p.charterPaid && (plan?.materialsShort ?? false),
         stalled,
       });

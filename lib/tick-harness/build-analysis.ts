@@ -472,10 +472,12 @@ interface CohortAccumulator {
  * draw hollowing out the systems that pay for expansion — which no galaxy-wide average can show,
  * because founders are a minority of developed systems.
  *
- * Membership is NOT random: a founder is by construction an established system with stock to spare,
- * so it out-produces the cohort of everything else — much of which is the colonies it founded — for
- * reasons that have nothing to do with founding. The comparison is read as a TREND between arms of
- * the same seed, never as a claim that supplying a colony made a system productive.
+ * Membership is a system that SUCCESSFULLY STAGED A DRAW, not one that sourced a founding: a founder
+ * with nothing to spare supplies its colony no goods and so never enters the cohort at all. It is
+ * also not random — such a system is by construction an established one with stock to spare, so it
+ * out-produces the cohort of everything else (much of which is the colonies it founded) for reasons
+ * that have nothing to do with founding. The comparison is read as a TREND between arms of the same
+ * seed, never as a claim that supplying a colony made a system productive.
  */
 export function summarizeFounderCohort(
   systems: ReadonlyArray<Pick<TickSystem, "id" | "control" | "buildingIdleCycles">>,
@@ -509,11 +511,15 @@ export function summarizeFounderCohort(
   }
   for (const m of markets) {
     const bucket = bucketOf(m.systemId);
-    // A market with no realized rate is not a producer, and counting it would dilute both the
-    // production mean and the suppressed share with rows that could never move either.
-    if (bucket === undefined || m.realizedProductionRate === undefined) continue;
+    if (bucket === undefined) continue;
+    // A market only produces if it realized something. Missing means "not yet assessed", but an
+    // ASSESSED non-producer holds a real 0 — and by run end that is nearly every row in the galaxy,
+    // so testing for the field's presence would put the whole basket in the denominator and deflate
+    // the suppressed share toward nothing.
+    const realized = m.realizedProductionRate ?? 0;
+    if (!(realized > 0)) continue;
     bucket.producingMarkets++;
-    bucket.production += Math.max(0, m.realizedProductionRate);
+    bucket.production += realized;
     if (m.productionSuppressed ?? false) bucket.suppressed++;
   }
 

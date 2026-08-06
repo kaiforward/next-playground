@@ -159,8 +159,9 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const colonyCommitments = new Map<string, number>();
   const inFlightEstablishes = newInFlightEstablishTotals();
   const foundingStalls = newFoundingStallTotals();
-  // Every developed system that has supplied a founding — the founder cohort the end-of-run
-  // production and disuse reads are split by.
+  // Every system that has SUCCESSFULLY STAGED A DRAW for a founding — the founder cohort the
+  // end-of-run production and disuse reads are split by. A source with nothing to spare stages
+  // nothing, emits no manifest, and so is not one of these however many colonies name it.
   const founderSystemIds = new Set<string>();
   // One record per faction per settlement, taken as each lands: a settlement is overwritten by the
   // next one, so the founding-era money bars cannot be reconstructed from the final world.

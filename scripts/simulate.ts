@@ -508,10 +508,12 @@ function formatTable(results: HarnessResults): string {
     {
       const era = results.foundingEra;
       const fl = results.foundingLifecycle;
+      const fw = era.fixedWindow;
       lines.push(
-        `  founding spend: ${fmtNum(era.foundingSpend)} cr over the founding era ` +
-          `(t=${era.startupTailEndTick + 1}–${era.eraEndTick ?? results.config.tickCount}) ` +
-          `= ${(era.spendShare * 100).toFixed(2)}% of founding-era income (${fmtNum(era.income)} cr)` +
+        `  founding spend: ${fmtNum(era.foundingSpend)} cr over this arm's founding era ` +
+          `(t=${era.startupTailEndTick + 1}–${era.eraEndTick ?? results.config.tickCount}` +
+          (era.eraCensored ? ", STILL OPEN at run end — censored" : "") +
+          `) = ${(era.spendShare * 100).toFixed(2)}% of that era's income (${fmtNum(era.income)} cr)` +
           (era.totalFoundingSpend > era.foundingSpend
             ? ` | ${fmtNum(era.totalFoundingSpend)} cr whole run`
             : "") +
@@ -519,6 +521,14 @@ function formatTable(results: HarnessResults): string {
             ? ` | ${fmtNum(era.totalFoundingSpend / fs.foundedCount)} cr per colony founded ` +
               `(charter + materials, in-flight staging included)`
             : ""),
+      );
+      // The arm-comparable half: identical ticks whatever an arm's own founding did, so a baseline
+      // and a treatment are measured over the same window by construction.
+      lines.push(
+        `    fixed window t=${fw.startTick}–${fw.endTick ?? results.config.tickCount} ` +
+          `(ARM-COMPARABLE): ${fmtNum(fw.foundingSpend)} cr = ` +
+          `${(fw.spendShare * 100).toFixed(2)}% of ${fmtNum(fw.income)} cr over ` +
+          `${fmtNum(fw.factionCycles)} faction-cycles`,
       );
       lines.push(
         `  commitment → completion: median ${fl.medianCycles.toFixed(1)} cycles ` +
@@ -617,7 +627,8 @@ function formatTable(results: HarnessResults): string {
         `(${era.withFounding.shorted}/${era.withFounding.cycles}) vs ` +
         `WITHOUT ${(era.withoutFounding.share * 100).toFixed(2)}% ` +
         `(${era.withoutFounding.shorted}/${era.withoutFounding.cycles}) | ` +
-        `startup tail ${era.startupTail.shorted}/${era.startupTail.cycles}` +
+        `outside the era: startup tail ${era.startupTail.shorted}/${era.startupTail.cycles}, ` +
+        `post-era ${era.postEra.shorted}/${era.postEra.cycles} (in no bar)` +
         (era.invalidRows > 0 ? ` | ⚠ ${era.invalidRows} INVALID ROWS` : ""),
     );
     lines.push(
@@ -627,7 +638,10 @@ function formatTable(results: HarnessResults): string {
             `p10 ${era.fundedMaintenance.p10.toFixed(3)}, min ${era.fundedMaintenance.min.toFixed(3)}`
           : "n/a (no founding-era cycles)") +
         ` | min construction ` +
-        (era.minFundedConstruction !== null ? era.minFundedConstruction.toFixed(3) : "n/a"),
+        (era.minFundedConstruction !== null
+          ? `${era.minFundedConstruction.toFixed(3)} over ${fmtNum(era.billedConstructionCycles)} ` +
+            `BILLED cycles`
+          : "n/a (no billed cycle)"),
     );
   }
 

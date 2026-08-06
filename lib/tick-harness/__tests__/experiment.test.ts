@@ -284,7 +284,7 @@ describe("ExperimentConfig", () => {
       results.founderCohort.founder.systemCount = 12;
       results.foundingEra = summarizeFoundingEra([
         { tick: 500, income: 100, foundingExpense: 20, shorted: false,
-          fundedMaintenance: 1, fundedConstruction: 1 },
+          fundedMaintenance: 1, fundedConstruction: 1, constructionBill: 5 },
       ]);
 
       const saved = buildExperimentResult(results);

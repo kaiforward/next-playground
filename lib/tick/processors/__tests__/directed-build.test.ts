@@ -1404,6 +1404,28 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(pool.every((s) => !s.stalled)).toBe(true);
   });
 
+  it("attributes a PARTLY funded cycle to the pool, not to nothing at all", async () => {
+    // Front-first funding runs out mid-project, so the marginal colony absorbs some of its cap and
+    // not the rest. That colony is exactly the "the construction pool got smaller" case the record
+    // exists to isolate; a test against zero absorption would file it as ungated and the report
+    // would show the pool costing nothing while it throttled every founding in the galaxy.
+    // A pool that funds part of one cap per cycle: enough to move, not enough to fill the ceiling.
+    const cycles = 6;
+    const run = await runEstablish(
+      stockedHome({ food: 5_000, water: 5_000 }), 100_000, cycles, 0.0025,
+    );
+
+    const absorbedPerCycle = run.workDoneByCycle.map(
+      (done, i) => done - (i === 0 ? 0 : run.workDoneByCycle[i - 1]),
+    );
+    const partial = absorbedPerCycle
+      .map((absorbed, i) => ({ absorbed, gate: run.stallsByCycle[i][0]?.gate }))
+      .filter((c) => c.absorbed > 0 && c.absorbed < STAGE_CAP - 1e-9);
+
+    expect(partial).not.toHaveLength(0);            // the arm really is partly funded
+    expect(partial.every((c) => c.gate === "pool")).toBe(true);
+  });
+
   it("reports a founder that cannot spare the want as materials-short, not as a work gate", async () => {
     // The achievable-want rule: a source with nothing to give does not hold the project up — the
     // colony builds at its full cap and opens thinner. Counting that as a gate would read a thin

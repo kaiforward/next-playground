@@ -407,7 +407,7 @@ export interface HarnessResults {
   /** How long foundings took, how many ran at once, and what held them up — the reading that tells a
    *  founding the money gate refused from one the construction pool never reached. */
   foundingLifecycle: FoundingLifecycleSummary;
-  /** The systems that supplied foundings, read against every other developed system. */
+  /** The systems that successfully staged a founding draw, read against every other developed system. */
   founderCohort: FounderCohortSummary;
   /** Faction-treasury health at simulation end — balances, income mix, funded fractions, shortfalls. */
   treasurySummary: TreasurySummary;

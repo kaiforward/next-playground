@@ -80,7 +80,7 @@ export interface ExperimentResult {
   /** How long foundings took, how many ran at once and what gated them — the reading that separates
    *  a founding the money gate refused from one the construction pool never reached. */
   foundingLifecycle: HarnessResults["foundingLifecycle"];
-  /** The supplying systems read against every other developed one — the founder's side of the cost. */
+  /** The systems that staged a draw, read against every other developed one — the founder's cost side. */
   founderCohort: HarnessResults["founderCohort"];
   /** Per-cohort supply and unrest — the same separation on the population axis. */
   worldCohorts: HarnessResults["worldCohorts"];

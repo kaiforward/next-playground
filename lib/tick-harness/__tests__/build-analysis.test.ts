@@ -643,7 +643,8 @@ describe("summarizeFounderCohort", () => {
       mkt("f1", 10), mkt("f1", 30, true),
       mkt("f2", 20),
       mkt("o1", 4), mkt("o1", 2),
-      mkt("o1"),                           // produces nothing — not a producing market
+      mkt("o1"),                           // never assessed — not a producing market
+      mkt("o1", 0),                        // ASSESSED and produces nothing — also not one
       mkt("c1", 999),                      // undeveloped — excluded entirely
     ];
 
@@ -654,7 +655,10 @@ describe("summarizeFounderCohort", () => {
     expect(summary.founder.meanRealizedProduction).toBeCloseTo(30, 9); // (10+30+20)/2 systems
     expect(summary.other.meanRealizedProduction).toBeCloseTo(6, 9);    // (4+2)/1 system
     expect(summary.founder.producingMarkets).toBe(3);
-    expect(summary.other.producingMarkets).toBe(2);                    // the null-rate row is not one
+    // Neither the unassessed row nor the assessed zero counts. By run end almost every row in the
+    // galaxy is assessed, so counting a real 0 as a producer would put the whole basket in this
+    // denominator and drive the suppressed share toward nothing.
+    expect(summary.other.producingMarkets).toBe(2);
     expect(summary.founder.productionSuppressedShare).toBeCloseTo(1 / 3, 9);
     expect(summary.other.productionSuppressedShare).toBe(0);
     expect(summary.founder.meanIdleTypes).toBeCloseTo(0.5, 9);         // one type idle over two systems
