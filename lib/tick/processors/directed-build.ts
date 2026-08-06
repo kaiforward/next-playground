@@ -529,8 +529,10 @@ export async function runDirectedBuildProcessor(
     // this cycle. Founding is only staged where it is PRICED: a faction with no purse (the build-only
     // engine path, independents) founds exactly as it did before, with no charter and no materials.
     const priced = purse !== undefined && charterParams !== undefined && factionId !== null;
-    const stagingPlans = new Map<string, { lines: FoundingStockLine[]; cost: number; plannedWork: number }>();
-    const materialsCeiling = new Map<string, number>();
+    const stagingPlans = new Map<
+      string,
+      { lines: FoundingStockLine[]; cost: number; plannedWork: number; ceiling: number }
+    >();
     if (priced) {
       for (const p of charged) {
         if (p.kind !== "colony_establish" || !p.charterPaid) continue;
@@ -547,8 +549,9 @@ export async function runDirectedBuildProcessor(
           source, p, workShare, foundingStockBalance, workingBalance, charterParams.economyScale,
         );
         workingBalance = safeMoney(workingBalance - draw.cost);
-        stagingPlans.set(p.id, { lines: draw.lines, cost: draw.cost, plannedWork });
-        materialsCeiling.set(p.id, cap * draw.achievableFraction);
+        stagingPlans.set(p.id, {
+          lines: draw.lines, cost: draw.cost, plannedWork, ceiling: cap * draw.achievableFraction,
+        });
       }
     }
     // The seam through which what the queue cannot know — whether a colony's materials can be bought
@@ -556,7 +559,7 @@ export async function runDirectedBuildProcessor(
     const capFor = (p: WorldConstructionProject): number => {
       if (!priced || p.kind !== "colony_establish") return cap;
       if (!p.charterPaid) return 0; // absorbs no work until the charter is bought
-      return materialsCeiling.get(p.id) ?? cap;
+      return stagingPlans.get(p.id)?.ceiling ?? cap;
     };
 
     // Fund front-first (in-flight work finishes before new commitments, then fresh player orders,
@@ -573,8 +576,13 @@ export async function runDirectedBuildProcessor(
     /**
      * Stage the manifest share matching the work a colony actually absorbed — recovered by diffing
      * `workDone`, so nothing is staged for work the pool did not fund. The staged goods leave the
-     * source's markets and are paid for as they go; a cycle that stages nothing advances the stall
-     * counter toward the write-off, and any staging resets it.
+     * source's markets and are paid for as they go; any staging resets the stall counter.
+     *
+     * A cycle that stages nothing advances that counter toward the write-off ONLY where the
+     * materials are what held the project back. A ceiling above zero means materials would have let
+     * work through, so absorbing none of it is the construction pool's doing — colonies reserve no
+     * floor and can be out-ROI'd indefinitely — and a queue that never reached a project must not
+     * write off its manifest for a reason that has nothing to do with what it can buy.
      */
     const stageOnto = (p: WorldConstructionProject): WorldConstructionProject => {
       if (!priced || p.kind !== "colony_establish" || !p.charterPaid) return p;
@@ -585,7 +593,11 @@ export async function runDirectedBuildProcessor(
       const staged = (plan?.lines ?? [])
         .map((l) => ({ goodId: l.goodId, quantity: l.quantity * share }))
         .filter((l) => l.quantity > 0);
-      if (staged.length === 0) return { ...p, stalledCycles: p.stalledCycles + 1 };
+      if (staged.length === 0) {
+        const starvedOfPool =
+          plan !== undefined && plan.plannedWork > 0 && plan.ceiling > 0 && absorbedWork <= 0;
+        return starvedOfPool ? p : { ...p, stalledCycles: p.stalledCycles + 1 };
+      }
       for (const line of staged) {
         stagingDraws.push({ sourceSystemId: p.sourceSystemId, goodId: line.goodId, quantity: line.quantity });
       }

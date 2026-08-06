@@ -1246,19 +1246,27 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
    * Run that establish cycle by cycle until its colony develops (or `maxCycles` is spent), carrying
    * the open queue, the founding money committed so far and every staging draw forward. Nothing ever
    * settles during the run, so what has been committed stays pending against the same balance.
+   * `throughputPerPop` sets the faction's construction pool — 0 starves the queue outright.
    */
-  async function runEstablish(home: SystemBuildRow, balance: number, maxCycles = 40) {
+  async function runEstablish(
+    home: SystemBuildRow,
+    balance: number,
+    maxCycles = 40,
+    throughputPerPop = 0.05,
+  ) {
     let projects: WorldConstructionProject[] = [stagingProject()];
     let committed = 0;
     let developed = false;
     const draws: FoundingStagingDraw[] = [];
     const workDoneByCycle: number[] = [];
     const ledgerByCycle: number[] = [];
+    const stalledByCycle: number[] = [];
     let cycles = 0;
     for (; cycles < maxCycles && !developed; cycles++) {
       const w = new MemoryDirectedBuildWorld([home], projects);
       const r = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
-        interval: INTERVAL, routeCost: reachable, construction: mkConstruction(STAGE_CAP),
+        interval: INTERVAL, routeCost: reachable,
+        construction: mkConstruction(STAGE_CAP, throughputPerPop),
         develop: { candidateProvider: () => [], params: STAGING_PARAMS },
         treasuryByFaction: new Map([["f1", { balance, pendingFounding: committed, maintenanceBill: 0 }]]),
       });
@@ -1270,9 +1278,10 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
       )[0];
       workDoneByCycle.push(colony?.workDone ?? STAGE_WORK); // gone from the queue ⇒ it completed
       ledgerByCycle.push(colony?.stagedManifest.length ?? 0);
+      stalledByCycle.push(colony?.stalledCycles ?? 0);
       developed = w.developments.some((d) => d.systemId === "c1");
     }
-    return { developed, cycles, committed, draws, workDoneByCycle, ledgerByCycle };
+    return { developed, cycles, committed, draws, workDoneByCycle, ledgerByCycle, stalledByCycle };
   }
 
   it("completes a founding whose source can spare nothing, and opens with an empty ledger", async () => {
@@ -1307,6 +1316,21 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(staged).toBeGreaterThan(singleDraw);                // the spread total beats the single raid…
     expect(staged).toBeCloseTo(foundingWant("food"), 6);       // …reaching the whole want
     expect(run.committed).toBeCloseTo(FEE + foundingGoodsValue([{ goodId: "food", quantity: staged }], 1), 6);
+  });
+
+  it("does not count a pool-starved cycle as a materials stall", async () => {
+    // Everything the colony needs is affordable and on the founder's shelves — the materials ceiling
+    // never binds. What it does not get is construction points: colonies reserve no pool floor, so a
+    // faction whose pool goes elsewhere can leave one waiting indefinitely. That is not a reason to
+    // write off a manifest it could have bought, so the stall counter must not move at all.
+    const cycles = COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES + 3;
+    const run = await runEstablish(stockedHome({ food: 5_000, water: 5_000 }), 100_000, cycles, 0);
+
+    expect(run.cycles).toBe(cycles);                             // no pool ⇒ it never lands
+    expect(run.workDoneByCycle.every((w) => w === 0)).toBe(true); // …and never absorbs anything
+    expect(run.stalledByCycle.every((s) => s === 0)).toBe(true);  // the counter never moved
+    expect(run.draws).toEqual([]);                                // nothing staged for unfunded work
+    expect(run.committed).toBe(FEE);                              // only the charter was ever paid
   });
 
   it("completes on work alone after FOUNDING_STALL_COMPLETE_CYCLES cycles staging nothing", async () => {
