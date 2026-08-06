@@ -12,7 +12,8 @@ import type { GovernmentType } from "@/lib/types/game";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 import type { DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
-import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
+import type { FoundingEraSummary, TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
+import type { FounderCohortSummary, FoundingLifecycleSummary } from "./build-analysis";
 import type { DemandHuntingSummary } from "./market-analysis";
 
 // ── Market role classification ──────────────────────────────────
@@ -333,7 +334,10 @@ export interface FoundingStockSummary {
    *  the median of nothing must not print as a founder drained to 0.00×.
    *
    *  Not comparable with a run measured before materials were staged per cycle, where the same name
-   *  meant one whole manifest taken in a single draw. */
+   *  meant one whole manifest taken in a single draw. Nor is it a clean per-colony attribution: a
+   *  draw is measured against what the founder holds after every draw already made on it that cycle,
+   *  including other colonies', so a colony the queue reaches second reads deeper than the same
+   *  colony would have read first. */
   medianFounderCoverAfter: number | null;
 }
 
@@ -400,8 +404,15 @@ export interface HarnessResults {
   migrationThroughput: MigrationThroughputSummary;
   /** How well provisioned colonies founded during the run were at their first assessed cycle. */
   foundingStock: FoundingStockSummary;
+  /** How long foundings took, how many ran at once, and what held them up — the reading that tells a
+   *  founding the money gate refused from one the construction pool never reached. */
+  foundingLifecycle: FoundingLifecycleSummary;
+  /** The systems that supplied foundings, read against every other developed system. */
+  founderCohort: FounderCohortSummary;
   /** Faction-treasury health at simulation end — balances, income mix, funded fractions, shortfalls. */
   treasurySummary: TreasurySummary;
+  /** The founding-era money bars, counted over settled faction-cycles across the whole run. */
+  foundingEra: FoundingEraSummary;
   /** Treasury balance trajectory sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
   treasurySnapshots: TreasurySnapshot[];
 }

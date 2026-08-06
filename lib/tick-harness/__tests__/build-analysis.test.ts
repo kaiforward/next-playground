@@ -2,11 +2,13 @@ import { describe, it, expect } from "vitest";
 import {
   summarizeColonisation, summarizeConstructionPool, summarizeBuildBursts,
   trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summarizeFoundingStock,
-  recordFoundingManifest,
+  recordFoundingManifest, newFoundingStallTotals, recordFoundingStall, newInFlightEstablishTotals,
+  sampleOpenColonies, summarizeFoundingLifecycle, summarizeFounderCohort,
 } from "../build-analysis";
 import type {
   BuildCommitmentRecord, FoundedColonyRecord, FoundedColonySystem, FoundingStagingTotals,
 } from "../build-analysis";
+import type { FoundingStallEvent } from "@/lib/tick/types";
 import { EXPANSION } from "@/lib/constants/expansion";
 import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, HEAVY_INDUSTRY_COMPLEX,
@@ -511,5 +513,164 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     const summary = summarizeFoundingStock(tracker);
     expect(summary.medianFounderCoverAfter).toBeCloseTo(0.8, 9);
     expect(summary.meanManifestTonnage).toBeCloseTo(50, 9); // 100 over both founded colonies
+  });
+});
+
+describe("founding lifecycle — stall attribution", () => {
+  const stall = (
+    gate: FoundingStallEvent["gate"],
+    extra: { materialsShort?: boolean; stalled?: boolean } = {},
+  ): FoundingStallEvent => ({
+    systemId: "c1", sourceSystemId: "home", gate,
+    materialsShort: extra.materialsShort ?? false,
+    stalled: extra.stalled ?? false,
+  });
+
+  it("keeps the three causes apart, and counts a materials shortfall as neither", () => {
+    // The counter this whole reading exists for. Collapsed into one number, a galaxy where the
+    // charter froze founding and one where the construction pool shrank read identically — and the
+    // fix for one is the opposite of the fix for the other.
+    const totals = newFoundingStallTotals();
+    recordFoundingStall(totals, stall("charter"), false);
+    recordFoundingStall(totals, stall("funds", { stalled: true }), false);
+    // Money bought PART of the share: work is gated below the cap, yet something was staged, so
+    // the write-off clock resets. The two counts are not the same question.
+    recordFoundingStall(totals, stall("funds"), false);
+    recordFoundingStall(totals, stall("pool"), false);
+    recordFoundingStall(totals, stall(null, { materialsShort: true, stalled: true }), true);
+    recordFoundingStall(totals, stall(null, { materialsShort: true, stalled: true }), false);
+    recordFoundingStall(totals, stall(null), false);
+
+    expect(totals.charter).toBe(1);
+    expect(totals.funds).toBe(2);
+    expect(totals.pool).toBe(1);
+    expect(totals.unGated).toBe(3);
+    // The four gate buckets partition the observed colony-cycles — no cycle is counted twice and
+    // none is lost, so every share printed against `observed` is honest.
+    expect(totals.charter + totals.funds + totals.pool + totals.unGated).toBe(totals.observed);
+    expect(totals.observed).toBe(7);
+    // Materials shortfalls cut ACROSS the partition: informational, never a work gate.
+    expect(totals.materialsShort).toBe(2);
+    expect(totals.materialsShortUnderEvent).toBe(1);
+    // The write-off clock is the world's own materials/money semantics, not the gate split: a
+    // pool-starved cycle never advances it, and a partly-funded cycle resets it.
+    expect(totals.stalled).toBe(3);
+  });
+
+  it("reports an empty census as zeroes that survive JSON, never NaN", () => {
+    const totals = newFoundingStallTotals();
+    expect(totals.observed).toBe(0);
+    expect(JSON.parse(JSON.stringify(totals))).toEqual(totals);
+  });
+});
+
+describe("founding lifecycle — commitment, completion and concurrency", () => {
+  const colony = (systemId: string, foundedTick: number): FoundedColonyRecord => ({
+    systemId, foundedTick, openingSatisfaction: null, openingDissatisfaction: null,
+  });
+  const establish = (systemId: string) => ({ kind: "colony_establish" as const, systemId });
+  const build = (systemId: string) => ({ kind: "build" as const, systemId });
+
+  it("dates a commitment to the first cycle its establish was seen open, and counts concurrency", () => {
+    const commitments = new Map<string, number>();
+    const inFlight = newInFlightEstablishTotals();
+    sampleOpenColonies([establish("c1"), build("hw")], 24, commitments, inFlight);
+    sampleOpenColonies([establish("c1"), establish("c2")], 48, commitments, inFlight);
+    sampleOpenColonies([establish("c2")], 72, commitments, inFlight);
+
+    // First seen wins — a colony open for three cycles was committed once, not three times.
+    expect(commitments.get("c1")).toBe(24);
+    expect(commitments.get("c2")).toBe(48);
+    expect(inFlight.samples).toBe(3);
+    expect(inFlight.total).toBe(4);
+    expect(inFlight.max).toBe(2);
+    expect(inFlight.maxTick).toBe(48);
+  });
+
+  it("measures duration in construction cycles and excludes colonies never seen committed", () => {
+    const commitments = new Map<string, number>([["c1", 24], ["c2", 48]]);
+    const inFlight = newInFlightEstablishTotals();
+    sampleOpenColonies([establish("c1"), establish("c2")], 96, commitments, inFlight);
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["c1", colony("c1", 120)],  // 96 ticks = 4 cycles
+      ["c2", colony("c2", 192)],  // 144 ticks = 6 cycles
+      ["c3", colony("c3", 200)],  // committed and completed inside one cycle — never in the queue
+    ]);
+
+    const summary = summarizeFoundingLifecycle(
+      tracker, commitments, inFlight, newFoundingStallTotals(), 24,
+    );
+
+    // The denominator is colonies with a reading, not colonies founded: folding the unobserved one
+    // in as a zero would report founding as a third faster than it is.
+    expect(summary.sampledCount).toBe(2);
+    expect(summary.unobservedCount).toBe(1);
+    expect(summary.meanCycles).toBeCloseTo(5, 9);
+    expect(summary.medianCycles).toBeCloseTo(5, 9);
+    expect(summary.maxCycles).toBeCloseTo(6, 9);
+    expect(summary.inFlight.meanPerCycle).toBeCloseTo(2, 9);
+    expect(summary.inFlight.sampledCycles).toBe(1);
+  });
+
+  it("reports a run that founded nothing as zeroes, not NaN", () => {
+    const summary = summarizeFoundingLifecycle(
+      new Map(), new Map(), newInFlightEstablishTotals(), newFoundingStallTotals(), 24,
+    );
+    expect(summary.sampledCount).toBe(0);
+    expect(summary.meanCycles).toBe(0);
+    expect(summary.medianCycles).toBe(0);
+    expect(summary.inFlight.meanPerCycle).toBe(0);
+    expect(summary.inFlight.maxTick).toBeNull();
+    expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
+  });
+});
+
+describe("summarizeFounderCohort", () => {
+  const sys = (id: string, control: SystemControl, idle: Record<string, number> = {}) =>
+    ({ id, control, buildingIdleCycles: idle });
+  const mkt = (
+    systemId: string, realizedProductionRate?: number, productionSuppressed?: boolean,
+  ) => ({ systemId, realizedProductionRate, productionSuppressed });
+
+  it("splits developed systems by whether they supplied a founding, each with its own denominator", () => {
+    const systems = [
+      sys("f1", "developed", { ore: 2 }),
+      sys("f2", "developed"),
+      sys("o1", "developed", { ore: 1, food: 3 }),
+      sys("c1", "controlled", { ore: 5 }), // never developed — in neither cohort
+    ];
+    const markets = [
+      mkt("f1", 10), mkt("f1", 30, true),
+      mkt("f2", 20),
+      mkt("o1", 4), mkt("o1", 2),
+      mkt("o1"),                           // produces nothing — not a producing market
+      mkt("c1", 999),                      // undeveloped — excluded entirely
+    ];
+
+    const summary = summarizeFounderCohort(systems, markets, new Set(["f1", "f2"]));
+
+    expect(summary.founder.systemCount).toBe(2);
+    expect(summary.other.systemCount).toBe(1);
+    expect(summary.founder.meanRealizedProduction).toBeCloseTo(30, 9); // (10+30+20)/2 systems
+    expect(summary.other.meanRealizedProduction).toBeCloseTo(6, 9);    // (4+2)/1 system
+    expect(summary.founder.producingMarkets).toBe(3);
+    expect(summary.other.producingMarkets).toBe(2);                    // the null-rate row is not one
+    expect(summary.founder.productionSuppressedShare).toBeCloseTo(1 / 3, 9);
+    expect(summary.other.productionSuppressedShare).toBe(0);
+    expect(summary.founder.meanIdleTypes).toBeCloseTo(0.5, 9);         // one type idle over two systems
+    expect(summary.other.meanIdleTypes).toBeCloseTo(2, 9);
+    expect(summary.founder.idleSystemShare).toBeCloseTo(0.5, 9);
+    expect(summary.other.idleSystemShare).toBe(1);
+  });
+
+  it("reports an empty founder cohort as zeroes that survive JSON, never NaN", () => {
+    const summary = summarizeFounderCohort(
+      [sys("o1", "developed")], [mkt("o1", 5)], new Set(),
+    );
+    expect(summary.founder.systemCount).toBe(0);
+    expect(summary.founder.meanRealizedProduction).toBe(0);
+    expect(summary.founder.productionSuppressedShare).toBe(0);
+    expect(summary.founder.idleSystemShare).toBe(0);
+    expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
   });
 });

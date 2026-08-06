@@ -1175,6 +1175,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     const stalledByCycle: number[] = [];
     let delivered: FoundingStockLine[] = [];
     const manifestEvents: NonNullable<TickProcessorResult["foundingManifests"]> = [];
+    const stallsByCycle: NonNullable<TickProcessorResult["foundingStalls"]>[] = [];
     let cycles = 0;
     for (; cycles < maxCycles && !developed; cycles++) {
       const w = new MemoryDirectedBuildWorld([home], projects);
@@ -1197,10 +1198,11 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
       developed = development !== undefined;
       delivered = development?.stockManifest ?? [];
       manifestEvents.push(...(r.foundingManifests ?? []));
+      stallsByCycle.push(r.foundingStalls ?? []);
     }
     return {
       developed, cycles, committed, draws, workDoneByCycle, ledgerByCycle, stalledByCycle,
-      delivered, manifestEvents,
+      delivered, manifestEvents, stallsByCycle,
     };
   }
 
@@ -1368,6 +1370,85 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     // Stated as a ratio, the donor floor cancels: the two covers are the same founder at
     // (stock − served) and at (stock − the whole pile).
     expect(coverServed / coverLeftovers).toBeCloseTo((stock - served) / (stock - drawable), 6);
+  });
+
+  it("attributes an unpaid charter, an unaffordable share and a starved pool to three causes", async () => {
+    // The three ways a founding fails to move, run as three arms of one case, because the whole
+    // value of the record is that they are DIFFERENT: a report that collapses them cannot say
+    // whether the money gate refused a colony or the construction queue simply never reached it.
+    const stocked = () => stockedHome({ food: 5_000, water: 5_000 });
+
+    // (a) No money at all: the charter goes unpaid, so the project absorbs nothing whatever else
+    // is true. One cycle only — an unpaid autonomic colony is dropped from the queue after it.
+    const noMoney = await runEstablish(stocked(), 0, 1);
+    expect(noMoney.stallsByCycle[0].map((s) => s.gate)).toEqual(["charter"]);
+
+    // (b) Exactly one charter's worth: the fee is paid, and the empty purse then buys none of the
+    // materials share, which is what holds the work ceiling at zero.
+    const charterOnly = await runEstablish(stocked(), FEE);
+    const funds = charterOnly.stallsByCycle
+      .slice(0, COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES)
+      .flat();
+    expect(funds).not.toHaveLength(0);
+    expect(funds.every((s) => s.gate === "funds")).toBe(true);
+    expect(funds.every((s) => s.stalled)).toBe(true);        // …and the write-off clock is running
+    expect(funds.every((s) => !s.materialsShort)).toBe(true); // the founder's shelves were full
+
+    // (c) Money and materials both ample, no construction pool: nothing about founding is refusing.
+    const starved = await runEstablish(stocked(), 100_000, 3, 0);
+    const pool = starved.stallsByCycle.flat();
+    expect(pool).not.toHaveLength(0);
+    expect(pool.every((s) => s.gate === "pool")).toBe(true);
+    // The world's own semantics: a pool-starved cycle is not a materials/money stall and must not
+    // advance the write-off clock.
+    expect(pool.every((s) => !s.stalled)).toBe(true);
+  });
+
+  it("reports a founder that cannot spare the want as materials-short, not as a work gate", async () => {
+    // The achievable-want rule: a source with nothing to give does not hold the project up — the
+    // colony builds at its full cap and opens thinner. Counting that as a gate would read a thin
+    // endowment as a refused founding, which is the opposite of what happened.
+    const run = await runEstablish(stockedHome({ food: 0, water: 0 }), 100_000);
+
+    expect(run.developed).toBe(true);
+    const records = run.stallsByCycle.flat();
+    expect(records).toHaveLength(run.cycles);
+    expect(records.every((s) => s.gate === null)).toBe(true);
+    expect(records.every((s) => s.materialsShort)).toBe(true);
+    expect(records.every((s) => s.systemId === "c1" && s.sourceSystemId === "home")).toBe(true);
+  });
+
+  it("emits one record per priced colony per cycle, and none for an unpriced founding", async () => {
+    // The denominator every share in the report is taken over: a colony that moved and a colony
+    // that did not each contribute exactly one colony-cycle.
+    const paid = (id: string, systemId: string): WorldColonyEstablishProject => ({
+      ...stagingProject(), kind: "colony_establish", id, systemId,
+      sourceSystemId: "home", seedPop: EXPANSION.COLONY_SEED_POP, housingLevels: 1,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    });
+    const w = new MemoryDirectedBuildWorld(
+      [stockedHome({ food: 5_000, water: 5_000 })],
+      [paid("colA", "c1"), paid("colB", "c2")],
+    );
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(STAGE_CAP, 0.05),
+      develop: { candidateProvider: () => [], params: STAGING_PARAMS },
+      treasuryByFaction: new Map([["f1", { balance: 1_000_000, pendingFounding: 0, maintenanceBill: 0 }]]),
+    });
+    expect((result.foundingStalls ?? []).map((s) => s.systemId).sort()).toEqual(["c1", "c2"]);
+
+    const unpriced = new MemoryDirectedBuildWorld(
+      [stockedHome({ food: 5_000, water: 5_000 })],
+      [paid("colA", "c1")],
+    );
+    const unpricedResult = await runDirectedBuildProcessor(unpriced, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(STAGE_CAP, 0.05),
+      develop: { candidateProvider: () => [], params: STAGING_PARAMS },
+      // no treasuryByFaction — an unpriced founding charges nothing and so reports nothing
+    });
+    expect(unpricedResult.foundingStalls).toEqual([]);
   });
 
   it("lands an unpriced founding with an empty ledger — no charter, no materials", async () => {

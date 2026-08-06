@@ -503,6 +503,54 @@ function formatTable(results: HarnessResults): string {
             : "n/a (no measurable manifest)"),
       );
     }
+    // Founding money and pacing — the two reads that separate "the gate refused" from "the
+    // construction pool got smaller", which the founding count alone cannot.
+    {
+      const era = results.foundingEra;
+      const fl = results.foundingLifecycle;
+      lines.push(
+        `  founding spend: ${fmtNum(era.foundingSpend)} cr over the founding era ` +
+          `(t=${era.startupTailEndTick + 1}–${era.eraEndTick ?? results.config.tickCount}) ` +
+          `= ${(era.spendShare * 100).toFixed(2)}% of founding-era income (${fmtNum(era.income)} cr)` +
+          (era.totalFoundingSpend > era.foundingSpend
+            ? ` | ${fmtNum(era.totalFoundingSpend)} cr whole run`
+            : "") +
+          (fs.foundedCount > 0
+            ? ` | ${fmtNum(era.totalFoundingSpend / fs.foundedCount)} cr per colony founded ` +
+              `(charter + materials, in-flight staging included)`
+            : ""),
+      );
+      lines.push(
+        `  commitment → completion: median ${fl.medianCycles.toFixed(1)} cycles ` +
+          `(mean ${fl.meanCycles.toFixed(1)}, max ${fl.maxCycles.toFixed(1)}) over ${fl.sampledCount} colonies` +
+          (fl.unobservedCount > 0 ? `, ${fl.unobservedCount} never seen in queue` : "") +
+          ` | in flight: mean ${fl.inFlight.meanPerCycle.toFixed(1)}, max ${fl.inFlight.max}` +
+          (fl.inFlight.maxTick !== null ? ` @ t=${fl.inFlight.maxTick}` : "") +
+          ` over ${fl.inFlight.sampledCycles} cycles`,
+      );
+      const st = fl.stalls;
+      lines.push(
+        `  what gated in-flight colonies (${fmtNum(st.observed)} colony-cycles): ` +
+          `charter ${fmtNum(st.charter)} | funds ${fmtNum(st.funds)} | pool ${fmtNum(st.pool)} | ` +
+          `ungated ${fmtNum(st.unGated)} | write-off counter advanced ${fmtNum(st.stalled)}`,
+      );
+      lines.push(
+        `    founder could not spare the full want (informational — still builds): ` +
+          `${fmtNum(st.materialsShort)}, of which ${fmtNum(st.materialsShortUnderEvent)} under an ` +
+          `active founder event`,
+      );
+      const fc = results.founderCohort;
+      lines.push(
+        `  founders vs other developed systems: ` +
+          `production ${fmtNum(fc.founder.meanRealizedProduction)} vs ` +
+          `${fmtNum(fc.other.meanRealizedProduction)} /system | ` +
+          `suppressed markets ${(fc.founder.productionSuppressedShare * 100).toFixed(1)}% vs ` +
+          `${(fc.other.productionSuppressedShare * 100).toFixed(1)}% | ` +
+          `disuse countdowns ${fc.founder.meanIdleTypes.toFixed(2)} vs ` +
+          `${fc.other.meanIdleTypes.toFixed(2)} types/system ` +
+          `(n=${fc.founder.systemCount} vs ${fc.other.systemCount})`,
+      );
+    }
     const cp = summarizeConstructionPool(finalTickSystems, finalWorld.constructionProjects);
     lines.push(
       `Construction pool: base ${fmtNum(cp.poolBase)} + centres ${fmtNum(cp.poolCentres)} ` +
@@ -556,6 +604,30 @@ function formatTable(results: HarnessResults): string {
         `constr ${(ts.fundedMeans.construction * 100).toFixed(0)}%` +
         (ts.firstShortfallTick !== null ? ` | first shortfall t=${ts.firstShortfallTick}` : " | never shorted") +
         (ts.invalidRows > 0 ? ` | ⚠ ${ts.invalidRows} INVALID ROWS` : ""),
+    );
+    // Shortfalls split by whether the faction-cycle carried a founding charge. The roster means
+    // above read ~1.000 while the shorted tail triples, and the startup tail shorts before the
+    // first founding ever happens — neither is readable without this split.
+    const era = results.foundingEra;
+    lines.push(
+      `  founding-era faction-cycles ` +
+        `(t=${era.startupTailEndTick + 1}–${era.eraEndTick ?? results.config.tickCount}): ` +
+        `${fmtNum(era.factionCycles)} | ` +
+        `shorted WITH founding ${(era.withFounding.share * 100).toFixed(2)}% ` +
+        `(${era.withFounding.shorted}/${era.withFounding.cycles}) vs ` +
+        `WITHOUT ${(era.withoutFounding.share * 100).toFixed(2)}% ` +
+        `(${era.withoutFounding.shorted}/${era.withoutFounding.cycles}) | ` +
+        `startup tail ${era.startupTail.shorted}/${era.startupTail.cycles}` +
+        (era.invalidRows > 0 ? ` | ⚠ ${era.invalidRows} INVALID ROWS` : ""),
+    );
+    lines.push(
+      `  founding-era funded fractions: maintenance ` +
+        (era.fundedMaintenance !== null
+          ? `median ${era.fundedMaintenance.median.toFixed(3)}, ` +
+            `p10 ${era.fundedMaintenance.p10.toFixed(3)}, min ${era.fundedMaintenance.min.toFixed(3)}`
+          : "n/a (no founding-era cycles)") +
+        ` | min construction ` +
+        (era.minFundedConstruction !== null ? era.minFundedConstruction.toFixed(3) : "n/a"),
     );
   }
 

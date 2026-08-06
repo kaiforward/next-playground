@@ -8,6 +8,8 @@ import {
 } from "../experiment";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { generateWorld } from "@/lib/world/gen";
+import { newFoundingStallTotals } from "../build-analysis";
+import { summarizeFoundingEra } from "../treasury-analysis";
 import type { HarnessResults } from "../types";
 
 describe("ExperimentConfig", () => {
@@ -158,12 +160,28 @@ describe("ExperimentConfig", () => {
           meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
           meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
         },
+        foundingLifecycle: {
+          sampledCount: 0, unobservedCount: 0, meanCycles: 0, medianCycles: 0, maxCycles: 0,
+          inFlight: { meanPerCycle: 0, max: 0, maxTick: null, sampledCycles: 0 },
+          stalls: newFoundingStallTotals(),
+        },
+        founderCohort: {
+          founder: {
+            systemCount: 0, meanRealizedProduction: 0, productionSuppressedShare: 0,
+            producingMarkets: 0, meanIdleTypes: 0, idleSystemShare: 0,
+          },
+          other: {
+            systemCount: 0, meanRealizedProduction: 0, productionSuppressedShare: 0,
+            producingMarkets: 0, meanIdleTypes: 0, idleSystemShare: 0,
+          },
+        },
         treasurySummary: {
           factionCount: 0, meanBalance: 0, minBalance: 0, maxBalance: 0,
           headsShare: 0, productionShare: 0,
           fundedMeans: { maintenance: 0, logistics: 0, construction: 0 },
           invalidRows: 0, firstShortfallTick: null,
         },
+        foundingEra: summarizeFoundingEra([]),
         treasurySnapshots: [],
       };
     }
@@ -254,6 +272,26 @@ describe("ExperimentConfig", () => {
       const saved = buildExperimentResult(results);
       expect(saved.demandHunting).toEqual(results.demandHunting);
       expect(saved.foundingStock).toEqual(results.foundingStock);
+    });
+
+    it("includes the founding lifecycle, founder cohort and money bars in the saved JSON", () => {
+      // A gate arm run through --config saves this document and nothing else. A reading the report
+      // prints but the document drops cannot be compared between arms, which is the only way these
+      // numbers are ever read.
+      const results = minimalResults();
+      results.foundingLifecycle.medianCycles = 8;
+      results.foundingLifecycle.stalls.funds = 3;
+      results.founderCohort.founder.systemCount = 12;
+      results.foundingEra = summarizeFoundingEra([
+        { tick: 500, income: 100, foundingExpense: 20, shorted: false,
+          fundedMaintenance: 1, fundedConstruction: 1 },
+      ]);
+
+      const saved = buildExperimentResult(results);
+      expect(saved.foundingLifecycle).toEqual(results.foundingLifecycle);
+      expect(saved.founderCohort).toEqual(results.founderCohort);
+      expect(saved.foundingEra).toEqual(results.foundingEra);
+      expect(saved.foundingEra.spendShare).toBeCloseTo(0.2, 9);
     });
   });
 });

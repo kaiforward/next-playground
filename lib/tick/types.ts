@@ -99,6 +99,10 @@ export interface TickProcessorResult {
    *  Calibration instrumentation — the cost side of colonisation, invisible to any galaxy-wide
    *  average because foundings are rare. */
   foundingManifests?: FoundingStagingEvent[];
+  /** What held each in-flight colony back this cycle, one entry per priced colony in the queue.
+   *  Calibration instrumentation — cadence alone cannot tell a founding the money gate refused from
+   *  one the construction pool never reached, and only the processor knows which it was. */
+  foundingStalls?: FoundingStallEvent[];
   /** Per-faction haul-budget ledger for this cycle's directed-logistics resolution.
    *  Faction-owned systems only — the independent (null-faction) group hauls but is not
    *  ledgered, matching `workPerformedByFaction`. Calibration instrumentation — surfaced via
@@ -133,6 +137,42 @@ export interface FoundingStagingEvent {
   founderCover?: number;
 }
 
+/**
+ * One in-flight colony's cycle, as the founding path actually resolved it: what held its work below
+ * the absorption cap, whether its founder could spare the whole of that cycle's want, and whether
+ * the write-off counter advanced.
+ *
+ * One event per PRICED colony per construction cycle — every colony in a due faction's queue emits
+ * one, moving or not, so the counts carry their own denominator. An unpriced founding (the
+ * build-only engine path, independents) emits nothing, exactly as it charges nothing.
+ */
+export interface FoundingStallEvent {
+  /** The colony being established — still `controlled` until the establish completes. */
+  systemId: string;
+  /** The developed system its materials come from. */
+  sourceSystemId: string;
+  /**
+   * What gated absorption this cycle, or null when nothing did:
+   * - `charter` — the fee is unpaid, so the project absorbs no work at all;
+   * - `funds` — the treasury could not buy the whole of this cycle's materials share, which is what
+   *   lowers the project's ceiling;
+   * - `pool` — materials would have let work through and the construction queue never reached it.
+   *
+   * Only the first two are the founding path refusing; `pool` is the ordinary build queue, and
+   * conflating them is exactly the misread the record exists to prevent.
+   */
+  gate: "charter" | "funds" | "pool" | null;
+  /**
+   * The founder could not spare part of this cycle's want. INFORMATIONAL, never a gate: the
+   * achievable-want rule counts what a founder cannot spare as satisfied, so the ceiling stays up
+   * and the colony absorbs its full cap and simply opens with a thinner endowment.
+   */
+  materialsShort: boolean;
+  /** This cycle advanced the project's `stalledCycles` write-off counter — the world's own
+   *  materials/money stall semantics, which a pool-starved cycle deliberately does not trip. */
+  stalled: boolean;
+}
+
 /** One faction's haul-budget ledger for a single directed-logistics resolution: the budget
  *  granted (post catch-up and funding), the transfer cost it actually paid, and how many
  *  deficits were recorded funding-bound. Shared by the processor that builds it and the
@@ -148,7 +188,11 @@ export interface LogisticsBudgetLedger {
  *  result so the shared field can't drift. */
 export type TickInstrumentation = Pick<
   TickProcessorResult,
-  "buildCommitmentsByGood" | "migrationMoved" | "foundingManifests" | "logisticsBudget"
+  | "buildCommitmentsByGood"
+  | "migrationMoved"
+  | "foundingManifests"
+  | "foundingStalls"
+  | "logisticsBudget"
 >;
 
 /** The full payload one tick's run hands to the broadcast layer. */

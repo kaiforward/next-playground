@@ -1,4 +1,6 @@
-import type { FoundingStagingEvent, TickContext, TickProcessorResult } from "../types";
+import type {
+  FoundingStagingEvent, FoundingStallEvent, TickContext, TickProcessorResult,
+} from "../types";
 import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
 import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
@@ -99,8 +101,13 @@ export interface FactionFoundingPurse {
 interface StagingDraw {
   lines: FoundingStockLine[];
   cost: number;
-  /** Share of this cycle's manifest share that is satisfied — 1 when nothing holds the project back. */
+  /** Share of this cycle's manifest share that is satisfied — 1 when nothing holds the project back.
+   *  Below 1 is money alone: what the source cannot spare is satisfied by the achievable-want rule. */
   achievableFraction: number;
+  /** The source could not spare all of some good this cycle's share wanted. Reported rather than
+   *  inferred from `achievableFraction`, which the achievable-want rule deliberately hides it from —
+   *  it is the colony's endowment thinning, not its work being gated. */
+  materialsShort: boolean;
 }
 
 /**
@@ -134,7 +141,9 @@ function planStagingDraw(
   moneyLeft: number,
   economyScale: number,
 ): StagingDraw {
-  if (project.seedPop <= 0 || !(workShare > 0)) return { lines: [], cost: 0, achievableFraction: 1 };
+  if (project.seedPop <= 0 || !(workShare > 0)) {
+    return { lines: [], cost: 0, achievableFraction: 1, materialsShort: false };
+  }
 
   const stagedSoFar = new Map<string, number>();
   for (const line of project.stagedManifest) {
@@ -147,6 +156,7 @@ function planStagingDraw(
   let cost = 0;
   let targetValue = 0;
   let satisfiedValue = 0;
+  let materialsShort = false;
 
   for (const good of toGoodMarketStates(source)) {
     const colonyDemandRate = consumptionRate(good.goodId, basis);
@@ -176,6 +186,7 @@ function planStagingDraw(
     // world state, and `JSON.stringify` turns a NaN into null.
     const headroom = Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
     const sparable = Math.min(target, headroom);
+    if (sparable < target) materialsShort = true;
     // The achievable-want rule: what the source cannot spare is satisfied by never being wanted again.
     satisfiedValue += (target - sparable) * unitValue;
     if (!(sparable > 0)) continue;
@@ -193,7 +204,44 @@ function planStagingDraw(
 
   // Nothing left to want this cycle is fully achievable, not fully stalled.
   const achievableFraction = targetValue > 0 ? clamp(satisfiedValue / targetValue, 0, 1) : 1;
-  return { lines, cost, achievableFraction };
+  return { lines, cost, achievableFraction, materialsShort };
+}
+
+/** One priced colony's resolved plan for a cycle: what it stages, what that costs, the work ceiling
+ *  the materials buy it, and the two ways the plan came up short. */
+interface ColonyStagingPlan {
+  lines: FoundingStockLine[];
+  cost: number;
+  plannedWork: number;
+  /** The absorption cap this colony may actually use, `cap × achievableFraction`. */
+  ceiling: number;
+  /** The treasury could not buy the whole of this cycle's share. */
+  fundsShort: boolean;
+  /** The source could not spare the whole of it. Never lowers `ceiling` — the achievable-want rule. */
+  materialsShort: boolean;
+}
+
+/**
+ * What held one colony's work below the absorption cap this cycle, for the calibration record only —
+ * the founding path refusing (`charter`, `funds`), the ordinary build queue never reaching the
+ * project (`pool`), or nothing at all.
+ *
+ * The order is the binding order: an unpaid charter absorbs nothing whatever else is true, a ceiling
+ * money held at zero comes next, and only then can absorbing nothing be blamed on the queue. A colony
+ * with no plan — written off, or its source gone — buys nothing more and runs on work alone, so the
+ * queue is the only thing left that can hold it up.
+ */
+function colonyWorkGate(
+  p: WorldColonyEstablishProject,
+  plan: ColonyStagingPlan | undefined,
+  absorbedWork: number,
+): FoundingStallEvent["gate"] {
+  if (!p.charterPaid) return "charter";
+  if (plan === undefined) return absorbedWork > 0 ? null : "pool";
+  if (plan.plannedWork <= 0) return null;
+  if (!(plan.ceiling > 0)) return "funds";
+  if (absorbedWork <= 0) return "pool";
+  return plan.fundsShort ? "funds" : null;
 }
 
 /** Fold this cycle's staged lines into a project's ledger, summing per good. */
@@ -329,6 +377,10 @@ export async function runDirectedBuildProcessor(
   // Each cycle's staging draws, for the calibration harness only — the cost side of colonisation,
   // recorded as it happens because a slice is gone from every ledger the moment the tick returns.
   const foundingManifests: FoundingStagingEvent[] = [];
+  // One record per priced colony per cycle, for the calibration harness only — what actually held
+  // each in-flight founding back, which no post-tick reader can recover: the world stores how long a
+  // project has been stalled, never why, and never that the queue simply did not reach it.
+  const foundingStalls: FoundingStallEvent[] = [];
   const nextOpen: WorldConstructionProject[] = [];
   const workPerformedByFaction = new Map<string, number>();
   // Money committed to founding this cycle, per faction — the treasury's settlement input. Directed
@@ -513,10 +565,7 @@ export async function runDirectedBuildProcessor(
     // this cycle. Founding is only staged where it is PRICED: a faction with no purse (the build-only
     // engine path, independents) founds exactly as it did before, with no charter and no materials.
     const priced = purse !== undefined && charterParams !== undefined && factionId !== null;
-    const stagingPlans = new Map<
-      string,
-      { lines: FoundingStockLine[]; cost: number; plannedWork: number; ceiling: number }
-    >();
+    const stagingPlans = new Map<string, ColonyStagingPlan>();
     if (priced) {
       for (const p of charged) {
         if (p.kind !== "colony_establish" || !p.charterPaid) continue;
@@ -535,6 +584,12 @@ export async function runDirectedBuildProcessor(
         workingBalance = safeMoney(workingBalance - draw.cost);
         stagingPlans.set(p.id, {
           lines: draw.lines, cost: draw.cost, plannedWork, ceiling: cap * draw.achievableFraction,
+          // Money is all that can leave the share unsatisfied, so a fraction below 1 is the treasury
+          // failing to buy this cycle's slice — the one materials-side reason that gates work. The
+          // tolerance is not cosmetic: a fully-bought share sums its value in a different order from
+          // the target it is measured against, so an exact test would report float dust as a stall.
+          fundsShort: draw.achievableFraction < 1 - 1e-9,
+          materialsShort: draw.materialsShort,
         });
       }
     }
@@ -569,19 +624,28 @@ export async function runDirectedBuildProcessor(
      * write off its manifest for a reason that has nothing to do with what it can buy.
      */
     const stageOnto = (p: WorldConstructionProject): WorldConstructionProject => {
-      if (!priced || p.kind !== "colony_establish" || !p.charterPaid) return p;
+      if (!priced || p.kind !== "colony_establish") return p;
       const plan = stagingPlans.get(p.id);
       const absorbedWork = p.workDone - (workBefore.get(p.id) ?? p.workDone);
       const share =
-        plan !== undefined && plan.plannedWork > 0 ? clamp(absorbedWork / plan.plannedWork, 0, 1) : 0;
-      const staged = (plan?.lines ?? [])
+        p.charterPaid && plan !== undefined && plan.plannedWork > 0
+          ? clamp(absorbedWork / plan.plannedWork, 0, 1)
+          : 0;
+      const staged = (p.charterPaid ? plan?.lines ?? [] : [])
         .map((l) => ({ goodId: l.goodId, quantity: l.quantity * share }))
         .filter((l) => l.quantity > 0);
-      if (staged.length === 0) {
-        const starvedOfPool =
-          plan !== undefined && plan.plannedWork > 0 && plan.ceiling > 0 && absorbedWork <= 0;
-        return starvedOfPool ? p : { ...p, stalledCycles: p.stalledCycles + 1 };
-      }
+      const starvedOfPool =
+        plan !== undefined && plan.plannedWork > 0 && plan.ceiling > 0 && absorbedWork <= 0;
+      const stalled = p.charterPaid && staged.length === 0 && !starvedOfPool;
+      foundingStalls.push({
+        systemId: p.systemId,
+        sourceSystemId: p.sourceSystemId,
+        gate: colonyWorkGate(p, plan, absorbedWork),
+        materialsShort: p.charterPaid && (plan?.materialsShort ?? false),
+        stalled,
+      });
+      if (!p.charterPaid) return p;
+      if (staged.length === 0) return stalled ? { ...p, stalledCycles: p.stalledCycles + 1 } : p;
       const source = rowBySystem.get(p.sourceSystemId);
       let tonnage = 0;
       // The founder's own remaining cover on the good this draw binds hardest: post-draw stock over
@@ -670,5 +734,8 @@ export async function runDirectedBuildProcessor(
   // Persist the construction proposal-pressure counters last — independent of ROI/funding outcome.
   if (proposalPersistence.length > 0) await world.applyProposalPersistenceUpdates(proposalPersistence);
 
-  return { workPerformedByFaction, foundingDebitsByFaction, buildCommitmentsByGood, foundingManifests };
+  return {
+    workPerformedByFaction, foundingDebitsByFaction, buildCommitmentsByGood,
+    foundingManifests, foundingStalls,
+  };
 }

@@ -916,6 +916,8 @@ export async function runWorldTick(
   let migrationMoved: TickInstrumentation["migrationMoved"];
   // Calibration-only: what each founding-stock manifest cost its founder. Same reason.
   let foundingManifests: TickInstrumentation["foundingManifests"];
+  // Calibration-only: what held each in-flight colony back this cycle. Same reason.
+  let foundingStalls: TickInstrumentation["foundingStalls"];
   // Calibration-only: directed-logistics' per-faction haul-budget ledger. Same reason.
   let logisticsBudget: TickInstrumentation["logisticsBudget"];
   const migrationResolves = isCycleStart(tick, cadence.cycle);
@@ -1178,6 +1180,7 @@ export async function runWorldTick(
       foundingDebitsByFaction = dbResult.foundingDebitsByFaction;
       buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
       foundingManifests = dbResult.foundingManifests;
+      foundingStalls = dbResult.foundingStalls;
       processorsRun.push("directed-build");
     }
 
@@ -1333,6 +1336,8 @@ export async function runWorldTick(
     world: nextWorld,
     events: tickEvents,
     markets,
-    instrumentation: { buildCommitmentsByGood, migrationMoved, foundingManifests, logisticsBudget },
+    instrumentation: {
+      buildCommitmentsByGood, migrationMoved, foundingManifests, foundingStalls, logisticsBudget,
+    },
   };
 }
