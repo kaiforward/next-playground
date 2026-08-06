@@ -332,6 +332,10 @@ export type SystemBuildOptionsData =
               seedPop: number;
               housingLevels: number;
               work: number;
+              /** One-off fee charged when the establish first draws funding. */
+              charter: number;
+              /** Upper bound on the materials bill — the uncapped want, hence "up to" in the UI. */
+              projectedBill: number;
             };
           }
         | { state: "ineligible"; reason: ColonyBlockReason };

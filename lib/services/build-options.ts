@@ -43,6 +43,7 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
         preview: {
           sourceSystemId: check.sourceSystemId, sourceSystemName: sourceName,
           seedPop: sizing.seedPop, housingLevels: sizing.housingLevels, work: sizing.work,
+          charter: check.charter, projectedBill: check.projectedBill,
         },
       },
     };

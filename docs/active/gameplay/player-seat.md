@@ -98,12 +98,20 @@ A controlled, not-yet-developed player system's founding entry (rendered on its 
 Industry tab — see UI). Eligibility mirrors the autonomic planner's own colony-candidate gate exactly,
 via one shared function (`colonyEligibility`, `lib/services/colony-eligibility.ts`, consumed by both the
 mutation service and the read service so neither drifts from the other): not already forming, above the
-habitable floor, and a reachable developed same-faction seed source within the tick's hop radius
-(`COLONY_REACH_HOPS = max(logistics, build, expansion reach)`). Sizing (`seedPop`, bundled
-`housingLevels`, total `work`) comes from `sizeColonyEstablish` — the exact function the autonomic
-planner calls, extracted so both order the same shape of project. An eligible system shows the verb plus
-a preview line (source system, seed pop, bundled housing, work) that **is** the confirmation surface — no
-dialog; clicking it orders directly. An ineligible controlled system shows the verb disabled with the
+habitable floor, a reachable developed same-faction seed source within the tick's hop radius
+(`COLONY_REACH_HOPS = max(logistics, build, expansion reach)`), and — last — a treasury that can commit.
+Sizing (`seedPop`, bundled `housingLevels`, total `work`) comes from `sizeColonyEstablish` — the exact
+function the autonomic planner calls, extracted so both order the same shape of project.
+
+The money gate prices the colony through `lib/engine/founding-cost` — the charter fee plus
+`FOUNDING_GATE_HEADROOM` cycles of the projected material bill — against the faction's working balance
+(`balance − pendingFounding`), using the same functions and the same comparison the autonomic planner's
+affordability gate uses, so a colony costs one number whoever founds it. It is a **hard** block: with
+colonisation automation off the planner never runs for the player's faction, so without it the player
+would be the one faction that founds for free. An eligible system shows the verb plus a preview line
+(source system, seed pop, bundled housing, work, charter, and the material bill labelled "up to" because
+the projection is the uncapped want) that **is** the confirmation surface — no dialog; clicking it orders
+directly. An ineligible controlled system shows the verb disabled with the
 blocking reason, teaching the planner's own rules. The seed-source tie-break (nearest developed
 same-faction system) differs in one respect from the autonomic planner's — see
 [ROADMAP.md](../../ROADMAP.md) for the recorded (accepted) divergence.

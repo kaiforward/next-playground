@@ -58,6 +58,13 @@ export function ColonySection({ systemId }: { systemId: string }) {
               <span className="font-mono text-text-primary">{colony.preview.housingLevels}</span> housing bundled ·{" "}
               <span className="font-mono text-text-primary">{formatMagnitude(colony.preview.work)}</span> work
             </p>
+            {/* "up to" on the materials: the projection is the uncapped want, an upper bound on what
+                the founder will actually be asked to spare. */}
+            <p className="mt-1 text-xs text-text-secondary">
+              charter <span className="font-mono text-text-primary">{formatMagnitude(colony.preview.charter)}</span> CR ·{" "}
+              up to <span className="font-mono text-text-primary">{formatMagnitude(colony.preview.projectedBill)}</span> CR
+              of materials
+            </p>
           </>
         ) : colony ? (
           <>

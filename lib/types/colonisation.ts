@@ -7,11 +7,16 @@
  */
 
 /** Why a controlled system can't take a colony order right now (mirrors planner eligibility). */
-export type ColonyBlockReason = "already_forming" | "below_habitable_floor" | "no_seed_source";
+export type ColonyBlockReason =
+  | "already_forming"
+  | "below_habitable_floor"
+  | "no_seed_source"
+  | "insufficient_funds";
 
 /** User-facing copy for each block reason — shared by the order error and the Industry-tab UI. */
 export const COLONY_BLOCK_COPY: Record<ColonyBlockReason, string> = {
   already_forming: "A colony is already forming here.",
   below_habitable_floor: "Below the habitable floor — this world cannot hold a colony.",
   no_seed_source: "No developed system in range to seed a colony from.",
+  insufficient_funds: "The treasury cannot cover the charter and the materials it will owe.",
 };

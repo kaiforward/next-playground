@@ -3,6 +3,10 @@ import { setWorld, clearWorld } from "@/lib/world/store";
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld } from "@/lib/world/store";
 import { orderBuild, orderColony, cancelOrder, setAutomation } from "@/lib/services/construction-orders";
+import { colonyEligibility } from "@/lib/services/colony-eligibility";
+import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
+import { COLONISATION } from "@/lib/constants/colonisation";
+import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type { World, WorldBuildProject, WorldColonyEstablishProject } from "@/lib/world/types";
 
@@ -22,6 +26,33 @@ const home = () => {
 /** One system's whole warehouse, by good — the figure a conservation check is taken on. */
 const stockAtSystem = (world: World, systemId: string) =>
   new Map(world.markets.filter((m) => m.systemId === systemId).map((m) => [m.goodId, m.stock]));
+
+/**
+ * Put money in the player's purse. World-gen starts every treasury at zero and founding is priced,
+ * so any fixture that expects a colony order to go through has to be solvent first.
+ */
+function fundPlayer(balance: number) {
+  const w = getWorld();
+  setWorld({
+    ...w,
+    treasuries: w.treasuries.map((t) =>
+      t.factionId === w.player?.controlledFactionId ? { ...t, balance } : t,
+    ),
+  });
+}
+
+/** A controlled, amply-landed player system next to the homeworld — eligibility manufactured, not rolled. */
+function controlledNeighbour(habitableSpace: number) {
+  const w = getWorld();
+  if (!w.player) throw new Error("fixture: expected a player seat");
+  const conn = w.connections.find((c) => c.fromId === home().id || c.toId === home().id)!;
+  const otherId = conn.fromId === home().id ? conn.toId : conn.fromId;
+  const target = w.systems.find((s) => s.id === otherId)!;
+  target.factionId = w.player.controlledFactionId;
+  target.control = "controlled";
+  target.habitableSpace = habitableSpace;
+  return target;
+}
 
 describe("construction order services", () => {
   beforeEach(() => { clearWorld(); setWorld(seatWorld()); });
@@ -102,6 +133,7 @@ describe("construction order services", () => {
       target.factionId = pid;
       target.control = "controlled";
     }
+    fundPlayer(1_000_000); // amply solvent — this test is about the physical gates, not the price
     const r = orderColony({ systemId: target.id });
     if (target.habitableSpace >= 1) {
       expect(r.ok).toBe(true);
@@ -116,20 +148,58 @@ describe("construction order services", () => {
     expect(orderColony({ systemId: home().id }).ok).toBe(false);
   });
 
+  it("refuses a colony the treasury cannot commit to, at the mutation boundary", () => {
+    // With colonisation automation off — the player's normal mode — the planner's affordability gate
+    // never runs for the player's faction. If the price is only enforced in the read service the
+    // order still lands, and the player is the one faction in the galaxy that founds for free: it
+    // holds `already_forming` on the target for nothing and pushes the maintenance floor around.
+    const target = controlledNeighbour(50);
+    const pid = getWorld().player!.controlledFactionId;
+
+    // The price this candidate is quoted at, taken from the shared eligibility service itself (the
+    // same `charter` and `projectedBill` the UI displays) so the boundary below is the real one.
+    fundPlayer(Number.MAX_SAFE_INTEGER);
+    const quote = colonyEligibility(getWorld(), pid, target);
+    expect(quote.eligible).toBe(true);
+    if (!quote.eligible) return;
+    const cost = foundingCommitmentCost(
+      quote.charter, quote.projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM,
+    );
+    expect(cost).toBeGreaterThan(0);
+    expect(quote.charter).toBeGreaterThan(0);
+
+    fundPlayer(cost - 1); // one credit short of the commitment, every physical gate still passing
+    const refused = orderColony({ systemId: target.id });
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(refused.error).toBe(COLONY_BLOCK_COPY.insufficient_funds);
+    expect(
+      getWorld().constructionProjects.some((p) => p.kind === "colony_establish" && p.systemId === target.id),
+    ).toBe(false);
+
+    // Exactly affordable: the same order goes through, and the row opens owing both its charter and
+    // its whole manifest.
+    fundPlayer(cost);
+    const placed = orderColony({ systemId: target.id });
+    expect(placed.ok).toBe(true);
+    if (!placed.ok) return;
+    const row = getWorld().constructionProjects.find(
+      (p): p is WorldColonyEstablishProject =>
+        p.kind === "colony_establish" && p.id === placed.data.projectId,
+    )!;
+    expect(row.charterPaid).toBe(false);
+    expect(row.stagedManifest).toEqual([]);
+    expect(row.stalledCycles).toBe(0);
+  });
+
   it("returns a cancelled colony's staged goods to its founder, conserving total stock", () => {
     // The spec's conservation bar for cancellation: staged materials are real inventory, already out
     // of the founder's markets and paid for. Deleting the row without returning them destroys stock
     // the faction owns. Work and the charter stay forfeit — only the goods come home.
-    const w = getWorld();
-    const pid = w.player!.controlledFactionId;
-    // Manufacture an eligible controlled target next to the homeworld (the same idiom the colony-order
-    // test uses), with land well clear of the habitable floor so nothing rejects on substrate.
-    const conn = w.connections.find((c) => c.fromId === home().id || c.toId === home().id)!;
-    const otherId = conn.fromId === home().id ? conn.toId : conn.fromId;
-    const target = w.systems.find((s) => s.id === otherId)!;
-    target.factionId = pid;
-    target.control = "controlled";
-    target.habitableSpace = 50;
+    // Manufacture an eligible controlled target next to the homeworld, with land well clear of the
+    // habitable floor so nothing rejects on substrate, and a purse that covers the commitment.
+    const target = controlledNeighbour(50);
+    fundPlayer(1_000_000);
 
     const placed = orderColony({ systemId: target.id });
     if (!placed.ok) throw new Error("setup failed");

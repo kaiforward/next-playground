@@ -3,11 +3,22 @@
  * the build-options read service and the construction-orders mutation service consume this so
  * neither depends on the other (a read service importing from a mutation service was a layering
  * smell); the same eligibility check backs the order's own validation and the UI's preview.
+ *
+ * Server-only, because pricing a colony reads `ECONOMY_SCALE`: the client never sees the scale, only
+ * the resolved charter and material figures this service hands the API. The block-reason vocabulary
+ * a client component does render lives apart in `lib/types/colonisation.ts`, which imports nothing.
  */
 import type { World, WorldSystem } from "@/lib/world/types";
 import { toTickConnections } from "@/lib/world/tick";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import { boundedHopsFromOrigin } from "@/lib/engine/pathfinding";
+import {
+  charterFee, foundingCommitmentCost, foundingGoodsValue, projectedManifestWant,
+} from "@/lib/engine/founding-cost";
+import { safeMoney } from "@/lib/engine/treasury";
+import { catchUpFactor } from "@/lib/tick/shard";
+import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -45,20 +56,62 @@ export function sizingParams(): { seedPop: number; establishWork: number } {
   return { seedPop: EXPANSION.COLONY_SEED_POP, establishWork: COLONISATION.COLONY_ESTABLISH_WORK };
 }
 
-/** Planner-equivalent eligibility for the direct-colony verb at a CONTROLLED player system. */
+/**
+ * Planner-equivalent eligibility for the direct-colony verb at a CONTROLLED player system.
+ *
+ * The money gate runs last, once the physical gates have produced the seed sizing and the source the
+ * price is quoted against. Charter and projected material bill come from `lib/engine/founding-cost` —
+ * the same functions the autonomic planner's affordability gate calls, against the same working
+ * balance the tick's founding path spends from (`balance − pendingFounding`) and the same
+ * comparison the planner truncates its candidate list on — so a colony costs one number whoever
+ * founds it. With colonisation automation off the planner never runs for the player's faction, so
+ * without this gate the player would be the one faction that founds for free.
+ *
+ * `projectedBill` rides back out on the eligible branch so the caller prices the verb without
+ * recomputing it. It is the UNCAPPED want — an upper bound, since what a founder can actually spare
+ * over an establish's life is not knowable at commitment — which is why the UI labels it "up to".
+ */
 export function colonyEligibility(
   world: World, factionId: string, system: WorldSystem,
-): { eligible: true; sourceSystemId: string } | { eligible: false; reason: ColonyBlockReason } {
+):
+  | { eligible: true; sourceSystemId: string; charter: number; projectedBill: number }
+  | { eligible: false; reason: ColonyBlockReason } {
   if (world.constructionProjects.some((p) => p.kind === "colony_establish" && p.systemId === system.id)) {
     return { eligible: false, reason: "already_forming" };
   }
   if (system.habitableSpace < EXPANSION.DEVELOP_HABITABLE_FLOOR) {
     return { eligible: false, reason: "below_habitable_floor" };
   }
-  if (sizeColonyEstablish(system.habitableSpace, sizingParams()) === null) {
+  const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
+  if (sizing === null) {
     return { eligible: false, reason: "below_habitable_floor" };
   }
   const source = findSeedSource(world, factionId, system.id);
   if (source === null) return { eligible: false, reason: "no_seed_source" };
-  return { eligible: true, sourceSystemId: source };
+
+  const treasury = world.treasuries.find((t) => t.factionId === factionId);
+  // De-scaled to a REFERENCE cycle exactly as the tick quotes it: the stored bill is a per-settlement
+  // flow, a charter is a one-off charge on an event, and CYCLE_LENGTH is a real knob — quoting off
+  // the raw figure would let a cadence change move the player's price and not the planner's.
+  const referenceBill =
+    (treasury?.lastSettlement?.maintenanceBill ?? 0) / catchUpFactor(CYCLE_LENGTH);
+  const charter = charterFee(referenceBill, {
+    mult: COLONISATION.CHARTER_FEE_SPEND_MULT, min: COLONISATION.CHARTER_FEE_MIN,
+  });
+  const projectedBill = foundingGoodsValue(
+    projectedManifestWant(
+      world.markets.filter((m) => m.systemId === source),
+      sizing.seedPop,
+      COLONISATION.FOUNDING_STOCK_COVER,
+    ),
+    ECONOMY_SCALE,
+  );
+  const workingBalance =
+    treasury === undefined
+      ? 0
+      : safeMoney(safeMoney(treasury.balance) - safeMoney(treasury.pendingFounding));
+  const cost = foundingCommitmentCost(charter, projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM);
+  if (cost > workingBalance) return { eligible: false, reason: "insufficient_funds" };
+
+  return { eligible: true, sourceSystemId: source, charter, projectedBill };
 }
