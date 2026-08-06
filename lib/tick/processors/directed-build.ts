@@ -11,8 +11,9 @@ import { workCostPerLevel } from "@/lib/constants/construction";
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { COLONISATION } from "@/lib/constants/colonisation";
-import { charterFee } from "@/lib/engine/founding-cost";
+import { charterFee, foundingGoodsValue } from "@/lib/engine/founding-cost";
 import { safeMoney } from "@/lib/engine/treasury";
+import { clamp } from "@/lib/utils/math";
 import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
@@ -22,6 +23,7 @@ import type {
   SystemClaim,
   SystemDevelopment,
   FoundingStockLine,
+  FoundingStagingDraw,
   ProposalPersistenceUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import {
@@ -138,6 +140,111 @@ function planFoundingStock(
   return manifest;
 }
 
+/** One colony's staging plan for a cycle: what it draws, what that costs, and how much of the cycle's
+ *  manifest share it can satisfy (the ceiling on the work it may absorb). */
+interface StagingDraw {
+  lines: FoundingStockLine[];
+  cost: number;
+  /** Share of this cycle's manifest share that is satisfied — 1 when nothing holds the project back. */
+  achievableFraction: number;
+}
+
+/**
+ * What an in-flight colony stages THIS cycle, and how much of the cycle's manifest share that covers.
+ *
+ * The manifest is the same want `planFoundingStock` sizes — `FOUNDING_STOCK_COVER` cycles of the
+ * seed's raw rate per good — but drawn in slices instead of in one raid at completion: `workShare` is
+ * the fraction of the whole establish the ordinary absorption cap would build this cycle, so the
+ * materials arrive in step with the work. Per good the draw is the least of what is still wanted,
+ * what the source can spare (`surplusDrawable`, under the running per-(source, good) balance so two
+ * colonies drawing on one founder share a shrinking pile), and what the faction's money buys through
+ * the valuation seam.
+ *
+ * `achievableFraction` is value-weighted across the cycle's share, and **a good the source cannot
+ * spare this cycle counts as satisfied**: the colony lands with less of it, exactly as it does today,
+ * rather than the project waiting forever on stock that is not coming. Without that rule the ceiling
+ * would deadlock the median colony — a founder measurably spares only part of the want, so the share
+ * could never reach 1 and the project would hold work below its cap for ever. What is left unsatisfied
+ * is therefore money alone: a faction that cannot pay stages less and builds slower.
+ *
+ * Lives here rather than in the planner because only the processor has the source's market rows.
+ */
+function planStagingDraw(
+  source: SystemBuildRow,
+  project: WorldColonyEstablishProject,
+  workShare: number,
+  stockBalance: Map<string, number>,
+  moneyLeft: number,
+  economyScale: number,
+): StagingDraw {
+  if (project.seedPop <= 0 || !(workShare > 0)) return { lines: [], cost: 0, achievableFraction: 1 };
+
+  const stagedSoFar = new Map<string, number>();
+  for (const line of project.stagedManifest) {
+    stagedSoFar.set(line.goodId, (stagedSoFar.get(line.goodId) ?? 0) + Math.max(0, line.quantity));
+  }
+
+  const basis: CivilianDemandBasis = { population: project.seedPop, technicians: 0, engineers: 0 };
+  const lines: FoundingStockLine[] = [];
+  let budget = safeMoney(moneyLeft);
+  let cost = 0;
+  let targetValue = 0;
+  let satisfiedValue = 0;
+
+  for (const good of toGoodMarketStates(source)) {
+    const colonyDemandRate = consumptionRate(good.goodId, basis);
+    if (colonyDemandRate <= 0) continue; // the seed does not consume it
+    const want = COLONISATION.FOUNDING_STOCK_COVER * colonyDemandRate;
+    const remainingWant = Math.max(0, want - (stagedSoFar.get(good.goodId) ?? 0));
+    const target = Math.min(remainingWant, workShare * want);
+    if (!(target > 0)) continue;
+
+    // Unit price through the one valuation seam, so a staging debit and the charter's material
+    // projection can never read two different numbers for the same good.
+    const unitValue = foundingGoodsValue([{ goodId: good.goodId, quantity: 1 }], economyScale);
+    targetValue += target * unitValue;
+
+    const key = `${source.systemId}|${good.goodId}`;
+    const remaining = stockBalance.get(key)
+      ?? surplusDrawable(good.stock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed);
+    // An unreadable headroom spares nothing rather than poisoning the ledger: staged quantities are
+    // world state, and `JSON.stringify` turns a NaN into null.
+    const headroom = Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
+    const sparable = Math.min(target, headroom);
+    // The achievable-want rule: what the source cannot spare is satisfied by never being wanted again.
+    satisfiedValue += (target - sparable) * unitValue;
+    if (!(sparable > 0)) continue;
+
+    const affordable = unitValue > 0 ? budget / unitValue : sparable;
+    const quantity = Math.min(sparable, affordable);
+    if (!(quantity > 0)) continue;
+    const lineCost = quantity * unitValue;
+    budget -= lineCost;
+    cost += lineCost;
+    satisfiedValue += lineCost;
+    stockBalance.set(key, headroom - quantity);
+    lines.push({ goodId: good.goodId, quantity });
+  }
+
+  // Nothing left to want this cycle is fully achievable, not fully stalled.
+  const achievableFraction = targetValue > 0 ? clamp(satisfiedValue / targetValue, 0, 1) : 1;
+  return { lines, cost, achievableFraction };
+}
+
+/** Fold this cycle's staged lines into a project's ledger, summing per good. */
+function mergeStaged(
+  ledger: ReadonlyArray<FoundingStockLine>,
+  added: ReadonlyArray<FoundingStockLine>,
+): FoundingStockLine[] {
+  const merged: FoundingStockLine[] = ledger.map((l) => ({ ...l }));
+  for (const line of added) {
+    const existing = merged.find((l) => l.goodId === line.goodId);
+    if (existing) existing.quantity += line.quantity;
+    else merged.push({ ...line });
+  }
+  return merged;
+}
+
 /** Build the engine's per-system build state: capacity + per-good market state (shared derivation). */
 function toBuildState(row: SystemBuildRow): BuildSystemState {
   return {
@@ -236,6 +343,8 @@ export async function runDirectedBuildProcessor(
   // founded from one system draw from the same shrinking pile rather than both reading its opening
   // stock — the same conservation `applyDevelopments` gives the seed population itself.
   const foundingStockBalance = new Map<string, number>();
+  // This cycle's materials debits at the founding sources — applied to the markets by the tick body.
+  const stagingDraws: FoundingStagingDraw[] = [];
   const nextOpen: WorldConstructionProject[] = [];
   const workPerformedByFaction = new Map<string, number>();
   // Money committed to founding this cycle, per faction — the treasury's settlement input. Directed
@@ -413,15 +522,82 @@ export async function runDirectedBuildProcessor(
       foundingDebitsByFaction.set(factionId, (foundingDebitsByFaction.get(factionId) ?? 0) + charterDebits);
     }
 
+    // ── Materials phase: what each paid colony can stage this cycle, and the work that buys ──
+    // Materials gate work, not the other way round. Plans are drawn in queue order against the same
+    // working balance the charters just spent from, so two colonies can never commit one faction's
+    // money twice; a plan reserves what it might spend and the unspent remainder simply goes unused
+    // this cycle. Founding is only staged where it is PRICED: a faction with no purse (the build-only
+    // engine path, independents) founds exactly as it did before, with no charter and no materials.
+    const priced = purse !== undefined && charterParams !== undefined && factionId !== null;
+    const stagingPlans = new Map<string, { lines: FoundingStockLine[]; cost: number; plannedWork: number }>();
+    const materialsCeiling = new Map<string, number>();
+    if (priced) {
+      for (const p of charged) {
+        if (p.kind !== "colony_establish" || !p.charterPaid) continue;
+        // A written-off project has stopped wanting its remainder: it runs on work alone from here,
+        // stages nothing more, and so keeps its counter latched above the threshold by construction.
+        if (p.stalledCycles >= COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES) continue;
+        // A source that is gone can never supply the rest of the manifest — the whole remaining want
+        // is unachievable, so the project finishes on work alone with what is already in its ledger.
+        const source = rowBySystem.get(p.sourceSystemId);
+        if (source === undefined) continue;
+        const plannedWork = Math.min(cap, Math.max(0, p.workTotal - p.workDone));
+        const workShare = p.workTotal > 0 ? plannedWork / p.workTotal : 0;
+        const draw = planStagingDraw(
+          source, p, workShare, foundingStockBalance, workingBalance, charterParams.economyScale,
+        );
+        workingBalance = safeMoney(workingBalance - draw.cost);
+        stagingPlans.set(p.id, { lines: draw.lines, cost: draw.cost, plannedWork });
+        materialsCeiling.set(p.id, cap * draw.achievableFraction);
+      }
+    }
+    // The seam through which what the queue cannot know — whether a colony's materials can be bought
+    // this cycle — lowers one project's ceiling. Builds and unpriced foundings read the scalar cap.
+    const capFor = (p: WorldConstructionProject): number => {
+      if (!priced || p.kind !== "colony_establish") return cap;
+      if (!p.charterPaid) return 0; // absorbs no work until the charter is bought
+      return materialsCeiling.get(p.id) ?? cap;
+    };
+
     // Fund front-first (in-flight work finishes before new commitments, then fresh player orders,
     // then this cycle's new autonomic proposals), with the development-scaled colony floor reserved
     // ahead of the ROI order; land completed levels.
+    const workBefore = new Map(charged.map((p) => [p.id, p.workDone]));
     const { projects: fundedOpen, landed, absorbed } = fundQueueWithFloor(
       charged, pool, cap, reserved,
       (p) => p.kind === "build" && (floorBySystem.get(p.systemId) ?? 0) > 0,
+      capFor,
     );
     if (factionId !== null && absorbed > 0) workPerformedByFaction.set(factionId, absorbed);
-    for (const p of fundedOpen) {
+
+    /**
+     * Stage the manifest share matching the work a colony actually absorbed — recovered by diffing
+     * `workDone`, so nothing is staged for work the pool did not fund. The staged goods leave the
+     * source's markets and are paid for as they go; a cycle that stages nothing advances the stall
+     * counter toward the write-off, and any staging resets it.
+     */
+    const stageOnto = (p: WorldConstructionProject): WorldConstructionProject => {
+      if (!priced || p.kind !== "colony_establish" || !p.charterPaid) return p;
+      const plan = stagingPlans.get(p.id);
+      const absorbedWork = p.workDone - (workBefore.get(p.id) ?? p.workDone);
+      const share =
+        plan !== undefined && plan.plannedWork > 0 ? clamp(absorbedWork / plan.plannedWork, 0, 1) : 0;
+      const staged = (plan?.lines ?? [])
+        .map((l) => ({ goodId: l.goodId, quantity: l.quantity * share }))
+        .filter((l) => l.quantity > 0);
+      if (staged.length === 0) return { ...p, stalledCycles: p.stalledCycles + 1 };
+      for (const line of staged) {
+        stagingDraws.push({ sourceSystemId: p.sourceSystemId, goodId: line.goodId, quantity: line.quantity });
+      }
+      const spent = (plan?.cost ?? 0) * share;
+      if (spent > 0 && factionId !== null) {
+        foundingDebitsByFaction.set(factionId, (foundingDebitsByFaction.get(factionId) ?? 0) + spent);
+      }
+      return { ...p, stagedManifest: mergeStaged(p.stagedManifest, staged), stalledCycles: 0 };
+    };
+
+    for (const funded of fundedOpen) {
+      const p = stageOnto(funded);
       // Persist-if-funded applies to AUTONOMIC colonies and centres only — they are re-emitted and
       // re-priced next cycle, so a workless row is dropped to keep the queue live. A player order is
       // a standing commitment with no re-emitter: it always persists until funded or cancelled. A
@@ -433,7 +609,8 @@ export async function runDirectedBuildProcessor(
       }
       nextOpen.push(p);
     }
-    for (const l of landed) {
+    for (const completed of landed) {
+      const l = stageOnto(completed);
       if (l.kind === "build") {
         const byType = landedBySystem.get(l.systemId) ?? new Map<string, number>();
         byType.set(l.buildingType, (byType.get(l.buildingType) ?? 0) + l.levels);
@@ -449,6 +626,10 @@ export async function runDirectedBuildProcessor(
       }
     }
   }
+
+  // Debit this cycle's staged materials at their sources — the goods are now in-transit inventory in
+  // the projects' ledgers, in no market row until their colony opens.
+  if (stagingDraws.length > 0) await world.applyFoundingStagingDraws(stagingDraws);
 
   // Apply completed colony establishments (develop + conserved seed + bundled housing).
   if (developments.length > 0) await world.applyDevelopments(developments);

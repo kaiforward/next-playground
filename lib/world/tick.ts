@@ -107,6 +107,7 @@ import type {
   BuildBuildingUpdate,
   SystemClaim,
   SystemDevelopment,
+  FoundingStagingDraw,
 } from "@/lib/tick/world/directed-build-world";
 
 import type {
@@ -569,6 +570,44 @@ export function applyFoundingStock(markets: WorldMarket[], developments: SystemD
     const change = delta.get(`${m.systemId}|${m.goodId}`);
     if (change === undefined || change === 0) return m;
     return { ...m, stock: Math.max(0, m.stock + change) };
+  });
+}
+
+/**
+ * Debit this cycle's colony staging draws from their founding sources' market rows.
+ *
+ * A debit with no matching credit: materials leave the founder the cycle they are paid for and sit in
+ * the establish project's ledger — in-transit inventory, in no market row at either end — until the
+ * colony opens and receives them. The founder is therefore drawn down over the life of an establish
+ * instead of in one raid at completion.
+ *
+ * Every line is clamped to what its source still holds across the pass, so a draw can never take
+ * stock that is not there whatever the caller's caps said — conservation is this function's own
+ * property, mirroring `applyFoundingStock`. Non-finite or non-positive lines are skipped rather than
+ * trusted: stock is world state, and `JSON.stringify` turns a NaN into null.
+ */
+export function applyFoundingStagingDraws(
+  markets: WorldMarket[],
+  draws: FoundingStagingDraw[],
+): WorldMarket[] {
+  if (draws.length === 0) return markets;
+  const available = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.stock]));
+  const delta = new Map<string, number>();
+  for (const draw of draws) {
+    if (!Number.isFinite(draw.quantity) || draw.quantity <= 0) continue;
+    const key = `${draw.sourceSystemId}|${draw.goodId}`;
+    const moved = Math.min(draw.quantity, available.get(key) ?? 0);
+    if (!(moved > 0)) continue;
+    available.set(key, (available.get(key) ?? 0) - moved);
+    delta.set(key, (delta.get(key) ?? 0) - moved);
+  }
+  if (delta.size === 0) return markets;
+  // No `Math.max(0, …)` floor on the write, deliberately: the clamp above already bounds every debit
+  // by what its own row holds, so a floor here could only ever hide a draw that had escaped it.
+  return markets.map((m) => {
+    const change = delta.get(`${m.systemId}|${m.goodId}`);
+    if (change === undefined || change === 0) return m;
+    return { ...m, stock: m.stock + change };
   });
 }
 
@@ -1120,6 +1159,9 @@ export async function runWorldTick(
       // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —
       // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
       markets = applyBuildMarketUpdates(markets, dbWorld.proposalCycleUpdates);
+      // This cycle's staged materials leave their founders before anything else touches the markets:
+      // they are paid for and out of the world's markets from the moment they are drawn.
+      markets = applyFoundingStagingDraws(markets, dbWorld.foundingStagingDraws);
       // Each new colony gets its (empty) market rows, then its founder's endowment moves in — the
       // first goods the system has ever held. Order matters: the endowment lands on these rows.
       markets = addMarketsForSettledSystems(markets, systems, dbWorld.developments);

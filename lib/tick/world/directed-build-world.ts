@@ -58,6 +58,21 @@ export interface ProposalPersistenceUpdate {
 /** Processor-facing name for a founding-manifest line — one shape across the world boundary. */
 export type FoundingStockLine = WorldFoundingStockLine;
 
+/**
+ * One per-cycle materials debit: a quantity of one good drawn from a founding source's market row
+ * into an in-flight colony's ledger, and paid for as it is drawn.
+ *
+ * A debit with no matching credit anywhere in the world — between the draw and the colony's opening
+ * the goods are in-transit inventory, held in the project's `stagedManifest` and in no market row at
+ * either end.
+ */
+export interface FoundingStagingDraw {
+  /** The founding system the goods leave. */
+  sourceSystemId: string;
+  goodId: string;
+  quantity: number;
+}
+
 /** One development: a controlled system flips to developed and receives a conserved colony seed + bundled housing. */
 export interface SystemDevelopment {
   systemId: string;
@@ -93,4 +108,6 @@ export interface DirectedBuildWorld {
   applyClaims(claims: SystemClaim[]): Promise<void>;
   /** Ownership writes from the develop step (controlled → developed + colony seed transfer). */
   applyDevelopments(developments: SystemDevelopment[]): Promise<void>;
+  /** This cycle's materials debits at the founding sources (goods leave for a colony's ledger). */
+  applyFoundingStagingDraws(draws: FoundingStagingDraw[]): Promise<void>;
 }

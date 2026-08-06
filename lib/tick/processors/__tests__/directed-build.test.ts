@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build";
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
-import type { SystemBuildRow } from "@/lib/tick/world/directed-build-world";
+import type { SystemBuildRow, FoundingStagingDraw } from "@/lib/tick/world/directed-build-world";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
-import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
+import type { SystemControl, WorldColonyEstablishProject, WorldConstructionProject } from "@/lib/world/types";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { ClaimCandidate, ExpansionParams } from "@/lib/engine/expansion";
@@ -16,6 +16,7 @@ import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
+import { foundingGoodsValue } from "@/lib/engine/founding-cost";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 
 const reachable: RouteCost = () => 1;
@@ -1215,5 +1216,112 @@ describe("runDirectedBuildProcessor: colony founding stock", () => {
     expect(draws[1]).toBeGreaterThan(0);
     expect(draws[1]).toBeLessThan(draws[0]);               // …the second gets only what is left…
     expect(draws[0] + draws[1]).toBeCloseTo(drawable, 6);  // …and the pile is spent exactly once
+  });
+});
+
+// ── per-cycle materials staging ──────────────────────────────────
+// The manifest is drawn in slices as the establish is built, paid for as it is drawn, and the work a
+// colony may absorb in a cycle is capped by the share of that slice it can actually stage.
+
+describe("runDirectedBuildProcessor: staged founding materials", () => {
+  const FEE = 100;
+  // charterMult 0 + charterMin 100 ⇒ every charter is exactly 100, so the money figures below are
+  // stated rather than recomputed through the pricing functions under test.
+  const STAGING_PARAMS: ColonyEstablishParams = { ...COLONY_PARAMS, charterMult: 0, charterMin: FEE };
+  const STAGE_CAP = 4;
+  const STAGE_WORK = 20;                          // 5 cycles at the cap — a whole establish in a short loop
+  const STAGE_CYCLES = STAGE_WORK / STAGE_CAP;
+
+  /** One committed, unpaid establish — seeded directly so the planner's own gate is out of the way. */
+  function stagingProject(): WorldConstructionProject {
+    return {
+      kind: "colony_establish", id: "col", origin: "auto", factionId: "f1",
+      systemId: "c1", sourceSystemId: "home", seedPop: EXPANSION.COLONY_SEED_POP,
+      housingLevels: 1, workTotal: STAGE_WORK, workDone: 0,
+      stagedManifest: [], charterPaid: false, stalledCycles: 0,
+    };
+  }
+
+  /**
+   * Run that establish cycle by cycle until its colony develops (or `maxCycles` is spent), carrying
+   * the open queue, the founding money committed so far and every staging draw forward. Nothing ever
+   * settles during the run, so what has been committed stays pending against the same balance.
+   */
+  async function runEstablish(home: SystemBuildRow, balance: number, maxCycles = 40) {
+    let projects: WorldConstructionProject[] = [stagingProject()];
+    let committed = 0;
+    let developed = false;
+    const draws: FoundingStagingDraw[] = [];
+    const workDoneByCycle: number[] = [];
+    const ledgerByCycle: number[] = [];
+    let cycles = 0;
+    for (; cycles < maxCycles && !developed; cycles++) {
+      const w = new MemoryDirectedBuildWorld([home], projects);
+      const r = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+        interval: INTERVAL, routeCost: reachable, construction: mkConstruction(STAGE_CAP),
+        develop: { candidateProvider: () => [], params: STAGING_PARAMS },
+        treasuryByFaction: new Map([["f1", { balance, pendingFounding: committed, maintenanceBill: 0 }]]),
+      });
+      committed += r.foundingDebitsByFaction?.get("f1") ?? 0;
+      draws.push(...w.foundingStagingDraws);
+      projects = w.constructionProjects;
+      const colony = projects.filter(
+        (p): p is WorldColonyEstablishProject => p.kind === "colony_establish",
+      )[0];
+      workDoneByCycle.push(colony?.workDone ?? STAGE_WORK); // gone from the queue ⇒ it completed
+      ledgerByCycle.push(colony?.stagedManifest.length ?? 0);
+      developed = w.developments.some((d) => d.systemId === "c1");
+    }
+    return { developed, cycles, committed, draws, workDoneByCycle, ledgerByCycle };
+  }
+
+  it("completes a founding whose source can spare nothing, and opens with an empty ledger", async () => {
+    // A source holding nothing can never supply the manifest, at any point of the establish. What it
+    // cannot spare counts as satisfied, so the project runs at full cap on work alone; without that
+    // rule the materials ceiling would sit at 0 for ever and this colony would never open.
+    const run = await runEstablish(stockedHome({ food: 0, water: 0 }), 100_000);
+
+    expect(run.developed).toBe(true);
+    expect(run.cycles).toBe(STAGE_CYCLES);                    // full cap every cycle — nothing held it back
+    expect(run.draws).toEqual([]);                            // nothing drawn…
+    expect(run.ledgerByCycle.every((n) => n === 0)).toBe(true); // …and nothing conjured into the ledger
+    expect(run.committed).toBe(FEE);                          // the charter is all it ever cost
+  });
+
+  it("stages over the whole establish, past what a single completion draw could take", async () => {
+    // A food exporter parked so its spare is exactly half the colony's want: one raid at completion
+    // could only ever take that half, while a per-cycle slice of the want fits inside it every cycle.
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
+    const exportRate = homeDemand * 2;
+    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + foundingWant("food") / 2;
+    const singleDraw = surplusDrawable(
+      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand, homeDemand, exportRate, false,
+    );
+    expect(singleDraw).toBeCloseTo(foundingWant("food") / 2, 6); // the setup really is half a want
+
+    const run = await runEstablish(stockedHome({ food: stock }, { food: exportRate }), 1_000_000);
+
+    expect(run.developed).toBe(true);
+    expect(run.draws).toHaveLength(STAGE_CYCLES);              // one draw per funded cycle, landing cycle included
+    const staged = run.draws.reduce((sum, d) => sum + d.quantity, 0);
+    expect(staged).toBeGreaterThan(singleDraw);                // the spread total beats the single raid…
+    expect(staged).toBeCloseTo(foundingWant("food"), 6);       // …reaching the whole want
+    expect(run.committed).toBeCloseTo(FEE + foundingGoodsValue([{ goodId: "food", quantity: staged }], 1), 6);
+  });
+
+  it("completes on work alone after FOUNDING_STALL_COMPLETE_CYCLES cycles staging nothing", async () => {
+    // One charter's worth of money and a source with plenty to sell: the charter empties the purse, so
+    // every staging draw is unaffordable and the ceiling holds the project at zero work — until the
+    // write-off drops the remaining want and it finishes on construction alone.
+    const run = await runEstablish(stockedHome({ food: 5_000, water: 5_000 }), FEE);
+
+    expect(run.committed).toBe(FEE);                          // only the charter was ever paid…
+    expect(run.draws).toEqual([]);                            // …so no materials moved
+    const stalled = run.workDoneByCycle.slice(0, COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES);
+    expect(stalled.every((w) => w === 0)).toBe(true);          // it really stalled, rather than merely crawling
+    // The cycle after the write-off, work resumes at the ordinary cap.
+    expect(run.workDoneByCycle[COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES]).toBe(STAGE_CAP);
+    expect(run.developed).toBe(true);
+    expect(run.cycles).toBe(COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES + STAGE_CYCLES);
   });
 });

@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { applyDevelopments, applyBuildingIncreases, applyFoundingStock } from "@/lib/world/tick";
+import {
+  applyDevelopments,
+  applyBuildingIncreases,
+  applyFoundingStock,
+  applyFoundingStagingDraws,
+} from "@/lib/world/tick";
 import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
@@ -251,5 +256,45 @@ describe("applyFoundingStock", () => {
     expect(stockAt(after, "source", "food")).toBe(0); // emptied, never negative
     expect(stockAt(after, "colony", "food")).toBe(10); // credited what was debited, not the manifest
     expect(totalStock(after, "food")).toBe(totalStock(markets, "food"));
+  });
+});
+
+describe("applyFoundingStagingDraws", () => {
+  it("debits each source and credits nothing — staged goods are in transit", () => {
+    const markets = [
+      market("source", "food", 100), market("colony", "food", 0), market("other", "food", 40),
+    ];
+    const after = applyFoundingStagingDraws(markets, [
+      { sourceSystemId: "source", goodId: "food", quantity: 12 },
+      { sourceSystemId: "other", goodId: "food", quantity: 5 },
+    ]);
+    expect(stockAt(after, "source", "food")).toBe(88);
+    expect(stockAt(after, "other", "food")).toBe(35);
+    // The colony gets nothing until it opens: the draw leaves the world's markets entirely.
+    expect(stockAt(after, "colony", "food")).toBe(0);
+    expect(totalStock(after, "food")).toBe(totalStock(markets, "food") - 17);
+  });
+
+  it("takes only what the source still holds across the whole pass", () => {
+    // Two draws on one source in one cycle: the second sees what the first left, so the pair can
+    // never take more than the row held however the caller sized them.
+    const markets = [market("source", "food", 10)];
+    const after = applyFoundingStagingDraws(markets, [
+      { sourceSystemId: "source", goodId: "food", quantity: 8 },
+      { sourceSystemId: "source", goodId: "food", quantity: 8 },
+    ]);
+    expect(stockAt(after, "source", "food")).toBe(0); // emptied, never negative
+  });
+
+  it("skips non-finite, non-positive and unknown-row draws rather than writing them", () => {
+    const markets = [market("source", "food", 100)];
+    const after = applyFoundingStagingDraws(markets, [
+      { sourceSystemId: "source", goodId: "food", quantity: Number.NaN },
+      { sourceSystemId: "source", goodId: "food", quantity: Number.POSITIVE_INFINITY },
+      { sourceSystemId: "source", goodId: "food", quantity: -5 },
+      { sourceSystemId: "gone", goodId: "food", quantity: 5 },
+    ]);
+    expect(after).toBe(markets); // no delta at all — the same array, not a rebuilt copy
+    for (const m of after) expect(Number.isFinite(m.stock)).toBe(true);
   });
 });

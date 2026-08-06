@@ -4,6 +4,7 @@ import type {
   BuildBuildingUpdate,
   SystemClaim,
   SystemDevelopment,
+  FoundingStagingDraw,
   ProposalPersistenceUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -18,6 +19,8 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   readonly claims: SystemClaim[] = [];
   /** Developments resolved this run (developed tier + colony seed). */
   readonly developments: SystemDevelopment[] = [];
+  /** Materials drawn from founding sources this run (per-cycle colony staging). */
+  readonly foundingStagingDraws: FoundingStagingDraw[] = [];
   /** Proposal-pressure counters written this run, keyed by composite market id, clamped to a finite [0,2]. */
   readonly proposalCycleUpdates = new Map<string, number>();
   /** The live open-project set — updated in place by applyConstructionUpdates; read back by the tick body. */
@@ -90,5 +93,9 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
 
   async applyDevelopments(developments: SystemDevelopment[]): Promise<void> {
     this.developments.push(...developments);
+  }
+
+  async applyFoundingStagingDraws(draws: FoundingStagingDraw[]): Promise<void> {
+    this.foundingStagingDraws.push(...draws);
   }
 }
