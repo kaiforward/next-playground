@@ -22,19 +22,24 @@ export const COLONY_BLOCK_COPY: Record<ColonyBlockReason, string> = {
   insufficient_funds: "The treasury cannot cover the charter and the materials it will owe.",
 };
 
-/** What a committed founding is waiting on, in the order the causes bind. */
+/**
+ * What a committed founding is waiting on, in the order the causes bind. The first two hold the
+ * project's work at a standstill; `awaiting_materials` does not — it keeps building and opens with
+ * a thinner endowment — so it reads as information about the manifest, not as a stall.
+ */
 export type ColonyStallReason = "awaiting_charter" | "awaiting_funds" | "awaiting_materials";
 
-/** Short badge copy for a stalled founding — what is missing, in the player's terms. */
+/** Short badge copy for a waiting founding — what is missing, in the player's terms. */
 export const COLONY_STALL_COPY: Record<ColonyStallReason, string> = {
   awaiting_charter: "awaiting charter",
   awaiting_funds: "awaiting funds",
-  awaiting_materials: "awaiting materials",
+  awaiting_materials: "short on stores",
 };
 
-/** The line under a stalled founding: what is missing, and what would clear it. */
+/** The line under a waiting founding: what is missing, and what it costs the colony. */
 export const COLONY_STALL_DETAIL: Record<ColonyStallReason, string> = {
   awaiting_charter: "The charter is unpaid — no work is absorbed until the treasury can cover it.",
   awaiting_funds: "The treasury cannot pay for the next materials, so none are being staged.",
-  awaiting_materials: "The source has nothing to spare for the manifest right now.",
+  awaiting_materials:
+    "The source has nothing to spare for the manifest — building continues, and the colony opens with less.",
 };

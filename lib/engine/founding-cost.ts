@@ -146,37 +146,55 @@ function quantityByGood(lines: ReadonlyArray<FoundingStockLine>): Map<string, nu
   return totals;
 }
 
+/** The next cycle's staging share, in money: what it asks for, and what is actually there to buy. */
+export interface NextStagingShare {
+  /** Value of the share the colony wants this cycle, before the source's shelves are consulted. */
+  wantValue: number;
+  /** Value of the part of that share the source can spare — the money the founder must find. */
+  drawableValue: number;
+}
+
 /**
- * What the next cycle of staging would cost a founder, in money: this cycle's share of the manifest,
- * per good bounded by what is still wanted and by what the source can spare, valued through the seam.
+ * What the next cycle of staging would ask of a founder, and what it could actually draw: this
+ * cycle's share of the manifest, per good bounded by what is still wanted and then by what the
+ * source can spare, both valued through the seam.
  *
  * The processor's own plan is the same expression with the working balance clamped in good by good.
- * Leaving the money out is exactly what makes this readable as a question — can the balance pay for
- * what is drawable? — which is what separates a colony waiting on money from one waiting on goods a
- * founder does not have. `workShare` is the fraction of the whole establish the cycle's absorption
- * cap would build, the same slice the staging draw sizes itself on.
+ * Leaving the money out is exactly what makes the pair readable as two questions — is there anything
+ * on the shelves (`drawableValue` against `wantValue`), and can the balance pay for it — which is
+ * what separates a colony waiting on money from one waiting on goods a founder does not have.
+ * `workShare` is the fraction of the whole establish the cycle's absorption cap would build, the
+ * same slice the staging draw sizes itself on.
  */
-export function nextStagingShareCost(
+export function nextStagingShare(
   supply: ReadonlyArray<FoundingSourceSupply>,
   stagedManifest: ReadonlyArray<FoundingStockLine>,
   seedPop: number,
   workShare: number,
   cover: number,
   economyScale: number,
-): number {
-  if (!(workShare > 0)) return 0;
+): NextStagingShare {
+  if (!(workShare > 0)) return { wantValue: 0, drawableValue: 0 };
   const staged = quantityByGood(stagedManifest);
   const sparable = new Map(supply.map((s) => [s.goodId, s.sparable]));
-  const share = projectedManifestWant(supply, seedPop, cover).map((want) => {
-    const remaining = Math.max(0, want.quantity - (staged.get(want.goodId) ?? 0));
-    const target = Math.min(remaining, workShare * want.quantity);
-    const headroom = sparable.get(want.goodId) ?? 0;
+  const wanted = projectedManifestWant(supply, seedPop, cover).map((want) => ({
+    goodId: want.goodId,
+    quantity: Math.min(
+      Math.max(0, want.quantity - (staged.get(want.goodId) ?? 0)),
+      workShare * want.quantity,
+    ),
+  }));
+  const drawable = wanted.map((line) => {
+    const headroom = sparable.get(line.goodId) ?? 0;
     return {
-      goodId: want.goodId,
-      quantity: Math.min(target, Number.isFinite(headroom) ? Math.max(0, headroom) : 0),
+      goodId: line.goodId,
+      quantity: Math.min(line.quantity, Number.isFinite(headroom) ? Math.max(0, headroom) : 0),
     };
   });
-  return foundingGoodsValue(share, economyScale);
+  return {
+    wantValue: foundingGoodsValue(wanted, economyScale),
+    drawableValue: foundingGoodsValue(drawable, economyScale),
+  };
 }
 
 /**

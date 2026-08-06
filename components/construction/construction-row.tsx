@@ -53,8 +53,12 @@ export function ConstructionRow({
           )}
         </span>
         {row.origin === "player" && <Badge color="amber">ORDERED</Badge>}
+        {/* Amber only where the wait actually halts the work (which `stalled` already reads off the
+            suppressed ETA); a founding merely short on stores keeps building, so it stays neutral. */}
         {row.kind === "colony_establish" && row.stalledReason !== null && (
-          <Badge color="amber">{COLONY_STALL_COPY[row.stalledReason].toUpperCase()}</Badge>
+          <Badge color={stalled ? "amber" : "slate"}>
+            {COLONY_STALL_COPY[row.stalledReason].toUpperCase()}
+          </Badge>
         )}
         <span
           className={`ml-auto font-mono text-[11px] ${stalled ? "text-status-amber-light" : "text-text-secondary"}`}
@@ -100,7 +104,7 @@ export function ConstructionRow({
 
       {row.kind === "colony_establish" && (
         <p
-          className={`mb-1.5 text-[11px] ${row.stalledReason !== null ? "text-status-amber-light" : "text-text-tertiary"}`}
+          className={`mb-1.5 text-[11px] ${stalled ? "text-status-amber-light" : "text-text-tertiary"}`}
         >
           {row.stalledReason !== null
             ? COLONY_STALL_DETAIL[row.stalledReason]

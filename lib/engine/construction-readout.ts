@@ -11,7 +11,7 @@ import {
   factionConstructionPool, forecastEtaCycles, fundQueue, type ConstructionPoolRates,
 } from "@/lib/engine/construction";
 import {
-  foundingStagedFraction, nextStagingShareCost, type FoundingSourceSupply,
+  foundingStagedFraction, nextStagingShare, type FoundingSourceSupply,
 } from "@/lib/engine/founding-cost";
 import type { ColonyStallReason } from "@/lib/types/colonisation";
 import { GOODS } from "@/lib/constants/goods";
@@ -63,8 +63,10 @@ export interface ConstructionProjectColonyRow extends ConstructionRowBase {
   sourceSystemName: string;
   seedPop: number;
   housingLevels: number;
-  /** What is holding this founding up, or null when nothing is. Derived at read time — the world
-   *  stores how long a project has been stalled, never why. */
+  /** What this founding is waiting on right now, or null when nothing is. Derived at read time —
+   *  the world stores how long a project has been stalled, never why. `awaiting_materials` is
+   *  informational: such a project still builds at its normal rate and simply opens with a thinner
+   *  endowment, so it is the one reason that leaves `etaCycles` and `nextCycleGain` standing. */
   stalledReason: ColonyStallReason | null;
   /** Share of the seed's manifest already staged and paid for, in [0,1] (value-weighted). */
   stagedFraction: number;
@@ -160,18 +162,25 @@ export function nextCycleGains(
 }
 
 /**
- * Why a founding is making no progress, or null when nothing is holding it back.
+ * What a founding is waiting on right now, or null when nothing is.
  *
- * An unpaid charter binds first and absorbs no work at all. Past that the stall counter is the
- * world's own record that a cycle bought nothing, and what the working balance could have covered
- * separates a founder with no money from one whose source has nothing to spare. A colony merely
- * queued behind higher-ROI builds is NOT stalled — the counter deliberately ignores a cycle the
- * construction pool never reached — so such a row reads null with a finite, possibly distant, ETA.
+ * An unpaid charter binds first and absorbs no work at all. Past that, `stalledCycles` is only ever
+ * the world's record that some PAST cycle bought nothing — it resets on a staging draw and nothing
+ * else clears it, so a colony that went broke three cycles ago, was refunded, and now merely sits
+ * behind higher-ROI builds carries a positive counter for ever (the pool-starvation guard refuses to
+ * advance it, but no one retires it). The counter therefore only opens the question; the answer is
+ * two LIVE tests against this cycle's share — can the balance pay for what is drawable, and is
+ * anything drawable at all. A row that passes both is not waiting on anything, whatever its counter
+ * says, and reads null with a finite (possibly distant) ETA.
  *
  * A counter at the write-off threshold is not a stall either, and reads as the opposite of one: the
  * project has given up the rest of its manifest, so nothing gates its work any more and it runs to
  * completion on construction points alone. Its counter stays latched there by construction, so
  * without this it would report a permanent stall for the rest of a build that is actually moving.
+ *
+ * The two live tests take the optimistic view the processor does not: each colony sees the whole of
+ * its source's headroom and the whole working balance, where the tick draws them down in queue order
+ * across every colony founding that cycle. It decides a displayed reason, never a debit.
  */
 function colonyStallReason(
   p: WorldColonyEstablishProject,
@@ -182,11 +191,13 @@ function colonyStallReason(
   if (p.stalledCycles <= 0 || p.stalledCycles >= founding.writeOffCycles) return null;
   const plannedWork = Math.min(cap, Math.max(0, p.workTotal - p.workDone));
   const workShare = p.workTotal > 0 ? plannedWork / p.workTotal : 0;
-  const shareCost = nextStagingShareCost(
+  const share = nextStagingShare(
     founding.supplyBySource.get(p.sourceSystemId) ?? [],
     p.stagedManifest, p.seedPop, workShare, founding.cover, founding.economyScale,
   );
-  return shareCost > founding.workingBalance ? "awaiting_funds" : "awaiting_materials";
+  if (share.drawableValue > founding.workingBalance) return "awaiting_funds";
+  if (share.wantValue > 0 && share.drawableValue <= 0) return "awaiting_materials";
+  return null;
 }
 
 /**
@@ -227,13 +238,16 @@ export function computeFactionConstruction(
     if (p.kind === "colony_establish") {
       const stalledReason = colonyStallReason(p, founding, cap);
       const supply = founding.supplyBySource.get(p.sourceSystemId) ?? [];
+      // Only money gates WORK. An unpaid charter absorbs nothing, and a share the balance cannot
+      // buy holds the materials ceiling at zero — for both, the pool-derived ETA and rate would
+      // promise progress the project cannot make. A source with nothing to spare does not: the
+      // achievable-want rule counts what a founder cannot spare as satisfied, so the ceiling stays
+      // at the full cap and the colony builds at its normal rate, to open with a thinner endowment.
+      const gatesWork = stalledReason === "awaiting_charter" || stalledReason === "awaiting_funds";
       const row: ConstructionProjectColonyRow = {
         ...base,
-        // A priced stall is a stall: the work forecast reads the pool, which knows nothing about a
-        // project that will absorb no points until its money or its materials arrive. Both the ETA
-        // and the next-cycle rate are pool figures, and both would read as steady progress.
-        etaCycles: stalledReason === null ? base.etaCycles : null,
-        nextCycleGain: stalledReason === null ? base.nextCycleGain : 0,
+        etaCycles: gatesWork ? null : base.etaCycles,
+        nextCycleGain: gatesWork ? 0 : base.nextCycleGain,
         kind: "colony_establish",
         sourceSystemId: p.sourceSystemId,
         sourceSystemName: nameById.get(p.sourceSystemId) ?? p.sourceSystemId,

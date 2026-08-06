@@ -307,13 +307,32 @@ describe("computeFactionConstruction — why a founding is stuck", () => {
     expect(row.etaCycles).toBeNull();
   });
 
-  it("reads a stall at a source with nothing to spare as awaiting_materials, however rich the faction", () => {
+  it("reports awaiting_materials without calling it a stall — such a colony builds at full rate", () => {
+    // The achievable-want rule counts what a founder cannot spare as satisfied, so the materials
+    // ceiling stays at the full cap: the project keeps absorbing its whole pool share and opens with
+    // a thinner endowment. Nulling its ETA would brand the fastest-moving state as stopped.
     const row = readColony(
       colony({ stalledCycles: 3 }),
       founded({ workingBalance: 10_000_000, supplyBySource: fromSource(supply(0)) }),
     );
     expect(row.stalledReason).toBe("awaiting_materials");
-    expect(row.etaCycles).toBeNull();
+    expect(row.etaCycles).not.toBeNull();
+    expect(row.etaCycles).toBeGreaterThan(0);
+    expect(row.nextCycleGain).toBeGreaterThan(0);
+  });
+
+  it("retires a stale counter: refunded and merely queue-parked reads as waiting on nothing", () => {
+    // `stalledCycles` resets only on a staging draw, and the pool-starvation guard refuses to
+    // advance it — so a colony that went broke three cycles ago, was refunded, and now just sits
+    // behind higher-ROI builds carries its counter for ever. The counter opens the question; the
+    // live tests answer it, and here both pass.
+    const row = readColony(
+      colony({ stalledCycles: 3 }),
+      founded({ workingBalance: 10_000_000, supplyBySource: fromSource(supply(1000)) }),
+    );
+    expect(row.stalledReason).toBeNull();
+    expect(row.etaCycles).not.toBeNull();
+    expect(row.nextCycleGain).toBeGreaterThan(0);
   });
 
   it("does not call a colony merely out-competed for the pool stalled", () => {

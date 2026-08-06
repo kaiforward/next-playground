@@ -133,29 +133,33 @@ describe("getSystemConstruction", () => {
     const stalled = world.constructionProjects.map((p) =>
       p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
     );
-    // A founder with shelves to spare, so "no money" and "no goods" are genuinely distinguishable.
-    const markets = world.markets.map((m) =>
-      m.systemId === dev.id ? { ...m, stock: 100_000 } : m,
-    );
+    const sourceStock = (stock: number) =>
+      world.markets.map((m) => (m.systemId === dev.id ? { ...m, stock } : m));
     const purse = (balance: number) =>
       world.treasuries.map((t) =>
         t.factionId === factionId ? { ...t, balance, pendingFounding: 0 } : t,
       );
+    const colonyRow = (systemId: string) => {
+      const data = getSystemConstruction(systemId);
+      if (data.visibility !== "visible") throw new Error("expected visible");
+      const row = data.projects[0];
+      if (row.kind !== "colony_establish") throw new Error("expected a colony row");
+      return row;
+    };
 
-    setWorld({ ...world, constructionProjects: stalled, markets, treasuries: purse(0) });
-    const broke = getSystemConstruction(ctrlWithColony.id);
-    if (broke.visibility !== "visible") throw new Error("expected visible");
-    const brokeRow = broke.projects[0];
-    if (brokeRow.kind !== "colony_establish") throw new Error("expected a colony row");
-    expect(brokeRow.stalledReason).toBe("awaiting_funds");
-    expect(brokeRow.etaCycles).toBeNull();
+    // Full shelves, empty purse: the goods are there and the faction cannot buy them.
+    setWorld({
+      ...world, constructionProjects: stalled, markets: sourceStock(100_000), treasuries: purse(0),
+    });
+    const broke = colonyRow(ctrlWithColony.id);
+    expect(broke.stalledReason).toBe("awaiting_funds");
+    expect(broke.etaCycles).toBeNull();
 
-    setWorld({ ...world, constructionProjects: stalled, markets, treasuries: purse(10_000_000) });
-    const rich = getSystemConstruction(ctrlWithColony.id);
-    if (rich.visibility !== "visible") throw new Error("expected visible");
-    const richRow = rich.projects[0];
-    if (richRow.kind !== "colony_establish") throw new Error("expected a colony row");
-    expect(richRow.stalledReason).toBe("awaiting_materials");
+    // Bare shelves, full purse: money buys nothing that is not there.
+    setWorld({
+      ...world, constructionProjects: stalled, markets: sourceStock(0), treasuries: purse(10_000_000),
+    });
+    expect(colonyRow(ctrlWithColony.id).stalledReason).toBe("awaiting_materials");
   });
 
   it("throws ServiceError(404) naming the id for an unknown system", () => {
