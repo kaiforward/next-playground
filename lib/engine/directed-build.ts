@@ -1146,13 +1146,17 @@ export function planFactionColonyProposals(
   // Settler-supply founding gate: a faction only opens new colonies while it can still deliver its
   // minimum settler supply to each colony it is ALREADY trying to fill (+ each new one). Releasable
   // settler flow this cycle = idle spare labour + the always-on employed leak, summed over developed
-  // systems; "hungry" absorbers are developed systems still below their housing cap. Founding is
-  // capped to `floor(releasable / minSettlerSupply) − hungry` best-valued candidates, so a faction
-  // fills what it has before it sprawls into colonies it can never populate. `minSettlerSupply ≤ 0`
-  // disables the gate.
+  // systems; "hungry" absorbers are developed systems still below their housing cap, PLUS every
+  // establish still in flight. Counting the in-flight ones is what makes the gate's strength
+  // independent of how long an establish takes: a forming colony is `controlled`, so it is invisible
+  // to the developed-systems loop, and a longer forming window would otherwise let a faction hold
+  // more and more concurrent foundings against the same settler supply. Founding is capped to
+  // `floor(releasable / minSettlerSupply) − hungry` best-valued candidates, so a faction fills what
+  // it has before it sprawls into colonies it can never populate. `minSettlerSupply ≤ 0` disables
+  // the gate.
   if (params.minSettlerSupply <= 0 || proposals.length === 0) return proposals;
   let releasable = 0;
-  let hungry = 0;
+  let hungry = openColonyProjects.length;
   for (const s of developed) {
     const ld = labourDemand(s.buildings);
     const staffed = Math.min(Math.max(0, s.population), Math.max(0, ld));

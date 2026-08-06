@@ -1713,6 +1713,29 @@ describe("planFactionColonyProposals: seed-pop opportunity cost", () => {
     expect(proposals).toHaveLength(0);
   });
 
+  it("holds total concurrent establish commitment invariant to how many are already forming", () => {
+    // The settler supply, the candidates and the developed set are identical across all three calls;
+    // the ONLY difference is how many establishes are already in flight — which is exactly what a
+    // longer establish produces. Forming colonies are `controlled`, so the developed-systems loop
+    // cannot see them, and each one is a mouth the faction has already promised settlers to.
+    // releasable 100 ÷ minSettlerSupply 20 ⇒ 5 settler slots for the whole faction.
+    const candidates = Array.from({ length: 10 }, (_, i) => candidate({ systemId: `c${i}`, habitableSpace: (i + 1) * 100 }));
+    const gated = { ...COLONY_PARAMS, minSettlerSupply: 20, employedLeakFraction: 0 };
+    // Targets none of the candidates, so the already-in-flight skip is not what is being measured.
+    const forming = (n: number): WorldColonyEstablishProject[] =>
+      Array.from({ length: n }, (_, i) => ({
+        kind: "colony_establish", id: `e${i}`, origin: "auto", factionId: "f1",
+        systemId: `forming${i}`, sourceSystemId: "core", seedPop: 2, housingLevels: 1,
+        workTotal: 68, workDone: 10, stagedManifest: [], charterPaid: true, stalledCycles: 0,
+      }));
+    const none = planFactionColonyProposals("f1", [supplyCore], candidates, [], gated);
+    const three = planFactionColonyProposals("f1", [supplyCore], candidates, forming(3), gated);
+    const five = planFactionColonyProposals("f1", [supplyCore], candidates, forming(5), gated);
+    expect(none).toHaveLength(5);
+    expect(three.length + 3).toBe(5);  // 2 new — the supply is shared with what is already forming
+    expect(five).toHaveLength(0);      // fully committed: nothing new until one of them lands
+  });
+
   it("does not gate when minSettlerSupply is 0 (disabled)", () => {
     const candidates = Array.from({ length: 8 }, (_, i) => candidate({ systemId: `c${i}`, habitableSpace: 100 }));
     expect(planFactionColonyProposals("f1", [supplyCore], candidates, [], COLONY_PARAMS)).toHaveLength(8);
