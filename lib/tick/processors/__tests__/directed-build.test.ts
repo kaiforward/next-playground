@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build";
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
-import type { SystemBuildRow, FoundingStagingDraw } from "@/lib/tick/world/directed-build-world";
+import type {
+  SystemBuildRow,
+  FoundingStagingDraw,
+  FoundingStockLine,
+} from "@/lib/tick/world/directed-build-world";
+import type { TickProcessorResult } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { SystemControl, WorldColonyEstablishProject, WorldConstructionProject } from "@/lib/world/types";
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
@@ -1090,7 +1095,7 @@ describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommit
 // ── founding stock endowment ─────────────────────────────────────
 // A colony used to open holding nothing, so it read as starving from its first cycle before any
 // logistics could reach it. It now arrives with a slice of its founder's warehouses, sized on its
-// OWN basket and capped by what the founder can spare.
+// OWN basket, capped by what the founder can spare, and staged over the whole establish.
 
 /** The seed population's own demand basis — no skilled work at a brand-new colony. */
 const SEED_BASIS: CivilianDemandBasis = {
@@ -1125,99 +1130,6 @@ function stockedHome(
     })),
   };
 }
-
-const developColony = (w: MemoryDirectedBuildWorld, candidates: ColonyEstablishCandidate[]) =>
-  runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
-    interval: INTERVAL, routeCost: reachable, construction: mkConstruction(1000, 1),
-    develop: { candidateProvider: (f) => (f === "f1" ? candidates : []), params: COLONY_PARAMS },
-  });
-
-describe("runDirectedBuildProcessor: colony founding stock", () => {
-  it("weights the manifest like the colony's own basket, not a flat share", async () => {
-    // Ample stock of each, so the COLONY's want is what binds rather than the founder's spare.
-    const w = new MemoryDirectedBuildWorld([stockedHome({ food: 5_000, water: 5_000, luxuries: 5_000 })]);
-    const result = await developColony(w, [colonyCand("c1")]);
-
-    const manifest = new Map(w.developments[0].stockManifest.map((l) => [l.goodId, l.quantity]));
-    for (const goodId of ["food", "water", "luxuries"]) {
-      expect(manifest.get(goodId)).toBeCloseTo(foundingWant(goodId), 6);
-    }
-    // The shape that matters: a 2-pop seed is sent staples, and only a trace of what nobody there
-    // yet consumes much of. Water and food are the biggest per-capita needs; luxuries the smallest.
-    expect(manifest.get("water")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
-    expect(manifest.get("food")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
-
-    // The founding-cost readout the harness samples: one record per provisioned founding, its
-    // tonnage the manifest's own line sum, attributed to the founder that paid it.
-    expect(result.foundingManifests).toHaveLength(1);
-    const record = result.foundingManifests?.[0];
-    if (record === undefined) throw new Error("Expected a founding manifest record");
-    expect(record.systemId).toBe("c1");
-    expect(record.sourceSystemId).toBe("home");
-    const manifestTonnage = w.developments[0].stockManifest
-      .reduce((sum, line) => sum + line.quantity, 0);
-    expect(record.tonnage).toBeCloseTo(manifestTonnage, 9);
-    expect(record.goodIds).toEqual(w.developments[0].stockManifest.map((l) => l.goodId));
-  });
-
-  it("never draws the founder below its own drawable surplus", async () => {
-    // A food exporter parked just above its strategic reserve, so surplusDrawable — not the colony's
-    // want — is the binding cap. It has to be an exporter to sit that finely: an ordinary donor keeps
-    // DONOR_RESERVE_COVER cycles of its OWN demand, and at this population that floor is far above
-    // anything a 2-pop seed asks for, so a non-exporting home of this size simply spares nothing.
-    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
-    const exportRate = homeDemand * 2;
-    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + foundingWant("food") / 2;
-    const w = new MemoryDirectedBuildWorld([stockedHome({ food: stock }, { food: exportRate })]);
-    await developColony(w, [colonyCand("c1")]);
-
-    const food = w.developments[0].stockManifest.find((l) => l.goodId === "food");
-    const drawable = surplusDrawable(
-      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand,
-      homeDemand, exportRate, false,
-    );
-    expect(drawable).toBeGreaterThan(0);
-    expect(drawable).toBeLessThan(foundingWant("food")); // the founder's spare, not the want, binds
-    expect(food?.quantity ?? 0).toBeCloseTo(drawable, 6);
-  });
-
-  it("sends nothing from a source that holds nothing, and the colony still lands", async () => {
-    const w = new MemoryDirectedBuildWorld([stockedHome({ food: 0, water: 0 })]);
-    const result = await developColony(w, [colonyCand("c1")]);
-
-    expect(w.developments).toHaveLength(1);       // the colony is founded regardless
-    expect(w.developments[0].seedPop).toBe(EXPANSION.COLONY_SEED_POP);
-    expect(w.developments[0].stockManifest).toEqual([]);
-    // An unprovisioned founding cost its founder nothing — it must not appear in the
-    // founding-cost readout at all, or the harness reads it as a founder drained flat.
-    expect(result.foundingManifests).toEqual([]);
-  });
-
-  it("draws two colonies from one shrinking source balance, never twice from the opening stock", async () => {
-    // A food exporter, so the drawable surplus slides continuously above the strategic reserve and can
-    // be parked at one-and-a-half wants — enough for the first colony's want and only a remainder for
-    // the second. Without a shared balance both would read the same opening figure and both would be
-    // granted a full want, minting stock the founder never had.
-    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
-    const exportRate = homeDemand * 2;
-    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + foundingWant("food") * 1.5;
-    const w = new MemoryDirectedBuildWorld([stockedHome({ food: stock }, { food: exportRate })]);
-    await developColony(w, [colonyCand("c1"), colonyCand("c2")]);
-
-    expect(w.developments.length).toBeGreaterThanOrEqual(2);
-    const draws = w.developments.map(
-      (d) => d.stockManifest.find((l) => l.goodId === "food")?.quantity ?? 0,
-    );
-    const drawable = surplusDrawable(
-      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand,
-      homeDemand, exportRate, false,
-    );
-    expect(draws[0]).toBeCloseTo(foundingWant("food"), 6); // the first colony is fully provisioned…
-    expect(draws[1]).toBeGreaterThan(0);
-    expect(draws[1]).toBeLessThan(draws[0]);               // …the second gets only what is left…
-    expect(draws[0] + draws[1]).toBeCloseTo(drawable, 6);  // …and the pile is spent exactly once
-  });
-});
 
 // ── per-cycle materials staging ──────────────────────────────────
 // The manifest is drawn in slices as the establish is built, paid for as it is drawn, and the work a
@@ -1261,6 +1173,8 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     const workDoneByCycle: number[] = [];
     const ledgerByCycle: number[] = [];
     const stalledByCycle: number[] = [];
+    let delivered: FoundingStockLine[] = [];
+    let manifestRecord: TickProcessorResult["foundingManifests"] = undefined;
     let cycles = 0;
     for (; cycles < maxCycles && !developed; cycles++) {
       const w = new MemoryDirectedBuildWorld([home], projects);
@@ -1279,9 +1193,15 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
       workDoneByCycle.push(colony?.workDone ?? STAGE_WORK); // gone from the queue ⇒ it completed
       ledgerByCycle.push(colony?.stagedManifest.length ?? 0);
       stalledByCycle.push(colony?.stalledCycles ?? 0);
-      developed = w.developments.some((d) => d.systemId === "c1");
+      const development = w.developments.find((d) => d.systemId === "c1");
+      developed = development !== undefined;
+      delivered = development?.stockManifest ?? [];
+      manifestRecord = r.foundingManifests;
     }
-    return { developed, cycles, committed, draws, workDoneByCycle, ledgerByCycle, stalledByCycle };
+    return {
+      developed, cycles, committed, draws, workDoneByCycle, ledgerByCycle, stalledByCycle,
+      delivered, manifestRecord,
+    };
   }
 
   it("completes a founding whose source can spare nothing, and opens with an empty ledger", async () => {
@@ -1347,5 +1267,84 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(run.workDoneByCycle[COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES]).toBe(STAGE_CAP);
     expect(run.developed).toBe(true);
     expect(run.cycles).toBe(COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES + STAGE_CYCLES);
+  });
+
+  it("opens the colony with exactly the ledger it staged, weighted like the seed's own basket", async () => {
+    // Ample stock and money, so the COLONY's want is what binds rather than the founder's spare.
+    const run = await runEstablish(stockedHome({ food: 5_000, water: 5_000, luxuries: 5_000 }), 1_000_000);
+    expect(run.developed).toBe(true);
+
+    // The delivery carries the staged ledger and nothing else — no fresh draw at completion. Restore
+    // a completion-time manifest and this diverges, because the landing draw is not in `draws`.
+    const drawn = new Map<string, number>();
+    for (const d of run.draws) drawn.set(d.goodId, (drawn.get(d.goodId) ?? 0) + d.quantity);
+    const manifest = new Map(run.delivered.map((l) => [l.goodId, l.quantity]));
+    expect([...manifest.keys()].sort()).toEqual([...drawn.keys()].sort());
+    for (const [goodId, quantity] of drawn) expect(manifest.get(goodId)).toBeCloseTo(quantity, 9);
+
+    // Staged in slices, the total still reaches the same want a single completion draw aimed at…
+    for (const goodId of ["food", "water", "luxuries"]) {
+      expect(manifest.get(goodId)).toBeCloseTo(foundingWant(goodId), 6);
+    }
+    // …and keeps the shape that matters: a 2-pop seed is sent staples, and only a trace of what
+    // nobody there yet consumes much of. Water and food are the biggest needs; luxuries the smallest.
+    expect(manifest.get("water")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
+    expect(manifest.get("food")!).toBeGreaterThan(manifest.get("luxuries")! * 5);
+
+    // The founding-cost readout the harness samples: one record per provisioned founding, its
+    // tonnage the delivered ledger's own line sum, attributed to the founder that paid it.
+    expect(run.manifestRecord).toHaveLength(1);
+    const record = run.manifestRecord?.[0];
+    if (record === undefined) throw new Error("Expected a founding manifest record");
+    expect(record.systemId).toBe("c1");
+    expect(record.sourceSystemId).toBe("home");
+    expect(record.tonnage).toBeCloseTo(run.delivered.reduce((sum, l) => sum + l.quantity, 0), 9);
+    expect(record.goodIds).toEqual(run.delivered.map((l) => l.goodId));
+  });
+
+  it("stages two colonies from one founder against a single shrinking pile", async () => {
+    // A food exporter, so the drawable surplus slides continuously above the strategic reserve and can
+    // be parked at one-and-a-half of a single cycle's share — enough to serve one colony's slice and
+    // leave only a remainder for the other. Without a shared balance both would read the same opening
+    // figure, both would be granted a full slice, and the ledgers would record stock that never left.
+    const homeDemand = consumptionRate("food", { population: HOME_POP, technicians: 0, engineers: 0 });
+    const exportRate = homeDemand * 2;
+    const cycleShare = foundingWant("food") * (STAGE_CAP / STAGE_WORK);
+    const stock = DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER * homeDemand + cycleShare * 1.5;
+    const drawable = surplusDrawable(
+      stock, DIRECTED_LOGISTICS.DONOR_RESERVE_COVER * homeDemand, homeDemand, exportRate, false,
+    );
+    expect(drawable).toBeCloseTo(cycleShare * 1.5, 6); // the setup really is one and a half slices
+
+    const paid = (id: string, systemId: string): WorldColonyEstablishProject => ({
+      ...stagingProject(), kind: "colony_establish", id, systemId,
+      sourceSystemId: "home", seedPop: EXPANSION.COLONY_SEED_POP, housingLevels: 1,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    });
+    const w = new MemoryDirectedBuildWorld(
+      [stockedHome({ food: stock }, { food: exportRate })],
+      [paid("colA", "c1"), paid("colB", "c2")],
+    );
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(STAGE_CAP, 0.05),
+      develop: { candidateProvider: () => [], params: STAGING_PARAMS },
+      treasuryByFaction: new Map([["f1", { balance: 1_000_000, pendingFounding: 0, maintenanceBill: 0 }]]),
+    });
+
+    const stagedFood = (id: string) =>
+      w.constructionProjects
+        .filter((p): p is WorldColonyEstablishProject => p.kind === "colony_establish" && p.id === id)
+        .flatMap((p) => p.stagedManifest)
+        .filter((l) => l.goodId === "food")
+        .reduce((sum, l) => sum + l.quantity, 0);
+    // Which of the two the queue reaches first is not the property under test — the pile is.
+    const [served, leftovers] = [stagedFood("colA"), stagedFood("colB")].sort((a, b) => b - a);
+    expect(served).toBeCloseTo(cycleShare, 6);           // one colony's slice fits whole…
+    expect(leftovers).toBeGreaterThan(0);
+    expect(leftovers).toBeLessThan(served);              // …the other gets only what is left…
+    expect(served + leftovers).toBeCloseTo(drawable, 6); // …and the pile is spent exactly once
+    // The ledgers are the debits: nothing was recorded that did not leave the founder.
+    expect(w.foundingStagingDraws.reduce((sum, d) => sum + d.quantity, 0)).toBeCloseTo(drawable, 6);
   });
 });

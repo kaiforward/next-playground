@@ -4,7 +4,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { getWorld } from "@/lib/world/store";
 import { orderBuild, orderColony, cancelOrder, setAutomation } from "@/lib/services/construction-orders";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
-import type { WorldBuildProject } from "@/lib/world/types";
+import type { World, WorldBuildProject, WorldColonyEstablishProject } from "@/lib/world/types";
 
 /** A small authored world: the player faction owns a developed homeworld. */
 function seatWorld() {
@@ -18,6 +18,10 @@ const home = () => {
   const f = w.factions.find((x) => x.id === w.player?.controlledFactionId)!;
   return w.systems.find((s) => s.id === f.homeworldId)!;
 };
+
+/** One system's whole warehouse, by good — the figure a conservation check is taken on. */
+const stockAtSystem = (world: World, systemId: string) =>
+  new Map(world.markets.filter((m) => m.systemId === systemId).map((m) => [m.goodId, m.stock]));
 
 describe("construction order services", () => {
   beforeEach(() => { clearWorld(); setWorld(seatWorld()); });
@@ -110,6 +114,68 @@ describe("construction order services", () => {
     }
     // The developed homeworld is never colony-eligible.
     expect(orderColony({ systemId: home().id }).ok).toBe(false);
+  });
+
+  it("returns a cancelled colony's staged goods to its founder, conserving total stock", () => {
+    // The spec's conservation bar for cancellation: staged materials are real inventory, already out
+    // of the founder's markets and paid for. Deleting the row without returning them destroys stock
+    // the faction owns. Work and the charter stay forfeit — only the goods come home.
+    const w = getWorld();
+    const pid = w.player!.controlledFactionId;
+    // Manufacture an eligible controlled target next to the homeworld (the same idiom the colony-order
+    // test uses), with land well clear of the habitable floor so nothing rejects on substrate.
+    const conn = w.connections.find((c) => c.fromId === home().id || c.toId === home().id)!;
+    const otherId = conn.fromId === home().id ? conn.toId : conn.fromId;
+    const target = w.systems.find((s) => s.id === otherId)!;
+    target.factionId = pid;
+    target.control = "controlled";
+    target.habitableSpace = 50;
+
+    const placed = orderColony({ systemId: target.id });
+    if (!placed.ok) throw new Error("setup failed");
+    const ordered = getWorld();
+    const project = ordered.constructionProjects.find(
+      (p): p is WorldColonyEstablishProject =>
+        p.kind === "colony_establish" && p.id === placed.data.projectId,
+    )!;
+    const before = stockAtSystem(ordered, project.sourceSystemId);
+
+    // Stage a cycle's materials exactly as the tick does: debit the founder's rows, append the same
+    // quantities to the project's ledger.
+    const staged = [...before.entries()]
+      .filter(([, stock]) => stock > 0)
+      .slice(0, 2)
+      .map(([goodId, stock]) => ({ goodId, quantity: stock / 4 }));
+    expect(staged).toHaveLength(2); // the fixture's founder really does hold stock to stage
+    setWorld({
+      ...ordered,
+      markets: ordered.markets.map((m) => {
+        if (m.systemId !== project.sourceSystemId) return m;
+        const line = staged.find((l) => l.goodId === m.goodId);
+        return line ? { ...m, stock: m.stock - line.quantity } : m;
+      }),
+      constructionProjects: ordered.constructionProjects.map((p) =>
+        p.id === project.id ? { ...project, stagedManifest: staged } : p,
+      ),
+    });
+    const mid = stockAtSystem(getWorld(), project.sourceSystemId);
+    for (const line of staged) {
+      expect(mid.get(line.goodId)!).toBeLessThan(before.get(line.goodId)!); // genuinely gone in flight
+    }
+
+    expect(cancelOrder({ projectId: project.id }).ok).toBe(true);
+
+    const after = stockAtSystem(getWorld(), project.sourceSystemId);
+    for (const [goodId, stock] of before) expect(after.get(goodId)).toBeCloseTo(stock, 9);
+    expect(getWorld().constructionProjects.some((p) => p.id === project.id)).toBe(false);
+  });
+
+  it("leaves every market row alone when a build order is cancelled", () => {
+    const placed = orderBuild({ systemId: home().id, buildingType: HOUSING_TYPE, levels: 1 });
+    if (!placed.ok) throw new Error("setup failed");
+    const markets = getWorld().markets;
+    expect(cancelOrder({ projectId: placed.data.projectId }).ok).toBe(true);
+    expect(getWorld().markets).toBe(markets); // the same array, not a rebuilt copy
   });
 
   it("sets and reports automation on the player seat", () => {

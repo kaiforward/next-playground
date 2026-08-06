@@ -82,9 +82,10 @@ export interface SystemDevelopment {
   /** Housing levels placed on the colony with the establishment (viable by construction). */
   housingLevels: number;
   /**
-   * Goods the founding system sends along with the seed, so the colony opens stocked rather than at
-   * satisfaction 0 on everything. Conserved — every line is subtracted from `sourceSystemId`'s market
-   * and added to `systemId`'s. Empty when the source can spare nothing.
+   * The completed establish project's staged ledger: goods drawn from `sourceSystemId` and paid for
+   * cycle by cycle while the colony formed, held as in-transit inventory since. Delivered
+   * CREDIT-ONLY at `systemId` — the founding end was debited as each slice was staged, so nothing
+   * moves there now. Empty when the project staged nothing.
    */
   stockManifest: FoundingStockLine[];
 }

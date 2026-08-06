@@ -94,52 +94,6 @@ export interface FactionFoundingPurse {
   maintenanceBill: number;
 }
 
-/**
- * Goods the founding system sends with a colony seed, and what it can actually spare.
- *
- * Sized on the COLONY's own basket — `consumptionRate` at the seed population, so the manifest is
- * mostly food and water at a small seed and only a trace of anything an engineer would want, with no
- * per-good list deciding what matters. The want per good is `FOUNDING_STOCK_COVER` cycles of that
- * raw rate: every good opens at the same cycles-of-supply of what the seed genuinely uses.
- * Deliberately not a share of the good's pricing anchor — that anchor floors at `MIN_DEMAND`, which at
- * a 2-pop seed flattens nearly every good to one figure and erases the basket's shape.
- *
- * Two caps make it honest. `surplusDrawable` is the source's own export rule, so provisioning a
- * colony can never draw a founder below the reserve it keeps for itself; and `balance` carries what
- * is left of each source across the whole cycle, so two colonies founded from one system draw from
- * the same shrinking pile instead of both reading the opening stock. A source holding none of a good
- * sends none of it.
- *
- * Lives here rather than in the planner because only the processor has the source's market rows; the
- * pure planner has no market read or write path.
- */
-function planFoundingStock(
-  source: SystemBuildRow,
-  seedPop: number,
-  balance: Map<string, number>,
-): FoundingStockLine[] {
-  if (seedPop <= 0) return [];
-  const basis: CivilianDemandBasis = { population: seedPop, technicians: 0, engineers: 0 };
-  const manifest: FoundingStockLine[] = [];
-  for (const good of toGoodMarketStates(source)) {
-    // The want line is the seed population's raw civilian rate — a colony that does not exist yet
-    // has no industry and no strike to gate. Its CAP is the founder's `surplusDrawable` below,
-    // which is use-figure denominated, so a founder whose own draw was overstated now parts with
-    // more per colony. The two sides are deliberately denominated differently.
-    const colonyDemandRate = consumptionRate(good.goodId, basis);
-    if (colonyDemandRate <= 0) continue; // the seed does not consume it
-    const want = COLONISATION.FOUNDING_STOCK_COVER * colonyDemandRate;
-    const key = `${source.systemId}|${good.goodId}`;
-    const remaining = balance.get(key)
-      ?? surplusDrawable(good.stock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed);
-    const quantity = Math.min(want, Math.max(0, remaining));
-    if (!(quantity > 0)) continue;
-    balance.set(key, remaining - quantity);
-    manifest.push({ goodId: good.goodId, quantity });
-  }
-  return manifest;
-}
-
 /** One colony's staging plan for a cycle: what it draws, what that costs, and how much of the cycle's
  *  manifest share it can satisfy (the ceiling on the work it may absorb). */
 interface StagingDraw {
@@ -152,13 +106,16 @@ interface StagingDraw {
 /**
  * What an in-flight colony stages THIS cycle, and how much of the cycle's manifest share that covers.
  *
- * The manifest is the same want `planFoundingStock` sizes — `FOUNDING_STOCK_COVER` cycles of the
- * seed's raw rate per good — but drawn in slices instead of in one raid at completion: `workShare` is
- * the fraction of the whole establish the ordinary absorption cap would build this cycle, so the
- * materials arrive in step with the work. Per good the draw is the least of what is still wanted,
- * what the source can spare (`surplusDrawable`, under the running per-(source, good) balance so two
- * colonies drawing on one founder share a shrinking pile), and what the faction's money buys through
- * the valuation seam.
+ * The manifest is sized on the COLONY's own basket — `FOUNDING_STOCK_COVER` cycles of
+ * `consumptionRate` at the seed population, so it is mostly food and water at a small seed and only
+ * a trace of anything an engineer would want, with no per-good list deciding what matters.
+ * Deliberately not a share of the good's pricing anchor: that anchor floors at `MIN_DEMAND`, which at
+ * a 2-pop seed flattens nearly every good to one figure and erases the basket's shape. It is drawn in
+ * slices rather than in one raid at completion: `workShare` is the fraction of the whole establish the
+ * ordinary absorption cap would build this cycle, so the materials arrive in step with the work. Per
+ * good the draw is the least of what is still wanted, what the source can spare (`surplusDrawable`,
+ * under the running per-(source, good) balance so two colonies drawing on one founder share a
+ * shrinking pile), and what the faction's money buys through the valuation seam.
  *
  * `achievableFraction` is value-weighted across the cycle's share, and **a good the source cannot
  * spare this cycle counts as satisfied**: the colony lands with less of it, exactly as it does today,
@@ -205,8 +162,16 @@ function planStagingDraw(
     targetValue += target * unitValue;
 
     const key = `${source.systemId}|${good.goodId}`;
+    // Bounded by the row's LIVE stock as well as by the export rule, because this plan is written
+    // straight into the project's ledger and that ledger is what the colony is credited on delivery.
+    // The debit itself clamps to live stock (`applyFoundingStagingDraws`), so a plan promising more
+    // than the row physically holds would record goods that never left the founder — and deliver
+    // them anyway. Bounding here keeps the ledger equal to what was actually debited.
     const remaining = stockBalance.get(key)
-      ?? surplusDrawable(good.stock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed);
+      ?? Math.min(
+        surplusDrawable(good.stock, good.donorReserve, good.demand, good.production ?? 0, good.productionSuppressed),
+        Math.max(0, good.stock),
+      );
     // An unreadable headroom spares nothing rather than poisoning the ledger: staged quantities are
     // world state, and `JSON.stringify` turns a NaN into null.
     const headroom = Number.isFinite(remaining) ? Math.max(0, remaining) : 0;
@@ -629,11 +594,11 @@ export async function runDirectedBuildProcessor(
         landedBySystem.set(l.systemId, byType);
       } else {
         // A completed colony-establish → develop the system: seed transfer + bundled housing + the
-        // founding stock its source can spare (all applied in tick.ts).
-        const source = rowBySystem.get(l.sourceSystemId);
+        // ledger it staged over the whole establish (all applied in tick.ts). Nothing is drawn from
+        // the founder here — every line was debited on the cycle it was staged.
         developments.push({
           systemId: l.systemId, sourceSystemId: l.sourceSystemId, seedPop: l.seedPop, housingLevels: l.housingLevels,
-          stockManifest: source ? planFoundingStock(source, l.seedPop, foundingStockBalance) : [],
+          stockManifest: l.stagedManifest,
         });
       }
     }
@@ -665,8 +630,9 @@ export async function runDirectedBuildProcessor(
   // Persist the construction proposal-pressure counters last — independent of ROI/funding outcome.
   if (proposalPersistence.length > 0) await world.applyProposalPersistenceUpdates(proposalPersistence);
 
-  // What each founding cost its founder, for the calibration harness only. Read here because the
-  // manifest lines are gone by the time `applyDevelopments` has folded them into stock.
+  // What each founding cost its founder, for the calibration harness only — the whole staged ledger
+  // the colony opens with, read here because the lines are gone by the time the tick body has
+  // delivered them onto the colony's market rows.
   const foundingManifests = developments
     .filter((d) => d.stockManifest.length > 0)
     .map((d) => ({

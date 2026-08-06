@@ -498,7 +498,7 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
  * Give each newly settled system its market rows, opening EMPTY. World-gen builds markets only for
  * systems that are already developed — an unclaimed rock holds nothing — so a colony has no market at
  * all until this runs, and the founder's endowment is the first stock it ever holds. Must therefore
- * run before `applyFoundingStock`, whose credits land on these rows.
+ * run before `applyStagedManifestDelivery`, whose credits land on these rows.
  *
  * Goods the system already has a row for are left alone, so redeveloping a system that was settled
  * before keeps its warehouses rather than resetting them.
@@ -533,43 +533,40 @@ export function addMarketsForSettledSystems(
 }
 
 /**
- * Move each development's founding stock from the founding system's markets to the colony's, in one
- * conserving pass: every line subtracts from `sourceSystemId` and adds the SAME quantity to
- * `systemId`, so the galaxy's total holding of a good is unchanged. A line is clamped to what its
- * source still holds across the pass, so conservation is a property of this function and not of its
- * caller's caps — a manifest that overdraws simply moves less, never mints the difference.
+ * Land each new colony's staged manifest on its own market rows — a delivery, not a transfer.
  *
- * That clamp is the physical floor (you cannot move stock that is not there). How much a founder is
- * WILLING to part with is a separate, much stricter question, answered upstream by `surplusDrawable`
- * and a per-source running balance when the manifest is built.
+ * The goods left their founder cycle by cycle as the establish was built and paid for
+ * (`applyFoundingStagingDraws`), and have been in-transit inventory in the project's ledger ever
+ * since, in no market row at either end. This is where they arrive, so the pass is CREDIT-ONLY:
+ * touching the source again would take the same goods a second time and hand the colony only what
+ * the founder still happened to hold — possibly nothing.
  *
- * A colony would otherwise open holding nothing and read as starving from its first cycle, before any
- * logistics could reach it. Non-finite or non-positive lines are skipped rather than trusted — stock
- * is world state, and `JSON.stringify` turns a NaN into null.
+ * Conservation is therefore a property of the pair, not of this function alone: every quantity
+ * credited here was debited when it was staged, because the staging plan is bounded by the same
+ * live market row the debit clamps against (`planStagingDraw`, lib/tick/processors/directed-build.ts).
+ *
+ * Credits land only on rows the colony already has — `addMarketsForSettledSystems` must run first, or
+ * a colony has no row to receive anything. Non-finite or non-positive lines are skipped rather than
+ * trusted: stock is world state, and `JSON.stringify` turns a NaN into null.
  */
-export function applyFoundingStock(markets: WorldMarket[], developments: SystemDevelopment[]): WorldMarket[] {
-  const delta = new Map<string, number>();
-  const available = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.stock]));
+export function applyStagedManifestDelivery(
+  markets: WorldMarket[],
+  developments: SystemDevelopment[],
+): WorldMarket[] {
+  if (developments.length === 0) return markets;
+  const credit = new Map<string, number>();
   for (const d of developments) {
     for (const line of d.stockManifest) {
-      const quantity = line.quantity;
-      if (!Number.isFinite(quantity) || quantity <= 0) continue;
-      const from = `${d.sourceSystemId}|${line.goodId}`;
-      // Credit only what the source can actually pay, drawn down across the whole pass, so
-      // conservation holds for any caller rather than resting on the manifest being pre-capped.
-      const moved = Math.min(quantity, available.get(from) ?? 0);
-      if (!(moved > 0)) continue;
-      available.set(from, (available.get(from) ?? 0) - moved);
-      const to = `${d.systemId}|${line.goodId}`;
-      delta.set(from, (delta.get(from) ?? 0) - moved);
-      delta.set(to, (delta.get(to) ?? 0) + moved);
+      if (!Number.isFinite(line.quantity) || line.quantity <= 0) continue;
+      const key = `${d.systemId}|${line.goodId}`;
+      credit.set(key, (credit.get(key) ?? 0) + line.quantity);
     }
   }
-  if (delta.size === 0) return markets;
+  if (credit.size === 0) return markets;
   return markets.map((m) => {
-    const change = delta.get(`${m.systemId}|${m.goodId}`);
-    if (change === undefined || change === 0) return m;
-    return { ...m, stock: Math.max(0, m.stock + change) };
+    const change = credit.get(`${m.systemId}|${m.goodId}`);
+    if (change === undefined) return m;
+    return { ...m, stock: m.stock + change };
   });
 }
 
@@ -582,9 +579,11 @@ export function applyFoundingStock(markets: WorldMarket[], developments: SystemD
  * instead of in one raid at completion.
  *
  * Every line is clamped to what its source still holds across the pass, so a draw can never take
- * stock that is not there whatever the caller's caps said — conservation is this function's own
- * property, mirroring `applyFoundingStock`. Non-finite or non-positive lines are skipped rather than
- * trusted: stock is world state, and `JSON.stringify` turns a NaN into null.
+ * stock that is not there whatever the caller's caps said. That clamp is a floor, not the working
+ * rule: the planner already bounds each draw by the same live market row (`planStagingDraw`), so a
+ * bound clamp here would mean the ledger recorded more than left the founder and the delivery would
+ * mint the difference. Non-finite or non-positive lines are skipped rather than trusted: stock is
+ * world state, and `JSON.stringify` turns a NaN into null.
  */
 export function applyFoundingStagingDraws(
   markets: WorldMarket[],
@@ -1162,10 +1161,11 @@ export async function runWorldTick(
       // This cycle's staged materials leave their founders before anything else touches the markets:
       // they are paid for and out of the world's markets from the moment they are drawn.
       markets = applyFoundingStagingDraws(markets, dbWorld.foundingStagingDraws);
-      // Each new colony gets its (empty) market rows, then its founder's endowment moves in — the
-      // first goods the system has ever held. Order matters: the endowment lands on these rows.
+      // Each new colony gets its (empty) market rows, then the manifest it staged over the whole
+      // establish is delivered onto them — the first goods the system has ever held, and already out
+      // of the founder's markets. Order matters: the delivery lands on these rows.
       markets = addMarketsForSettledSystems(markets, systems, dbWorld.developments);
-      markets = applyFoundingStock(markets, dbWorld.developments);
+      markets = applyStagedManifestDelivery(markets, dbWorld.developments);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
       foundingDebitsByFaction = dbResult.foundingDebitsByFaction;
       buildCommitmentsByGood = dbResult.buildCommitmentsByGood;

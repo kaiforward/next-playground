@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   applyDevelopments,
   applyBuildingIncreases,
-  applyFoundingStock,
+  applyStagedManifestDelivery,
   applyFoundingStagingDraws,
 } from "@/lib/world/tick";
 import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
@@ -168,7 +168,7 @@ describe("applyBuildingIncreases — popCap tracks built housing", () => {
   });
 });
 
-/** Minimal market row — only systemId/goodId/stock matter to applyFoundingStock. */
+/** Minimal market row — only systemId/goodId/stock matter to the two founding passes. */
 function market(systemId: string, goodId: string, stock: number): WorldMarket {
   return { systemId, goodId, stock, anchorMult: 1, demandRate: 1, storageCapacity: 0 };
 }
@@ -179,8 +179,11 @@ const stockAt = (markets: WorldMarket[], systemId: string, goodId: string) =>
 const totalStock = (markets: WorldMarket[], goodId: string) =>
   markets.filter((m) => m.goodId === goodId).reduce((n, m) => n + m.stock, 0);
 
-describe("applyFoundingStock", () => {
-  it("conserves each good exactly: the source loses what the colony gains", () => {
+describe("applyStagedManifestDelivery", () => {
+  it("opens the colony holding exactly its staged ledger, with the founder untouched", () => {
+    // The falsifier for the whole change: the goods left the founder cycle by cycle as they were
+    // staged, so delivery is a credit. Swap in the old conserving move and the source is debited a
+    // second time here for materials it already paid for.
     const markets = [
       market("source", "food", 100), market("colony", "food", 0),
       market("source", "water", 80), market("colony", "water", 0),
@@ -190,39 +193,40 @@ describe("applyFoundingStock", () => {
       stockManifest: [{ goodId: "food", quantity: 12 }, { goodId: "water", quantity: 7 }],
     }];
 
-    const after = applyFoundingStock(markets, developments);
-    expect(stockAt(after, "source", "food")).toBe(88);
+    const after = applyStagedManifestDelivery(markets, developments);
     expect(stockAt(after, "colony", "food")).toBe(12);
-    expect(stockAt(after, "source", "water")).toBe(73);
     expect(stockAt(after, "colony", "water")).toBe(7);
-    // Nothing minted, nothing destroyed — the galaxy holds exactly what it did.
-    expect(totalStock(after, "food")).toBe(totalStock(markets, "food"));
-    expect(totalStock(after, "water")).toBe(totalStock(markets, "water"));
+    expect(stockAt(after, "source", "food")).toBe(100); // the founder is not touched at all
+    expect(stockAt(after, "source", "water")).toBe(80);
+    // The staged goods re-enter the world's market rows here and nowhere else.
+    expect(totalStock(after, "food")).toBe(totalStock(markets, "food") + 12);
+    expect(totalStock(after, "water")).toBe(totalStock(markets, "water") + 7);
   });
 
-  it("conserves across two colonies drawing on one shared source", () => {
+  it("delivers each of two colonies its own ledger in full", () => {
+    // Two colonies off one founder: neither ledger is capped by the other, nor by what the source
+    // still holds — both were debited long ago.
     const markets = [
-      market("source", "food", 100), market("a", "food", 0), market("b", "food", 0),
+      market("source", "food", 10), market("a", "food", 0), market("b", "food", 0),
     ];
     const developments: SystemDevelopment[] = [
       { systemId: "a", sourceSystemId: "source", seedPop: 2, housingLevels: 1, stockManifest: [{ goodId: "food", quantity: 30 }] },
       { systemId: "b", sourceSystemId: "source", seedPop: 2, housingLevels: 1, stockManifest: [{ goodId: "food", quantity: 25 }] },
     ];
 
-    const after = applyFoundingStock(markets, developments);
-    expect(stockAt(after, "source", "food")).toBe(45); // both draws land on one balance
+    const after = applyStagedManifestDelivery(markets, developments);
     expect(stockAt(after, "a", "food")).toBe(30);
     expect(stockAt(after, "b", "food")).toBe(25);
-    expect(totalStock(after, "food")).toBe(totalStock(markets, "food"));
+    expect(stockAt(after, "source", "food")).toBe(10);
   });
 
-  it("lands the colony unchanged when the manifest is empty, and serialises cleanly", () => {
+  it("lands the colony unchanged when the ledger is empty, and serialises cleanly", () => {
     const markets = [market("source", "food", 100), market("colony", "food", 0)];
     const developments: SystemDevelopment[] = [{
       systemId: "colony", sourceSystemId: "source", seedPop: 2, housingLevels: 1, stockManifest: [],
     }];
 
-    const after = applyFoundingStock(markets, developments);
+    const after = applyStagedManifestDelivery(markets, developments);
     expect(after).toBe(markets); // no delta at all — the same array, not a rebuilt copy
     expect(JSON.parse(JSON.stringify(developments[0])).stockManifest).toEqual([]);
   });
@@ -239,23 +243,23 @@ describe("applyFoundingStock", () => {
       ],
     }];
 
-    const after = applyFoundingStock(markets, developments);
-    expect(stockAt(after, "source", "food")).toBe(100);
-    expect(stockAt(after, "colony", "food")).toBe(0);
+    const after = applyStagedManifestDelivery(markets, developments);
+    expect(after).toBe(markets);
     for (const m of after) expect(Number.isFinite(m.stock)).toBe(true);
   });
 
-  it("moves only what an overdrawing source actually holds, minting nothing", () => {
-    const markets = [market("source", "food", 10), market("colony", "food", 0)];
+  it("credits nothing for a good the colony has no market row for", () => {
+    // Delivery runs after `addMarketsForSettledSystems`, so a colony has a row for every good it can
+    // hold. A line with no row is dropped rather than minted onto a fresh one.
+    const markets = [market("source", "food", 100), market("colony", "food", 0)];
     const developments: SystemDevelopment[] = [{
       systemId: "colony", sourceSystemId: "source", seedPop: 2, housingLevels: 1,
-      stockManifest: [{ goodId: "food", quantity: 25 }], // more than the source holds
+      stockManifest: [{ goodId: "food", quantity: 5 }, { goodId: "exotics", quantity: 9 }],
     }];
 
-    const after = applyFoundingStock(markets, developments);
-    expect(stockAt(after, "source", "food")).toBe(0); // emptied, never negative
-    expect(stockAt(after, "colony", "food")).toBe(10); // credited what was debited, not the manifest
-    expect(totalStock(after, "food")).toBe(totalStock(markets, "food"));
+    const after = applyStagedManifestDelivery(markets, developments);
+    expect(stockAt(after, "colony", "food")).toBe(5);
+    expect(after.some((m) => m.goodId === "exotics")).toBe(false);
   });
 });
 

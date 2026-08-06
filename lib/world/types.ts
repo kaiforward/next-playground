@@ -209,7 +209,8 @@ export interface WorldColonyEstablishProject extends WorldConstructionProjectBas
   stagedManifest: WorldFoundingStockLine[];
   /** The one-off charter fee has been debited. False → the project absorbs no work and stages nothing. */
   charterPaid: boolean;
-  /** Consecutive cycles that staged nothing, counted only once the charter is paid. */
+  /** Consecutive cycles stalled for want of materials or money, counted only once the charter is
+   *  paid. A cycle the construction pool never reached does not count. */
   stalledCycles: number;
 }
 
