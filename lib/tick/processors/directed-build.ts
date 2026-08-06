@@ -11,6 +11,8 @@ import { workCostPerLevel } from "@/lib/constants/construction";
 import { surplusDrawable, type RouteCost } from "@/lib/engine/directed-logistics";
 import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { COLONISATION } from "@/lib/constants/colonisation";
+import { charterFee } from "@/lib/engine/founding-cost";
+import { safeMoney } from "@/lib/engine/treasury";
 import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import type {
@@ -72,6 +74,22 @@ export interface DirectedBuildProcessorParams {
   /** Latched funded.construction per faction (0–1) — scales the funded pool. Missing
    *  faction or omitted map → 1 (ungated: engine tests, independents). */
   fundingByFaction?: ReadonlyMap<string, number>;
+  /** The treasury position founding is priced against. Missing faction or omitted map → founding is
+   *  UNPRICED for that faction: no charter is charged and no colony waits on one (the build-only
+   *  engine/adapter path, and independents, which never colonise anyway). */
+  treasuryByFaction?: ReadonlyMap<string, FactionFoundingPurse>;
+}
+
+/** One faction's money as the founding path reads it. `balance − pendingFounding` is the working
+ *  balance: what is genuinely free once this cycle's already-committed founding is honoured. */
+export interface FactionFoundingPurse {
+  balance: number;
+  /** Founding money committed since the last settlement and not yet charged. */
+  pendingFounding: number;
+  /** The faction's maintenance bill for one REFERENCE cycle — the charter's scale base, re-quoted
+   *  every cycle. Reference-denominated because a charter is a one-off charge on an event, not a
+   *  per-cycle rate: a settlement cadence change must not change what a colony costs. */
+  maintenanceBill: number;
 }
 
 /**
@@ -220,6 +238,10 @@ export async function runDirectedBuildProcessor(
   const foundingStockBalance = new Map<string, number>();
   const nextOpen: WorldConstructionProject[] = [];
   const workPerformedByFaction = new Map<string, number>();
+  // Money committed to founding this cycle, per faction — the treasury's settlement input. Directed
+  // build never writes `balance`; it commits against `balance − pendingFounding` and the settlement
+  // applies what it committed.
+  const foundingDebitsByFaction = new Map<string, number>();
   // Proposal-pressure counters advance for EVERY due faction's assessed markets — the construction
   // clock, distinct from the economy's squeeze clock — regardless of whether a proposal is emitted or
   // funded. Keyed by the market's composite id, the same convention the economy adapter writes by.
@@ -249,6 +271,11 @@ export async function runDirectedBuildProcessor(
     // keeps reading the unscaled reference pool.
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
     const pool = poolRef.total * catchUp * funded;
+
+    // The faction's money for founding: what is free once the founding already committed this
+    // settlement period is honoured. Absent → this faction founds unpriced.
+    const purse = factionId === null ? undefined : params.treasuryByFaction?.get(factionId);
+    let workingBalance = purse === undefined ? 0 : safeMoney(safeMoney(purse.balance) - safeMoney(purse.pendingFounding));
 
     const existing = openByFaction.get(factionId) ?? [];
     // The human seat's per-domain switches: off = skip PROPOSAL GENERATION for this faction in that
@@ -280,6 +307,7 @@ export async function runDirectedBuildProcessor(
       );
       colonyProposals = planFactionColonyProposals(
         factionId, developedStates, params.develop.candidateProvider(factionId), openColonies, params.develop.params,
+        purse === undefined ? undefined : { balance: workingBalance, maintenanceBill: purse.maintenanceBill },
       );
     }
 
@@ -356,20 +384,51 @@ export async function runDirectedBuildProcessor(
       }
     }
 
+    const queue = [...orderOpenProjects(existing), ...newProjects];
+
+    // ── Charter phase: committing to a colony and paying for it are ONE step ──
+    // Every colony in the queue that has not paid its charter tries to, in queue order, against the
+    // running working balance. The fee is re-quoted from the CURRENT maintenance bill, not from the
+    // quote at proposal, so a faction that shrank between proposing and paying pays what it is worth
+    // now. A colony that cannot pay stays unpaid and simply waits — it absorbs no work and stages
+    // nothing until the money is there. Nothing here writes `balance`; the debit is committed to the
+    // treasury's settlement, which is the single writer.
+    const charterParams = params.develop?.params;
+    let charterDebits = 0;
+    const charged: WorldConstructionProject[] =
+      purse === undefined || charterParams === undefined || factionId === null
+        ? queue
+        : queue.map((p) => {
+            if (p.kind !== "colony_establish" || p.charterPaid) return p;
+            const fee = charterFee(purse.maintenanceBill, {
+              mult: charterParams.charterMult,
+              min: charterParams.charterMin,
+            });
+            if (fee > workingBalance) return p; // no debt: a purchase that cannot be paid does not happen
+            workingBalance -= fee;
+            charterDebits += fee;
+            return { ...p, charterPaid: true };
+          });
+    if (charterDebits > 0 && factionId !== null) {
+      foundingDebitsByFaction.set(factionId, (foundingDebitsByFaction.get(factionId) ?? 0) + charterDebits);
+    }
+
     // Fund front-first (in-flight work finishes before new commitments, then fresh player orders,
     // then this cycle's new autonomic proposals), with the development-scaled colony floor reserved
     // ahead of the ROI order; land completed levels.
     const { projects: fundedOpen, landed, absorbed } = fundQueueWithFloor(
-      [...orderOpenProjects(existing), ...newProjects], pool, cap, reserved,
+      charged, pool, cap, reserved,
       (p) => p.kind === "build" && (floorBySystem.get(p.systemId) ?? 0) > 0,
     );
     if (factionId !== null && absorbed > 0) workPerformedByFaction.set(factionId, absorbed);
     for (const p of fundedOpen) {
       // Persist-if-funded applies to AUTONOMIC colonies and centres only — they are re-emitted and
       // re-priced next cycle, so a workless row is dropped to keep the queue live. A player order is
-      // a standing commitment with no re-emitter: it always persists until funded or cancelled.
+      // a standing commitment with no re-emitter: it always persists until funded or cancelled. A
+      // colony whose charter is PAID is a standing commitment too: dropping it would delete a project
+      // the faction has already bought, and next cycle's re-emission would charge the charter again.
       if (p.origin !== "player") {
-        if (p.kind === "colony_establish" && p.workDone <= 0) continue;
+        if (p.kind === "colony_establish" && !p.charterPaid && p.workDone <= 0) continue;
         if (p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE && p.workDone <= 0) continue;
       }
       nextOpen.push(p);
@@ -424,5 +483,5 @@ export async function runDirectedBuildProcessor(
       goodIds: d.stockManifest.map((line) => line.goodId),
     }));
 
-  return { workPerformedByFaction, buildCommitmentsByGood, foundingManifests };
+  return { workPerformedByFaction, foundingDebitsByFaction, buildCommitmentsByGood, foundingManifests };
 }

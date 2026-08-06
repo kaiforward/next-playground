@@ -92,7 +92,7 @@ import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
 import { InMemoryTreasuryWorld } from "@/lib/tick/adapters/memory/treasury";
 
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
-import { isCycleStart } from "@/lib/tick/shard";
+import { isCycleStart, catchUpFactor } from "@/lib/tick/shard";
 import type {
   TickContext,
   TickBroadcastRaw,
@@ -858,6 +858,7 @@ export async function runWorldTick(
   // The two work maps are declared here (outside the block) rather than as locals inside
   // it, because the treasury stage below reads them after the block closes.
   let constructionWorkByFaction: Map<string, number> | undefined;
+  let foundingDebitsByFaction: Map<string, number> | undefined;
   let logisticsWorkByFaction: Map<string, number> | undefined;
   // Calibration-only: directed-build's per-cycle new autonomic production-good levels, by good.
   // Declared here (not a local inside the block) purely to survive past the block's close, mirroring
@@ -1088,6 +1089,29 @@ export async function runWorldTick(
           : undefined,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.construction])),
+        // The purse founding is committed against. Read at tick start like the funding latch, so a
+        // faction commits against the balance its last settlement left it, minus what it has already
+        // committed since. No maintenance bill yet (pre-first-settlement) reads as 0 — the charter
+        // floor is what prices a colony then.
+        //
+        // The bill is de-scaled back to a REFERENCE cycle. `maintenanceBill` is a per-settlement flow
+        // (`upkeep.total × catchUp`), but a charter is a one-off charge on an event, not a per-cycle
+        // rate: quoting it off the raw stored figure would halve what a colony costs whenever the
+        // settlement cadence halves, which is granularity leaking into price. At the shipped cadence
+        // this divides by 1.
+        treasuryByFaction:
+          treasuries.length > 0
+            ? new Map(
+                treasuries.map((t) => [
+                  t.factionId,
+                  {
+                    balance: t.balance,
+                    pendingFounding: t.pendingFounding,
+                    maintenanceBill: (t.lastSettlement?.maintenanceBill ?? 0) / catchUpFactor(cadence.cycle),
+                  },
+                ]),
+              )
+            : undefined,
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
       systems = applyClaims(systems, dbWorld.claims);
@@ -1101,6 +1125,7 @@ export async function runWorldTick(
       markets = addMarketsForSettledSystems(markets, systems, dbWorld.developments);
       markets = applyFoundingStock(markets, dbWorld.developments);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
+      foundingDebitsByFaction = dbResult.foundingDebitsByFaction;
       buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
       foundingManifests = dbResult.foundingManifests;
       processorsRun.push("directed-build");
@@ -1111,8 +1136,15 @@ export async function runWorldTick(
   // ── treasury (cycle settlement; mid-cycle it only accrues the bands' own work) ──
   {
     const treasuryResolves = isCycleStart(tick, cadence.cycle);
+    // Founding debits belong in this guard alongside the two work bands: this guard decides whether
+    // the processor runs AT ALL, so its own accrual guard never sees a tick this one refuses. A cycle
+    // where every colony in the queue is waiting on its charter absorbs no work anywhere, which is
+    // exactly the tick that commits charter money — and off a settlement tick that debit would be
+    // silently dropped.
     const hasWork =
-      (constructionWorkByFaction?.size ?? 0) > 0 || (logisticsWorkByFaction?.size ?? 0) > 0;
+      (constructionWorkByFaction?.size ?? 0) > 0 ||
+      (logisticsWorkByFaction?.size ?? 0) > 0 ||
+      (foundingDebitsByFaction?.size ?? 0) > 0;
     if (treasuries.length > 0 && (treasuryResolves || hasWork)) {
       // The processor reads systems only when settling — a mid-cycle accrual
       // tick (band work without a cycle boundary) skips the O(systems) build.
@@ -1140,7 +1172,7 @@ export async function runWorldTick(
           economyScale: ECONOMY_SCALE,
           constructionWorkByFaction: constructionWorkByFaction ?? new Map(),
           logisticsWorkByFaction: logisticsWorkByFaction ?? new Map(),
-          foundingDebitsByFaction: new Map(),
+          foundingDebitsByFaction: foundingDebitsByFaction ?? new Map(),
           rates: {
             headsTaxPerCycle: TREASURY.HEADS_TAX_PER_CYCLE,
             headsWeights: { ...TREASURY.HEADS_WEIGHTS },

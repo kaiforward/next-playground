@@ -83,6 +83,11 @@ export interface TickProcessorResult {
    *  points absorbed; directed-logistics: work-budget consumed). Transient input
    *  to the treasury settlement — not broadcast, not persisted. */
   workPerformedByFaction?: Map<string, number>;
+  /** Money directed build committed to colony founding this cycle per faction — charter fees and
+   *  staged materials, already valued through the founding seam. A settlement INPUT, not
+   *  instrumentation: the treasury processor accrues it into `pendingFounding` and charges it off the
+   *  top at the next settlement. */
+  foundingDebitsByFaction?: Map<string, number>;
   /** New autonomic production-good build levels committed this cycle (directed-build), by
    *  good id. Counts proposal levels, not the final funded queue. Calibration instrumentation
    *  only — surfaced via `runWorldTick().instrumentation`, never broadcast or persisted. */

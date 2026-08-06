@@ -584,6 +584,75 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
   });
 });
 
+describe("runDirectedBuildProcessor: the charter", () => {
+  // charterMult 0 + charterMin 100 ⇒ every charter is exactly 100, and headroom over a source with no
+  // market rows adds nothing — so the money figures below are stated, not recomputed through the
+  // pricing functions under test.
+  const FEE = 100;
+  const FLAT_FEE_PARAMS: ColonyEstablishParams = { ...COLONY_PARAMS, charterMult: 0, charterMin: FEE };
+
+  function purse(balance: number, pendingFounding = 0) {
+    return new Map([["f1", { balance, pendingFounding, maintenanceBill: 0 }]]);
+  }
+
+  it("charges one charter per colony across a multi-cycle stall, never one per cycle", async () => {
+    // A faction with pool 0 (population 0): the colony it commits to gets zero work on its first
+    // cycle and every cycle after. It is paid for, so it must stay on the queue — dropping it would
+    // put the same candidate back in front of the planner next cycle under a fresh id, and the
+    // faction would buy the same colony again.
+    let projects: WorldConstructionProject[] = [];
+    let committed = 0;
+    const everPaid = new Set<string>();
+    for (let cycle = 0; cycle < 5; cycle++) {
+      const w = new MemoryDirectedBuildWorld([saturatedHome(0)], projects);
+      const r = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+        interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+        develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: FLAT_FEE_PARAMS },
+        // Balance never settles in this test, so what has already been committed stays pending.
+        treasuryByFaction: purse(10_000, committed),
+      });
+      committed += r.foundingDebitsByFaction?.get("f1") ?? 0;
+      projects = w.constructionProjects;
+      for (const p of projects) if (p.kind === "colony_establish" && p.charterPaid) everPaid.add(p.id);
+    }
+    expect(committed).toBe(FEE);              // bought once, not once per cycle
+    expect(everPaid.size).toBe(1);            // and it is still the same project row
+    expect(projects).toHaveLength(1);
+    expect(projects[0].workDone).toBe(0);     // it really did stall — this is not a colony that built
+  });
+
+  it("commits no more charters in one cycle than the faction's opening balance covers", async () => {
+    // Five colonies already on the queue with unpaid charters — the planner's own gate never saw
+    // them, so the charter phase's running balance is the only thing standing between a faction with
+    // 250 in hand and 500 of charters.
+    const waiting: WorldConstructionProject[] = Array.from({ length: 5 }, (_, i) => ({
+      kind: "colony_establish", id: `wait-${i}`, origin: "auto", factionId: "f1",
+      systemId: `c${i}`, sourceSystemId: "home", seedPop: 2, housingLevels: 1,
+      workTotal: 10_000, workDone: 1, stagedManifest: [], charterPaid: false, stalledCycles: 0,
+    }));
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)], waiting);
+    const r = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: () => [], params: FLAT_FEE_PARAMS },
+      treasuryByFaction: purse(250),
+    });
+    const paid = w.constructionProjects.filter((p) => p.kind === "colony_establish" && p.charterPaid);
+    expect(paid).toHaveLength(2);                                  // 250 buys two charters, not five
+    expect(r.foundingDebitsByFaction?.get("f1")).toBe(2 * FEE);
+    expect(r.foundingDebitsByFaction?.get("f1") ?? 0).toBeLessThanOrEqual(250);
+  });
+
+  it("leaves founding unpriced when the faction has no purse (the build-only path)", async () => {
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    const r = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: FLAT_FEE_PARAMS },
+    });
+    expect(w.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(true);
+    expect(r.foundingDebitsByFaction?.size ?? 0).toBe(0);
+  });
+});
+
 /** A developed home saturated on housing (σ = 1, no housing headroom) but carrying a deep food deficit
  *  with spare labour + food slots — so it emits a food industry build proposal that competes with a
  *  colony in the same pool. Population sets labour; the pool is kept scarce via mkConstruction's rate. */
