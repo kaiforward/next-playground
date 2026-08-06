@@ -89,7 +89,12 @@ export interface FoundedColonyRecord {
    *
    *  A different unit from the pre-staging reading of the same name, which measured one whole
    *  manifest taken in a single draw at the founding tick: a run's figure here is not comparable
-   *  with one measured before materials were staged per cycle. */
+   *  with one measured before materials were staged per cycle.
+   *
+   *  Queue-order dependent within a cycle, and so not a pure per-colony attribution: a draw is
+   *  measured against what the founder holds after every draw already made on it this cycle,
+   *  including other colonies'. A colony the queue reaches second reads deeper than the same
+   *  colony would have read first. */
   founderCoverAfter?: number;
 }
 

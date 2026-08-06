@@ -24,7 +24,9 @@ import {
   summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summarizeFoundingStock, recordFoundingManifest,
 } from "./build-analysis";
-import type { BuildCommitmentRecord, FoundedColonyRecord, FoundingStagingTotals } from "./build-analysis";
+import type {
+  BuildCommitmentRecord, FoundedColonyRecord, FoundingStagingRecord, FoundingStagingTotals,
+} from "./build-analysis";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
 import type { TreasurySnapshot } from "./treasury-analysis";
@@ -42,7 +44,31 @@ import type {
   RegionOverviewEntry,
   MigrationThroughputSummary,
 } from "./types";
-import type { TickEvent } from "@/lib/tick/rows";
+import type { TickEvent, TickSystem } from "@/lib/tick/rows";
+
+/**
+ * One tick's founding bookkeeping: accumulate this tick's staging draws, THEN sweep for colonies
+ * that just developed, so a colony founded on this tick takes its own last slice with it.
+ *
+ * The two steps are one function because their ORDER is the whole instrument. A colony stages for
+ * many cycles while its target is still `controlled`, and the last slice is staged on the very tick
+ * the establish completes. Sweep first and that slice lands in the accumulator after the record was
+ * built from it, and is never read again — and the loss is silent: every earlier slice still folds,
+ * so the readout prints a plausible, slightly small number rather than an obviously dead 0.
+ *
+ * Exported for the test that pins that composition; `runTickHarness` is its only production caller.
+ */
+export function foldFoundingTick(
+  systems: ReadonlyArray<Pick<TickSystem, "id" | "control">>,
+  tick: number,
+  developedAtStart: ReadonlySet<string>,
+  tracker: Map<string, FoundedColonyRecord>,
+  staging: Map<string, FoundingStagingTotals>,
+  draws: ReadonlyArray<FoundingStagingRecord>,
+): void {
+  for (const draw of draws) recordFoundingManifest(staging, draw);
+  trackFoundedColonies(systems, tick, developedAtStart, tracker, staging);
+}
 
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
 interface ActiveEventRecord {
@@ -176,14 +202,9 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
     }
 
-    // This cycle's staging draws, accumulated BEFORE the founding sweep: a colony that completes
-    // this tick stages its last slice on the same tick it develops, and the accumulator is what
-    // carries every earlier slice — all of them made while the target was still `controlled`.
-    for (const draw of result.instrumentation.foundingManifests ?? []) {
-      recordFoundingManifest(foundingStaging, draw);
-    }
-    trackFoundedColonies(
+    foldFoundingTick(
       world.systems, world.meta.currentTick, developedAtStart, foundedColonies, foundingStaging,
+      result.instrumentation.foundingManifests ?? [],
     );
     // The colony opening sample needs full tick rows (buildings + government drive the demand
     // weights). Due colonies are rare, so the rows are built only on the ticks that need them.

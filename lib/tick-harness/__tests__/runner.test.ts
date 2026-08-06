@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { runTickHarness } from "../runner";
+import { foldFoundingTick, runTickHarness } from "../runner";
 import { MARKET_ROLES } from "../types";
 import type { HarnessConfig, MarketRole } from "../types";
+import type { FoundedColonyRecord, FoundingStagingTotals } from "../build-analysis";
 
 /** Small and short: this suite is about the role pin's wiring, not about economy behaviour. */
 const CONFIG: HarnessConfig = { systemCount: 20, seed: 7, tickCount: 60 };
@@ -54,6 +55,40 @@ describe("runTickHarness: the role partition", () => {
     }
     // Non-vacuous: the unpinned run really does classify markets into other roles.
     expect(unpinned.roleCoverLevels.some((e) => e.countByRole.consumer === 0)).toBe(true);
+  });
+});
+
+// ── foldFoundingTick ──────────────────────────────────────────────
+// The order inside it is the instrument. Sweeping for new colonies before accumulating the tick's
+// draws loses the founding cycle's own slice — and loses it QUIETLY, since every earlier slice
+// still folds, so no aggregate goes to zero and nothing else in the harness notices.
+
+describe("foldFoundingTick", () => {
+  it("folds a draw made on the founding tick itself into the colony it founded", () => {
+    const tracker = new Map<string, FoundedColonyRecord>();
+    const staging = new Map<string, FoundingStagingTotals>();
+
+    // Two earlier cycles, while the target was still `controlled` — no colony to track yet.
+    foldFoundingTick([{ id: "c1", control: "controlled" }], 24, new Set(), tracker, staging, [
+      { systemId: "c1", tonnage: 40, moneyCost: 12, founderCover: 0.9 },
+    ]);
+    foldFoundingTick([{ id: "c1", control: "controlled" }], 48, new Set(), tracker, staging, [
+      { systemId: "c1", tonnage: 30, moneyCost: 9, founderCover: 0.7 },
+    ]);
+    expect(tracker.size).toBe(0);
+
+    // The completing tick: the last slice is staged AND the system reads `developed`, both in this
+    // one batch. Sweep before accumulating and this slice — and the deepest cover of the three —
+    // is dropped, leaving a plausible 70 t / 0.7× instead of the truth.
+    foldFoundingTick([{ id: "c1", control: "developed" }], 72, new Set(), tracker, staging, [
+      { systemId: "c1", tonnage: 30, moneyCost: 9, founderCover: 0.4 },
+    ]);
+
+    const record = tracker.get("c1");
+    expect(record?.foundedTick).toBe(72);
+    expect(record?.manifestTonnage).toBeCloseTo(100, 9);
+    expect(record?.foundingMoneyCost).toBeCloseTo(30, 9);
+    expect(record?.founderCoverAfter).toBeCloseTo(0.4, 9);
   });
 });
 
