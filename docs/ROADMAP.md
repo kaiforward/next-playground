@@ -37,13 +37,16 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    each good's shortfall and collapsed its range ~5×. Absorbs two items previously booked separately:
    re-cutting the unrest band, and struck worlds that can neither grow out nor die.
    Key input, already measured: `foldSupplyState` returns `rationing` for *any* `d > 0` and `supplied`
-   only at exactly 0, so homeworlds at mean D 0.000 read 40% Rationing. There is no threshold to re-cut
-   because there is no threshold.
-   *Next step:* `/spec-review docs/planned/supply-response.md` — **required** before any implementation
-   plan (cross-mechanic: unrest fold, regime label, struck-world cohort).
-   Three steps inside it, **in order, measuring between** — (1) Provision + band demotion + struck-world
-   resolution, (2) change-driven unrest, (3) adaptive expectation. Steps 2 and 3 both change what the
-   slopes are measured against.
+   only at exactly 0 — there is no threshold to re-cut because there is no threshold. The exact-zero
+   cliff is real, but the mislabelled cohort is the 43.5% Rationing share at equilibrium (253 of 582
+   settled), not homeworlds: they read 100% Supplied at mean D 0.000 (n = 20, both horizons). The
+   clearest case is the pop ≥ 1K cohort — mean D 0.006 and still 23% Rationing (n = 370, equilibrium).
+   *Next step:* `/build-plan` from the reviewed spec (spec-review done 2026-08-07, all findings
+   accepted and folded in; report in `.agent-reviews/`).
+   Five items inside it, **in order, measuring between** — (1) Provision + band demotion +
+   instrumentation + the constant re-cuts, (2) change-driven unrest, (3) adaptive expectation,
+   (4) abandonment, (5) relief. Items 2 and 3 both change what the slopes are measured against; 4 and 5
+   each need a primitive the game does not have and are gated on it.
    *Don't:* precision-tune any constant before this lands — it invalidates them twice over.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line.
