@@ -185,10 +185,57 @@ describe("summarizeFoundingEra", () => {
   });
 
   it("runs the era to the end of the run when nothing was ever charged for a founding", () => {
-    const summary = summarizeFoundingEra([cycle(500, { income: 100 }), cycle(9000, { income: 100 })]);
+    const summary = summarizeFoundingEra([cycle(500, { income: 100 }), cycle(9000, { income: 300 })]);
     expect(summary.eraEndTick).toBeNull();
     expect(summary.factionCycles).toBe(2);
     expect(summary.spendShare).toBe(0);
+    // An era that never closed is an OPEN window, not an empty one: the income still has to be
+    // measured, or a run that founded nothing reads as a run that earned nothing.
+    expect(summary.income).toBe(400);
+    // …and with no era end there is no "after the era" either.
+    expect(summary.postEra).toEqual({ cycles: 0, shorted: 0, share: 0 });
+  });
+
+  it("puts a faction-cycle landing exactly on a window boundary on the right side of it", () => {
+    // Ticks are real settlement ticks and the windows are half-open at both ends, so a row sitting
+    // exactly on a boundary is the common case rather than an edge: the tail's last tick, the era's
+    // first, and the fixed window's last are all boundaries a report is read across.
+    const summary = summarizeFoundingEra([
+      cycle(FOUNDING_ERA_START_TICK, { income: 70, foundingExpense: 7 }),       // the tail's last tick
+      cycle(FOUNDING_ERA_START_TICK + 1, { income: 100, foundingExpense: 10 }), // the era's first
+      cycle(1000, { income: 100, foundingExpense: 10 }),                        // the fixed window's last
+      cycle(1001, { income: 100, foundingExpense: 10 }),                        // one tick past it
+    ]);
+
+    expect(summary.startupTail.cycles).toBe(1); // the boundary tick belongs to the tail…
+    expect(summary.factionCycles).toBe(3);      // …and not to the era
+    expect(summary.income).toBe(300);
+    expect(summary.fixedWindow.factionCycles).toBe(2); // 401 and 1000; not 400, not 1001
+    expect(summary.fixedWindow.income).toBe(200);
+    expect(summary.fixedWindow.foundingSpend).toBe(20);
+  });
+
+  it("closes the era on the LATEST founding charge, whatever order the rows arrive in", () => {
+    // Records are folded per settled faction-cycle across the whole roster, so they arrive grouped
+    // by faction, not sorted by tick. Keeping a running maximum is what makes the era's end the
+    // era's end rather than whichever charge the fold happened to see last.
+    const summary = summarizeFoundingEra([
+      cycle(900, { income: 100, foundingExpense: 10 }),
+      cycle(500, { income: 100, foundingExpense: 10 }),
+      cycle(600, { income: 100 }),
+    ]);
+    expect(summary.eraEndTick).toBe(900);
+    expect(summary.factionCycles).toBe(3);
+    // The run's last settled cycle is 900 too, so the era stopped because the run did.
+    expect(summary.eraCensored).toBe(true);
+  });
+
+  it("closes the era on a founding charged in the very first settled cycle", () => {
+    // Tick 0 is a real settlement tick, and 0 is not "no era end" — a comparison that leaned on a
+    // null reading as zero would lose the whole era of a galaxy that founded on its first cycle.
+    const summary = summarizeFoundingEra([cycle(0, { income: 100, foundingExpense: 10 })]);
+    expect(summary.eraEndTick).toBe(0);
+    expect(summary.eraCensored).toBe(true);
   });
 
   it("measures the fixed window over the same ticks whatever the arm's own era did", () => {
@@ -241,6 +288,16 @@ describe("summarizeFoundingEra", () => {
     ]);
 
     expect(summary.postEra).toEqual({ cycles: 2, shorted: 1, share: 0.5 });
+    // The slice is the rows AFTER the era, and reading it off the wrong side of the boundary would
+    // report the tail's shortfalls as post-era ones — same count, opposite meaning.
+    expect(
+      summarizeFoundingEra([
+        cycle(100),
+        cycle(500, { foundingExpense: 10 }),
+        cycle(2000, { shorted: true }),
+        cycle(3000, { shorted: true }),
+      ]).postEra,
+    ).toEqual({ cycles: 2, shorted: 2, share: 1 });
     expect(summary.withFounding.cycles + summary.withoutFounding.cycles).toBe(summary.factionCycles);
     // Tail + era + post-era account for every valid row.
     expect(
@@ -301,6 +358,20 @@ describe("summarizeFoundingEra", () => {
     expect(summary.minFundedConstruction).toBeCloseTo(0.7, 9);
   });
 
+  it("keeps the era's WORST funded cycle, not whichever one it read last", () => {
+    // The bar is a minimum over the era, and the worst cycle is not usually the last one. A running
+    // minimum that latched every row would report the run's final cycle and pass a bar the galaxy's
+    // actual trough failed.
+    const summary = summarizeFoundingEra([
+      cycle(500, { maintenance: 1, construction: 1, constructionBill: 5 }),
+      cycle(600, { maintenance: 0.6, construction: 0.7, constructionBill: 5 }),
+      cycle(700, { maintenance: 1, construction: 1, constructionBill: 5 }),
+    ]);
+    expect(summary.fundedMaintenance?.min).toBeCloseTo(0.6, 9);
+    expect(summary.minFundedConstruction).toBeCloseTo(0.7, 9);
+    expect(summary.billedConstructionCycles).toBe(3);
+  });
+
   it("excludes a non-finite or negative row from every figure, and counts it", () => {
     const summary = summarizeFoundingEra([
       cycle(500, { income: 100, foundingExpense: 10 }),
@@ -318,6 +389,9 @@ describe("summarizeFoundingEra", () => {
   it("reports a run with no founding-era cycles as nulls and zeroes, never NaN", () => {
     const summary = summarizeFoundingEra([]);
     expect(summary.spendShare).toBe(0);
+    // No era at all is not a censored one — an era that never began cannot have been cut short.
+    expect(summary.eraEndTick).toBeNull();
+    expect(summary.eraCensored).toBe(false);
     expect(summary.withFounding).toEqual({ cycles: 0, shorted: 0, share: 0 });
     // A median of nothing must not print as a starved 0.00 — that is a measurement, not an absence.
     expect(summary.fundedMaintenance).toBeNull();

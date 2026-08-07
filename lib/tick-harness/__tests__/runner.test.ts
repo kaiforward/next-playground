@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { foldFoundingTick, runTickHarness } from "../runner";
 import { MARKET_ROLES } from "../types";
 import type { HarnessConfig, MarketRole } from "../types";
+import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { FoundedColonyRecord, FoundingStagingTotals } from "../build-analysis";
 
 /** Small and short: this suite is about the role pin's wiring, not about economy behaviour. */
@@ -90,6 +91,58 @@ describe("foldFoundingTick", () => {
     expect(record?.foundingMoneyCost).toBeCloseTo(30, 9);
     expect(record?.founderCoverAfter).toBeCloseTo(0.4, 9);
   });
+});
+
+describe("runTickHarness: founding instruments", () => {
+  // Every figure below is the harness's own wiring, not the economy's behaviour: a break in any of
+  // it reads as a plausible number (0 stalls looks like a healthy galaxy; a concurrency mean off by
+  // the cadence looks like a busier one), so each is asserted as a structural identity rather than
+  // a magnitude nobody could recognise as wrong. 240 ticks is ten construction cycles on a small
+  // world — long enough that colonies are committed, staged from and held up.
+  const CONFIG: HarnessConfig = { systemCount: 20, seed: 7, tickCount: 240 };
+
+  it("samples open colonies once per construction cycle, not once per tick", async () => {
+    // The census is a per-CYCLE rate. Sampled per tick it would read the construction interval
+    // times too high, and the settler gate's invariance — whose whole evidence is a concurrent
+    // count — would be measured against a figure that moved with the cadence knob.
+    const results = await runTickHarness(CONFIG);
+    const inFlight = results.foundingLifecycle.inFlight;
+
+    expect(inFlight.sampledCycles).toBe(Math.floor(CONFIG.tickCount / CONSTRUCTION_INTERVAL));
+    expect(inFlight.max).toBeGreaterThan(0);
+    expect(inFlight.maxTick).not.toBeNull();
+    expect((inFlight.maxTick ?? 1) % CONSTRUCTION_INTERVAL).toBe(0); // taken on a cycle boundary
+    expect(inFlight.meanPerCycle).toBeGreaterThan(0);
+    expect(inFlight.meanPerCycle).toBeLessThanOrEqual(inFlight.max);
+  }, 30_000);
+
+  it("wires the founding stall board, its gate split and its event context end to end", async () => {
+    const results = await runTickHarness(CONFIG);
+    const stalls = results.foundingLifecycle.stalls;
+
+    expect(stalls.observed).toBeGreaterThan(0);
+    // One record per priced colony per CONSTRUCTION cycle — never one per tick, and never one for
+    // something that is not a stall record at all.
+    expect(stalls.observed).toBeLessThan(CONFIG.tickCount);
+    expect(stalls.charter + stalls.funds + stalls.pool + stalls.unGated).toBe(stalls.observed);
+    // The event board is read at the tick the shortfall happened: a founder sparing less under an
+    // active event is a shortfall the design accepts, and by run end that event is long gone.
+    expect(stalls.materialsShort).toBeGreaterThan(0);
+    expect(stalls.materialsShortUnderEvent).toBeGreaterThan(0);
+    expect(stalls.materialsShortUnderEvent).toBeLessThanOrEqual(stalls.materialsShort);
+  }, 30_000);
+
+  it("collects the founder cohort from the manifests actually staged, and settles cleanly", async () => {
+    const results = await runTickHarness(CONFIG);
+    // A source that can spare nothing stages nothing and is no founder however many colonies name
+    // it — so a non-empty cohort is evidence the manifest stream was read, not merely that colonies
+    // were committed.
+    expect(results.founderCohort.founder.systemCount).toBeGreaterThan(0);
+    expect(results.founderCohort.founder.systemCount)
+      .toBeLessThanOrEqual(results.founderCohort.other.systemCount + results.founderCohort.founder.systemCount);
+    // Every faction-cycle folded into the money bars is a real settlement, not a seeded placeholder.
+    expect(results.foundingEra.invalidRows).toBe(0);
+  }, 30_000);
 });
 
 describe("runTickHarness: logistics instruments", () => {

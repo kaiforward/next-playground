@@ -622,6 +622,60 @@ describe("founding lifecycle — commitment, completion and concurrency", () => 
     expect(summary.inFlight.sampledCycles).toBe(1);
   });
 
+  it("dates the concurrency peak to the FIRST cycle that reached it", () => {
+    // "When was founding at its busiest" is answered by when the peak was first reached, not by the
+    // last cycle that happened to match it — a plateau otherwise reports its own end as its start.
+    const commitments = new Map<string, number>();
+    const inFlight = newInFlightEstablishTotals();
+    sampleOpenColonies([establish("c1"), establish("c2")], 24, commitments, inFlight);
+    sampleOpenColonies([establish("c1"), establish("c2")], 48, commitments, inFlight);
+    expect(inFlight.max).toBe(2);
+    expect(inFlight.maxTick).toBe(24);
+  });
+
+  it("keeps the LONGEST founding as the maximum, not the last one measured", () => {
+    // The slowest founding is the one the bar is read against; a running maximum that latched every
+    // reading would report whichever colony the tracker iterated last.
+    const commitments = new Map<string, number>([["slow", 0], ["fast", 0]]);
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["slow", colony("slow", 240)], // 10 cycles
+      ["fast", colony("fast", 24)],  // 1 cycle — iterated last
+    ]);
+    const summary = summarizeFoundingLifecycle(
+      tracker, commitments, newInFlightEstablishTotals(), newFoundingStallTotals(), 24,
+    );
+    expect(summary.maxCycles).toBeCloseTo(10, 9);
+    expect(summary.meanCycles).toBeCloseTo(5.5, 9);
+  });
+
+  it("averages concurrency over the cycles sampled, never multiplies by them", () => {
+    // meanPerCycle is a rate: `open summed ÷ cycles sampled`. The two figures are within an order
+    // of each other in a real run, so a wrong operator here reads as a plausible number.
+    const commitments = new Map<string, number>();
+    const inFlight = newInFlightEstablishTotals();
+    sampleOpenColonies([establish("c1"), establish("c2"), establish("c3")], 24, commitments, inFlight);
+    sampleOpenColonies([establish("c1")], 48, commitments, inFlight);
+    sampleOpenColonies([], 72, commitments, inFlight);
+    const summary = summarizeFoundingLifecycle(
+      new Map(), commitments, inFlight, newFoundingStallTotals(), 24,
+    );
+    expect(summary.inFlight.sampledCycles).toBe(3);
+    expect(summary.inFlight.meanPerCycle).toBeCloseTo(4 / 3, 9); // not 12
+  });
+
+  it("reports durations in ticks rather than dividing by a cadence of zero", () => {
+    // An Infinity in a duration would print as the report's headline figure and survive the JSON
+    // round-trip as null.
+    const summary = summarizeFoundingLifecycle(
+      new Map<string, FoundedColonyRecord>([["c1", colony("c1", 96)]]),
+      new Map([["c1", 24]]),
+      newInFlightEstablishTotals(), newFoundingStallTotals(), 0,
+    );
+    expect(summary.meanCycles).toBe(72);
+    expect(summary.maxCycles).toBe(72);
+    expect(Number.isFinite(summary.medianCycles)).toBe(true);
+  });
+
   it("reports a run that founded nothing as zeroes, not NaN", () => {
     const summary = summarizeFoundingLifecycle(
       new Map(), new Map(), newInFlightEstablishTotals(), newFoundingStallTotals(), 24,
@@ -629,6 +683,7 @@ describe("founding lifecycle — commitment, completion and concurrency", () => 
     expect(summary.sampledCount).toBe(0);
     expect(summary.meanCycles).toBe(0);
     expect(summary.medianCycles).toBe(0);
+    expect(summary.maxCycles).toBe(0);
     expect(summary.inFlight.meanPerCycle).toBe(0);
     expect(summary.inFlight.maxTick).toBeNull();
     expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
@@ -674,6 +729,21 @@ describe("summarizeFounderCohort", () => {
     expect(summary.founder.meanIdleTypes).toBeCloseTo(0.5, 9);         // one type idle over two systems
     expect(summary.other.meanIdleTypes).toBeCloseTo(2, 9);
     expect(summary.founder.idleSystemShare).toBeCloseTo(0.5, 9);
+    expect(summary.other.idleSystemShare).toBe(1);
+  });
+
+  it("does not count a building type standing at zero idle cycles as idle", () => {
+    // `buildingIdleCycles` carries a counter per type, and a running type sits at 0 rather than
+    // being absent. Counting a present-but-zero entry would report every developed system in the
+    // galaxy as idle on everything it has built.
+    const summary = summarizeFounderCohort(
+      [sys("f1", "developed", { ore: 0, food: 0 }), sys("o1", "developed", { ore: 0, food: 2 })],
+      [mkt("f1", 5), mkt("o1", 5)],
+      new Set(["f1"]),
+    );
+    expect(summary.founder.meanIdleTypes).toBe(0);
+    expect(summary.founder.idleSystemShare).toBe(0);
+    expect(summary.other.meanIdleTypes).toBeCloseTo(1, 9); // only `food` is genuinely idle
     expect(summary.other.idleSystemShare).toBe(1);
   });
 
