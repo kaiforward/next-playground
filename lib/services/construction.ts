@@ -22,8 +22,12 @@ import {
 import { orderOpenProjects } from "@/lib/engine/construction";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
-import { safeMoney } from "@/lib/engine/treasury";
-import type { FoundingSourceSupply } from "@/lib/engine/founding-cost";
+import { foundingWorkingBalance } from "@/lib/engine/treasury";
+import { catchUpFactor } from "@/lib/tick/shard";
+import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import {
+  charterFee, referenceMaintenanceBill, type FoundingSourceSupply,
+} from "@/lib/engine/founding-cost";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import type { World, WorldConstructionProject } from "@/lib/world/types";
@@ -77,6 +81,40 @@ function foundingSupplyBySource(
   return supply;
 }
 
+/**
+ * One faction's founding position as every read surface must see it: the purse the tick spends from,
+ * what each in-flight colony's source can spare, and the cadence the founding path is paced at.
+ *
+ * Shared with the build-options service, whose queue-aware ETA runs over the same committed queue —
+ * a colony's absorption ceiling is part of how that queue drains, so an ETA derived without it would
+ * promise the player pool a gated colony was never going to release.
+ */
+export function foundingReadoutInputs(
+  world: World,
+  factionId: string,
+  projects: WorldConstructionProject[],
+  buildings: Map<string, Record<string, number>>,
+): FoundingReadoutInputs {
+  const treasury = world.treasuries.find((t) => t.factionId === factionId);
+  return {
+    workingBalance:
+      treasury === undefined
+        ? 0
+        : foundingWorkingBalance(treasury.balance, treasury.pendingFounding),
+    // Quoted off the same reference-de-scaled bill the tick's charter phase re-quotes from, so the
+    // affordability the readout tests is the one the charter phase will actually apply.
+    charter: charterFee(
+      referenceMaintenanceBill(treasury?.lastSettlement?.maintenanceBill, CYCLE_LENGTH),
+      { mult: COLONISATION.CHARTER_FEE_SPEND_MULT, min: COLONISATION.CHARTER_FEE_MIN },
+    ),
+    supplyBySource: foundingSupplyBySource(world, projects, buildings),
+    cover: COLONISATION.FOUNDING_STOCK_COVER,
+    catchUp: catchUpFactor(CONSTRUCTION_INTERVAL),
+    writeOffCycles: COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES,
+    economyScale: ECONOMY_SCALE,
+  };
+}
+
 function readoutForFaction(factionId: string): FactionConstructionReadout {
   const world = getWorld();
   const faction = world.factions.find((f) => f.id === factionId);
@@ -90,18 +128,7 @@ function readoutForFaction(factionId: string): FactionConstructionReadout {
       buildings: buildings.get(s.id) ?? {},
     }));
   const projects = orderOpenProjects(world.constructionProjects.filter((p) => p.factionId === factionId));
-
-  const treasury = world.treasuries.find((t) => t.factionId === factionId);
-  const founding: FoundingReadoutInputs = {
-    workingBalance:
-      treasury === undefined
-        ? 0
-        : safeMoney(safeMoney(treasury.balance) - safeMoney(treasury.pendingFounding)),
-    supplyBySource: foundingSupplyBySource(world, projects, buildings),
-    cover: COLONISATION.FOUNDING_STOCK_COVER,
-    writeOffCycles: COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES,
-    economyScale: ECONOMY_SCALE,
-  };
+  const founding = foundingReadoutInputs(world, factionId, projects, buildings);
 
   return computeFactionConstruction(
     projects, systems,

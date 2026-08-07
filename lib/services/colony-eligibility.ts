@@ -16,7 +16,7 @@ import {
   charterFee, foundingCommitmentCost, foundingGoodsValue, projectedManifestWant,
   referenceMaintenanceBill,
 } from "@/lib/engine/founding-cost";
-import { safeMoney } from "@/lib/engine/treasury";
+import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { COLONISATION } from "@/lib/constants/colonisation";
@@ -105,9 +105,7 @@ export function colonyEligibility(
     ECONOMY_SCALE,
   );
   const workingBalance =
-    treasury === undefined
-      ? 0
-      : safeMoney(safeMoney(treasury.balance) - safeMoney(treasury.pendingFounding));
+    treasury === undefined ? 0 : foundingWorkingBalance(treasury.balance, treasury.pendingFounding);
   const cost = foundingCommitmentCost(charter, projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM);
   if (cost > workingBalance) return { eligible: false, reason: "insufficient_funds" };
 

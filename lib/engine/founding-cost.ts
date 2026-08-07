@@ -146,6 +146,41 @@ function quantityByGood(lines: ReadonlyArray<FoundingStockLine>): Map<string, nu
   return totals;
 }
 
+/**
+ * THE per-cycle staging share: one cycle's slice of a colony's manifest, per good.
+ *
+ * Each good's slice is `workShare` of the full want, never more than is still outstanding — so the
+ * materials arrive in step with the work and a colony is never asked twice for what it already
+ * carries. `workShare` is the fraction of the whole establish the cycle's absorption cap would build.
+ *
+ * One function because two callers must size the SAME slice: the readout quotes what the next cycle
+ * will ask of a founder, and the processor's staging draw is that quote with the founder's shelves
+ * and the faction's balance clamped in good by good. Sized apart, a colony would be quoted one
+ * figure and charged another.
+ *
+ * `goods` decides which goods are on the list — a colony can only be provisioned with goods its
+ * source has a market row for. Only the good ids are read.
+ */
+export function stagingShareLines(
+  goods: ReadonlyArray<{ goodId: string }>,
+  stagedManifest: ReadonlyArray<FoundingStockLine>,
+  seedPop: number,
+  workShare: number,
+  cover: number,
+): FoundingStockLine[] {
+  if (!(workShare > 0)) return [];
+  const staged = quantityByGood(stagedManifest);
+  const lines: FoundingStockLine[] = [];
+  for (const want of projectedManifestWant(goods, seedPop, cover)) {
+    const quantity = Math.min(
+      Math.max(0, want.quantity - (staged.get(want.goodId) ?? 0)),
+      workShare * want.quantity,
+    );
+    if (quantity > 0) lines.push({ goodId: want.goodId, quantity });
+  }
+  return lines;
+}
+
 /** The next cycle's staging share, in money: what it asks for, and what is actually there to buy. */
 export interface NextStagingShare {
   /** Value of the share the colony wants this cycle, before the source's shelves are consulted. */
@@ -174,16 +209,8 @@ export function nextStagingShare(
   cover: number,
   economyScale: number,
 ): NextStagingShare {
-  if (!(workShare > 0)) return { wantValue: 0, drawableValue: 0 };
-  const staged = quantityByGood(stagedManifest);
+  const wanted = stagingShareLines(supply, stagedManifest, seedPop, workShare, cover);
   const sparable = new Map(supply.map((s) => [s.goodId, s.sparable]));
-  const wanted = projectedManifestWant(supply, seedPop, cover).map((want) => ({
-    goodId: want.goodId,
-    quantity: Math.min(
-      Math.max(0, want.quantity - (staged.get(want.goodId) ?? 0)),
-      workShare * want.quantity,
-    ),
-  }));
   const drawable = wanted.map((line) => {
     const headroom = sparable.get(line.goodId) ?? 0;
     return {

@@ -1312,6 +1312,80 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(money).toBeCloseTo(run.committed - FEE, 9);
   });
 
+  it("stages the whole share a part-funded cycle bought, in step with the work it bought", async () => {
+    // A purse holding exactly half this cycle's manifest share, against a founder with plenty on the
+    // shelves: money — not materials — is what lowers the ceiling, so the colony absorbs half a cap
+    // and must stage the half-share it actually paid for. The plan's lines are ALREADY the money's
+    // half; prorating them a second time by the same fraction would stage a quarter, charge a
+    // quarter, and leave the faction's own purse untouched with nothing reporting it.
+    const cycleShare = foundingWant("food") * (STAGE_CAP / STAGE_WORK);
+    const halfValue = foundingGoodsValue([{ goodId: "food", quantity: cycleShare }], 1) / 2;
+
+    const paid: WorldColonyEstablishProject = {
+      ...stagingProject(), kind: "colony_establish", id: "col", systemId: "c1",
+      sourceSystemId: "home", seedPop: EXPANSION.COLONY_SEED_POP, housingLevels: 1,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    };
+    const w = new MemoryDirectedBuildWorld([stockedHome({ food: 5_000 })], [paid]);
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(STAGE_CAP, 0.05),
+      develop: { candidateProvider: () => [], params: STAGING_PARAMS },
+      treasuryByFaction: new Map([["f1", { balance: halfValue, pendingFounding: 0, maintenanceBill: 0 }]]),
+    });
+
+    // Half the share is affordable ⇒ the ceiling holds the work at half a cap.
+    const colony = w.constructionProjects.find((p) => p.id === "col");
+    expect(colony?.workDone).toBeCloseTo(STAGE_CAP / 2, 6);
+    // …and that half-cap of work carries the whole half-share the money bought — the ledger, the
+    // founder's debit and the faction's bill all agree on one figure.
+    const drawn = w.foundingStagingDraws.reduce((sum, d) => sum + d.quantity, 0);
+    expect(drawn).toBeCloseTo(cycleShare / 2, 6);
+    expect(result.foundingDebitsByFaction?.get("f1")).toBeCloseTo(halfValue, 6);
+    expect((result.foundingManifests ?? []).reduce((sum, e) => sum + e.moneyCost, 0)).toBeCloseTo(halfValue, 6);
+  });
+
+  it("never commits one faction's money twice when two colonies stage in the same cycle", async () => {
+    // Two paid colonies drawing on one founder with ample stock, against a purse that covers exactly
+    // ONE cycle's share. The staging plans are drawn in queue order against a running balance, so the
+    // first spends it and the second finds nothing left — its ceiling is 0 and it stages nothing. The
+    // charter phase has the same contention case; without the running balance here a faction would
+    // over-commit `pendingFounding` and the treasury would settle a bill it never approved.
+    const cycleShare = foundingWant("food") * (STAGE_CAP / STAGE_WORK);
+    const shareValue = foundingGoodsValue([{ goodId: "food", quantity: cycleShare }], 1);
+
+    const paid = (id: string, systemId: string): WorldColonyEstablishProject => ({
+      ...stagingProject(), kind: "colony_establish", id, systemId,
+      sourceSystemId: "home", seedPop: EXPANSION.COLONY_SEED_POP, housingLevels: 1,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    });
+    const w = new MemoryDirectedBuildWorld(
+      [stockedHome({ food: 5_000 })],
+      [paid("colA", "c1"), paid("colB", "c2")],
+    );
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable,
+      construction: mkConstruction(STAGE_CAP, 0.05),
+      develop: { candidateProvider: () => [], params: STAGING_PARAMS },
+      treasuryByFaction: new Map([["f1", { balance: shareValue, pendingFounding: 0, maintenanceBill: 0 }]]),
+    });
+
+    // The purse is spent exactly once — not once per colony.
+    expect(result.foundingDebitsByFaction?.get("f1")).toBeCloseTo(shareValue, 6);
+    expect(w.foundingStagingDraws.reduce((sum, d) => sum + d.quantity, 0)).toBeCloseTo(cycleShare, 6);
+    // Which of the two the queue reaches first is not the property under test — the purse is.
+    const stagedFood = (id: string) =>
+      w.constructionProjects
+        .filter((p): p is WorldColonyEstablishProject => p.kind === "colony_establish" && p.id === id)
+        .flatMap((p) => p.stagedManifest)
+        .reduce((sum, l) => sum + l.quantity, 0);
+    const [served, starved] = [stagedFood("colA"), stagedFood("colB")].sort((a, b) => b - a);
+    expect(served).toBeCloseTo(cycleShare, 6);
+    expect(starved).toBe(0);
+    // The starved one is refused by the money, and says so.
+    expect((result.foundingStalls ?? []).filter((s) => s.gate === "funds")).toHaveLength(1);
+  });
+
   it("stages two colonies from one founder against a single shrinking pile", async () => {
     // A food exporter, so the drawable surplus slides continuously above the strategic reserve and can
     // be parked at one-and-a-half of a single cycle's share — enough to serve one colony's slice and

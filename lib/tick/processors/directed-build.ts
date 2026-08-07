@@ -11,10 +11,9 @@ import { systemDevelopment } from "@/lib/engine/development";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { surplusDrawable, type GoodMarketState, type RouteCost } from "@/lib/engine/directed-logistics";
-import { consumptionRate, type CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { COLONISATION } from "@/lib/constants/colonisation";
-import { charterFee, foundingGoodsValue } from "@/lib/engine/founding-cost";
-import { safeMoney } from "@/lib/engine/treasury";
+import { charterFee, foundingGoodsValue, stagingShareLines } from "@/lib/engine/founding-cost";
+import { foundingWorkingBalance, safeMoney } from "@/lib/engine/treasury";
 import { clamp } from "@/lib/utils/math";
 import type { WorldConstructionProject, WorldColonyEstablishProject, WorldPlayer } from "@/lib/world/types";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
@@ -139,18 +138,21 @@ function planStagingDraw(
   workShare: number,
   stockBalance: Map<string, number>,
   moneyLeft: number,
+  cover: number,
   economyScale: number,
 ): StagingDraw {
   if (project.seedPop <= 0 || !(workShare > 0)) {
     return { lines: [], cost: 0, achievableFraction: 1, materialsShort: false };
   }
 
-  const stagedSoFar = new Map<string, number>();
-  for (const line of project.stagedManifest) {
-    stagedSoFar.set(line.goodId, (stagedSoFar.get(line.goodId) ?? 0) + Math.max(0, line.quantity));
-  }
+  const goods = toGoodMarketStates(source);
+  // This cycle's slice, from the ONE share derivation the readout's quote also runs — so what a
+  // colony is told the next cycle asks for is what it is actually charged for.
+  const shareByGood = new Map(
+    stagingShareLines(goods, project.stagedManifest, project.seedPop, workShare, cover)
+      .map((l) => [l.goodId, l.quantity]),
+  );
 
-  const basis: CivilianDemandBasis = { population: project.seedPop, technicians: 0, engineers: 0 };
   const lines: FoundingStockLine[] = [];
   let budget = safeMoney(moneyLeft);
   let cost = 0;
@@ -158,13 +160,9 @@ function planStagingDraw(
   let satisfiedValue = 0;
   let materialsShort = false;
 
-  for (const good of toGoodMarketStates(source)) {
-    const colonyDemandRate = consumptionRate(good.goodId, basis);
-    if (colonyDemandRate <= 0) continue; // the seed does not consume it
-    const want = COLONISATION.FOUNDING_STOCK_COVER * colonyDemandRate;
-    const remainingWant = Math.max(0, want - (stagedSoFar.get(good.goodId) ?? 0));
-    const target = Math.min(remainingWant, workShare * want);
-    if (!(target > 0)) continue;
+  for (const good of goods) {
+    const target = shareByGood.get(good.goodId);
+    if (target === undefined) continue; // the seed does not want it, or wants no more of it
 
     // Unit price through the one valuation seam, so a staging debit and the charter's material
     // projection can never read two different numbers for the same good.
@@ -431,7 +429,8 @@ export async function runDirectedBuildProcessor(
     // The faction's money for founding: what is free once the founding already committed this
     // settlement period is honoured. Absent → this faction founds unpriced.
     const purse = factionId === null ? undefined : params.treasuryByFaction?.get(factionId);
-    let workingBalance = purse === undefined ? 0 : safeMoney(safeMoney(purse.balance) - safeMoney(purse.pendingFounding));
+    let workingBalance =
+      purse === undefined ? 0 : foundingWorkingBalance(purse.balance, purse.pendingFounding);
 
     const existing = openByFaction.get(factionId) ?? [];
     // The human seat's per-domain switches: off = skip PROPOSAL GENERATION for this faction in that
@@ -590,7 +589,8 @@ export async function runDirectedBuildProcessor(
         const plannedWork = Math.min(cap, Math.max(0, p.workTotal - p.workDone));
         const workShare = p.workTotal > 0 ? plannedWork / p.workTotal : 0;
         const draw = planStagingDraw(
-          source, p, workShare, foundingStockBalance, workingBalance, charterParams.economyScale,
+          source, p, workShare, foundingStockBalance, workingBalance,
+          charterParams.foundingStockCover, charterParams.economyScale,
         );
         workingBalance = safeMoney(workingBalance - draw.cost);
         stagingPlans.set(p.id, {
@@ -638,9 +638,15 @@ export async function runDirectedBuildProcessor(
       if (!priced || p.kind !== "colony_establish") return p;
       const plan = stagingPlans.get(p.id);
       const absorbedWork = p.workDone - (workBefore.get(p.id) ?? p.workDone);
+      // Prorate against the work the plan could ACTUALLY have funded — `min(ceiling, plannedWork)`,
+      // the same expression the gate record measures against. The plan's lines were already cut to
+      // what the money bought, so dividing by the un-ceilinged `plannedWork` would apply that same
+      // affordability fraction a second time: a part-funded cycle would stage (and be charged) f² of
+      // its share while doing f of the work, with nothing on any path reporting the gap.
+      const fundable = plan === undefined ? 0 : Math.min(plan.ceiling, plan.plannedWork);
       const share =
-        p.charterPaid && plan !== undefined && plan.plannedWork > 0
-          ? clamp(absorbedWork / plan.plannedWork, 0, 1)
+        p.charterPaid && plan !== undefined && fundable > 0
+          ? clamp(absorbedWork / fundable, 0, 1)
           : 0;
       const staged = (p.charterPaid ? plan?.lines ?? [] : [])
         .map((l) => ({ goodId: l.goodId, quantity: l.quantity * share }))

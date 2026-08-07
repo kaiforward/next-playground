@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
 import { generateWorld } from "@/lib/world/gen";
 import { getSystemBuildOptions } from "@/lib/services/build-options";
+import { getSystemConstruction } from "@/lib/services/construction";
 import { orderBuild } from "@/lib/services/construction-orders";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
+import type { WorldConstructionProject } from "@/lib/world/types";
 
 function seatWorld() {
   return generateWorld({
@@ -115,6 +117,58 @@ describe("getSystemBuildOptions", () => {
     // floor, and the material projection is a real bill for a seed that genuinely consumes goods.
     expect(data.colony.preview.charter).toBeGreaterThanOrEqual(COLONISATION.CHARTER_FEE_MIN);
     expect(data.colony.preview.projectedBill).toBeGreaterThan(0);
+  });
+
+  it("does not charge a build's ETA for pool a gated colony ahead of it never takes", () => {
+    // A charter-paid colony sits in the committed prefix ahead of everything the player can order.
+    // With the treasury unable to buy its next materials the tick holds its absorption at zero and
+    // funds the queue behind it as if it were not there — so the ETA quoted for a fresh order must
+    // not be pushed back by pool that colony will never consume.
+    const { target, home } = controlledNeighbour();
+    fundPlayer(0);
+    const w = getWorld();
+    const gated: WorldConstructionProject = {
+      kind: "colony_establish", id: "gated-colony", origin: "auto",
+      factionId: w.player!.controlledFactionId, systemId: target.id, sourceSystemId: home.id,
+      seedPop: 2, housingLevels: 1, workTotal: 10_000, workDone: 40,
+      stagedManifest: [], charterPaid: true, stalledCycles: 3,
+    };
+    // The founder's shelves are full, so nothing the colony wants is unsparable: what it cannot
+    // stage is the treasury's doing alone, and its ceiling sits at zero rather than part-way. The
+    // faction's heads are cut to a pool of roughly ONE absorption cap, so whether the colony ahead
+    // takes a cap or nothing is the whole difference between the two readings below.
+    const factionId = w.player!.controlledFactionId;
+    setWorld({
+      ...w,
+      constructionProjects: [gated],
+      markets: w.markets.map((m) => (m.systemId === home.id ? { ...m, stock: 1_000_000 } : m)),
+      // No industry to license heads away and 90 of them left: the pool is ≈ 4.5, barely more than
+      // one absorption cap, so whether the colony ahead takes a cap or nothing IS the difference
+      // between the two readings below.
+      buildings: w.buildings.filter((b) => b.systemId !== home.id),
+      systems: w.systems.map((s) =>
+        s.factionId !== factionId ? s : { ...s, population: s.id === home.id ? 90 : 0 },
+      ),
+    });
+
+    // The premise: this colony really is money-gated, so it absorbs nothing this cycle.
+    const colonyView = getSystemConstruction(target.id);
+    expect(colonyView.visibility).toBe("visible");
+    if (colonyView.visibility !== "visible") return;
+    const row = colonyView.projects.find((p) => p.id === "gated-colony");
+    expect(row?.kind).toBe("colony_establish");
+    if (row === undefined || row.kind !== "colony_establish") return;
+    expect(row.stalledReason).toBe("awaiting_funds");
+    expect(row.nextCycleGain).toBe(0);
+
+    const withColony = getSystemBuildOptions(home.id);
+    setWorld({ ...getWorld(), constructionProjects: [] });
+    const alone = getSystemBuildOptions(home.id);
+    if (withColony.mode !== "build" || alone.mode !== "build") throw new Error("expected build mode");
+    const etaOf = (data: typeof alone) =>
+      data.options.find((o) => o.buildingType === HOUSING_TYPE)?.etaCycles ?? null;
+    expect(etaOf(alone)).not.toBeNull();
+    expect(etaOf(withColony)).toBe(etaOf(alone));
   });
 
   it("reads a penniless faction's colony verb as insufficient_funds", () => {

@@ -23,13 +23,18 @@ function build(id: string, workTotal: number, workDone: number): WorldBuildProje
 function founded(over: Partial<FoundingReadoutInputs> = {}): FoundingReadoutInputs {
   return {
     workingBalance: 1_000_000,
+    charter: CHARTER,
     supplyBySource: new Map(),
     cover: COLONISATION.FOUNDING_STOCK_COVER,
+    catchUp: 1, // the reference construction cadence — cap and staging share are unscaled
     writeOffCycles: COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES,
     economyScale: 1,
     ...over,
   };
 }
+
+/** A stated charter fee — the money figures below are asserted, not recomputed through the pricing. */
+const CHARTER = 100;
 
 /** A source's rows, all of them drawable up to `sparable` (0 = it can spare nothing). */
 function supply(sparable: number, goodIds = ["water", "food"]): FoundingSourceSupply[] {
@@ -277,16 +282,48 @@ describe("computeFactionConstruction — why a founding is stuck", () => {
 
   const fromSource = (rows: FoundingSourceSupply[]) => new Map([["src", rows]]);
 
-  it("reads an unpaid charter as awaiting_charter, with no ETA to promise", () => {
-    // Money and materials are both abundant — only the charter is outstanding, and until it is paid
-    // the project absorbs no work at all, so any ETA the pool implies would be a fiction.
+  it("reads an unpaid charter the treasury cannot cover as awaiting_charter, with no ETA to promise", () => {
+    // Materials are abundant but the fee is out of reach, so the project absorbs no work at all
+    // until the money is there and any ETA the pool implies would be a fiction.
     const row = readColony(
       colony({ charterPaid: false }),
-      founded({ supplyBySource: fromSource(supply(1000)) }),
+      founded({ workingBalance: CHARTER - 1, supplyBySource: fromSource(supply(1000)) }),
     );
     expect(row.stalledReason).toBe("awaiting_charter");
     expect(row.etaCycles).toBeNull();
     // The rate is a pool figure too: an unpaid charter absorbs nothing, whatever the pool offers.
+    expect(row.nextCycleGain).toBe(0);
+  });
+
+  it("does not call a freshly ordered colony the treasury CAN pay for stalled", () => {
+    // The charter phase pays for every colony the working balance covers, in the same cycle it is
+    // ordered — so an unpaid charter on a solvent faction is a step about to happen, not a stall.
+    // Reading it as one would brand every player order amber for its first cycle, on the very path
+    // where the order service just proved the money was there.
+    const row = readColony(
+      colony({ charterPaid: false }),
+      founded({ workingBalance: CHARTER * 100, supplyBySource: fromSource(supply(1000)) }),
+    );
+    expect(row.stalledReason).toBeNull();
+    expect(row.etaCycles).not.toBeNull();
+    expect(row.nextCycleGain).toBeGreaterThan(0);
+  });
+
+  it("prices the charter out of the balance before the materials it leaves behind", () => {
+    // The tick pays the charter first and stages from what is left. A faction holding exactly the
+    // fee can therefore buy the colony but none of its first slice — reading the whole balance as
+    // available to the materials too would spend the same money twice and promise a rate it has not
+    // got. Its counter is running, so the live tests are consulted.
+    const rows = supply(1000);
+    const want = projectedManifestWant(rows, SEED_POP, COLONISATION.FOUNDING_STOCK_COVER);
+    const inputs = founded({
+      workingBalance: CHARTER,
+      supplyBySource: fromSource(rows),
+    });
+    expect(foundingGoodsValue(want, 1)).toBeGreaterThan(0); // the slice really does cost something
+
+    const row = readColony(colony({ charterPaid: false, stalledCycles: 3 }), inputs);
+    expect(row.stalledReason).toBe("awaiting_funds");
     expect(row.nextCycleGain).toBe(0);
   });
 
@@ -359,6 +396,53 @@ describe("computeFactionConstruction — why a founding is stuck", () => {
     expect(row.stalledReason).toBeNull();
     expect(row.etaCycles).not.toBeNull();
     expect(row.nextCycleGain).toBeGreaterThan(0);
+  });
+
+  it("passes the pool a gated colony cannot absorb through to the rows behind it", () => {
+    // The tick holds a colony whose materials the treasury cannot buy at a ceiling of zero and funds
+    // the next row from what it leaves. A forecast that funded every project at the scalar cap would
+    // have the gated colony swallow the whole pool, and the build behind it would read a rate of 0
+    // and an ETA it will beat by cycles — the common case, since a charter-paid colony sits in the
+    // committed prefix ahead of the queue.
+    const onePool: ConstructionSystemInfo[] = [
+      { id: "src", name: "Vela Prime", control: "developed", population: 80, buildings: {} },
+      { id: "ctrl", name: "Kepler Reach", control: "controlled", population: 0, buildings: {} },
+    ];
+    const gatedThenBuild: WorldConstructionProject[] = [
+      colony({ stalledCycles: 3 }),
+      { kind: "build", id: "behind", origin: "auto", factionId: "f1", systemId: "src",
+        buildingType: "housing", levels: 1, workTotal: 100, workDone: 0 },
+    ];
+    const r = computeFactionConstruction(
+      gatedThenBuild, onePool, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4,
+      founded({ workingBalance: 0, supplyBySource: fromSource(supply(1000)) }),
+    );
+    expect(r.pool).toBeCloseTo(4, 6); // exactly one cap: whoever takes it, the other gets nothing
+
+    const gated = r.all.find((row) => row.id === "c1");
+    const behind = r.all.find((row) => row.id === "behind");
+    if (!gated || !behind) throw new Error("fixture: expected both rows");
+    expect(gated.nextCycleGain).toBe(0);
+    expect(gated.etaCycles).toBeNull();
+    expect(behind.nextCycleGain).toBe(4); // its full cap — the tick would fund it, so the forecast does
+    expect(behind.etaCycles).toBe(25);    // 100 work ÷ 4 per cycle, undisturbed by the colony ahead
+  });
+
+  it("sizes the staging share off the cadence-scaled cap the tick paces staging on", () => {
+    const rows = supply(1000);
+    const want = projectedManifestWant(rows, SEED_POP, COLONISATION.FOUNDING_STOCK_COVER);
+    // The fixture colony has 60 work left of 100, so one reference cycle's cap (4) buys 4% of it.
+    const referenceShare = foundingGoodsValue(want, 1) * (4 / 100);
+    // One and a half reference slices: comfortably over one, comfortably under two.
+    const purse = (catchUp: number) =>
+      founded({ workingBalance: referenceShare * 1.5, catchUp, supplyBySource: fromSource(rows) });
+
+    // At the reference construction cadence the balance covers that slice exactly.
+    expect(readColony(colony({ stalledCycles: 3 }), purse(1)).stalledReason).toBeNull();
+    // Run construction half as often and each resolution builds twice as much, so it asks for twice
+    // the materials and the same purse no longer covers it. Sized off the unscaled cap both arms
+    // read alike and the readout quotes a slice the tick never draws.
+    expect(readColony(colony({ stalledCycles: 3 }), purse(2)).stalledReason).toBe("awaiting_funds");
   });
 
   it("reports the staged share of the manifest, weighted by what the goods cost", () => {
