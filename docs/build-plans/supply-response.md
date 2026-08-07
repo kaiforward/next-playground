@@ -54,8 +54,10 @@ Proves:
 - An empty basket and a fully-delivered basket both read Provision 1, while a weighted basket at zero
   satisfaction reads 0 — the empty-basket arm is the one that silently reads "perfect" for an emptying
   world, and it must be pinned before anything is measured over it.
-- A good with zero demand, or zero necessity, changes neither the mean nor the tail — it must not enter
-  either denominator.
+- A good with zero demand enters neither the mean nor the tail. A good with zero necessity changes the
+  mean not at all, but stays tail-eligible with its demand-only `demandShare` intact — the tail's only
+  exclusion is `demanded <= 0`, so Gate 1's necessity-floor decision can see low-necessity goods with
+  their necessity attached.
 - On a partial-satisfaction basket the mean and the shipped squared fold are not complements of each
   other: a uniform partial shortfall reads its own size, several times the squared fold's value. This is
   the vacuity check — a scenario built the way `dFor()` builds them (`band-constants.test.ts:139-144`,

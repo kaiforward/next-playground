@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   dissatisfaction,
+  provision,
+  worstDemandedGoods,
   accumulateUnrest,
   strikeMultiplier,
   populationDelta,
@@ -14,6 +16,7 @@ import {
   type SupplyState,
 } from "../population";
 import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT } from "@/lib/constants/economy";
+import { GOOD_NECESSITY } from "@/lib/constants/physical-economy";
 
 describe("dissatisfaction (convex, necessity-weighted)", () => {
   it("is 0 when fully satisfied and 0 when nothing is demanded", () => {
@@ -66,6 +69,182 @@ describe("dissatisfaction (convex, necessity-weighted)", () => {
       { goodId: "not_a_good", satisfaction: 0, demanded: 100 },
       { goodId: "water", satisfaction: 1, demanded: 10 },
     ])).toBe(0);
+  });
+});
+
+describe("provision (necessity-and-demand-weighted mean)", () => {
+  it("reads 1 for an empty basket and a fully-delivered basket, 0 for a weighted basket at zero satisfaction", () => {
+    expect(provision([])).toBe(1);
+    expect(provision([
+      { goodId: "water", satisfaction: 1, demanded: 10 },
+      { goodId: "luxuries", satisfaction: 1, demanded: 2 },
+    ])).toBeCloseTo(1, 10);
+    expect(provision([
+      { goodId: "water", satisfaction: 0, demanded: 10 },
+      { goodId: "food", satisfaction: 0, demanded: 5 },
+    ])).toBe(0);
+  });
+
+  it("is unmoved by a good with zero demand, or zero necessity", () => {
+    const base = [
+      { goodId: "water", satisfaction: 0.4, demanded: 10 },
+      { goodId: "food", satisfaction: 0.9, demanded: 5 },
+    ];
+    const withZeroDemand = [...base, { goodId: "medicine", satisfaction: 0, demanded: 0 }];
+    const withZeroNecessity = [...base, { goodId: "not_a_good", satisfaction: 0, demanded: 100 }];
+    expect(provision(withZeroDemand)).toBeCloseTo(provision(base), 10);
+    expect(provision(withZeroNecessity)).toBeCloseTo(provision(base), 10);
+  });
+
+  it("is not the complement of dissatisfaction() on a partial-satisfaction basket (the vacuity check)", () => {
+    // Every named good at satisfaction 0, the way band-constants.test.ts's dFor() builds scenarios,
+    // cannot distinguish the two folds: both read the full gap.
+    const zeroed = [
+      { goodId: "water", satisfaction: 0, demanded: 10 },
+      { goodId: "food", satisfaction: 0, demanded: 10 },
+    ];
+    expect(dissatisfaction(zeroed)).toBeCloseTo(1 - provision(zeroed), 10);
+
+    // A uniform PARTIAL shortfall is where the two folds separate: the un-squared mean reads its own
+    // size (0.2), the squared fold reads a small fraction of it (0.04) — several times smaller.
+    const partial = [
+      { goodId: "water", satisfaction: 0.8, demanded: 10 },
+      { goodId: "food", satisfaction: 0.8, demanded: 30 },
+      { goodId: "medicine", satisfaction: 0.8, demanded: 5 },
+    ];
+    const shortfall = 1 - provision(partial);
+    const d = dissatisfaction(partial);
+    expect(shortfall).toBeCloseTo(0.2, 10);
+    expect(d).toBeCloseTo(0.04, 10);
+    expect(shortfall).toBeGreaterThan(d * 4);
+  });
+
+  it("clamps non-finite or out-of-range satisfaction rather than propagating it", () => {
+    const nanGoods = [
+      { goodId: "water", satisfaction: NaN, demanded: 10 },
+      { goodId: "food", satisfaction: 1, demanded: 10 },
+    ];
+    expect(Number.isNaN(provision(nanGoods))).toBe(false);
+    expect(provision(nanGoods)).toBeCloseTo(0.5, 10); // NaN clamps to 0, averaged with a full 1
+
+    const outOfRange = [
+      { goodId: "water", satisfaction: 1.5, demanded: 10 },
+      { goodId: "food", satisfaction: -3, demanded: 10 },
+    ];
+    expect(provision(outOfRange)).toBeCloseTo(0.5, 10); // 1.5 clamps to 1, -3 clamps to 0
+
+    const infinities = [
+      { goodId: "water", satisfaction: Infinity, demanded: 10 },
+      { goodId: "food", satisfaction: -Infinity, demanded: 10 },
+    ];
+    expect(Number.isFinite(provision(infinities))).toBe(true);
+    expect(provision(infinities)).toBeCloseTo(0.5, 10);
+  });
+});
+
+describe("worstDemandedGoods (ascending tail with demand share)", () => {
+  it("returns the demanded good(s) with lowest satisfaction, ascending — a naive min scan", () => {
+    const goods = [
+      { goodId: "water", satisfaction: 0.6, demanded: 10 },
+      { goodId: "food", satisfaction: 0.2, demanded: 10 },
+      { goodId: "medicine", satisfaction: 0.9, demanded: 10 },
+    ];
+    expect(worstDemandedGoods(goods, 2).map((r) => r.goodId)).toEqual(["food", "water"]);
+  });
+
+  it("breaks a satisfaction tie by descending demand share", () => {
+    const goods = [
+      { goodId: "water", satisfaction: 0.3, demanded: 10 },
+      { goodId: "food", satisfaction: 0.3, demanded: 90 }, // tied on satisfaction, bigger demand share
+      { goodId: "medicine", satisfaction: 0.9, demanded: 100 },
+    ];
+    const worst = worstDemandedGoods(goods, 2);
+    expect(worst.map((r) => r.goodId)).toEqual(["food", "water"]);
+  });
+
+  it("returns fewer than count when the world demands fewer goods, dropping demanded<=0 goods entirely", () => {
+    const goods = [
+      { goodId: "water", satisfaction: 0.5, demanded: 10 },
+      { goodId: "food", satisfaction: 0.9, demanded: 0 }, // not demanded — not a reading
+      { goodId: "medicine", satisfaction: 0.1, demanded: -5 }, // negative demand — not a reading
+    ];
+    const worst = worstDemandedGoods(goods, 5);
+    expect(worst).toHaveLength(1);
+    expect(worst[0].goodId).toBe("water");
+  });
+
+  it("demandShare sums to 1 over the world's demanded goods and moves only with demand", () => {
+    const goods = [
+      { goodId: "water", satisfaction: 0.5, demanded: 90 },
+      { goodId: "food", satisfaction: 0.5, demanded: 9 },
+      { goodId: "medicine", satisfaction: 0.5, demanded: 1 }, // epsilon demand, high necessity
+    ];
+    const all = worstDemandedGoods(goods, goods.length);
+    const totalShare = all.reduce((sum, r) => sum + r.demandShare, 0);
+    expect(totalShare).toBeCloseTo(1, 10);
+    const medicine = all.find((r) => r.goodId === "medicine");
+    expect(medicine).toBeDefined();
+    expect(medicine?.necessity).toBeCloseTo(GOOD_NECESSITY.medicine, 10);
+    expect(medicine?.demandShare).toBeCloseTo(0.01, 10); // 1 / (90 + 9 + 1)
+  });
+
+  it("keeps a zero-necessity, positive-demand good tail-eligible with its demand-only share", () => {
+    // demandShare is deliberately NOT necessity-weighted, and only demanded <= 0 excludes a good from
+    // being a reading at all — an unauthored (necessity 0) good with real demand must still be able to
+    // be "the worst demanded good", carrying necessity: 0 rather than being silently dropped.
+    const goods = [
+      { goodId: "not_a_good", satisfaction: 0.1, demanded: 40 }, // necessity 0, worst satisfaction
+      { goodId: "water", satisfaction: 0.9, demanded: 60 },
+    ];
+    const worst = worstDemandedGoods(goods, 2);
+    const zeroNecessity = worst.find((r) => r.goodId === "not_a_good");
+    expect(zeroNecessity).toBeDefined();
+    expect(zeroNecessity?.necessity).toBe(0);
+    expect(zeroNecessity?.demandShare).toBeCloseTo(0.4, 10); // 40 / (40 + 60), demand-only
+    expect(worst[0].goodId).toBe("not_a_good"); // worst satisfaction still ranks first
+  });
+
+  it("clamps non-finite or out-of-range satisfaction in the reading instead of propagating it", () => {
+    const nan = worstDemandedGoods([{ goodId: "water", satisfaction: NaN, demanded: 10 }], 1);
+    expect(nan[0].satisfaction).toBe(0);
+
+    const outOfRange = worstDemandedGoods(
+      [
+        { goodId: "water", satisfaction: 1.5, demanded: 10 },
+        { goodId: "food", satisfaction: -3, demanded: 10 },
+      ],
+      2,
+    );
+    const water = outOfRange.find((r) => r.goodId === "water");
+    const food = outOfRange.find((r) => r.goodId === "food");
+    expect(water?.satisfaction).toBe(1);
+    expect(food?.satisfaction).toBe(0);
+
+    const infinities = worstDemandedGoods(
+      [
+        { goodId: "water", satisfaction: Infinity, demanded: 10 },
+        { goodId: "food", satisfaction: -Infinity, demanded: 10 },
+      ],
+      2,
+    );
+    for (const r of infinities) expect(Number.isFinite(r.satisfaction)).toBe(true);
+    expect(infinities.find((r) => r.goodId === "water")?.satisfaction).toBe(1);
+    expect(infinities.find((r) => r.goodId === "food")?.satisfaction).toBe(0);
+  });
+
+  it("returns an empty tail rather than throwing or padding when count <= 0", () => {
+    // Five entries so a negative count that only guards via Array.slice's own negative-index
+    // behaviour (rather than clamping count itself) is caught: slice(0, -3) here would return 2
+    // entries, not [].
+    const goods = [
+      { goodId: "water", satisfaction: 0.5, demanded: 10 },
+      { goodId: "food", satisfaction: 0.4, demanded: 10 },
+      { goodId: "medicine", satisfaction: 0.3, demanded: 10 },
+      { goodId: "ore", satisfaction: 0.2, demanded: 10 },
+      { goodId: "gas", satisfaction: 0.1, demanded: 10 },
+    ];
+    expect(worstDemandedGoods(goods, 0)).toEqual([]);
+    expect(worstDemandedGoods(goods, -3)).toEqual([]);
   });
 });
 

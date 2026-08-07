@@ -67,6 +67,71 @@ export function dissatisfaction(goods: GoodSatisfaction[]): number {
   return d;
 }
 
+/** Satisfaction clamped into [0,1]; NaN clamps to 0 rather than propagating — a corrupted read must
+ *  read as the worst case, never silently pass a NaN into a mean (or, worse, into the world). */
+function clampSatisfaction(satisfaction: number): number {
+  return Number.isNaN(satisfaction) ? 0 : clamp(satisfaction, 0, 1);
+}
+
+/**
+ * Provision: the necessity-and-demand-weighted MEAN of per-good satisfaction, in [0,1]. Same weights
+ * as dissatisfaction() (goodWeight = demanded × necessity, unchanged) — but averaged, not
+ * squared-and-averaged, so a uniform partial shortfall reads its own size rather than its square.
+ * Read directly: 100% = everything demanded arrived, or nothing is demanded at all; 50% = half of
+ * what this world needs, weighted by how badly it needs it, is not arriving.
+ * Returns 1 when Σ weight ≤ 0 — the empty basket (or a basket of goods nobody here demands or needs)
+ * reads as fully provisioned, the complement of dissatisfaction()'s 0 for the same case. That value is
+ * load-bearing: it is what an emptying world reads on its way out.
+ */
+export function provision(goods: GoodSatisfaction[]): number {
+  let totalWeight = 0;
+  for (const g of goods) totalWeight += goodWeight(g);
+  if (totalWeight <= 0) return 1;
+  let mean = 0;
+  for (const g of goods) {
+    const share = goodWeight(g) / totalWeight;
+    mean += share * clampSatisfaction(g.satisfaction);
+  }
+  return mean;
+}
+
+/**
+ * One demanded good's reading for the worst-good tail. `demandShare` is this good's share of the
+ * world's total civilian DEMAND (Σ demanded over demanded goods) — deliberately NOT weighted by
+ * necessity, because a demand-share floor filters tiny demand, not low importance. `necessity` is
+ * carried alongside, unused here, so a necessity-floor variant can be decided from the same reading
+ * without re-deriving either quantity.
+ */
+export interface DemandedGoodReading {
+  goodId: string;
+  /** Clamped into [0,1]; a non-finite input reads 0 rather than propagating. */
+  satisfaction: number;
+  demandShare: number;
+  necessity: number;
+}
+
+/**
+ * The `count` demanded goods with the lowest satisfaction, ascending, ties broken by descending
+ * demandShare — the more-wanted of two equally-bad goods surfaces first. Goods with `demanded <= 0`
+ * are not readings at all: a good nobody here demands cannot be "the worst demanded good". Returns
+ * fewer than `count` entries rather than padding when the world demands fewer goods than that.
+ */
+export function worstDemandedGoods(goods: GoodSatisfaction[], count: number): DemandedGoodReading[] {
+  const demanded = goods.filter((g) => g.demanded > 0);
+  let totalDemand = 0;
+  for (const g of demanded) totalDemand += g.demanded;
+  const readings = demanded.map((g) => ({
+    goodId: g.goodId,
+    satisfaction: clampSatisfaction(g.satisfaction),
+    demandShare: totalDemand > 0 ? g.demanded / totalDemand : 0,
+    necessity: Math.max(0, GOOD_NECESSITY[g.goodId] ?? 0),
+  }));
+  readings.sort((a, b) =>
+    a.satisfaction !== b.satisfaction ? a.satisfaction - b.satisfaction : b.demandShare - a.demandShare,
+  );
+  return readings.slice(0, Math.max(0, count));
+}
+
 /** Supply-rate class for a system this tick. */
 export type SupplyRegime = "supplied" | "rationing" | "shortage";
 
