@@ -106,7 +106,7 @@ stripped of the conditions it was taken under is what turns into a false premise
 /feature-spec→ functional spec               (entry condition: evidence exists)
 /spec-review → revised functional spec       (rubric = the design hazards)
 /build-plan  → implementation plan           (files + interfaces, NOT the code)
-implementation → PR
+/implement-plan → PR                         (SDD dispatch + TDD, red-proof against the plan's detection list)
 /uber-review → merge
 ```
 
@@ -190,12 +190,27 @@ cannot reach.
 1. **`/brainstorm`** — prose discussion, no forced-choice lists, terminal state is `/measure` rather
    than a spec.
 2. **`/feature-spec`** — four-field header, hazard worksheet, refuses to start without evidence.
-3. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
+3. **`/implement-plan`** — the execution stage, currently the only unnamed step in the sequence and
+   the last superpowers dependency (executing-plans / subagent-driven-development / TDD are generic:
+   they have never heard of `Proves`, red-proof, the SDD ledger or the per-task review gate, and that
+   seam is where PR #217's ~278 unpinned behaviours leaked through despite a filled plan). Codifies
+   what we already do ad hoc: the SDD ledger (`progress.md`), per-task subagent dispatch with an
+   explicit model per task, TDD where the red run is the plan's detection list executed item by item
+   (write the test, break the listed behaviour, watch red, restore), the per-task review gate, commit
+   discipline. **Companion edit to `/build-plan`:** widen `Proves` from one premise per task to a
+   short detection list — the 3-6 wrong behaviours the task's tests must be seen to fail on
+   (boundaries, contention paths, branch arms, the vacuity check). Behaviours, not test code; the
+   no-code rule holds. Decided with Kai 2026-08-07, during PR #217's mutation triage. **Write it
+   after PR #217 ships**: the fix-wave agent's report is the design input (what an executor needed
+   spelling out, and the ratio of survivors that exposed wrong behaviour vs merely tightened
+   assertions — the same ratio that decides whether the mutation gate demotes to a periodic audit).
+4. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
    separate task — a checklist item on items 1-2. The test of whether it worked is the same as for
    `/measure`: dogfood the skill on a real queue item and see whether the mechanism catches something.
    `/spec-review` and `/build-plan` both passed that test on 2026-08-04 (details in their Done
    bullets above) — the honest-demand-and-flow spec arrived before roadmap item 6 and became the
-   dogfood for both.
+   dogfood for both. For item 3 the natural mechanism-B instance is a per-task "what this task's
+   tests do not prove" line in the ledger.
 
 The plain-language-before-numbers question is closed — Kai called it yes on 2026-08-03: a required
 `Meaning` line now leads `/measure`'s report frame (rank 2). The rank-3 preference in
