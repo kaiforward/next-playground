@@ -186,8 +186,9 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 
 **Executing fix batches**
 - **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched
-  Opus agent** — with the standard one-line ask — never inline in the main
-  session. Inline is for a single trivial edit only. The main session runs the priciest model and
+  agent** — with the standard one-line ask — never inline in the main
+  session. Model is the session's judgment per batch (the one hard rule is never Fable): heavier
+  reasoning where fixes need it, cheaper tiers for mechanical sweeps. Inline is for a single trivial edit only. The main session runs the priciest model and
   its context belongs to orchestration; "don't block on an ask" is not a reason to skip the ask.
   The ask describes the dispatch's scope in words — what it will read and do, never a token count.
   The session's job on the result: verify the agent's claims and make the judgement calls it flags

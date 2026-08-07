@@ -90,7 +90,9 @@ Resolve tiers through `.agents/model-tiers.md`; effort explicit on every dispatc
   cross-mechanic engine surgery, or was gated on a spec amendment — and record why in the ledger.
 - **Per-task reviewer: `strong`** — it verifies written invariants against a written list.
   Open-ended judgment review is `/uber-review`'s job, later, with its own dials.
-- **Fix wave: `frontier`** — the standing fix-batch rule in `AGENTS.md`.
+- **Fix wave: the session's call per batch** — `strong` for mechanical, well-specified fixes;
+  `frontier` where the batch needs real reasoning (a fix that could weaken a test, cross-cutting
+  cleanups, a finding the session suspects is wrong). Record the choice in the ledger.
 - Effort: `high` for engine/tick work, `medium` for mechanical harness and report tasks.
 
 ## What this skill does not do
