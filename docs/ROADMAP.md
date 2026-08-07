@@ -222,6 +222,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
+- **[M] Pre-existing mutation survivors in the colonisation-adjacent files** — the PR #217 scoped
+  sweep (27 files) surfaced ~1,000 surviving/no-coverage mutants on lines *outside* that PR's diff;
+  the in-diff ones were handled at the PR's own gate. Heaviest: `lib/world/tick.ts`,
+  `lib/engine/directed-build.ts`, `lib/tick-harness/runner.ts`. The incremental cache
+  (`reports/stryker-incremental.json`, machine-local) makes re-runs minutes, not hours.
+  *Next step:* chip file-by-file, worst first, same kill-or-accept discipline as the PR gate.
 - **[S] Decide the simulate "equilibrium" horizon** — the quick run's 10,000-tick label sits inside
   the startup transient for high-tier consumer metrics (electronics/luxuries recoveries land
   t≈9,500-11,000; ship_frames later still). Options: extend the labelled horizon to 12-16k
