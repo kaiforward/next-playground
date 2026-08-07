@@ -64,7 +64,7 @@ writes it, who reads it, where it sits in the run order. The expensive loop in t
 Inconclusive → back here → re-instrument → re-run; most wrong-instrument picks (wrong function,
 wrong scope, measured outside the tick) are visible in that one cheap read.
 
-Scratch diagnostics live in `.superpowers/` (gitignored) and are never committed. `lock-diag.ts`
+Scratch diagnostics live in `temp/` (gitignored) and are never committed. `lock-diag.ts`
 (anchor funding, per-producer stock) and `floor-diag.ts` (per-good floored share, requested vs
 delivered at the moment of transfer) already exist and take `DIAG_TICKS`/`DIAG_SYSTEMS`/`DIAG_SEED`.
 
@@ -87,7 +87,7 @@ and cohort labels intact; it does not mean the full dump.
 tracked code under `lib/`. That patch is a measuring tool, not a change, and it must never reach a
 commit: `git checkout -- <file>`, then `git status` and a grep for the hook's name across `lib/` and
 `scripts/`. Do this before writing up, not after — the write-up is where it gets forgotten. Only the
-scratch runner in `.superpowers/` (gitignored) survives the session.
+scratch runner in `temp/` (gitignored) survives the session.
 
 ### 5. Report in the required frame
 

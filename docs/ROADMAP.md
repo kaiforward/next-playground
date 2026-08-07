@@ -88,7 +88,7 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   *builds*: the brake knee (40 cycles of use / 8 of output) is the natural capacity target the
   autonomic build works toward — storage becomes a build product balanced against production and
   consumption, not a seeded constant. Evidence preserved: gate report §7/§7.1 per-good tables
-  (`.superpowers/stage3-gate-report.md`).
+  (`temp/stage3-gate-report.md`).
   Kai's leaning (2026-08-05): industry pricing probably lands here too — it touches the same
   ROI/build-planner surface, so the ROI ordering gets retuned once, not twice.
   *Next step:* design pass + `/spec-review` (cross-mechanic: brake, pricing band `maxStock`,

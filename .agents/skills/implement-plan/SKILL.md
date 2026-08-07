@@ -21,7 +21,7 @@ orchestration around those gates, not a restatement of them.
 
 ## The ledger
 
-`.superpowers/sdd/<feature>/progress.md` — created before the first dispatch, updated after every
+`temp/sdd/<feature>/progress.md` — created before the first dispatch, updated after every
 task, gitignored. It is the implementation's memory; anything not written here is treated as never
 having happened. Two required sections:
 

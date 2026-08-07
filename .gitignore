@@ -60,8 +60,11 @@ next-env.d.ts
 # local cross-harness agent review output
 .agent-reviews/
 
-# superpowers brainstorm scratch
+# superpowers brainstorm scratch (folder retires with the plugin)
 .superpowers/
+
+# project scratch: diag runners, gate reports, SDD ledgers (temp/sdd/<feature>/)
+temp/
 
 # cocoindex code search index
 .cocoindex_code/
