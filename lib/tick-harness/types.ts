@@ -140,6 +140,11 @@ export interface WorldCohortEntry {
   suppliedShare: number;
   rationingShare: number;
   shortageShare: number;
+  /** Mean provision() over the cohort's systems. */
+  meanProvision: number;
+  /** Median of each system's single worst-demanded-good satisfaction (1 for a system with no
+   *  demanded goods) — the quantile a mean would flatten out of a bimodal cohort. */
+  worstGoodMedian: number;
 }
 
 export interface MarketHealthSummary {

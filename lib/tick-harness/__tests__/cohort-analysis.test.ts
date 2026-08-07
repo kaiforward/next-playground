@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts, marketRolesByKey,
 } from "../cohort-analysis";
+import { perSystemSupplyState } from "../population-analysis";
 import type { MarketRole } from "../types";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
@@ -280,7 +281,59 @@ describe("computeWorldCohorts", () => {
     for (const e of entries) {
       expect(Number.isNaN(e.meanDissatisfaction)).toBe(false);
       expect(Number.isNaN(e.meanUnrest)).toBe(false);
+      expect(Number.isNaN(e.meanProvision)).toBe(false);
+      expect(Number.isNaN(e.worstGoodMedian)).toBe(false);
     }
+  });
+
+  it("folds a cohort's Provision mean from the same per-system map perSystemSupplyState computes", () => {
+    // Both systems land in "pop <10" — the cohort IS the whole settled population here, so its
+    // meanProvision must equal a manual fold over the same map computeWorldCohorts reads.
+    const systems = [sys("s1", { population: 5 }), sys("s2", { population: 5 })];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 0.5 },
+      { systemId: "s2", goodId: "water", satisfaction: 1 },
+    ];
+
+    const states = perSystemSupplyState(systems, markets);
+    const manualMean = [...states.values()].reduce((a, s) => a + s.provision, 0) / states.size;
+
+    const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.meanProvision).toBeCloseTo(manualMean, 10);
+  });
+
+  it("reports a cohort's worstGoodMedian as the median of its members' known worst-good satisfactions", () => {
+    // Each system demands only water, so its worst good IS water and its satisfaction is
+    // unambiguous — no tie-break or multi-good folding can obscure what the median is taken over.
+    // Values 0.2, 0.5, 0.9 median to the middle one exactly, so a stand-in default (e.g. always 1)
+    // cannot coincidentally pass.
+    const systems = [
+      sys("s1", { population: 5 }), sys("s2", { population: 5 }), sys("s3", { population: 5 }),
+    ];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 0.2 },
+      { systemId: "s2", goodId: "water", satisfaction: 0.5 },
+      { systemId: "s3", goodId: "water", satisfaction: 0.9 },
+    ];
+
+    const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.worstGoodMedian).toBeCloseTo(0.5, 6);
+  });
+
+  it("keeps an unclaimed system out of every cohort's Provision denominator", () => {
+    const claimed = sys("s1", { population: 5 });
+    const unclaimed = sys("s2", { population: 5, control: "unclaimed" });
+    const markets = [{ systemId: "s1", goodId: "water", satisfaction: 0.4 }];
+
+    const entries = computeWorldCohorts([claimed, unclaimed], markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.n).toBe(1);
+    expect(band?.meanProvision).toBeCloseTo(0.4, 6);
   });
 
   it("counts a striking system into its cohort's striking share", () => {

@@ -253,6 +253,8 @@ describe("ExperimentConfig", () => {
         suppliedShare: 0.34,
         rationingShare: 0.627,
         shortageShare: 0.033,
+        meanProvision: 0.94,
+        worstGoodMedian: 0.9,
       }];
       const saved = buildExperimentResult(results);
       expect(saved.worldCohorts).toEqual(results.worldCohorts);

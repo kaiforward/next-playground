@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { detectPingPong, perSystemSupplyState, summarizeInfrastructure, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
+import {
+  detectPingPong, perSystemSupplyState, summarizeInfrastructure, summarizePopulation,
+  summarizeSupplyRegimes,
+} from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
 import { D_SHORTAGE_CUT } from "@/lib/constants/economy";
@@ -272,6 +275,53 @@ describe("summarizeSupplyRegimes", () => {
     expect(summary.counted).toBe(0);
     expect(Number.isFinite(summary.suppliedShare)).toBe(true);
     expect(summary.meanDissatisfaction).toBe(0);
+    expect(summary.provisionLevels).toEqual({ median: 0, p10: 0, p90: 0 });
+    expect(summary.worstGoodLevels).toEqual({ median: 0, p10: 0, p90: 0 });
+  });
+
+  it("excludes an unclaimed system from the Provision and worst-good distributions", () => {
+    const claimed = popSys("claimed", 100, 1000);
+    const unclaimed = { ...popSys("unclaimed", 100, 1000), control: "unclaimed" as const };
+    const markets = [mkt("claimed", "water", 0.5), mkt("unclaimed", "water", 0)];
+
+    const summary = summarizeSupplyRegimes([claimed, unclaimed], markets);
+
+    expect(summary.counted).toBe(1);
+    // Water is the only demanded good on "claimed", so both its Provision and its (only, hence
+    // worst) good's satisfaction are exactly 0.5. If the unclaimed system's reading leaked into
+    // either distribution, the median could not land on that exact value.
+    expect(summary.provisionLevels.median).toBeCloseTo(0.5, 6);
+    expect(summary.worstGoodLevels.median).toBeCloseTo(0.5, 6);
+  });
+
+  it("shows a bimodal population's p10 and p90 apart, not collapsed onto one mean", () => {
+    // The spec measures 53.4% of settled systems at exactly D 0 against a short tail — this fixture
+    // is the same shape at Provision's scale: half the galaxy fully served, half fully deprived.
+    const fed = Array.from({ length: 5 }, (_, i) => popSys(`fed-${i}`, 100, 1000));
+    const starved = Array.from({ length: 5 }, (_, i) => popSys(`starved-${i}`, 100, 1000));
+    const systems = [...fed, ...starved];
+    const markets = [
+      ...fed.map((s) => mkt(s.id, "water", 1)),
+      ...starved.map((s) => mkt(s.id, "water", 0)),
+    ];
+
+    const summary = summarizeSupplyRegimes(systems, markets);
+
+    expect(summary.provisionLevels.p10).toBeCloseTo(0, 6);
+    expect(summary.provisionLevels.p90).toBeCloseTo(1, 6);
+    expect(summary.worstGoodLevels.p10).toBeCloseTo(0, 6);
+    expect(summary.worstGoodLevels.p90).toBeCloseTo(1, 6);
+  });
+
+  it("collapses p10, median and p90 onto the same value when every world is identical", () => {
+    const systems = [popSys("a", 100, 1000), popSys("b", 100, 1000), popSys("c", 100, 1000)];
+    const markets = systems.map((s) => mkt(s.id, "water", 0.6));
+
+    const summary = summarizeSupplyRegimes(systems, markets);
+
+    expect(summary.provisionLevels.p10).toBeCloseTo(summary.provisionLevels.median, 10);
+    expect(summary.provisionLevels.median).toBeCloseTo(summary.provisionLevels.p90, 10);
+    expect(summary.provisionLevels.median).toBeCloseTo(0.6, 6);
   });
 });
 
@@ -314,5 +364,37 @@ describe("perSystemSupplyState", () => {
     const meanD = [...states.values()].reduce((a, s) => a + s.d, 0) / states.size;
     expect(meanD).toBeCloseTo(summary.meanDissatisfaction, 10);
     expect(states.size).toBe(summary.counted);
+  });
+
+  it("counts a settled system with no market rows at Provision 1, not dropped", () => {
+    const systems = [sys("s1")];
+
+    const states = perSystemSupplyState(systems, []);
+
+    expect(states.size).toBe(1);
+    expect(states.get("s1")?.provision).toBe(1);
+    expect(states.get("s1")?.worstGoods).toEqual([]);
+  });
+
+  it("carries the worst-demanded good's tiny demand share, not just its satisfaction", () => {
+    // ship_frames' unskilled per-capita rate (0.0003) sits far below water/food/gas/ore's combined
+    // baseline — a real epsilon-demand tail good, the shape the demand-share floor is chosen from.
+    // If the harness wiring dropped or zeroed demandShare on the way into worstGoods, this would
+    // still pass on satisfaction alone.
+    const systems = [sys("s1")];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 1 },
+      { systemId: "s1", goodId: "food", satisfaction: 1 },
+      { systemId: "s1", goodId: "gas", satisfaction: 1 },
+      { systemId: "s1", goodId: "ore", satisfaction: 1 },
+      { systemId: "s1", goodId: "ship_frames", satisfaction: 0 },
+    ];
+
+    const [worst] = perSystemSupplyState(systems, markets).get("s1")?.worstGoods ?? [];
+
+    expect(worst?.goodId).toBe("ship_frames");
+    expect(worst?.satisfaction).toBe(0);
+    expect(worst?.demandShare).toBeGreaterThan(0);
+    expect(worst?.demandShare).toBeLessThan(0.05);
   });
 });

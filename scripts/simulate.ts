@@ -405,6 +405,14 @@ function formatTable(results: HarnessResults): string {
     ));
     lines.push(`  mean D ${regimes.meanDissatisfaction.toFixed(3)} over ${regimes.counted} settled systems`);
     lines.push('  mean D and mean unrest average incomparable worlds — see "Supply & unrest by world cohort".');
+    lines.push(
+      `  Provision: median ${regimes.provisionLevels.median.toFixed(3)}, ` +
+        `p10 ${regimes.provisionLevels.p10.toFixed(3)}, p90 ${regimes.provisionLevels.p90.toFixed(3)}`,
+    );
+    lines.push(
+      `  Worst demanded good: median ${regimes.worstGoodLevels.median.toFixed(3)}, ` +
+        `p10 ${regimes.worstGoodLevels.p10.toFixed(3)}, p90 ${regimes.worstGoodLevels.p90.toFixed(3)}`,
+    );
   }
 
   // Cohorts overlap by design: a system is in one population band, one of homeworld/colony,
@@ -414,12 +422,14 @@ function formatTable(results: HarnessResults): string {
     lines.push("Supply & unrest by world cohort (end of simulation):");
 
     lines.push(...renderTable(
-      ["Cohort", "n", "mean D", "unrest", "strike%", "Sup/Rat/Sho %"],
-      [16, 6, 8, 8, 9, 20],
+      ["Cohort", "n", "mean D", "Provision", "worst-good", "unrest", "strike%", "Sup/Rat/Sho %"],
+      [16, 6, 8, 10, 11, 8, 9, 20],
       worldCohorts.map((c) => [
         c.cohort,
         String(c.n),
         c.meanDissatisfaction.toFixed(3),
+        c.meanProvision.toFixed(3),
+        c.worstGoodMedian.toFixed(3),
         c.meanUnrest.toFixed(3),
         `${(c.strikingShare * 100).toFixed(1)}%`,
         `${(c.suppliedShare * 100).toFixed(0)} / ` +

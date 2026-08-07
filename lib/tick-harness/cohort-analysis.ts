@@ -13,7 +13,7 @@ import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import { median } from "@/lib/utils/math";
 import { nearBandFloor } from "./market-analysis";
-import { perSystemSupplyState } from "./population-analysis";
+import { perSystemSupplyState, worstGoodSatisfaction } from "./population-analysis";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldEvent, WorldMarket } from "@/lib/world/types";
@@ -260,6 +260,7 @@ export function computeWorldCohorts(
   const acc = new Map<WorldCohort, {
     n: number; dSum: number; unrestSum: number; striking: number;
     supplied: number; rationing: number; shortage: number;
+    provisionSum: number; worstGoodSats: number[];
   }>();
 
   for (const s of systems) {
@@ -269,12 +270,17 @@ export function computeWorldCohorts(
     for (const cohort of cohortsForSystem(s, homeworldIds)) {
       let a = acc.get(cohort);
       if (!a) {
-        a = { n: 0, dSum: 0, unrestSum: 0, striking: 0, supplied: 0, rationing: 0, shortage: 0 };
+        a = {
+          n: 0, dSum: 0, unrestSum: 0, striking: 0, supplied: 0, rationing: 0, shortage: 0,
+          provisionSum: 0, worstGoodSats: [],
+        };
         acc.set(cohort, a);
       }
       a.n += 1;
       a.dSum += state.d;
       a.unrestSum += s.unrest;
+      a.provisionSum += state.provision;
+      a.worstGoodSats.push(worstGoodSatisfaction(state));
       if (s.unrest >= strikeThreshold) a.striking += 1;
       if (state.regime === "supplied") a.supplied += 1;
       else if (state.regime === "rationing") a.rationing += 1;
@@ -296,6 +302,8 @@ export function computeWorldCohorts(
       suppliedShare: a.supplied / a.n,
       rationingShare: a.rationing / a.n,
       shortageShare: a.shortage / a.n,
+      meanProvision: a.provisionSum / a.n,
+      worstGoodMedian: median(a.worstGoodSats),
     });
   }
   return result;
