@@ -14,9 +14,13 @@ export default {
     configFile: "vitest.mutation.config.ts",
   },
   // Cache mutant results (reports/stryker-incremental.json, gitignored): a re-sweep
-  // after writing killing tests only re-runs mutants whose code or covering tests
-  // changed — minutes instead of the full price. Delete the cache file to force a
-  // cold run. The first sweep of any new file set is always full price.
+  // only re-runs mutants whose source or covering tests changed. The saving is
+  // proportional to how little changed — a one-file test tweak re-verifies in
+  // minutes, but a fix wave that edits big source files and adds tests across the
+  // scope invalidates most of the store and still costs hours (cold rate ≈ 2.5 s
+  // per mutant at concurrency 4). Estimate the invalidated count from the diff
+  // before launching; never quote "minutes" unchecked. Delete the cache file to
+  // force a cold run. The first sweep of any new file set is always full price.
   incremental: true,
   coverageAnalysis: "perTest",
   reporters: ["clear-text"],
