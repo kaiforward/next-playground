@@ -29,7 +29,7 @@ beforeEach(() => {
 
   world.constructionProjects = [
     { kind: "build", id: "b1", origin: "auto", factionId, systemId: dev.id, buildingType: "housing", levels: 4, workTotal: 40, workDone: 32 },
-    { kind: "colony_establish", id: "c1", origin: "auto", factionId, systemId: ctrlWithColony.id, sourceSystemId: dev.id, seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62 },
+    { kind: "colony_establish", id: "c1", origin: "auto", factionId, systemId: ctrlWithColony.id, sourceSystemId: dev.id, seedPop: 340, housingLevels: 3, workTotal: 100, workDone: 62, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
   ];
   setWorld(world);
 });
@@ -46,6 +46,47 @@ describe("getFactionConstruction", () => {
     expect(data.buildSystems[0].systemId).toBe(dev.id);
     expect(data.buildSystems[0].count).toBe(1);
   });
+  it("scopes the roll-up to one faction and orders both lists for the eye", () => {
+    // The summary is a navigation surface: build systems lead with the busiest, colonies with the
+    // nearest to opening, and neither list may carry another faction's work — a rival's queue in a
+    // player's command summary is both a leak and a link that goes nowhere.
+    const rival = world.systems.find(
+      (s) => s.factionId !== null && s.factionId !== factionId && s.control === "developed",
+    );
+    if (!rival || rival.factionId === null) throw new Error("fixture: expected a rival system");
+    const spare = world.systems.filter((s) => s.factionId === factionId && s.id !== dev.id);
+    const [second, third] = [spare[0], spare[1]];
+    if (!second || !third) throw new Error("fixture: expected two more systems for the faction");
+    second.control = "developed";
+    third.control = "controlled";
+
+    setWorld({
+      ...world,
+      constructionProjects: [
+        // `second` carries two builds, `dev` one → `second` must lead the build list.
+        { kind: "build", id: "d1", origin: "auto", factionId, systemId: dev.id, buildingType: "housing", levels: 1, workTotal: 40, workDone: 0 },
+        { kind: "build", id: "s1", origin: "player", factionId, systemId: second.id, buildingType: "housing", levels: 1, workTotal: 40, workDone: 0 },
+        { kind: "build", id: "s2", origin: "player", factionId, systemId: second.id, buildingType: "housing", levels: 1, workTotal: 40, workDone: 0 },
+        // Two colonies at different progress → the nearer one leads.
+        { kind: "colony_establish", id: "cA", origin: "auto", factionId, systemId: ctrlWithColony.id, sourceSystemId: dev.id, seedPop: 2, housingLevels: 1, workTotal: 100, workDone: 10, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
+        { kind: "colony_establish", id: "cB", origin: "auto", factionId, systemId: third.id, sourceSystemId: dev.id, seedPop: 2, housingLevels: 1, workTotal: 100, workDone: 90, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
+        // A rival's work, in the same world.
+        { kind: "build", id: "r1", origin: "player", factionId: rival.factionId, systemId: rival.id, buildingType: "housing", levels: 1, workTotal: 40, workDone: 0 },
+      ],
+    });
+
+    const data = getFactionConstruction(factionId);
+    expect(data.buildSystems.map((s) => s.systemId)).toEqual([second.id, dev.id]);
+    expect(data.buildSystems[0].count).toBe(2);
+    expect(data.colonies.map((c) => c.systemId)).toEqual([third.id, ctrlWithColony.id]);
+    expect(data.colonies[0].progress).toBeGreaterThan(data.colonies[1].progress);
+    // Only the rows the player actually ordered are counted as orders.
+    expect(data.orderedCount).toBe(2);
+    // …and nothing of the rival's is in either list.
+    expect(data.buildSystems.some((s) => s.systemId === rival.id)).toBe(false);
+    expect(getFactionConstruction(rival.factionId).buildSystems.map((s) => s.systemId)).toEqual([rival.id]);
+  });
+
   it("throws ServiceError(404) naming the id for an unknown faction", () => {
     expect(() => getFactionConstruction("nope")).toThrow(ServiceError);
     try {
@@ -126,6 +167,130 @@ describe("getSystemConstruction", () => {
     if (!unclaimed) throw new Error("fixture: expected an unclaimed system in the generated world");
     expect(getSystemConstruction(unclaimed.id)).toEqual({ visibility: "hidden" });
   });
+  it("reads a stalled colony's reason from the faction's purse and its source's shelves", () => {
+    // `stalledCycles` records only THAT a cycle bought nothing, never why: the reason is derived at
+    // read time from the working balance and what the source can actually spare, so this is the
+    // service's marshalling under test as much as the derivation's.
+    const stalled = world.constructionProjects.map((p) =>
+      p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
+    );
+    const sourceStock = (stock: number) =>
+      world.markets.map((m) => (m.systemId === dev.id ? { ...m, stock } : m));
+    const purse = (balance: number) =>
+      world.treasuries.map((t) =>
+        t.factionId === factionId ? { ...t, balance, pendingFounding: 0 } : t,
+      );
+    const colonyRow = (systemId: string) => {
+      const data = getSystemConstruction(systemId);
+      if (data.visibility !== "visible") throw new Error("expected visible");
+      const row = data.projects[0];
+      if (row.kind !== "colony_establish") throw new Error("expected a colony row");
+      return row;
+    };
+
+    // Full shelves, empty purse: the goods are there and the faction cannot buy them.
+    setWorld({
+      ...world, constructionProjects: stalled, markets: sourceStock(100_000), treasuries: purse(0),
+    });
+    const broke = colonyRow(ctrlWithColony.id);
+    expect(broke.stalledReason).toBe("awaiting_funds");
+    expect(broke.etaCycles).toBeNull();
+
+    // Bare shelves, full purse: money buys nothing that is not there.
+    setWorld({
+      ...world, constructionProjects: stalled, markets: sourceStock(0), treasuries: purse(10_000_000),
+    });
+    expect(colonyRow(ctrlWithColony.id).stalledReason).toBe("awaiting_materials");
+
+    // Stock the export rule will not release is not supply: a trickle far under the founder's own
+    // donor floor stays where it is, so the colony reads exactly as it does against bare shelves.
+    // Read as raw stock it would look like a fully-provisioned founder and a solvent faction.
+    setWorld({
+      ...world, constructionProjects: stalled, markets: sourceStock(1), treasuries: purse(10_000_000),
+    });
+    expect(colonyRow(ctrlWithColony.id).stalledReason).toBe("awaiting_materials");
+
+    // …and it is the colony's OWN source that is read. Filling every OTHER system's shelves while
+    // the named source stays bare changes nothing.
+    setWorld({
+      ...world,
+      constructionProjects: stalled,
+      markets: world.markets.map((m) => (m.systemId === dev.id ? { ...m, stock: 0 } : { ...m, stock: 100_000 })),
+      treasuries: purse(10_000_000),
+    });
+    expect(colonyRow(ctrlWithColony.id).stalledReason).toBe("awaiting_materials");
+  });
+
+  it("reads a colony whose seed source has gone as still building, not as a crash", () => {
+    // A source can leave the read set between cycles. It lists no goods, so there is nothing left to
+    // want and nothing to wait on: the colony finishes on work alone with what its ledger already
+    // holds. Reaching into the missing row instead would take the whole page down.
+    const orphaned = world.constructionProjects.map((p) =>
+      p.kind === "colony_establish"
+        ? { ...p, sourceSystemId: "no-such-system", stalledCycles: 3 }
+        : p,
+    );
+    setWorld({
+      ...world,
+      constructionProjects: orphaned,
+      treasuries: world.treasuries.map((t) =>
+        t.factionId === factionId ? { ...t, balance: 10_000_000, pendingFounding: 0 } : t,
+      ),
+    });
+    const data = getSystemConstruction(ctrlWithColony.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    const row = data.projects[0];
+    if (row.kind !== "colony_establish") throw new Error("expected a colony row");
+    expect(row.stalledReason).toBeNull();
+    expect(row.sourceSystemName).toBe("no-such-system"); // no name to resolve — the id stands in
+    expect(row.stagedFraction).toBe(0);
+    expect(row.etaCycles).not.toBeNull();                // and it still builds
+    expect(row.nextCycleGain).toBeGreaterThan(0);
+  });
+
+  it("reads the source's real buildings and yields into what it can spare — a barren source is not a rich one", () => {
+    // The supply derivation feeds the source's buildings and yield columns into `production`, which
+    // `surplusDrawable` branches on. A reading that stops consulting either prices a barren source
+    // exactly like a rich one — the readout↔tick drift this service exists to prevent. Differential
+    // on purpose: no reserve constant is pinned, only "a richer source reads differently from a
+    // barren one", so economy tuning cannot break it.
+    const stalled = world.constructionProjects.map((p) =>
+      p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
+    );
+    const reading = (over: Partial<World>) => {
+      setWorld({
+        ...world,
+        constructionProjects: stalled,
+        // Stock held between the exporter reserve and the donor margin, so which branch
+        // `surplusDrawable` takes — a production question — decides what is drawable.
+        markets: world.markets.map((m) => (m.systemId === dev.id ? { ...m, stock: 200 } : m)),
+        treasuries: world.treasuries.map((t) =>
+          t.factionId === factionId ? { ...t, balance: 0, pendingFounding: 0 } : t,
+        ),
+        ...over,
+      });
+      const data = getSystemConstruction(ctrlWithColony.id);
+      if (data.visibility !== "visible") throw new Error("expected visible");
+      const row = data.projects[0];
+      if (row.kind !== "colony_establish") throw new Error("expected a colony row");
+      return [row.stalledReason, row.nextCycleGain, row.etaCycles];
+    };
+
+    const rich = reading({});
+    const noYields = reading({
+      systems: world.systems.map((s) =>
+        s.id === dev.id
+          ? { ...s, yieldGas: 0, yieldMinerals: 0, yieldOre: 0, yieldBiomass: 0,
+              yieldArable: 0, yieldWater: 0, yieldRadioactive: 0 }
+          : s,
+      ),
+    });
+    const noBuildings = reading({ buildings: world.buildings.filter((b) => b.systemId !== dev.id) });
+
+    expect(noYields).not.toEqual(rich);
+    expect(noBuildings).not.toEqual(rich);
+  });
+
   it("throws ServiceError(404) naming the id for an unknown system", () => {
     expect(() => getSystemConstruction("nope")).toThrow(ServiceError);
     try {

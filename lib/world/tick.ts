@@ -92,6 +92,7 @@ import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
 import { InMemoryTreasuryWorld } from "@/lib/tick/adapters/memory/treasury";
 
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
+import { referenceMaintenanceBill } from "@/lib/engine/founding-cost";
 import { isCycleStart } from "@/lib/tick/shard";
 import type {
   TickContext,
@@ -107,6 +108,7 @@ import type {
   BuildBuildingUpdate,
   SystemClaim,
   SystemDevelopment,
+  FoundingStagingDraw,
 } from "@/lib/tick/world/directed-build-world";
 
 import type {
@@ -449,7 +451,7 @@ function applyClaims(systems: TickSystem[], claims: SystemClaim[]): TickSystem[]
 /**
  * Apply completed colony establishments: the target flips `developed`, receives the conserved seed
  * population (capped by what its stored source can spare), and lands its bundled housing so `popCap ≥
- * seedPop` on arrival (viable by construction — docs/planned/economy-colonisation-cost.md §2). The `:
+ * seedPop` on arrival (viable by construction — docs/active/gameplay/colonisation.md). The `:
  * TickSystem` annotation narrows the `"developed"` literal. `available` tracks each source's remaining
  * spendable population across the loop so two establishments sharing a source draw from the same
  * (shrinking) balance rather than both reading the original snapshot — otherwise a shared source would
@@ -497,7 +499,7 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
  * Give each newly settled system its market rows, opening EMPTY. World-gen builds markets only for
  * systems that are already developed — an unclaimed rock holds nothing — so a colony has no market at
  * all until this runs, and the founder's endowment is the first stock it ever holds. Must therefore
- * run before `applyFoundingStock`, whose credits land on these rows.
+ * run before `applyStagedManifestDelivery`, whose credits land on these rows.
  *
  * Goods the system already has a row for are left alone, so redeveloping a system that was settled
  * before keeps its warehouses rather than resetting them.
@@ -532,43 +534,88 @@ export function addMarketsForSettledSystems(
 }
 
 /**
- * Move each development's founding stock from the founding system's markets to the colony's, in one
- * conserving pass: every line subtracts from `sourceSystemId` and adds the SAME quantity to
- * `systemId`, so the galaxy's total holding of a good is unchanged. A line is clamped to what its
- * source still holds across the pass, so conservation is a property of this function and not of its
- * caller's caps — a manifest that overdraws simply moves less, never mints the difference.
+ * Land each new colony's staged manifest on its own market rows — a delivery, not a transfer.
  *
- * That clamp is the physical floor (you cannot move stock that is not there). How much a founder is
- * WILLING to part with is a separate, much stricter question, answered upstream by `surplusDrawable`
- * and a per-source running balance when the manifest is built.
+ * The goods left their founder cycle by cycle as the establish was built and paid for
+ * (`applyFoundingStagingDraws`), and have been in-transit inventory in the project's ledger ever
+ * since, in no market row at either end. This is where they arrive, so the pass is CREDIT-ONLY:
+ * touching the source again would take the same goods a second time and hand the colony only what
+ * the founder still happened to hold — possibly nothing.
  *
- * A colony would otherwise open holding nothing and read as starving from its first cycle, before any
- * logistics could reach it. Non-finite or non-positive lines are skipped rather than trusted — stock
- * is world state, and `JSON.stringify` turns a NaN into null.
+ * Conservation is therefore a property of the pair, not of this function alone: every quantity
+ * credited here was debited when it was staged. The staging plan is bounded by the same live market
+ * row the debit reads (`planStagingDraw`, lib/tick/processors/directed-build.ts), and
+ * `applyFoundingStagingDraws` throws rather than shorten a draw — so a ledger line that was never
+ * paid for cannot reach this function to be minted.
+ *
+ * Credits land only on rows the colony already has — `addMarketsForSettledSystems` must run first, or
+ * a colony has no row to receive anything. Non-finite or non-positive lines are skipped rather than
+ * trusted: stock is world state, and `JSON.stringify` turns a NaN into null.
  */
-export function applyFoundingStock(markets: WorldMarket[], developments: SystemDevelopment[]): WorldMarket[] {
-  const delta = new Map<string, number>();
-  const available = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.stock]));
+export function applyStagedManifestDelivery(
+  markets: WorldMarket[],
+  developments: SystemDevelopment[],
+): WorldMarket[] {
+  if (developments.length === 0) return markets;
+  const credit = new Map<string, number>();
   for (const d of developments) {
     for (const line of d.stockManifest) {
-      const quantity = line.quantity;
-      if (!Number.isFinite(quantity) || quantity <= 0) continue;
-      const from = `${d.sourceSystemId}|${line.goodId}`;
-      // Credit only what the source can actually pay, drawn down across the whole pass, so
-      // conservation holds for any caller rather than resting on the manifest being pre-capped.
-      const moved = Math.min(quantity, available.get(from) ?? 0);
-      if (!(moved > 0)) continue;
-      available.set(from, (available.get(from) ?? 0) - moved);
-      const to = `${d.systemId}|${line.goodId}`;
-      delta.set(from, (delta.get(from) ?? 0) - moved);
-      delta.set(to, (delta.get(to) ?? 0) + moved);
+      if (!Number.isFinite(line.quantity) || line.quantity <= 0) continue;
+      const key = `${d.systemId}|${line.goodId}`;
+      credit.set(key, (credit.get(key) ?? 0) + line.quantity);
     }
   }
+  if (credit.size === 0) return markets;
+  return markets.map((m) => {
+    const change = credit.get(`${m.systemId}|${m.goodId}`);
+    if (change === undefined) return m;
+    return { ...m, stock: m.stock + change };
+  });
+}
+
+/**
+ * Debit this cycle's colony staging draws from their founding sources' market rows.
+ *
+ * A debit with no matching credit: materials leave the founder the cycle they are paid for and sit in
+ * the establish project's ledger — in-transit inventory, in no market row at either end — until the
+ * colony opens and receives them. The founder is therefore drawn down over the life of an establish
+ * instead of in one raid at completion.
+ *
+ * Every draw is moved in FULL or the tick fails. A draw the source cannot cover is not a cap doing
+ * its job — the planner already bounds each draw by this same live market row (`planStagingDraw`)
+ * and by a running per-(source, good) balance, so a short draw means the ledger recorded goods that
+ * never left the founder, and `applyStagedManifestDelivery` would mint them onto the colony when it
+ * opens. Clamping silently would make that a world-state corruption no test could see; throwing
+ * makes it a hard pause with no broken world committed, which is what the store's tick atomicity is
+ * for. Non-finite or non-positive lines are skipped rather than trusted: stock is world state, and
+ * `JSON.stringify` turns a NaN into null.
+ */
+export function applyFoundingStagingDraws(
+  markets: WorldMarket[],
+  draws: FoundingStagingDraw[],
+): WorldMarket[] {
+  if (draws.length === 0) return markets;
+  const available = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.stock]));
+  const delta = new Map<string, number>();
+  for (const draw of draws) {
+    if (!Number.isFinite(draw.quantity) || draw.quantity <= 0) continue;
+    const key = `${draw.sourceSystemId}|${draw.goodId}`;
+    const stock = available.get(key) ?? 0;
+    if (draw.quantity > stock) {
+      throw new Error(
+        `Founding staging draw exceeds live stock at ${key}: drawing ${draw.quantity}, holding ${stock}`,
+      );
+    }
+    available.set(key, stock - draw.quantity);
+    delta.set(key, (delta.get(key) ?? 0) - draw.quantity);
+  }
   if (delta.size === 0) return markets;
+  // No `Math.max(0, …)` floor on the write, deliberately: every debit is bounded above by what its
+  // own row held, so a floor here could only ever hide a draw that had escaped that bound.
   return markets.map((m) => {
     const change = delta.get(`${m.systemId}|${m.goodId}`);
     if (change === undefined || change === 0) return m;
-    return { ...m, stock: Math.max(0, m.stock + change) };
+    return { ...m, stock: m.stock + change };
   });
 }
 
@@ -858,6 +905,7 @@ export async function runWorldTick(
   // The two work maps are declared here (outside the block) rather than as locals inside
   // it, because the treasury stage below reads them after the block closes.
   let constructionWorkByFaction: Map<string, number> | undefined;
+  let foundingDebitsByFaction: Map<string, number> | undefined;
   let logisticsWorkByFaction: Map<string, number> | undefined;
   // Calibration-only: directed-build's per-cycle new autonomic production-good levels, by good.
   // Declared here (not a local inside the block) purely to survive past the block's close, mirroring
@@ -868,6 +916,8 @@ export async function runWorldTick(
   let migrationMoved: TickInstrumentation["migrationMoved"];
   // Calibration-only: what each founding-stock manifest cost its founder. Same reason.
   let foundingManifests: TickInstrumentation["foundingManifests"];
+  // Calibration-only: what held each in-flight colony back this cycle. Same reason.
+  let foundingStalls: TickInstrumentation["foundingStalls"];
   // Calibration-only: directed-logistics' per-faction haul-budget ledger. Same reason.
   let logisticsBudget: TickInstrumentation["logisticsBudget"];
   const migrationResolves = isCycleStart(tick, cadence.cycle);
@@ -1076,6 +1126,11 @@ export async function runWorldTick(
             popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
             minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
             employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
+            charterMult: COLONISATION.CHARTER_FEE_SPEND_MULT,
+            charterMin: COLONISATION.CHARTER_FEE_MIN,
+            gateHeadroom: COLONISATION.FOUNDING_GATE_HEADROOM,
+            foundingStockCover: COLONISATION.FOUNDING_STOCK_COVER,
+            economyScale: ECONOMY_SCALE,
           },
         },
         player: world.player
@@ -1083,6 +1138,28 @@ export async function runWorldTick(
           : undefined,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.construction])),
+        // The purse founding is committed against. Read at tick start like the funding latch, so a
+        // faction commits against the balance its last settlement left it, minus what it has already
+        // committed since. No maintenance bill yet (pre-first-settlement) reads as 0 — the charter
+        // floor is what prices a colony then.
+        //
+        // The bill is de-scaled back to a REFERENCE cycle (see `referenceMaintenanceBill`), the same
+        // way the player's colony verb quotes it.
+        treasuryByFaction:
+          treasuries.length > 0
+            ? new Map(
+                treasuries.map((t) => [
+                  t.factionId,
+                  {
+                    balance: t.balance,
+                    pendingFounding: t.pendingFounding,
+                    maintenanceBill: referenceMaintenanceBill(
+                      t.lastSettlement?.maintenanceBill, cadence.cycle,
+                    ),
+                  },
+                ]),
+              )
+            : undefined,
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
       systems = applyClaims(systems, dbWorld.claims);
@@ -1091,13 +1168,19 @@ export async function runWorldTick(
       // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —
       // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
       markets = applyBuildMarketUpdates(markets, dbWorld.proposalCycleUpdates);
-      // Each new colony gets its (empty) market rows, then its founder's endowment moves in — the
-      // first goods the system has ever held. Order matters: the endowment lands on these rows.
+      // This cycle's staged materials leave their founders before anything else touches the markets:
+      // they are paid for and out of the world's markets from the moment they are drawn.
+      markets = applyFoundingStagingDraws(markets, dbWorld.foundingStagingDraws);
+      // Each new colony gets its (empty) market rows, then the manifest it staged over the whole
+      // establish is delivered onto them — the first goods the system has ever held, and already out
+      // of the founder's markets. Order matters: the delivery lands on these rows.
       markets = addMarketsForSettledSystems(markets, systems, dbWorld.developments);
-      markets = applyFoundingStock(markets, dbWorld.developments);
+      markets = applyStagedManifestDelivery(markets, dbWorld.developments);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
+      foundingDebitsByFaction = dbResult.foundingDebitsByFaction;
       buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
       foundingManifests = dbResult.foundingManifests;
+      foundingStalls = dbResult.foundingStalls;
       processorsRun.push("directed-build");
     }
 
@@ -1106,8 +1189,15 @@ export async function runWorldTick(
   // ── treasury (cycle settlement; mid-cycle it only accrues the bands' own work) ──
   {
     const treasuryResolves = isCycleStart(tick, cadence.cycle);
+    // Founding debits belong in this guard alongside the two work bands: this guard decides whether
+    // the processor runs AT ALL, so its own accrual guard never sees a tick this one refuses. A cycle
+    // where every colony in the queue is waiting on its charter absorbs no work anywhere, which is
+    // exactly the tick that commits charter money — and off a settlement tick that debit would be
+    // silently dropped.
     const hasWork =
-      (constructionWorkByFaction?.size ?? 0) > 0 || (logisticsWorkByFaction?.size ?? 0) > 0;
+      (constructionWorkByFaction?.size ?? 0) > 0 ||
+      (logisticsWorkByFaction?.size ?? 0) > 0 ||
+      (foundingDebitsByFaction?.size ?? 0) > 0;
     if (treasuries.length > 0 && (treasuryResolves || hasWork)) {
       // The processor reads systems only when settling — a mid-cycle accrual
       // tick (band work without a cycle boundary) skips the O(systems) build.
@@ -1135,6 +1225,7 @@ export async function runWorldTick(
           economyScale: ECONOMY_SCALE,
           constructionWorkByFaction: constructionWorkByFaction ?? new Map(),
           logisticsWorkByFaction: logisticsWorkByFaction ?? new Map(),
+          foundingDebitsByFaction: foundingDebitsByFaction ?? new Map(),
           rates: {
             headsTaxPerCycle: TREASURY.HEADS_TAX_PER_CYCLE,
             headsWeights: { ...TREASURY.HEADS_WEIGHTS },
@@ -1245,6 +1336,8 @@ export async function runWorldTick(
     world: nextWorld,
     events: tickEvents,
     markets,
-    instrumentation: { buildCommitmentsByGood, migrationMoved, foundingManifests, logisticsBudget },
+    instrumentation: {
+      buildCommitmentsByGood, migrationMoved, foundingManifests, foundingStalls, logisticsBudget,
+    },
   };
 }

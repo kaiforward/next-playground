@@ -130,6 +130,47 @@ describe("treasury over the live tick", () => {
     expect(others.reduce((acc, t) => acc + t.pendingWork.construction, 0)).toBeGreaterThan(0);
   });
 
+  it("carries a charter debit committed on a workless mid-cycle tick through to the treasury", async () => {
+    // The tick body's own guard decides whether the treasury processor runs at all, so a founding
+    // debit on a tick that produced no band work anywhere would never reach an accumulator. Rigged to
+    // be exactly that tick: every faction's construction band is unfunded (pool 0 ⇒ nothing absorbs
+    // work), the economy cycle and logistics both sit at 48 so neither resolves, and one faction has
+    // a controlled neighbour it can commit a colony to and the money to pay the charter.
+    const cadence = { cycle: 48, construction: 24, logistics: 48 };
+    let world = generateWorld({ systemCount: 40, seed: 11 });
+    const settlerId = world.factions[0].id;
+    const home = world.factions[0].homeworldId;
+    const conn = world.connections.find((c) => {
+      if (c.fromId !== home && c.toId !== home) return false;
+      const otherId = c.fromId === home ? c.toId : c.fromId;
+      return world.systems.find((s) => s.id === otherId)!.factionId === null;
+    })!;
+    const neighbourId = conn.fromId === home ? conn.toId : conn.fromId;
+    world = {
+      ...world,
+      systems: world.systems.map((s) =>
+        s.id === neighbourId
+          ? { ...s, factionId: settlerId, control: "controlled", habitableSpace: Math.max(s.habitableSpace, 200) }
+          : s,
+      ),
+      treasuries: world.treasuries.map((t) => ({
+        ...t,
+        balance: 100_000,
+        funded: { ...t.funded, construction: 0 },
+      })),
+    };
+    for (let tick = 1; tick <= 24; tick++) {
+      const result = await runWorldTick(world, { cadence });
+      world = result.world;
+    }
+    const work = world.treasuries.reduce(
+      (acc, t) => acc + t.pendingWork.construction + t.pendingWork.logistics, 0);
+    const founding = world.treasuries.reduce((acc, t) => acc + t.pendingFounding, 0);
+    expect(work).toBe(0);            // the premise: nothing about this tick is band work
+    expect(founding).toBeGreaterThan(0); // yet a colony was bought, and the treasury knows
+    for (const t of world.treasuries) expect(t.lastSettlement, t.factionId).toBeNull(); // not a settlement tick
+  });
+
   it("a zero-funded logistics band hauls nothing while a funded twin hauls", async () => {
     // Same divergent cadences: logistics resolves at 24, mid-cycle, so its work
     // lands in pendingWork (observable before settlement clears it).

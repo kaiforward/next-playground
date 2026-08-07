@@ -25,39 +25,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
-  *Next step:* the economy queue below, then Provision, then PR6.
-
----
-
-## Queued — economy
-
-Ordered. These gate PR6: its presentation layer must sit on an economy that is settled, or the
-numbers it presents are re-tuned underneath it. (Items 1 and 5 — the `surplusDrawable` donor side,
-#212, and the `TARGET_COVER` role split — shipped; rows keep their numbers when one ships, so
-references stay stable. The honest-demand-and-flow arc — the two demand figures, multi-donor
-matching, and the brake off the price anchor — shipped on the branch; no physical mechanism reads
-the price anchor any more.)
-
-10. **[L] Colonisation economics — founding stops being free.** Now that monetary mechanics exist,
-    colonisation becomes a major, resource-intensive undertaking (Stellaris-scale): claims,
-    establish projects and founding manifests carry real monetary and goods cost, and the AI
-    founding policy prices colonies against its treasury instead of founding essentially everything
-    by ~t500. Absorbs the **remove-everything-free audit**: the logistics work budget ("free,
-    population-scaled in v1"), the per-pop construction pool base, cheap claims — sweep for the
-    rest. Aim: fewer, deliberate colonies — the structural fix for the leech-colony / served-last
-    pattern (the #212 documented cost, noted in `economy-autonomic-agency.md`). One measured input
-    (2026-08-04): the haul budget never binds today (~6–8% spent) — pricing it changes no flow
-    unless deliberately authored to bind. The parked
-    "colony seed size vs housing unit" item parked *because* it changes founding pacing — it may
-    un-park here, deliberately.
-    Sits before Provision by explicit ordering decision (2026-08-03): Provision's struck-world
-    resolution and band calibration would otherwise be tuned against a galaxy of cheap colonies
-    this row then removes.
-    *Next step:* `/measure` the founding-economics baseline (founding rate and timing, per-colony
-    cost today, treasury headroom at founding scale) before any design; then spec + `/spec-review`
-    (heavy cross-mechanic: treasury, build planner, colonisation-value, migration, events).
-    *Don't:* precision-tune anything Provision will re-define (its own Don't), and don't design the
-    cost model from intuition — the treasury balances and founding cadence are measurable first.
+  *Next step:* Provision (item 6), then PR6.
 
 ---
 
@@ -117,13 +85,20 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   autonomic build works toward — storage becomes a build product balanced against production and
   consumption, not a seeded constant. Evidence preserved: gate report §7/§7.1 per-good tables
   (`.superpowers/stage3-gate-report.md`).
+  Kai's leaning (2026-08-05): industry pricing probably lands here too — it touches the same
+  ROI/build-planner surface, so the ROI ordering gets retuned once, not twice.
   *Next step:* design pass + `/spec-review` (cross-mechanic: brake, pricing band `maxStock`,
   autonomic build, decay, Industry UI).
   *Don't:* re-size the existing constants to make a brake cap work — no single multiplier fits a
   16–843× per-good spread, and inflating them inflates every pricing band with them.
 - **[L] Goods-pricing revisit** — moved way back from the economy queue by explicit decision
   (2026-08-03): pricing is only worth reworking when demand becomes partly monetary — pop wages
-  and real goods purchase, or inter-faction trade agreements / shared markets. Carries the former
+  and real goods purchase, or inter-faction trade agreements / shared markets. Also absorbs
+  **separating `surplusDrawable`'s triple duty** (logistics donor cap / build input gate / founding
+  manifest cap — three consumers of one figure, deferred at colonisation-economics). Kai's observation
+  (2026-08-05, unmeasured): lots of edge cases with producers/consumers not reading the price based
+  on type properly — row 10 routes around live prices because of this; `/measure` it when this row
+  comes forward. Carries the former
   queue item 4 unresolved: an exporter's resting price pins at its ceiling (measured at
   equilibrium: 3.00× / 3.00× / 2.50× for `electronics` / `luxuries` / `fuel` — a drawn exporter
   rests at `EXPORT_RESERVE_COVER`, below the curve's saturation point, so the curve clamps, and
@@ -140,7 +115,13 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   Likely folds into the goods-pricing revisit above when that comes forward.
 - **[M] Government layer revisit** — `GOVERNMENT_TYPES` carries only event weights and a danger baseline
   since the flat `consumptionBoosts` term was deleted. Governments are economically inert until something
-  replaces it as an economic axis.
+  replaces it as an economic axis. The leading candidate: **doctrine-driven allocation of discretionary
+  spend** — a per-government budget split over the two spends a faction chooses (construction and
+  founding; maintenance and logistics are obligations, not choices), so expansionist empires commit more
+  surplus to colonisation and read as sprawling many-world realms while tall ones concentrate into dense
+  developed cores. Emerges from priced founding; composes with the ROI/`Proposal` review lens. Distinct
+  from the funding sliders, which throttle payment of bills already arrived — this shapes what gets
+  committed upstream. Needs the treasury spend-attribution row (Tooling) built first.
 - **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand becomes
   partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still
   lack the goods). The former blocker — `demandRate` double-purposed as pricing anchor and logistics
@@ -207,12 +188,28 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   (cut), `GOODS.volatility` (still present as unread metadata since the noise path was removed in #170).
 - **[M] Logistics-pillar depth check** — the pillar is still shallow; e.g. penalised cross-unowned-space
   logistics was inherited from a retired umbrella and never built. Its own pass before calling the
-  pillar done. Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
+  pillar done. Includes **hauling founding freight with real ships** — the staged manifest currently
+  teleports source→colony at completion; deferred at colonisation-economics to whenever logistics
+  carries real cargo. Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
   coarse in-fiction valve at most) are preserved in memory `design-logistics-depth-inputs`.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
+- **[S] Per-category treasury spend attribution** — the tick merges charter fees and staged materials
+  into one `foundingDebitsByFaction` figure, so the harness can neither check the charter conservation
+  identity in money (it falls back to counting colonies) nor say what any faction spent on what in a
+  given cycle. Split the instrumentation per category (charter / staged materials / construction /
+  maintenance / logistics) and print per-cycle spend by category in the harness. An oversight of the
+  colonisation-economics spec, booked at its calibration gate. Prerequisite for tuning doctrine
+  allocation (government layer revisit) and for the founding-constant retune when the sibling treasury
+  drains (priced logistics, military, industry pricing) land.
+- **[M] Pre-existing mutation survivors in the colonisation-adjacent files** — the PR #217 scoped
+  sweep (27 files) surfaced ~1,000 surviving/no-coverage mutants on lines *outside* that PR's diff;
+  the in-diff ones were handled at the PR's own gate. Heaviest: `lib/world/tick.ts`,
+  `lib/engine/directed-build.ts`, `lib/tick-harness/runner.ts`. The incremental cache
+  (`reports/stryker-incremental.json`, machine-local) makes re-runs minutes, not hours.
+  *Next step:* chip file-by-file, worst first, same kill-or-accept discipline as the PR gate.
 - **[S] Decide the simulate "equilibrium" horizon** — the quick run's 10,000-tick label sits inside
   the startup transient for high-tier consumer metrics (electronics/luxuries recoveries land
   t≈9,500-11,000; ship_frames later still). Options: extend the labelled horizon to 12-16k
@@ -230,6 +227,7 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[S] Colony seed size scaled against the housing unit** — a 2-pop seed against a 20-pop housing level
   means no colony can open looking anything but empty. Variant on record: send what the founder can spare,
   up to a whole level. Changes colonisation pacing and the AI founding policy, which is why it parked.
+  Eligible to un-park now founding is priced — pacing changes land on a costed mechanic, not a free one.
 - **[S] Luxuries weighted higher for engineers** — Kai's point is that engineers should be *more* annoyed
   when luxuries are missing. The engineer basket already carries luxuries at 50× the per-capita rate;
   whether that is enough is demand tuning. Revisit once the galaxy isn't starving.

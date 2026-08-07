@@ -48,6 +48,7 @@ describe("classifyGhosts", () => {
       kind: "colony_establish", id: "c1", systemId: "s1", systemName: "Alpha", origin: "player",
       sourceSystemId: "s0", sourceSystemName: "Home", seedPop: 100, housingLevels: 1,
       progress: 0.5, workDone: 10, workTotal: 20, etaCycles: 2, nextCycleGain: 2,
+      stalledReason: null, stagedFraction: 0.5,
     };
     expect(classifyGhosts([colony]).size).toBe(0);
   });

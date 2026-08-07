@@ -5,7 +5,11 @@
  * at once), matching logistics.
  */
 import type { ResourceVector } from "@/lib/types/game";
-import type { SystemControl, WorldConstructionProject } from "@/lib/world/types";
+import type {
+  SystemControl,
+  WorldConstructionProject,
+  WorldFoundingStockLine,
+} from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
 
@@ -51,8 +55,20 @@ export interface ProposalPersistenceUpdate {
   proposalCycles: number;
 }
 
-/** One founding-stock line: goods moved from the founding system's market to the colony's. */
-export interface FoundingStockLine {
+/** Processor-facing name for a founding-manifest line — one shape across the world boundary. */
+export type FoundingStockLine = WorldFoundingStockLine;
+
+/**
+ * One per-cycle materials debit: a quantity of one good drawn from a founding source's market row
+ * into an in-flight colony's ledger, and paid for as it is drawn.
+ *
+ * A debit with no matching credit anywhere in the world — between the draw and the colony's opening
+ * the goods are in-transit inventory, held in the project's `stagedManifest` and in no market row at
+ * either end.
+ */
+export interface FoundingStagingDraw {
+  /** The founding system the goods leave. */
+  sourceSystemId: string;
   goodId: string;
   quantity: number;
 }
@@ -66,9 +82,10 @@ export interface SystemDevelopment {
   /** Housing levels placed on the colony with the establishment (viable by construction). */
   housingLevels: number;
   /**
-   * Goods the founding system sends along with the seed, so the colony opens stocked rather than at
-   * satisfaction 0 on everything. Conserved — every line is subtracted from `sourceSystemId`'s market
-   * and added to `systemId`'s. Empty when the source can spare nothing.
+   * The completed establish project's staged ledger: goods drawn from `sourceSystemId` and paid for
+   * cycle by cycle while the colony formed, held as in-transit inventory since. Delivered
+   * CREDIT-ONLY at `systemId` — the founding end was debited as each slice was staged, so nothing
+   * moves there now. Empty when the project staged nothing.
    */
   stockManifest: FoundingStockLine[];
 }
@@ -92,4 +109,6 @@ export interface DirectedBuildWorld {
   applyClaims(claims: SystemClaim[]): Promise<void>;
   /** Ownership writes from the develop step (controlled → developed + colony seed transfer). */
   applyDevelopments(developments: SystemDevelopment[]): Promise<void>;
+  /** This cycle's materials debits at the founding sources (goods leave for a colony's ledger). */
+  applyFoundingStagingDraws(draws: FoundingStagingDraw[]): Promise<void>;
 }

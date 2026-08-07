@@ -8,7 +8,7 @@
  */
 
 import { generateWorld } from "@/lib/world/gen";
-import { runWorldTick, toTickSystems, marketRowsBySystem } from "@/lib/world/tick";
+import { runWorldTick, toTickSystems } from "@/lib/world/tick";
 import {
   takeMarketSnapshot, computeMarketHealth, computeKneeBinding, SNAPSHOT_INTERVAL,
   newDemandHuntingAccumulator, sampleDemandHunting, summarizeDemandHunting,
@@ -22,12 +22,21 @@ import { summarizeLogistics, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis
 import type { LogisticsBudgetTotals, FundingBoundFlagCensus } from "./logistics-analysis";
 import {
   summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
-  summarizeFoundingStock, recordFoundingManifest,
+  summarizeFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
+  newInFlightEstablishTotals, sampleOpenColonies, summarizeFoundingLifecycle, summarizeFounderCohort,
 } from "./build-analysis";
-import type { BuildCommitmentRecord, FoundedColonyRecord } from "./build-analysis";
-import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
-import { sampleTreasuries, summarizeTreasuries } from "./treasury-analysis";
-import type { TreasurySnapshot } from "./treasury-analysis";
+import type {
+  BuildCommitmentRecord, FoundedColonyRecord, FoundingStagingRecord, FoundingStagingTotals,
+} from "./build-analysis";
+import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import {
+  sampleTreasuries, summarizeTreasuries, recordSettledCycles, summarizeFoundingEra,
+} from "./treasury-analysis";
+import type { FactionCycleRecord, TreasurySnapshot } from "./treasury-analysis";
+import {
+  newCharterCensus, recordCharterCensus, newStagedLedgerCensus, recordStagedLedger,
+  summarizeConservation,
+} from "./conservation-analysis";
 import { computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey, marketRolesByKey } from "./cohort-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
@@ -42,37 +51,30 @@ import type {
   RegionOverviewEntry,
   MigrationThroughputSummary,
 } from "./types";
-import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
-import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { TickEvent, TickSystem } from "@/lib/tick/rows";
 
 /**
- * The founder's own remaining cover on the BINDING good of a manifest it just shipped — the
- * minimum, across the manifest's goods, of post-manifest stock over that good's donor floor.
- * Below 1 means founding drew the founder under the floor it is meant to keep for itself, which
- * is the reading the manifest cap's use-figure denominator can move.
+ * One tick's founding bookkeeping: accumulate this tick's staging draws, THEN sweep for colonies
+ * that just developed, so a colony founded on this tick takes its own last slice with it.
  *
- * Undefined when there is nothing to measure — the founder is unknown, it has no market rows,
- * the manifest names no goods, or no shipped good carries a positive donor floor. "Could not
- * measure" and "measured a founder drained to 0" are opposite readings and must never share a
- * value. Exported for its own tests; the runner is its only production caller.
+ * The two steps are one function because their ORDER is the whole instrument. A colony stages for
+ * many cycles while its target is still `controlled`, and the last slice is staged on the very tick
+ * the establish completes. Sweep first and that slice lands in the accumulator after the record was
+ * built from it, and is never read again — and the loss is silent: every earlier slice still folds,
+ * so the readout prints a plausible, slightly small number rather than an obviously dead 0.
+ *
+ * Exported for the test that pins that composition; `runTickHarness` is its only production caller.
  */
-export function founderCoverAfter(
-  source: TickSystem | undefined,
-  rows: MarketRowForLogistics[] | undefined,
-  goodIds: ReadonlyArray<string>,
-): number | undefined {
-  if (!source || !rows || goodIds.length === 0) return undefined;
-  const shipped = new Set(goodIds);
-  let binding = Infinity;
-  const states = toGoodMarketStates({
-    buildings: source.buildings, population: source.population, yields: source.yields, markets: rows,
-  });
-  for (const state of states) {
-    if (!shipped.has(state.goodId) || state.donorReserve <= 0) continue;
-    binding = Math.min(binding, state.stock / state.donorReserve);
-  }
-  return Number.isFinite(binding) ? binding : undefined;
+export function foldFoundingTick(
+  systems: ReadonlyArray<Pick<TickSystem, "id" | "control">>,
+  tick: number,
+  developedAtStart: ReadonlySet<string>,
+  tracker: Map<string, FoundedColonyRecord>,
+  staging: Map<string, FoundingStagingTotals>,
+  draws: ReadonlyArray<FoundingStagingRecord>,
+): void {
+  for (const draw of draws) recordFoundingManifest(staging, draw);
+  trackFoundedColonies(systems, tick, developedAtStart, tracker, staging);
 }
 
 /** Mirrors event-analysis.ts's (unexported) ActiveEventRecord shape. */
@@ -151,8 +153,38 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     tickSystemsAtStart.filter((s) => s.control === "developed").map((s) => s.id),
   );
   const foundedColonies = new Map<string, FoundedColonyRecord>();
+  // What each in-flight colony has staged from its founder so far, keyed by TARGET system. Kept
+  // apart from `foundedColonies` because a colony stages for cycles before it is one: keyed by the
+  // tracker, every draw but the last would be dropped as belonging to an unknown system.
+  const foundingStaging = new Map<string, FoundingStagingTotals>();
+  // The founding lifecycle, all three parts accumulated per tick because none survives the tick that
+  // produced it: the first cycle each colony was seen committed (its establish leaves the open queue
+  // the cycle it lands), the concurrent in-flight census, and what held each colony back.
+  const colonyCommitments = new Map<string, number>();
+  const inFlightEstablishes = newInFlightEstablishTotals();
+  const foundingStalls = newFoundingStallTotals();
+  // Every system that has SUCCESSFULLY STAGED A DRAW for a founding — the founder cohort the
+  // end-of-run production and disuse reads are split by. A source with nothing to spare stages
+  // nothing, emits no manifest, and so is not one of these however many colonies name it.
+  const founderSystemIds = new Set<string>();
+  // One record per faction per settlement, taken as each lands: a settlement is overwritten by the
+  // next one, so the founding-era money bars cannot be reconstructed from the final world.
+  const factionCycles: FactionCycleRecord[] = [];
+  const settlementTickByFaction = new Map<string, number>();
+  // The conservation identities' two run-long collectors. Charters are censused every tick, not every
+  // construction cycle: a charter is paid in the same processor pass that mints its project, so the
+  // unpaid state is usually never visible and only a per-tick read bounds how long a revert could
+  // hide. The opening balances are taken before the first tick because the first settlement's own
+  // opening balance exists nowhere else once that settlement has overwritten it.
+  const charterCensus = newCharterCensus();
+  const startingBalances = new Map(world.treasuries.map((t) => [t.factionId, t.balance]));
+  // The staged-goods comparison is sampled per tick because the END of a run is the one moment it
+  // has nothing to look at: by the equilibrium horizon every establish has completed and the queue
+  // holds no colonies, so a run-end read compares 0 against 0 and passes vacuously.
+  const stagedLedgerCensus = newStagedLedgerCensus();
   const demandHunting = newDemandHuntingAccumulator();
   const cycleLength = config.cadence?.cycle ?? CYCLE_LENGTH;
+  const constructionInterval = config.cadence?.construction ?? CONSTRUCTION_INTERVAL;
 
   const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
   const initialBuildingTotal = tickSystemsAtStart.reduce(
@@ -203,32 +235,45 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
     }
 
-    trackFoundedColonies(world.systems, world.meta.currentTick, developedAtStart, foundedColonies);
-    // The founding-cost read and the colony opening sample both need full tick rows (buildings +
-    // government drive the demand weights). Foundings and due colonies are rare — and land on the
-    // same cycle ticks — so the rows are built once, only on the ticks that need them.
-    const manifests = result.instrumentation.foundingManifests ?? [];
+    for (const draw of result.instrumentation.foundingManifests ?? []) {
+      founderSystemIds.add(draw.sourceSystemId);
+    }
+    // The event board is read at the tick the shortfall happened: a founder under an active event is
+    // sparing less for a reason the design accepts, and by run end that event is long gone.
+    const stalls = result.instrumentation.foundingStalls ?? [];
+    if (stalls.length > 0) {
+      const systemsUnderEvent = new Set<string>();
+      for (const e of world.events) {
+        if (e.systemId !== null) systemsUnderEvent.add(e.systemId);
+      }
+      for (const stall of stalls) {
+        recordFoundingStall(foundingStalls, stall, systemsUnderEvent.has(stall.sourceSystemId));
+      }
+    }
+    // Sampled on the construction cycle the queue was just resolved on, so each in-flight colony is
+    // counted once per cycle rather than once per tick it happens to still be open.
+    if (constructionInterval > 0 && world.meta.currentTick % constructionInterval === 0) {
+      sampleOpenColonies(
+        world.constructionProjects, world.meta.currentTick, colonyCommitments, inFlightEstablishes,
+      );
+    }
+    recordCharterCensus(world.constructionProjects, charterCensus);
+    recordSettledCycles(world.treasuries, settlementTickByFaction, factionCycles);
+
+    foldFoundingTick(
+      world.systems, world.meta.currentTick, developedAtStart, foundedColonies, foundingStaging,
+      result.instrumentation.foundingManifests ?? [],
+    );
+    // After the fold, never before it: this tick's last draw is staged on the very tick its
+    // establish completes, and comparing a ledger against an accumulator missing that draw would
+    // report a conserved move as lost goods.
+    recordStagedLedger(world.constructionProjects, foundingStaging, stagedLedgerCensus);
+    // The colony opening sample needs full tick rows (buildings + government drive the demand
+    // weights). Due colonies are rare, so the rows are built only on the ticks that need them.
     const colonyDue =
       cycleLength > 0 && world.meta.currentTick % cycleLength === 0 &&
       hasColonyAwaitingSample(foundedColonies, world.meta.currentTick);
-    const tickSystems = manifests.length > 0 || colonyDue ? toTickSystems(world) : undefined;
-    if (tickSystems && manifests.length > 0) {
-      for (const manifest of manifests) {
-        // What the founding cost its founder, read at the founding tick — the founder's stock
-        // still reflects this manifest and no other. Only the founder's own rows are grouped;
-        // a galaxy-wide row build to look up one system is the cost this avoids.
-        const source = tickSystems.find((s) => s.id === manifest.sourceSystemId);
-        const rows = marketRowsBySystem(
-          currentMarkets.filter((m) => m.systemId === manifest.sourceSystemId),
-        ).get(manifest.sourceSystemId);
-        recordFoundingManifest(
-          foundedColonies,
-          manifest.systemId,
-          manifest.tonnage,
-          founderCoverAfter(source, rows, manifest.goodIds),
-        );
-      }
-    }
+    const tickSystems = colonyDue ? toTickSystems(world) : undefined;
 
     // The flip half of the hunting reading is a per-cycle observation; the churn half comes off
     // the whole flow log at the end.
@@ -346,7 +391,18 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     populationSnapshots,
     migrationThroughput,
     foundingStock: summarizeFoundingStock(foundedColonies),
+    foundingLifecycle: summarizeFoundingLifecycle(
+      foundedColonies, colonyCommitments, inFlightEstablishes, foundingStalls, constructionInterval,
+    ),
+    founderCohort: summarizeFounderCohort(finalTickSystems, currentMarkets, founderSystemIds),
     treasurySummary: summarizeTreasuries(world.treasuries, treasurySnapshots),
+    foundingEra: summarizeFoundingEra(factionCycles),
     treasurySnapshots,
+    conservation: summarizeConservation({
+      charters: charterCensus,
+      factionCycles,
+      startingBalances,
+      stagedLedger: stagedLedgerCensus,
+    }),
   };
 }

@@ -253,6 +253,102 @@ describe("fundQueueWithFloor", () => {
     expect(r.absorbed).toBeCloseTo(workDelta);
     expect(r.absorbed).toBeLessThanOrEqual(10);
   });
+
+  it("holds a project at a per-project ceiling of 0 — through the reserve pass too", () => {
+    // The regression this guards: pass A funds the floor-eligible slice on the SCALAR cap, so a
+    // ceiling that only binds in pass B lets a reserved project absorb work it cannot pay for.
+    const cap = 10;
+    const blocked = projectAt("c", "colony", "food", 1, 0, 1000);
+    const neighbour = projectAt("h", "home", "food", 1, 0, 1000);
+    const r = fundQueueWithFloor(
+      [blocked, neighbour],
+      100,
+      cap,
+      50, // a reserve big enough to fund the blocked project several times over
+      (p) => p.id === "c", // …and it is the only project the reserve is for
+      (p) => (p.id === "c" ? 0 : cap),
+    );
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(0);
+    expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(cap);
+    expect(r.absorbed).toBe(cap);
+  });
+
+  it("resolves each project's ceiling once, so both passes see one figure", () => {
+    // The callback reads market and treasury state the caller re-derives per cycle; nothing here
+    // promises it is pure. Resolving it per pass would let a floor-eligible project absorb its
+    // reserved slice under one ceiling and the general pool under another — a build-time floor no
+    // caller could reason about, and a per-project call count that grows with the queue.
+    const cap = 10;
+    const calls: string[] = [];
+    let handed = 0;
+    const r = fundQueueWithFloor(
+      [projectAt("c", "colony", "food", 1, 0, 1000), projectAt("h", "home", "food", 1, 0, 1000)],
+      100, cap, 50,
+      (p) => p.id === "c",
+      (p) => { calls.push(p.id); handed += cap; return handed; }, // 10 first, 20 second, …
+    );
+    expect(calls).toEqual(["c", "h"]); // one resolution each, not one per pass
+    // Both ceilings clamp back to the scalar cap, so each project absorbs exactly a cap's worth —
+    // a second call for "c" would have handed it 30 and the clamp would hide the extra call.
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(cap);
+    expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(cap);
+  });
+
+  it("spares nothing for a project whose ceiling is unreadable", () => {
+    // A ceiling is derived from market and money state; a NaN reaching workDone would land in World
+    // state, and `JSON.stringify` turns it into null on save.
+    const cap = 10;
+    for (const unreadable of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const r = fundQueueWithFloor(
+        [projectAt("c", "colony", "food", 1, 0, 1000)],
+        100, cap, 50, () => true, () => unreadable,
+      );
+      expect(r.projects[0].workDone).toBe(0);
+      expect(r.absorbed).toBe(0);
+    }
+  });
+
+  it("makes a project at half its ceiling take twice the cycles", () => {
+    const cap = 10;
+    let full = projectAt("f", "s", "food", 1, 0, 40);
+    let half = projectAt("g", "s", "food", 1, 0, 40);
+    let fullCycles = 0;
+    let halfCycles = 0;
+    while (fullCycles < 20) {
+      const r = fundQueueWithFloor([full], 100, cap, 0, () => false);
+      fullCycles++;
+      if (r.landed.length > 0) break;
+      full = r.projects[0];
+    }
+    while (halfCycles < 20) {
+      const r = fundQueueWithFloor([half], 100, cap, 0, () => false, () => cap / 2);
+      halfCycles++;
+      if (r.landed.length > 0) break;
+      half = r.projects[0];
+    }
+    expect(fullCycles).toBe(4);
+    expect(halfCycles).toBe(8);
+  });
+
+  it("is identical to the scalar cap when capFor returns it", () => {
+    const cap = 10;
+    const ordered = [
+      projectAt("h", "home", "food", 1, 0, 1000),
+      projectAt("c", "colony", "food", 1, 0, 1000),
+    ];
+    expect(fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony", () => cap)).toEqual(
+      fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony"),
+    );
+  });
+
+  it("only ever lowers: a ceiling above the scalar cap is clamped back to it", () => {
+    // The per-build cap is the minimum-build-time floor (workTotal ÷ cap cycles). A caller that
+    // could raise its own ceiling would buy past that floor — so a raise reads as the plain cap.
+    const cap = 10;
+    const ordered = [projectAt("c", "colony", "food", 1, 0, 1000)];
+    const raised = fundQueueWithFloor(ordered, 500, cap, 0, () => false, () => cap * 5);
+    expect(raised.projects[0].workDone).toBe(cap);
+  });
 });
 
 /** Build a proposal with explicit value/work; `role` defaults to industry. */

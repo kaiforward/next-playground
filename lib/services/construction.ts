@@ -2,18 +2,118 @@
  * Construction read services — thin marshallers over the pure `computeFactionConstruction` readout.
  * The faction roll-up reads the whole readout; the per-system section reads it filtered to one system
  * (ETA needs the whole faction queue, so both go through one faction-scoped computation). Read-only.
+ *
+ * Server-only, because a colony row's stall reason is priced: it reads `ECONOMY_SCALE` to compare
+ * what the next staging draw would cost against the faction's working balance. The client only ever
+ * sees the resolved reason.
  */
 import { getWorld } from "@/lib/world/store";
 import { ServiceError } from "@/lib/services/errors";
 import { CONSTRUCTION } from "@/lib/constants/construction";
+import { COLONISATION } from "@/lib/constants/colonisation";
+import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import {
   computeFactionConstruction,
   type ConstructionSystemInfo,
   type FactionConstructionReadout,
+  type FoundingReadoutInputs,
 } from "@/lib/engine/construction-readout";
 import { orderOpenProjects } from "@/lib/engine/construction";
+import { surplusDrawable } from "@/lib/engine/directed-logistics";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { foundingWorkingBalance } from "@/lib/engine/treasury";
+import { catchUpFactor } from "@/lib/tick/shard";
+import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import {
+  charterFee, referenceMaintenanceBill, type FoundingSourceSupply,
+} from "@/lib/engine/founding-cost";
+import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { marketRowsBySystem } from "@/lib/world/tick";
+import type { World, WorldConstructionProject } from "@/lib/world/types";
 import type { SystemConstructionData, FactionConstructionData } from "@/lib/types/api";
+
+/**
+ * What each in-flight colony's source can spare it, read exactly as the staging draw reads it: the
+ * shared market-state derivation, then the export rule, then the row's live stock (a plan may never
+ * promise more goods than physically sit there). Only the sources of open colonies are derived —
+ * on the common queue that is nothing at all.
+ */
+function foundingSupplyBySource(
+  world: World,
+  projects: WorldConstructionProject[],
+  buildings: Map<string, Record<string, number>>,
+): Map<string, FoundingSourceSupply[]> {
+  const supply = new Map<string, FoundingSourceSupply[]>();
+  const sourceIds = new Set(
+    projects.filter((p) => p.kind === "colony_establish").map((p) => p.sourceSystemId),
+  );
+  if (sourceIds.size === 0) return supply;
+
+  const marketRows = marketRowsBySystem(world.markets);
+  for (const sourceId of sourceIds) {
+    const source = world.systems.find((s) => s.id === sourceId);
+    if (source === undefined) continue;
+    const states = toGoodMarketStates({
+      buildings: buildings.get(sourceId) ?? {},
+      population: source.population,
+      yields: resourceVectorFromColumns(
+        {
+          yieldGas: source.yieldGas, yieldMinerals: source.yieldMinerals, yieldOre: source.yieldOre,
+          yieldBiomass: source.yieldBiomass, yieldArable: source.yieldArable,
+          yieldWater: source.yieldWater, yieldRadioactive: source.yieldRadioactive,
+        },
+        "yield",
+      ),
+      markets: marketRows.get(sourceId) ?? [],
+    });
+    supply.set(
+      sourceId,
+      states.map((g) => ({
+        goodId: g.goodId,
+        sparable: Math.min(
+          surplusDrawable(g.stock, g.donorReserve, g.demand, g.production, g.productionSuppressed),
+          Math.max(0, g.stock),
+        ),
+      })),
+    );
+  }
+  return supply;
+}
+
+/**
+ * One faction's founding position as every read surface must see it: the purse the tick spends from,
+ * what each in-flight colony's source can spare, and the cadence the founding path is paced at.
+ *
+ * Shared with the build-options service, whose queue-aware ETA runs over the same committed queue —
+ * a colony's absorption ceiling is part of how that queue drains, so an ETA derived without it would
+ * promise the player pool a gated colony was never going to release.
+ */
+export function foundingReadoutInputs(
+  world: World,
+  factionId: string,
+  projects: WorldConstructionProject[],
+  buildings: Map<string, Record<string, number>>,
+): FoundingReadoutInputs {
+  const treasury = world.treasuries.find((t) => t.factionId === factionId);
+  return {
+    workingBalance:
+      treasury === undefined
+        ? 0
+        : foundingWorkingBalance(treasury.balance, treasury.pendingFounding),
+    // Quoted off the same reference-de-scaled bill the tick's charter phase re-quotes from, so the
+    // affordability the readout tests is the one the charter phase will actually apply.
+    charter: charterFee(
+      referenceMaintenanceBill(treasury?.lastSettlement?.maintenanceBill, CYCLE_LENGTH),
+      { mult: COLONISATION.CHARTER_FEE_SPEND_MULT, min: COLONISATION.CHARTER_FEE_MIN },
+    ),
+    supplyBySource: foundingSupplyBySource(world, projects, buildings),
+    cover: COLONISATION.FOUNDING_STOCK_COVER,
+    catchUp: catchUpFactor(CONSTRUCTION_INTERVAL),
+    writeOffCycles: COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES,
+    economyScale: ECONOMY_SCALE,
+  };
+}
 
 function readoutForFaction(factionId: string): FactionConstructionReadout {
   const world = getWorld();
@@ -28,11 +128,13 @@ function readoutForFaction(factionId: string): FactionConstructionReadout {
       buildings: buildings.get(s.id) ?? {},
     }));
   const projects = orderOpenProjects(world.constructionProjects.filter((p) => p.factionId === factionId));
+  const founding = foundingReadoutInputs(world, factionId, projects, buildings);
 
   return computeFactionConstruction(
     projects, systems,
     { throughputPerPop: CONSTRUCTION.THROUGHPUT_PER_POP, pointsPerLevel: CONSTRUCTION.POINTS_PER_LEVEL },
     CONSTRUCTION.PER_BUILD_ABSORPTION_CAP,
+    founding,
   );
 }
 

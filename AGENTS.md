@@ -27,7 +27,7 @@ Skills are authored in `.agents/skills/` (canonical). `.claude/skills/` holds di
 - `npx vitest run` — unit tests
 - `npm run simulate` — headless run of the real tick, reporting economy health at two horizons: 1000 ticks (startup/founding behaviour) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`.
 - `npm run impact -- <SYMBOL>` — every module that reads a constant, field or signal, which tick processors declare it, which ones write it without declaring it, and their position in the run order. Run it before leaning on any shared quantity.
-- `npm run mutation -- --mutate "<changed lib files>"` — scoped StrykerJS run; a surviving mutant is a code change no test notices. Part of the pre-review gates. **Always scoped, never bare.**
+- `npm run mutation -- --mutate "<changed lib files>"` — scoped StrykerJS run; a surviving mutant is a code change no test notices. Runs as a periodic batch (sweep → fix wave → re-sweep, typically overnight), not an in-session pre-review gate; incremental cache in `reports/stryker-incremental.json`. **Always scoped, never bare.**
 
 ## Tech Stack
 
@@ -57,7 +57,7 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 
 Conventions:
 - **No `docs/archive/`** — superseded docs are deleted. Git is the history.
-- **Active docs describe current reality in present tense** — no change history, no phase numbers or nicknames.
+- **Active docs describe current reality in present tense** — no change history, no phase numbers or nicknames, no names or dates attributing decisions (git holds who and when).
 - **Specs lead with a plain-language headline** of the mechanics and their interactions; math goes in later sections.
 - **Before deleting a doc, book what it defers.** Grep it for deferred/follow-up/"→ ROADMAP" work and confirm each was actually booked (`git log -S` the destination) — a plan claiming it routed something is not evidence anyone did.
 
@@ -150,13 +150,13 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 
 ### Review process
 - **Spec gate:** `/spec-review <doc>` on any spec with cross-mechanic surface (economy, tick processors, changed signals/primitives) BEFORE writing the implementation plan. Pure-UI and tooling skip it.
-- **Everything you know about a PR goes on the table BEFORE it merges.** Findings, doubts, "worth considering" notes, anything you would otherwise append afterwards — they belong in the review response while the merge is still a decision Kai can make differently. A post-merge "oh, also, three things…" is withholding the inputs to a decision he already made, and is the single most-repeated failure here. If you genuinely only see something after the merge, say plainly that it was missed at review time.
-- **A roadmap item is Kai's decision, not yours.** Booking a finding instead of fixing it must be (a) stated in the turn's response and (b) named in the commit message. Default: if it is cheap, self-contained and in a file the PR already touches, fix it and say so.
+- **Everything you know about a PR goes on the table BEFORE it merges.** Findings, doubts, "worth considering" notes, anything you would otherwise append afterwards — they belong in the review response while the merge is still an open decision. A post-merge "oh, also, three things…" is withholding the inputs to a decision already made, and is the single most-repeated failure here. If you genuinely only see something after the merge, say plainly that it was missed at review time.
+- **A roadmap item is the owner's decision, not yours.** Booking a finding instead of fixing it must be (a) stated in the turn's response and (b) named in the commit message. Default: if it is cheap, self-contained and in a file the PR already touches, fix it and say so.
 - **Open the PR before reviewing**, so findings land as PR comments. Don't gate PR creation on a clean review.
 - **Review each sub-feature going INTO shared**, while it is small and in context — a whole-branch review at the end is the symptom of having skipped that gate, not the standard.
 - **PR-mode `/uber-review`: check out the PR head first**, else agents review stale base-branch code.
 - **Scale the review to substantive surface, not file count.** Deletion-heavy PRs: strip pure-deletion files (`--diff-filter=d`, pass the deleted list as context), bump `--chunk-size`, prune `--only` reviewers whose domain was deleted.
-- **Wait for Kai's go-ahead** when he is running the manual/visual smoke himself.
+- **Wait for the go-ahead** when the manual/visual smoke is being run by hand.
 - **Never merge over red CI.** Confirm an unrelated flake passes in isolation and fix it — don't merge past it.
 
 ## Working Practices
@@ -168,9 +168,11 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 - **A "ruled out" is a claim with the same evidence bar as a finding** — both horizons, and record which horizon and cohort it was measured at. Nobody re-tests a negative, so a wrong one steers every later investigation away from the cause.
 - **Read an aggregate cohorted before diagnosing it** (`npm run simulate` splits by market role and world cohort). A galaxy-wide median moves with cohort *mix*, not just with the thing it measures.
 - **Write the test that fails when the task's own premise breaks**, not one that confirms the happy path.
-- **Red-proof + mutation gates before review** — every new/changed test seen red once (break the
-  premise, watch it fail, restore); a scoped `npm run mutation` sweep on the changed `lib/` files
-  with every survivor killed or justified. Procedure: `docs/active/engineering/feature-process.md`.
+- **Red-proof before review; mutation sweep on a batch cadence** — every new/changed test seen red once
+  (break the premise, watch it fail, restore) is the synchronous, in-session gate. The scoped
+  `npm run mutation` sweep runs as a periodic batch — sweep → fix wave → re-sweep, results at the next
+  working session — with the same bar: every in-diff survivor killed or accepted with a stated reason, never
+  a Stryker disable comment. Procedure: `docs/active/engineering/feature-process.md`.
 - Calibrate to a coarse health bar only (no NaN/runaway/pinning; dispersion; liquidity) until all mechanisms ship — precision tuning is perishable.
 
 **Before building a mechanic**
@@ -179,8 +181,17 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 - **Read what a constant was authored to MEAN — its docstring, not its value.** Numbers here are routinely authored for one purpose and read as if they meant another: `GOOD_CONSUMPTION` is a tier gradient, not a necessity ranking; `MIN_DEMAND` is a divide-by-zero guard for *pricing*; `TARGET_COVER` is a price-dispersion knob. Check the authored intent and the table's real shape before leaning on a value.
 
 **UI / dataviz**
-- UI-heavy work gets a collaborative design pass with a browser-viewable HTML prototype Kai approves BEFORE implementation. Breadth-first: rough wireframes to react to, then refine the chosen one.
+- UI-heavy work gets a collaborative design pass with a browser-viewable HTML prototype approved BEFORE implementation. Breadth-first: rough wireframes to react to, then refine the chosen one.
 - A shared/segmented bar is for two consumers of ONE datapoint, never N differently-scaled series.
+
+**Executing fix batches**
+- **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched
+  Opus agent** — with the standard one-line ask — never inline in the main
+  session. Inline is for a single trivial edit only. The main session runs the priciest model and
+  its context belongs to orchestration; "don't block on an ask" is not a reason to skip the ask.
+  The ask describes the dispatch's scope in words — what it will read and do, never a token count.
+  The session's job on the result: verify the agent's claims and make the judgement calls it flags
+  (a wrong finding, a fix that would weaken a test).
 
 **Scripts**
 - `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test). One-off diagnostics live in scratch and are never committed.

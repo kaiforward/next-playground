@@ -12,8 +12,10 @@ import type { GovernmentType } from "@/lib/types/game";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 import type { DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
-import type { TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
+import type { FoundingEraSummary, TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
+import type { FounderCohortSummary, FoundingLifecycleSummary } from "./build-analysis";
 import type { DemandHuntingSummary } from "./market-analysis";
+import type { ConservationSummary } from "./conservation-analysis";
 
 // ── Market role classification ──────────────────────────────────
 
@@ -320,15 +322,30 @@ export interface FoundingStockSummary {
   meanOpeningDissatisfaction: number;
   /** Sampled colonies that opened below half satisfaction. Should read ~0. */
   openingDeprivedCount: number;
-  /** Mean manifest tonnage per colony founded — what founding costs a founder in goods. The
+  /** Mean tonnage staged per colony founded — what founding costs a founder in goods. The
    *  manifest's cap is use-figure denominated, so this moves when a founder's stated draw does. */
   meanManifestTonnage: number;
-  /** Median, over colonies that drew a manifest with a measurable cover reading, of the founder's
-   *  own remaining cover on the binding good (post-manifest stock ÷ that good's donor floor).
-   *  Below 1 means founding is drawing founders under the floor they are meant to keep. Null when
-   *  no founding produced a measurable reading — the median of nothing must not print as a
-   *  founder drained to 0.00×. */
+  /** Mean money per colony founded paid for those staged materials, through the founding valuation
+   *  seam. The charter fee is a separate charge and is not in it. */
+  meanFoundingMoneyCost: number;
+  /** Median, over colonies with a measurable cover reading, of the founder's own remaining cover on
+   *  the binding good — the deepest any one of that colony's staging draws left it (post-draw stock
+   *  ÷ that good's donor floor, minimum across draws). Below 1 means founding is drawing founders
+   *  under the floor they are meant to keep. Null when no founding produced a measurable reading —
+   *  the median of nothing must not print as a founder drained to 0.00×.
+   *
+   *  Not comparable with a run measured before materials were staged per cycle, where the same name
+   *  meant one whole manifest taken in a single draw. Nor is it a clean per-colony attribution: a
+   *  draw is measured against what the founder holds after every draw already made on it that cycle,
+   *  including other colonies', so a colony the queue reaches second reads deeper than the same
+   *  colony would have read first. */
   medianFounderCoverAfter: number | null;
+  /** Share of the run's founded colonies the cadence mark below is taken at. Reported so the mark is
+   *  never read against a differently-defined one. */
+  cadenceMarkShare: number;
+  /** The tick by which that share of the run's colonies had been founded — how far the founding
+   *  burst spread, which the founded count alone cannot show. Null when nothing was founded. */
+  cadenceMarkTick: number | null;
 }
 
 // ── Region overview ─────────────────────────────────────────────
@@ -394,8 +411,18 @@ export interface HarnessResults {
   migrationThroughput: MigrationThroughputSummary;
   /** How well provisioned colonies founded during the run were at their first assessed cycle. */
   foundingStock: FoundingStockSummary;
+  /** How long foundings took, how many ran at once, and what held them up — the reading that tells a
+   *  founding the money gate refused from one the construction pool never reached. */
+  foundingLifecycle: FoundingLifecycleSummary;
+  /** The systems that successfully staged a founding draw, read against every other developed system. */
+  founderCohort: FounderCohortSummary;
   /** Faction-treasury health at simulation end — balances, income mix, funded fractions, shortfalls. */
   treasurySummary: TreasurySummary;
+  /** The founding-era money bars, counted over settled faction-cycles across the whole run. */
+  foundingEra: FoundingEraSummary;
   /** Treasury balance trajectory sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
   treasurySnapshots: TreasurySnapshot[];
+  /** The four pass/fail conservation identities — the half of the acceptance bar that is checked
+   *  rather than judged. */
+  conservation: ConservationSummary;
 }

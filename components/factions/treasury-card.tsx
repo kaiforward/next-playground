@@ -100,6 +100,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
               ))}
             <LedgerRow label="Logistics" amount={signedMoney(-s.paid.logistics)} />
             <LedgerRow label="Construction" amount={signedMoney(-s.paid.construction)} />
+            <LedgerRow label="Founding" amount={signedMoney(-s.foundingExpense)} />
           </>
         )}
 

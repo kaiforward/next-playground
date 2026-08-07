@@ -59,12 +59,14 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 10 (squeeze/proposal counters renamed to cycles)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(10);
+  it("is at save format version 11 (founding ledger, charter flag and purse line)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(11);
   });
 
-  it("rejects a prior-version (v9) save — saves break on the shape bump", () => {
-    const json = JSON.stringify({ formatVersion: 9, world });
+  it("rejects a prior-version (v10) save — saves break on the shape bump", () => {
+    // v10's in-flight colonies were committed under the free founding model; there is no
+    // field-defaulting path, and any default would be a lie about whether they were paid for.
+    const json = JSON.stringify({ formatVersion: 10, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
@@ -112,6 +114,8 @@ describe("serializeWorld / deserializeWorld", () => {
   });
 
   it("round-trips a colony-establish project unchanged (serializable, no lost fields)", () => {
+    // The staged manifest is real in-transit inventory sitting in no market row at either end —
+    // lose it on save and the founder is debited for goods the colony never receives.
     const withColony: World = {
       ...world,
       constructionProjects: [
@@ -126,6 +130,12 @@ describe("serializeWorld / deserializeWorld", () => {
           housingLevels: 3,
           workTotal: 84,
           workDone: 40,
+          stagedManifest: [
+            { goodId: "water", quantity: 42 },
+            { goodId: "food", quantity: 17.5 },
+          ],
+          charterPaid: true,
+          stalledCycles: 3,
         },
       ],
     };

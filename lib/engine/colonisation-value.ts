@@ -1,6 +1,6 @@
 /**
  * Pure colony valuation — the expand-vs-build ROI numerator
- * (docs/planned/economy-colonisation-cost.md §3). Zero I/O.
+ * (docs/active/gameplay/colonisation.md). Zero I/O.
  *
  * A colony's value sits on the same demand-rate axis as a build's served deficit, so the planner
  * can rank "establish this colony" against "build this factory" on one pool:

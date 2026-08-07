@@ -21,6 +21,7 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { median } from "@/lib/utils/math";
+import type { FoundingStagingEvent, FoundingStallEvent } from "@/lib/tick/types";
 import type { BuildBurstSummary, FoundingStockSummary } from "./types";
 
 /** How a developed system's built base breaks down by role/tier. */
@@ -74,35 +75,73 @@ export interface FoundedColonyRecord {
   openingSatisfaction: number | null;
   /** The convex fold unrest itself reads (`dissatisfaction`) at that cycle; null until sampled. */
   openingDissatisfaction: number | null;
-  /** Total tonnage the founding manifest shipped from the founder; absent until recorded. */
+  /** Total tonnage the colony staged from its founder over the whole establish; absent when it
+   *  staged nothing. */
   manifestTonnage?: number;
-  /** The founder's own remaining cover on the manifest's BINDING good — post-manifest stock ÷ that
-   *  good's donor floor, minimum across the manifest — sampled at the founding tick. Below 1 means
-   *  founding drew the founder under the floor it is meant to keep for itself. Absent when the
-   *  manifest gave no measurable reading (no shipped good with a positive donor floor). */
+  /** What the faction paid for those materials through the founding valuation seam, over the whole
+   *  establish (the charter is not part of it); absent when it staged nothing. */
+  foundingMoneyCost?: number;
+  /** The founder's remaining cover on the binding good — post-draw stock ÷ that good's donor floor —
+   *  taken as the MINIMUM ACROSS THE COLONY'S STAGING DRAWS, i.e. the deepest any one cycle's draw
+   *  left it. Below 1 means founding drew the founder under the floor it is meant to keep for
+   *  itself. Absent when no draw gave a measurable reading (no staged good with a positive donor
+   *  floor).
+   *
+   *  A different unit from the pre-staging reading of the same name, which measured one whole
+   *  manifest taken in a single draw at the founding tick: a run's figure here is not comparable
+   *  with one measured before materials were staged per cycle.
+   *
+   *  Queue-order dependent within a cycle, and so not a pure per-colony attribution: a draw is
+   *  measured against what the founder holds after every draw already made on it this cycle,
+   *  including other colonies'. A colony the queue reaches second reads deeper than the same
+   *  colony would have read first. */
   founderCoverAfter?: number;
 }
 
 /**
- * Record what one founding cost its founder. Called at the founding tick, where the founder's
- * post-manifest stock still reflects this manifest and no other. A colony with no manifest is
- * never recorded, so it contributes no cover reading rather than a 0 one.
+ * What one colony has staged from its founder so far — the running total behind its record.
+ *
+ * Kept keyed by TARGET SYSTEM and independent of the founded-colony tracker, because every staging
+ * draw fires while the target is still `controlled`: a tracker-keyed recorder would drop every draw
+ * made before the colony existed, which is all of them but the last.
+ */
+export interface FoundingStagingTotals {
+  tonnage: number;
+  moneyCost: number;
+  /** Minimum cover across the draws that had a measurable one; absent while none has. */
+  minFounderCover?: number;
+}
+
+/** One cycle's staging draw as the processor emits it (`instrumentation.foundingManifests`). */
+export type FoundingStagingRecord = Pick<
+  FoundingStagingEvent, "systemId" | "tonnage" | "moneyCost" | "founderCover"
+>;
+
+/**
+ * Accumulate one staging draw against its target colony. Called for every draw as it happens; the
+ * totals are folded into the colony's record when `trackFoundedColonies` first sees it developed.
+ * A draw that moved nothing is ignored, so a colony that never staged has no entry at all and
+ * contributes no cover reading rather than a 0 one.
  */
 export function recordFoundingManifest(
-  tracker: Map<string, FoundedColonyRecord>,
-  systemId: string,
-  manifestTonnage: number,
-  founderCoverAfter: number | undefined,
+  staging: Map<string, FoundingStagingTotals>,
+  draw: FoundingStagingRecord,
 ): void {
-  const record = tracker.get(systemId);
-  if (!record || !(manifestTonnage > 0)) return;
-  record.manifestTonnage = manifestTonnage;
+  if (!(draw.tonnage > 0)) return;
+  const totals = staging.get(draw.systemId) ?? { tonnage: 0, moneyCost: 0 };
+  totals.tonnage += draw.tonnage;
+  // A non-finite money cost is a corrupt reading, not a free draw — counting it would poison every
+  // later sum with a NaN. The tonnage still stands.
+  if (Number.isFinite(draw.moneyCost)) totals.moneyCost += Math.max(0, draw.moneyCost);
   // A cover with nothing measurable behind it stays absent — folding a placeholder 0 into the
   // median would read as a founder drained flat, the opposite of "there was no floor to draw
   // under". Same rule for a corrupt (non-finite) reading.
-  if (founderCoverAfter !== undefined && Number.isFinite(founderCoverAfter)) {
-    record.founderCoverAfter = Math.max(0, founderCoverAfter);
+  if (draw.founderCover !== undefined && Number.isFinite(draw.founderCover)) {
+    const cover = Math.max(0, draw.founderCover);
+    totals.minFounderCover =
+      totals.minFounderCover === undefined ? cover : Math.min(totals.minFounderCover, cover);
   }
+  staging.set(draw.systemId, totals);
 }
 
 /** Opening satisfaction below this reads as a colony that arrived deprived. */
@@ -120,17 +159,26 @@ export type FoundedColonySystem =
  * Detection only; the reading itself is `sampleFoundedColonies` at the first economy cycle STRICTLY
  * after the founding tick, so it covers a whole assessed cycle of the colony's life rather than
  * however much of one remained when it landed.
+ *
+ * This is also where a colony's staging totals join its record — every draw it made happened before
+ * it existed as a colony, so the accumulator is the only place they can have been kept. Feed the
+ * tick's draws in before calling this, or the founding cycle's own draw misses the fold.
  */
 export function trackFoundedColonies(
   systems: ReadonlyArray<Pick<TickSystem, "id" | "control">>,
   tick: number,
   developedAtStart: ReadonlySet<string>,
   tracker: Map<string, FoundedColonyRecord>,
+  staging: ReadonlyMap<string, FoundingStagingTotals>,
 ): void {
   for (const s of systems) {
     if (s.control !== "developed" || developedAtStart.has(s.id) || tracker.has(s.id)) continue;
+    const staged = staging.get(s.id);
     tracker.set(s.id, {
       systemId: s.id, foundedTick: tick, openingSatisfaction: null, openingDissatisfaction: null,
+      manifestTonnage: staged?.tonnage,
+      foundingMoneyCost: staged?.moneyCost,
+      founderCoverAfter: staged?.minFounderCover,
     });
   }
 }
@@ -181,6 +229,40 @@ export function sampleFoundedColonies(
   }
 }
 
+/**
+ * Share of a run's founded colonies the cadence mark is taken at. The acceptance bar reads the
+ * founding BURST's spread, and the burst's tail is what a pacing change moves — the median barely
+ * shifts while the 80% mark slides by hundreds of ticks.
+ */
+export const FOUNDING_CADENCE_MARK_SHARE = 0.8;
+
+/**
+ * The tick by which `share` of the run's founded colonies had been founded — the cadence mark the
+ * gate compares arms on.
+ *
+ * Denominated over the run's OWN total, so it says when this arm's burst had mostly happened rather
+ * than when it reached some absolute count. That makes it a pacing read and not a volume one: an arm
+ * that founds half as many colonies at the same rhythm reads the same mark.
+ *
+ * Order-independent by construction — the ticks are sorted, so the answer cannot depend on the order
+ * colonies happened to be tracked in. Null when nothing was founded: there is no mark, and a 0 would
+ * read as "the whole burst landed on tick zero", the opposite of what happened.
+ */
+export function foundingCadenceMarkTick(
+  tracker: ReadonlyMap<string, FoundedColonyRecord>,
+  share: number = FOUNDING_CADENCE_MARK_SHARE,
+): number | null {
+  const ticks: number[] = [];
+  for (const r of tracker.values()) ticks.push(r.foundedTick);
+  if (ticks.length === 0) return null;
+  ticks.sort((a, b) => a - b);
+  // The colonies needed to reach the share, in whole colonies — the mark is a real founding's tick,
+  // never an interpolation between two. The epsilon keeps an exact share (0.8 × 5 = 4) off the wrong
+  // side of a float comparison.
+  const needed = Math.min(ticks.length, Math.max(1, Math.ceil(share * ticks.length - 1e-9)));
+  return ticks[needed - 1];
+}
+
 /** Fold the tracked colonies into the run's founding-stock health reading. */
 export function summarizeFoundingStock(
   tracker: ReadonlyMap<string, FoundedColonyRecord>,
@@ -190,9 +272,11 @@ export function summarizeFoundingStock(
   let dissatisfactionSum = 0;
   let openingDeprivedCount = 0;
   let manifestTonnageSum = 0;
+  let moneyCostSum = 0;
   const founderCovers: number[] = [];
   for (const r of tracker.values()) {
     manifestTonnageSum += r.manifestTonnage ?? 0;
+    moneyCostSum += r.foundingMoneyCost ?? 0;
     // Only a colony that actually drew a manifest says anything about the cost to its founder.
     if (r.founderCoverAfter !== undefined) founderCovers.push(r.founderCoverAfter);
     if (r.openingSatisfaction === null || r.openingDissatisfaction === null) continue;
@@ -210,8 +294,286 @@ export function summarizeFoundingStock(
     // Denominated over every colony founded, so a run that ships nothing reads 0 rather than
     // hiding behind a shrunken denominator.
     meanManifestTonnage: tracker.size > 0 ? manifestTonnageSum / tracker.size : 0,
+    meanFoundingMoneyCost: tracker.size > 0 ? moneyCostSum / tracker.size : 0,
     medianFounderCoverAfter: founderCovers.length > 0 ? median(founderCovers) : null,
+    cadenceMarkShare: FOUNDING_CADENCE_MARK_SHARE,
+    cadenceMarkTick: foundingCadenceMarkTick(tracker),
   };
+}
+
+// ── Founding lifecycle: how long a founding takes, and what holds it up ──────────
+
+/**
+ * Running census of what held in-flight foundings back, in COLONY-CYCLES: one count per priced
+ * colony per construction cycle, whether it moved or not, so every share below carries `observed`
+ * as its denominator.
+ *
+ * The four gate counts partition `observed`. `stalled` and the two materials counts cut across them
+ * and are deliberately NOT part of that partition:
+ * - `stalled` is the world's own write-off clock, which advances on a money/materials stall and
+ *   pointedly not on a pool-starved cycle;
+ * - `materialsShort` is informational — a colony whose founder cannot spare the whole want still
+ *   absorbs its full cap and opens thinner, so counting it as a stall would read a thinner endowment
+ *   as a refused founding.
+ */
+export interface FoundingStallTotals {
+  /** Colony-cycles observed — the denominator for every count here. */
+  observed: number;
+  /** Absorbed nothing: the charter is unpaid. */
+  charter: number;
+  /** Work held below the cap because the treasury could not buy the cycle's materials share. */
+  funds: number;
+  /** Materials would have allowed the work; the construction queue never reached the project. */
+  pool: number;
+  /** Nothing held the project below its cap. */
+  unGated: number;
+  /** Cycles that advanced the project's write-off counter. */
+  stalled: number;
+  /** Cycles whose founder could not spare the whole want (informational — work is not gated). */
+  materialsShort: number;
+  /** Of those, cycles whose founder was under an active event: accepted flavour, not a fault. */
+  materialsShortUnderEvent: number;
+}
+
+export function newFoundingStallTotals(): FoundingStallTotals {
+  return {
+    observed: 0, charter: 0, funds: 0, pool: 0, unGated: 0,
+    stalled: 0, materialsShort: 0, materialsShortUnderEvent: 0,
+  };
+}
+
+/**
+ * Fold one colony-cycle into the census. `founderUnderEvent` is the harness's own reading of whether
+ * the source system was under an active event on that tick — the processor emits the shortfall, the
+ * runner knows the event board, and the two only meet here.
+ */
+export function recordFoundingStall(
+  totals: FoundingStallTotals,
+  event: FoundingStallEvent,
+  founderUnderEvent: boolean,
+): void {
+  totals.observed++;
+  if (event.gate === null) totals.unGated++;
+  else totals[event.gate]++;
+  if (event.stalled) totals.stalled++;
+  if (event.materialsShort) {
+    totals.materialsShort++;
+    if (founderUnderEvent) totals.materialsShortUnderEvent++;
+  }
+}
+
+/** Running per-cycle census of open colony-establish projects — the settler gate's invariance to
+ *  how long an establish takes is only visible as a concurrent count. */
+export interface InFlightEstablishTotals {
+  /** Cycles sampled — the mean's denominator. */
+  samples: number;
+  /** Σ open establishes across those samples. */
+  total: number;
+  max: number;
+  maxTick: number | null;
+}
+
+export function newInFlightEstablishTotals(): InFlightEstablishTotals {
+  return { samples: 0, total: 0, max: 0, maxTick: null };
+}
+
+/**
+ * One pass over the open queue that does the two jobs needing it: census this cycle's in-flight
+ * establishes, and record the first tick each colony was seen committed.
+ *
+ * The commitment reading is keyed by TARGET system and taken from the open queue rather than from a
+ * processor signal, because the queue is where a commitment becomes real: an autonomic colony whose
+ * charter cannot be paid is dropped and re-proposed with a fresh id, so nothing that could not pay
+ * ever reaches this. A colony committed and completed inside a single cycle never appears at all —
+ * `summarizeFoundingLifecycle` counts those rather than pretending they took zero cycles.
+ */
+export function sampleOpenColonies(
+  projects: ReadonlyArray<Pick<WorldConstructionProject, "kind" | "systemId">>,
+  tick: number,
+  commitments: Map<string, number>,
+  inFlight: InFlightEstablishTotals,
+): void {
+  let open = 0;
+  for (const p of projects) {
+    if (p.kind !== "colony_establish") continue;
+    open++;
+    if (!commitments.has(p.systemId)) commitments.set(p.systemId, tick);
+  }
+  inFlight.samples++;
+  inFlight.total += open;
+  if (open > inFlight.max) {
+    inFlight.max = open;
+    inFlight.maxTick = tick;
+  }
+}
+
+/** How long foundings took, how many ran at once, and what held them up. */
+export interface FoundingLifecycleSummary {
+  /** Colonies founded in play whose commitment cycle was observed — the cycles denominator. */
+  sampledCount: number;
+  /** Founded colonies that never appeared in the open queue (committed and completed inside one
+   *  cycle), so no duration exists for them. Excluded from the three figures below rather than
+   *  folded in as zero, which would read as instant founding. */
+  unobservedCount: number;
+  meanCycles: number;
+  medianCycles: number;
+  maxCycles: number;
+  inFlight: {
+    meanPerCycle: number;
+    max: number;
+    maxTick: number | null;
+    sampledCycles: number;
+  };
+  stalls: FoundingStallTotals;
+}
+
+/**
+ * Fold the founding lifecycle into its reading. Durations are measured in CONSTRUCTION cycles —
+ * `cycleTicks` is the interval this run resolved builds at, so a cadence override reports the same
+ * unit rather than a tick count that silently means something else.
+ */
+export function summarizeFoundingLifecycle(
+  tracker: ReadonlyMap<string, FoundedColonyRecord>,
+  commitments: ReadonlyMap<string, number>,
+  inFlight: InFlightEstablishTotals,
+  stalls: FoundingStallTotals,
+  cycleTicks: number,
+): FoundingLifecycleSummary {
+  const durations: number[] = [];
+  let unobservedCount = 0;
+  for (const r of tracker.values()) {
+    const committedAt = commitments.get(r.systemId);
+    if (committedAt === undefined) {
+      unobservedCount++;
+      continue;
+    }
+    const ticks = Math.max(0, r.foundedTick - committedAt);
+    durations.push(cycleTicks > 0 ? ticks / cycleTicks : ticks);
+  }
+  let sum = 0;
+  let max = 0;
+  for (const d of durations) {
+    sum += d;
+    if (d > max) max = d;
+  }
+  return {
+    sampledCount: durations.length,
+    unobservedCount,
+    meanCycles: durations.length > 0 ? sum / durations.length : 0,
+    medianCycles: durations.length > 0 ? median(durations) : 0,
+    maxCycles: max,
+    inFlight: {
+      meanPerCycle: inFlight.samples > 0 ? inFlight.total / inFlight.samples : 0,
+      max: inFlight.max,
+      maxTick: inFlight.maxTick,
+      sampledCycles: inFlight.samples,
+    },
+    stalls,
+  };
+}
+
+// ── Founder cohort: what supplying a colony costs the system that supplies it ────
+
+/** The founder-cohort read for one cohort. Each cohort carries its own denominator. */
+export interface FounderCohortStats {
+  systemCount: number;
+  /** Mean, per system, of its summed realized production rate — the selling side of the draw. */
+  meanRealizedProduction: number;
+  /** Share of PRODUCING markets flagged production-suppressed (strike or maintenance). */
+  productionSuppressedShare: number;
+  /** Producing markets in the cohort — the suppressed share's denominator. */
+  producingMarkets: number;
+  /** Mean building types per system sitting under a disuse countdown. */
+  meanIdleTypes: number;
+  /** Share of systems carrying any disuse countdown at all. */
+  idleSystemShare: number;
+}
+
+/** One cohort's running sums while the two passes below walk systems and markets. */
+interface CohortAccumulator {
+  systemCount: number;
+  production: number;
+  producingMarkets: number;
+  suppressed: number;
+  idleTypes: number;
+  idleSystems: number;
+}
+
+/**
+ * Founder cohort vs the rest of the developed galaxy.
+ *
+ * Staging draws stock OUT of a founder, which is the `sellingFactor` side of the mechanic: a lower
+ * start stock lifts the production ceiling, so a founder should read at least as productive and no
+ * more idle than its neighbours. A founder cohort that produces less and idles more is the sustained
+ * draw hollowing out the systems that pay for expansion — which no galaxy-wide average can show,
+ * because founders are a minority of developed systems.
+ *
+ * Membership is a system that SUCCESSFULLY STAGED A DRAW, not one that sourced a founding: a founder
+ * with nothing to spare supplies its colony no goods and so never enters the cohort at all. It is
+ * also not random — such a system is by construction an established one with stock to spare, so it
+ * out-produces the cohort of everything else (much of which is the colonies it founded) for reasons
+ * that have nothing to do with founding. The comparison is read as a TREND between arms of the same
+ * seed, never as a claim that supplying a colony made a system productive.
+ */
+export function summarizeFounderCohort(
+  systems: ReadonlyArray<Pick<TickSystem, "id" | "control" | "buildingIdleCycles">>,
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "realizedProductionRate" | "productionSuppressed">>,
+  founderIds: ReadonlySet<string>,
+): FounderCohortSummary {
+  const developed = new Set<string>();
+  for (const s of systems) {
+    if (s.control === "developed") developed.add(s.id);
+  }
+  const acc = (): CohortAccumulator => ({
+    systemCount: 0, production: 0, producingMarkets: 0, suppressed: 0, idleTypes: 0, idleSystems: 0,
+  });
+  const founder = acc();
+  const other = acc();
+  const bucketOf = (systemId: string): CohortAccumulator | undefined => {
+    if (!developed.has(systemId)) return undefined;
+    return founderIds.has(systemId) ? founder : other;
+  };
+
+  for (const s of systems) {
+    const bucket = bucketOf(s.id);
+    if (bucket === undefined) continue;
+    bucket.systemCount++;
+    let idle = 0;
+    for (const cycles of Object.values(s.buildingIdleCycles)) {
+      if (cycles > 0) idle++;
+    }
+    bucket.idleTypes += idle;
+    if (idle > 0) bucket.idleSystems++;
+  }
+  for (const m of markets) {
+    const bucket = bucketOf(m.systemId);
+    if (bucket === undefined) continue;
+    // A market only produces if it realized something. Missing means "not yet assessed", but an
+    // ASSESSED non-producer holds a real 0 — and by run end that is nearly every row in the galaxy,
+    // so testing for the field's presence would put the whole basket in the denominator and deflate
+    // the suppressed share toward nothing.
+    const realized = m.realizedProductionRate ?? 0;
+    if (!(realized > 0)) continue;
+    bucket.producingMarkets++;
+    bucket.production += realized;
+    if (m.productionSuppressed ?? false) bucket.suppressed++;
+  }
+
+  const fold = (b: CohortAccumulator): FounderCohortStats => ({
+    systemCount: b.systemCount,
+    meanRealizedProduction: b.systemCount > 0 ? b.production / b.systemCount : 0,
+    productionSuppressedShare: b.producingMarkets > 0 ? b.suppressed / b.producingMarkets : 0,
+    producingMarkets: b.producingMarkets,
+    meanIdleTypes: b.systemCount > 0 ? b.idleTypes / b.systemCount : 0,
+    idleSystemShare: b.systemCount > 0 ? b.idleSystems / b.systemCount : 0,
+  });
+  return { founder: fold(founder), other: fold(other) };
+}
+
+/** Founder cohort vs every other developed system, on the two reads the sustained draw moves. */
+export interface FounderCohortSummary {
+  founder: FounderCohortStats;
+  other: FounderCohortStats;
 }
 
 export interface ColonisationSummary {

@@ -211,6 +211,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
     bands: { maintenance: 1, logistics: 1, construction: 1 },
     funded: { maintenance: 1, logistics: 1, construction: 1 },
     pendingWork: { logistics: 0, construction: 0 },
+    pendingFounding: 0,
     lastSettlement: null,
     updatedAtTick: 0,
   }));

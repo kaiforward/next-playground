@@ -77,10 +77,18 @@ export interface ExperimentResult {
   demandHunting: HarnessResults["demandHunting"];
   /** Founding-cost readings — manifest tonnage and founder cover — a stage-gate primary read. */
   foundingStock: HarnessResults["foundingStock"];
+  /** How long foundings took, how many ran at once and what gated them — the reading that separates
+   *  a founding the money gate refused from one the construction pool never reached. */
+  foundingLifecycle: HarnessResults["foundingLifecycle"];
+  /** The systems that staged a draw, read against every other developed one — the founder's cost side. */
+  founderCohort: HarnessResults["founderCohort"];
   /** Per-cohort supply and unrest — the same separation on the population axis. */
   worldCohorts: HarnessResults["worldCohorts"];
   eventImpacts: HarnessResults["eventImpacts"];
   treasurySummary: TreasurySummary;
+  /** The founding-era money bars over settled faction-cycles — the share of era income founding
+   *  cost, and the shortfall split that says whether a charter caused one. */
+  foundingEra: HarnessResults["foundingEra"];
   treasurySnapshots: TreasurySnapshot[];
   /** Whole-run logistics activity incl. the budget/flow instruments (`budgetSpentFrac`,
    *  funding-bound events/set-rate, `flowRowsPerCycle`) — stage-gate primary reads. */
@@ -89,6 +97,9 @@ export interface ExperimentResult {
   buildBurstSummary: HarnessResults["buildBurstSummary"];
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
   migrationThroughput: HarnessResults["migrationThroughput"];
+  /** The four pass/fail conservation identities. Saved rather than left in the console the run threw
+   *  away: an arm's identities are part of what makes its calibration reads admissible at all. */
+  conservation: HarnessResults["conservation"];
   elapsedMs: number;
 }
 
@@ -107,13 +118,17 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     marketRoles: results.marketRoles,
     demandHunting: results.demandHunting,
     foundingStock: results.foundingStock,
+    foundingLifecycle: results.foundingLifecycle,
+    founderCohort: results.founderCohort,
     worldCohorts: results.worldCohorts,
     eventImpacts: results.eventImpacts,
     treasurySummary: results.treasurySummary,
+    foundingEra: results.foundingEra,
     treasurySnapshots: results.treasurySnapshots,
     logisticsActivity: results.logisticsActivity,
     buildBurstSummary: results.buildBurstSummary,
     migrationThroughput: results.migrationThroughput,
+    conservation: results.conservation,
     elapsedMs: results.elapsedMs,
   };
 }

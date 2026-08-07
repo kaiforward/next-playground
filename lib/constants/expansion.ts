@@ -8,7 +8,7 @@
  *
  * Claims are cheap and near-instant this phase (bounded by MAX_CLAIMS_PER_CYCLE + the reach radius +
  * the score floor). Developing a controlled system is NO longer instant or capped here — it is a
- * pool-funded, timed colony-establish project (docs/planned/economy-colonisation-cost.md); COLONY_SEED_POP
+ * pool-funded, timed colony-establish project (docs/active/gameplay/colonisation.md); COLONY_SEED_POP
  * and DEVELOP_HABITABLE_FLOOR feed that project's sizing/eligibility, the construction pool paces it.
  */
 export const EXPANSION = {

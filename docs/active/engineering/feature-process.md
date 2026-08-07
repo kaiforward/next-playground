@@ -65,17 +65,30 @@ Two mechanisms upgrade rank-3 rules toward rank 2, and every skill carries them 
    recurring review finding is fixtures that coincide with the old behaviour, thresholds sitting
    exactly on a boundary, or assertions comparing a function to itself — all of which pass on first
    write.
-3. **Mutation sweep** (before requesting review): `npm run mutation -- --mutate "<changed lib .ts
-   files, comma-separated>"`. A surviving mutant is a code change no test noticed. Kill each survivor
-   with a test, or justify it in the PR notes (equivalent mutant, dev-harness-only weight). The
-   survivor report travels to `/uber-review`, whose tests lens triages it instead of re-discovering
-   it. Scoped runs take seconds to minutes; never run it unscoped.
-4. **Doc-sync grep**: when a change alters a symbol's *meaning or shape* — not just its value — grep
+3. **Doc-sync grep**: when a change alters a symbol's *meaning or shape* — not just its value — grep
    that identifier across `lib/` and `docs/active/` for stale docstrings, module headers and doc
    claims. `npm run impact` finds the code readers; this finds the prose readers. The recurring
    review finding is a header or docstring falsified by the same diff that shipped it.
-5. **Mechanic-level proof**: `npm run simulate`, both horizons, per `AGENTS.md` → Verifying changes.
+4. **Mechanic-level proof**: `npm run simulate`, both horizons, per `AGENTS.md` → Verifying changes.
    Fixtures passing while the galaxy is broken is the anti-pattern the whole pipeline exists to stop.
+
+## The mutation sweep — a periodic batch, not an in-session gate
+
+A surviving mutant is a code change no test noticed, and the bar is unchanged: **every in-diff survivor is
+killed with a test or accepted with a stated reason** (equivalent mutant, dev-harness-only weight). No
+Stryker disable comments — an accepted survivor is recorded in prose, where a reader can disagree with it.
+
+What moved is the *scheduling*. The sweep no longer blocks requesting a review. It runs as a periodic batch,
+typically overnight, as one cycle: **sweep → fix wave → re-sweep**, with the survivor report and the fix
+wave's outcome brought to the next working session. Batching it is what keeps the synchronous loop short
+enough to stay honest; the red-proof gate above remains the in-session guarantee that a test was ever
+capable of failing.
+
+The run is **always scoped** (`npm run mutation -- --mutate "<changed lib .ts files, comma-separated>"`),
+never bare. The harness dev instrument (`lib/tick-harness/`) stays inside the scope: its output feeds
+decisions, so a mutant it does not notice is a decision made on an unverified number. The incremental cache
+lives in `reports/stryker-incremental.json` (machine-local), which makes a re-sweep minutes rather than
+hours.
 
 ## Review and merge
 

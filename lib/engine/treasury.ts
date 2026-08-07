@@ -52,6 +52,19 @@ export interface SettlementLadderResult {
 export const safeMoney = (n: number): number => (Number.isFinite(n) ? Math.max(0, n) : 0);
 const safe = safeMoney;
 
+/**
+ * The money a faction may genuinely commit to founding: its balance less the founding already
+ * committed this settlement period and not yet charged.
+ *
+ * One expression, because three readers must price against the same purse — the planner's
+ * affordability gate and the player verb's `insufficient_funds` block, the tick's own charter and
+ * staging phases, and the readout that says why a founding is stuck. Money-path coerced on both
+ * sides and floored at 0: a faction is never in founding debt.
+ */
+export function foundingWorkingBalance(balance: number, pendingFounding: number): number {
+  return safe(safe(balance) - safe(pendingFounding));
+}
+
 export function headsTaxIncome(
   alloc: HeadsTaxInput,
   weights: HeadsTaxInput,

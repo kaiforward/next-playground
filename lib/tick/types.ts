@@ -83,6 +83,11 @@ export interface TickProcessorResult {
    *  points absorbed; directed-logistics: work-budget consumed). Transient input
    *  to the treasury settlement — not broadcast, not persisted. */
   workPerformedByFaction?: Map<string, number>;
+  /** Money directed build committed to colony founding this cycle per faction — charter fees and
+   *  staged materials, already valued through the founding seam. A settlement INPUT, not
+   *  instrumentation: the treasury processor accrues it into `pendingFounding` and charges it off the
+   *  top at the next settlement. */
+  foundingDebitsByFaction?: Map<string, number>;
   /** New autonomic production-good build levels committed this cycle (directed-build), by
    *  good id. Counts proposal levels, not the final funded queue. Calibration instrumentation
    *  only — surfaced via `runWorldTick().instrumentation`, never broadcast or persisted. */
@@ -90,20 +95,82 @@ export interface TickProcessorResult {
   /** People moved this cycle start (colonist delivery + edge diffusion), conserved flows only.
    *  Calibration instrumentation — surfaced via runWorldTick().instrumentation, never broadcast. */
   migrationMoved?: { colonists: number; diffusion: number };
-  /** Founding-stock manifests shipped this cycle, one per colony established: what left the
-   *  founder's warehouses and which goods it came out of. Calibration instrumentation — the cost
-   *  side of colonisation, invisible to any galaxy-wide average because foundings are rare. */
-  foundingManifests?: Array<{
-    systemId: string;
-    sourceSystemId: string;
-    tonnage: number;
-    goodIds: string[];
-  }>;
+  /** Founding materials staged this cycle, one entry per draw a colony made on its founder.
+   *  Calibration instrumentation — the cost side of colonisation, invisible to any galaxy-wide
+   *  average because foundings are rare. */
+  foundingManifests?: FoundingStagingEvent[];
+  /** What held each in-flight colony back this cycle, one entry per priced colony in the queue.
+   *  Calibration instrumentation — cadence alone cannot tell a founding the money gate refused from
+   *  one the construction pool never reached, and only the processor knows which it was. */
+  foundingStalls?: FoundingStallEvent[];
   /** Per-faction haul-budget ledger for this cycle's directed-logistics resolution.
    *  Faction-owned systems only — the independent (null-faction) group hauls but is not
    *  ledgered, matching `workPerformedByFaction`. Calibration instrumentation — surfaced via
    *  `runWorldTick().instrumentation`, never broadcast or persisted. */
   logisticsBudget?: Map<string, LogisticsBudgetLedger>;
+}
+
+/**
+ * One colony's materials draw on its founder in a single cycle: what left the founder's warehouses,
+ * which goods it came out of, what the faction paid for it, and how much cover the founder was left
+ * holding on the good that draw bound hardest.
+ *
+ * One event per DRAW, not per colony: a manifest is staged in slices over the whole establish, so a
+ * colony contributes as many events as it had funded cycles, and a founder supplying two colonies in
+ * one cycle emits one event each. `founderCover` is computed by the processor as it stages, because
+ * post-tick reconstruction reads the founder after every draw and cannot tell those two apart.
+ */
+export interface FoundingStagingEvent {
+  /** The colony the goods are staged for — still `controlled` until the establish completes. */
+  systemId: string;
+  /** The developed system the goods left. */
+  sourceSystemId: string;
+  /** Total quantity staged by this draw, across its goods. */
+  tonnage: number;
+  goodIds: string[];
+  /** What the faction paid for this draw through the founding valuation seam (charter excluded). */
+  moneyCost: number;
+  /** The founder's post-draw stock ÷ donor floor, minimum across the goods this draw moved. Below 1
+   *  means the draw left the founder under the floor it keeps for itself. Absent when nothing was
+   *  measurable — no good this draw moved carries a positive donor floor — because "could not
+   *  measure" and "drained to nothing" are opposite readings and must never share a value. */
+  founderCover?: number;
+}
+
+/**
+ * One in-flight colony's cycle, as the founding path actually resolved it: what held its work below
+ * the absorption cap, whether its founder could spare the whole of that cycle's want, and whether
+ * the write-off counter advanced.
+ *
+ * One event per PRICED colony per construction cycle — every colony in a due faction's queue emits
+ * one, moving or not, so the counts carry their own denominator. An unpriced founding (the
+ * build-only engine path, independents) emits nothing, exactly as it charges nothing.
+ */
+export interface FoundingStallEvent {
+  /** The colony being established — still `controlled` until the establish completes. */
+  systemId: string;
+  /** The developed system its materials come from. */
+  sourceSystemId: string;
+  /**
+   * What gated absorption this cycle, or null when nothing did:
+   * - `charter` — the fee is unpaid, so the project absorbs no work at all;
+   * - `funds` — the treasury could not buy the whole of this cycle's materials share, which is what
+   *   lowers the project's ceiling;
+   * - `pool` — materials would have let work through and the construction queue never reached it.
+   *
+   * Only the first two are the founding path refusing; `pool` is the ordinary build queue, and
+   * conflating them is exactly the misread the record exists to prevent.
+   */
+  gate: "charter" | "funds" | "pool" | null;
+  /**
+   * The founder could not spare part of this cycle's want. INFORMATIONAL, never a gate: the
+   * achievable-want rule counts what a founder cannot spare as satisfied, so the ceiling stays up
+   * and the colony absorbs its full cap and simply opens with a thinner endowment.
+   */
+  materialsShort: boolean;
+  /** This cycle advanced the project's `stalledCycles` write-off counter — the world's own
+   *  materials/money stall semantics, which a pool-starved cycle deliberately does not trip. */
+  stalled: boolean;
 }
 
 /** One faction's haul-budget ledger for a single directed-logistics resolution: the budget
@@ -121,7 +188,11 @@ export interface LogisticsBudgetLedger {
  *  result so the shared field can't drift. */
 export type TickInstrumentation = Pick<
   TickProcessorResult,
-  "buildCommitmentsByGood" | "migrationMoved" | "foundingManifests" | "logisticsBudget"
+  | "buildCommitmentsByGood"
+  | "migrationMoved"
+  | "foundingManifests"
+  | "foundingStalls"
+  | "logisticsBudget"
 >;
 
 /** The full payload one tick's run hands to the broadcast layer. */
