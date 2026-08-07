@@ -149,7 +149,13 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   Likely folds into the goods-pricing revisit above when that comes forward.
 - **[M] Government layer revisit** — `GOVERNMENT_TYPES` carries only event weights and a danger baseline
   since the flat `consumptionBoosts` term was deleted. Governments are economically inert until something
-  replaces it as an economic axis.
+  replaces it as an economic axis. The leading candidate: **doctrine-driven allocation of discretionary
+  spend** — a per-government budget split over the two spends a faction chooses (construction and
+  founding; maintenance and logistics are obligations, not choices), so expansionist empires commit more
+  surplus to colonisation and read as sprawling many-world realms while tall ones concentrate into dense
+  developed cores. Emerges from priced founding; composes with the ROI/`Proposal` review lens. Distinct
+  from the funding sliders, which throttle payment of bills already arrived — this shapes what gets
+  committed upstream. Needs the treasury spend-attribution row (Tooling) built first.
 - **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand becomes
   partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still
   lack the goods). The former blocker — `demandRate` double-purposed as pricing anchor and logistics
@@ -222,6 +228,14 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
+- **[S] Per-category treasury spend attribution** — the tick merges charter fees and staged materials
+  into one `foundingDebitsByFaction` figure, so the harness can neither check the charter conservation
+  identity in money (it falls back to counting colonies) nor say what any faction spent on what in a
+  given cycle. Split the instrumentation per category (charter / staged materials / construction /
+  maintenance / logistics) and print per-cycle spend by category in the harness. An oversight of the
+  colonisation-economics spec, booked at its calibration gate. Prerequisite for tuning doctrine
+  allocation (government layer revisit) and for the founding-constant retune when the sibling treasury
+  drains (priced logistics, military, industry pricing) land.
 - **[M] Pre-existing mutation survivors in the colonisation-adjacent files** — the PR #217 scoped
   sweep (27 files) surfaced ~1,000 surviving/no-coverage mutants on lines *outside* that PR's diff;
   the in-diff ones were handled at the PR's own gate. Heaviest: `lib/world/tick.ts`,
