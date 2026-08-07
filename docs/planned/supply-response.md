@@ -215,6 +215,15 @@ without a floor an epsilon-demand good sets a world's band and bites its unrest 
 weight. A minimum demand share for band and override eligibility is part of both rules, not a
 refinement of them.
 
+The demand-share floor filters tiny *demand*, not low *importance* — so one mislabelling shape
+survives it: a low-necessity good wanted in genuine volume (a tech hub's engineer-basket luxuries at
+20% satisfaction) sets the band to Rationing on a world reading Provision ≈ 0.97. The candidate
+answer is a **necessity floor on band eligibility** alongside the demand-share floor: a good below a
+named necessity weight can hold the band at Strained but never set Rationing, so the distress label
+is reserved for goods whose absence is actually suffered. Decided with the boundary placements, from
+the same measured worst-good distribution — the instrument shows how many worlds sit in this shape
+before the floor needs a value.
+
 **No gameplay effect reads the band.** The relaxation-rate switch is removed and the rate becomes a
 single value; effects that should vary with supply read Provision or the shortfall. This is the
 load-bearing part of the demotion: once nothing is gated, the boundaries can be moved on taste
