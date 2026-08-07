@@ -273,6 +273,41 @@ describe("fundQueueWithFloor", () => {
     expect(r.absorbed).toBe(cap);
   });
 
+  it("resolves each project's ceiling once, so both passes see one figure", () => {
+    // The callback reads market and treasury state the caller re-derives per cycle; nothing here
+    // promises it is pure. Resolving it per pass would let a floor-eligible project absorb its
+    // reserved slice under one ceiling and the general pool under another — a build-time floor no
+    // caller could reason about, and a per-project call count that grows with the queue.
+    const cap = 10;
+    const calls: string[] = [];
+    let handed = 0;
+    const r = fundQueueWithFloor(
+      [projectAt("c", "colony", "food", 1, 0, 1000), projectAt("h", "home", "food", 1, 0, 1000)],
+      100, cap, 50,
+      (p) => p.id === "c",
+      (p) => { calls.push(p.id); handed += cap; return handed; }, // 10 first, 20 second, …
+    );
+    expect(calls).toEqual(["c", "h"]); // one resolution each, not one per pass
+    // Both ceilings clamp back to the scalar cap, so each project absorbs exactly a cap's worth —
+    // a second call for "c" would have handed it 30 and the clamp would hide the extra call.
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(cap);
+    expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(cap);
+  });
+
+  it("spares nothing for a project whose ceiling is unreadable", () => {
+    // A ceiling is derived from market and money state; a NaN reaching workDone would land in World
+    // state, and `JSON.stringify` turns it into null on save.
+    const cap = 10;
+    for (const unreadable of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const r = fundQueueWithFloor(
+        [projectAt("c", "colony", "food", 1, 0, 1000)],
+        100, cap, 50, () => true, () => unreadable,
+      );
+      expect(r.projects[0].workDone).toBe(0);
+      expect(r.absorbed).toBe(0);
+    }
+  });
+
   it("makes a project at half its ceiling take twice the cycles", () => {
     const cap = 10;
     let full = projectAt("f", "s", "food", 1, 0, 40);

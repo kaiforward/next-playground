@@ -387,11 +387,21 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     trackFoundedColonies(systems, 24, new Set(), noWater, NO_STAGING);
     sampleFoundedColonies(systems, [mkt("c1", "water", 0), mkt("c1", "luxuries", 1)], 48, noWater);
 
-    expect(noLuxuries.get("c1")!.openingSatisfaction!).toBeGreaterThan(0.9);
-    expect(noWater.get("c1")!.openingSatisfaction!).toBeLessThan(0.1);
+    // Both readings must exist before they are compared — an unsampled colony leaves them undefined,
+    // and `undefined > 0.9` is quietly false rather than an error.
+    const luxuriesRecord = noLuxuries.get("c1");
+    const waterRecord = noWater.get("c1");
+    if (luxuriesRecord?.openingSatisfaction == null ||
+        luxuriesRecord.openingDissatisfaction === null ||
+        waterRecord?.openingSatisfaction == null ||
+        waterRecord.openingDissatisfaction === null) {
+      throw new Error("fixture: expected both colonies to carry an opening reading");
+    }
+    expect(luxuriesRecord.openingSatisfaction).toBeGreaterThan(0.9);
+    expect(waterRecord.openingSatisfaction).toBeLessThan(0.1);
     // ...and the unrest fold agrees, so instrument and simulation cannot drift apart.
-    expect(noWater.get("c1")!.openingDissatisfaction!)
-      .toBeGreaterThan(noLuxuries.get("c1")!.openingDissatisfaction!);
+    expect(waterRecord.openingDissatisfaction)
+      .toBeGreaterThan(luxuriesRecord.openingDissatisfaction);
   });
 
   it("keeps the opening reading, ignoring later cycles", () => {

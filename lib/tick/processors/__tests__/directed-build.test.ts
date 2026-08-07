@@ -1272,6 +1272,17 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(run.workDoneByCycle[COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES]).toBe(STAGE_CAP);
     expect(run.developed).toBe(true);
     expect(run.cycles).toBe(COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES + STAGE_CYCLES);
+    // Past the write-off the project is given no plan at all, so the gate has to fall back to the
+    // project's own remaining work: it absorbs the whole of that allowance every cycle, and nothing
+    // — not the money it gave up on, not the queue — is holding it back any more.
+    const afterWriteOff = run.stallsByCycle
+      .slice(COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES)
+      .flat();
+    expect(afterWriteOff).not.toHaveLength(0);
+    expect(afterWriteOff.every((s) => s.gate === null)).toBe(true);
+    // Its counter stays latched above the threshold by construction — it stages nothing ever again —
+    // which is exactly why the readout must not read that counter as a live stall.
+    expect(afterWriteOff.every((s) => s.stalled)).toBe(true);
   });
 
   it("opens the colony with exactly the ledger it staged, weighted like the seed's own basket", async () => {
@@ -1343,6 +1354,38 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     expect(drawn).toBeCloseTo(cycleShare / 2, 6);
     expect(result.foundingDebitsByFaction?.get("f1")).toBeCloseTo(halfValue, 6);
     expect((result.foundingManifests ?? []).reduce((sum, e) => sum + e.moneyCost, 0)).toBeCloseTo(halfValue, 6);
+    // It filled the whole ceiling its money bought, so the queue is not what held it back — the
+    // partial purse is, and the record has to say so rather than reading the cycle as ungated.
+    expect((result.foundingStalls ?? []).map((s) => s.gate)).toEqual(["funds"]);
+  });
+
+  it("blames the queue, not the founding path, for a colony whose source has vanished", async () => {
+    // A source that is gone can never supply the remainder, so the colony is given no plan at all
+    // and runs on work alone. `colonyWorkGate` then has to size the cycle's allowance from the
+    // project itself: with no pool it is the QUEUE holding it up, and an allowance that fell back to
+    // zero would file the cycle as ungated and hide the starvation.
+    const paid: WorldColonyEstablishProject = {
+      ...stagingProject(), kind: "colony_establish", id: "col", systemId: "c1",
+      sourceSystemId: "vanished", seedPop: EXPANSION.COLONY_SEED_POP, housingLevels: 1,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    };
+    const purse = new Map([["f1", { balance: 1_000_000, pendingFounding: 0, maintenanceBill: 0 }]]);
+    const run = async (throughputPerPop: number, cap = STAGE_CAP) => {
+      const w = new MemoryDirectedBuildWorld([stockedHome({ food: 5_000 })], [paid]);
+      return runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+        interval: INTERVAL, routeCost: reachable,
+        construction: mkConstruction(cap, throughputPerPop),
+        develop: { candidateProvider: () => [], params: STAGING_PARAMS },
+        treasuryByFaction: purse,
+      });
+    };
+
+    // No pool at all: the allowance is a whole cap of work the queue never funded.
+    expect((await run(0)).foundingStalls?.map((s) => s.gate)).toEqual(["pool"]);
+    // Ample pool: it absorbs its whole sourceless allowance, and nothing is gating it.
+    expect((await run(0.05)).foundingStalls?.map((s) => s.gate)).toEqual([null]);
+    // A cap of zero is a cycle with nothing to allow — not a founding refused by anything.
+    expect((await run(0.05, 0)).foundingStalls?.map((s) => s.gate)).toEqual([null]);
   });
 
   it("never commits one faction's money twice when two colonies stage in the same cycle", async () => {

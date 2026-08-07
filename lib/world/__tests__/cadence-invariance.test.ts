@@ -90,6 +90,10 @@ describe("cadence interval invariance", () => {
       const cycle12 = await runAtCadence({ cycle: 12, construction: 24, logistics: 24 });
       const build12 = await runAtCadence({ cycle: 24, construction: 12, logistics: 24 });
 
+      // The premise of the founding arm below: the base run actually founds something. relDiff(0,0)
+      // is 0, so a gate that froze founding galaxy-wide (a missing /economyScale in the valuation
+      // seam is exactly that) would sail through the invariance test it exists to catch.
+      expect(base.foundingExpense, "base run charged nothing for founding").toBeGreaterThan(0);
       for (const [name, v] of [
         ["cycle12", cycle12],
         ["build12", build12],
