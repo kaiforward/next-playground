@@ -200,7 +200,7 @@ cannot reach.
    discipline. **Companion edit to `/build-plan`:** widen `Proves` from one premise per task to a
    short detection list — the 3-6 wrong behaviours the task's tests must be seen to fail on
    (boundaries, contention paths, branch arms, the vacuity check). Behaviours, not test code; the
-   no-code rule holds. Decided with Kai 2026-08-07, during PR #217's mutation triage. **Write it
+   no-code rule holds. **Write it
    after PR #217 ships**: the fix-wave agent's report is the design input (what an executor needed
    spelling out, and the ratio of survivors that exposed wrong behaviour vs merely tightened
    assertions — the same ratio that decides whether the mutation gate demotes to a periodic audit).
