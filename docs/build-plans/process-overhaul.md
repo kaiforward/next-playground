@@ -197,10 +197,10 @@ cannot reach.
    what we already do ad hoc: the SDD ledger (`progress.md`), per-task subagent dispatch with an
    explicit model per task, TDD where the red run is the plan's detection list executed item by item
    (write the test, break the listed behaviour, watch red, restore), the per-task review gate, commit
-   discipline. **Companion edit to `/build-plan`:** widen `Proves` from one premise per task to a
-   short detection list — the 3-6 wrong behaviours the task's tests must be seen to fail on
-   (boundaries, contention paths, branch arms, the vacuity check). Behaviours, not test code; the
-   no-code rule holds. The second worked example is the calibration gate on the same PR: the plan asserted
+   discipline. **Companion edit to `/build-plan` (done 2026-08-07):** `Proves` widened from one premise per task
+   to a 3-6 entry detection list (boundaries, contention paths, branch arms, the vacuity check),
+   with a self-review bullet reading each list back against its task's Interface. Behaviours, not
+   test code; the no-code rule holds. The second worked example is the calibration gate on the same PR: the plan asserted
    its gate reads were "all now printed" while two of them had never been implemented, and nothing caught it
    until the gate was actually run — so the skill treats "the instrument prints X" as a claim to verify by
    running the instrument and matching its output against the list, never as a statement the plan may assert.

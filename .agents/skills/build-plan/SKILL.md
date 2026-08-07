@@ -25,13 +25,27 @@ defect, not a formatting choice:
 ### Task N — <one-sentence goal>
 Files:      <every file touched; existing files verified present, new files marked (new)>
 Interface:  <the signatures, types and fields this task exposes — the contract later tasks consume>
-Proves:     <the test or sim metric that FAILS if this task's premise breaks — not the happy path>
+Proves:     <detection list — the 3-6 wrong behaviours this task's tests must be SEEN to fail on:
+             boundaries, contention paths, branch arms, the vacuity check. Behaviours in words,
+             never test code. Not the happy path.>
 Consumes:   <which earlier tasks' interfaces it reads; never one a later task defines>
 ```
 
 The `Interface` field is the plan's actual content. "Add the donor gate" plans nothing;
 "`donorDrawable(market, good): number`, replacing the `surplusDrawable` read in
 `matchFactionTransfers`" is a contract one session can build and another can build against.
+
+`Proves` is a **detection list**, not a single premise. Each entry names one behaviour that would be
+true if the task were built wrong — a boundary that doesn't hold, a contention path that loses, a
+branch arm that never fires, a test that passes against an empty implementation (the vacuity check).
+At implementation the red-proof gate executes this list item by item: break the listed behaviour,
+watch the named test fail, restore. A task that pins one premise leaves every other behaviour
+unpinned — a filled plan in the old one-premise format let hundreds of unpinned behaviours through
+to the mutation sweep. The list is 3-6 entries: fewer means the task's failure modes weren't
+enumerated; more means the task is too big.
+
+Entries are behaviours in words — "a donor at exactly its reserve gives nothing", never test code
+or assertions. The no-code rule holds in this field like every other.
 
 `Proves` must be runnable at the task's own position in the order — a sim metric a later harness
 task builds belongs to that stage's gate, not to an earlier task's `Proves`.
@@ -81,6 +95,9 @@ Minutes, by the author, before committing the plan. No agent dispatch.
   table never analysed is not a planning detail; it is missed spec scope. Go back. The spec's own
   `npm run impact` table is the licence for the symbols it covers — re-run the tool only for symbols
   the plan leans on beyond it.
+- **Each detection list read back against its own Interface.** Every branch arm, boundary and
+  contention the interface implies has an entry; a list of happy-path restatements is an unfilled
+  field wearing a filled one's clothes.
 
 Fix what the self-review finds, note anything material in the plan, move on. It is a checklist, not
 a review cycle.
