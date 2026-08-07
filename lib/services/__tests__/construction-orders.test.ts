@@ -257,6 +257,77 @@ describe("construction order services", () => {
     expect(treasury.lastSettlement?.foundingExpense).toBeCloseTo(quote.charter, 6);
   });
 
+  it("projects the material bill off the SEED SOURCE's own rows, and quotes a fresh treasury off the floor", () => {
+    // A colony can only ever be provisioned from its own source, so the bill is that system's market
+    // list — priced off the whole galaxy's it would be an order of magnitude out and refuse every
+    // founding, and off the wrong system it would quote goods that were never on offer.
+    const target = controlledNeighbour(50);
+    const w = getWorld();
+    const pid = w.player!.controlledFactionId;
+    fundPlayer(Number.MAX_SAFE_INTEGER);
+
+    const quote = colonyEligibility(getWorld(), pid, target);
+    expect(quote.eligible).toBe(true);
+    if (!quote.eligible) return;
+    const sourceGoods = new Set(
+      getWorld().markets.filter((m) => m.systemId === quote.sourceSystemId).map((m) => m.goodId),
+    );
+    const galaxyGoods = new Set(getWorld().markets.map((m) => m.goodId));
+    expect(sourceGoods.size).toBeGreaterThan(0);
+
+    // Deleting a good the SOURCE lists moves the bill; deleting the same good everywhere else does
+    // not — the projection is that one system's list, not the galaxy's.
+    const dropAt = (systemIds: (id: string) => boolean, goodId: string) =>
+      setWorld({
+        ...getWorld(),
+        markets: getWorld().markets.filter((m) => !(systemIds(m.systemId) && m.goodId === goodId)),
+      });
+    const consumed = [...sourceGoods].find((g) => {
+      const w2 = getWorld();
+      dropAt((id) => id === quote.sourceSystemId, g);
+      const after = colonyEligibility(getWorld(), pid, target);
+      setWorld(w2);
+      return after.eligible && after.projectedBill < quote.projectedBill;
+    });
+    expect(consumed).toBeDefined();
+    if (consumed === undefined) return;
+    expect(galaxyGoods.has(consumed)).toBe(true);
+
+    dropAt((id) => id !== quote.sourceSystemId, consumed);
+    const elsewhereGone = colonyEligibility(getWorld(), pid, target);
+    expect(elsewhereGone.eligible).toBe(true);
+    if (!elsewhereGone.eligible) return;
+    expect(elsewhereGone.projectedBill).toBeCloseTo(quote.projectedBill, 9);
+  });
+
+  it("quotes a never-settled faction's charter off the floor rather than reading through a null settlement", () => {
+    // World-gen starts every treasury unsettled, so this is the state the very first colony of a
+    // game is priced in: there is no maintenance bill to scale the fee off yet, and the floor is
+    // what the charter is FOR at that moment.
+    const target = controlledNeighbour(50);
+    const pid = getWorld().player!.controlledFactionId;
+    fundPlayer(Number.MAX_SAFE_INTEGER);
+    expect(getWorld().treasuries.find((t) => t.factionId === pid)?.lastSettlement ?? null).toBeNull();
+
+    const quote = colonyEligibility(getWorld(), pid, target);
+    expect(quote.eligible).toBe(true);
+    if (!quote.eligible) return;
+    expect(quote.charter).toBe(COLONISATION.CHARTER_FEE_MIN);
+  });
+
+  it("refuses a colony to a faction with no treasury at all", () => {
+    // A working balance is `balance − pendingFounding`; with no treasury row there is no balance,
+    // and reading one anyway would either throw or found the colony for free.
+    const target = controlledNeighbour(50);
+    const pid = getWorld().player!.controlledFactionId;
+    setWorld({ ...getWorld(), treasuries: getWorld().treasuries.filter((t) => t.factionId !== pid) });
+
+    const quote = colonyEligibility(getWorld(), pid, target);
+    expect(quote.eligible).toBe(false);
+    if (quote.eligible) return;
+    expect(quote.reason).toBe("insufficient_funds");
+  });
+
   it("returns a cancelled colony's staged goods to its founder, conserving total stock", () => {
     // The spec's conservation bar for cancellation: staged materials are real inventory, already out
     // of the founder's markets and paid for. Deleting the row without returning them destroys stock
@@ -303,6 +374,76 @@ describe("construction order services", () => {
     const after = stockAtSystem(getWorld(), project.sourceSystemId);
     for (const [goodId, stock] of before) expect(after.get(goodId)).toBeCloseTo(stock, 9);
     expect(getWorld().constructionProjects.some((p) => p.id === project.id)).toBe(false);
+  });
+
+  it("credits a cancelled colony's goods to its own founder alone, and only the readable lines", () => {
+    // Two hazards in one path: a line that cannot be read is world state waiting to become null on
+    // the next save, and a credit written onto every row carrying that good would mint stock across
+    // the galaxy for goods only one system ever parted with.
+    const target = controlledNeighbour(50);
+    fundPlayer(1_000_000);
+    const placed = orderColony({ systemId: target.id });
+    if (!placed.ok) throw new Error("setup failed");
+    const ordered = getWorld();
+    const project = ordered.constructionProjects.find(
+      (p): p is WorldColonyEstablishProject =>
+        p.kind === "colony_establish" && p.id === placed.data.projectId,
+    )!;
+    const goodId = [...stockAtSystem(ordered, project.sourceSystemId).entries()]
+      .find(([, stock]) => stock > 0)![0];
+    const elsewhere = ordered.markets.filter(
+      (m) => m.goodId === goodId && m.systemId !== project.sourceSystemId,
+    );
+    expect(elsewhere.length).toBeGreaterThan(0); // other systems really do hold this good
+
+    setWorld({
+      ...ordered,
+      constructionProjects: ordered.constructionProjects.map((p) =>
+        p.id === project.id
+          ? {
+              ...project,
+              stagedManifest: [
+                { goodId, quantity: 40 },
+                { goodId, quantity: Number.NaN },
+                { goodId, quantity: 0 },
+                { goodId, quantity: -10 },
+              ],
+            }
+          : p,
+      ),
+    });
+    const beforeSource = stockAtSystem(getWorld(), project.sourceSystemId).get(goodId)!;
+    expect(cancelOrder({ projectId: project.id }).ok).toBe(true);
+
+    // Exactly the readable line came home — the unreadable, the empty and the negative ones did not.
+    expect(stockAtSystem(getWorld(), project.sourceSystemId).get(goodId)).toBeCloseTo(
+      beforeSource + 40, 9,
+    );
+    for (const m of elsewhere) {
+      const now = getWorld().markets.find(
+        (x) => x.systemId === m.systemId && x.goodId === m.goodId,
+      );
+      expect(now?.stock).toBe(m.stock); // every other holder of the good is untouched
+    }
+  });
+
+  it("leaves every market row alone when there is nothing readable to return", () => {
+    const target = controlledNeighbour(50);
+    fundPlayer(1_000_000);
+    const placed = orderColony({ systemId: target.id });
+    if (!placed.ok) throw new Error("setup failed");
+    const ordered = getWorld();
+    setWorld({
+      ...ordered,
+      constructionProjects: ordered.constructionProjects.map((p) =>
+        p.id === placed.data.projectId && p.kind === "colony_establish"
+          ? { ...p, stagedManifest: [{ goodId: "food", quantity: 0 }] }
+          : p,
+      ),
+    });
+    const markets = getWorld().markets;
+    expect(cancelOrder({ projectId: placed.data.projectId }).ok).toBe(true);
+    expect(getWorld().markets).toBe(markets); // the same array, not a rebuilt copy
   });
 
   it("leaves every market row alone when a build order is cancelled", () => {

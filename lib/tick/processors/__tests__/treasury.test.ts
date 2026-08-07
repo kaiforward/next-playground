@@ -161,6 +161,24 @@ describe("treasury processor", () => {
     expect(world.treasuries[0].updatedAtTick).toBe(0);
   });
 
+  it("carries a mid-cycle tick that moved ONLY logistics work through to persisted state", async () => {
+    // Logistics is the one band that can accrue on a tick where nothing else did — a transfer is
+    // paid for on its own cadence. Both the early return and the mid-cycle write branch test all
+    // three accruals, and either dropping logistics loses that work silently: nothing else on the
+    // tick would differ, and the bill simply never arrives at settlement.
+    const world = new InMemoryTreasuryWorld({
+      treasuries: [makeTreasury({ balance: 500 })],
+      systems: [SYSTEM],
+    });
+    await runTreasuryProcessor(world, { tick: 9, results: new Map() }, makeParams({
+      logisticsWorkByFaction: new Map([["faction-1", 40]]),
+      economyScale: 100,
+    }));
+    expect(world.treasuries[0].pendingWork.logistics).toBeCloseTo(0.4); // 40 / S=100
+    expect(world.treasuries[0].pendingWork.construction).toBe(0);
+    expect(world.treasuries[0].updatedAtTick).toBe(9);
+  });
+
   it("carries a founding debit accrued on a WORKLESS mid-cycle tick through to settlement", async () => {
     // A colony can be committed on a cycle where the queue absorbed nothing at all. Both the early
     // return and the mid-cycle write branch key on pending WORK by default, so either one still

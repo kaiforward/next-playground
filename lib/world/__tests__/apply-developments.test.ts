@@ -240,6 +240,7 @@ describe("applyStagedManifestDelivery", () => {
         { goodId: "food", quantity: Number.NaN },
         { goodId: "food", quantity: Number.POSITIVE_INFINITY },
         { goodId: "food", quantity: -5 },
+        { goodId: "food", quantity: 0 }, // a line that moves nothing is not a delta either
       ],
     }];
 
@@ -313,6 +314,7 @@ describe("applyFoundingStagingDraws", () => {
       { sourceSystemId: "source", goodId: "food", quantity: Number.NaN },
       { sourceSystemId: "source", goodId: "food", quantity: Number.POSITIVE_INFINITY },
       { sourceSystemId: "source", goodId: "food", quantity: -5 },
+      { sourceSystemId: "source", goodId: "food", quantity: 0 }, // moves nothing — not a delta either
     ]);
     expect(after).toBe(markets); // no delta at all — the same array, not a rebuilt copy
     for (const m of after) expect(Number.isFinite(m.stock)).toBe(true);

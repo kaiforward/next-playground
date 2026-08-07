@@ -1693,6 +1693,26 @@ describe("planFactionColonyProposals: affordability gate", () => {
     const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
     expect(planFactionColonyProposals("f1", developed, candidates, [], COLONY_PARAMS)).toHaveLength(10);
   });
+
+  it("quotes a candidate whose seed source is outside the developed set on its charter alone", () => {
+    // The material projection is read off the SOURCE's market rows, and the source of a candidate
+    // handed in by a caller need not be in the developed states this call was given — a system the
+    // faction just lost, or a hop provider running ahead of the build rows. There is nothing to
+    // project for it, so the charter is the whole quote rather than a crash on the way to it.
+    const developed = [homeState({
+      systemId: "home", housing: 1, habitableSpace: 1000,
+      goods: [{ goodId: "food", stock: 500, demand: 10, production: 10, capacityProduction: 10 }],
+    })];
+    const orphaned = candidates.map((c) => ({ ...c, sourceSystemId: "not-in-the-build-rows" }));
+    const priced = { ...COLONY_PARAMS, charterMult: 0, charterMin: 100, gateHeadroom: 5000 };
+    const purse = { balance: 250, maintenanceBill: 0 };
+
+    // 100 a charter and nothing to reserve for materials ⇒ 250 buys two.
+    expect(planFactionColonyProposals("f1", developed, orphaned, [], priced, purse)).toHaveLength(2);
+    // Non-vacuous: the same candidates against a source that DOES have rows carry a material
+    // projection, and at this headroom it prices every one of them out.
+    expect(planFactionColonyProposals("f1", developed, candidates, [], priced, purse)).toHaveLength(0);
+  });
 });
 
 describe("planFactionColonyProposals: seed-pop opportunity cost", () => {

@@ -163,6 +163,28 @@ describe("projectedManifestWant / stagingShareLines — the empty-projection ear
     // the establish is left to build.
     expect(stagingShareLines(SOURCE_GOODS, want, SEED_POP, 1, 6)).toEqual([]);
   });
+
+  it("nets a ledger that carries a good across several lines, and ignores an unreadable one", async () => {
+    const { projectedManifestWant, stagingShareLines } = await import("@/lib/engine/founding-cost");
+    const want = projectedManifestWant(SOURCE_GOODS, SEED_POP, 6);
+    const water = want.find((l) => l.goodId === "water")!;
+    // A ledger is APPENDED to cycle by cycle, so one good arrives as several lines; the outstanding
+    // want is against their sum, not against whichever line is read last.
+    const halves = [
+      { goodId: "water", quantity: water.quantity / 2 },
+      { goodId: "water", quantity: water.quantity / 2 },
+    ];
+    expect(stagingShareLines([{ goodId: "water" }], halves, SEED_POP, 1, 6)).toEqual([]);
+    expect(stagingShareLines([{ goodId: "water" }], halves.slice(0, 1), SEED_POP, 1, 6))
+      .toEqual([{ goodId: "water", quantity: water.quantity / 2 }]);
+
+    // An unreadable or negative line credits the colony with nothing — a NaN here would make the
+    // whole outstanding want unreadable and the cycle's draw with it.
+    for (const quantity of [Number.NaN, Number.POSITIVE_INFINITY, -water.quantity]) {
+      const share = stagingShareLines([{ goodId: "water" }], [{ goodId: "water", quantity }], SEED_POP, 1, 6);
+      expect(share).toEqual([{ goodId: "water", quantity: water.quantity }]);
+    }
+  });
 });
 
 describe("charterFee", () => {
