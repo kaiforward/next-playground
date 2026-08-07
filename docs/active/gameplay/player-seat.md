@@ -119,7 +119,10 @@ same-faction system) differs in one respect from the autonomic planner's — see
 ### Cancel
 
 An inline ✕ on player-originated rows (ghost rows on the Industry tab, the forming-colony hero row on
-Overview). Cancelling drops the row outright — **work spent is lost**, by design. Add + cancel are the
+Overview). Cancelling drops the row outright — **work spent is lost**, by design, as is a colony's charter.
+A cancelled colony's **staged materials are returned** to its founder's market rows, uncapped: they are real
+inventory, drawn from those very rows and paid for cycle by cycle, so destroying them would destroy stock the
+faction owns, and stock coming home can never breach a reserve. Add + cancel are the
 whole verb set for this slice; reorder/pause are not built.
 
 ---

@@ -288,8 +288,9 @@ PAYBACK_HORIZON`), sited at the developed system with the most spare labour and 
 in the ordinary ROI ordering like any other proposal. Emergent and self-limiting: a deep backlog of
 *valuable* work prices a centre in; a draining backlog or a backlog of junk never does; a landed centre
 grows the pool, pushing the frontier out and depressing the next centre's value. A centre project is
-**persist-if-funded** — like a colony, an unfunded centre is dropped and re-priced next cycle rather than
-queue-jumping later work with a stale commitment.
+**persist-if-funded** — like an unpaid colony, an unfunded centre is dropped and re-priced next cycle rather
+than queue-jumping later work with a stale commitment. (A colony whose **charter is paid** is exempt: the
+faction has already bought it, and dropping it would charge a second charter on re-emission.)
 
 ---
 
@@ -322,10 +323,12 @@ processors join the tick pipeline:
   claim scores in-reach unclaimed systems (substrate × proximity, absolute so factions compare
   directly) and proposes one per faction, with cross-faction conflicts resolved deterministically
   (highest score, seeded-RNG tiebreak); develop scores a faction's own controlled systems as colony
-  candidates (by ROI, on the same demand-rate axis as a build) and funds a **pool-funded, timed
-  colony-establish** for those that win pool priority, which on completion flips the system to
-  `developed` with a tiny conserved seed population and the housing to hold it (see
-  [colonisation](./colonisation.md)). Only after these two steps does the build step run — the develop-gate
+  candidates (by ROI, on the same demand-rate axis as a build), **prices** each one against a running
+  per-faction working balance — a candidate is proposed only while that balance still covers its charter fee
+  plus headroom for the materials it will owe, and the first it cannot cover ends the list — and funds a
+  **priced, pool-funded, timed colony-establish** for those that win pool priority, which on completion flips
+  the system to `developed` with a tiny conserved seed population, the housing to hold it and its staged
+  manifest (see [colonisation](./colonisation.md)). Only after these two steps does the build step run — the develop-gate
   everywhere is `system.control === "developed"`, so a system claimed this cycle is build-eligible only
   once it has also been developed. Builds are applied as upward `WorldBuilding.count` increments
   (continuous Float; removal stays decay's job).

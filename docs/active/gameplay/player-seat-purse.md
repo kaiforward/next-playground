@@ -33,7 +33,7 @@ everything else activates or starves mechanics that already existed.
   JSON-serializable throughout — the funded-fraction math guards against 0-bills (see
   Settlement).
 - Income and expenses are **itemised line items** from day one (income: heads tax, production tax;
-  expenses: maintenance by building type, logistics, construction), with the last settlement's
+  expenses: maintenance by building type, logistics, construction, founding), with the last settlement's
   itemised snapshot persisted so UI reads don't recompute transients. Itemisation is the extension
   mechanism: every later money mechanic (spot-price tax line, wages, claim costs) is a new line,
   never a redesign.
@@ -181,6 +181,12 @@ under a future cadence retune.
   insolvency only, never by nudging a slider. **Zero-bill guard:** when a band's bill is 0 (empty
   construction queue, no transfers), effective funding = the slider value — never 0/0 (NaN is a
   save-corrupting hazard).
+- **Founding is taken off the top, outside the bands.** Colony charter fees and staged founding materials
+  accrue into `pendingFounding` during the cycle and leave the balance **before** the ladder runs, so
+  committing to a colony competes with paying the bills rather than claiming the remainder. They settle as
+  their own `foundingExpense` field — deliberately not a fourth band, which would corrupt the three-field
+  type the sliders, the bills and the latched funded fractions all share. Directed build commits against
+  `balance − pendingFounding`, so the subtraction cannot legitimately go negative.
 - **No debt.** Balance clamps at ≥ 0.
 - **Queue staleness (accepted, noted):** a long-starved construction band's auto-build rows
   persist unfunded; when funding returns the queue thaws in stale ROI order. Broadly "the queue
@@ -228,10 +234,12 @@ calibration harness, across the full faction roster (majors + minors). Per-facti
 
 - **Faction panel — treasury card** (`components/factions/treasury-card.tsx`): single-column
   ledger — balance + net/cycle at top, itemised income (heads line, production line), itemised
-  expenses with a **collapsible maintenance by-type breakdown (default collapsed)**, then the
+  expenses with a **collapsible maintenance by-type breakdown (default collapsed)** and a **Founding**
+  row for the settlement's colony charters and staged materials, then the
   three band-funding rows and the 5-segment tax-level stepper. Ledger expense amounts are money
   actually **paid** last settlement; the maintenance breakdown itemises the **bill's** composition
-  by building type. Each band row shows **set vs runs**: the slider thumb is the player's set
+  by building type. `net` subtracts founding alongside the three paid bands — it is a real expense that
+  never passes through a band, and a `net` that ignored it would be wrong, not merely incomplete. Each band row shows **set vs runs**: the slider thumb is the player's set
   fraction; the copper fill is last settlement's latched paid fraction ("runs"), with an explicit
   "— shorted" tag when the ladder diverges them and a hatched zone marking maintenance's
   un-slidable 50% floor (drags into it pin at the floor). The card renders on **every** faction's
