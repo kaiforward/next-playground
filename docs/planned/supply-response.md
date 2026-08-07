@@ -198,8 +198,10 @@ differ by accident, which is the version that is definitely wrong.
 Bands read the *worst affected good* rather than Provision, because that is the question a player is
 asking when they look at a list of worlds. Provision answers "how well supplied is this world"; the
 band answers "is anything wrong here". They are different questions and the model should not force one
-number to answer both — which is also why a world short on ten goods at 85% bands identically to a
-flawless one, and why breadth is settled below rather than left open.
+number to answer both — which is also why a world short on ten goods at 92% bands identically to a
+flawless one (breadth above the Supplied boundary is Provision's to show, not the band's), and why
+breadth is settled here rather than left open. Breadth *below* the boundary is caught: ten goods at
+85% reads Strained.
 
 Two of the boundaries already exist as authored constants: `SHORTAGE_SATISFACTION` is the 50% line and
 `SURVIVAL_GOODS` is the famine distinction. The ~90% Supplied boundary is new and answers "how short
