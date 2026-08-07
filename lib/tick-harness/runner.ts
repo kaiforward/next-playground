@@ -50,6 +50,7 @@ import type {
   EventLifecycle,
   RegionOverviewEntry,
   MigrationThroughputSummary,
+  StrikeSuppressionSummary,
 } from "./types";
 import type { TickEvent, TickSystem } from "@/lib/tick/rows";
 
@@ -145,6 +146,12 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   let migrationCycleCount = 0;
   let migrationColonistsTotal = 0;
   let migrationDiffusionTotal = 0;
+  // Whole-run strike-suppression resolution (directed-build) — Σ suppressed / Σ eligible over every
+  // cycle's per-(system,good) resolution. Transient instrumentation, accumulated per tick like the
+  // migration totals above; read as a rate over eligible, never as the raw counts (the spec's
+  // hazard-6: the raw count grows with the galaxy).
+  let strikeSuppressedTotal = 0;
+  let strikeEligibleTotal = 0;
   const activeEventTracker = new Map<string, ActiveEventRecord>();
   const completedEvents: EventLifecycle[] = [];
   // Colonies founded in play, sampled at their first assessed cycle. Every system already developed
@@ -233,6 +240,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       migrationCycleCount++;
       migrationColonistsTotal += result.instrumentation.migrationMoved.colonists;
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
+    }
+
+    if (result.instrumentation.strikeSuppressedProposals) {
+      strikeSuppressedTotal += result.instrumentation.strikeSuppressedProposals.suppressed;
+      strikeEligibleTotal += result.instrumentation.strikeSuppressedProposals.eligible;
     }
 
     for (const draw of result.instrumentation.foundingManifests ?? []) {
@@ -369,6 +381,12 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
         : 0,
   };
 
+  const strikeSuppression: StrikeSuppressionSummary = {
+    suppressed: strikeSuppressedTotal,
+    eligible: strikeEligibleTotal,
+    ratePerEligible: strikeEligibleTotal > 0 ? strikeSuppressedTotal / strikeEligibleTotal : 0,
+  };
+
   return {
     config,
     economyScale: ECONOMY_SCALE,
@@ -390,6 +408,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     initialBuildingTotal,
     populationSnapshots,
     migrationThroughput,
+    strikeSuppression,
     foundingStock: summarizeFoundingStock(foundedColonies),
     foundingLifecycle: summarizeFoundingLifecycle(
       foundedColonies, colonyCommitments, inFlightEstablishes, foundingStalls, constructionInterval,

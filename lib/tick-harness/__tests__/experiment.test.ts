@@ -158,6 +158,7 @@ describe("ExperimentConfig", () => {
         initialBuildingTotal: 0,
         populationSnapshots: [],
         migrationThroughput: { totalColonists: 0, totalDiffusion: 0, cycleCount: 0, meanPerCycle: 0 },
+        strikeSuppression: { suppressed: 0, eligible: 0, ratePerEligible: 0 },
         foundingStock: {
           foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
           meanOpeningDissatisfaction: 0, meanOpeningProvision: null, p10OpeningProvision: null,

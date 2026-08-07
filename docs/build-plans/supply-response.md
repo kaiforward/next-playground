@@ -159,7 +159,8 @@ Files:
 - `lib/world/tick.ts` (existing — instrumentation locals `:913-922`, return `:1339-1341`)
 - `lib/tick-harness/runner.ts` (existing — per-tick accumulation `:218-236`)
 - `lib/tick-harness/types.ts`, `scripts/simulate.ts`
-- `lib/engine/__tests__/directed-build.test.ts`, `lib/tick/processors/__tests__/directed-build.test.ts`
+- `lib/engine/__tests__/directed-build.test.ts`, `lib/tick/processors/__tests__/directed-build.test.ts`,
+  `lib/tick-harness/__tests__/runner.test.ts` (the zero-denominator guard lives in `runner.ts`)
 
 Interface:
 - `StructuralAssessment` gains a per-resolution count `{ suppressed: number; eligible: number }` over
@@ -175,8 +176,9 @@ Interface:
 
 Proves:
 - A striking world with capacity in a good increments both counters; a striking world with no capacity
-  in that good increments only the denominator — the capacity-gap term is unconditional by authored
-  design (`:314-318`) and counting it as suppressed would invert the reading.
+  in that good increments neither — a capacity-0 pair can never fire `strikeExplains`, so it is not an
+  eligible pair, and counting it as suppressed would invert the reading (the capacity-gap term is
+  unconditional by authored design, `:314-318`).
 - A calm world increments the denominator and not the numerator, so the rate is 0 rather than undefined
   on a healthy galaxy.
 - The counter counts pairs the planner actually assessed, not systems — a world short in five goods is

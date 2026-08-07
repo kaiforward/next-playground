@@ -457,6 +457,19 @@ function formatTable(results: HarnessResults): string {
     );
   }
 
+  // Strike-suppression rate (whole run) — the number that says how much a strike narrows the
+  // planner's second exit (the feedback-gap channel). Read the RATE, never the raw counts: the
+  // denominator grows with the galaxy.
+  {
+    const ss = results.strikeSuppression;
+    lines.push("");
+    lines.push("Strike-Suppressed Proposals (whole run):");
+    lines.push(
+      `Rate: ${(ss.ratePerEligible * 100).toFixed(2)}% (${fmtNum(ss.suppressed)} suppressed / ` +
+        `${fmtNum(ss.eligible)} eligible pairs)`,
+    );
+  }
+
   // Infrastructure decay summary
   {
     const infra = summarizeInfrastructure(finalTickSystems, initialBuildingTotal);

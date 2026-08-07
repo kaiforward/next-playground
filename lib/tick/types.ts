@@ -108,6 +108,13 @@ export interface TickProcessorResult {
    *  ledgered, matching `workPerformedByFaction`. Calibration instrumentation — surfaced via
    *  `runWorldTick().instrumentation`, never broadcast or persisted. */
   logisticsBudget?: Map<string, LogisticsBudgetLedger>;
+  /** Directed-build proposals `strikeExplains` suppressed this cycle (directed-build), resolved per
+   *  (system, good) pair and summed across every due faction: `eligible` is every pair with capacity
+   *  in the good — the pairs a strike can silence at all — and `suppressed` is the subset where it
+   *  did. Meant to be read as a rate over `eligible`, never as the raw count (it grows with the
+   *  galaxy). Calibration instrumentation only — surfaced via `runWorldTick().instrumentation`, never
+   *  broadcast or persisted. */
+  strikeSuppressedProposals?: { suppressed: number; eligible: number };
 }
 
 /**
@@ -193,6 +200,7 @@ export type TickInstrumentation = Pick<
   | "foundingManifests"
   | "foundingStalls"
   | "logisticsBudget"
+  | "strikeSuppressedProposals"
 >;
 
 /** The full payload one tick's run hands to the broadcast layer. */

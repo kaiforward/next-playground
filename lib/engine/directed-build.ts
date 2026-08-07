@@ -216,6 +216,14 @@ interface StructuralAssessment {
   systems: BuildSystemState[];
   deficits: StructuralDeficit[];
   persistenceUpdates: ProposalPersistenceUpdate[];
+  /**
+   * Per-(system, good) resolution over the pairs this assessment considered: `eligible` is every pair
+   * with `capacity > 0` — the pairs where `strikeExplains` can fire at all, since a capacity-0 pair's
+   * gap is always the unconditional capacity-gap term and never a candidate for suppression;
+   * `suppressed` is the subset where `strikeExplains` actually fired. Calibration instrumentation
+   * only, meant to be read as a rate over `eligible` (the raw count grows with the galaxy).
+   */
+  strikeSuppressedProposals: { suppressed: number; eligible: number };
 }
 
 /** Open build levels folded into one system's effective construction state. */
@@ -304,6 +312,10 @@ function assessStructuralDeficits(
   const candidatesByGood = new Map<string, Array<{ systemId: string; gross: number }>>();
   const exportersByGood = new Map<string, Array<{ systemId: string; spare: number }>>();
   const persistenceUpdates: ProposalPersistenceUpdate[] = [];
+  // Strike-suppression resolution (calibration instrumentation): counted alongside the gap math below
+  // so it reads the same `capacity`/`strikeExplains` values, rather than recomputing them.
+  let strikeEligible = 0;
+  let strikeSuppressed = 0;
 
   for (const system of effective) {
     if (!isEconomicallyActive(system.control)) continue;
@@ -317,6 +329,10 @@ function assessStructuralDeficits(
       // to build its way out. The capacity gap is therefore unconditional; `capacity = 0` is its
       // ordinary case, not an exception.
       const strikeExplains = good.productionSuppressed === true && capacity > 0;
+      if (capacity > 0) {
+        strikeEligible++;
+        if (strikeExplains) strikeSuppressed++;
+      }
       const capacityGap = Math.max(0, (1 + DIRECTED_BUILD.PROVISION_MARGIN) * demand - capacity);
       const feedbackGap = !strikeExplains && !good.logisticsFundingBound && (good.squeezeCycles ?? 0) >= DIRECTED_BUILD.PERSISTENCE_CYCLES
         ? demand * (1 - clamp(good.satisfaction ?? 1, 0, 1))
@@ -393,7 +409,10 @@ function assessStructuralDeficits(
     }
   }
 
-  return { systems: effective, deficits, persistenceUpdates };
+  return {
+    systems: effective, deficits, persistenceUpdates,
+    strikeSuppressedProposals: { suppressed: strikeSuppressed, eligible: strikeEligible },
+  };
 }
 
 /**
@@ -927,6 +946,9 @@ export function planFactionBuilds(
 export interface FactionBuildPlan {
   proposals: BuildProposal[];
   persistenceUpdates: ProposalPersistenceUpdate[];
+  /** Carried through from `assessStructuralDeficits` unchanged — see `StructuralAssessment`'s
+   *  docstring. Calibration instrumentation only. */
+  strikeSuppressedProposals: { suppressed: number; eligible: number };
 }
 
 /**
@@ -961,7 +983,10 @@ export function planFactionProposals(
       work: bundle.work,
     });
   }
-  return { proposals, persistenceUpdates: assessment.persistenceUpdates };
+  return {
+    proposals, persistenceUpdates: assessment.persistenceUpdates,
+    strikeSuppressedProposals: assessment.strikeSuppressedProposals,
+  };
 }
 /** A controlled system a faction could settle: its substrate + the developed seed source (from hop data). */
 export interface ColonyEstablishCandidate {

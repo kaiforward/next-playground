@@ -304,6 +304,25 @@ export interface MigrationThroughputSummary {
   meanPerCycle: number;
 }
 
+// ── Strike suppression ───────────────────────────────────────────
+
+/**
+ * Whole-run directed-build proposals `strikeExplains` suppressed, resolved per (system, good) pair
+ * over every cycle's assessment. `eligible` is every pair a strike could ever silence (capacity in
+ * the good); `suppressed` is the subset where it did. Read `ratePerEligible`, never the raw counts —
+ * the raw count grows with the galaxy (hazard-6: 582 settled systems at equilibrium against 253 at
+ * startup), so only the rate is comparable across horizons or arms.
+ */
+export interface StrikeSuppressionSummary {
+  /** (system, good) pairs across the run with capacity in the good — the pool a strike can silence. */
+  eligible: number;
+  /** The subset of `eligible` where `strikeExplains` actually silenced the feedback-gap term. */
+  suppressed: number;
+  /** suppressed / eligible; 0 when eligible is 0 (never NaN) — a run with no construction cycle due,
+   *  or a galaxy with no capacity anywhere, reads a zero denominator rather than dividing by it. */
+  ratePerEligible: number;
+}
+
 // ── Colony founding stock ───────────────────────────────────────
 
 /**
@@ -426,6 +445,8 @@ export interface HarnessResults {
   populationSnapshots: Array<Map<string, number>>;
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
   migrationThroughput: MigrationThroughputSummary;
+  /** Whole-run directed-build proposals `strikeExplains` suppressed, per eligible (system, good) pair. */
+  strikeSuppression: StrikeSuppressionSummary;
   /** How well provisioned colonies founded during the run were at their first assessed cycle. */
   foundingStock: FoundingStockSummary;
   /** How long foundings took, how many ran at once, and what held them up — the reading that tells a

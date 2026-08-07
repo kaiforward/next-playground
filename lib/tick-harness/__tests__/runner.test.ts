@@ -59,6 +59,16 @@ describe("runTickHarness: the role partition", () => {
   });
 });
 
+describe("runTickHarness: strike-suppression rate", () => {
+  it("reports a zero denominator rather than dividing by it when no construction cycle is ever due", async () => {
+    // Below CONSTRUCTION_INTERVAL (24): the construction-cycle boundary is never crossed, so
+    // directed-build never resolves and strikeSuppressedProposals never reaches the accumulator —
+    // eligible stays at 0 for the whole run. The rate must read 0, not NaN.
+    const results = await runTickHarness({ systemCount: 20, seed: 7, tickCount: CONSTRUCTION_INTERVAL - 1 });
+    expect(results.strikeSuppression).toEqual({ suppressed: 0, eligible: 0, ratePerEligible: 0 });
+  });
+});
+
 // ── foldFoundingTick ──────────────────────────────────────────────
 // The order inside it is the instrument. Sweeping for new colonies before accumulating the tick's
 // draws loses the founding cycle's own slice — and loses it QUIETLY, since every earlier slice

@@ -1405,6 +1405,54 @@ describe("planFactionProposals: persistent structural policy", () => {
     expect(inputPlan.persistenceUpdates.find((update) => update.goodId === "ore")?.proposalCycles).toBe(1);
   });
 });
+
+describe("planFactionProposals: strikeSuppressedProposals — per-eligible-pair suppression count", () => {
+  it("a striking good with capacity increments both counters", () => {
+    const plan = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 12, squeezeCycles: 2, satisfaction: 0, productionSuppressed: true }))],
+      () => 1, [], DEV_REFS,
+    );
+    expect(plan.strikeSuppressedProposals).toEqual({ suppressed: 1, eligible: 1 });
+  });
+
+  // The lock this pins: with no capacity, `strikeExplains` can never fire (`:319`), so the pair can
+  // never have been a candidate for suppression in the first place. The capacity-gap term is
+  // unconditional (`:314-318`) — this pair's deficit is proposed regardless of the strike — so
+  // counting it as suppressed, or even as eligible for suppression, would invert the reading.
+  it("a striking good with NO capacity is excluded from both counters, even though its capacity-gap deficit is still proposed", () => {
+    const plan = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 0, capacityProduction: 0, squeezeCycles: 2, satisfaction: 0, productionSuppressed: true }))],
+      () => 1, [], DEV_REFS,
+    );
+    // Sanity, matching the pre-existing "still finds a structural deficit" test above: the deficit
+    // fires despite the strike.
+    const ore = plan.proposals.find((proposal) => proposal.items.some((item) => item.buildingType === "ore"));
+    expect(ore).toBeDefined();
+    expect(plan.strikeSuppressedProposals).toEqual({ suppressed: 0, eligible: 0 });
+  });
+
+  it("a calm (non-striking) good with capacity increments eligible only, so the rate is 0 rather than undefined", () => {
+    const plan = planFactionProposals(
+      [policySystem(policyGood({ demand: 10, production: 10, capacityProduction: 12 }))],
+      () => 1, [], DEV_REFS,
+    );
+    expect(plan.strikeSuppressedProposals).toEqual({ suppressed: 0, eligible: 1 });
+  });
+
+  it("counts pairs, not systems — one striking system short in five goods contributes five", () => {
+    const goodIds = ["water", "food", "ore", "textiles", "gas"];
+    const plan = planFactionProposals(
+      [policySystem(policyGood(), {
+        goods: goodIds.map((goodId) =>
+          policyGood({ goodId, demand: 10, production: 0, capacityProduction: 12, productionSuppressed: true }),
+        ),
+      })],
+      () => 1, [], DEV_REFS,
+    );
+    expect(plan.strikeSuppressedProposals).toEqual({ suppressed: 5, eligible: 5 });
+  });
+});
+
 describe("planFactionBuilds: develop gate", () => {
   const buildable = { population: 100, generalSpace: 50, habitableSpace: 50, goods: [] };
 
