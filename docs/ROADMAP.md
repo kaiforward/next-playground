@@ -21,7 +21,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   the replacement skills.
 
 - **[L] Economy band reconciliation** — the `feat/band-reconciliation` shared branch. Design:
-  [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md). PR1-5 shipped plus #206-#211.
+  [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md). PR1-5 shipped plus #202-#217
+  (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics).
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
