@@ -33,6 +33,10 @@ import {
   sampleTreasuries, summarizeTreasuries, recordSettledCycles, summarizeFoundingEra,
 } from "./treasury-analysis";
 import type { FactionCycleRecord, TreasurySnapshot } from "./treasury-analysis";
+import {
+  newCharterCensus, recordCharterCensus, newStagedLedgerCensus, recordStagedLedger,
+  summarizeConservation,
+} from "./conservation-analysis";
 import { computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey, marketRolesByKey } from "./cohort-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
@@ -167,6 +171,17 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // next one, so the founding-era money bars cannot be reconstructed from the final world.
   const factionCycles: FactionCycleRecord[] = [];
   const settlementTickByFaction = new Map<string, number>();
+  // The conservation identities' two run-long collectors. Charters are censused every tick, not every
+  // construction cycle: a charter is paid in the same processor pass that mints its project, so the
+  // unpaid state is usually never visible and only a per-tick read bounds how long a revert could
+  // hide. The opening balances are taken before the first tick because the first settlement's own
+  // opening balance exists nowhere else once that settlement has overwritten it.
+  const charterCensus = newCharterCensus();
+  const startingBalances = new Map(world.treasuries.map((t) => [t.factionId, t.balance]));
+  // The staged-goods comparison is sampled per tick because the END of a run is the one moment it
+  // has nothing to look at: by the equilibrium horizon every establish has completed and the queue
+  // holds no colonies, so a run-end read compares 0 against 0 and passes vacuously.
+  const stagedLedgerCensus = newStagedLedgerCensus();
   const demandHunting = newDemandHuntingAccumulator();
   const cycleLength = config.cadence?.cycle ?? CYCLE_LENGTH;
   const constructionInterval = config.cadence?.construction ?? CONSTRUCTION_INTERVAL;
@@ -242,12 +257,17 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
         world.constructionProjects, world.meta.currentTick, colonyCommitments, inFlightEstablishes,
       );
     }
+    recordCharterCensus(world.constructionProjects, charterCensus);
     recordSettledCycles(world.treasuries, settlementTickByFaction, factionCycles);
 
     foldFoundingTick(
       world.systems, world.meta.currentTick, developedAtStart, foundedColonies, foundingStaging,
       result.instrumentation.foundingManifests ?? [],
     );
+    // After the fold, never before it: this tick's last draw is staged on the very tick its
+    // establish completes, and comparing a ledger against an accumulator missing that draw would
+    // report a conserved move as lost goods.
+    recordStagedLedger(world.constructionProjects, foundingStaging, stagedLedgerCensus);
     // The colony opening sample needs full tick rows (buildings + government drive the demand
     // weights). Due colonies are rare, so the rows are built only on the ticks that need them.
     const colonyDue =
@@ -378,5 +398,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     treasurySummary: summarizeTreasuries(world.treasuries, treasurySnapshots),
     foundingEra: summarizeFoundingEra(factionCycles),
     treasurySnapshots,
+    conservation: summarizeConservation({
+      charters: charterCensus,
+      factionCycles,
+      startingBalances,
+      stagedLedger: stagedLedgerCensus,
+    }),
   };
 }

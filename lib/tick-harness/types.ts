@@ -15,6 +15,7 @@ import type { DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
 import type { FoundingEraSummary, TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
 import type { FounderCohortSummary, FoundingLifecycleSummary } from "./build-analysis";
 import type { DemandHuntingSummary } from "./market-analysis";
+import type { ConservationSummary } from "./conservation-analysis";
 
 // ── Market role classification ──────────────────────────────────
 
@@ -339,6 +340,12 @@ export interface FoundingStockSummary {
    *  including other colonies', so a colony the queue reaches second reads deeper than the same
    *  colony would have read first. */
   medianFounderCoverAfter: number | null;
+  /** Share of the run's founded colonies the cadence mark below is taken at. Reported so the mark is
+   *  never read against a differently-defined one. */
+  cadenceMarkShare: number;
+  /** The tick by which that share of the run's colonies had been founded — how far the founding
+   *  burst spread, which the founded count alone cannot show. Null when nothing was founded. */
+  cadenceMarkTick: number | null;
 }
 
 // ── Region overview ─────────────────────────────────────────────
@@ -415,4 +422,7 @@ export interface HarnessResults {
   foundingEra: FoundingEraSummary;
   /** Treasury balance trajectory sampled at SNAPSHOT_INTERVAL ticks (parallel to marketSnapshots). */
   treasurySnapshots: TreasurySnapshot[];
+  /** The four pass/fail conservation identities — the half of the acceptance bar that is checked
+   *  rather than judged. */
+  conservation: ConservationSummary;
 }

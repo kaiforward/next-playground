@@ -4,6 +4,7 @@ import {
   trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summarizeFoundingStock,
   recordFoundingManifest, newFoundingStallTotals, recordFoundingStall, newInFlightEstablishTotals,
   sampleOpenColonies, summarizeFoundingLifecycle, summarizeFounderCohort,
+  foundingCadenceMarkTick, FOUNDING_CADENCE_MARK_SHARE,
 } from "../build-analysis";
 import type {
   BuildCommitmentRecord, FoundedColonyRecord, FoundedColonySystem, FoundingStagingTotals,
@@ -437,6 +438,9 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
       meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
       meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
+      // Same rule for the cadence mark: no colonies means there is no mark, and a 0 would read as
+      // "the whole burst landed on tick zero".
+      cadenceMarkShare: FOUNDING_CADENCE_MARK_SHARE, cadenceMarkTick: null,
     });
   });
 
@@ -523,6 +527,60 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     const summary = summarizeFoundingStock(tracker);
     expect(summary.medianFounderCoverAfter).toBeCloseTo(0.8, 9);
     expect(summary.meanManifestTonnage).toBeCloseTo(50, 9); // 100 over both founded colonies
+  });
+});
+
+describe("founding cadence mark", () => {
+  const at = (systemId: string, foundedTick: number): FoundedColonyRecord => ({
+    systemId, foundedTick, openingSatisfaction: null, openingDissatisfaction: null,
+  });
+  const trackerOf = (...ticks: number[]): Map<string, FoundedColonyRecord> =>
+    new Map(ticks.map((t, i) => [`c${i}`, at(`c${i}`, t)]));
+
+  it("returns the tick the share'th colony was founded on, not an interpolation", () => {
+    // Five colonies, 80% ⇒ the fourth. The mark is a real founding's tick: an interpolated one
+    // names a tick on which nothing happened, and two arms cannot be compared on that.
+    expect(foundingCadenceMarkTick(trackerOf(100, 200, 300, 400, 5000))).toBe(400);
+  });
+
+  it("does not depend on the order colonies were tracked in", () => {
+    // The tracker is a Map keyed by system, and its iteration order follows insertion — which
+    // follows whichever system the sweep happened to reach first, not founding order.
+    const ordered = foundingCadenceMarkTick(trackerOf(100, 200, 300, 400, 5000));
+    const shuffled = foundingCadenceMarkTick(trackerOf(100, 5000, 200, 300, 400));
+    expect(shuffled).toBe(ordered);
+  });
+
+  it("rounds a fractional share UP to a whole colony", () => {
+    // Four colonies, 80% ⇒ 3.2 colonies. Three of four is 75% and has NOT reached the mark, so the
+    // mark is the fourth's tick — rounding down would report the run 80% founded at 75%.
+    expect(foundingCadenceMarkTick(trackerOf(10, 20, 30, 900))).toBe(900);
+  });
+
+  it("denominates over the run's OWN total, so it reads pacing and not volume", () => {
+    // Twice as many colonies on the same rhythm must read the same mark — otherwise an arm that
+    // founds more colonies looks like one that founds them later.
+    expect(foundingCadenceMarkTick(trackerOf(100, 200, 300, 400, 500))).toBe(400);
+    expect(
+      foundingCadenceMarkTick(trackerOf(100, 100, 200, 200, 300, 300, 400, 400, 500, 500)),
+    ).toBe(400);
+  });
+
+  it("reports no mark for a run that founded nothing, never a zero tick", () => {
+    expect(foundingCadenceMarkTick(new Map())).toBeNull();
+    // JSON-safe: a NaN or Infinity would serialize to null and read as "not founded" instead.
+    const summary = summarizeFoundingStock(trackerOf(48));
+    expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
+  });
+
+  it("puts a single founding's own tick on the mark", () => {
+    expect(foundingCadenceMarkTick(trackerOf(432))).toBe(432);
+  });
+
+  it("carries the mark and its share into the founding-stock summary", () => {
+    const summary = summarizeFoundingStock(trackerOf(100, 200, 300, 400, 5000));
+    expect(summary.cadenceMarkShare).toBe(FOUNDING_CADENCE_MARK_SHARE);
+    expect(summary.cadenceMarkTick).toBe(400);
   });
 });
 

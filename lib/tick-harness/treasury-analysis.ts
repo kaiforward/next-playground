@@ -65,6 +65,10 @@ export const FOUNDING_FIXED_WINDOW_END_TICK = 1000;
  */
 export interface FactionCycleRecord {
   tick: number;
+  /** Whose cycle it is. The era bars pool every faction, but the conservation identities walk each
+   *  faction's settlements as a CHAIN — one cycle's closing balance is the next one's opening — and
+   *  a chain cannot be reassembled from an unattributed row. */
+  factionId: string;
   /** Heads + production income settled that cycle. */
   income: number;
   /** Charter fees and staged materials charged off the top that cycle. */
@@ -78,6 +82,13 @@ export interface FactionCycleRecord {
    *  cycle is a policy setting, and reading it as starvation would fail the bar on a faction that
    *  simply had nothing to build. */
   constructionBill: number;
+  /** Σ of the three bands actually PAID that cycle — the middle term of `net`. Carried apart from
+   *  the bills because a band pays what it can afford, and the identity reconciles against what left
+   *  the treasury rather than what it was asked for. */
+  paidTotal: number;
+  /** Balance the settlement CLOSED at. Nothing but a settlement writes `balance`, so this doubles as
+   *  the next cycle's opening balance and makes the chain checkable from the records alone. */
+  balance: number;
 }
 
 /**
@@ -100,12 +111,15 @@ export function recordSettledCycles(
     seenTickByFaction.set(t.factionId, s.tick);
     out.push({
       tick: s.tick,
+      factionId: t.factionId,
       income: s.headsIncome + s.productionIncome,
       foundingExpense: s.foundingExpense,
       shorted: isShorted(t),
       fundedMaintenance: t.funded.maintenance,
       fundedConstruction: t.funded.construction,
       constructionBill: s.constructionBill,
+      paidTotal: s.paid.maintenance + s.paid.logistics + s.paid.construction,
+      balance: t.balance,
     });
   }
 }
@@ -187,12 +201,18 @@ export interface FoundingEraSummary {
    *  debited before the ladder, so this is the distribution that says whether the floor was starved.
    *  Null when the era has no cycles — the median of nothing must not print as a starved 0.00. */
   fundedMaintenance: { median: number; p10: number; min: number } | null;
-  /** Minimum `funded.construction` over founding-era faction-cycles that were actually BILLED for
-   *  construction. An unbilled cycle latches the slider rather than a paid fraction, so including it
-   *  would report a faction with nothing to build as a faction starved of funding. Null when no
-   *  founding-era cycle was billed. */
-  minFundedConstruction: number | null;
-  /** Founding-era faction-cycles carrying a construction bill — the minimum above is over these. */
+  /**
+   * `funded.construction` across founding-era faction-cycles that were actually BILLED for
+   * construction. An unbilled cycle latches the slider rather than a paid fraction, so including it
+   * would report a faction with nothing to build as a faction starved of funding. Null when no
+   * founding-era cycle was billed.
+   *
+   * The DISTRIBUTION, not just the floor the acceptance bar names: a minimum of 0 is either one
+   * outlier cycle or a routine drain, and the two want opposite responses. The median and p10 over
+   * the same billed set are what tell them apart.
+   */
+  fundedConstruction: { median: number; p10: number; min: number } | null;
+  /** Founding-era faction-cycles carrying a construction bill — the distribution above is over these. */
   billedConstructionCycles: number;
   /** Rows carrying a non-finite or negative money value, excluded from every figure above. */
   invalidRows: number;
@@ -248,6 +268,9 @@ export function summarizeFoundingEra(
   const valid: FactionCycleRecord[] = [];
   let invalidRows = 0;
   for (const r of records) {
+    // Exactly the values the era's own aggregates read. `paidTotal` and `balance` ride on the record
+    // for the conservation identities and feed nothing here, so a corrupt one must not drop a row
+    // from a founding-era bar it does not touch — that check belongs to the identity that reads it.
     const money = [
       r.income, r.foundingExpense, r.fundedMaintenance, r.fundedConstruction, r.constructionBill,
     ];
@@ -266,8 +289,8 @@ export function summarizeFoundingEra(
   const tail = valid.filter((r) => r.tick <= startupTailEndTick);
   const postEra = valid.filter((r) => eraEndTick !== null && r.tick > eraEndTick);
   const maintenance: number[] = [];
-  let minConstruction: number | null = null;
-  let billedConstructionCycles = 0;
+  const construction: number[] = [];
+  let minConstruction = 0;
   let minMaintenance = 0;
   for (const r of era) {
     if (maintenance.length === 0 || r.fundedMaintenance < minMaintenance) {
@@ -276,12 +299,15 @@ export function summarizeFoundingEra(
     maintenance.push(r.fundedMaintenance);
     // Only a billed cycle says anything about construction funding — an unbilled one latches the
     // slider, and a faction with nothing to build would otherwise fail the bar for a 0 it chose.
+    // The same filter feeds all three construction figures, so the median and p10 are read over
+    // exactly the rows the minimum came from.
     if (!(r.constructionBill > 0)) continue;
-    billedConstructionCycles++;
-    if (minConstruction === null || r.fundedConstruction < minConstruction) {
+    if (construction.length === 0 || r.fundedConstruction < minConstruction) {
       minConstruction = r.fundedConstruction;
     }
+    construction.push(r.fundedConstruction);
   }
+  const billedConstructionCycles = construction.length;
   let totalFoundingSpend = 0;
   for (const r of valid) totalFoundingSpend += r.foundingExpense;
   const endogenous = spendShareWindow(era, startupTailEndTick + 1, eraEndTick);
@@ -310,7 +336,14 @@ export function summarizeFoundingEra(
             min: minMaintenance,
           }
         : null,
-    minFundedConstruction: minConstruction,
+    fundedConstruction:
+      construction.length > 0
+        ? {
+            median: median(construction),
+            p10: quantile(construction, 0.1),
+            min: minConstruction,
+          }
+        : null,
     billedConstructionCycles,
     invalidRows,
   };

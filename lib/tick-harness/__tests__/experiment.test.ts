@@ -10,6 +10,9 @@ import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { generateWorld } from "@/lib/world/gen";
 import { newFoundingStallTotals } from "../build-analysis";
 import { summarizeFoundingEra } from "../treasury-analysis";
+import {
+  newCharterCensus, newStagedLedgerCensus, summarizeConservation,
+} from "../conservation-analysis";
 import type { HarnessResults } from "../types";
 
 describe("ExperimentConfig", () => {
@@ -159,6 +162,7 @@ describe("ExperimentConfig", () => {
           foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
           meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
           meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
+          cadenceMarkShare: 0.8, cadenceMarkTick: null,
         },
         foundingLifecycle: {
           sampledCount: 0, unobservedCount: 0, meanCycles: 0, medianCycles: 0, maxCycles: 0,
@@ -183,6 +187,12 @@ describe("ExperimentConfig", () => {
         },
         foundingEra: summarizeFoundingEra([]),
         treasurySnapshots: [],
+        conservation: summarizeConservation({
+          charters: newCharterCensus(),
+          factionCycles: [],
+          startingBalances: new Map(),
+          stagedLedger: newStagedLedgerCensus(),
+        }),
       };
     }
 
@@ -268,6 +278,7 @@ describe("ExperimentConfig", () => {
         foundedCount: 4, sampledCount: 3, meanOpeningSatisfaction: 0.9,
         meanOpeningDissatisfaction: 0.02, openingDeprivedCount: 0,
         meanManifestTonnage: 250, meanFoundingMoneyCost: 75, medianFounderCoverAfter: 1.4,
+        cadenceMarkShare: 0.8, cadenceMarkTick: 1720,
       };
       const saved = buildExperimentResult(results);
       expect(saved.demandHunting).toEqual(results.demandHunting);
@@ -283,8 +294,9 @@ describe("ExperimentConfig", () => {
       results.foundingLifecycle.stalls.funds = 3;
       results.founderCohort.founder.systemCount = 12;
       results.foundingEra = summarizeFoundingEra([
-        { tick: 500, income: 100, foundingExpense: 20, shorted: false,
-          fundedMaintenance: 1, fundedConstruction: 1, constructionBill: 5 },
+        { tick: 500, factionId: "f1", income: 100, foundingExpense: 20, shorted: false,
+          fundedMaintenance: 1, fundedConstruction: 1, constructionBill: 5,
+          paidTotal: 60, balance: 200 },
       ]);
 
       const saved = buildExperimentResult(results);

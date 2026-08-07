@@ -229,6 +229,40 @@ export function sampleFoundedColonies(
   }
 }
 
+/**
+ * Share of a run's founded colonies the cadence mark is taken at. The acceptance bar reads the
+ * founding BURST's spread, and the burst's tail is what a pacing change moves — the median barely
+ * shifts while the 80% mark slides by hundreds of ticks.
+ */
+export const FOUNDING_CADENCE_MARK_SHARE = 0.8;
+
+/**
+ * The tick by which `share` of the run's founded colonies had been founded — the cadence mark the
+ * gate compares arms on.
+ *
+ * Denominated over the run's OWN total, so it says when this arm's burst had mostly happened rather
+ * than when it reached some absolute count. That makes it a pacing read and not a volume one: an arm
+ * that founds half as many colonies at the same rhythm reads the same mark.
+ *
+ * Order-independent by construction — the ticks are sorted, so the answer cannot depend on the order
+ * colonies happened to be tracked in. Null when nothing was founded: there is no mark, and a 0 would
+ * read as "the whole burst landed on tick zero", the opposite of what happened.
+ */
+export function foundingCadenceMarkTick(
+  tracker: ReadonlyMap<string, FoundedColonyRecord>,
+  share: number = FOUNDING_CADENCE_MARK_SHARE,
+): number | null {
+  const ticks: number[] = [];
+  for (const r of tracker.values()) ticks.push(r.foundedTick);
+  if (ticks.length === 0) return null;
+  ticks.sort((a, b) => a - b);
+  // The colonies needed to reach the share, in whole colonies — the mark is a real founding's tick,
+  // never an interpolation between two. The epsilon keeps an exact share (0.8 × 5 = 4) off the wrong
+  // side of a float comparison.
+  const needed = Math.min(ticks.length, Math.max(1, Math.ceil(share * ticks.length - 1e-9)));
+  return ticks[needed - 1];
+}
+
 /** Fold the tracked colonies into the run's founding-stock health reading. */
 export function summarizeFoundingStock(
   tracker: ReadonlyMap<string, FoundedColonyRecord>,
@@ -262,6 +296,8 @@ export function summarizeFoundingStock(
     meanManifestTonnage: tracker.size > 0 ? manifestTonnageSum / tracker.size : 0,
     meanFoundingMoneyCost: tracker.size > 0 ? moneyCostSum / tracker.size : 0,
     medianFounderCoverAfter: founderCovers.length > 0 ? median(founderCovers) : null,
+    cadenceMarkShare: FOUNDING_CADENCE_MARK_SHARE,
+    cadenceMarkTick: foundingCadenceMarkTick(tracker),
   };
 }
 

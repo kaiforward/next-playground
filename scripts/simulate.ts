@@ -164,6 +164,14 @@ function loadPinnedRoles(pinPath: string): PinnedRolesDocument {
 
 // ── Formatting ──────────────────────────────────────────────────
 
+/** A conservation residual, where the interesting range is float dust — `fmtNum` would round every
+ *  one of them to "0" and hide the difference between exact and nearly-exact. */
+function fmtResidual(n: number): string {
+  if (n === 0) return "0";
+  if (!Number.isFinite(n)) return String(n);
+  return n.toExponential(2);
+}
+
 function fmtNum(n: number): string {
   if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + "K";
@@ -486,6 +494,15 @@ function formatTable(results: HarnessResults): string {
     lines.push(
       `Founding stock: ${fs.foundedCount} colonies founded (${fs.sampledCount} reached a first assessment)`,
     );
+    // How far the burst SPREAD, which the count alone cannot show: a pacing change slides this mark
+    // by hundreds of ticks while the founded count barely moves.
+    lines.push(
+      `  cadence: ${(fs.cadenceMarkShare * 100).toFixed(0)}% mark ` +
+        (fs.cadenceMarkTick !== null
+          ? `t=${fs.cadenceMarkTick} — the tick by which ${(fs.cadenceMarkShare * 100).toFixed(0)}% ` +
+            `of this run's ${fs.foundedCount} colonies had been founded`
+          : "n/a (no colonies founded this run)"),
+    );
     if (fs.sampledCount > 0) {
       lines.push(
         `  opening satisfaction (demand-weighted): mean ${fs.meanOpeningSatisfaction.toFixed(2)}, ` +
@@ -637,12 +654,35 @@ function formatTable(results: HarnessResults): string {
           ? `median ${era.fundedMaintenance.median.toFixed(3)}, ` +
             `p10 ${era.fundedMaintenance.p10.toFixed(3)}, min ${era.fundedMaintenance.min.toFixed(3)}`
           : "n/a (no founding-era cycles)") +
-        ` | min construction ` +
-        (era.minFundedConstruction !== null
-          ? `${era.minFundedConstruction.toFixed(3)} over ${fmtNum(era.billedConstructionCycles)} ` +
-            `BILLED cycles`
+        ` | construction ` +
+        (era.fundedConstruction !== null
+          ? `median ${era.fundedConstruction.median.toFixed(3)}, ` +
+            `p10 ${era.fundedConstruction.p10.toFixed(3)}, ` +
+            `min ${era.fundedConstruction.min.toFixed(3)} over ` +
+            `${fmtNum(era.billedConstructionCycles)} BILLED cycles`
           : "n/a (no billed cycle)"),
     );
+  }
+
+  // Conservation identities — the pass/fail half of the acceptance bar. Printed whatever the run
+  // did: a missing line is indistinguishable from a passing one, and these are the reads a broken
+  // founding ledger shows up in rather than as a number someone has to judge.
+  {
+    const cons = results.conservation;
+    lines.push("");
+    lines.push(
+      `Conservation identities (pass/fail, relative tolerance ${cons.tolerance.toExponential(0)}):`,
+    );
+    for (const c of cons.checks) {
+      lines.push(
+        `  ${c.pass ? "PASS" : "FAIL"} ${c.name.padEnd(42)} ` +
+          `${fmtNum(c.left)} vs ${fmtNum(c.right)} | residual ${fmtResidual(c.residual)}`,
+      );
+      lines.push(`       ${c.note}`);
+    }
+    if (!cons.allPass) {
+      lines.push("  ⚠ AN IDENTITY FAILED — the founding ledger is out, not merely mistuned.");
+    }
   }
 
   // Logistics activity — did directed-logistics actually move anything?

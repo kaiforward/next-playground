@@ -97,6 +97,9 @@ export interface ExperimentResult {
   buildBurstSummary: HarnessResults["buildBurstSummary"];
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
   migrationThroughput: HarnessResults["migrationThroughput"];
+  /** The four pass/fail conservation identities. Saved rather than left in the console the run threw
+   *  away: an arm's identities are part of what makes its calibration reads admissible at all. */
+  conservation: HarnessResults["conservation"];
   elapsedMs: number;
 }
 
@@ -125,6 +128,7 @@ export function buildExperimentResult(results: HarnessResults): ExperimentResult
     logisticsActivity: results.logisticsActivity,
     buildBurstSummary: results.buildBurstSummary,
     migrationThroughput: results.migrationThroughput,
+    conservation: results.conservation,
     elapsedMs: results.elapsedMs,
   };
 }

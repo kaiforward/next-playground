@@ -129,6 +129,17 @@ describe("treasury analysis", () => {
     expect(out[1].constructionBill).toBe(1);
   });
 
+  it("carries the faction, what it paid and the balance it closed at onto each record", () => {
+    // The conservation identities walk each faction's settlements as a chain — one cycle's closing
+    // balance is the next one's opening. Without these three the chain cannot be reassembled, and
+    // an unattributed row silently joins another faction's chain.
+    const out: FactionCycleRecord[] = [];
+    recordSettledCycles([makeTreasury({ factionId: "f9", balance: 37 })], new Map(), out);
+    expect(out[0].factionId).toBe("f9");
+    expect(out[0].balance).toBe(37);
+    expect(out[0].paidTotal).toBe(4); // 2 maintenance + 1 logistics + 1 construction
+  });
+
   it("skips a faction that has never settled", () => {
     const out: FactionCycleRecord[] = [];
     recordSettledCycles([makeTreasury({ lastSettlement: null })], new Map(), out);
@@ -141,11 +152,12 @@ describe("summarizeFoundingEra", () => {
     tick: number,
     {
       income = 100, foundingExpense = 0, shorted = false, maintenance = 1, construction = 1,
-      constructionBill = 1,
+      constructionBill = 1, factionId = "f1", paidTotal = 0, balance = 0,
     } = {},
   ): FactionCycleRecord => ({
-    tick, income, foundingExpense, shorted,
+    tick, factionId, income, foundingExpense, shorted,
     fundedMaintenance: maintenance, fundedConstruction: construction, constructionBill,
+    paidTotal, balance,
   });
 
   it("shares founding spend against the income of the SAME faction-cycles", () => {
@@ -315,13 +327,52 @@ describe("summarizeFoundingEra", () => {
       cycle(800, { foundingExpense: 1, construction: 1, constructionBill: 5 }),
     ]);
 
-    expect(summary.minFundedConstruction).toBeCloseTo(0.8, 9);
+    expect(summary.fundedConstruction?.min).toBeCloseTo(0.8, 9);
     expect(summary.billedConstructionCycles).toBe(3);
+  });
+
+  it("reads construction as a distribution over exactly the BILLED cycles the minimum came from", () => {
+    // A minimum of 0 is either one outlier cycle or a routine drain, and the two want opposite
+    // responses. The median and p10 are what tell them apart — and they must be taken over the
+    // same billed set, or the distribution describes a different population from its own floor.
+    const summary = summarizeFoundingEra([
+      cycle(450, { construction: 0, constructionBill: 0 }),   // unbilled — in no construction figure
+      cycle(500, { construction: 0, constructionBill: 5 }),   // the outlier
+      cycle(600, { construction: 1, constructionBill: 5 }),
+      cycle(700, { construction: 1, constructionBill: 5 }),
+      cycle(800, { construction: 1, constructionBill: 5 }),
+      cycle(900, { construction: 1, constructionBill: 5 }),
+    ]);
+
+    expect(summary.billedConstructionCycles).toBe(5);
+    expect(summary.fundedConstruction?.min).toBeCloseTo(0, 9);
+    // Four of five billed cycles paid in full: the floor is an outlier, not the norm.
+    expect(summary.fundedConstruction?.median).toBeCloseTo(1, 9);
+    expect(summary.fundedConstruction?.p10).toBeCloseTo(0, 9);
+  });
+
+  it("separates a routine construction drain from a single starved cycle", () => {
+    // The same minimum, a completely different reading — this is the pair the distribution exists
+    // to distinguish, and a min-only report gives them the identical answer.
+    const routine = summarizeFoundingEra([
+      cycle(500, { construction: 0.2, constructionBill: 5 }),
+      cycle(600, { construction: 0.2, constructionBill: 5 }),
+      cycle(700, { construction: 0.2, constructionBill: 5 }),
+    ]);
+    const outlier = summarizeFoundingEra([
+      cycle(500, { construction: 0.2, constructionBill: 5 }),
+      cycle(600, { construction: 1, constructionBill: 5 }),
+      cycle(700, { construction: 1, constructionBill: 5 }),
+    ]);
+
+    expect(routine.fundedConstruction?.min).toBeCloseTo(outlier.fundedConstruction?.min ?? -1, 9);
+    expect(routine.fundedConstruction?.median).toBeCloseTo(0.2, 9);
+    expect(outlier.fundedConstruction?.median).toBeCloseTo(1, 9);
   });
 
   it("reports no billed construction cycle as null, not as a starved zero", () => {
     const summary = summarizeFoundingEra([cycle(500, { construction: 0, constructionBill: 0 })]);
-    expect(summary.minFundedConstruction).toBeNull();
+    expect(summary.fundedConstruction).toBeNull();
     expect(summary.billedConstructionCycles).toBe(0);
   });
 
@@ -355,7 +406,7 @@ describe("summarizeFoundingEra", () => {
     expect(summary.fundedMaintenance).not.toBeNull();
     expect(summary.fundedMaintenance?.median).toBeCloseTo(1, 9);
     expect(summary.fundedMaintenance?.min).toBeCloseTo(0.6, 9);
-    expect(summary.minFundedConstruction).toBeCloseTo(0.7, 9);
+    expect(summary.fundedConstruction?.min).toBeCloseTo(0.7, 9);
   });
 
   it("keeps the era's WORST funded cycle, not whichever one it read last", () => {
@@ -368,7 +419,7 @@ describe("summarizeFoundingEra", () => {
       cycle(700, { maintenance: 1, construction: 1, constructionBill: 5 }),
     ]);
     expect(summary.fundedMaintenance?.min).toBeCloseTo(0.6, 9);
-    expect(summary.minFundedConstruction).toBeCloseTo(0.7, 9);
+    expect(summary.fundedConstruction?.min).toBeCloseTo(0.7, 9);
     expect(summary.billedConstructionCycles).toBe(3);
   });
 
@@ -395,7 +446,7 @@ describe("summarizeFoundingEra", () => {
     expect(summary.withFounding).toEqual({ cycles: 0, shorted: 0, share: 0 });
     // A median of nothing must not print as a starved 0.00 — that is a measurement, not an absence.
     expect(summary.fundedMaintenance).toBeNull();
-    expect(summary.minFundedConstruction).toBeNull();
+    expect(summary.fundedConstruction).toBeNull();
     expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
   });
 });
