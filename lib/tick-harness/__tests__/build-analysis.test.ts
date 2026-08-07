@@ -336,7 +336,10 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     ({ systemId, goodId, satisfaction });
   const rec = (
     systemId: string, openingSatisfaction: number | null, openingDissatisfaction: number | null,
-  ): FoundedColonyRecord => ({ systemId, foundedTick: 0, openingSatisfaction, openingDissatisfaction });
+    openingProvision: number | null = openingSatisfaction,
+  ): FoundedColonyRecord => ({
+    systemId, foundedTick: 0, openingSatisfaction, openingDissatisfaction, openingProvision,
+  });
   /** No staging draws behind these colonies — the detection cases are about who is tracked, not cost. */
   const NO_STAGING = new Map<string, FoundingStagingTotals>();
   /** One staging draw as the processor emits it. */
@@ -371,8 +374,31 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     sampleFoundedColonies(systems, markets, 48, tracker);
     expect(tracker.get("c1")?.openingSatisfaction).toBeCloseTo(1, 6);
     expect(tracker.get("c1")?.openingDissatisfaction).toBeCloseTo(0, 6);
+    expect(tracker.get("c1")?.openingProvision).toBeCloseTo(1, 6);
     // Once read, it stops asking to be read again.
     expect(hasColonyAwaitingSample(tracker, 72)).toBe(false);
+  });
+
+  it("samples openingProvision once, on the same cycle and basket as the other two readings", () => {
+    // A colony sampled twice, or sampled before its first cycle, would move the cohort's Provision
+    // mean without the galaxy having changed — the same hazard `openingSatisfaction` already guards
+    // against, now checked for the new field too.
+    const tracker = new Map<string, FoundedColonyRecord>();
+    const systems = [sys("c1", "developed")];
+    const markets = [mkt("c1", "water", 0.5)];
+    trackFoundedColonies(systems, 24, new Set(), tracker, NO_STAGING);
+
+    // Founded on a cycle-start tick: not due yet, so no reading of any of the three fields.
+    sampleFoundedColonies(systems, markets, 24, tracker);
+    expect(tracker.get("c1")?.openingProvision).toBeNull();
+
+    sampleFoundedColonies(systems, markets, 48, tracker);
+    const firstReading = tracker.get("c1")?.openingProvision;
+    expect(firstReading).not.toBeNull();
+
+    // A later cycle's famine must not move the already-taken reading.
+    sampleFoundedColonies(systems, [mkt("c1", "water", 0.01)], 72, tracker);
+    expect(tracker.get("c1")?.openingProvision).toBe(firstReading);
   });
 
   it("weights a good by the colony's own need for it, not one vote per good", () => {
@@ -405,6 +431,42 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       .toBeGreaterThan(luxuriesRecord.openingDissatisfaction);
   });
 
+  it("leaves openingProvision null on an empty basket, never recorded as fully provisioned", () => {
+    // Population 0 makes consumptionRate's per-capita term 0 for every good, so the basket is empty
+    // (goods.length === 0 in sampleFoundedColonies) even though market rows exist for the system.
+    // provision()'s OWN rule reads an empty basket as 1 ("fully provisioned") — the founding reading
+    // must not inherit that: "could not measure" and "opened perfectly supplied" are opposite claims
+    // (the founderCover precedent, lib/tick/types.ts:133-137).
+    const tracker = new Map<string, FoundedColonyRecord>();
+    const emptySys: FoundedColonySystem = { id: "c1", control: "developed", population: 0, buildings: {} };
+    trackFoundedColonies([emptySys], 24, new Set(), tracker, NO_STAGING);
+    sampleFoundedColonies([emptySys], [mkt("c1", "water", 1), mkt("c1", "food", 1)], 48, tracker);
+
+    expect(tracker.get("c1")?.openingProvision).toBeNull();
+    expect(tracker.get("c1")?.openingSatisfaction).toBeNull();
+  });
+
+  it("differs from openingSatisfaction when a good's demand share and its necessity disagree", () => {
+    // water: per-capita need 0.007, necessity 1.0. gas: need 0.004, necessity 0.4 (physical-economy.ts).
+    // Demand-only shares (7:4) and demand×necessity shares (0.007:0.0016 = 35:8) disagree, so weighting
+    // the SAME two readings (water 0.2, gas 1.0) by one vs the other must produce different means — if
+    // they agreed, the necessity term was dropped and openingProvision is openingSatisfaction relabelled.
+    const tracker = new Map<string, FoundedColonyRecord>();
+    const systems = [sys("c1", "developed")];
+    trackFoundedColonies(systems, 24, new Set(), tracker, NO_STAGING);
+    sampleFoundedColonies(systems, [mkt("c1", "water", 0.2), mkt("c1", "gas", 1.0)], 48, tracker);
+
+    const record = tracker.get("c1");
+    if (record?.openingSatisfaction == null || record.openingProvision == null) {
+      throw new Error("fixture: expected a sampled opening reading");
+    }
+    expect(record.openingSatisfaction).toBeCloseTo(5.4 / 11, 9);   // demand-only shares: 7:4
+    expect(record.openingProvision).toBeCloseTo(15 / 43, 9);       // demand×necessity shares: 35:8
+    expect(record.openingProvision).not.toBeCloseTo(record.openingSatisfaction, 3);
+    // Necessity weighs water (the worse-served good) more heavily, so Provision reads worse.
+    expect(record.openingProvision).toBeLessThan(record.openingSatisfaction);
+  });
+
   it("keeps the opening reading, ignoring later cycles", () => {
     const tracker = new Map<string, FoundedColonyRecord>();
     const systems = [sys("c1", "developed")];
@@ -427,21 +489,62 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(summary.sampledCount).toBe(2);       // 'c' never reached a cycle — not a zero in the mean
     expect(summary.meanOpeningSatisfaction).toBeCloseTo(0.5, 6);
     expect(summary.meanOpeningDissatisfaction).toBeCloseTo(0.41, 6);
+    expect(summary.meanOpeningProvision).toBeCloseTo(0.5, 6);   // rec() defaults provision = satisfaction
     expect(summary.openingDeprivedCount).toBe(1);
   });
 
-  it("reports zeroed means — and a NULL cover median — when no colony was ever founded", () => {
+  it("folds meanOpeningProvision from openingProvision, not from openingSatisfaction", () => {
+    // Every OTHER summary-level test in this file uses rec()'s default, which sets openingProvision
+    // equal to openingSatisfaction per record — so a bug that aliased the two summary accumulators
+    // (e.g. meanOpeningProvision folded from r.openingSatisfaction) would pass the whole suite despite
+    // being wrong. Here the two are deliberately made to differ per colony, and per colony the
+    // provision value has no fixed relationship to the satisfaction value (some higher, some lower),
+    // so the two summary means can only land on the values below if each is folded from its own field.
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["a", rec("a", 0.9, 0.01, 0.5)],
+      ["b", rec("b", 0.1, 0.81, 0.9)],
+      ["c", rec("c", 0.5, 0.25, 0.7)],
+    ]);
+
+    const summary = summarizeFoundingStock(tracker);
+    expect(summary.meanOpeningSatisfaction).toBeCloseTo((0.9 + 0.1 + 0.5) / 3, 9);   // 0.5
+    expect(summary.meanOpeningProvision).toBeCloseTo((0.5 + 0.9 + 0.7) / 3, 9);      // 0.7
+    expect(summary.meanOpeningProvision).not.toBeCloseTo(summary.meanOpeningSatisfaction, 3);
+  });
+
+  it("reports zeroed means — and NULL cover/Provision readings — when no colony was ever founded", () => {
     // The cover median must be null, not 0: a printed "0.00×" reads as founders drained flat
-    // when the truth is that nothing was measured.
+    // when the truth is that nothing was measured. Provision is null for the same reason: a run
+    // that founds nothing has no founding Provision to report, not a Provision of 0%.
     const summary = summarizeFoundingStock(new Map());
     expect(summary).toEqual({
       foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
-      meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
+      meanOpeningDissatisfaction: 0, meanOpeningProvision: null, p10OpeningProvision: null,
+      openingDeprivedCount: 0,
       meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
       // Same rule for the cadence mark: no colonies means there is no mark, and a 0 would read as
       // "the whole burst landed on tick zero".
       cadenceMarkShare: FOUNDING_CADENCE_MARK_SHARE, cadenceMarkTick: null,
     });
+  });
+
+  it("separates p10 from the mean on a skewed cohort", () => {
+    // A single number can't carry the invariant when the cohort is skewed — the spec measures 376
+    // of 562 colonies opening below 50% satisfaction, so most of a run's colonies can be badly
+    // provisioned while a handful of well-off ones pull the mean up. Mirror that shape: 6 poor, 4 well.
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["a", rec("a", 0.1, 0.81, 0.1)], ["b", rec("b", 0.1, 0.81, 0.1)], ["c", rec("c", 0.1, 0.81, 0.1)],
+      ["d", rec("d", 0.1, 0.81, 0.1)], ["e", rec("e", 0.1, 0.81, 0.1)], ["f", rec("f", 0.1, 0.81, 0.1)],
+      ["g", rec("g", 0.9, 0.01, 0.9)], ["h", rec("h", 0.9, 0.01, 0.9)],
+      ["i", rec("i", 0.9, 0.01, 0.9)], ["j", rec("j", 0.9, 0.01, 0.9)],
+    ]);
+    const summary = summarizeFoundingStock(tracker);
+    if (summary.meanOpeningProvision === null || summary.p10OpeningProvision === null) {
+      throw new Error("fixture: expected both readings on a founded cohort");
+    }
+    expect(summary.meanOpeningProvision).toBeCloseTo(0.42, 9);  // (6*0.1 + 4*0.9) / 10
+    expect(summary.p10OpeningProvision).toBeCloseTo(0.1, 9);    // the worst decile is still in the poor tail
+    expect(summary.p10OpeningProvision).toBeLessThan(summary.meanOpeningProvision);
   });
 
   it("folds every cycle's draw into the one colony, not just the draw it was founded on", () => {
@@ -532,7 +635,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
 
 describe("founding cadence mark", () => {
   const at = (systemId: string, foundedTick: number): FoundedColonyRecord => ({
-    systemId, foundedTick, openingSatisfaction: null, openingDissatisfaction: null,
+    systemId, foundedTick, openingSatisfaction: null, openingDissatisfaction: null, openingProvision: null,
   });
   const trackerOf = (...ticks: number[]): Map<string, FoundedColonyRecord> =>
     new Map(ticks.map((t, i) => [`c${i}`, at(`c${i}`, t)]));
@@ -634,7 +737,7 @@ describe("founding lifecycle — stall attribution", () => {
 
 describe("founding lifecycle — commitment, completion and concurrency", () => {
   const colony = (systemId: string, foundedTick: number): FoundedColonyRecord => ({
-    systemId, foundedTick, openingSatisfaction: null, openingDissatisfaction: null,
+    systemId, foundedTick, openingSatisfaction: null, openingDissatisfaction: null, openingProvision: null,
   });
   const establish = (systemId: string) => ({ kind: "colony_establish" as const, systemId });
   const build = (systemId: string) => ({ kind: "build" as const, systemId });

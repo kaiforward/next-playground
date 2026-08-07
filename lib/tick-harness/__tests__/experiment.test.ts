@@ -160,7 +160,8 @@ describe("ExperimentConfig", () => {
         migrationThroughput: { totalColonists: 0, totalDiffusion: 0, cycleCount: 0, meanPerCycle: 0 },
         foundingStock: {
           foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
-          meanOpeningDissatisfaction: 0, openingDeprivedCount: 0,
+          meanOpeningDissatisfaction: 0, meanOpeningProvision: null, p10OpeningProvision: null,
+          openingDeprivedCount: 0,
           meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
           cadenceMarkShare: 0.8, cadenceMarkTick: null,
         },
@@ -278,7 +279,8 @@ describe("ExperimentConfig", () => {
       results.demandHunting = { flipRate: 0.12, haulChurnRatio: 0.03 };
       results.foundingStock = {
         foundedCount: 4, sampledCount: 3, meanOpeningSatisfaction: 0.9,
-        meanOpeningDissatisfaction: 0.02, openingDeprivedCount: 0,
+        meanOpeningDissatisfaction: 0.02, meanOpeningProvision: 0.85, p10OpeningProvision: 0.6,
+        openingDeprivedCount: 0,
         meanManifestTonnage: 250, meanFoundingMoneyCost: 75, medianFounderCoverAfter: 1.4,
         cadenceMarkShare: 0.8, cadenceMarkTick: 1720,
       };

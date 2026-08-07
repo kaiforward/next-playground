@@ -519,6 +519,14 @@ function formatTable(results: HarnessResults): string {
           `dissatisfaction ${fs.meanOpeningDissatisfaction.toFixed(3)} | ` +
           `opened deprived (<0.50): ${fs.openingDeprivedCount}`,
       );
+      // A different weighting from the line above (necessity × demand, not demand alone) — reported
+      // on its own line so the two quantities are never read as the same number.
+      if (fs.meanOpeningProvision !== null && fs.p10OpeningProvision !== null) {
+        lines.push(
+          `  opening Provision (necessity+demand-weighted): mean ${fs.meanOpeningProvision.toFixed(2)}, ` +
+            `p10 ${fs.p10OpeningProvision.toFixed(2)}`,
+        );
+      }
     }
     if (fs.foundedCount > 0) {
       lines.push(

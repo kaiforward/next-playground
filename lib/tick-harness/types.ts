@@ -325,6 +325,18 @@ export interface FoundingStockSummary {
    *  reads. Reported alongside the weighted mean so the instrument and the simulation cannot drift
    *  into disagreeing about whether a colony opened deprived. */
   meanOpeningDissatisfaction: number;
+  /** Mean, over sampled colonies, of `provision()` (necessity-and-demand-weighted mean satisfaction)
+   *  at the same cycle and over the same basket as `meanOpeningSatisfaction` — a good's weight is
+   *  demand × necessity here, demand alone there, so the two read apart whenever a colony's worst
+   *  shortage and its most-needed good disagree. This is THE MEASURED founding Provision the founding
+   *  invariant's shortfall term is written against. Null when no colony was ever founded or none
+   *  reached a first assessment — a mean of nothing must not print as "opened at 0% Provision". */
+  meanOpeningProvision: number | null;
+  /** The 10th percentile of the same per-colony Provision readings behind `meanOpeningProvision`.
+   *  Reported alongside the mean because the founding invariant does not say whether "the measured
+   *  founding Provision" means the cohort's average or its worst decile — both exist so that choice
+   *  can be made from real numbers. Null under the same rule as the mean. */
+  p10OpeningProvision: number | null;
   /** Sampled colonies that opened below half satisfaction. Should read ~0. */
   openingDeprivedCount: number;
   /** Mean tonnage staged per colony founded — what founding costs a founder in goods. The

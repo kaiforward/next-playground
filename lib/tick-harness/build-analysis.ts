@@ -15,12 +15,12 @@ import {
   HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, RESEARCH_INSTITUTE_TYPE, COMPLEX_TYPES, CONSTRUCTION_CENTRE_TYPE,
 } from "@/lib/constants/industry";
 import { factionConstructionPool } from "@/lib/engine/construction";
-import { dissatisfaction } from "@/lib/engine/population";
+import { dissatisfaction, provision } from "@/lib/engine/population";
 import { goodSatisfactionsBySystem } from "@/lib/tick-harness/good-satisfaction";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
-import { median } from "@/lib/utils/math";
+import { median, quantile } from "@/lib/utils/math";
 import type { FoundingStagingEvent, FoundingStallEvent } from "@/lib/tick/types";
 import type { BuildBurstSummary, FoundingStockSummary } from "./types";
 
@@ -75,6 +75,13 @@ export interface FoundedColonyRecord {
   openingSatisfaction: number | null;
   /** The convex fold unrest itself reads (`dissatisfaction`) at that cycle; null until sampled. */
   openingDissatisfaction: number | null;
+  /** `provision()` — the necessity-and-demand-weighted MEAN satisfaction — over the same basket as
+   *  the two readings above; null until sampled. Differs from `openingSatisfaction` whenever a good's
+   *  demand share and its necessity disagree: `openingSatisfaction` weights by demand alone,
+   *  `openingProvision` by demand × necessity. Deliberately NOT `provision()`'s own empty-basket ≡ 1
+   *  reading — an empty basket at sampling leaves this null (see `sampleFoundedColonies`), because
+   *  "could not measure" and "opened perfectly supplied" are opposite readings. */
+  openingProvision: number | null;
   /** Total tonnage the colony staged from its founder over the whole establish; absent when it
    *  staged nothing. */
   manifestTonnage?: number;
@@ -175,7 +182,8 @@ export function trackFoundedColonies(
     if (s.control !== "developed" || developedAtStart.has(s.id) || tracker.has(s.id)) continue;
     const staged = staging.get(s.id);
     tracker.set(s.id, {
-      systemId: s.id, foundedTick: tick, openingSatisfaction: null, openingDissatisfaction: null,
+      systemId: s.id, foundedTick: tick,
+      openingSatisfaction: null, openingDissatisfaction: null, openingProvision: null,
       manifestTonnage: staged?.tonnage,
       foundingMoneyCost: staged?.moneyCost,
       founderCoverAfter: staged?.minFounderCover,
@@ -226,6 +234,7 @@ export function sampleFoundedColonies(
     for (const g of goods) weighted += (Math.max(0, g.demanded) / totalDemand) * g.satisfaction;
     record.openingSatisfaction = weighted;
     record.openingDissatisfaction = dissatisfaction(goods);
+    record.openingProvision = provision(goods);
   }
 }
 
@@ -270,6 +279,8 @@ export function summarizeFoundingStock(
   let sampledCount = 0;
   let satisfactionSum = 0;
   let dissatisfactionSum = 0;
+  let provisionSum = 0;
+  const provisions: number[] = [];
   let openingDeprivedCount = 0;
   let manifestTonnageSum = 0;
   let moneyCostSum = 0;
@@ -279,10 +290,14 @@ export function summarizeFoundingStock(
     moneyCostSum += r.foundingMoneyCost ?? 0;
     // Only a colony that actually drew a manifest says anything about the cost to its founder.
     if (r.founderCoverAfter !== undefined) founderCovers.push(r.founderCoverAfter);
-    if (r.openingSatisfaction === null || r.openingDissatisfaction === null) continue;
+    if (r.openingSatisfaction === null || r.openingDissatisfaction === null || r.openingProvision === null) {
+      continue;
+    }
     sampledCount++;
     satisfactionSum += r.openingSatisfaction;
     dissatisfactionSum += r.openingDissatisfaction;
+    provisionSum += r.openingProvision;
+    provisions.push(r.openingProvision);
     if (r.openingSatisfaction < OPENING_DEPRIVED_SATISFACTION) openingDeprivedCount++;
   }
   return {
@@ -290,6 +305,10 @@ export function summarizeFoundingStock(
     sampledCount,
     meanOpeningSatisfaction: sampledCount > 0 ? satisfactionSum / sampledCount : 0,
     meanOpeningDissatisfaction: sampledCount > 0 ? dissatisfactionSum / sampledCount : 0,
+    // Null rather than 0 when nothing was sampled — the founding invariant reads this as THE
+    // measured founding Provision, and a run that founded nothing has no such reading to give.
+    meanOpeningProvision: sampledCount > 0 ? provisionSum / sampledCount : null,
+    p10OpeningProvision: sampledCount > 0 ? quantile(provisions, 0.1) : null,
     openingDeprivedCount,
     // Denominated over every colony founded, so a run that ships nothing reads 0 rather than
     // hiding behind a shrunken denominator.
