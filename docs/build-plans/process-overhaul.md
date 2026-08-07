@@ -190,24 +190,25 @@ cannot reach.
 1. **`/brainstorm`** — prose discussion, no forced-choice lists, terminal state is `/measure` rather
    than a spec.
 2. **`/feature-spec`** — four-field header, hazard worksheet, refuses to start without evidence.
-3. **`/implement-plan`** — the execution stage, currently the only unnamed step in the sequence and
-   the last superpowers dependency (executing-plans / subagent-driven-development / TDD are generic:
-   they have never heard of `Proves`, red-proof, the SDD ledger or the per-task review gate, and that
-   seam is where PR #217's ~278 unpinned behaviours leaked through despite a filled plan). Codifies
-   what we already do ad hoc: the SDD ledger (`progress.md`), per-task subagent dispatch with an
-   explicit model per task, TDD where the red run is the plan's detection list executed item by item
-   (write the test, break the listed behaviour, watch red, restore), the per-task review gate, commit
-   discipline. **Companion edit to `/build-plan` (done 2026-08-07):** `Proves` widened from one premise per task
+3. **`/implement-plan` (done 2026-08-07)** — the execution stage, previously the only unnamed step
+   in the sequence and the last superpowers dependency (executing-plans / subagent-driven-development
+   / TDD are generic: they had never heard of `Proves`, red-proof, the SDD ledger or the per-task
+   review gate, and that seam is where PR #217's ~278 unpinned behaviours leaked through despite a
+   filled plan). Shipped at `.agents/skills/implement-plan/`: per-task red-proof records where the
+   red run is the plan's detection list executed item by item; the required `## Issues` ledger
+   section with exactly two dispositions at task time (fixed now / ledgered — Kai's correction:
+   per-task "minor" deferrals were being forgotten by implementation end and expensively re-found at
+   review); a **mandatory closing fix wave** where every ledgered issue reaches fixed / rejected /
+   booked before any review is requested, its disposition table riding into the review handoff;
+   "the instrument prints X" treated as a claim verified only by running the instrument (the PR #217
+   calibration-gate lesson — two "all now printed" gate reads had never been implemented); and
+   strong-tier implementers/reviewers by default (the plan's Interface + detection list make tasks
+   bounded; judgment was spent upstream) with a flagged, ledger-recorded frontier escalation.
+   **Companion edit to `/build-plan` (done 2026-08-07):** `Proves` widened from one premise per task
    to a 3-6 entry detection list (boundaries, contention paths, branch arms, the vacuity check),
-   with a self-review bullet reading each list back against its task's Interface. Behaviours, not
-   test code; the no-code rule holds. The second worked example is the calibration gate on the same PR: the plan asserted
-   its gate reads were "all now printed" while two of them had never been implemented, and nothing caught it
-   until the gate was actually run — so the skill treats "the instrument prints X" as a claim to verify by
-   running the instrument and matching its output against the list, never as a statement the plan may assert.
-   **Write it
-   after PR #217 ships**: the fix-wave agent's report is the design input (what an executor needed
-   spelling out, and the ratio of survivors that exposed wrong behaviour vs merely tightened
-   assertions — the same ratio that decides whether the mutation gate demotes to a periodic audit).
+   with a self-review bullet reading each list back against its task's Interface.
+   **Dogfood: Provision step 1** (the supply-response build plan) — same bar as the other skills:
+   fold frictions back into the skill same-day.
 4. **Carry mechanisms A and B into each skill as it is written**, per the applies-to lines above. Not a
    separate task — a checklist item on items 1-2. The test of whether it worked is the same as for
    `/measure`: dogfood the skill on a real queue item and see whether the mechanism catches something.

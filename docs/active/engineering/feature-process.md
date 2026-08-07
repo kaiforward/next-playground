@@ -17,7 +17,7 @@ brainstorm     → chosen idea + its falsifier   (prose discussion, no forced-ch
 feature spec   → functional spec               (entry condition: evidence exists; hazard worksheet filled)
 /spec-review   → revised spec                  (cross-mechanic surface only; rubric = the design hazards)
 /build-plan    → implementation plan           (files, task order, interfaces — not the code)
-implementation → PR                            (per-task gates below)
+/implement-plan → PR                           (SDD ledger, per-task gates below, closing fix wave)
 /uber-review   → findings on the table         (each phase into shared; doc lifecycle before final review)
 merge                                          (human-gated — everything known goes on the table first)
 ```
