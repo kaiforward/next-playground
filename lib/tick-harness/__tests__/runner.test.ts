@@ -128,6 +128,10 @@ describe("runTickHarness: founding instruments", () => {
     // The event board is read at the tick the shortfall happened: a founder sparing less under an
     // active event is a shortfall the design accepts, and by run end that event is long gone.
     expect(stalls.materialsShort).toBeGreaterThan(0);
+    // Deliberate behaviour anchor, not a structural identity: it needs an event to land on a
+    // founder system inside this run (it does, on this seed), and it is what fails if the event
+    // board stops being read at the shortfall's own tick. If seed or event tuning flips it,
+    // re-anchor the fixture — do not delete the attribution check.
     expect(stalls.materialsShortUnderEvent).toBeGreaterThan(0);
     expect(stalls.materialsShortUnderEvent).toBeLessThanOrEqual(stalls.materialsShort);
   }, 30_000);
@@ -138,8 +142,6 @@ describe("runTickHarness: founding instruments", () => {
     // it — so a non-empty cohort is evidence the manifest stream was read, not merely that colonies
     // were committed.
     expect(results.founderCohort.founder.systemCount).toBeGreaterThan(0);
-    expect(results.founderCohort.founder.systemCount)
-      .toBeLessThanOrEqual(results.founderCohort.other.systemCount + results.founderCohort.founder.systemCount);
     // Every faction-cycle folded into the money bars is a real settlement, not a seeded placeholder.
     expect(results.foundingEra.invalidRows).toBe(0);
   }, 30_000);

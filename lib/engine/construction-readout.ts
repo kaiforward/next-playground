@@ -8,7 +8,7 @@ import type {
   SystemControl, WorldColonyEstablishProject, WorldConstructionProject,
 } from "@/lib/world/types";
 import {
-  factionConstructionPool, forecastEtaCycles, fundQueue, fundQueueWithFloor,
+  factionConstructionPool, forecastEtaCycles, fundCycle,
   type ConstructionPoolRates, type ProjectCap,
 } from "@/lib/engine/construction";
 import {
@@ -163,10 +163,7 @@ export function nextCycleGains(
   cap: number,
   capFor?: ProjectCap,
 ): number[] {
-  const { projects: open, landed } =
-    capFor === undefined
-      ? fundQueue(projects, pool, cap)
-      : fundQueueWithFloor(projects, pool, cap, 0, () => false, capFor);
+  const { projects: open, landed } = fundCycle(projects, pool, cap, capFor);
   // Keyed by project id — unique per queue (minted from the world's nextId counter), so each project
   // reads back its own post-step workDone; a duplicate id would cross-wire two projects' gains.
   const doneById = new Map<string, number>();
@@ -265,10 +262,12 @@ export function foundingCeilings(
  * the world's record that some PAST cycle bought nothing — it resets on a staging draw and nothing
  * else clears it, so a colony that went broke three cycles ago, was refunded, and now merely sits
  * behind higher-ROI builds carries a positive counter for ever (the pool-starvation guard refuses to
- * advance it, but no one retires it). The counter therefore only opens the question; the answer is
- * two LIVE tests against this cycle's share — can the balance pay for what is drawable, and is
- * anything drawable at all. A row that passes both is not waiting on anything, whatever its counter
- * says, and reads null with a finite (possibly distant) ETA.
+ * advance it, but no one retires it). The answer is two LIVE tests against this cycle's share.
+ * The money test — can the balance pay for what is drawable — runs whatever the counter says,
+ * because the ceiling is priced from the same position unconditionally: a colony held at 0 must
+ * carry its reason even at a counter of 0. The counter opens only the informational materials arm.
+ * A row that passes both tests is not waiting on anything, whatever its counter says, and reads
+ * null with a finite (possibly distant) ETA.
  *
  * A counter at the write-off threshold is not a stall either, and reads as the opposite of one: the
  * project has given up the rest of its manifest, so nothing gates its work any more and it runs to
@@ -285,9 +284,13 @@ function colonyStallReason(
   cap: number,
 ): ColonyStallReason | null {
   if (!p.charterPaid && founding.charter > founding.workingBalance) return "awaiting_charter";
-  if (p.stalledCycles <= 0 || p.stalledCycles >= founding.writeOffCycles) return null;
+  if (p.stalledCycles >= founding.writeOffCycles) return null; // written off — runs on work alone
   const position = foundingPosition(p, founding, cap);
+  // The money test runs whatever the counter says: `foundingCeilings` prices this same position
+  // unconditionally, so a colony it holds at 0 (no ETA) must carry the reason from the same
+  // derivation — a counter still at 0 only spares the informational materials arm below.
   if (position.drawableValue > position.balance) return "awaiting_funds";
+  if (p.stalledCycles <= 0) return null;
   if (position.wantValue > 0 && position.drawableValue <= 0) return "awaiting_materials";
   return null;
 }

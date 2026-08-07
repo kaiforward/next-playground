@@ -248,6 +248,49 @@ describe("getSystemConstruction", () => {
     expect(row.nextCycleGain).toBeGreaterThan(0);
   });
 
+  it("reads the source's real buildings and yields into what it can spare — a barren source is not a rich one", () => {
+    // The supply derivation feeds the source's buildings and yield columns into `production`, which
+    // `surplusDrawable` branches on. A reading that stops consulting either prices a barren source
+    // exactly like a rich one — the readout↔tick drift this service exists to prevent. Differential
+    // on purpose: no reserve constant is pinned, only "a richer source reads differently from a
+    // barren one", so economy tuning cannot break it.
+    const stalled = world.constructionProjects.map((p) =>
+      p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
+    );
+    const reading = (over: Partial<World>) => {
+      setWorld({
+        ...world,
+        constructionProjects: stalled,
+        // Stock held between the exporter reserve and the donor margin, so which branch
+        // `surplusDrawable` takes — a production question — decides what is drawable.
+        markets: world.markets.map((m) => (m.systemId === dev.id ? { ...m, stock: 200 } : m)),
+        treasuries: world.treasuries.map((t) =>
+          t.factionId === factionId ? { ...t, balance: 0, pendingFounding: 0 } : t,
+        ),
+        ...over,
+      });
+      const data = getSystemConstruction(ctrlWithColony.id);
+      if (data.visibility !== "visible") throw new Error("expected visible");
+      const row = data.projects[0];
+      if (row.kind !== "colony_establish") throw new Error("expected a colony row");
+      return [row.stalledReason, row.nextCycleGain, row.etaCycles];
+    };
+
+    const rich = reading({});
+    const noYields = reading({
+      systems: world.systems.map((s) =>
+        s.id === dev.id
+          ? { ...s, yieldGas: 0, yieldMinerals: 0, yieldOre: 0, yieldBiomass: 0,
+              yieldArable: 0, yieldWater: 0, yieldRadioactive: 0 }
+          : s,
+      ),
+    });
+    const noBuildings = reading({ buildings: world.buildings.filter((b) => b.systemId !== dev.id) });
+
+    expect(noYields).not.toEqual(rich);
+    expect(noBuildings).not.toEqual(rich);
+  });
+
   it("throws ServiceError(404) naming the id for an unknown system", () => {
     expect(() => getSystemConstruction("nope")).toThrow(ServiceError);
     try {

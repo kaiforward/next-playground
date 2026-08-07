@@ -182,6 +182,14 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 - UI-heavy work gets a collaborative design pass with a browser-viewable HTML prototype Kai approves BEFORE implementation. Breadth-first: rough wireframes to react to, then refine the chosen one.
 - A shared/segmented bar is for two consumers of ONE datapoint, never N differently-scaled series.
 
+**Executing fix batches**
+- **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched
+  Opus agent** — with the standard one-line ask + token estimate — never inline in the main
+  session. Inline is for a single trivial edit only. The main session runs the priciest model and
+  its context belongs to orchestration; "don't block on an ask" is not a reason to skip the ask.
+  The session's job on the result: verify the agent's claims and make the judgement calls it flags
+  (a wrong finding, a fix that would weaken a test).
+
 **Scripts**
 - `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test). One-off diagnostics live in scratch and are never committed.
 

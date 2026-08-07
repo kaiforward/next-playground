@@ -384,6 +384,21 @@ describe("computeFactionConstruction — why a founding is stuck", () => {
     expect(row.etaCycles).not.toBeNull();
   });
 
+  it("gives a money-gated colony its reason even before the counter advances", () => {
+    // The ceiling prices the coming cycle from the live position and never consults the counter —
+    // so a colony whose faction spent the balance since its last successful draw forecasts a
+    // ceiling of 0 (no ETA) this cycle, at a counter of 0. The reason must come from the same live
+    // test the ceiling ran, or the row reads "this will never finish" and "nothing is wrong with
+    // it" at once.
+    const row = readColony(
+      colony({ stalledCycles: 0 }),
+      founded({ workingBalance: 0, supplyBySource: fromSource(supply(1000)) }),
+    );
+    expect(row.stalledReason).toBe("awaiting_funds");
+    expect(row.etaCycles).toBeNull();
+    expect(row.nextCycleGain).toBe(0);
+  });
+
   it("does not call a colony that has written off its manifest stalled", () => {
     // Past the write-off threshold the remainder is given up, the materials ceiling stops binding
     // and the project finishes on construction work alone — while its counter stays latched above

@@ -136,7 +136,7 @@ export type ProjectCap = (p: WorldConstructionProject) => number;
  * `fundQueueWithFloor` does. No floor is reserved: a forecast is a rate estimate, and the reserve is
  * a within-cycle reordering that never changes how much the pool funds in total.
  */
-function fundCycle(
+export function fundCycle(
   projects: WorldConstructionProject[],
   pool: number,
   cap: number,
