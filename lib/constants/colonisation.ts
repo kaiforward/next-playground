@@ -1,6 +1,6 @@
 /**
  * Colonisation-cost tuning — the establish/land/saturation knobs of the pool-funded expansion model
- * (docs/planned/economy-colonisation-cost.md §1–§3). First-cut, coarse values: only the relative shape
+ * (docs/active/gameplay/colonisation.md). First-cut, coarse values: only the relative shape
  * matters here (home-first while there is cheap building; expansion accelerating as habitable territory
  * fills). Magnitudes are calibrated against the simulator. Each is a tunable *input* with a clear
  * meaning — a per-doctrine lookup feeds them later; the valuation formula never changes.

@@ -187,7 +187,7 @@ export interface WorldFoundingStockLine {
 }
 
 /**
- * A queued order to establish a colony at controlled `systemId` (docs/planned/economy-colonisation-cost.md
+ * A queued order to establish a colony at controlled `systemId` (docs/active/gameplay/colonisation.md
  * §1-2). On completion the system flips `developed`, receives the conserved `seedPop` transferred from
  * `sourceSystemId` (capped at apply time by the source's population), and lands `housingLevels` of housing
  * bundled with it — so `popCap ≥ seedPop` on arrival (viable by construction). `seedPop`/`housingLevels`

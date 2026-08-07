@@ -113,8 +113,8 @@ would be the one faction that founds for free. An eligible system shows the verb
 the projection is the uncapped want) that **is** the confirmation surface — no dialog; clicking it orders
 directly. An ineligible controlled system shows the verb disabled with the
 blocking reason, teaching the planner's own rules. The seed-source tie-break (nearest developed
-same-faction system) differs in one respect from the autonomic planner's — see
-[ROADMAP.md](../../ROADMAP.md) for the recorded (accepted) divergence.
+same-faction system) differs in one respect from the autonomic planner's — an accepted divergence,
+recorded where it lives (`lib/services/colony-eligibility.ts`, the tie-break docstring).
 
 ### Cancel
 

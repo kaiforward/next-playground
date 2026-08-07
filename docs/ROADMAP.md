@@ -129,7 +129,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   16–843× per-good spread, and inflating them inflates every pricing band with them.
 - **[L] Goods-pricing revisit** — moved way back from the economy queue by explicit decision
   (2026-08-03): pricing is only worth reworking when demand becomes partly monetary — pop wages
-  and real goods purchase, or inter-faction trade agreements / shared markets. Kai's observation
+  and real goods purchase, or inter-faction trade agreements / shared markets. Also absorbs
+  **separating `surplusDrawable`'s triple duty** (logistics donor cap / build input gate / founding
+  manifest cap — three consumers of one figure, deferred at colonisation-economics). Kai's observation
   (2026-08-05, unmeasured): lots of edge cases with producers/consumers not reading the price based
   on type properly — row 10 routes around live prices because of this; `/measure` it when this row
   comes forward. Carries the former
@@ -222,7 +224,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   (cut), `GOODS.volatility` (still present as unread metadata since the noise path was removed in #170).
 - **[M] Logistics-pillar depth check** — the pillar is still shallow; e.g. penalised cross-unowned-space
   logistics was inherited from a retired umbrella and never built. Its own pass before calling the
-  pillar done. Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
+  pillar done. Includes **hauling founding freight with real ships** — the staged manifest currently
+  teleports source→colony at completion; deferred at colonisation-economics to whenever logistics
+  carries real cargo. Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
   coarse in-fiction valve at most) are preserved in memory `design-logistics-depth-inputs`.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.

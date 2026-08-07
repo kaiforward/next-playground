@@ -580,7 +580,7 @@ export interface ProposalItem {
 }
 
 /**
- * A funding proposal — the unit that carries an ROI (docs/planned/economy-colonisation-cost.md §4).
+ * A funding proposal — the unit that carries an ROI (docs/active/gameplay/colonisation.md).
  * A BuildProposal BUNDLES a production level-set with the academies/complex that GATE it, in `items`
  * held gate-first (complex → schools → institutes → production); a housing proposal is a single
  * housing item. ROI = `value` (served demand-rate the production covers) ÷ `work` (the WHOLE bundle's
@@ -1094,7 +1094,7 @@ export function sizeColonyEstablish(
 
 /**
  * Emit a colony-establish proposal for each controlled candidate above the ROI floor, scored on the same
- * demand-rate axis as a build (docs/planned/economy-colonisation-cost.md §3). Faction-level aggregates
+ * demand-rate axis as a build (docs/active/gameplay/colonisation.md). Faction-level aggregates
  * (territory saturation σ, and the unmet demand each missing resource unblocks) are computed once from the
  * faction's DEVELOPED systems; each candidate is then valued with `colonyValue` and sized to its land —
  * seed capped to the whole-level habitable capacity and housing sized to house it, so the landed colony has

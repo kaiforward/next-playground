@@ -451,7 +451,7 @@ function applyClaims(systems: TickSystem[], claims: SystemClaim[]): TickSystem[]
 /**
  * Apply completed colony establishments: the target flips `developed`, receives the conserved seed
  * population (capped by what its stored source can spare), and lands its bundled housing so `popCap ≥
- * seedPop` on arrival (viable by construction — docs/planned/economy-colonisation-cost.md §2). The `:
+ * seedPop` on arrival (viable by construction — docs/active/gameplay/colonisation.md). The `:
  * TickSystem` annotation narrows the `"developed"` literal. `available` tracks each source's remaining
  * spendable population across the loop so two establishments sharing a source draw from the same
  * (shrinking) balance rather than both reading the original snapshot — otherwise a shared source would

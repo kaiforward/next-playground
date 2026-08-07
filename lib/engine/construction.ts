@@ -268,7 +268,7 @@ function isHousing(p: Proposal): boolean {
 
 /**
  * Order this cycle's new proposals into funding priority (front = funded first) — the reorder of
- * `fundQueue`'s input the value-order model prescribes (docs/planned/economy-colonisation-cost.md §4):
+ * `fundQueue`'s input the value-order model prescribes (docs/active/gameplay/colonisation.md):
  *   1. housing — the proactive population substrate leads (no served-demand ROI of its own);
  *   2. everything else by descending ROI (value ÷ whole-bundle work).
  * Ties break by systemId then first-item type, a total order independent of input order (determinism).
