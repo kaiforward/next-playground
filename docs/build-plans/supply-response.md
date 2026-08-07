@@ -607,13 +607,11 @@ On the branch, before the final review.
   back to the spec, not patched here — B4 cannot be implemented until it is written.
 - **The `needSeverity` reconciliation's effect on the industry input gate.** **Booked at Gate 1**,
   condition 8.
-- **A world-level Provision display** — a percentage and its "weighted by how badly it needs it"
-  tooltip. **Dropped for item 1:** no world-level supply reading reaches the client today. Nothing under
-  `components/`, `lib/services/` or `lib/types/api.ts` reads `SupplyState`, `SupplyRegime` or the fold;
-  the population panel shows stability, the striking flag and the per-good needs ledger only. The spec's
-  tooltip sentence is a constraint on a display that does not exist, and adding one is UI work AGENTS.md
-  gates behind a design pass with an approved prototype. The constraint is carried into the promoted doc
-  so any future display inherits it rather than losing it.
+- **A world-level Provision display** — population-tab row, vital tile and map value mode. **Booked:**
+  its own roadmap row under UI, gated on this item shipping and on the design pass (three surfaces, one
+  a map mode). No world-level supply reading reaches the client today — nothing under `components/`,
+  `lib/services/` or `lib/types/api.ts` reads `SupplyState`, `SupplyRegime` or the fold — so item 1
+  ships no player-visible score; the spec's tooltip wording rides in the roadmap row.
 - **`strikeExplains` itself, and `STRIKE_PARAMS.threshold` / `INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold`.**
   **Dropped:** the spec states they are not re-cut — unrest stays a [0,1] state and only how many worlds
   reach the thresholds moves, which is the slopes' job.

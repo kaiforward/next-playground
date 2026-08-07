@@ -166,6 +166,14 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   correctness; worth one shared staffing-estimate helper.
 
 **UI**
+- **[M] Provision display — population-tab row + Provision vital tile + map value mode.** Surfaces
+  the Provision score (supply-response item 1) to the player: a row + band badge on the Population
+  tab, a vitals-grid tile, and a Provision choropleth alongside the existing stability/population/
+  development map modes. Gated on supply-response item 1 shipping (the score must exist). Needs the
+  collaborative design pass + HTML prototype first (three surfaces, one of them a map mode). The
+  tooltip must carry the spec's wording — "weighted by how badly it needs it" — the bare percentage
+  invites the misreading the spec warns about; deliberately decided as a follow-up rather than part
+  of item 1.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a
