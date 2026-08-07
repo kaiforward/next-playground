@@ -25,43 +25,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
-  *Next step:* the economy queue below, then Provision, then PR6.
-
----
-
-## Queued — economy
-
-Ordered. These gate PR6: its presentation layer must sit on an economy that is settled, or the
-numbers it presents are re-tuned underneath it. (Items 1 and 5 — the `surplusDrawable` donor side,
-#212, and the `TARGET_COVER` role split — shipped; rows keep their numbers when one ships, so
-references stay stable. The honest-demand-and-flow arc — the two demand figures, multi-donor
-matching, and the brake off the price anchor — shipped on the branch; no physical mechanism reads
-the price anchor any more.)
-
-10. **[L] Colonisation economics — founding stops being free.** Aim (settled 2026-08-05, Kai):
-    colonisation becomes a priced strategic decision competing for the same treasury and goods as
-    everything else, with pacing emerging from the cost rather than an authored rate — costs derived
-    from physical quantities (manifest valued at base/reference prices — NOT live market prices,
-    which misbehave today; establish work at real rates; a charter fee scaled to cycle spend) so
-    later drains (priced logistics, military, industry pricing) rescale
-    them for free. Absorbs the **remove-everything-free audit** — the 12-flow enumeration is done
-    (zero flows carry a per-colony price). The parked "colony seed size vs housing unit" item parked
-    *because* it changes founding pacing — it may un-park here, deliberately.
-    Sits before Provision by explicit ordering decision (2026-08-03): Provision's struck-world
-    resolution and band calibration would otherwise be tuned against a galaxy of cheap colonies
-    this row then removes.
-    Baseline measured (2026-08-05): [colonisation-economics.md](./build-plans/colonisation-economics.md)
-    — no monetary cost exists anywhere on the founding path; founding-era treasuries hold ~9.4 cycles
-    of spend (~600/cycle per faction — the bite anchor); founding is a startup burst (57.7% by
-    t=1,000, done by t≈3,700, zero after); the founder's goods cost is transient. The old
-    leech-colony motivation is falsified (chronic struck share ~3%, not >25%) — do not cite it.
-    Spec written and `/spec-review`ed (2026-08-05, all 25 findings accepted + applied, `d70d1cd6`):
-    [colonisation-economics spec](./planned/colonisation-economics.md).
-    Build plan written (2026-08-06): 14 tasks in three phases + a calibration gate, in the working
-    file. *Next step:* implement Phase A (Tasks 1-5 — the priced quantities and the save shape).
-    *Don't:* precision-tune anything Provision will re-define (its own Don't), and don't quote the
-    old `founderCoverAfter` unit against the redefined one — the spec's harness row restarts that
-    baseline.
+  *Next step:* Provision (item 6), then PR6.
 
 ---
 
@@ -263,6 +227,7 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[S] Colony seed size scaled against the housing unit** — a 2-pop seed against a 20-pop housing level
   means no colony can open looking anything but empty. Variant on record: send what the founder can spare,
   up to a whole level. Changes colonisation pacing and the AI founding policy, which is why it parked.
+  Eligible to un-park now founding is priced — pacing changes land on a costed mechanic, not a free one.
 - **[S] Luxuries weighted higher for engineers** — Kai's point is that engineers should be *more* annoyed
   when luxuries are missing. The engineer basket already carries luxuries at 50× the per-capita rate;
   whether that is enough is demand tuning. Revisit once the galaxy isn't starving.
