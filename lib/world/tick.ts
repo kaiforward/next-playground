@@ -920,6 +920,8 @@ export async function runWorldTick(
   let foundingStalls: TickInstrumentation["foundingStalls"];
   // Calibration-only: directed-logistics' per-faction haul-budget ledger. Same reason.
   let logisticsBudget: TickInstrumentation["logisticsBudget"];
+  // Calibration-only: directed-build's per-cycle strikeExplains-suppressed proposal resolution. Same reason.
+  let strikeSuppressedProposals: TickInstrumentation["strikeSuppressedProposals"];
   const migrationResolves = isCycleStart(tick, cadence.cycle);
   const logisticsResolves = isCycleStart(tick, cadence.logistics);
   const buildResolves = isCycleStart(tick, cadence.construction);
@@ -1181,6 +1183,7 @@ export async function runWorldTick(
       buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
       foundingManifests = dbResult.foundingManifests;
       foundingStalls = dbResult.foundingStalls;
+      strikeSuppressedProposals = dbResult.strikeSuppressedProposals;
       processorsRun.push("directed-build");
     }
 
@@ -1338,6 +1341,7 @@ export async function runWorldTick(
     markets,
     instrumentation: {
       buildCommitmentsByGood, migrationMoved, foundingManifests, foundingStalls, logisticsBudget,
+      strikeSuppressedProposals,
     },
   };
 }

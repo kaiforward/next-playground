@@ -134,12 +134,33 @@ export interface WorldCohortEntry {
   cohort: WorldCohort;
   /** Settled systems in this cohort — this row's own denominator. */
   n: number;
-  meanDissatisfaction: number;
+  /** Mean shortfall (1 − Provision, dissatisfaction()'s linear scale) over the cohort's systems. */
+  meanShortfall: number;
   meanUnrest: number;
   strikingShare: number;
   suppliedShare: number;
+  strainedShare: number;
   rationingShare: number;
   shortageShare: number;
+  /** Mean provision() over the cohort's systems. */
+  meanProvision: number;
+  /** Median of each system's single worst-demanded-good satisfaction (1 for a system with no
+   *  demanded goods) — the quantile a mean would flatten out of a bimodal cohort. */
+  worstGoodMedian: number;
+  /**
+   * (end population − start population) / start population, summed over the cohort before
+   * dividing (never averaged per system) so a system absent from the tick-0 population reading —
+   * a colony founded during the run — contributes its whole end population to the numerator
+   * instead of an individual divide-by-zero. Membership is END-of-run: a system is scored in the
+   * cohort it FINISHED in, not the one (if any) it started in, so a cohort's growth includes
+   * colonies founded into it mid-run and excludes ones it grew out of by crossing a population
+   * band. Net growth moves with the crowd brake, migration and founding rate, not only the growth
+   * factor — read this alongside those, never as a clean read on the growth factor alone. 0 when
+   * the cohort's own start-population sum is 0 (matches `growthPct`'s zero-start convention). Null
+   * when the run took no tick-0 population reading at all (`startPopulationBySystem` empty) —
+   * unmeasured, not a lying 0.
+   */
+  netGrowthPct: number | null;
 }
 
 export interface MarketHealthSummary {
@@ -299,6 +320,25 @@ export interface MigrationThroughputSummary {
   meanPerCycle: number;
 }
 
+// ── Strike suppression ───────────────────────────────────────────
+
+/**
+ * Whole-run directed-build proposals `strikeExplains` suppressed, resolved per (system, good) pair
+ * over every cycle's assessment. `eligible` is every pair a strike could ever silence (capacity in
+ * the good); `suppressed` is the subset where it did. Read `ratePerEligible`, never the raw counts —
+ * the raw count grows with the galaxy (hazard-6: 582 settled systems at equilibrium against 253 at
+ * startup), so only the rate is comparable across horizons or arms.
+ */
+export interface StrikeSuppressionSummary {
+  /** (system, good) pairs across the run with capacity in the good — the pool a strike can silence. */
+  eligible: number;
+  /** The subset of `eligible` where `strikeExplains` actually silenced the feedback-gap term. */
+  suppressed: number;
+  /** suppressed / eligible; 0 when eligible is 0 (never NaN) — a run with no construction cycle due,
+   *  or a galaxy with no capacity anywhere, reads a zero denominator rather than dividing by it. */
+  ratePerEligible: number;
+}
+
 // ── Colony founding stock ───────────────────────────────────────
 
 /**
@@ -316,10 +356,22 @@ export interface FoundingStockSummary {
    *  what the colony actually needs of it, so no water weighs far heavier than no reactor cores.
    *  Should sit near 1; near 0 is a colony arriving genuinely unprovisioned. */
   meanOpeningSatisfaction: number;
-  /** Mean, over sampled colonies, of the convex `dissatisfaction` fold the unrest engine itself
-   *  reads. Reported alongside the weighted mean so the instrument and the simulation cannot drift
-   *  into disagreeing about whether a colony opened deprived. */
-  meanOpeningDissatisfaction: number;
+  /** Mean, over sampled colonies, of the `dissatisfaction` fold (1 − Provision, linear scale) the
+   *  unrest engine itself reads. Reported alongside the weighted mean so the instrument and the
+   *  simulation cannot drift into disagreeing about whether a colony opened deprived. */
+  meanOpeningShortfall: number;
+  /** Mean, over sampled colonies, of `provision()` (necessity-and-demand-weighted mean satisfaction)
+   *  at the same cycle and over the same basket as `meanOpeningSatisfaction` — a good's weight is
+   *  demand × necessity here, demand alone there, so the two read apart whenever a colony's worst
+   *  shortage and its most-needed good disagree. This is THE MEASURED founding Provision the founding
+   *  invariant's shortfall term is written against. Null when no colony was ever founded or none
+   *  reached a first assessment — a mean of nothing must not print as "opened at 0% Provision". */
+  meanOpeningProvision: number | null;
+  /** The 10th percentile of the same per-colony Provision readings behind `meanOpeningProvision`.
+   *  Reported alongside the mean because the founding invariant does not say whether "the measured
+   *  founding Provision" means the cohort's average or its worst decile — both exist so that choice
+   *  can be made from real numbers. Null under the same rule as the mean. */
+  p10OpeningProvision: number | null;
   /** Sampled colonies that opened below half satisfaction. Should read ~0. */
   openingDeprivedCount: number;
   /** Mean tonnage staged per colony founded — what founding costs a founder in goods. The
@@ -409,6 +461,8 @@ export interface HarnessResults {
   populationSnapshots: Array<Map<string, number>>;
   /** Whole-run migration throughput — conserved people-moved totals, colonist delivery vs edge diffusion. */
   migrationThroughput: MigrationThroughputSummary;
+  /** Whole-run directed-build proposals `strikeExplains` suppressed, per eligible (system, good) pair. */
+  strikeSuppression: StrikeSuppressionSummary;
   /** How well provisioned colonies founded during the run were at their first assessed cycle. */
   foundingStock: FoundingStockSummary;
   /** How long foundings took, how many ran at once, and what held them up — the reading that tells a

@@ -245,7 +245,7 @@ export async function runEconomyProcessor(
     const goods = goodsBySystem.get(sysId) ?? [];
     const d = dissatisfaction(goods);
     dissatisfactionBySystem.set(sysId, d);
-    supplyStateBySystem.set(sysId, foldSupplyState(goods, d));
+    supplyStateBySystem.set(sysId, foldSupplyState(goods));
   }
   const economySignals: EconomySignals = {
     dissatisfactionBySystem,

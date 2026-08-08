@@ -407,6 +407,12 @@ export async function runDirectedBuildProcessor(
   // excludes them without a separate kind check. Never fed into `TickBroadcastRaw`/SSE/world — the
   // calibration harness (`runWorldTick().instrumentation`) is its only reader.
   const buildCommitmentsByGood = new Map<string, number>();
+  // Calibration instrumentation: proposals `strikeExplains` suppressed this cycle, resolved per
+  // (system, good) pair and summed across every due faction's assessment — the planner's second exit
+  // (the feedback-gap channel) narrows by however much this rate moves. Never fed into
+  // `TickBroadcastRaw`/SSE/world — `runWorldTick().instrumentation` is its only reader.
+  let strikeSuppressed = 0;
+  let strikeEligible = 0;
 
   for (const [factionId, group] of byFaction) {
     // The faction's per-cycle pool: eligible heads + centre output over developed systems
@@ -450,6 +456,8 @@ export async function runDirectedBuildProcessor(
     for (const u of buildPlan.persistenceUpdates) {
       proposalPersistence.push({ id: `${u.systemId}|${u.goodId}`, proposalCycles: u.proposalCycles });
     }
+    strikeSuppressed += buildPlan.strikeSuppressedProposals.suppressed;
+    strikeEligible += buildPlan.strikeSuppressedProposals.eligible;
     const buildProposals = skipBuild ? [] : buildPlan.proposals;
 
     // Colony-establish proposals compete with builds on the same pool. Only faction-owned systems can
@@ -754,5 +762,6 @@ export async function runDirectedBuildProcessor(
   return {
     workPerformedByFaction, foundingDebitsByFaction, buildCommitmentsByGood,
     foundingManifests, foundingStalls,
+    strikeSuppressedProposals: { suppressed: strikeSuppressed, eligible: strikeEligible },
   };
 }

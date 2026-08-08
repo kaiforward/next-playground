@@ -870,7 +870,8 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
 
   const supplyByGood = new Map(supplyChain.map((s) => [s.goodId, s]));
   const popNeedByGood = new Map(popNeeds.map((n) => [n.goodId, n]));
-  // Already pressure-sorted (computePopNeeds), so unmet[0]/[1] are the two highest-pressure shortages.
+  // Already pressure-sorted (computePopNeeds) on the linear necessity-weighted share × gap — not the
+  // deepest gaps — so unmet[0]/[1] are the two highest-pressure shortages.
   const unmet = popNeeds.filter((n) => needSeverity(n.satisfaction) !== "met");
   const depRows = depositRows(deposits, extractors, unrest, THRESHOLD);
   const contributorsFor = (resource: DepositRow["resource"]) =>

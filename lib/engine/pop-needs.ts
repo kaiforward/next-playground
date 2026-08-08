@@ -6,9 +6,10 @@
  * boundary bias is gone. The stored measure is taken against total civilian
  * demand; rationing is pro-rata, so the delivered fraction is identical for
  * every civilian drawer.
- * Pressure mirrors the necessity-weighted share × gap² shape of the `dissatisfaction()` sum, weighted
- * by unfloored civilian want × GOOD_NECESSITY (the cycle's own shares fold in demand floors and
- * modifiers, so magnitudes can differ slightly). Pure — callers pass market rows and a demand basis.
+ * Pressure mirrors the necessity-weighted share × gap shape of the `dissatisfaction()` sum — one
+ * implementation each, in lockstep, so the two cannot drift apart — weighted by unfloored civilian
+ * want × GOOD_NECESSITY (the cycle's own shares fold in demand floors and modifiers, so magnitudes
+ * can differ slightly). Pure — callers pass market rows and a demand basis.
  */
 import { consumptionBreakdown, consumptionRate, type CivilianDemandBasis, type ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_NECESSITY, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
@@ -22,7 +23,7 @@ export interface PopNeed {
   satisfaction: number;
   /** want × satisfaction. */
   delivered: number;
-  /** necessityWeightedShare × (1 − satisfaction)² — this good's term in the system's dissatisfaction sum. */
+  /** necessityWeightedShare × (1 − satisfaction) — this good's term in the system's dissatisfaction sum. */
   pressure: number;
   breakdown: ConsumptionBreakdown;
 }
@@ -68,7 +69,7 @@ export function computePopNeeds(basis: CivilianDemandBasis, markets: PopNeedsMar
         want,
         satisfaction,
         delivered: want * satisfaction,
-        pressure: totalWeight > 0 ? (weight / totalWeight) * gap * gap : 0,
+        pressure: totalWeight > 0 ? (weight / totalWeight) * gap : 0,
         breakdown: consumptionBreakdown(goodId, basis),
       };
     })

@@ -1,9 +1,20 @@
 /** Shared needs view-model — severity thresholds, glyphs, ledger split. No DOM, no React. */
+import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+
 export type NeedSeverity = "met" | "short" | "critical";
 
+/**
+ * Satisfaction at or above which a single need reads "met" — answers "is this particular good fully
+ * served", a per-good attention line. Deliberately NOT the same line as the system band's Supplied
+ * edge (a separate constant, near 0.90), which answers "is anything wrong here" as a world mean: the
+ * two disagree on ~6 of 582 worlds on cliff data, and that disagreement is correct — a good can read
+ * short without moving the world mean, and vice versa. Never import the band edges here.
+ */
+export const NEED_MET_SATISFACTION = 0.95;
+
 export function needSeverity(satisfaction: number): NeedSeverity {
-  if (satisfaction >= 0.95) return "met";
-  if (satisfaction >= 0.5) return "short";
+  if (satisfaction >= NEED_MET_SATISFACTION) return "met";
+  if (satisfaction >= SHORTAGE_SATISFACTION) return "short";
   return "critical";
 }
 

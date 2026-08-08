@@ -10,10 +10,10 @@ import type {
 } from "@/lib/tick/world/population-world";
 
 /**
- * Pure processor body. Reads the per-system dissatisfaction D and supply regime the
+ * Pure processor body. Reads the per-system dissatisfaction D and supply state the
  * economy processor recorded this tick (via ctx.results), relaxes unrest toward its
- * standing-pressure floor while integrating D at the regime's rate, applies crowd-braked
- * growth/decline, and rewrites demandRate for the new population. Scoped to the
+ * standing-pressure floor at the single relaxation rate while integrating D, applies
+ * crowd-braked growth/decline, and rewrites demandRate for the new population. Scoped to the
  * economy's shard (D's key set), so per-tick work is bounded and the satisfaction
  * signal is fresh.
  */
@@ -29,14 +29,13 @@ export async function runPopulationProcessor(
   const states = await world.getPopulationState(systemIds);
 
   // Rates are reference-denominated; one run applies catchUpFactor(interval) reference-cycles of
-  // change. Only the relaxation rates rescale the time step — the slopes are dimensionless exchange rates
-  // on the equilibrium, and the gain is derived from the (scaled, clamped) rate inside
+  // change. Only the relaxation rate rescales the time step — the slopes are dimensionless exchange
+  // rates on the equilibrium, and the gain is derived from the (scaled, clamped) rate inside
   // accumulateUnrest, so equilibrium is catch-up invariant by construction.
   const catchUp = catchUpFactor(params.interval);
   const scaledUnrest: UnrestParams = {
     ...params.unrest,
     decay: params.unrest.decay * catchUp,
-    recoveryDecay: params.unrest.recoveryDecay * catchUp,
   };
 
   const popUpdates: PopulationUpdate[] = [];
@@ -44,7 +43,7 @@ export async function runPopulationProcessor(
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
     const supply = signals.supplyStateBySystem.get(s.systemId)
-      ?? { regime: "supplied", survivalShortfall: false };
+      ?? { regime: "supplied", survivalShortfall: false, criticalWeight: 0 };
     // Standing pressure: what a system settles at with nothing going wrong. Tax raises
     // unrest, not hunger, and overcrowding adds a bounded share on top — so both hold
     // unrest up rather than being shed like a supply shock, while the growth/decline

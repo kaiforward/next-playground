@@ -52,7 +52,7 @@ is what makes it move.
 
 ```
                         ┌─────────────── existing (unchanged) ───────────────┐
- food/water shortage ─► dissatisfaction D ─► unrest (integral) ─► death (sink) │
+ food/water shortage ─► shortfall(1−Prov) ─► unrest (integral) ─► death (sink) │
                         └──────────────────────────────┬──────────────────────┘
                                                         │
    built count ──┐                                      │ unrest

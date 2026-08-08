@@ -50,10 +50,11 @@ export interface TickContext {
  * Not broadcast, not persisted.
  */
 export interface EconomySignals {
-  /** Per-system convex necessity-weighted dissatisfaction D ∈ [0,1], for systems processed this tick. */
+  /** Per-system necessity-weighted dissatisfaction D ∈ [0,1] — 1 minus Provision — for systems processed this tick. */
   dissatisfactionBySystem: Map<string, number>;
-  /** Per-system supplied/rationing/shortage reading of this cycle's consumption satisfaction, with
-   *  the survival-good shortfall bit the unrest slope reads. */
+  /** Per-system Supplied/Strained/Rationing/Shortage reading of this cycle's consumption
+   *  satisfaction, with the survival-good shortfall bit and the critical-good override weight the
+   *  unrest slope reads. */
   supplyStateBySystem: Map<string, SupplyState>;
   /**
    * Per-system, per-produced-good isolated selling factor ∈ [0,1] (1 = selling
@@ -108,6 +109,13 @@ export interface TickProcessorResult {
    *  ledgered, matching `workPerformedByFaction`. Calibration instrumentation — surfaced via
    *  `runWorldTick().instrumentation`, never broadcast or persisted. */
   logisticsBudget?: Map<string, LogisticsBudgetLedger>;
+  /** Directed-build proposals `strikeExplains` suppressed this cycle (directed-build), resolved per
+   *  (system, good) pair and summed across every due faction: `eligible` is every pair with capacity
+   *  in the good — the pairs a strike can silence at all — and `suppressed` is the subset where it
+   *  did. Meant to be read as a rate over `eligible`, never as the raw count (it grows with the
+   *  galaxy). Calibration instrumentation only — surfaced via `runWorldTick().instrumentation`, never
+   *  broadcast or persisted. */
+  strikeSuppressedProposals?: { suppressed: number; eligible: number };
 }
 
 /**
@@ -193,6 +201,7 @@ export type TickInstrumentation = Pick<
   | "foundingManifests"
   | "foundingStalls"
   | "logisticsBudget"
+  | "strikeSuppressedProposals"
 >;
 
 /** The full payload one tick's run hands to the broadcast layer. */

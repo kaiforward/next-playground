@@ -217,14 +217,28 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 
 Each system has a **`population`** (a Float magnitude) that is now dynamic — it grows, declines, and migrates. Population drives the system-wide `labourFulfillment` ratio (labour pool for the seeded industrial base) and consumption demand (`perCapitaNeed × population`). As population moves, the stored `demandRate` per market is rewritten each tick to reflect the new level.
 
-**Unrest (`unrest`, 0…1)** accumulates from unmet need. Each economy tick the processor records per-good satisfaction (`delivered / demanded`) for each system it processes. The population processor then computes a convex, demand-weighted dissatisfaction value `D` — where a deep food shortage dominates many shallow ones because food's demand weight is ~8× a luxury's — and integrates it:
+**Unrest (`unrest`, 0…1)** accumulates from unmet need. Each economy tick the processor records per-good satisfaction (`delivered / demanded`) for each system it processes. The population processor folds these into **Provision** — the necessity-and-demand-weighted mean satisfaction, each demanded good weighted by its demand share × its authored necessity (`GOOD_NECESSITY`, the suffering weight). Provision reads as *"the share of what this world needs, weighted by how badly it needs it"* — never "the share of its goods that arrived": a world receiving no war matériel and no luxuries still reads ≈ 0.97, because those carry almost no suffering weight. The unrest integral consumes the **shortfall** (`1 − Provision`):
 
 ```
-D       = Σ_g  demandShare_g · (1 − satisfaction_g)²
-unrest ← clamp(unrest + k·D − decay·unrest, 0, 1)
+Provision = Σ_g weight_g · satisfaction_g / Σ_g weight_g     where weight_g = demandShare_g · necessity_g
+unrest   ← clamp(floor + (1 − decay)·(unrest − floor) + slope(shortfall)·decay·shortfall, 0, 1)
 ```
 
-Chronic unmet demand climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; sustained shortage crosses the thresholds.
+`floor` is the standing pressure every settled world carries regardless of supply (tax level + crowding, up to ~0.23). Relaxation is a single rate (`decay`) whatever the world's state, and because the gain is scaled by the same `decay`, the fixed point is `min(1, floor + slope × shortfall)` **independent of the relaxation rate** — the rate sets only how fast unrest travels there. The slope ramps from `slopeRationing` to `slopeShortage` across deep shortfalls, and severity lives in two explicit overrides rather than in the curve's shape — the two cases where a single good must matter despite a healthy average:
+
+- **Survival floor** — water or food below `SHORTAGE_SATISFACTION` (50%) promotes the slope to `slopeShortage` outright and bands the world Shortage, whatever the average says. Famine is never averaged away.
+- **Critical-good override** — each demanded good below `CRITICAL_SATISFACTION` (0.25, a separate line from the famine one) holding at least `BAND_MIN_DEMAND_SHARE` (1%) of the basket adds its `necessity × demandShare` weight to the slope (scaled by `slopeShortage − slopeRationing`, capped at `slopeShortage`). Slope-only: it never moves the band, and a world that also has famine fires the survival step alone.
+
+The **band is description, not mechanism** — four labels binned from Provision, read by the sim harness today (the player-facing Provision surface is a separately booked roadmap row):
+
+| Band | Rule |
+| --- | --- |
+| **Supplied** | Provision ≥ `SUPPLIED_PROVISION` (0.90) |
+| **Strained** | Provision in [`RATIONING_PROVISION`, `SUPPLIED_PROVISION`) |
+| **Rationing** | Provision < `RATIONING_PROVISION` (0.70) |
+| **Shortage** | a *survival* good below 50%, whatever Provision says |
+
+No gameplay effect keys off the band — effects read Provision or the shortfall, so the label can never disagree with what is happening to the world, and the bin edges are a legibility choice rather than a balance risk. The containment guarantee is proved from the constants (`lib/constants/__tests__/band-constants.test.ts`): a world without famine banded Supplied or Strained cannot reach the 0.75 infrastructure-collapse line at any tax, crowding or override composition; collapse first becomes possible inside Rationing. Chronic unmet demand climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; sustained shortage crosses the thresholds.
 
 **Strikes** are derived each tick from `unrest` (no separate stored flag): above the strike threshold, a smooth suppression multiplier scales down production output only. People still consume — consumption is never suppressed. The strike state feeds back into the next economy tick's production.
 

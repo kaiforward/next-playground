@@ -1,8 +1,12 @@
 import type { TickSystem } from "@/lib/tick/rows";
-import { crowdFactor, dissatisfaction, foldSupplyState, type SupplyRegime } from "@/lib/engine/population";
+import {
+  crowdFactor, dissatisfaction, foldSupplyState, provision, worstDemandedGoods,
+  type DemandedGoodReading, type SupplyRegime,
+} from "@/lib/engine/population";
 import { goodSatisfactionsBySystem } from "@/lib/tick-harness/good-satisfaction";
 import { aggregateModifiers, buildModifiersForPhase, type ModifierRow } from "@/lib/engine/events";
 import { EVENT_DEFINITIONS, MODIFIER_CAPS } from "@/lib/constants/events";
+import { median, quantile } from "@/lib/utils/math";
 import type { WorldEvent, WorldMarket } from "@/lib/world/types";
 
 export interface InfrastructureSummary {
@@ -231,28 +235,71 @@ function consumptionMultBySystem(
  * the day one is added — and rebuilding it from the persisted events, rather than storing it, is
  * what keeps the two from drifting.
  */
+/** One distribution's median, 10th and 90th percentile — the shape a quantile read needs to show a
+ *  bimodal population apart from a uniform one, which a mean alone cannot. */
+export interface QuantileLevels {
+  median: number;
+  p10: number;
+  p90: number;
+}
+
+function quantileLevels(xs: number[]): QuantileLevels {
+  return { median: median(xs), p10: quantile(xs, 0.1), p90: quantile(xs, 0.9) };
+}
+
 export interface SupplyRegimeSummary {
   counted: number;
   supplied: number;
+  strained: number;
   rationing: number;
   shortage: number;
   suppliedShare: number;
+  strainedShare: number;
   rationingShare: number;
   shortageShare: number;
-  /** Mean D over counted systems — the magnitude behind the labels. */
-  meanDissatisfaction: number;
+  /** Mean shortfall (1 − Provision, dissatisfaction()'s linear scale) over counted systems — the
+   *  magnitude behind the labels. */
+  meanShortfall: number;
+  /** Distribution of per-system Provision (provision()) over counted systems. */
+  provisionLevels: QuantileLevels;
+  /** Distribution of each system's single worst-demanded-good satisfaction (worstGoods[0],
+   *  or 1 for a system with no demanded goods) over counted systems. */
+  worstGoodLevels: QuantileLevels;
 }
 
-/** One settled system's supply reading — the magnitude and the label it folds to. */
+/** Depth of the worst-good tail carried per system. Instrument-local — no gameplay code reads this
+ *  constant or the `worstGoods` list it sizes. It exists so Gate 1 can re-slice the demand-share
+ *  floor and the necessity-floor variant from readings already captured in one run, rather than
+ *  re-running the simulation once per candidate value. 10 of a populated world's ~26 demanded goods
+ *  is deep enough to carry the low-demand-share tail those two floors are chosen from. */
+const WORST_GOOD_TAIL_DEPTH = 10;
+
+/** One settled system's supply reading — the magnitude and the label it folds to, plus the
+ *  Provision-scale readings (provision(), worstDemandedGoods()) the same basket folds to. */
 export interface SystemSupplyState {
   d: number;
   regime: SupplyRegime;
+  /** provision() over the same goods basket — the necessity-and-demand-weighted mean, not the fold. */
+  provision: number;
+  /** worstDemandedGoods() over the same basket, ascending, at most WORST_GOOD_TAIL_DEPTH entries.
+   *  Instrument-local: see WORST_GOOD_TAIL_DEPTH. */
+  worstGoods: DemandedGoodReading[];
+}
+
+/** A system's single worst-demanded-good satisfaction — worstGoods[0], or 1 (no shortfall) when the
+ *  basket demands nothing. Shared by the galaxy-wide and cohorted folds so neither can read the
+ *  empty-basket convention differently — the same "counted, not dropped" argument Provision's own
+ *  empty-basket 1 makes. */
+export function worstGoodSatisfaction(state: SystemSupplyState): number {
+  return state.worstGoods[0]?.satisfaction ?? 1;
 }
 
 /**
- * Per-system dissatisfaction and regime at the end of the run, keyed by system id. The
+ * Per-system dissatisfaction, regime and Provision at the end of the run, keyed by system id. The
  * galaxy-wide summary folds this same map, so a cohorted regime split and the galaxy-wide
- * one cannot drift apart. Settled systems only: an unclaimed rock has no market and no opinion.
+ * one cannot drift apart. Settled systems only: an unclaimed rock has no market and no opinion. A
+ * settled system with no market rows folds an empty goods basket, which reads Provision 1 and D 0 —
+ * it is counted, not dropped, so every share and distribution denominator matches the settled set.
  */
 export function perSystemSupplyState(
   systems: TickSystem[],
@@ -271,7 +318,12 @@ export function perSystemSupplyState(
   for (const systemId of settled.keys()) {
     const goods = goodsBySystem.get(systemId) ?? [];
     const d = dissatisfaction(goods);
-    states.set(systemId, { d, regime: foldSupplyState(goods, d).regime });
+    states.set(systemId, {
+      d,
+      regime: foldSupplyState(goods).regime,
+      provision: provision(goods),
+      worstGoods: worstDemandedGoods(goods, WORST_GOOD_TAIL_DEPTH),
+    });
   }
   return states;
 }
@@ -283,20 +335,36 @@ export function summarizeSupplyRegimes(
 ): SupplyRegimeSummary {
   const states = perSystemSupplyState(systems, markets, events);
 
-  let supplied = 0, rationing = 0, shortage = 0, dSum = 0;
-  for (const { d, regime } of states.values()) {
-    dSum += d;
-    if (regime === "supplied") supplied++;
-    else if (regime === "rationing") rationing++;
-    else shortage++;
+  let supplied = 0, strained = 0, rationing = 0, shortage = 0, shortfallSum = 0;
+  const provisions: number[] = [];
+  const worstGoodSats: number[] = [];
+  for (const state of states.values()) {
+    shortfallSum += state.d;
+    provisions.push(state.provision);
+    worstGoodSats.push(worstGoodSatisfaction(state));
+    // Exhaustive over the four members — a fifth regime added to the union fails to compile here
+    // instead of silently folding into Shortage, the very defect this widening exists to close.
+    switch (state.regime) {
+      case "supplied": supplied++; break;
+      case "strained": strained++; break;
+      case "rationing": rationing++; break;
+      case "shortage": shortage++; break;
+      default: {
+        const exhaustive: never = state.regime;
+        throw new Error(`unhandled supply regime: ${exhaustive}`);
+      }
+    }
   }
   const counted = states.size;
   const share = (n: number) => (counted > 0 ? n / counted : 0);
   return {
-    counted, supplied, rationing, shortage,
+    counted, supplied, strained, rationing, shortage,
     suppliedShare: share(supplied),
+    strainedShare: share(strained),
     rationingShare: share(rationing),
     shortageShare: share(shortage),
-    meanDissatisfaction: counted > 0 ? dSum / counted : 0,
+    meanShortfall: counted > 0 ? shortfallSum / counted : 0,
+    provisionLevels: quantileLevels(provisions),
+    worstGoodLevels: quantileLevels(worstGoodSats),
   };
 }

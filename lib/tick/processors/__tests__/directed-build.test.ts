@@ -1092,6 +1092,49 @@ describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommit
   });
 });
 
+describe("runDirectedBuildProcessor — strike-suppression instrumentation (strikeSuppressedProposals)", () => {
+  // A developed self-supplier whose buildings already cover demand (no capacity gap), so the ONLY
+  // thing `strikeExplains` can silence is the squeeze-feedback term — mirrors the persistence
+  // suite's `rationedSelfSupplier` fixture (capacity > 0 by construction: `buildings.food`).
+  const strikingProducer = (productionSuppressed: boolean): SystemBuildRow => ({
+    systemId: "S", factionId: "f1", control: "developed", population: 20,
+    buildings: { food: 10 }, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
+    markets: [{
+      id: "S|food", goodId: "food", stock: 50, anchorMult: 1, demandRate: 10, storageCapacity: 0,
+      squeezeCycles: 2, satisfaction: 0, realizedProductionRate: 0, proposalCycles: 1, productionSuppressed,
+    }],
+  });
+
+  // A developed system with no BUILT capacity in the good at all (`buildings: {}`) but land to build
+  // its own — the capacity-gap term is unconditional (engine `:314-318`), so this pair's deficit is
+  // proposed regardless of the strike, unlike the feedback-gap term `strikingProducer` isolates.
+  const strikingNoCapacity: SystemBuildRow = {
+    systemId: "N", factionId: "f1", control: "developed", population: 100,
+    buildings: {}, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
+    markets: [{ ...foodMarket("N", 1, 1), productionSuppressed: true }],
+  };
+
+  it("a striking system with capacity increments both counters; one with none is excluded from both", async () => {
+    const w = new MemoryDirectedBuildWorld([strikingProducer(true), strikingNoCapacity]);
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    // Sanity: N's capacity-gap deficit still fires despite the strike — nothing was suppressed there.
+    expect(w.constructionProjects.some((p) => p.kind === "build" && p.systemId === "N" && p.buildingType === "food")).toBe(true);
+    expect(result.strikeSuppressedProposals).toEqual({ suppressed: 1, eligible: 1 });
+  });
+
+  it("a calm system increments eligible only, so the rate is 0 rather than undefined on a healthy galaxy", async () => {
+    const w = new MemoryDirectedBuildWorld([strikingProducer(false)]);
+    const result = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(result.strikeSuppressedProposals).toEqual({ suppressed: 0, eligible: 1 });
+  });
+
+  it("reports no strikeSuppressedProposals on an off-boundary tick — the harness's denominator stays at zero rather than acquiring one to divide by", async () => {
+    const w = new MemoryDirectedBuildWorld([strikingProducer(true)]);
+    const result = await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, { interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4) });
+    expect(result.strikeSuppressedProposals).toBeUndefined();
+  });
+});
+
 // ── founding stock endowment ─────────────────────────────────────
 // A colony used to open holding nothing, so it read as starving from its first cycle before any
 // logistics could reach it. It now arrives with a slice of its founder's warehouses, sized on its

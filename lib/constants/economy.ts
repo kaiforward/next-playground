@@ -88,22 +88,73 @@ export const ECONOMY_SIM_PARAMS: Readonly<EconomySimParams> = {
 export const SHORTAGE_SATISFACTION = 0.5;
 
 /**
- * System dissatisfaction D at or above which the supply regime reads Shortage rather than Rationing.
- * Cut against the measured 26-good basket under GOOD_NECESSITY: the ambient barren-galaxy deficit
- * (every tier-1 and tier-2 good empty) folds to ≈0.14 while a total water failure folds to ≈0.37, so
- * any cut in (0.141, 0.319] grades famine as Shortage and ambient scarcity as Rationing. Both
- * endpoints are scenario values, not constants — moving any necessity weight moves them, so re-derive
- * rather than nudge (lib/constants/__tests__/band-constants.test.ts asserts the separation holds).
- * First cut; the simulator owns the final.
+ * Provision shortfall (`1 − provision()`, a linear mean — a partial shortfall reads its own size, not
+ * its square) at or above which the unrest slope BEGINS ramping from `slopeRationing` toward
+ * `slopeShortage` (full Shortage weight lands at cut + blend = 0.90). Its only consumer is
+ * `unrestSlope` — the band bins Provision directly and never reads this cut — which is why it is
+ * authored as ESCALATION-ONLY: it does not separate ambient scarcity from famine (the
+ * survival floor already does that job outright), it only decides when the ramp engages. Set well
+ * above every measured founding shortfall (p10 0.59, mean 0.27 — equilibrium founding cohort,
+ * n = 562, docs/planned/supply-response.md) so a newborn colony's own worst reading never engages it.
+ * The old gap-1/squared-scale anchors (≈0.14 ambient, ≈0.37 water, as D values on the squared fold)
+ * carried no information about the linear scale and are retired rather than restated. Re-derive
+ * rather than nudge if the founding shortfall distribution moves
+ * (lib/constants/__tests__/band-constants.test.ts pins it above the measured p10).
  */
-export const D_SHORTAGE_CUT = 0.25;
+export const D_SHORTAGE_CUT = 0.65;
 
 /**
  * Width of the D band above the cut across which the unrest slope ramps from the Rationing value to
- * the Shortage one. The ramp starts AT the cut and never below it, so the Rationing containment
- * guarantee (sustained Rationing cannot reach collapse at any tax) holds across the whole Rationing
- * range; a hard branch here would instead double a system's settled unrest for an arbitrarily small
- * change in delivered goods, and land that step across strike onset. Narrow enough that a total food
- * failure still reaches the full Shortage slope — asserted from the constants, not assumed.
+ * the Shortage one — full Shortage weight lands at shortfall 0.90. The ramp starts AT the cut and
+ * never below it, so no system takes a hard step in settled unrest for an arbitrarily small change in
+ * delivered goods. Escalation-only, like the cut it extends: it no longer marks where a band boundary
+ * sits (the band bins Provision directly instead), only how fast the ramp climbs once above it.
  */
-export const D_SHORTAGE_BLEND = 0.05;
+export const D_SHORTAGE_BLEND = 0.25;
+
+/**
+ * Provision at or above which a system bands Supplied — the healthiest of the four descriptive
+ * bands (Supplied / Strained / Rationing / Shortage). A legibility line only: no gameplay effect
+ * reads the band (effects that scale with supply read Provision or the shortfall directly instead),
+ * so moving this edge is a display decision, not a balance one. Inclusive: Provision exactly at this
+ * value still bands Supplied. Set from the measured distribution: the mature galaxy reads ~92-96%
+ * Supplied at this edge (7.9% below it at 10k ticks, 4.0% at 12k), the young galaxy 80/8/12 across
+ * the three Provision bands (19.8% below this edge, 11.9% below RATIONING_PROVISION at 1k ticks) —
+ * healthy reads healthy, founding stress stays visible.
+ */
+export const SUPPLIED_PROVISION = 0.9;
+
+/**
+ * Provision below which a system bands Rationing rather than Strained — the boundary between "worth
+ * watching" and "actively short". Also a legibility line only, for the same reason as
+ * SUPPLIED_PROVISION. Exclusive on the low side: Provision exactly at this value still bands
+ * Strained, the low edge of the Strained band rather than the high edge of Rationing.
+ */
+export const RATIONING_PROVISION = 0.7;
+
+/**
+ * Civilian satisfaction below which a demanded good counts toward the critical-good override's
+ * weight (see `unrestSlope`) — a good under a quarter met is critical. Its own constant, not
+ * SHORTAGE_SATISFACTION: the famine line and the criticality line must be able to move
+ * independently, and extending SHORTAGE_SATISFACTION to a third meaning would fuse them
+ * permanently. Set at half of SHORTAGE_SATISFACTION (0.5) — "collapsed" is a distinctly worse state
+ * than shortage-grade. The measured per-good satisfaction distribution is a cliff (goods delivered
+ * in full or not at all), so any line strictly between 0 and 0.5 catches the same worlds today; this
+ * value binds only on future partial-satisfaction states, which is why it is authored as a rule
+ * rather than tuned to a fit. A strict `<` boundary: exactly this level does not count.
+ */
+export const CRITICAL_SATISFACTION = 0.25;
+
+/**
+ * A demanded good's minimum share of a world's total civilian demand (the same demand-only share
+ * `worstDemandedGoods` computes) to be eligible for the critical-good override's weight — override
+ * eligibility only. There is no band-level demand floor: the band bins Provision directly, and
+ * Provision's own weighting (`demanded × necessity`) already discounts negligible demand on its own.
+ * Below 1% of a world's demand basket a good is a trace entry, not a real need: this excludes
+ * exactly the epsilon skilled-basket goods (measured shares 0.005-0.010) while a good genuinely held
+ * at 1-5% of the basket (e.g. medicine, necessity 0.8) still counts. Survival goods are immune to
+ * this floor by construction — the survival step promotes the whole system to Shortage regardless of
+ * demand share. Re-check this value if a high-necessity good is ever deliberately authored at a
+ * trace demand share.
+ */
+export const BAND_MIN_DEMAND_SHARE = 0.01;

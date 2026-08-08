@@ -13,7 +13,10 @@ per-task** are forgotten by the time implementation ends, then expensively re-fo
 
 **Entry condition: the plan exists and is committed** — `docs/build-plans/<feature>.md` with
 four-field tasks (`Files / Interface / Proves / Consumes`, `Proves` a detection list) and its
-gates. No plan → that is `/build-plan`; go back. Work happens on the feature branch per `AGENTS.md`.
+gates. No plan → that is `/build-plan`; go back. Work happens on the feature branch per `AGENTS.md` —
+and **if the target branch is a `shared/*` integration branch, create `feat/<sub-feature>` off it
+before the first dispatch**: task commits land on the sub-branch, which PRs into shared when the
+feature completes (the commit-branch hook blocks commits anywhere but `feat/*`).
 
 The per-task definition of done is `docs/active/engineering/feature-process.md` → Implementation
 gates (checks green, red-proof, doc-sync grep, mechanic-level proof). This skill is the

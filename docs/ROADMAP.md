@@ -20,34 +20,32 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   *Next step:* finish the instruction-mass cut (AGENTS.md done, docs + memory in flight), then design
   the replacement skills.
 
-- **[L] Economy band reconciliation** — the `feat/band-reconciliation` shared branch. Design:
+- **[L] Economy band reconciliation** — the `shared/band-reconciliation` integration branch
+  (sub-features ride `feat/*` branches PR'd into it; item 6 is on `feat/supply-response`). Design:
   [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md). PR1-5 shipped plus #202-#217
   (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics).
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
-  *Next step:* Provision (item 6), then PR6.
+  *Next step:* merge `feat/supply-response` (item 6 step 1 — Provision — PR open into shared), then PR6.
 
 ---
 
 ## Queued — supply response, then PR6
 
-6. **[L] Provision + supply response** — [supply-response.md](./planned/supply-response.md). Renames the
-   supply score to **Provision** (a weighted-mean satisfaction percentage) because today's fold squares
-   each good's shortfall and collapsed its range ~5×. Absorbs two items previously booked separately:
-   re-cutting the unrest band, and struck worlds that can neither grow out nor die.
-   Key input, already measured: `foldSupplyState` returns `rationing` for *any* `d > 0` and `supplied`
-   only at exactly 0 — there is no threshold to re-cut because there is no threshold. The exact-zero
-   cliff is real, but the mislabelled cohort is the 43.5% Rationing share at equilibrium (253 of 582
-   settled), not homeworlds: they read 100% Supplied at mean D 0.000 (n = 20, both horizons). The
-   clearest case is the pop ≥ 1K cohort — mean D 0.006 and still 23% Rationing (n = 370, equilibrium).
-   *Next step:* `/build-plan` from the reviewed spec (spec-review done 2026-08-07, all findings
-   accepted and folded in; report in `.agent-reviews/`).
-   Five items inside it, **in order, measuring between** — (1) Provision + band demotion +
-   instrumentation + the constant re-cuts, (2) change-driven unrest, (3) adaptive expectation,
-   (4) abandonment, (5) relief. Items 2 and 3 both change what the slopes are measured against; 4 and 5
-   each need a primitive the game does not have and are gated on it.
-   *Don't:* precision-tune any constant before this lands — it invalidates them twice over.
+6. **[L] Supply response — the remaining arc** — [supply-response.md](./planned/supply-response.md).
+   Item 1 (Provision: the un-squared score, four descriptive bands, constant re-cuts, harness
+   instrument) **shipped on `feat/supply-response`** and passed its A/B gate (Gate 2, 2026-08-08:
+   mislabelling gone, growth/strikes flat-or-better, `strikeExplains` suppression fell ~3×).
+   Three items remain, **in order, measuring between** — (1) the **adaptive expectation** (unrest
+   judged against a persisted per-world baseline of what that world has been getting; absorbs the
+   old change-term item as its fastest-decay calibration arm — decided at Gate 2), (2) abandonment,
+   (3) relief. The expectation changes what the slopes are measured against and retires the interim
+   `slopeRationing`/founding invariant; abandonment and relief each need a primitive the game does
+   not have and are gated on it.
+   *Next step:* design pass + `/spec-review` for the adaptive expectation (cross-mechanic: save
+   shape, slopes, migration, abandonment's trigger).
+   *Don't:* precision-tune any constant before the expectation lands — it re-derives the slopes.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line.
    *Next step:* after item 6.
@@ -113,6 +111,17 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   raise the export reserve (withholds real stock from importers). If grading is wanted, the lever
   is the curve's saturation point — which makes the `MarketCurve.k` item below this work's natural
   first slice.
+- **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
+  Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
+  full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy
+  fill — each receiving system takes its full demand while in-range supply lasts, so at most one
+  system gets a partial fill and everyone after gets zero. If confirmed, the fix is an allocation
+  policy weighing availability against the number of demanding systems (candidate policies in
+  memory `design-logistics-depth-inputs`; possibly player-configurable). Complements the band /
+  critical-good mechanics — partial-satisfaction states make `CRITICAL_SATISFACTION` a live line
+  instead of a formality. Sibling of the logistics-pillar depth check below.
+  *Next step:* `/measure` the directed-logistics fill order to confirm or kill the greedy-drain
+  hypothesis before any policy design.
 - **[M] Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
   real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
   is 1 for every good and `priceFloor`/`priceCeiling` is a pure tier lookup with zero per-good variation.
@@ -189,6 +198,15 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
   as this system's second tier.
+- **[S] Define a tick-tempo anchor** — a short doc section stating what a tick feels like in play:
+  wall-clock at each speed setting (fast mode is 5 ticks/s today), rough equivalents against
+  genre reference points (Victoria 3 ≈ 146K ticks per 100 years at 4 ticks/day), and the cycle
+  (24 ticks) as the unit pacing arguments should be made in. Exists so calibration decisions stop
+  arguing "N ticks feels long/short" from unanchored intuition — the relaxation-rate call at the
+  supply-response Gate 1 turned on exactly this. Not a design of game-time itself (ticks still
+  have no defined in-fiction span); just the shared measuring language.
+  *Next step:* one section in `docs/SPEC.md` or `docs/active/gameplay/`, plus a one-line pointer
+  wherever pacing constants are authored.
 - **[S] Move the dev cheat-panel button to the header** — the map sidebar and other floating elements block it.
 - **[S] Standardise main content panel size** — system detail should be smaller than command center.
 
@@ -222,6 +240,16 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   `lib/engine/directed-build.ts`, `lib/tick-harness/runner.ts`. The incremental cache
   (`reports/stryker-incremental.json`, machine-local) makes re-runs minutes, not hours.
   *Next step:* chip file-by-file, worst first, same kill-or-accept discipline as the PR gate.
+- **[S] Harden the runner integration suite's thin anchors** — found while re-deriving the
+  drawBrakeCeiling divergence fixture. The gate-split identity test (`runner.test.ts:152`,
+  `charter + funds + pool + unGated === observed`) passes vacuously: the 20/7/240 fixture never
+  exercises three of the four buckets (all zeros), so a broken classification still satisfies the
+  identity — same hollowing-out class as the divergence failure, but silent. Three sibling
+  assertions rest on counts of exactly 2 (`materialsShortUnderEvent`, founder `systemCount`,
+  `inFlight.max`) and zero out on modest tuning changes; `budgetSpentFrac` passes at 0.006% spend,
+  a near-vacuous read of the haul-budget ledger.
+  *Next step:* one fixture-derivation pass giving the gate-split test a scenario with all four
+  buckets non-zero; document or widen the count-2 anchors while there.
 - **[S] Decide the simulate "equilibrium" horizon** — the quick run's 10,000-tick label sits inside
   the startup transient for high-tier consumer metrics (electronics/luxuries recoveries land
   t≈9,500-11,000; ship_frames later still). Options: extend the labelled horizon to 12-16k

@@ -395,6 +395,7 @@ function formatTable(results: HarnessResults): string {
     lines.push("Supply regimes (per settled system, end of simulation):");
     const rRows: [string, number, number][] = [
       ["Supplied", regimes.supplied, regimes.suppliedShare],
+      ["Strained", regimes.strained, regimes.strainedShare],
       ["Rationing", regimes.rationing, regimes.rationingShare],
       ["Shortage", regimes.shortage, regimes.shortageShare],
     ];
@@ -403,8 +404,16 @@ function formatTable(results: HarnessResults): string {
       [24, 12, 12],
       rRows.map(([l, n, sh]) => [l, String(n), `${(sh * 100).toFixed(1)}%`]),
     ));
-    lines.push(`  mean D ${regimes.meanDissatisfaction.toFixed(3)} over ${regimes.counted} settled systems`);
-    lines.push('  mean D and mean unrest average incomparable worlds — see "Supply & unrest by world cohort".');
+    lines.push(`  mean shortfall ${regimes.meanShortfall.toFixed(3)} over ${regimes.counted} settled systems`);
+    lines.push('  mean shortfall and mean unrest average incomparable worlds — see "Supply & unrest by world cohort".');
+    lines.push(
+      `  Provision: median ${regimes.provisionLevels.median.toFixed(3)}, ` +
+        `p10 ${regimes.provisionLevels.p10.toFixed(3)}, p90 ${regimes.provisionLevels.p90.toFixed(3)}`,
+    );
+    lines.push(
+      `  Worst demanded good: median ${regimes.worstGoodLevels.median.toFixed(3)}, ` +
+        `p10 ${regimes.worstGoodLevels.p10.toFixed(3)}, p90 ${regimes.worstGoodLevels.p90.toFixed(3)}`,
+    );
   }
 
   // Cohorts overlap by design: a system is in one population band, one of homeworld/colony,
@@ -414,22 +423,28 @@ function formatTable(results: HarnessResults): string {
     lines.push("Supply & unrest by world cohort (end of simulation):");
 
     lines.push(...renderTable(
-      ["Cohort", "n", "mean D", "unrest", "strike%", "Sup/Rat/Sho %"],
-      [16, 6, 8, 8, 9, 20],
+      ["Cohort", "n", "shortfall", "Provision", "worst-good", "unrest", "strike%", "Sup/Str/Rat/Sho %", "net growth%"],
+      [16, 6, 9, 10, 11, 8, 9, 26, 12],
       worldCohorts.map((c) => [
         c.cohort,
         String(c.n),
-        c.meanDissatisfaction.toFixed(3),
+        c.meanShortfall.toFixed(3),
+        c.meanProvision.toFixed(3),
+        c.worstGoodMedian.toFixed(3),
         c.meanUnrest.toFixed(3),
         `${(c.strikingShare * 100).toFixed(1)}%`,
         `${(c.suppliedShare * 100).toFixed(0)} / ` +
+          `${(c.strainedShare * 100).toFixed(0)} / ` +
           `${(c.rationingShare * 100).toFixed(0)} / ` +
           `${(c.shortageShare * 100).toFixed(0)}`,
+        c.netGrowthPct === null ? "n/a" : `${c.netGrowthPct.toFixed(1)}%`,
       ]),
     ));
 
     lines.push("  cohorts overlap — a system appears in its population band, in homeworld/colony,");
     lines.push("  and in survival-short if it has no arable slot. Each row's n is its own denominator.");
+    lines.push("  net growth% is (end pop - start pop) / start pop over the cohort's END-of-run");
+    lines.push("  membership, measured from tick 0; n/a only if no start reading was taken at all.");
   }
 
   // Migration throughput (whole run) — reads most meaningfully on a land-tight seed, where colony
@@ -444,6 +459,19 @@ function formatTable(results: HarnessResults): string {
       `People moved: ${fmtNum(mt.totalColonists + mt.totalDiffusion)} total ` +
         `(colonists ${fmtNum(mt.totalColonists)}, diffusion ${fmtNum(mt.totalDiffusion)}) ` +
         `over ${mt.cycleCount} cycles, mean ${mt.meanPerCycle.toFixed(1)}/cycle`,
+    );
+  }
+
+  // Strike-suppression rate (whole run) — the number that says how much a strike narrows the
+  // planner's second exit (the feedback-gap channel). Read the RATE, never the raw counts: the
+  // denominator grows with the galaxy.
+  {
+    const ss = results.strikeSuppression;
+    lines.push("");
+    lines.push("Strike-Suppressed Proposals (whole run):");
+    lines.push(
+      `Rate: ${(ss.ratePerEligible * 100).toFixed(2)}% (${fmtNum(ss.suppressed)} suppressed / ` +
+        `${fmtNum(ss.eligible)} eligible pairs)`,
     );
   }
 
@@ -506,9 +534,17 @@ function formatTable(results: HarnessResults): string {
     if (fs.sampledCount > 0) {
       lines.push(
         `  opening satisfaction (demand-weighted): mean ${fs.meanOpeningSatisfaction.toFixed(2)}, ` +
-          `dissatisfaction ${fs.meanOpeningDissatisfaction.toFixed(3)} | ` +
+          `shortfall ${fs.meanOpeningShortfall.toFixed(3)} | ` +
           `opened deprived (<0.50): ${fs.openingDeprivedCount}`,
       );
+      // A different weighting from the line above (necessity × demand, not demand alone) — reported
+      // on its own line so the two quantities are never read as the same number.
+      if (fs.meanOpeningProvision !== null && fs.p10OpeningProvision !== null) {
+        lines.push(
+          `  opening Provision (necessity+demand-weighted): mean ${fs.meanOpeningProvision.toFixed(2)}, ` +
+            `p10 ${fs.p10OpeningProvision.toFixed(2)}`,
+        );
+      }
     }
     if (fs.foundedCount > 0) {
       lines.push(

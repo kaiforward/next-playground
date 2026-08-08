@@ -1,8 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { detectPingPong, perSystemSupplyState, summarizeInfrastructure, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
+import {
+  detectPingPong, perSystemSupplyState, summarizeInfrastructure, summarizePopulation,
+  summarizeSupplyRegimes, worstGoodSatisfaction,
+} from "../population-analysis";
+import type { SystemSupplyState } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
-import { D_SHORTAGE_CUT } from "@/lib/constants/economy";
+import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import { GOOD_NAMES } from "@/lib/constants/goods";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldEvent } from "@/lib/world/types";
@@ -218,35 +224,64 @@ describe("summarizeSupplyRegimes", () => {
     expect(summary.counted).toBe(2);
     expect(summary.supplied).toBe(1);
     expect(summary.shortage).toBe(1);
-    expect(summary.suppliedShare + summary.rationingShare + summary.shortageShare).toBeCloseTo(1, 10);
+    expect(
+      summary.suppliedShare + summary.strainedShare + summary.rationingShare + summary.shortageShare,
+    ).toBeCloseTo(1, 10);
   });
 
-  it("buckets a mildly-short system as rationing, not supplied or shortage", () => {
-    // The bucket the other fixtures never produce. Water at 0.9 is above the survival line, and the
-    // squared gap folds to D ≈ 0.005 — non-zero, so not supplied; far under the cut, so not shortage.
+  it("counts a Strained world as Strained, not silently folded into Shortage", () => {
+    // The defect this widening exists to close: before the four-band fold, anything that wasn't
+    // Supplied or Rationing landed in a catch-all `else` that counted it as Shortage. Provision 0.8
+    // sits strictly between RATIONING_PROVISION (0.70) and SUPPLIED_PROVISION (0.90), and no survival
+    // good is touched, so this system must read Strained — a summarizer that dropped the fourth band
+    // back to a three-way catch-all would report it as Shortage instead.
+    const systems = [popSys("strained", 100, 1000)];
+    const summary = summarizeSupplyRegimes(systems, [mkt("strained", "water", 0.8)]);
+    expect(summary.strained).toBe(1);
+    expect(summary.supplied).toBe(0);
+    expect(summary.rationing).toBe(0);
+    expect(summary.shortage).toBe(0);
+  });
+
+  it("buckets a system below the Rationing bin edge as rationing, not supplied, strained or shortage", () => {
+    // Provision-based banding means Rationing is the LARGE-shortfall band now, not "any positive D"
+    // the way the old D-scale cut read it: both demanded goods at 0.6 gives Provision exactly 0.6
+    // (uniform satisfaction, so the weights cancel out) — below RATIONING_PROVISION (0.70), above the
+    // SHORTAGE_SATISFACTION survival floor (0.5), so this must read Rationing and nothing else.
     // Without this, a summarizer that mis-routed the rationing branch would still pass the suite.
     const systems = [popSys("peckish", 100, 1000)];
     const summary = summarizeSupplyRegimes(systems, [
-      mkt("peckish", "water", 0.9), mkt("peckish", "food", 1),
+      mkt("peckish", "water", 0.6), mkt("peckish", "food", 0.6),
     ]);
     expect(summary.rationing).toBe(1);
     expect(summary.supplied).toBe(0);
+    expect(summary.strained).toBe(0);
     expect(summary.shortage).toBe(0);
-    expect(summary.meanDissatisfaction).toBeGreaterThan(0);
-    expect(summary.meanDissatisfaction).toBeLessThan(D_SHORTAGE_CUT);
+    expect(summary.meanShortfall).toBeGreaterThan(0);
+    expect(summary.meanShortfall).toBeLessThan(D_SHORTAGE_CUT);
   });
 
-  it("reaches shortage through the D cut, not only the survival shortcut", () => {
-    // Both survival goods sit ABOVE SHORTAGE_SATISFACTION (0.55 > 0.5), so hasSurvivalShortfall is
-    // false and the shortcut cannot fire — a deeply-missing low-necessity good carries D over the cut
-    // on its own. The "thirsty" fixture above takes the shortcut, so without this case the cut branch
-    // is never the thing under test.
+  it("stops at rationing for a near-total basket collapse that never crosses the survival floor", () => {
+    // Gate 1 dropped band promotion (docs/SPEC.md's "the critical-good override is slope-only"):
+    // foldSupplyState() has exactly one route to Shortage — hasSurvivalShortfall — and no
+    // Provision-level cut promotes the band on its own, however low Provision falls. This fixture is
+    // the stress case for that: both survival goods sit exactly AT SHORTAGE_SATISFACTION (not below
+    // it, so hasSurvivalShortfall stays false) while every other demanded good reads zero — a
+    // near-total basket collapse. If a D/Provision cut ever again promoted the band directly, this is
+    // the fixture that would first read Shortage instead of Rationing. Built from the real tables
+    // (GOOD_NAMES, SURVIVAL_GOODS) so it re-verifies itself if any necessity or demand weight moves.
+    const nonSurvival = GOOD_NAMES.filter((g) => !SURVIVAL_GOODS.includes(g));
     const systems = [popSys("squeezed", 100, 1000)];
     const summary = summarizeSupplyRegimes(systems, [
-      mkt("squeezed", "water", 0.55), mkt("squeezed", "food", 0.55), mkt("squeezed", "gas", 0),
+      ...SURVIVAL_GOODS.map((g) => mkt("squeezed", g, SHORTAGE_SATISFACTION)),
+      ...nonSurvival.map((g) => mkt("squeezed", g, 0)),
     ]);
-    expect(summary.shortage).toBe(1);
-    expect(summary.meanDissatisfaction).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);
+    expect(summary.rationing).toBe(1);
+    expect(summary.shortage).toBe(0);
+    // The shortfall is large — Gate 1's escalation cut (D_SHORTAGE_CUT, unrestSlope-only now) still
+    // fires on it, which is exactly why band promotion had to be dropped explicitly rather than left
+    // to fall out of the same cut.
+    expect(summary.meanShortfall).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);
   });
 
   it("folds active events without disturbing the reading when none touches consumption", () => {
@@ -271,7 +306,54 @@ describe("summarizeSupplyRegimes", () => {
     const summary = summarizeSupplyRegimes([], []);
     expect(summary.counted).toBe(0);
     expect(Number.isFinite(summary.suppliedShare)).toBe(true);
-    expect(summary.meanDissatisfaction).toBe(0);
+    expect(summary.meanShortfall).toBe(0);
+    expect(summary.provisionLevels).toEqual({ median: 0, p10: 0, p90: 0 });
+    expect(summary.worstGoodLevels).toEqual({ median: 0, p10: 0, p90: 0 });
+  });
+
+  it("excludes an unclaimed system from the Provision and worst-good distributions", () => {
+    const claimed = popSys("claimed", 100, 1000);
+    const unclaimed = { ...popSys("unclaimed", 100, 1000), control: "unclaimed" as const };
+    const markets = [mkt("claimed", "water", 0.5), mkt("unclaimed", "water", 0)];
+
+    const summary = summarizeSupplyRegimes([claimed, unclaimed], markets);
+
+    expect(summary.counted).toBe(1);
+    // Water is the only demanded good on "claimed", so both its Provision and its (only, hence
+    // worst) good's satisfaction are exactly 0.5. If the unclaimed system's reading leaked into
+    // either distribution, the median could not land on that exact value.
+    expect(summary.provisionLevels.median).toBeCloseTo(0.5, 6);
+    expect(summary.worstGoodLevels.median).toBeCloseTo(0.5, 6);
+  });
+
+  it("shows a bimodal population's p10 and p90 apart, not collapsed onto one mean", () => {
+    // The spec measures 53.4% of settled systems at exactly D 0 against a short tail — this fixture
+    // is the same shape at Provision's scale: half the galaxy fully served, half fully deprived.
+    const fed = Array.from({ length: 5 }, (_, i) => popSys(`fed-${i}`, 100, 1000));
+    const starved = Array.from({ length: 5 }, (_, i) => popSys(`starved-${i}`, 100, 1000));
+    const systems = [...fed, ...starved];
+    const markets = [
+      ...fed.map((s) => mkt(s.id, "water", 1)),
+      ...starved.map((s) => mkt(s.id, "water", 0)),
+    ];
+
+    const summary = summarizeSupplyRegimes(systems, markets);
+
+    expect(summary.provisionLevels.p10).toBeCloseTo(0, 6);
+    expect(summary.provisionLevels.p90).toBeCloseTo(1, 6);
+    expect(summary.worstGoodLevels.p10).toBeCloseTo(0, 6);
+    expect(summary.worstGoodLevels.p90).toBeCloseTo(1, 6);
+  });
+
+  it("collapses p10, median and p90 onto the same value when every world is identical", () => {
+    const systems = [popSys("a", 100, 1000), popSys("b", 100, 1000), popSys("c", 100, 1000)];
+    const markets = systems.map((s) => mkt(s.id, "water", 0.6));
+
+    const summary = summarizeSupplyRegimes(systems, markets);
+
+    expect(summary.provisionLevels.p10).toBeCloseTo(summary.provisionLevels.median, 10);
+    expect(summary.provisionLevels.median).toBeCloseTo(summary.provisionLevels.p90, 10);
+    expect(summary.provisionLevels.median).toBeCloseTo(0.6, 6);
   });
 });
 
@@ -312,7 +394,57 @@ describe("perSystemSupplyState", () => {
     const summary = summarizeSupplyRegimes(systems, markets);
 
     const meanD = [...states.values()].reduce((a, s) => a + s.d, 0) / states.size;
-    expect(meanD).toBeCloseTo(summary.meanDissatisfaction, 10);
+    expect(meanD).toBeCloseTo(summary.meanShortfall, 10);
     expect(states.size).toBe(summary.counted);
+  });
+
+  it("counts a settled system with no market rows at Provision 1, not dropped", () => {
+    const systems = [sys("s1")];
+
+    const states = perSystemSupplyState(systems, []);
+
+    expect(states.size).toBe(1);
+    expect(states.get("s1")?.provision).toBe(1);
+    expect(states.get("s1")?.worstGoods).toEqual([]);
+  });
+
+  it("carries the worst-demanded good's tiny demand share, not just its satisfaction", () => {
+    // ship_frames' unskilled per-capita rate (0.0003) sits far below water/food/gas/ore's combined
+    // baseline — a real epsilon-demand tail good, the shape the demand-share floor is chosen from.
+    // If the harness wiring dropped or zeroed demandShare on the way into worstGoods, this would
+    // still pass on satisfaction alone.
+    const systems = [sys("s1")];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 1 },
+      { systemId: "s1", goodId: "food", satisfaction: 1 },
+      { systemId: "s1", goodId: "gas", satisfaction: 1 },
+      { systemId: "s1", goodId: "ore", satisfaction: 1 },
+      { systemId: "s1", goodId: "ship_frames", satisfaction: 0 },
+    ];
+
+    const [worst] = perSystemSupplyState(systems, markets).get("s1")?.worstGoods ?? [];
+
+    expect(worst?.goodId).toBe("ship_frames");
+    expect(worst?.satisfaction).toBe(0);
+    expect(worst?.demandShare).toBeGreaterThan(0);
+    expect(worst?.demandShare).toBeLessThan(0.05);
+  });
+});
+
+describe("worstGoodSatisfaction", () => {
+  const stateOf = (worstGoods: SystemSupplyState["worstGoods"]): SystemSupplyState => ({
+    d: 0, regime: "rationing", provision: 1, worstGoods,
+  });
+
+  it("reads 1 for an empty basket — counted as fully served, not dropped", () => {
+    expect(worstGoodSatisfaction(stateOf([]))).toBe(1);
+  });
+
+  it("reads the first (worst) entry's satisfaction for a populated basket", () => {
+    const worstGoods = [
+      { goodId: "water", satisfaction: 0.3, demandShare: 0.4, necessity: 1 },
+      { goodId: "food", satisfaction: 0.6, demandShare: 0.3, necessity: 1 },
+    ];
+    expect(worstGoodSatisfaction(stateOf(worstGoods))).toBe(0.3);
   });
 });

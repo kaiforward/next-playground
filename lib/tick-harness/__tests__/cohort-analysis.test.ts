@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts, marketRolesByKey,
 } from "../cohort-analysis";
+import { perSystemSupplyState, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
 import type { MarketRole } from "../types";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
+import { CROWDING } from "@/lib/constants/population";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { WorldMarket } from "@/lib/world/types";
 import type { TickSystem } from "@/lib/tick/rows";
@@ -278,9 +280,99 @@ describe("computeWorldCohorts", () => {
     expect(entries.some((e) => e.cohort === "pop 10-100")).toBe(true);
     expect(entries.some((e) => e.cohort === "pop >=1K")).toBe(false);
     for (const e of entries) {
-      expect(Number.isNaN(e.meanDissatisfaction)).toBe(false);
+      expect(Number.isNaN(e.meanShortfall)).toBe(false);
       expect(Number.isNaN(e.meanUnrest)).toBe(false);
+      expect(Number.isNaN(e.meanProvision)).toBe(false);
+      expect(Number.isNaN(e.worstGoodMedian)).toBe(false);
+      expect(Number.isNaN(e.strainedShare)).toBe(false);
+      expect(e.suppliedShare + e.strainedShare + e.rationingShare + e.shortageShare).toBeCloseTo(1, 10);
     }
+  });
+
+  it("counts a Strained world into its cohort's strainedShare, not folded into shortageShare", () => {
+    // The same defect population-analysis.test.ts's "counted as Strained" test pins, at the cohort
+    // layer: water at 0.8 sits strictly between RATIONING_PROVISION and SUPPLIED_PROVISION with no
+    // survival good touched, so this system must read Strained. A cohort fold that kept the old
+    // three-way catch-all would silently count it as Shortage instead.
+    const systems = [sys("s1", { population: 5 })];
+    const markets = [{ systemId: "s1", goodId: "water", satisfaction: 0.8 }];
+
+    const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.strainedShare).toBe(1);
+    expect(band?.suppliedShare).toBe(0);
+    expect(band?.rationingShare).toBe(0);
+    expect(band?.shortageShare).toBe(0);
+  });
+
+  it("agrees with the galaxy-wide Strained count when the cohort is the whole settled population", () => {
+    // Both tables fold the SAME perSystemSupplyState map (see population-analysis.ts). A Strained
+    // count that differs between the galaxy-wide summary and the cohorted split means one of the two
+    // folds was missed when the union widened to four members.
+    const systems = [sys("s1", { population: 5 }), sys("s2", { population: 5 })];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 0.8 },
+      { systemId: "s2", goodId: "water", satisfaction: 1 },
+    ];
+
+    const summary = summarizeSupplyRegimes(systems, markets);
+    const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.n).toBe(summary.counted);
+    expect(band?.strainedShare).toBeCloseTo(summary.strainedShare, 10);
+    expect(band?.suppliedShare).toBeCloseTo(summary.suppliedShare, 10);
+  });
+
+  it("folds a cohort's Provision mean from the same per-system map perSystemSupplyState computes", () => {
+    // Both systems land in "pop <10" — the cohort IS the whole settled population here, so its
+    // meanProvision must equal a manual fold over the same map computeWorldCohorts reads.
+    const systems = [sys("s1", { population: 5 }), sys("s2", { population: 5 })];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 0.5 },
+      { systemId: "s2", goodId: "water", satisfaction: 1 },
+    ];
+
+    const states = perSystemSupplyState(systems, markets);
+    const manualMean = [...states.values()].reduce((a, s) => a + s.provision, 0) / states.size;
+
+    const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.meanProvision).toBeCloseTo(manualMean, 10);
+  });
+
+  it("reports a cohort's worstGoodMedian as the median of its members' known worst-good satisfactions", () => {
+    // Each system demands only water, so its worst good IS water and its satisfaction is
+    // unambiguous — no tie-break or multi-good folding can obscure what the median is taken over.
+    // Values 0.2, 0.5, 0.9 median to the middle one exactly, so a stand-in default (e.g. always 1)
+    // cannot coincidentally pass.
+    const systems = [
+      sys("s1", { population: 5 }), sys("s2", { population: 5 }), sys("s3", { population: 5 }),
+    ];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 0.2 },
+      { systemId: "s2", goodId: "water", satisfaction: 0.5 },
+      { systemId: "s3", goodId: "water", satisfaction: 0.9 },
+    ];
+
+    const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.worstGoodMedian).toBeCloseTo(0.5, 6);
+  });
+
+  it("keeps an unclaimed system out of every cohort's Provision denominator", () => {
+    const claimed = sys("s1", { population: 5 });
+    const unclaimed = sys("s2", { population: 5, control: "unclaimed" });
+    const markets = [{ systemId: "s1", goodId: "water", satisfaction: 0.4 }];
+
+    const entries = computeWorldCohorts([claimed, unclaimed], markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.n).toBe(1);
+    expect(band?.meanProvision).toBeCloseTo(0.4, 6);
   });
 
   it("counts a striking system into its cohort's striking share", () => {
@@ -320,5 +412,83 @@ describe("computeWorldCohorts", () => {
     // Neither system reaches these cohorts.
     expect(byCohort.has("pop >=1K")).toBe(false);
     expect(byCohort.has("pop 10-100")).toBe(false);
+  });
+
+  describe("netGrowthPct", () => {
+    it("agrees with the galaxy-wide growthPct arithmetic when the cohort is everything", () => {
+      // All three systems are homeworlds ⇒ the "homeworld" cohort IS the whole settled galaxy,
+      // so its netGrowthPct must reproduce summarizePopulation's growthPct computed the same way
+      // (same start/end sums, same formula) over the identical systems.
+      const systems = [
+        sys("s1", { population: 120 }),
+        sys("s2", { population: 80 }),
+        sys("s3", { population: 300 }),
+      ];
+      const start = new Map([["s1", 100], ["s2", 100], ["s3", 250]]);
+      const homeworldIds = new Set(["s1", "s2", "s3"]);
+
+      const totalStart = [...start.values()].reduce((a, b) => a + b, 0);
+      const expected = summarizePopulation(systems, totalStart, 0.8, CROWDING.BRAKE_END).growthPct;
+
+      const entries = computeWorldCohorts(systems, [], homeworldIds, 0.8, [], start);
+      const homeworld = entries.find((e) => e.cohort === "homeworld");
+
+      expect(homeworld?.netGrowthPct).toBeCloseTo(expected, 6);
+    });
+
+    it("counts a mid-run founded colony's whole population as growth, not a divide-by-zero", () => {
+      // s1 existed at start (100, unchanged); s2 is absent from the start snapshot — founded
+      // during the run — and ends with population 40. Both land in "colony". Summing before
+      // dividing keeps s2's own start-0 from individually blowing up: (140 - 100) / 100 = 40%.
+      const systems = [sys("s1", { population: 100 }), sys("s2", { population: 40 })];
+      const start = new Map([["s1", 100]]); // s2 absent — founded mid-run
+
+      const entries = computeWorldCohorts(systems, [], new Set(), 0.8, [], start);
+      const colony = entries.find((e) => e.cohort === "colony");
+
+      expect(colony?.netGrowthPct).not.toBeNull();
+      expect(Number.isFinite(colony?.netGrowthPct)).toBe(true);
+      expect(colony?.netGrowthPct).toBeCloseTo(40, 6);
+    });
+
+    it("reports a negative percentage for a cohort that lost population, not a clamp to 0", () => {
+      const systems = [sys("s1", { population: 40 })];
+      const start = new Map([["s1", 100]]);
+
+      const entries = computeWorldCohorts(systems, [], new Set(), 0.8, [], start);
+      const colony = entries.find((e) => e.cohort === "colony");
+
+      expect(colony?.netGrowthPct).toBeCloseTo(-60, 6);
+    });
+
+    it("gives a system in two overlapping cohorts the same correct reading in both, with no cross-cohort bleed", () => {
+      // s1: band "pop <10", not a homeworld ⇒ also "colony". s2: band "pop >=1K" (population
+      // 1500, above the 1K cutoff) and homeworld. Deliberately shares no cohort with s1, so a
+      // denominator leaking between rows shows up as a wrong netGrowthPct on a specific cohort
+      // rather than a coincidental match.
+      const rock = sys("s1", { population: 5 });
+      const homeworld = sys("s2", { population: 1500 });
+      const start = new Map([["s1", 2], ["s2", 1500]]);
+
+      const entries = computeWorldCohorts([rock, homeworld], [], new Set(["s2"]), 0.8, [], start);
+      const byCohort = new Map(entries.map((e) => [e.cohort, e]));
+
+      // s1's two rows: (5 - 2) / 2 = 150%, independently in both.
+      expect(byCohort.get("pop <10")?.netGrowthPct).toBeCloseTo(150, 6);
+      expect(byCohort.get("colony")?.netGrowthPct).toBeCloseTo(150, 6);
+      // s2's two rows: unchanged (1500 → 1500) = 0%, unaffected by s1's 150%.
+      expect(byCohort.get("pop >=1K")?.netGrowthPct).toBeCloseTo(0, 6);
+      expect(byCohort.get("homeworld")?.netGrowthPct).toBeCloseTo(0, 6);
+    });
+
+    it("reports null, not an unmeasured 0, for a run that took no start snapshot", () => {
+      // No 6th argument ⇒ the default empty map, the same shape a run shorter than one
+      // SNAPSHOT_INTERVAL produces (runner.ts's populationSnapshots stays empty).
+      const systems = [sys("s1", { population: 50 })];
+      const entries = computeWorldCohorts(systems, [], new Set(), 0.8, []);
+
+      expect(entries.length).toBeGreaterThan(0);
+      for (const e of entries) expect(e.netGrowthPct).toBeNull();
+    });
   });
 });

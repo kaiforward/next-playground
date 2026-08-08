@@ -671,7 +671,8 @@ Read at both horizons, cohorted, from `npm run simulate`.
   that says whether that choice starved the floor.
 - **Colonies open well stocked.** The staging target is `FOUNDING_STOCK_COVER` and the draw is spread over
   many cycles against a regrowing founder stock, so a thin endowment is a bug rather than a tradeoff. The
-  endowment-responsive reads are the opened-deprived count and the colony rationing share; strike% is read
+  endowment-responsive reads are the opened-deprived count, the colony cohort's opening Provision
+  (mean and p10), and its non-Supplied band share (Strained + Rationing + Shortage); strike% is read
   **split by pop cohort**, never galaxy-wide, because it varies by tens of times across cohorts and pricing
   changes exactly that mix by changing how many colonies exist and how well they open.
 - **The founder's cost is the real calibration question.** Mean manifest tonnage per colony and the founder's

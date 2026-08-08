@@ -31,7 +31,7 @@ Events ────────────────────────�
   └→ Relations (depends on: events, every 3 ticks)
 ```
 
-**Economy → Population in-memory handoff:** the economy processor records per-system satisfaction (`delivered_g / demanded_g` for each good it processes this tick) into `ctx.results` — a transient in-memory store that lives only for the duration of that tick. The population processor reads this from `ctx.results` in the same tick to compute dissatisfaction `D` and update `unrest` — no second pass over world state. This data is never persisted or broadcast to clients.
+**Economy → Population in-memory handoff:** the economy processor records per-system satisfaction (`delivered_g / demanded_g` for each good it processes this tick) into `ctx.results` — a transient in-memory store that lives only for the duration of that tick. The population processor reads this from `ctx.results` in the same tick to fold Provision (the necessity-and-demand-weighted mean satisfaction) and integrate its shortfall into `unrest` — no second pass over world state. This data is never persisted or broadcast to clients.
 
 ### Processor Details
 
