@@ -20,7 +20,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   *Next step:* finish the instruction-mass cut (AGENTS.md done, docs + memory in flight), then design
   the replacement skills.
 
-- **[L] Economy band reconciliation** — the `feat/band-reconciliation` shared branch. Design:
+- **[L] Economy band reconciliation** — the `shared/band-reconciliation` integration branch
+  (sub-features ride `feat/*` branches PR'd into it; item 6 is on `feat/supply-response`). Design:
   [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md). PR1-5 shipped plus #202-#217
   (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics).
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,

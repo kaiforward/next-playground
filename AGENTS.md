@@ -142,7 +142,13 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 
 - Feature branch per feature (`feat/name`), PR to main when complete. Commit after each meaningful unit of work.
 - **The PR unit is the cohesive part/sub-project, not its internal phases.** Phase A/B/C are check-in *pauses* on one branch — never read "3 phases" as "3 PRs". Split into 2-4 PRs only when a single sub-project is genuinely too big for one; markdown/tooling changes are always one PR.
-- **Multi-PR features use a shared feature branch** — branch off main, sub-PRs merge into shared, one final PR shared→main.
+- **Multi-PR features use a shared integration branch, named `shared/<name>`** — branch off main,
+  sub-PRs merge into shared, one final PR shared→main. **Nothing lands on a `shared/*` branch except
+  sub-feature PR merges** — no direct feature commits, no direct docs commits; a sub-feature's spec
+  amendments ride its own `feat/*` sub-branch. This is load-bearing: the shared→main PR gets only a
+  light sanity pass *because* every sub-feature was reviewed on its way in, so a direct commit to
+  shared skips the only review it will ever get. Enforced mechanically: a PreToolUse hook
+  (`.claude/hooks/guard-commit-branch.sh`) blocks `git commit` on any non-`feat/*` branch.
 - **Merge as squash or fast-forward, never a merge commit** — squash when commit subjects carry build noise (`PR3`, `Phase B`), else fast-forward.
 - **Never open a PR whose base is another open PR's branch.** Squash-merging the base rewrites its commits and deletes its branch, which *permanently* auto-closes the stacked PR — GitHub will not reopen or retarget it. Branch sequential work off `main`. If already stacked: capture the base head SHA before merging, then `git rebase --onto origin/main <old-base-SHA> <branch>`.
 - **Worktrees are for parallel workstreams, not sequential PRs.** Always `git worktree remove` after.
