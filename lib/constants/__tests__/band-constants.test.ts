@@ -371,10 +371,13 @@ describe("collapse containment — Supplied and Strained worlds never collapse",
     // RATIONING_SHORTFALL: critical goods sit just under the criticality line (gap → 1 − CRITICAL_SATISFACTION)
     // so the same total shortfall budget buys the most possible critical-flagged weight.
     const maxCriticalWeight = RATIONING_SHORTFALL / (1 - CRITICAL_SATISFACTION);
-    const worstSlope = Math.min(
-      UNREST_PARAMS.slopeShortage,
-      UNREST_PARAMS.slopeRationing + maxCriticalWeight * (UNREST_PARAMS.slopeShortage - UNREST_PARAMS.slopeRationing),
-    );
+    // Route through the real unrestSlope rather than re-deriving its cap/override composition here —
+    // otherwise this test keeps passing if that composition drifts. RATIONING_SHORTFALL (0.3) sits
+    // below D_SHORTAGE_CUT (0.65), so the D-ramp term clamps to 0 and contributes nothing: the
+    // override alone (criticalWeight × (slopeShortage − slopeRationing)) drives the slope here, which
+    // is exactly the edge-of-band case this test is proving contained.
+    const worstSupply: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: maxCriticalWeight };
+    const worstSlope = unrestSlope(RATIONING_SHORTFALL, worstSupply, UNREST_PARAMS);
     const worstCase = MAX_FLOOR + worstSlope * RATIONING_SHORTFALL;
     expect(worstCase).toBeCloseTo(0.689, 3);
     expect(worstCase).toBeLessThan(COLLAPSE);

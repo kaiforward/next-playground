@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   detectPingPong, perSystemSupplyState, summarizeInfrastructure, summarizePopulation,
-  summarizeSupplyRegimes,
+  summarizeSupplyRegimes, worstGoodSatisfaction,
 } from "../population-analysis";
+import type { SystemSupplyState } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
 import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
@@ -427,5 +428,23 @@ describe("perSystemSupplyState", () => {
     expect(worst?.satisfaction).toBe(0);
     expect(worst?.demandShare).toBeGreaterThan(0);
     expect(worst?.demandShare).toBeLessThan(0.05);
+  });
+});
+
+describe("worstGoodSatisfaction", () => {
+  const stateOf = (worstGoods: SystemSupplyState["worstGoods"]): SystemSupplyState => ({
+    d: 0, regime: "rationing", provision: 1, worstGoods,
+  });
+
+  it("reads 1 for an empty basket — counted as fully served, not dropped", () => {
+    expect(worstGoodSatisfaction(stateOf([]))).toBe(1);
+  });
+
+  it("reads the first (worst) entry's satisfaction for a populated basket", () => {
+    const worstGoods = [
+      { goodId: "water", satisfaction: 0.3, demandShare: 0.4, necessity: 1 },
+      { goodId: "food", satisfaction: 0.6, demandShare: 0.3, necessity: 1 },
+    ];
+    expect(worstGoodSatisfaction(stateOf(worstGoods))).toBe(0.3);
   });
 });
