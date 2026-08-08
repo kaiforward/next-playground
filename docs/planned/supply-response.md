@@ -186,54 +186,44 @@ differ by accident, which is the version that is definitely wrong.
 
 ## Bands become description
 
-**Four bands, from the worst demanded good:**
+**Four bands, binned from Provision, with two overrides that punch through the average:**
 
 | Band | Rule |
 | --- | --- |
-| **Supplied** | no demanded good below ~90% — trickle shortfalls are normal and unremarkable |
-| **Strained** | worst demanded good between 50% and ~90% |
-| **Rationing** | worst demanded good below 50% |
-| **Shortage** | a *survival* good below 50% |
+| **Supplied** | Provision at or above the Supplied bin edge, no override firing |
+| **Strained** | Provision between the Rationing and Supplied bin edges |
+| **Rationing** | Provision below the Rationing bin edge, **or** the critical-good override fires |
+| **Shortage** | a *survival* good below 50%, whatever Provision says |
 
-Bands read the *worst affected good* rather than Provision, because that is the question a player is
-asking when they look at a list of worlds. Provision answers "how well supplied is this world"; the
-band answers "is anything wrong here". They are different questions and the model should not force one
-number to answer both — which is also why a world short on ten goods at 92% bands identically to a
-flawless one (breadth above the Supplied boundary is Provision's to show, not the band's), and why
-breadth is settled here rather than left open. Breadth *below* the boundary is caught: ten goods at
-85% reads Strained.
+The band is a coarse rendering of the quantity that actually drives outcomes. Provision feeds the
+unrest integral and the growth factor, so a label binned from it can never disagree with what is
+happening to the world — and the two cases where a single good genuinely matters despite a healthy
+average are exactly the two overrides, which also feed unrest. A label and its consequences move
+together by construction.
 
-Two of the boundaries already exist as authored constants: `SHORTAGE_SATISFACTION` is the 50% line and
-`SURVIVAL_GOODS` is the famine distinction. The ~90% Supplied boundary is new and answers "how short
-before a player should care" — a legibility question, not a balance one.
+The alternative — banding on the worst affected good — was measured and rejected. The per-world
+worst-good distribution is a cliff: goods arrive in full or not at all (at equilibrium, 311 of 582
+settled worlds hold their worst good at exactly 1.0 and 228 at exactly 0.0, with only 43 between).
+A worst-good label therefore marks most of the young galaxy distressed — median worst good at
+startup is 0.000 — while mean unrest sits at its floor, which is the healthy-galaxy-reads-as-
+struggling defect this change exists to remove, rebuilt in a new shape. Specific-good detail is the
+per-good table's job (the needs ledger and the industry panel's input gates already show unfulfilled
+demand per good); the world label's job is consequence.
 
-**Only a good with a real demand share can set the band.** Every populated world demands all 26 goods
-at a positive per-capita rate, and the skilled baskets add goods at tiny volumes at small technician
-counts. The band rule and the override both drop the demand weighting that makes negligible demand
-harmless in the fold today (`goodWeight = demanded × necessity`, `lib/engine/population.ts:43-46`), so
-without a floor an epsilon-demand good sets a world's band and bites its unrest at full necessity
-weight. A minimum demand share for band and override eligibility is part of both rules, not a
-refinement of them.
+`SHORTAGE_SATISFACTION` (50%) and `SURVIVAL_GOODS` keep the famine line exactly as shipped. The two
+Provision bin edges are new constants, sized from the measured Provision distribution at Gate 1 —
+a legibility choice, not a balance one, since no gameplay effect reads the band.
 
-The demand-share floor filters tiny *demand*, not low *importance* — so one mislabelling shape
-survives it: a low-necessity good wanted in genuine volume (a tech hub's engineer-basket luxuries at
-20% satisfaction) sets the band to Rationing on a world reading Provision ≈ 0.97. The candidate
-answer is a **necessity floor on band eligibility** alongside the demand-share floor: a good below a
-named necessity weight can hold the band at Strained but never set Rationing, so the distress label
-is reserved for goods whose absence is actually suffered. Decided with the boundary placements, from
-the same measured worst-good distribution — the instrument shows how many worlds sit in this shape
-before the floor needs a value.
+**There is no necessity floor and no band-level demand floor.** Provision's own weighting
+(`goodWeight = demanded × necessity`) already makes negligible demand and negligible necessity
+harmless in the bin, and the critical-good override carries its `necessity × demand share` weighting
+plus a demand-share floor on eligibility — so the filtering the worst-good rule would have needed
+lives naturally inside the two quantities the band is built from.
 
 **No gameplay effect reads the band.** The relaxation-rate switch is removed and the rate becomes a
 single value; effects that should vary with supply read Provision or the shortfall. This is the
-load-bearing part of the demotion: once nothing is gated, the boundaries can be moved on taste
+load-bearing part of the demotion: once nothing is gated, the bin edges can be moved on taste
 without a recalibration, and they can never again be the reason a healthy galaxy reads as struggling.
-
-**Measurement prerequisite.** The band boundaries are unsettled until the per-world
-worst-demanded-good satisfaction distribution is instrumented, cohorted, at both horizons, and quoted
-in the table above. The measured population is bimodal — 53.4% of settled systems at D exactly 0 at
-equilibrium against a short tail — so where the boundaries actually land, and how many worlds each
-band would hold, is currently unknown. The ~90% figure is a starting position, not a result.
 
 ### The critical-good override
 
@@ -245,8 +235,19 @@ than mere Rationing. Its live consumer is the survival-good floor (`foldSupplySt
 (`lib/engine/directed-build.ts:146-154`) — and extending it to a third meaning would fuse the famine
 line to the criticality line permanently. They must move independently.
 
-The override contributes in proportion to `necessity × demand share`, above the demand-share floor.
-It promotes the unrest slope and the descriptive band; it gates nothing else.
+**The composition rule.** The override is a per-world weight,
+`criticalWeight = Σ necessity × demand share` over demanded goods with satisfaction below
+`CRITICAL_SATISFACTION` and demand share at or above `BAND_MIN_DEMAND_SHARE` (the floor's only
+remaining home — it exists so a two-pop stub's epsilon-demand medicine cannot fire the override).
+It carries on `SupplyState` and composes in `unrestSlope`, the one place severity composes:
+
+- **Slope:** effective slope = the D-ramp's value plus `criticalWeight × (slopeShortage −
+  slopeRationing)`, capped at `slopeShortage`. The survival step is unchanged and still promotes to
+  `slopeShortage` outright; the cap means the override can approach famine weight but never exceed
+  it, and a world with both fires the survival step alone.
+- **Band:** a non-zero `criticalWeight` promotes the band to at least Rationing. It never sets
+  Shortage — Shortage stays survival-only, so the band table and the override cannot conflict.
+- It gates nothing else.
 
 **The authored counter-argument, and the answer.** `fed()`'s docstring argues against exactly this
 shape:
@@ -582,9 +583,10 @@ Each item is measured before the next starts.
 
 ## Open questions
 
-- **Where exactly do the band boundaries sit?** ~90% and 50% are starting positions. Settled from the
-  measured per-world worst-demanded-good distribution once step 1's instrument exists, and reconciled
-  with the per-good chip's 0.95 "met" line so the two surfaces do not disagree by accident.
+- **Where exactly do the Provision bin edges sit?** Settled from the measured Provision distribution
+  at step 1's gate, and reconciled with the per-good chip's 0.95 "met" line so the two surfaces do
+  not disagree by accident (the chip reads a per-good satisfaction, the bin reads the world mean —
+  they may deliberately differ with a stated reason).
 - **Should worlds be judged against a local expectation rather than an absolute line?** Every
   threshold here is global and fixed: a two-pop frontier colony and a developed homeworld are held to
   one identical standard, and that standard never moves as the galaxy develops. The consequence is
@@ -687,7 +689,7 @@ Each item is measured before the next starts.
 | a viability predicate | **nowhere** — raw fields at `lib/world/types.ts:98-105` (slots) and `:106-112` (yields); `viable` is taken (`lib/engine/directed-build.ts:1054,1101,1154`) | slot counts + yield multipliers, no predicate | `canSustainItself` must be written before item 4 is designed |
 | a viability cohort in the harness | nearest is `survival-short`, keyed on `slotCap.arable ≤ 0` (`lib/tick-harness/cohort-analysis.ts:242`) | one slot test | the three-way test (no deposits, no arable, nothing to build on) must be added first |
 | an un-squared necessity-weighted mean satisfaction | **nowhere** — nearest is `openingSatisfaction` (`lib/tick-harness/build-analysis.ts:222-229`), demand-weighted with no necessity term | — | step 1 instruments it before sizing any constant |
-| per-world worst-demanded-good satisfaction | **nowhere** | — | the band table needs its distribution before the boundaries are settled |
+| per-world worst-demanded-good satisfaction | **nowhere** | — | measured by step 1's instrument; the reading rejected the worst-good band rule (cliff distribution) and sizes the critical-good override instead |
 | a prior-cycle supply reading | **nowhere** — `EconomySignals` is transient, one tick, not persisted (`lib/tick/types.ts:47-57`) | in-memory only | item 2 adds `priorProvision?` |
 
 ### 6. Designing against an aggregate that moves for other reasons

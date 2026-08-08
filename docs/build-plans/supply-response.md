@@ -248,17 +248,17 @@ seed 42, 600 systems, economy scale 100 — the run the spec's evidence table wa
 **Merge condition** — Stage B does not start until each of these is a number or a written decision, in
 `docs/planned/supply-response.md`, next to the measurement it came from:
 
-1. The Supplied boundary (the spec's ~90% starting position) and the Rationing line, from the measured
-   worst-good distribution.
-2. The demand-share floor for band and override eligibility.
-3. Whether the **necessity floor on band eligibility** is adopted, and its value if so — decided from
-   the count of worlds whose worst eligible good is low-necessity and wanted in genuine volume. The spec
-   defers this here explicitly.
-4. The criticality line's value, **and the critical-good override's composition rule** — how its
-   `necessity × demand share` weight composes with the D-ramp and the survival step in `unrestSlope`,
-   and what "promotes the descriptive band" means when the band table's Shortage is survival-only. The
-   spec states the ingredients and not the rule; this is spec scope, not a planning detail
-   (Self-review 3).
+1. The two Provision bin edges (`SUPPLIED_PROVISION`, `RATIONING_PROVISION`), from the measured
+   Provision distribution. *(Amended at Gate 1: the band was re-specced from worst-good to
+   Provision-binned — the measured worst-good distribution is a cliff and a worst-good label marks
+   the young galaxy distressed while unrest sits at its floor.)*
+2. The demand-share floor for **override** eligibility (the band has no floor — it inherits
+   Provision's weighting).
+3. ~~The necessity floor on band eligibility~~ **Dissolved at Gate 1** with the worst-good band rule:
+   the override's `necessity × demand share` weighting performs the filtering the floor existed for.
+4. The criticality line's value. *(The composition rule is no longer open — written into the spec at
+   Gate 1: ramp + `criticalWeight × (slopeShortage − slopeRationing)` capped at `slopeShortage`;
+   band promotion to at-least-Rationing, never Shortage; survival step fires alone when both apply.)*
 5. `D_SHORTAGE_CUT`, `D_SHORTAGE_BLEND`, `slopeRationing` and `slopeShortage` on the Provision scale,
    with the founding invariant's ceiling computed from the **measured** founding shortfall via the
    spec's own `maxSlope = (strikeThreshold − maxFloor) / foundingShortfall` — and reconciled with the
@@ -417,39 +417,47 @@ Interface:
   `criticalWeight: number` — the summed `necessity × demand share` of demanded goods below the
   criticality line and above the demand-share floor. This is the quantity the override contributes to
   the slope side; carrying it on the state is what keeps `unrestSlope` the one place severity composes.
-- `foldSupplyState(goods: GoodSatisfaction[]): SupplyState` — **the `d` parameter is dropped**. The band
-  now reads the worst *eligible* demanded good, the survival floor and the demand-share floor; D no
-  longer selects a label. Callers drop the second argument: `lib/tick/processors/economy.ts:248`,
+- `foldSupplyState(goods: GoodSatisfaction[]): SupplyState` — **the `d` parameter is dropped**. The
+  band is **binned from `provision(goods)`** (one implementation — the fold calls `provision()`, so
+  the bin and the number cannot drift), then the survival floor promotes to Shortage and a non-zero
+  `criticalWeight` promotes to at least Rationing (never Shortage — survival-only, per the spec's
+  composition rule). Callers drop the second argument: `lib/tick/processors/economy.ts:248`,
   `lib/tick-harness/population-analysis.ts:274`, and the test suites.
 - `unrestSlope(d: number, supply: SupplyState, params: UnrestParams): number` — takes the state rather
-  than the bare survival bit, so the D-ramp, the survival step and the override compose in one function.
-  **The composition rule is Gate 1 merge condition 4** and must be in the spec before this task is
-  implemented.
+  than the bare survival bit, so the D-ramp, the survival step and the override compose in one function
+  per the spec's composition rule (ramp + `criticalWeight × (slopeShortage − slopeRationing)`, capped
+  at `slopeShortage`; survival step unchanged and firing alone when both apply).
 - New constants in `lib/constants/economy.ts`, each with its own docstring stating what it is and what
-  it is not: `SUPPLIED_SATISFACTION` (the Supplied boundary), `CRITICAL_SATISFACTION` (the criticality
-  line — deliberately its own constant, so the famine line and the criticality line move independently),
-  `BAND_MIN_DEMAND_SHARE` (band and override eligibility), and `BAND_MIN_NECESSITY` only if Gate 1
-  adopts the necessity-floor variant.
+  it is not: `SUPPLIED_PROVISION` and `RATIONING_PROVISION` (the two Provision bin edges — legibility
+  constants; no gameplay reader), `CRITICAL_SATISFACTION` (the criticality line — deliberately its own
+  constant, so the famine line and the criticality line move independently), and
+  `BAND_MIN_DEMAND_SHARE` (**override eligibility only** — there is no band-level floor; the bin
+  inherits Provision's own weighting, and the necessity-floor variant is dissolved with the
+  worst-good band rule).
 - `SHORTAGE_SATISFACTION` keeps both existing consumers unchanged — `hasSurvivalShortfall` and `fed()`.
 
 Proves:
-- A world whose only shortfall is an epsilon-demand good bands Supplied and contributes no override
-  weight — the floor's whole reason to exist, since every populated world demands all 26 goods at a
-  positive rate and the skilled baskets add more at tiny volumes.
-- One good just below the Supplied boundary bands Strained, while ten goods just above it band Supplied
-   — breadth above the boundary is Provision's to show, not the band's, and the spec settles it there.
-- A survival good below the survival line bands Shortage whatever the average says; a non-survival good
+- The bin and `provision()` cannot disagree: a fixture whose Provision sits in each bin lands in that
+  band, and a re-implemented mean inside the fold (rather than a `provision()` call) is the drift this
+  entry exists to catch.
+- Both bin edges are inclusive on the side their docstrings state — a world exactly at an edge lands
+  where the constant says, not one band either way.
+- A survival good below the survival line bands Shortage whatever Provision says; a non-survival good
   at the identical satisfaction does not.
-- Each of the three lines is inclusive on the side its docstring states — a good exactly at a boundary
-  must land where the constant says, not one band either way.
+- A world whose only shortfall is an epsilon-demand good below the criticality line bands by its
+  Provision alone and contributes no override weight — the demand-share floor's whole reason to exist.
+- An eligible good below the criticality line on a high-Provision world promotes the band to Rationing
+  (never Shortage), and `criticalWeight` is proportional to `necessity × demand share` and exactly
+  zero for every good above the criticality line.
+- `unrestSlope` composes per the rule: the override raises the effective slope by
+  `criticalWeight × (slopeShortage − slopeRationing)` capped at `slopeShortage`, and a world with both
+  the survival step and override weight gets the survival step alone.
 - An empty basket bands Supplied with zero critical weight and no division by zero: this is what an
   emptying world reads, and the spec records that it changes sign from a permanent worst reading to a
   permanent perfect one.
-- The override's weight is proportional to `necessity × demand share` and is exactly zero for every good
-  above the criticality line — a flat contribution would re-fuse the criticality line to the famine line
-  the spec separated.
 
-Consumes: B1 (the label selects no rate), B3 (constants), Gate 1 (boundaries and the composition rule).
+Consumes: B1 (the label selects no rate), B3 (constants), Gate 1 (bin edges, floor, criticality line;
+the composition rule is in the spec — amended at Gate 1).
 
 #### Task B5 — widen the harness to four bands and re-label the D-unit readouts
 
@@ -501,8 +509,10 @@ Files:
 - `components/system/population-panel.tsx` (existing — tooltip severity `:25`, ledger `:63-65`)
 
 Interface:
-- `needSeverity`'s two hardcoded lines become imported constants — `SUPPLIED_SATISFACTION` for "met" and
-  `SHORTAGE_SATISFACTION` for "critical" — or the divergence stays with Gate 1's written reason. The
+- `needSeverity`'s two hardcoded lines become imported constants — or stay with Gate 1's written
+  reason. *(Amended at Gate 1: the band now bins the world-mean, so its edges are not per-good lines
+  and cannot be the chip's import; the candidates are `SHORTAGE_SATISFACTION` for "critical" and a
+  named UI constant for the 0.95 "met" line, with the world-bin divergence documented.)* The
   signature is unchanged, so all four reader modules inherit the decision through one function.
 - The industry panel's comment at `:873` asserting what the pressure sort means is restated for the
   un-squared shape; no sort logic moves (the ordering is `computePopNeeds`').
@@ -607,15 +617,14 @@ On the branch, before the final review.
 
 - **Items 2-5** — the change term, the adaptive expectation, abandonment, relief. **Booked:** the spec's
   own Sequence section and `docs/ROADMAP.md` row 6, which names all five and their gating primitives.
-- **Every band boundary, the demand-share floor, the criticality line, the single relaxation rate, and
-  each re-cut constant's value.** **Booked at Gate 1**, merge conditions 1-7. The spec deliberately
-  leaves these to the measurement; a plan that chose them would be tuning constants the evidence does
-  not license.
-- **The necessity-floor variant on band eligibility.** **Booked at Gate 1**, condition 3 — the spec
-  defers it to the same measured distribution.
-- **The critical-good override's composition rule** (into the slope, and its stated effect on a band
-  table whose Shortage is survival-only). **Booked at Gate 1**, condition 4. This is a spec hole routed
-  back to the spec, not patched here — B4 cannot be implemented until it is written.
+- **The Provision bin edges, the override's demand-share floor, the criticality line, the single
+  relaxation rate, and each re-cut constant's value.** **Booked at Gate 1**, merge conditions 1-7. The
+  spec deliberately leaves these to the measurement; a plan that chose them would be tuning constants
+  the evidence does not license.
+- **The necessity-floor variant on band eligibility.** **Dissolved at Gate 1** (condition 3): the band
+  was re-specced to bin from Provision, and the override's weighting performs the floor's filtering.
+- **The critical-good override's composition rule.** **Resolved at Gate 1** (condition 4): written
+  into the spec's override section; B4's interface carries it.
 - **The `needSeverity` reconciliation's effect on the industry input gate.** **Booked at Gate 1**,
   condition 8.
 - **A world-level Provision display** — population-tab row, vital tile and map value mode. **Booked:**
