@@ -50,7 +50,7 @@ export interface TickContext {
  * Not broadcast, not persisted.
  */
 export interface EconomySignals {
-  /** Per-system convex necessity-weighted dissatisfaction D ∈ [0,1], for systems processed this tick. */
+  /** Per-system necessity-weighted dissatisfaction D ∈ [0,1] — 1 minus Provision — for systems processed this tick. */
   dissatisfactionBySystem: Map<string, number>;
   /** Per-system supplied/rationing/shortage reading of this cycle's consumption satisfaction, with
    *  the survival-good shortfall bit the unrest slope reads. */

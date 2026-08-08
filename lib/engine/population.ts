@@ -2,12 +2,14 @@
  * Pure population-dynamics functions — zero DB dependency.
  *
  * The consequence spine: measure → accumulate → threshold → effect.
- *  - measure:    dissatisfaction() folds per-good satisfaction into one convex number D
- *                weighted by demand × authored necessity, and foldSupplyState() classes
- *                the same goods as supplied/rationing/shortage — a cut on D plus a
- *                water/food survival floor. D picks the magnitude of the shortfall; the
- *                class no longer picks a rate (accumulateUnrest reads one relaxation rate
- *                for every label) but still carries the survival bit.
+ *  - measure:    dissatisfaction() is the complement of provision() — 1 minus the
+ *                necessity-and-demand-weighted MEAN of per-good satisfaction — so a partial
+ *                shortfall reads its own size rather than a squared fraction of it.
+ *                foldSupplyState() classes the same goods as supplied/rationing/shortage
+ *                from that same number — a cut on D plus a water/food survival floor. D
+ *                picks the magnitude of the shortfall; the class no longer picks a rate
+ *                (accumulateUnrest reads one relaxation rate for every label) but still
+ *                carries the survival bit.
  *  - accumulate: accumulateUnrest() relaxes unrest toward a standing-pressure floor
  *                (tax + crowding) and integrates D on top of it, with gain =
  *                unrestSlope(D, survivalShortfall) × the relaxation rate. Equilibrium is
@@ -46,28 +48,6 @@ function goodWeight(g: GoodSatisfaction): number {
   return Math.max(0, g.demanded) * Math.max(0, GOOD_NECESSITY[g.goodId] ?? 0);
 }
 
-/**
- * Convex, necessity-weighted dissatisfaction D in [0,1] for one system:
- *   weight_g = demanded_g × necessity_g,  share_g = weight_g / Σ weight
- *   D        = Σ share_g × (1 − satisfaction_g)²
- * Importance is the AUTHORED necessity weight times how much is actually wanted — demand volume alone
- * is a tier gradient and ranks medicine below gas. Convexity makes a deep shortage dominate many
- * shallow ones. Necessity is resolved from goodId here rather than passed in, so no call site can
- * diverge on the table. Returns 0 when Σ weight ≤ 0.
- */
-export function dissatisfaction(goods: GoodSatisfaction[]): number {
-  let totalWeight = 0;
-  for (const g of goods) totalWeight += goodWeight(g);
-  if (totalWeight <= 0) return 0;
-  let d = 0;
-  for (const g of goods) {
-    const share = goodWeight(g) / totalWeight;
-    const gap = 1 - clamp(g.satisfaction, 0, 1);
-    d += share * gap * gap;
-  }
-  return d;
-}
-
 /** Satisfaction clamped into [0,1]; NaN clamps to 0 rather than propagating — a corrupted read must
  *  read as the worst case, never silently pass a NaN into a mean (or, worse, into the world). */
 function clampSatisfaction(satisfaction: number): number {
@@ -75,9 +55,12 @@ function clampSatisfaction(satisfaction: number): number {
 }
 
 /**
- * Provision: the necessity-and-demand-weighted MEAN of per-good satisfaction, in [0,1]. Same weights
- * as dissatisfaction() (goodWeight = demanded × necessity, unchanged) — but averaged, not
- * squared-and-averaged, so a uniform partial shortfall reads its own size rather than its square.
+ * Provision: the necessity-and-demand-weighted MEAN of per-good satisfaction, in [0,1]:
+ *   weight_g = demanded_g × necessity_g,  share_g = weight_g / Σ weight
+ *   Provision = Σ share_g × satisfaction_g
+ * Averaged, not squared-and-averaged, so a uniform partial shortfall reads its own size rather than
+ * its square. dissatisfaction() below is exactly 1 − provision() — one implementation, two names, so
+ * the two cannot drift apart.
  * Read directly: 100% = everything demanded arrived, or nothing is demanded at all; 50% = half of
  * what this world needs, weighted by how badly it needs it, is not arriving.
  * Returns 1 when Σ weight ≤ 0 — the empty basket (or a basket of goods nobody here demands or needs)
@@ -94,6 +77,23 @@ export function provision(goods: GoodSatisfaction[]): number {
     mean += share * clampSatisfaction(g.satisfaction);
   }
   return mean;
+}
+
+/**
+ * Necessity-weighted dissatisfaction D in [0,1] for one system — the exact complement of provision():
+ *   D = 1 − provision(goods)
+ * One implementation, two names, so the sim and the pop-needs display twin (pop-needs.ts) cannot
+ * drift apart. A partial shortfall now reads its own size (a 17% uniform shortfall folds to ~0.17,
+ * against the old squared fold's ~0.029) rather than a squared fraction of it — the old convexity,
+ * where one deep shortage dominated many shallow ones, is gone: this fold responds identically to any
+ * redistribution of the same total weighted gap. Importance is still the AUTHORED necessity weight
+ * times how much is actually wanted — demand volume alone is a tier gradient and ranks medicine below
+ * gas. Necessity is resolved from goodId here (via provision()) rather than passed in, so no call site
+ * can diverge on the table. Returns 0 when Σ weight ≤ 0, the complement of provision()'s 1 for the
+ * same basket.
+ */
+export function dissatisfaction(goods: GoodSatisfaction[]): number {
+  return 1 - provision(goods);
 }
 
 /**
@@ -138,10 +138,10 @@ export type SupplyRegime = "supplied" | "rationing" | "shortage";
 
 /**
  * The system's supply reading. `survivalShortfall` is carried alongside the label because the two
- * drive different things: the label picks the relaxation rate, the shortfall promotes the unrest
- * slope to the Shortage bound (see unrestSlope). It cannot be inferred back from the label —
- * a D-driven Shortage and a survival-driven one carry the same label and must not carry the same
- * slope shape.
+ * drive different things: the label is the three-way class foldSupplyState assigns (the relaxation
+ * rate is uniform and reads neither), the shortfall promotes the unrest slope to the Shortage bound
+ * (see unrestSlope). It cannot be inferred back from the label — a D-driven Shortage and a
+ * survival-driven one carry the same label and must not carry the same slope shape.
  */
 export interface SupplyState {
   regime: SupplyRegime;
@@ -200,8 +200,8 @@ export interface UnrestParams {
  * onset. The ramp starts at the cut, so the slope is exactly slopeRationing across the whole
  * Rationing range and the containment guarantee holds at the top of it. A survival shortfall is a
  * step to slopeShortage: famine in water or food is graded as famine whatever the fold says, which
- * is the guarantee the floor exists to make explicit rather than hope emerges from a squared average.
- * Total and monotone in both inputs.
+ * is the guarantee the floor exists to make explicit rather than assume it always emerges from the
+ * necessity-weighted average alone. Total and monotone in both inputs.
  */
 export function unrestSlope(d: number, survivalShortfall: boolean, params: UnrestParams): number {
   if (survivalShortfall) return params.slopeShortage;

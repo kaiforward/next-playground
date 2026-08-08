@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computePopNeeds } from "@/lib/engine/pop-needs";
+import { dissatisfaction } from "@/lib/engine/population";
 import { GOOD_CONSUMPTION, GOOD_NECESSITY } from "@/lib/constants/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 
@@ -22,7 +23,7 @@ describe("computePopNeeds — stored satisfaction", () => {
     const share = (fed.want * GOOD_NECESSITY[bigGood]) / totalWeight;
     expect(fed.satisfaction).toBeCloseTo(0.6, 5);
     expect(fed.delivered).toBeCloseTo(fed.want * 0.6, 5);
-    expect(fed.pressure).toBeCloseTo(share * 0.4 * 0.4, 5);
+    expect(fed.pressure).toBeCloseTo(share * 0.4, 5);
   });
 
   it("treats a missing satisfaction field as fully served (pre-change save)", () => {
@@ -70,5 +71,36 @@ describe("computePopNeeds — stored satisfaction", () => {
   it("excludes goods this basis does not want", () => {
     const zeroBasis = { population: 0, technicians: 0, engineers: 0 };
     expect(computePopNeeds(zeroBasis, [{ goodId: bigGood, satisfaction: 1 }])).toEqual([]);
+  });
+
+  it("sums to the fold over the same basket", () => {
+    // pressure is `dissatisfaction()`'s own per-good term (pop-needs.ts:9-11) — summed over the
+    // basket, it must equal calling dissatisfaction() directly on the equivalent GoodSatisfaction[].
+    // A re-implemented sum on either side is the drift this proves.
+    const basis = { population: 1000, technicians: 20, engineers: 5 };
+    const markets = consumedIds.map((id, i) => ({ goodId: id, satisfaction: [0.9, 0.6, 0.3, 0.75][i % 4] }));
+    const needs = computePopNeeds(basis, markets);
+    const totalPressure = needs.reduce((sum, n) => sum + n.pressure, 0);
+    const asGoods = needs.map((n) => ({ goodId: n.goodId, satisfaction: n.satisfaction, demanded: n.want }));
+    expect(totalPressure).toBeCloseTo(dissatisfaction(asGoods), 10);
+  });
+
+  it("ranking inverts for the case that motivated the coupling: linear favours the shallow, high-weight, high-volume good over a deep gap in a negligible one", () => {
+    // Under the old squared shape, a deep gap in a negligible good (luxuries, necessity 0.05) could
+    // outrank a shallow gap in a high-necessity, high-volume good (water, necessity 1.0) once the gap
+    // shrank enough to be squared away. The un-squared shape can't do that — it's exactly the weighted
+    // mean, so a big enough weight advantage always wins. A heavily-skilled basis (engineers >>
+    // technicians) keeps luxuries' own weight non-trivial, so the two shapes actually disagree here
+    // rather than both trivially favouring water.
+    const skilledBasis = { population: 1000, technicians: 0, engineers: 780 };
+    const markets = consumedIds.map((id) => {
+      if (id === "water") return { goodId: id, satisfaction: 0.7 }; // shallow gap, high weight
+      if (id === "luxuries") return { goodId: id, satisfaction: 0 }; // deep gap, negligible good
+      return { goodId: id, satisfaction: 1 }; // everything else fully met — contributes no pressure
+    });
+    const needs = computePopNeeds(skilledBasis, markets);
+    const water = needs.find((n) => n.goodId === "water")!;
+    const luxuries = needs.find((n) => n.goodId === "luxuries")!;
+    expect(water.pressure).toBeGreaterThan(luxuries.pressure);
   });
 });

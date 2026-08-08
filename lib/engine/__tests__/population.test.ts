@@ -18,7 +18,7 @@ import {
 import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT } from "@/lib/constants/economy";
 import { GOOD_NECESSITY } from "@/lib/constants/physical-economy";
 
-describe("dissatisfaction (convex, necessity-weighted)", () => {
+describe("dissatisfaction (complement of provision, necessity-weighted)", () => {
   it("is 0 when fully satisfied and 0 when nothing is demanded", () => {
     expect(dissatisfaction([
       { goodId: "food", satisfaction: 1, demanded: 10 },
@@ -54,13 +54,65 @@ describe("dissatisfaction (convex, necessity-weighted)", () => {
     expect(deep).toBeGreaterThan(shallow);
   });
 
-  it("convexity: one deep shortage dominates broad shallow tightness", () => {
+  it("is the exact complement of provision() on every basket, including the empty one", () => {
+    // One implementation, two names — pop-needs.ts:9-11's whole reason to exist is to stop the
+    // display twin re-implementing this sum and drifting from it. If dissatisfaction() were ever
+    // re-implemented as its own sum instead of 1 − provision(), this is the test that catches it.
+    const baskets: { goodId: string; satisfaction: number; demanded: number }[][] = [
+      [],
+      [
+        { goodId: "water", satisfaction: 1, demanded: 10 },
+        { goodId: "luxuries", satisfaction: 1, demanded: 2 },
+      ],
+      [
+        { goodId: "water", satisfaction: 0, demanded: 10 },
+        { goodId: "food", satisfaction: 0, demanded: 10 },
+      ],
+      [
+        { goodId: "water", satisfaction: 0.8, demanded: 10 },
+        { goodId: "food", satisfaction: 0.8, demanded: 30 },
+        { goodId: "medicine", satisfaction: 0.8, demanded: 5 },
+      ],
+    ];
+    for (const basket of baskets) {
+      expect(dissatisfaction(basket)).toBeCloseTo(1 - provision(basket), 10);
+    }
+  });
+
+  it("reads a uniform partial shortfall as its own size, not its square (the spec's compression table)", () => {
+    // A 17% uniform shortfall folds to ~0.17 under the un-squared fold, against the old squared
+    // fold's ~0.029 (0.17² ≈ 0.0289). A scenario built the way band-constants.test.ts's dFor() builds
+    // them (every named good at satisfaction 0, gap always exactly 1) cannot see this at all: 1² = 1
+    // either way. This basket needs a genuine partial gap.
+    const seventeenPercent = [
+      { goodId: "water", satisfaction: 0.83, demanded: 10 },
+      { goodId: "food", satisfaction: 0.83, demanded: 30 },
+      { goodId: "medicine", satisfaction: 0.83, demanded: 5 },
+    ];
+    expect(dissatisfaction(seventeenPercent)).toBeCloseTo(0.17, 2);
+
+    // Restated from the shipped "still weights by how much is wanted" family at an exact 20%
+    // shortfall: it used to fold to 0.04 (0.2²) and now reads 0.2 directly.
+    const twentyPercent = [
+      { goodId: "water", satisfaction: 0.8, demanded: 10 },
+      { goodId: "food", satisfaction: 0.8, demanded: 30 },
+      { goodId: "medicine", satisfaction: 0.8, demanded: 5 },
+    ];
+    expect(dissatisfaction(twentyPercent)).toBeCloseTo(0.2, 10);
+  });
+
+  it("is exactly linear, not convex: redistributing the same total weighted gap reads identically", () => {
+    // Before this change, a deep shortage in a small slice of the basket dominated a broad shallow
+    // one at the same total weighted gap (0.1 vs 0.01 under the squared fold — see the git history of
+    // this test). The un-squared fold IS the weighted mean, so it cannot tell the two distributions
+    // apart; this fails against the squared fold.
     const deep = dissatisfaction([
       { goodId: "water", satisfaction: 0, demanded: 10 },
       { goodId: "water", satisfaction: 1, demanded: 90 },
     ]);
     const shallow = dissatisfaction([{ goodId: "water", satisfaction: 0.9, demanded: 100 }]);
-    expect(deep).toBeGreaterThan(shallow);
+    expect(deep).toBeCloseTo(shallow, 10);
+    expect(deep).toBeCloseTo(0.1, 10);
   });
 
   it("ignores a good with no authored necessity rather than guessing one", () => {
@@ -94,29 +146,6 @@ describe("provision (necessity-and-demand-weighted mean)", () => {
     const withZeroNecessity = [...base, { goodId: "not_a_good", satisfaction: 0, demanded: 100 }];
     expect(provision(withZeroDemand)).toBeCloseTo(provision(base), 10);
     expect(provision(withZeroNecessity)).toBeCloseTo(provision(base), 10);
-  });
-
-  it("is not the complement of dissatisfaction() on a partial-satisfaction basket (the vacuity check)", () => {
-    // Every named good at satisfaction 0, the way band-constants.test.ts's dFor() builds scenarios,
-    // cannot distinguish the two folds: both read the full gap.
-    const zeroed = [
-      { goodId: "water", satisfaction: 0, demanded: 10 },
-      { goodId: "food", satisfaction: 0, demanded: 10 },
-    ];
-    expect(dissatisfaction(zeroed)).toBeCloseTo(1 - provision(zeroed), 10);
-
-    // A uniform PARTIAL shortfall is where the two folds separate: the un-squared mean reads its own
-    // size (0.2), the squared fold reads a small fraction of it (0.04) — several times smaller.
-    const partial = [
-      { goodId: "water", satisfaction: 0.8, demanded: 10 },
-      { goodId: "food", satisfaction: 0.8, demanded: 30 },
-      { goodId: "medicine", satisfaction: 0.8, demanded: 5 },
-    ];
-    const shortfall = 1 - provision(partial);
-    const d = dissatisfaction(partial);
-    expect(shortfall).toBeCloseTo(0.2, 10);
-    expect(d).toBeCloseTo(0.04, 10);
-    expect(shortfall).toBeGreaterThan(d * 4);
   });
 
   it("clamps non-finite or out-of-range satisfaction rather than propagating it", () => {
@@ -270,10 +299,12 @@ describe("foldSupplyState (D cut + survival floor)", () => {
   });
 
   it("selects shortage from the survival floor even when D is far below the cut", () => {
-    // Water at half rations folds to ~0.09 — nowhere near any workable cut, yet the population is
-    // genuinely on half rations. This is the case the floor exists for.
+    // Water at half rations, at a small demand share against a large well-served ore demand, folds
+    // to ~0.1 — nowhere near the cut — yet the population is genuinely on half rations. This is the
+    // case the floor exists for. (Demand split chosen so water's own share stays small: that isolates
+    // the floor from the cut, which the deep-shortage case below cannot.)
     const goods = [
-      { goodId: "water", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 100 },
+      { goodId: "water", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 10 },
       full("ore", 400),
     ];
     const d = dissatisfaction(goods);

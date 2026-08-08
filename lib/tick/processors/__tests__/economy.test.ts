@@ -380,19 +380,30 @@ describe("economy processor: supply regime signal", () => {
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     // A deep water shortage: both selectors agree here — water is below the shortage line AND the
-    // squared gap pushes D over the cut on its own. The next test isolates the floor from the cut.
+    // gap pushes D over the cut on its own. The next test isolates the floor from the cut.
     expect(satOf(world, "water")).toBeCloseTo(0.25, 6);
     expect(dOf(result.economySignals, "sys-starved")).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);
     expect(regimeOf(result.economySignals, "sys-starved")).toBe("shortage");
   });
 
   it("promotes to shortage from the survival floor alone, with D below the cut", async () => {
-    // The floor's whole reason to exist: water just under the shortage line is famine even though
-    // the squared fold reads it as mild. Without hasSurvivalShortfall this fixture reads "rationing",
-    // so it fails if the floor is removed — which the deep-shortage case above cannot detect.
+    // The floor's whole reason to exist: water just under the shortage line is famine even though the
+    // fold alone reads it as mild. Without hasSurvivalShortfall this fixture reads "rationing", so it
+    // fails if the floor is removed — which the deep-shortage case above cannot detect.
+    // Water and food alone (both necessity 1.0) already carry >50% of the necessity-weighted basket's
+    // total weight under the un-squared fold, so a water shortfall deep enough to trip the survival
+    // line (satisfaction < 0.5) would ALSO cross D_SHORTAGE_CUT on its own — that would no longer
+    // isolate the floor from the cut. Three more fully-served goods (medicine, gas, textiles) dilute
+    // water's share enough that D stays below the cut while the floor still fires.
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("sys-thirsty", 0)],
-      markets: [makeMarket("sys-thirsty", "food", SERVED_STOCK), makeMarket("sys-thirsty", "water", MILD_SHORT_STOCK)],
+      markets: [
+        makeMarket("sys-thirsty", "food", SERVED_STOCK),
+        makeMarket("sys-thirsty", "water", MILD_SHORT_STOCK),
+        makeMarket("sys-thirsty", "medicine", SERVED_STOCK),
+        makeMarket("sys-thirsty", "gas", SERVED_STOCK),
+        makeMarket("sys-thirsty", "textiles", SERVED_STOCK),
+      ],
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
@@ -818,8 +829,9 @@ describe("satisfaction — measured flow, persisted", () => {
 
   it("feeds the same value into dissatisfactionBySystem", async () => {
     // Single-good rationed consumer (stock 0.25 × ration threshold → satisfaction 0.5).
-    // With one good, demand-share = 1, so D = (1 − satisfaction)² = 0.25 — computed
-    // from the SAME persisted satisfaction, not a recomputed stock read.
+    // With one good, demand-share = 1, so D = 1 − satisfaction = 0.5 — computed from the SAME
+    // persisted satisfaction, not a recomputed stock read. (Was (1 − 0.5)² = 0.25 under the squared
+    // fold; this is the assertion that must be restated, not adjusted, when the fold un-squares.)
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("sys-fold", 0)],
       markets: [makeMarket("sys-fold", "food", 0.25 * rationStock)],
@@ -829,7 +841,7 @@ describe("satisfaction — measured flow, persisted", () => {
     const persisted = satOf(world, "sys-fold");
     const d = result.economySignals?.dissatisfactionBySystem.get("sys-fold");
     expect(persisted).toBeCloseTo(0.5, 6); // the persisted flow measure
-    expect(d).toBeCloseTo(0.25, 6); // = (1 − 0.5)², folded from that same persisted value
+    expect(d).toBeCloseTo(0.5, 6); // = 1 − 0.5, folded from that same persisted value
   });
 });
 
