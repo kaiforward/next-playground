@@ -19,7 +19,7 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
  * Each slope is an EXCHANGE RATE, not a cap: how much settled unrest one unit of D buys.
  *
  * `slopeRationing` is INTERIM SCAFFOLDING, not a design law — it dissolves once the adaptive
- * expectation (spec item 3) re-derives it against a newborn's own expectations rather than an
+ * expectation re-derives it against a newborn's own expectations rather than an
  * absolute floor. It sits in [0.84, 1.07] — the founding cohort (the modal world, opening at
  * the galaxy's worst supply state) must settle below the 0.65 strike threshold at the
  * FOUNDING-REALISTIC floor (frontier default tax 0.02, no crowding — the floor a newborn actually

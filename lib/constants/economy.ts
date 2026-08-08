@@ -89,10 +89,10 @@ export const SHORTAGE_SATISFACTION = 0.5;
 
 /**
  * Provision shortfall (`1 − provision()`, a linear mean — a partial shortfall reads its own size, not
- * its square) at or above which the unrest slope ramp reaches full Shortage weight. `foldSupplyState`
- * still bins its regime label on this same cut too, a role that ends once the band bins Provision
- * directly instead — which is why the cut is authored as ESCALATION-ONLY: it no longer separates
- * ambient scarcity from famine (the
+ * its square) at or above which the unrest slope BEGINS ramping from `slopeRationing` toward
+ * `slopeShortage` (full Shortage weight lands at cut + blend = 0.90). Its only consumer is
+ * `unrestSlope` — the band bins Provision directly and never reads this cut — which is why it is
+ * authored as ESCALATION-ONLY: it does not separate ambient scarcity from famine (the
  * survival floor already does that job outright), it only decides when the ramp engages. Set well
  * above every measured founding shortfall (p10 0.59, mean 0.27 — equilibrium founding cohort,
  * n = 562, docs/planned/supply-response.md) so a newborn colony's own worst reading never engages it.

@@ -221,15 +221,15 @@ Each system has a **`population`** (a Float magnitude) that is now dynamic — i
 
 ```
 Provision = Σ_g weight_g · satisfaction_g / Σ_g weight_g     where weight_g = demandShare_g · necessity_g
-unrest   ← clamp(unrest + slope(shortfall)·shortfall − decay·unrest, 0, 1)
+unrest   ← clamp(floor + (1 − decay)·(unrest − floor) + slope(shortfall)·decay·shortfall, 0, 1)
 ```
 
-Relaxation is a single rate (`decay`) whatever the world's state. The slope ramps from `slopeRationing` to `slopeShortage` across deep shortfalls, and severity lives in two explicit overrides rather than in the curve's shape — the two cases where a single good must matter despite a healthy average:
+`floor` is the standing pressure every settled world carries regardless of supply (tax level + crowding, up to ~0.23). Relaxation is a single rate (`decay`) whatever the world's state, and because the gain is scaled by the same `decay`, the fixed point is `min(1, floor + slope × shortfall)` **independent of the relaxation rate** — the rate sets only how fast unrest travels there. The slope ramps from `slopeRationing` to `slopeShortage` across deep shortfalls, and severity lives in two explicit overrides rather than in the curve's shape — the two cases where a single good must matter despite a healthy average:
 
 - **Survival floor** — water or food below `SHORTAGE_SATISFACTION` (50%) promotes the slope to `slopeShortage` outright and bands the world Shortage, whatever the average says. Famine is never averaged away.
 - **Critical-good override** — each demanded good below `CRITICAL_SATISFACTION` (0.25, a separate line from the famine one) holding at least `BAND_MIN_DEMAND_SHARE` (1%) of the basket adds its `necessity × demandShare` weight to the slope (scaled by `slopeShortage − slopeRationing`, capped at `slopeShortage`). Slope-only: it never moves the band, and a world that also has famine fires the survival step alone.
 
-The **band is description, not mechanism** — four labels binned from Provision, shown to the player and the harness:
+The **band is description, not mechanism** — four labels binned from Provision, read by the sim harness today (the player-facing Provision surface is a separately booked roadmap row):
 
 | Band | Rule |
 | --- | --- |
