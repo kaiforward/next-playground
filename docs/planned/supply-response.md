@@ -186,13 +186,13 @@ differ by accident, which is the version that is definitely wrong.
 
 ## Bands become description
 
-**Four bands, binned from Provision, with two overrides that punch through the average:**
+**Four bands, binned from Provision, with one override that punches through the average:**
 
 | Band | Rule |
 | --- | --- |
-| **Supplied** | Provision at or above the Supplied bin edge, no override firing |
+| **Supplied** | Provision at or above the Supplied bin edge |
 | **Strained** | Provision between the Rationing and Supplied bin edges |
-| **Rationing** | Provision below the Rationing bin edge, **or** the critical-good override fires |
+| **Rationing** | Provision below the Rationing bin edge |
 | **Shortage** | a *survival* good below 50%, whatever Provision says |
 
 The band is a coarse rendering of the quantity that actually drives outcomes. Provision feeds the
@@ -245,8 +245,12 @@ It carries on `SupplyState` and composes in `unrestSlope`, the one place severit
   slopeRationing)`, capped at `slopeShortage`. The survival step is unchanged and still promotes to
   `slopeShortage` outright; the cap means the override can approach famine weight but never exceed
   it, and a world with both fires the survival step alone.
-- **Band:** a non-zero `criticalWeight` promotes the band to at least Rationing. It never sets
-  Shortage — Shortage stays survival-only, so the band table and the override cannot conflict.
+- **The override never touches the band.** A binary promotion was measured and rejected at the
+  step-1 gate: it would have stamped ~170 healthy-Provision worlds Rationing over median gaps worth
+  ~1% of their weighted needs — and a weight `w` below the criticality line forces
+  `Provision ≤ 1 − 0.75w`, so every genuinely severe case already bins as Strained or Rationing on
+  Provision alone. The label stays a rendering of the health bar; famine (the survival floor) is the
+  single punch-through.
 - It gates nothing else.
 
 **The authored counter-argument, and the answer.** `fed()`'s docstring argues against exactly this

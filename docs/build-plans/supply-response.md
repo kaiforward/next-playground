@@ -419,10 +419,11 @@ Interface:
   the slope side; carrying it on the state is what keeps `unrestSlope` the one place severity composes.
 - `foldSupplyState(goods: GoodSatisfaction[]): SupplyState` — **the `d` parameter is dropped**. The
   band is **binned from `provision(goods)`** (one implementation — the fold calls `provision()`, so
-  the bin and the number cannot drift), then the survival floor promotes to Shortage and a non-zero
-  `criticalWeight` promotes to at least Rationing (never Shortage — survival-only, per the spec's
-  composition rule). Callers drop the second argument: `lib/tick/processors/economy.ts:248`,
-  `lib/tick-harness/population-analysis.ts:274`, and the test suites.
+  the bin and the number cannot drift); the survival floor promotes to Shortage; `criticalWeight` is
+  carried on the state but **never changes the band** (measured and rejected at Gate 1 — the spec's
+  override section records why). Callers drop the second argument:
+  `lib/tick/processors/economy.ts:248`, `lib/tick-harness/population-analysis.ts:274`, and the test
+  suites.
 - `unrestSlope(d: number, supply: SupplyState, params: UnrestParams): number` — takes the state rather
   than the bare survival bit, so the D-ramp, the survival step and the override compose in one function
   per the spec's composition rule (ramp + `criticalWeight × (slopeShortage − slopeRationing)`, capped
@@ -446,9 +447,9 @@ Proves:
   at the identical satisfaction does not.
 - A world whose only shortfall is an epsilon-demand good below the criticality line bands by its
   Provision alone and contributes no override weight — the demand-share floor's whole reason to exist.
-- An eligible good below the criticality line on a high-Provision world promotes the band to Rationing
-  (never Shortage), and `criticalWeight` is proportional to `necessity × demand share` and exactly
-  zero for every good above the criticality line.
+- An eligible good below the criticality line on a high-Provision world leaves the band exactly where
+  Provision bins it — the override never changes the label — while `criticalWeight` is proportional
+  to `necessity × demand share` and exactly zero for every good above the criticality line.
 - `unrestSlope` composes per the rule: the override raises the effective slope by
   `criticalWeight × (slopeShortage − slopeRationing)` capped at `slopeShortage`, and a world with both
   the survival step and override weight gets the survival step alone.
