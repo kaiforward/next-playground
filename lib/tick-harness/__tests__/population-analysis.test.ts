@@ -5,7 +5,9 @@ import {
 } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
-import { D_SHORTAGE_CUT } from "@/lib/constants/economy";
+import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import { GOOD_NAMES } from "@/lib/constants/goods";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldEvent } from "@/lib/world/types";
@@ -240,13 +242,19 @@ describe("summarizeSupplyRegimes", () => {
   });
 
   it("reaches shortage through the D cut, not only the survival shortcut", () => {
-    // Both survival goods sit ABOVE SHORTAGE_SATISFACTION (0.55 > 0.5), so hasSurvivalShortfall is
-    // false and the shortcut cannot fire — a deeply-missing low-necessity good carries D over the cut
-    // on its own. The "thirsty" fixture above takes the shortcut, so without this case the cut branch
-    // is never the thing under test.
+    // D_SHORTAGE_CUT is escalation-only now (Gate 1: 0.65, well above every measured founding
+    // shortfall) and sits close to the theoretical ceiling of D achievable while both survival goods
+    // hold the line: at satisfaction exactly SHORTAGE_SATISFACTION (not below it, so
+    // hasSurvivalShortfall stays false) with every OTHER demanded good at zero, the necessity-weighted
+    // mean tops out at ≈0.654 — a near-total basket collapse, not the shallow single-good gap this
+    // used to need under the old, much lower cut (0.25). Built from the real tables (GOOD_NAMES,
+    // SURVIVAL_GOODS) so it re-verifies itself if any necessity or demand weight moves; a smaller
+    // fixture cannot cross the cut at all without also tripping the shortcut (see economy.test.ts).
+    const nonSurvival = GOOD_NAMES.filter((g) => !SURVIVAL_GOODS.includes(g));
     const systems = [popSys("squeezed", 100, 1000)];
     const summary = summarizeSupplyRegimes(systems, [
-      mkt("squeezed", "water", 0.55), mkt("squeezed", "food", 0.55), mkt("squeezed", "gas", 0),
+      ...SURVIVAL_GOODS.map((g) => mkt("squeezed", g, SHORTAGE_SATISFACTION)),
+      ...nonSurvival.map((g) => mkt("squeezed", g, 0)),
     ]);
     expect(summary.shortage).toBe(1);
     expect(summary.meanDissatisfaction).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);

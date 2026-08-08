@@ -263,7 +263,10 @@ seed 42, 600 systems, economy scale 100 — the run the spec's evidence table wa
    `criticalWeight × (slopeShortage − slopeRationing)` capped at `slopeShortage`; the override never
    touches the band; survival step fires alone when both apply.)*
 5. **DECIDED: `D_SHORTAGE_CUT` = 0.65, `D_SHORTAGE_BLEND` = 0.25, `slopeRationing` = 0.95,
-   `slopeShortage` = 2.1.** The founding invariant is read at the **founding-realistic floor** (0.02,
+   `slopeShortage` = 2.4** *(amended at B3 from 2.1: the restated guarantee suite exposed that food —
+   the weaker survival share, ~0.32 — didn't clear the collapse line at 2.1; owner kept the
+   both-goods guarantee and moved the value: slope × 0.32 ≥ 0.75, 2.4 the smallest 0.1-step value
+   with real margin)**.** The founding invariant is read at the **founding-realistic floor** (0.02,
    frontier default tax, no crowding — the worst tax-and-crowding pairing collides with the strike
    guarantee: p10 shortfall 0.59 at floor 0.23 caps the slope at 0.71 < 0.84) giving ceiling 1.07;
    the shipped strike guarantee (`band-constants.test.ts:205-210`) bounds from below at 0.84. The
@@ -376,8 +379,9 @@ Files:
 
 Interface:
 - Values only, all of them Gate 1's decided numbers: `D_SHORTAGE_CUT` 0.65, `D_SHORTAGE_BLEND` 0.25,
-  `UNREST_PARAMS.slopeRationing` 0.95, `UNREST_PARAMS.slopeShortage` 2.1, `UNREST_PARAMS.decay` 0.06,
-  `POPULATION_PARAMS.growthRate` / `declineRate` unchanged at 0.015. No name, type or reader changes.
+  `UNREST_PARAMS.slopeRationing` 0.95, `UNREST_PARAMS.slopeShortage` 2.4 (amended at B3 — see the
+  merge-condition list), `UNREST_PARAMS.decay` 0.06, `POPULATION_PARAMS.growthRate` / `declineRate`
+  unchanged at 0.015. No name, type or reader changes.
 - Docstrings re-authored, not nudged: `D_SHORTAGE_CUT`'s cited anchors (≈0.14 ambient, ≈0.37 water) are
   gap-1 values and carry no information about the new scale; `UNREST_PARAMS`' "it exceeds 1 because D
   itself is small" premise is exactly what this change invalidates; `POPULATION_PARAMS`' symmetry
@@ -404,8 +408,8 @@ Proves:
 - **Collapse is contained to the Shortage band** (the Gate 1 re-authoring): a world without famine at
   Provision ≥ `RATIONING_PROVISION` stays below the 0.75 collapse line at any tax, any crowding, and
   the maximum override composition the structure permits — the worst case sits at the band edge
-  (`0.23 + (0.95 + (0.30/0.75) × 1.15) × 0.30 = 0.653`). The assertion computes the override worst case
-  from the constants rather than hardcoding 0.653, so it recomputes if a bin edge or slope moves. Do
+  (`0.23 + (0.95 + (0.30/0.75) × 1.45) × 0.30 = 0.689`). The assertion computes the override worst case
+  from the constants rather than hardcoding the result, so it recomputes if a bin edge or slope moves. Do
   not assert the gate report's "shortfall ≤ 0.5 never collapses" variant — it is false under the
   override.
 - A total water or food failure still collapses at zero tax and still drives net decline at every tax

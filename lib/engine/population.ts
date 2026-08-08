@@ -182,8 +182,9 @@ export function foldSupplyState(goods: GoodSatisfaction[], d: number): SupplySta
 
 export interface UnrestParams {
   /** Settled unrest ABOVE the standing floor, per unit of D, while Rationing — an exchange rate, not
-   *  a cap. It equals settled unrest only at D = 1, which does not occur (mean D ~0.15); the state
-   *  itself is [0,1] and saturates there. */
+   *  a cap. It equals settled unrest only at D = 1, which does not occur (mean shortfall ~0.03 at
+   *  equilibrium — D reads its own size now, not a squared fraction of it); the state itself is
+   *  [0,1] and saturates there. */
   slopeRationing: number;
   /** …and while Shortage. Strictly above slopeRationing. */
   slopeShortage: number;

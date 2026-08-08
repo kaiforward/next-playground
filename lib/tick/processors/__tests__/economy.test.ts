@@ -379,10 +379,15 @@ describe("economy processor: supply regime signal", () => {
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    // A deep water shortage: both selectors agree here — water is below the shortage line AND the
-    // gap pushes D over the cut on its own. The next test isolates the floor from the cut.
+    // A deep water shortage drives Shortage through the survival floor alone. D_SHORTAGE_CUT is now
+    // escalation-only and set well above every measured founding shortfall (Gate 1), so even a total
+    // water failure in a food+water-only economy (max D ≈ 0.54, water's weighted share of just the
+    // two) can no longer cross it unaided — the next test isolates the floor from the cut at a milder
+    // depth; "reaches shortage through the D cut, not only the survival shortcut"
+    // (population-analysis.test.ts) is where the cut-without-floor path is exercised, since it now
+    // takes a near-total, whole-basket collapse to reach on its own.
     expect(satOf(world, "water")).toBeCloseTo(0.25, 6);
-    expect(dOf(result.economySignals, "sys-starved")).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);
+    expect(dOf(result.economySignals, "sys-starved")).toBeLessThan(D_SHORTAGE_CUT);
     expect(regimeOf(result.economySignals, "sys-starved")).toBe("shortage");
   });
 

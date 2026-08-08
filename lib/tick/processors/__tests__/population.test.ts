@@ -385,11 +385,12 @@ describe("population processor", () => {
     // rides along while the slopes stay dimensionless exchange rates. Gains are read from a zero start (no
     // relaxation term) and relaxation from a raised start (D = 0, so no gain term). Which slope
     // applies is selected by D, not by the regime label: D_LOW sits below the shortage cut and D_HIGH
-    // above the top of the blend band. relax-supplied and relax-rationing carry different LABELS but
-    // the identical rate, so they must land on the identical relaxed value.
+    // above the top of the blend band (cut 0.65 + blend 0.25 = 0.90). relax-supplied and
+    // relax-rationing carry different LABELS but the identical rate, so they must land on the
+    // identical relaxed value.
     const start = 0.5;
     const D_LOW = 0.1;
-    const D_HIGH = 0.5;
+    const D_HIGH = 0.95;
     const runAt = async (interval: number) => {
       const world = new InMemoryPopulationWorld({
         systems: [

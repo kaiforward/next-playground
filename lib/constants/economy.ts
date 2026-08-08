@@ -88,22 +88,26 @@ export const ECONOMY_SIM_PARAMS: Readonly<EconomySimParams> = {
 export const SHORTAGE_SATISFACTION = 0.5;
 
 /**
- * System dissatisfaction D at or above which the supply regime reads Shortage rather than Rationing.
- * Cut against the measured 26-good basket under GOOD_NECESSITY: the ambient barren-galaxy deficit
- * (every tier-1 and tier-2 good empty) folds to ≈0.14 while a total water failure folds to ≈0.37, so
- * any cut in (0.141, 0.319] grades famine as Shortage and ambient scarcity as Rationing. Both
- * endpoints are scenario values, not constants — moving any necessity weight moves them, so re-derive
- * rather than nudge (lib/constants/__tests__/band-constants.test.ts asserts the separation holds).
- * First cut; the simulator owns the final.
+ * Provision shortfall (`1 − provision()`, a linear mean — a partial shortfall reads its own size, not
+ * its square) at or above which the unrest slope ramp reaches full Shortage weight. `foldSupplyState`
+ * still bins its regime label on this same cut too, a role that ends once the band bins Provision
+ * directly instead — which is why the cut is authored as ESCALATION-ONLY: it no longer separates
+ * ambient scarcity from famine (the
+ * survival floor already does that job outright), it only decides when the ramp engages. Set well
+ * above every measured founding shortfall (p10 0.59, mean 0.27 — equilibrium founding cohort,
+ * n = 562, docs/planned/supply-response.md) so a newborn colony's own worst reading never engages it.
+ * The old gap-1/squared-scale anchors (≈0.14 ambient, ≈0.37 water, as D values on the squared fold)
+ * carried no information about the linear scale and are retired rather than restated. Re-derive
+ * rather than nudge if the founding shortfall distribution moves
+ * (lib/constants/__tests__/band-constants.test.ts pins it above the measured p10).
  */
-export const D_SHORTAGE_CUT = 0.25;
+export const D_SHORTAGE_CUT = 0.65;
 
 /**
  * Width of the D band above the cut across which the unrest slope ramps from the Rationing value to
- * the Shortage one. The ramp starts AT the cut and never below it, so the Rationing containment
- * guarantee (sustained Rationing cannot reach collapse at any tax) holds across the whole Rationing
- * range; a hard branch here would instead double a system's settled unrest for an arbitrarily small
- * change in delivered goods, and land that step across strike onset. Narrow enough that a total food
- * failure still reaches the full Shortage slope — asserted from the constants, not assumed.
+ * the Shortage one — full Shortage weight lands at shortfall 0.90. The ramp starts AT the cut and
+ * never below it, so no system takes a hard step in settled unrest for an arbitrarily small change in
+ * delivered goods. Escalation-only, like the cut it extends: it no longer marks where a band boundary
+ * sits (the band bins Provision directly instead), only how fast the ramp climbs once above it.
  */
-export const D_SHORTAGE_BLEND = 0.05;
+export const D_SHORTAGE_BLEND = 0.25;

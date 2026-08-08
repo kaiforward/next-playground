@@ -16,8 +16,16 @@ import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, INPUT_DEMAND_MULTIPLI
 import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
+import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { unrestSlope, dissatisfaction, hasSurvivalShortfall, type GoodSatisfaction } from "@/lib/engine/population";
+import {
+  unrestSlope,
+  dissatisfaction,
+  hasSurvivalShortfall,
+  accumulateUnrest,
+  type GoodSatisfaction,
+} from "@/lib/engine/population";
 import { sizeColonyEstablish, fed, type BuildSystemState } from "@/lib/engine/directed-build";
 import { housingUsed, idleLevels } from "@/lib/engine/infrastructure-decay";
 import { emptyResourceVector } from "@/lib/engine/resources";
@@ -143,6 +151,18 @@ function dFor(empty: readonly string[]): number {
   return d;
 }
 
+/**
+ * Every good in the table at the SAME satisfaction level. Weight-independent: for a uniform gap the
+ * weighted mean equals that gap exactly, whatever the necessity/demand weights are — so D = 1 −
+ * satisfaction here, regardless of the fold. This is the shape dFor() cannot express (dFor always
+ * puts named goods at satisfaction 0, gap = 1, identical under the squared and linear folds) and the
+ * only shape that can distinguish them: at satisfaction 0.83 the linear fold reads ~0.17, the squared
+ * one ~0.0289.
+ */
+function uniformBasket(satisfaction: number): GoodSatisfaction[] {
+  return GOOD_NAMES.map((goodId) => ({ goodId, satisfaction, demanded: 1 }));
+}
+
 /** Equilibrium unrest under sustained D at a given standing floor: floor + slope(D) × D. */
 function settled(d: number, floor: number, survivalShortfall = false): number {
   return floor + unrestSlope(d, survivalShortfall, UNREST_PARAMS) * d;
@@ -152,18 +172,52 @@ const MAX_FLOOR = Math.max(...Object.values(TAX_LEVEL_UNREST_PRESSURE)) + CROWDI
 const COLLAPSE = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
 const TIER1PLUS2 = GOOD_NAMES.filter((g) => (GOOD_TIER_BY_KEY[g] ?? 0) > 0);
 
-describe("necessity fold — the separation the shortage cut was drawn against", () => {
+/** Measured founding shortfall distribution (equilibrium founding cohort, n = 562) — see
+ *  docs/planned/supply-response.md, "The guarantees, restated on Provision". Not a code constant: it
+ *  is what the founding cohort was measured at, not a value the sim reads. */
+const FOUNDING_SHORTFALL_P10 = 0.59;
+
+/** Frontier default tax stance, no crowding — the floor a newborn colony can actually occupy (never
+ *  the worst tax-and-crowding floor, which no founding colony occupies). */
+const FOUNDING_FLOOR = TAX_LEVEL_UNREST_PRESSURE.low;
+
+describe("the linear fold — the shape a gap-1 scenario can't see", () => {
+  it("reads a uniform partial shortfall as its own size, not its square", () => {
+    // Every dFor() scenario puts named goods at satisfaction 0 (gap = 1), where gap = gap², so the
+    // shipped suite could not tell the squared fold from the linear one at all. A uniform PARTIAL
+    // shortfall is the only shape that can: it is weight-independent (every term of the weighted mean
+    // carries the same gap), so D = 1 − satisfaction exactly, under the linear fold only. The squared
+    // fold would read (1 − satisfaction)² here instead — 0.17 vs ≈0.0289 — so this fails outright if
+    // dissatisfaction() is reverted to the squared shape.
+    const shortfall = 0.17;
+    expect(dissatisfaction(uniformBasket(1 - shortfall))).toBeCloseTo(shortfall, 9);
+  });
+
+  it("still returns the fold's complement on a partial basket, both directions", () => {
+    // provision() and dissatisfaction() must not drift on a scenario dFor() cannot express.
+    const basket = uniformBasket(0.62);
+    expect(dissatisfaction(basket)).toBeCloseTo(1 - 0.62, 9);
+  });
+});
+
+describe("shortage cut and blend — escalation-only now, not a band boundary", () => {
   it("grades a total water or food failure above the ambient barren-galaxy deficit", () => {
     // The whole point of the weight. Unweighted, the ambient deficit scored 2.2x a total water
-    // failure, so no cut could separate them; weighted, the ordering inverts.
+    // failure, so no cut could separate them; weighted, the ordering inverts. Unaffected by the fold
+    // or the cut/blend re-cut — dFor() always reads gap = 1, so this separation held before this task
+    // and still holds after it.
     const ambient = dFor(TIER1PLUS2);
     expect(dFor(["water"])).toBeGreaterThan(ambient * 2);
     expect(dFor(["food"])).toBeGreaterThan(ambient * 2);
   });
 
-  it("puts the shortage cut strictly between the two", () => {
-    expect(D_SHORTAGE_CUT).toBeGreaterThan(dFor(TIER1PLUS2));
-    expect(D_SHORTAGE_CUT).toBeLessThanOrEqual(dFor(["food"]));
+  it("no longer separates ambient scarcity from famine — it only decides when escalation engages", () => {
+    // D_SHORTAGE_CUT is no longer a band boundary — the band bins Provision directly instead
+    // (foldSupplyState) — the survival floor is the only thing that still grades famine outright. The cut's one
+    // remaining job is to stay above every measured founding shortfall, so a newborn colony's own
+    // worst reading never engages the ramp, and to reach full Shortage weight at shortfall 0.90.
+    expect(D_SHORTAGE_CUT).toBeGreaterThan(FOUNDING_SHORTFALL_P10);
+    expect(D_SHORTAGE_CUT + D_SHORTAGE_BLEND).toBeCloseTo(0.9, 10);
   });
 });
 
@@ -172,22 +226,36 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
     expect(UNREST_PARAMS.slopeShortage).toBeGreaterThan(UNREST_PARAMS.slopeRationing);
   });
 
-  it("never lets sustained Rationing reach collapse, at any tax", () => {
-    // Worst sustained Rationing: D just under the cut, the highest tax stance, fully overcrowded.
-    expect(settled(D_SHORTAGE_CUT - 1e-9, MAX_FLOOR)).toBeLessThan(COLLAPSE);
+  // "Never lets sustained Rationing reach collapse, at any tax" is RETIRED, not restated: at
+  // D_SHORTAGE_CUT − ε (now 0.65) and MAX_FLOOR, settled = 0.23 + 0.95 × 0.65 ≈ 0.85 — already past
+  // the 0.75 line. The wider cut makes a D-cut-based Rationing ceiling false; containment is
+  // re-authored on the Provision band instead (see "collapse containment to the Shortage band"
+  // below), which is the guarantee that actually holds.
+
+  it("lets a total failure of EITHER survival good collapse, even at zero tax", () => {
+    // A survival good's total failure reaches the Shortage slope through hasSurvivalShortfall's
+    // promotion, NOT through the D-ramp: each good's own weighted share sits deep inside Rationing
+    // territory under the new cut (0.65) and would never reach the ramp on D alone. Passing
+    // survivalShortfall = true is what the real foldSupplyState/accumulateUnrest pair does for any
+    // demanded survival good below SHORTAGE_SATISFACTION, whatever D says.
+    //
+    // Food is the weaker basket weight (~0.32 vs water's ~0.37) and the binding case: the owner
+    // decided slopeShortage must clear BOTH goods, not just the heavier one — the first linear cut
+    // (2.1, sized to water alone) left food (~0.67) short of the 0.75 line. 2.4 was chosen for real
+    // margin on food, not a knife edge.
+    for (const good of ["water", "food"]) {
+      expect(settled(dFor([good]), 0, true), good).toBeGreaterThan(COLLAPSE);
+    }
   });
 
-  it("lets a total water or food failure collapse, even at zero tax", () => {
-    expect(settled(dFor(["water"]), 0)).toBeGreaterThan(COLLAPSE);
-    expect(settled(dFor(["food"]), 0)).toBeGreaterThan(COLLAPSE);
-  });
-
-  it("lets a total water or food failure drive net decline at every tax level", () => {
-    // An uncrowded system declines when unrest > 1 − D (growth and decline share a rate).
+  it("lets a total failure of EITHER survival good drive net decline at every tax level", () => {
+    // An uncrowded system declines when unrest > 1 − D (growth and decline share a rate). Both goods
+    // now clear this at every tax level, including zero — food no longer sits just under the line the
+    // way it did under the 2.1 cut.
     for (const good of ["water", "food"]) {
       const d = dFor([good]);
       for (const pressure of Object.values(TAX_LEVEL_UNREST_PRESSURE)) {
-        expect(settled(d, pressure), `${good} @ ${pressure}`).toBeGreaterThan(1 - d);
+        expect(settled(d, pressure, true), `${good} @ ${pressure}`).toBeGreaterThan(1 - d);
       }
     }
   });
@@ -202,11 +270,38 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
     }
   });
 
-  it("still lets a broad shortage strike under overcrowding and very-high tax, below collapse", () => {
-    // "Only famine collapses" must not become "nothing but famine ever strikes".
-    const worstRationing = settled(D_SHORTAGE_CUT - 1e-9, MAX_FLOOR);
-    expect(worstRationing).toBeGreaterThan(STRIKE_PARAMS.threshold);
-    expect(worstRationing).toBeLessThan(COLLAPSE);
+  it("still lets a broad shortage strike under overcrowding and very-high tax, below collapse — the 0.84 lower bound", () => {
+    // "Only famine collapses" must not become "nothing but famine ever strikes". Fixed at a broad
+    // Shortage-band shortfall (d = 0.5, not the cut — D_SHORTAGE_CUT − ε now sits ABOVE collapse at
+    // MAX_FLOOR, see the retired test above) on the base ramp alone.
+    const worstBroadShortfall = settled(0.5, MAX_FLOOR);
+    expect(worstBroadShortfall).toBeGreaterThanOrEqual(STRIKE_PARAMS.threshold);
+    expect(worstBroadShortfall).toBeLessThan(COLLAPSE);
+
+    const lowerBound = (STRIKE_PARAMS.threshold - MAX_FLOOR) / 0.5;
+    expect(lowerBound).toBeCloseTo(0.84, 2);
+    expect(UNREST_PARAMS.slopeRationing).toBeGreaterThanOrEqual(lowerBound);
+  });
+
+  it("settles the founding cohort's p10 shortfall below the strike threshold at the founding-realistic floor — the 1.07 upper bound", () => {
+    // The new invariant (spec, "the guarantees, restated on Provision"): the founding cohort is the
+    // modal world and opens at the galaxy's worst supply state, so it must not open inside production
+    // suppression. Read at the founding-realistic floor (frontier default tax, no crowding) — the
+    // worst tax-and-crowding floor collides with the lower bound above and is not a state any
+    // founding colony occupies.
+    expect(settled(FOUNDING_SHORTFALL_P10, FOUNDING_FLOOR)).toBeLessThan(STRIKE_PARAMS.threshold);
+
+    const upperBound = (STRIKE_PARAMS.threshold - FOUNDING_FLOOR) / FOUNDING_SHORTFALL_P10;
+    expect(upperBound).toBeCloseTo(1.07, 2);
+    expect(UNREST_PARAMS.slopeRationing).toBeLessThanOrEqual(upperBound);
+  });
+
+  it("bounds slopeRationing from both ends at once — a value satisfying one guarantee and breaking the other must fail", () => {
+    const lowerBound = (STRIKE_PARAMS.threshold - MAX_FLOOR) / 0.5;
+    const upperBound = (STRIKE_PARAMS.threshold - FOUNDING_FLOOR) / FOUNDING_SHORTFALL_P10;
+    expect(lowerBound).toBeLessThan(upperBound);
+    expect(UNREST_PARAMS.slopeRationing).toBeGreaterThanOrEqual(lowerBound);
+    expect(UNREST_PARAMS.slopeRationing).toBeLessThanOrEqual(upperBound);
   });
 
   it("blends the slope across the cut instead of switching it", () => {
@@ -251,6 +346,67 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
     expect(ambientD).toBeLessThan(D_SHORTAGE_CUT);
     expect(hasSurvivalShortfall(ambient)).toBe(false);
     expect(fed(sysWithGoods(ambient))).toBe(true);
+  });
+});
+
+describe("collapse containment to the Shortage band — the re-authored guarantee", () => {
+  // RATIONING_PROVISION (0.70) and CRITICAL_SATISFACTION (0.25) are B4's constants, not this task's —
+  // named locally so the decided arithmetic can be pinned now without reaching into B4's
+  // interface early. B4 replaces both with the real imports when the band moves onto Provision.
+  const RATIONING_SHORTFALL = 0.3; // 1 − RATIONING_PROVISION (0.70); B4 imports RATIONING_PROVISION
+  const CRITICAL_SAT = 0.25; // B4 imports CRITICAL_SATISFACTION
+
+  it("keeps a world at the Rationing band edge below collapse at the worst tax, crowding and override composition", () => {
+    // Not "shortfall ≤ 0.5 never collapses" (measured false under the override, and not to
+    // be resurrected) — the guarantee is edge-of-band, computed from the constants so it recomputes
+    // if a bin edge or slope moves. Maximum criticalWeight compatible with a FIXED total shortfall of
+    // RATIONING_SHORTFALL: critical goods sit just under the criticality line (gap → 1 − CRITICAL_SAT)
+    // so the same total shortfall budget buys the most possible critical-flagged weight.
+    const maxCriticalWeight = RATIONING_SHORTFALL / (1 - CRITICAL_SAT);
+    const worstSlope = Math.min(
+      UNREST_PARAMS.slopeShortage,
+      UNREST_PARAMS.slopeRationing + maxCriticalWeight * (UNREST_PARAMS.slopeShortage - UNREST_PARAMS.slopeRationing),
+    );
+    const worstCase = MAX_FLOOR + worstSlope * RATIONING_SHORTFALL;
+    expect(worstCase).toBeCloseTo(0.689, 3);
+    expect(worstCase).toBeLessThan(COLLAPSE);
+  });
+});
+
+describe("transient event shocks — a shock's duration, not just its magnitude, keeps it contained", () => {
+  it("keeps a solar storm's peak unrest below collapse while active, on a Rationing world, and trending down once it expires", () => {
+    // The event hits every good system-wide (goodId: null), including the survival goods, at
+    // production_rate × 0.05 — modelled conservatively as every demanded good crashing to that
+    // satisfaction level for the shock's duration (worse than reality, which has stock buffers).
+    // "Whole cycles": the population processor runs once per CYCLE_LENGTH ticks, so the shock's
+    // effect is applied as that many whole accumulateUnrest steps, rounding its duration UP.
+    // This margin is thin — the peak clears 0.75 by ~0.0028 at the current constants — and erodes
+    // further if `decay` rises, the storm phase's duration range is widened, or its production
+    // multiplier is lowered (any of which raises how far unrest closes toward the shocked settled
+    // value before the shock ends); a change to any of those three should re-run this test, not
+    // assume it still holds.
+    const stormPhase = EVENT_DEFINITIONS.solar_storm.phases.find((p) => p.name === "storm")!;
+    const productionMultiplier = stormPhase.modifiers.find((m) => m.parameter === "production_rate")!.value;
+    const eventCycles = Math.ceil(stormPhase.durationRange[1] / CYCLE_LENGTH);
+
+    const eventGoods = uniformBasket(productionMultiplier);
+    const eventD = dissatisfaction(eventGoods);
+    const eventSurvival = hasSurvivalShortfall(eventGoods);
+    expect(eventSurvival).toBe(true); // the system-wide modifier crashes water/food too
+
+    // A Rationing world sitting at the band edge (worst tax and crowding, no override, no famine) —
+    // its own pre-event equilibrium.
+    const baseD = 0.3; // RATIONING_SHORTFALL, matching the containment describe above
+    const floor = MAX_FLOOR;
+    let unrest = settled(baseD, floor);
+
+    for (let cycle = 1; cycle <= eventCycles; cycle++) {
+      unrest = accumulateUnrest(unrest, eventD, floor, { regime: "shortage", survivalShortfall: eventSurvival }, UNREST_PARAMS);
+      expect(unrest, `cycle ${cycle}`).toBeLessThan(COLLAPSE);
+    }
+
+    const afterExpiry = accumulateUnrest(unrest, baseD, floor, { regime: "rationing", survivalShortfall: false }, UNREST_PARAMS);
+    expect(afterExpiry).toBeLessThan(unrest); // already heading back toward its own settled value
   });
 });
 

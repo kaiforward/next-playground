@@ -301,7 +301,7 @@ a silent galaxy-wide balance change.
 | `pressure` | `lib/engine/pop-needs.ts:71` (docstring `:9-11,25`) | un-squared in lockstep, docstrings updated |
 | `D_SHORTAGE_CUT` = 0.25 | `lib/constants/economy.ts:99` | **0.65** in Provision-shortfall units (Gate 1) |
 | `D_SHORTAGE_BLEND` = 0.05 | `lib/constants/economy.ts:109` | **0.25** — full shortage slope at shortfall 0.90 (Gate 1) |
-| `slopeRationing` = 1.8, `slopeShortage` = 2.5 | `lib/constants/population.ts:28-29` | **0.95** / **2.1** (Gate 1; derivations below) |
+| `slopeRationing` = 1.8, `slopeShortage` = 2.5 | `lib/constants/population.ts:28-29` | **0.95** / **2.4** (Gate 1, amended at B3; derivations below) |
 | `decay` = 0.06, `recoveryDecay` = 0.12 | `lib/constants/population.ts:30-31` | one rate, **0.06** (Gate 1; rationale below) |
 | `growthRate` = 0.015, `declineRate` = 0.015 | `lib/constants/population.ts:62-63` | **unchanged** — the feared re-scale was disconfirmed (below) |
 | `SupplyRegime` | `lib/engine/population.ts:71` — closed 3-member union | four members; harness folds widened |
@@ -353,7 +353,7 @@ against `COLLAPSE = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold` (0.75,
 | Guarantee today | On Provision |
 | --- | --- |
 | Shortage slope strictly above Rationing (`:171-173`) | unchanged in form |
-| Sustained Rationing never reaches collapse, at any tax (`:175-178`) | **re-authored at Gate 1: collapse is contained to the Shortage band.** A world without famine, banded Rationing or better (Provision ≥ `RATIONING_PROVISION`), cannot reach the 0.75 collapse line at any tax, any crowding, any override composition — worst case at the band edge is `0.23 + (0.95 + (0.30/0.75) × 1.15) × 0.30 = 0.653`. Collapse first becomes possible near shortfall 0.35 at max tax, just inside Shortage: the label tells the player the truth — Shortage means the world can die of it. (The interim "shortfall ≤ 0.5 never collapses" wording proposed at the gate is **false** under the override — a max-tax world at shortfall 0.5 concentrated in collapsed goods settles ≈ 0.99 — and must not be resurrected.) |
+| Sustained Rationing never reaches collapse, at any tax (`:175-178`) | **re-authored at Gate 1: collapse is contained to the Shortage band.** A world without famine, banded Rationing or better (Provision ≥ `RATIONING_PROVISION`), cannot reach the 0.75 collapse line at any tax, any crowding, any override composition — worst case at the band edge is `0.23 + (0.95 + (0.30/0.75) × 1.45) × 0.30 = 0.689`. Collapse first becomes possible near shortfall 0.33 at max tax, just inside Shortage: the label tells the player the truth — Shortage means the world can die of it. (The interim "shortfall ≤ 0.5 never collapses" wording proposed at the gate is **false** under the override — a max-tax world at shortfall 0.5 concentrated in collapsed goods settles near 1.0 — and must not be resurrected.) |
 | A total water or food failure collapses even at zero tax (`:180-183`) | unchanged in form — a gap-1 scenario, identical under both folds |
 | A total water or food failure drives net decline at every tax level (`:185-193`) | must be re-derived: it compares `settled(d, floor)` against `1 − d`, and both sides move |
 | No non-survival good alone reaches the strike threshold at any tax (`:195-202`) | same form, tighter: one good's contribution rises from `share × gap²` to `share × gap` |
@@ -382,14 +382,19 @@ Items 2 and 3 change what the slopes are measured against and re-derive them reg
 says so. The durable constraint in this family is the other side — broad shortage on an established
 world still strikes, slope ≥ 0.84.
 
-**`slopeShortage` = 2.1** is the durable one, derived from a stated behavioural claim: a total water
-failure must be able to collapse a world even at zero tax. Water's basket weight
-(necessity × demand share) is 0.37 and scale-invariant — a property of the consumption tables, not
-of this run — so the slope must satisfy `slope × 0.37 ≥ 0.75`; 2.1 is the smallest round value that
-clears it (0.78). It survives item 3 better than `slopeRationing` because the survival step is
-absolute, not expectation-relative: famine is famine whatever a population is used to. Down from the
-shipped 2.5, which was authored against the squared scale — keeping it would state a harsher claim
-than anyone authored.
+**`slopeShortage` = 2.4** is the durable one, derived from a stated behavioural claim: a total
+failure of **either survival good** must be able to collapse a world even at zero tax. The binding
+share is the weaker good's — food at ~0.32 basket weight (necessity × demand share), against water's
+~0.37; both are scale-invariant properties of the consumption tables, not of any run. So the slope
+must satisfy `slope × 0.32 ≥ 0.75`; 2.4 is the smallest 0.1-step value clearing it with real margin
+(food ≈ 0.77, water ≈ 0.90; 2.35 would clear food by 0.0008 — a knife edge nobody should author).
+The value was first cut as 2.1 from water's share alone; B3's restated guarantee suite exposed that
+food didn't clear it — an untaxed world with zero food would have settled at ~0.67, no collapse and
+roughly neutral population — and the owner amended the value rather than weaken the guarantee to
+water-only. It survives item 3 better than `slopeRationing` because the survival step is absolute,
+not expectation-relative: famine is famine whatever a population is used to. Down from the shipped
+2.5, which was authored against the squared scale — keeping it would state a harsher claim than
+anyone authored.
 
 **The existing tests cannot catch this.** Every scenario in `band-constants.test.ts` is built by
 `dFor()` (`:139-144`), which puts the named goods at satisfaction 0 — gap = 1, gap² = gap — so every
