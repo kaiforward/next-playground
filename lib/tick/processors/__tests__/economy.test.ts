@@ -360,16 +360,19 @@ describe("economy processor: supply regime signal", () => {
     expect(regimeOf(result.economySignals, "sys-fed")).toBe("supplied");
   });
 
-  it("reads rationing when one demanded good is short of full", async () => {
+  it("reads strained when one demanded good is short of full but Provision still reads healthy", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("sys-short", 0)],
       markets: [makeMarket("sys-short", "food", SERVED_STOCK), makeMarket("sys-short", "water", RATIONED_STOCK)],
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    // The fixture really is in the rationing band — served, but not fully.
+    // Water at 0.8 with food fully served folds to Provision ≈ 0.89 — inside [RATIONING_PROVISION,
+    // SUPPLIED_PROVISION), not the exact-zero-D cliff the old three-band fold required for anything
+    // above "supplied". This fixture is exactly the case the redesign exists for: served, but not
+    // fully, no longer means "rationing" outright.
     expect(satOf(world, "water")).toBeCloseTo(0.8, 6);
-    expect(regimeOf(result.economySignals, "sys-short")).toBe("rationing");
+    expect(regimeOf(result.economySignals, "sys-short")).toBe("strained");
   });
 
   it("reads shortage when one demanded good falls below the shortage line", async () => {
@@ -415,7 +418,11 @@ describe("economy processor: supply regime signal", () => {
     expect(satOf(world, "water")).toBeCloseTo(0.45, 6);
     expect(satOf(world, "water")).toBeLessThan(SHORTAGE_SATISFACTION); // below the survival line
     expect(dOf(result.economySignals, "sys-thirsty")).toBeLessThan(D_SHORTAGE_CUT); // but D is mild
-    expect(stateOf(result.economySignals, "sys-thirsty")).toEqual({ regime: "shortage", survivalShortfall: true });
+    expect(stateOf(result.economySignals, "sys-thirsty")).toEqual({
+      regime: "shortage",
+      survivalShortfall: true,
+      criticalWeight: 0, // every demanded good here sits above CRITICAL_SATISFACTION
+    });
   });
 
   it("reads supplied for a producer with no local consumption", async () => {

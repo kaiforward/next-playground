@@ -317,7 +317,7 @@ export function perSystemSupplyState(
     const d = dissatisfaction(goods);
     states.set(systemId, {
       d,
-      regime: foldSupplyState(goods, d).regime,
+      regime: foldSupplyState(goods).regime,
       provision: provision(goods),
       worstGoods: worstDemandedGoods(goods, WORST_GOOD_TAIL_DEPTH),
     });

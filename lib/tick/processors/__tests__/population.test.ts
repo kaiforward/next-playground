@@ -67,7 +67,7 @@ function ctxWithD(
   productionSuppressBySystem: Map<string, number> = new Map(),
 ): TickContext {
   const states = new Map<string, SupplyState>(
-    [...regimes].map(([systemId, regime]) => [systemId, { regime, survivalShortfall: false }]),
+    [...regimes].map(([systemId, regime]) => [systemId, { regime, survivalShortfall: false, criticalWeight: 0 }]),
   );
   return {
     tick: 0,

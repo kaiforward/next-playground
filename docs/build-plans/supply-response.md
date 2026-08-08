@@ -271,9 +271,11 @@ seed 42, 600 systems, economy scale 100 — the run the spec's evidence table wa
    guarantee: p10 shortfall 0.59 at floor 0.23 caps the slope at 0.71 < 0.84) giving ceiling 1.07;
    the shipped strike guarantee (`band-constants.test.ts:205-210`) bounds from below at 0.84. The
    invariant is **interim scaffolding** — it dissolves at item 3 (adaptive expectation) and the
-   slope's docstring says so. Collapse containment is re-authored: **contained to the Shortage band**
-   (spec, guarantees table) — the "shortfall ≤ 0.5 never collapses" variant is false under the
-   override and must not be used.
+   slope's docstring says so. Collapse containment is re-authored: **Supplied and Strained worlds
+   never collapse; collapse is possible only in the Rationing and Shortage bands** (spec, guarantees
+   table — an earlier draft misnamed the protected zone "the Shortage band's exterior / Rationing or
+   better"; the 0.70–0.90 band is Strained) — the "shortfall ≤ 0.5 never collapses" variant is false
+   under the override and must not be used.
 6. **DECIDED: single relaxation rate `decay` = 0.06.** Decided on tick tempo, not the spec's
    recovery-time argument (270 ticks ≈ under a minute of fast-mode wall clock — both candidates are
    "watchable"); 0.06 is today's non-Supplied rate, so the only behavioural delta is Supplied worlds
@@ -405,8 +407,9 @@ Proves:
   Shortage-band shortfall (d = 0.5) at the worst tax-and-crowding floor still strikes below collapse on
   the base ramp (bounds from below at 0.84), while the founding invariant bounds from above at 1.07. A
   value that satisfies one and breaks the other must fail.
-- **Collapse is contained to the Shortage band** (the Gate 1 re-authoring): a world without famine at
-  Provision ≥ `RATIONING_PROVISION` stays below the 0.75 collapse line at any tax, any crowding, and
+- **Collapse never touches a Supplied or Strained world** (the Gate 1 re-authoring, band names since
+  corrected): a world without famine at Provision ≥ `RATIONING_PROVISION` — banded Strained or
+  better — stays below the 0.75 collapse line at any tax, any crowding, and
   the maximum override composition the structure permits — the worst case sits at the band edge
   (`0.23 + (0.95 + (0.30/0.75) × 1.45) × 0.30 = 0.689`). The assertion computes the override worst case
   from the constants rather than hardcoding the result, so it recomputes if a bin edge or slope moves. Do

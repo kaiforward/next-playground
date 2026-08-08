@@ -5,14 +5,15 @@
  *  - measure:    dissatisfaction() is the complement of provision() — 1 minus the
  *                necessity-and-demand-weighted MEAN of per-good satisfaction — so a partial
  *                shortfall reads its own size rather than a squared fraction of it.
- *                foldSupplyState() classes the same goods as supplied/rationing/shortage
- *                from that same number — a cut on D plus a water/food survival floor. D
- *                picks the magnitude of the shortfall; the class no longer picks a rate
- *                (accumulateUnrest reads one relaxation rate for every label) but still
- *                carries the survival bit.
+ *                foldSupplyState() bins the same goods into four descriptive bands from
+ *                provision() alone (Supplied/Strained/Rationing), plus a water/food survival
+ *                floor that punches through to Shortage whatever Provision says. The band gates
+ *                no rate or effect (accumulateUnrest reads one relaxation rate for every label);
+ *                the survival bit and the critical-good weight (goods deep below the criticality
+ *                line) ride alongside the label for unrestSlope to read instead.
  *  - accumulate: accumulateUnrest() relaxes unrest toward a standing-pressure floor
  *                (tax + crowding) and integrates D on top of it, with gain =
- *                unrestSlope(D, survivalShortfall) × the relaxation rate. Equilibrium is
+ *                unrestSlope(D, supply) × the relaxation rate. Equilibrium is
  *                therefore min(1, floor + slope × D) at any rate, so the named slopes
  *                state exchange rates and recovery speed, catch-up and equilibrium are
  *                all decoupled.
@@ -30,7 +31,15 @@
  */
 
 import { clamp } from "@/lib/utils/math";
-import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT, D_SHORTAGE_BLEND } from "@/lib/constants/economy";
+import {
+  SHORTAGE_SATISFACTION,
+  D_SHORTAGE_CUT,
+  D_SHORTAGE_BLEND,
+  SUPPLIED_PROVISION,
+  RATIONING_PROVISION,
+  CRITICAL_SATISFACTION,
+  BAND_MIN_DEMAND_SHARE,
+} from "@/lib/constants/economy";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 
 /** One consumed good's signal for a system this tick. */
@@ -133,20 +142,28 @@ export function worstDemandedGoods(goods: GoodSatisfaction[], count: number): De
   return readings.slice(0, Math.max(0, count));
 }
 
-/** Supply-rate class for a system this tick. */
-export type SupplyRegime = "supplied" | "rationing" | "shortage";
+/** Descriptive supply band for a system this tick — binned from Provision, plus one survival
+ *  punch-through. Gates no rate or effect (see foldSupplyState); a display quantity only. */
+export type SupplyRegime = "supplied" | "strained" | "rationing" | "shortage";
 
 /**
- * The system's supply reading. `survivalShortfall` is carried alongside the label because the two
- * drive different things: the label is the three-way class foldSupplyState assigns (the relaxation
- * rate is uniform and reads neither), the shortfall promotes the unrest slope to the Shortage bound
- * (see unrestSlope). It cannot be inferred back from the label — a D-driven Shortage and a
- * survival-driven one carry the same label and must not carry the same slope shape.
+ * The system's supply reading. `regime` is a coarse rendering of Provision for display — it drives
+ * no rate or effect. `survivalShortfall` and `criticalWeight` ride alongside it because neither is
+ * inferrable back from the label: a famine-driven Shortage carries the survival bit that a
+ * low-Provision Rationing world does not, and two systems banded identically (both Strained, say)
+ * can carry very different critical-good weight. `unrestSlope` is the one place all three compose
+ * into a severity.
  */
 export interface SupplyState {
   regime: SupplyRegime;
-  /** A demanded survival good (water/food) is below SHORTAGE_SATISFACTION. */
+  /** A demanded survival good (water/food) is below SHORTAGE_SATISFACTION. Promotes `regime` to
+   *  Shortage outright, whatever Provision says. */
   survivalShortfall: boolean;
+  /** The critical-good override's weight: Σ necessity × demand share over demanded goods below
+   *  CRITICAL_SATISFACTION and at or above BAND_MIN_DEMAND_SHARE (see `unrestSlope`). Never moves
+   *  `regime` — a binary promotion was measured and rejected, so this is carried purely for the
+   *  slope side. Always finite and non-negative. */
+  criticalWeight: number;
 }
 
 /**
@@ -163,21 +180,43 @@ export function hasSurvivalShortfall(goods: GoodSatisfaction[]): boolean {
 }
 
 /**
- * The SYSTEM-level supply label, from the dissatisfaction the same goods folded to plus the
- * survival-good floor:
- *  - shortage  — D ≥ D_SHORTAGE_CUT, or a demanded survival good below SHORTAGE_SATISFACTION.
- *  - supplied  — D exactly 0. Reachable exactly, not approximately: delivery is full while stock
- *                covers the ration knee, so every gap above it is exactly 0.
- *  - rationing — anything in between.
- * `d` is the caller's own `dissatisfaction(goods)` over the SAME array, passed rather than recomputed
- * so the two folds cannot diverge. This label is about the whole system; the per-good chips read
- * stock cover and are a different labelling entirely.
+ * The critical-good override's weight: Σ necessity × demand share over demanded goods below
+ * CRITICAL_SATISFACTION and at or above BAND_MIN_DEMAND_SHARE. Mirrors worstDemandedGoods()'s
+ * demand-only share (Σ demanded over demanded goods) rather than re-deriving it, so eligibility and
+ * the worst-good tail can never read demand share differently. The demand-share floor is eligibility
+ * only — it never changes what band the system reads.
  */
-export function foldSupplyState(goods: GoodSatisfaction[], d: number): SupplyState {
+function criticalGoodWeight(goods: GoodSatisfaction[]): number {
+  let weight = 0;
+  for (const r of worstDemandedGoods(goods, goods.length)) {
+    if (r.satisfaction < CRITICAL_SATISFACTION && r.demandShare >= BAND_MIN_DEMAND_SHARE) {
+      weight += r.necessity * r.demandShare;
+    }
+  }
+  return Number.isFinite(weight) ? weight : 0;
+}
+
+/**
+ * The SYSTEM-level supply band:
+ *  - shortage  — a demanded survival good below SHORTAGE_SATISFACTION, whatever Provision says. The
+ *                one punch-through: famine is a step, not an average.
+ *  - supplied  — Provision at or above SUPPLIED_PROVISION.
+ *  - strained  — Provision at or above RATIONING_PROVISION, below SUPPLIED_PROVISION.
+ *  - rationing — Provision below RATIONING_PROVISION.
+ * Provision is computed here from `goods` directly (via `provision()`), not passed in, so the band
+ * and the number it renders cannot drift apart — one implementation, not a re-derived mean.
+ * `criticalWeight` rides on the returned state for `unrestSlope` to read; it never moves the band.
+ * This label is about the whole system; the per-good chips read stock cover and are a different
+ * labelling entirely.
+ */
+export function foldSupplyState(goods: GoodSatisfaction[]): SupplyState {
   const survivalShortfall = hasSurvivalShortfall(goods);
-  if (survivalShortfall) return { regime: "shortage", survivalShortfall };
-  if (d >= D_SHORTAGE_CUT) return { regime: "shortage", survivalShortfall };
-  return { regime: d > 0 ? "rationing" : "supplied", survivalShortfall };
+  const criticalWeight = criticalGoodWeight(goods);
+  if (survivalShortfall) return { regime: "shortage", survivalShortfall, criticalWeight };
+  const p = provision(goods);
+  const regime: SupplyRegime =
+    p >= SUPPLIED_PROVISION ? "supplied" : p >= RATIONING_PROVISION ? "strained" : "rationing";
+  return { regime, survivalShortfall, criticalWeight };
 }
 
 export interface UnrestParams {
@@ -193,30 +232,39 @@ export interface UnrestParams {
 }
 
 /**
- * The unrest-per-D slope this reading carries, in slopeRationing…slopeShortage.
+ * The unrest-per-D slope this reading carries, in [slopeRationing, slopeShortage].
  *
- * Two selectors, deliberately shaped differently. D drives a CONTINUOUS ramp across
- * [D_SHORTAGE_CUT, D_SHORTAGE_CUT + D_SHORTAGE_BLEND]: switching there would double a system's
- * settled unrest for an arbitrarily small change in delivered goods and land that step across strike
- * onset. The ramp starts at the cut, so the slope is exactly slopeRationing across the whole
- * Rationing range and the containment guarantee holds at the top of it. A survival shortfall is a
- * step to slopeShortage: famine in water or food is graded as famine whatever the fold says, which
- * is the guarantee the floor exists to make explicit rather than assume it always emerges from the
- * necessity-weighted average alone. Total and monotone in both inputs.
+ * Three terms, deliberately shaped differently:
+ *  - D drives a CONTINUOUS ramp across [D_SHORTAGE_CUT, D_SHORTAGE_CUT + D_SHORTAGE_BLEND]:
+ *    switching there would double a system's settled unrest for an arbitrarily small change in
+ *    delivered goods and land that step across strike onset. The ramp starts at the cut, so the
+ *    slope is exactly slopeRationing below it, whatever the system bands.
+ *  - A survival shortfall is a step to slopeShortage outright: famine in water or food is graded as
+ *    famine whatever the rest of the basket looks like. It dominates the override below rather than
+ *    composing with it — a world with both fires this step alone.
+ *  - The critical-good override adds `criticalWeight × (slopeShortage − slopeRationing)` on top of
+ *    the D-ramp's value, capped at slopeShortage: a basket carrying real weight below the
+ *    criticality line responds like a worse-than-its-Provision world, without ever being LABELLED
+ *    one (see foldSupplyState). The cap means it can approach famine weight but never exceed it.
+ * Total and monotone in D and in criticalWeight.
  */
-export function unrestSlope(d: number, survivalShortfall: boolean, params: UnrestParams): number {
-  if (survivalShortfall) return params.slopeShortage;
+export function unrestSlope(d: number, supply: SupplyState, params: UnrestParams): number {
+  if (supply.survivalShortfall) return params.slopeShortage;
   const ramp = D_SHORTAGE_BLEND > 0
     ? clamp((d - D_SHORTAGE_CUT) / D_SHORTAGE_BLEND, 0, 1)
     : (d >= D_SHORTAGE_CUT ? 1 : 0);
-  return params.slopeRationing + ramp * (params.slopeShortage - params.slopeRationing);
+  const diff = params.slopeShortage - params.slopeRationing;
+  const base = params.slopeRationing + ramp * diff;
+  const override = Math.max(0, supply.criticalWeight) * diff;
+  return Math.min(params.slopeShortage, base + override);
 }
 
 /**
  * Relaxes unrest toward its standing-pressure floor and integrates dissatisfaction on top:
  *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + slope*k*clamp(d,0,1), 0, 1)
  * where k = clamp(decay, 0, 1) and slope = unrestSlope(d, …). One relaxation rate for every
- * label — `supply.regime` is not read here; only `supply.survivalShortfall` feeds the slope.
+ * label — `supply.regime` is not read here; only `supply.survivalShortfall` and
+ * `supply.criticalWeight` feed the slope.
  *
  * Because the gain is `slope × k` rather than an independent number, the fixed point is
  * `min(1, floor + slope × D)` for ANY relaxation rate — so equilibrium, recovery speed and the
@@ -242,7 +290,7 @@ export function accumulateUnrest(
   params: UnrestParams,
 ): number {
   const k = clamp(params.decay, 0, 1);
-  const slope = unrestSlope(d, supply.survivalShortfall, params);
+  const slope = unrestSlope(d, supply, params);
   const relaxed = floor + (1 - k) * (unrest - floor);
   return clamp(relaxed + slope * k * clamp(d, 0, 1), 0, 1);
 }

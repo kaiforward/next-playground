@@ -5,6 +5,8 @@ import {
   SHORTAGE_SATISFACTION,
   D_SHORTAGE_CUT,
   D_SHORTAGE_BLEND,
+  RATIONING_PROVISION,
+  CRITICAL_SATISFACTION,
 } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { COLONISATION } from "@/lib/constants/colonisation";
@@ -25,6 +27,7 @@ import {
   hasSurvivalShortfall,
   accumulateUnrest,
   type GoodSatisfaction,
+  type SupplyState,
 } from "@/lib/engine/population";
 import { sizeColonyEstablish, fed, type BuildSystemState } from "@/lib/engine/directed-build";
 import { housingUsed, idleLevels } from "@/lib/engine/infrastructure-decay";
@@ -164,8 +167,9 @@ function uniformBasket(satisfaction: number): GoodSatisfaction[] {
 }
 
 /** Equilibrium unrest under sustained D at a given standing floor: floor + slope(D) × D. */
-function settled(d: number, floor: number, survivalShortfall = false): number {
-  return floor + unrestSlope(d, survivalShortfall, UNREST_PARAMS) * d;
+function settled(d: number, floor: number, survivalShortfall = false, criticalWeight = 0): number {
+  const supply: SupplyState = { regime: "rationing", survivalShortfall, criticalWeight };
+  return floor + unrestSlope(d, supply, UNREST_PARAMS) * d;
 }
 
 const MAX_FLOOR = Math.max(...Object.values(TAX_LEVEL_UNREST_PRESSURE)) + CROWDING.PRESSURE_MAX;
@@ -222,6 +226,14 @@ describe("shortage cut and blend — escalation-only now, not a band boundary", 
 });
 
 describe("unrest containment — the guarantees the two slopes carry", () => {
+  /** A SupplyState carrying only the survival bit — zero override weight, so these fixtures
+   *  isolate the D-ramp/survival-step pair from the critical-good composition tested separately. */
+  const supplyOf = (survivalShortfall: boolean): SupplyState => ({
+    regime: "rationing",
+    survivalShortfall,
+    criticalWeight: 0,
+  });
+
   it("keeps the Shortage slope strictly above the Rationing one", () => {
     expect(UNREST_PARAMS.slopeShortage).toBeGreaterThan(UNREST_PARAMS.slopeRationing);
   });
@@ -305,11 +317,11 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
   });
 
   it("blends the slope across the cut instead of switching it", () => {
-    const below = unrestSlope(D_SHORTAGE_CUT - 1e-6, false, UNREST_PARAMS);
-    const above = unrestSlope(D_SHORTAGE_CUT + 1e-6, false, UNREST_PARAMS);
+    const below = unrestSlope(D_SHORTAGE_CUT - 1e-6, supplyOf(false), UNREST_PARAMS);
+    const above = unrestSlope(D_SHORTAGE_CUT + 1e-6, supplyOf(false), UNREST_PARAMS);
     expect(Math.abs(above - below)).toBeLessThan(1e-4);
     expect(below).toBe(UNREST_PARAMS.slopeRationing);
-    expect(unrestSlope(D_SHORTAGE_CUT + D_SHORTAGE_BLEND, false, UNREST_PARAMS))
+    expect(unrestSlope(D_SHORTAGE_CUT + D_SHORTAGE_BLEND, supplyOf(false), UNREST_PARAMS))
       .toBeCloseTo(UNREST_PARAMS.slopeShortage, 10);
   });
 
@@ -317,12 +329,12 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
     // The ramp starts AT the cut, never below it — otherwise the containment guarantee above
     // would only hold at the bottom of the band.
     for (const d of [0, 0.05, 0.1, 0.2, D_SHORTAGE_CUT - 1e-9]) {
-      expect(unrestSlope(d, false, UNREST_PARAMS), `D=${d}`).toBe(UNREST_PARAMS.slopeRationing);
+      expect(unrestSlope(d, supplyOf(false), UNREST_PARAMS), `D=${d}`).toBe(UNREST_PARAMS.slopeRationing);
     }
   });
 
   it("promotes a survival shortfall to the Shortage slope at any D", () => {
-    expect(unrestSlope(0.05, true, UNREST_PARAMS)).toBe(UNREST_PARAMS.slopeShortage);
+    expect(unrestSlope(0.05, supplyOf(true), UNREST_PARAMS)).toBe(UNREST_PARAMS.slopeShortage);
   });
 
   it("refuses housing on exactly the systems the survival floor calls starving", () => {
@@ -349,20 +361,16 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
   });
 });
 
-describe("collapse containment to the Shortage band — the re-authored guarantee", () => {
-  // RATIONING_PROVISION (0.70) and CRITICAL_SATISFACTION (0.25) are B4's constants, not this task's —
-  // named locally so the decided arithmetic can be pinned now without reaching into B4's
-  // interface early. B4 replaces both with the real imports when the band moves onto Provision.
-  const RATIONING_SHORTFALL = 0.3; // 1 − RATIONING_PROVISION (0.70); B4 imports RATIONING_PROVISION
-  const CRITICAL_SAT = 0.25; // B4 imports CRITICAL_SATISFACTION
+describe("collapse containment — Supplied and Strained worlds never collapse", () => {
+  const RATIONING_SHORTFALL = 1 - RATIONING_PROVISION;
 
-  it("keeps a world at the Rationing band edge below collapse at the worst tax, crowding and override composition", () => {
+  it("keeps every Strained-or-better world (Provision >= RATIONING_PROVISION) below collapse at the worst tax, crowding and override composition", () => {
     // Not "shortfall ≤ 0.5 never collapses" (measured false under the override, and not to
     // be resurrected) — the guarantee is edge-of-band, computed from the constants so it recomputes
     // if a bin edge or slope moves. Maximum criticalWeight compatible with a FIXED total shortfall of
-    // RATIONING_SHORTFALL: critical goods sit just under the criticality line (gap → 1 − CRITICAL_SAT)
+    // RATIONING_SHORTFALL: critical goods sit just under the criticality line (gap → 1 − CRITICAL_SATISFACTION)
     // so the same total shortfall budget buys the most possible critical-flagged weight.
-    const maxCriticalWeight = RATIONING_SHORTFALL / (1 - CRITICAL_SAT);
+    const maxCriticalWeight = RATIONING_SHORTFALL / (1 - CRITICAL_SATISFACTION);
     const worstSlope = Math.min(
       UNREST_PARAMS.slopeShortage,
       UNREST_PARAMS.slopeRationing + maxCriticalWeight * (UNREST_PARAMS.slopeShortage - UNREST_PARAMS.slopeRationing),
@@ -401,11 +409,19 @@ describe("transient event shocks — a shock's duration, not just its magnitude,
     let unrest = settled(baseD, floor);
 
     for (let cycle = 1; cycle <= eventCycles; cycle++) {
-      unrest = accumulateUnrest(unrest, eventD, floor, { regime: "shortage", survivalShortfall: eventSurvival }, UNREST_PARAMS);
+      unrest = accumulateUnrest(
+        unrest, eventD, floor,
+        { regime: "shortage", survivalShortfall: eventSurvival, criticalWeight: 0 },
+        UNREST_PARAMS,
+      );
       expect(unrest, `cycle ${cycle}`).toBeLessThan(COLLAPSE);
     }
 
-    const afterExpiry = accumulateUnrest(unrest, baseD, floor, { regime: "rationing", survivalShortfall: false }, UNREST_PARAMS);
+    const afterExpiry = accumulateUnrest(
+      unrest, baseD, floor,
+      { regime: "rationing", survivalShortfall: false, criticalWeight: 0 },
+      UNREST_PARAMS,
+    );
     expect(afterExpiry).toBeLessThan(unrest); // already heading back toward its own settled value
   });
 });

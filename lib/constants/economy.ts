@@ -111,3 +111,50 @@ export const D_SHORTAGE_CUT = 0.65;
  * sits (the band bins Provision directly instead), only how fast the ramp climbs once above it.
  */
 export const D_SHORTAGE_BLEND = 0.25;
+
+/**
+ * Provision at or above which a system bands Supplied — the healthiest of the four descriptive
+ * bands (Supplied / Strained / Rationing / Shortage). A legibility line only: no gameplay effect
+ * reads the band (effects that scale with supply read Provision or the shortfall directly instead),
+ * so moving this edge is a display decision, not a balance one. Inclusive: Provision exactly at this
+ * value still bands Supplied. Set from the measured distribution: the mature galaxy reads ~92-96%
+ * Supplied at this edge (7.9% below it at 10k ticks, 4.0% at 12k), the young galaxy 80/8/12 across
+ * the three Provision bands (19.8% below this edge, 11.9% below RATIONING_PROVISION at 1k ticks) —
+ * healthy reads healthy, founding stress stays visible.
+ */
+export const SUPPLIED_PROVISION = 0.9;
+
+/**
+ * Provision below which a system bands Rationing rather than Strained — the boundary between "worth
+ * watching" and "actively short". Also a legibility line only, for the same reason as
+ * SUPPLIED_PROVISION. Exclusive on the low side: Provision exactly at this value still bands
+ * Strained, the low edge of the Strained band rather than the high edge of Rationing.
+ */
+export const RATIONING_PROVISION = 0.7;
+
+/**
+ * Civilian satisfaction below which a demanded good counts toward the critical-good override's
+ * weight (see `unrestSlope`) — a good under a quarter met is critical. Its own constant, not
+ * SHORTAGE_SATISFACTION: the famine line and the criticality line must be able to move
+ * independently, and extending SHORTAGE_SATISFACTION to a third meaning would fuse them
+ * permanently. Set at half of SHORTAGE_SATISFACTION (0.5) — "collapsed" is a distinctly worse state
+ * than shortage-grade. The measured per-good satisfaction distribution is a cliff (goods delivered
+ * in full or not at all), so any line strictly between 0 and 0.5 catches the same worlds today; this
+ * value binds only on future partial-satisfaction states, which is why it is authored as a rule
+ * rather than tuned to a fit. A strict `<` boundary: exactly this level does not count.
+ */
+export const CRITICAL_SATISFACTION = 0.25;
+
+/**
+ * A demanded good's minimum share of a world's total civilian demand (the same demand-only share
+ * `worstDemandedGoods` computes) to be eligible for the critical-good override's weight — override
+ * eligibility only. There is no band-level demand floor: the band bins Provision directly, and
+ * Provision's own weighting (`demanded × necessity`) already discounts negligible demand on its own.
+ * Below 1% of a world's demand basket a good is a trace entry, not a real need: this excludes
+ * exactly the epsilon skilled-basket goods (measured shares 0.005-0.010) while a good genuinely held
+ * at 1-5% of the basket (e.g. medicine, necessity 0.8) still counts. Survival goods are immune to
+ * this floor by construction — the survival step promotes the whole system to Shortage regardless of
+ * demand share. Re-check this value if a high-necessity good is ever deliberately authored at a
+ * trace demand share.
+ */
+export const BAND_MIN_DEMAND_SHARE = 0.01;

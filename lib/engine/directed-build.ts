@@ -138,10 +138,11 @@ export function hopRouteCost(
  * crowding is itself an unrest source, so refusing relief housing on a restive world would hold the
  * valve shut on exactly the world that needs it.
  *
- * A consequence worth stating outright: `foldSupplyState` also labels a system Shortage on D alone
- * (D ≥ D_SHORTAGE_CUT), and such a world — deprived across the basket but with food and water
- * arriving — is deliberately still fed here. The gate answers "can these people eat?", not "is this
- * system comfortable?", so the two readings are allowed to disagree in exactly that case.
+ * A consequence worth stating outright: `foldSupplyState` now bands a system Shortage only through
+ * the survival floor above — a world short across the whole basket, or one carrying real
+ * critical-good weight, still bands Rationing or Strained (never Shortage) while food and water
+ * arrive fine, and is deliberately still fed here. The gate answers "can these people eat?", not "is
+ * this system comfortable?", so the two readings are allowed to disagree in exactly that case.
  */
 export function fed(sys: BuildSystemState): boolean {
   return !hasSurvivalShortfall(

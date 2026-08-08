@@ -15,7 +15,13 @@ import {
   type SupplyRegime,
   type SupplyState,
 } from "../population";
-import { SHORTAGE_SATISFACTION, D_SHORTAGE_CUT } from "@/lib/constants/economy";
+import {
+  SHORTAGE_SATISFACTION,
+  SUPPLIED_PROVISION,
+  RATIONING_PROVISION,
+  CRITICAL_SATISFACTION,
+  BAND_MIN_DEMAND_SHARE,
+} from "@/lib/constants/economy";
 import { GOOD_NECESSITY } from "@/lib/constants/physical-economy";
 
 describe("dissatisfaction (complement of provision, necessity-weighted)", () => {
@@ -277,56 +283,150 @@ describe("worstDemandedGoods (ascending tail with demand share)", () => {
   });
 });
 
-describe("foldSupplyState (D cut + survival floor)", () => {
+describe("foldSupplyState (four bands binned from Provision, survival punch-through)", () => {
   const full = (goodId: string, demanded: number) => ({ goodId, satisfaction: 1, demanded });
+  const bandFor = (p: number) =>
+    p >= SUPPLIED_PROVISION ? "supplied" : p >= RATIONING_PROVISION ? "strained" : "rationing";
 
-  it("is supplied only at D exactly 0", () => {
-    const goods = [full("water", 10), full("luxuries", 2)];
-    expect(foldSupplyState(goods, dissatisfaction(goods)).regime).toBe("supplied");
-    expect(foldSupplyState([], 0).regime).toBe("supplied");
-  });
-
-  it("is rationing for any positive D below the cut", () => {
-    const goods = [{ goodId: "luxuries", satisfaction: 0, demanded: 2 }, full("water", 100)];
-    const state = foldSupplyState(goods, dissatisfaction(goods));
-    expect(state.regime).toBe("rationing");
-    expect(state.survivalShortfall).toBe(false);
-  });
-
-  it("is shortage at or above the cut", () => {
-    expect(foldSupplyState([full("ore", 10)], D_SHORTAGE_CUT).regime).toBe("shortage");
-    expect(foldSupplyState([full("ore", 10)], D_SHORTAGE_CUT - 1e-9).regime).toBe("rationing");
-  });
-
-  it("selects shortage from the survival floor even when D is far below the cut", () => {
-    // Water at half rations, at a small demand share against a large well-served ore demand, folds
-    // to ~0.1 — nowhere near the cut — yet the population is genuinely on half rations. This is the
-    // case the floor exists for. (Demand split chosen so water's own share stays small: that isolates
-    // the floor from the cut, which the deep-shortage case below cannot.)
-    const goods = [
-      { goodId: "water", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 10 },
-      full("ore", 400),
+  it("bins from provision() itself, in each of the three Provision bands — the one implementation a re-implemented mean would drift from", () => {
+    // Two goods of sharply different necessity, so an unweighted mean of the raw satisfactions would
+    // land in a different band than the necessity-and-demand-weighted provision() does. If
+    // foldSupplyState ever re-implemented its own mean instead of calling provision(), a fixture like
+    // this is what would expose the drift — computing the expected band from provision() itself
+    // (rather than a hardcoded number) means the two can never silently agree by coincidence.
+    // Neither good is a survival good, so the survival floor never interferes — this fixture set
+    // isolates the Provision bin from the punch-through entirely.
+    const suppliedGoods = [full("ore", 10), { goodId: "medicine", satisfaction: 0.9, demanded: 5 }];
+    const strainedGoods = [
+      { goodId: "ore", satisfaction: 0.82, demanded: 10 },
+      { goodId: "medicine", satisfaction: 0.7, demanded: 5 },
     ];
-    const d = dissatisfaction(goods);
-    expect(d).toBeLessThan(D_SHORTAGE_CUT);
-    const state = foldSupplyState(goods, d);
-    expect(state.regime).toBe("shortage");
-    expect(state.survivalShortfall).toBe(true);
+    const rationingGoods = [
+      { goodId: "ore", satisfaction: 0.4, demanded: 10 },
+      { goodId: "medicine", satisfaction: 0.3, demanded: 5 },
+    ];
+    const fixtures = [suppliedGoods, strainedGoods, rationingGoods];
+    for (const goods of fixtures) {
+      expect(foldSupplyState(goods).regime).toBe(bandFor(provision(goods)));
+    }
+    // Guard against every fixture accidentally landing in the same band, which would let the loop
+    // above pass without actually exercising all three.
+    expect(new Set(fixtures.map((g) => foldSupplyState(g).regime)).size).toBe(3);
+  });
+
+  it("both bin edges are inclusive on the side their docstrings state", () => {
+    // A single demanded good's provision() equals its own satisfaction exactly, whatever its
+    // necessity — share is 1 either way — so these fixtures land precisely on the edges.
+    const atSupplied = [{ goodId: "food", satisfaction: SUPPLIED_PROVISION, demanded: 10 }];
+    expect(provision(atSupplied)).toBeCloseTo(SUPPLIED_PROVISION, 10);
+    expect(foldSupplyState(atSupplied).regime).toBe("supplied"); // at-or-above: still Supplied
+
+    const justBelowSupplied = [{ goodId: "food", satisfaction: SUPPLIED_PROVISION - 1e-9, demanded: 10 }];
+    expect(foldSupplyState(justBelowSupplied).regime).toBe("strained");
+
+    const atRationing = [{ goodId: "food", satisfaction: RATIONING_PROVISION, demanded: 10 }];
+    expect(foldSupplyState(atRationing).regime).toBe("strained"); // at-or-above: still Strained
+
+    const justBelowRationing = [{ goodId: "food", satisfaction: RATIONING_PROVISION - 1e-9, demanded: 10 }];
+    expect(foldSupplyState(justBelowRationing).regime).toBe("rationing");
+  });
+
+  it("a survival good below the survival line bands Shortage whatever Provision says; a non-survival good at the identical satisfaction does not", () => {
+    const survivalShort = [
+      { goodId: "water", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 1 },
+      full("ore", 1000),
+    ];
+    expect(provision(survivalShort)).toBeGreaterThan(SUPPLIED_PROVISION); // Provision alone reads healthy
+    expect(foldSupplyState(survivalShort).regime).toBe("shortage");
+    expect(foldSupplyState(survivalShort).survivalShortfall).toBe(true);
+
+    const nonSurvivalSameSat = [
+      { goodId: "luxuries", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 1 },
+      full("ore", 1000),
+    ];
+    expect(foldSupplyState(nonSurvivalSameSat).regime).not.toBe("shortage");
+    expect(foldSupplyState(nonSurvivalSameSat).survivalShortfall).toBe(false);
   });
 
   it("treats exactly the shortage satisfaction line as not a survival shortfall (strict <)", () => {
     const goods = [{ goodId: "food", satisfaction: SHORTAGE_SATISFACTION, demanded: 100 }];
-    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
+    expect(foldSupplyState(goods).survivalShortfall).toBe(false);
   });
 
   it("ignores a zero-demand survival good", () => {
     const goods = [{ goodId: "water", satisfaction: 0, demanded: 0 }, full("ore", 5)];
-    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
+    expect(foldSupplyState(goods).survivalShortfall).toBe(false);
   });
 
   it("does not let a non-survival good trip the floor at any depth", () => {
     const goods = [{ goodId: "luxuries", satisfaction: 0, demanded: 5 }, full("water", 5)];
-    expect(foldSupplyState(goods, dissatisfaction(goods)).survivalShortfall).toBe(false);
+    expect(foldSupplyState(goods).survivalShortfall).toBe(false);
+  });
+
+  it("an epsilon-demand good below the criticality line bands by Provision alone and contributes no override weight", () => {
+    // 1 of 1000 total demand = 0.1%, well under BAND_MIN_DEMAND_SHARE (1%) — a trace entry, not a
+    // real need, exactly the skilled-basket-epsilon case the floor exists to exclude.
+    const goods = [
+      { goodId: "medicine", satisfaction: CRITICAL_SATISFACTION - 0.01, demanded: 1 },
+      full("ore", 999),
+    ];
+    const demandShare = 1 / 1000;
+    expect(demandShare).toBeLessThan(BAND_MIN_DEMAND_SHARE);
+    const state = foldSupplyState(goods);
+    expect(state.regime).toBe(bandFor(provision(goods)));
+    expect(state.criticalWeight).toBe(0);
+  });
+
+  it("an eligible critical good on a high-Provision world leaves the band exactly where Provision bins it; criticalWeight is proportional to necessity × demand share and zero above the line", () => {
+    const goods = [
+      full("water", 1000), // dominant, fully served — keeps Provision high
+      { goodId: "components", satisfaction: CRITICAL_SATISFACTION - 0.01, demanded: 100 }, // 100/1100 ≈ 9.1% share, well above the floor
+    ];
+    const p = provision(goods);
+    expect(p).toBeGreaterThanOrEqual(SUPPLIED_PROVISION);
+    const state = foldSupplyState(goods);
+    expect(state.regime).toBe("supplied"); // the override never changes the label
+    const expectedWeight = GOOD_NECESSITY.components * (100 / 1100);
+    expect(state.criticalWeight).toBeCloseTo(expectedWeight, 10);
+
+    // Every good above the criticality line contributes zero, however large its demand share.
+    const allAboveCriticality = [full("water", 1000), full("components", 100)];
+    expect(foldSupplyState(allAboveCriticality).criticalWeight).toBe(0);
+  });
+
+  it("bands an empty basket Supplied with zero critical weight and no division by zero", () => {
+    const state = foldSupplyState([]);
+    expect(state.regime).toBe("supplied");
+    expect(state.criticalWeight).toBe(0);
+    expect(Number.isFinite(state.criticalWeight)).toBe(true);
+  });
+});
+
+describe("unrestSlope (D-ramp + survival step + critical-good override)", () => {
+  const params: UnrestParams = { slopeRationing: 1, slopeShortage: 3, decay: 0.06 };
+  const supply = (survivalShortfall: boolean, criticalWeight: number): SupplyState => ({
+    regime: "rationing",
+    survivalShortfall,
+    criticalWeight,
+  });
+
+  it("raises the effective slope by criticalWeight × (slopeShortage − slopeRationing), capped at slopeShortage", () => {
+    // D = 0 isolates the ramp at slopeRationing, so the override's own contribution reads cleanly.
+    const diff = params.slopeShortage - params.slopeRationing; // 2
+    expect(unrestSlope(0, supply(false, 0.5), params)).toBeCloseTo(params.slopeRationing + 0.5 * diff, 10);
+    // A weight large enough to blow past slopeShortage caps there instead of exceeding it.
+    expect(unrestSlope(0, supply(false, 5), params)).toBe(params.slopeShortage);
+  });
+
+  it("gets the survival step alone when both the survival floor and override weight apply", () => {
+    // The composition rule is explicit: famine dominates outright rather than stacking with the
+    // override on top of it.
+    expect(unrestSlope(0, supply(true, 0.9), params)).toBe(params.slopeShortage);
+    expect(unrestSlope(0.5, supply(true, 0.9), params)).toBe(params.slopeShortage);
+  });
+
+  it("contributes nothing at zero criticalWeight — an unaffected world sees the D-ramp alone", () => {
+    expect(unrestSlope(0, supply(false, 0), params)).toBe(params.slopeRationing);
   });
 });
 
@@ -399,7 +499,11 @@ describe("crowdingPressure (standing unrest floor from overcrowding)", () => {
 
 describe("accumulateUnrest (floor-relaxation integrator)", () => {
   const params: UnrestParams = { slopeRationing: 1.8, slopeShortage: 2.5, decay: 0.06 };
-  const state = (regime: SupplyRegime, survivalShortfall = false): SupplyState => ({ regime, survivalShortfall });
+  const state = (regime: SupplyRegime, survivalShortfall = false, criticalWeight = 0): SupplyState => ({
+    regime,
+    survivalShortfall,
+    criticalWeight,
+  });
   const SUPPLIED = state("supplied");
   const RATIONING = state("rationing");
   const SHORTAGE = state("shortage");
@@ -451,8 +555,8 @@ describe("accumulateUnrest (floor-relaxation integrator)", () => {
     for (const [d, floor] of [[0.1, 0.2], [0.3, 0]] as const) {
       let u = 0;
       for (let i = 0; i < 500; i++) u = accumulateUnrest(u, d, floor, RATIONING, params);
-      expect(floor + unrestSlope(d, false, params) * d, `D=${d}`).toBeLessThan(1);
-      expect(u, `D=${d}`).toBeCloseTo(floor + unrestSlope(d, false, params) * d, 6);
+      expect(floor + unrestSlope(d, RATIONING, params) * d, `D=${d}`).toBeLessThan(1);
+      expect(u, `D=${d}`).toBeCloseTo(floor + unrestSlope(d, RATIONING, params) * d, 6);
     }
   });
 
@@ -463,7 +567,7 @@ describe("accumulateUnrest (floor-relaxation integrator)", () => {
     // bites: the highest standing floor (very-high tax + full crowding) under a total water failure.
     const floor = 0.23;
     const d = 0.37;
-    expect(floor + unrestSlope(d, true, params) * d).toBeGreaterThan(1); // the raw sum overflows
+    expect(floor + unrestSlope(d, state("shortage", true), params) * d).toBeGreaterThan(1); // the raw sum overflows
     let u = 0;
     for (let i = 0; i < 500; i++) u = accumulateUnrest(u, d, floor, state("shortage", true), params);
     expect(u).toBe(1);
@@ -508,7 +612,7 @@ describe("accumulateUnrest (floor-relaxation integrator)", () => {
     // Equilibrium, not one step: the regime label picks only the approach rate, so comparing single
     // steps across labels compares speeds rather than severities.
     const floor = 0.2;
-    const eq = (d: number, survivalShortfall: boolean) => floor + unrestSlope(d, survivalShortfall, params) * d;
+    const eq = (d: number, survivalShortfall: boolean) => floor + unrestSlope(d, state("rationing", survivalShortfall), params) * d;
     for (const d of [0, 0.05, 0.14, 0.25, 0.28, 0.32, 0.5, 1]) {
       expect(eq(d, true), `D=${d}`).toBeGreaterThanOrEqual(eq(d, false));
     }
