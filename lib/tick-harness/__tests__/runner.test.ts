@@ -187,13 +187,21 @@ describe("runTickHarness: logistics instruments", () => {
 
   it("wires the third-arm drawBrakeCeiling pin through to a measurable divergence", async () => {
     // A silently dropped wire is invisible on every OTHER counter — both arms would just run the
-    // live game twice and agree everywhere — so the guard has to be a same-seed A/B. The pin only
-    // reaches the draw figure's brake, which only ever moves an outcome by reordering which of two
-    // COMPETING deficits a budget-limited cycle services first — a small 20-system/800-tick world
-    // never happens to raise that competition (verified: byte-identical logistics activity), so
-    // this needs a bigger, longer run for the reordering to actually bite. Measured non-zero on
-    // every seed tried at this scale.
-    const config: HarnessConfig = { systemCount: 60, seed: 7, tickCount: 3000 };
+    // live game twice and agree everywhere — so the guard has to be a same-seed A/B. The pin
+    // reaches only the draw figure, whose one reader is the matcher's severity weight, and
+    // severity does nothing but ORDER the deficit queue. Donor pools are held per good, and the
+    // haul budget goes barely 0.2% spent at this scale, so reordering two deficits of DIFFERENT
+    // goods changes nothing at all: the divergence needs two systems of the same faction short of
+    // the SAME good in one cycle, competing for one donor's drawable.
+    //
+    // Faction count barely moves with galaxy size (8 majors plus a √N-interpolated dozen minors),
+    // so systems-per-faction is what supplies that competition. At 60 systems a faction musters
+    // three or four systems and same-good pairs essentially never swap (measured: 0 swaps at
+    // 3000 ticks, still 0 at 6000 — it is structural, not a matter of running longer); at 120 the
+    // same factions carry eight or nine systems each and the swaps are routine — 109 of them
+    // across 7 goods on this seed, 159 and 58 on the two others tried, which is what makes the
+    // divergence below an outcome rather than a coincidence.
+    const config: HarnessConfig = { systemCount: 120, seed: 7, tickCount: 3000 };
     const live = await runTickHarness(config);
     const pinned = await runTickHarness({ ...config, drawBrakeCeiling: "anchor" });
     expect(live.logisticsActivity.transferCount).toBeGreaterThan(0);

@@ -141,9 +141,14 @@ export const GOOD_NECESSITY: Record<string, number> = {
 
 /**
  * The goods whose deprivation is famine rather than scarcity. Below SHORTAGE_SATISFACTION on either
- * one, a system reads Shortage whatever the rest of the basket looks like: dissatisfaction squares
- * the gap, so water at half rations folds to only ~0.09 and no workable cut on the fold alone
- * catches a population that is genuinely on half rations.
+ * one, a system reads Shortage whatever the rest of the basket looks like: dissatisfaction is a
+ * linear necessity-and-demand-weighted mean now, so a shortfall only ever surfaces as its own
+ * weighted SHARE of the basket's total gap. Water and food carry the largest such share of any good
+ * (necessity 1.0, the table's ceiling, times the largest per-capita demand) — yet even so, water
+ * alone at half rations (satisfaction 0.5, everything else fully served) folds to a weighted gap of
+ * only ~0.19 on the base per-capita basket, not the ~0.5 the literal ration level would suggest.
+ * Averaging still dilutes a deep shortfall against the rest of an otherwise-healthy basket, so no
+ * workable cut on the fold alone catches a population that is genuinely on half rations.
  */
 export const SURVIVAL_GOODS: readonly string[] = ["water", "food"];
 

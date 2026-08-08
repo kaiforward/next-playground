@@ -175,6 +175,18 @@ describe("provision (necessity-and-demand-weighted mean)", () => {
     expect(Number.isFinite(provision(infinities))).toBe(true);
     expect(provision(infinities)).toBeCloseTo(0.5, 10);
   });
+
+  it("folds a demanded: NaN reading to zero weight rather than poisoning the mean — a corrupted reading cannot claim weight, same as demanded: 0", () => {
+    const base = [
+      { goodId: "water", satisfaction: 0.4, demanded: 10 },
+      { goodId: "food", satisfaction: 0.9, demanded: 5 },
+    ];
+    const withNaNDemand = [...base, { goodId: "medicine", satisfaction: 0, demanded: NaN }];
+    expect(Number.isNaN(provision(withNaNDemand))).toBe(false);
+    expect(provision(withNaNDemand)).toBeCloseTo(provision(base), 10);
+    expect(Number.isNaN(dissatisfaction(withNaNDemand))).toBe(false);
+    expect(dissatisfaction(withNaNDemand)).toBeCloseTo(dissatisfaction(base), 10);
+  });
 });
 
 describe("worstDemandedGoods (ascending tail with demand share)", () => {

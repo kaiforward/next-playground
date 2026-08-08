@@ -243,6 +243,16 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   `lib/engine/directed-build.ts`, `lib/tick-harness/runner.ts`. The incremental cache
   (`reports/stryker-incremental.json`, machine-local) makes re-runs minutes, not hours.
   *Next step:* chip file-by-file, worst first, same kill-or-accept discipline as the PR gate.
+- **[S] Harden the runner integration suite's thin anchors** — found while re-deriving the
+  drawBrakeCeiling divergence fixture. The gate-split identity test (`runner.test.ts:152`,
+  `charter + funds + pool + unGated === observed`) passes vacuously: the 20/7/240 fixture never
+  exercises three of the four buckets (all zeros), so a broken classification still satisfies the
+  identity — same hollowing-out class as the divergence failure, but silent. Three sibling
+  assertions rest on counts of exactly 2 (`materialsShortUnderEvent`, founder `systemCount`,
+  `inFlight.max`) and zero out on modest tuning changes; `budgetSpentFrac` passes at 0.006% spend,
+  a near-vacuous read of the haul-budget ledger.
+  *Next step:* one fixture-derivation pass giving the gate-split test a scenario with all four
+  buckets non-zero; document or widen the count-2 anchors while there.
 - **[S] Decide the simulate "equilibrium" horizon** — the quick run's 10,000-tick label sits inside
   the startup transient for high-tier consumer metrics (electronics/luxuries recoveries land
   t≈9,500-11,000; ship_frames later still). Options: extend the labelled horizon to 12-16k

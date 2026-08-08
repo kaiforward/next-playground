@@ -52,9 +52,13 @@ export interface GoodSatisfaction {
   demanded: number;
 }
 
-/** demanded × necessity — the fold's weight. An unweighted good contributes nothing, either way. */
+/** demanded × necessity — the fold's weight. An unweighted good contributes nothing, either way.
+ *  A non-finite `demanded` contributes zero weight rather than propagating — mirrors
+ *  clampSatisfaction()'s reasoning: a corrupted reading cannot claim weight in the fold, it can only
+ *  read as absent from it. */
 function goodWeight(g: GoodSatisfaction): number {
-  return Math.max(0, g.demanded) * Math.max(0, GOOD_NECESSITY[g.goodId] ?? 0);
+  const demanded = Number.isFinite(g.demanded) ? Math.max(0, g.demanded) : 0;
+  return demanded * Math.max(0, GOOD_NECESSITY[g.goodId] ?? 0);
 }
 
 /** Satisfaction clamped into [0,1]; NaN clamps to 0 rather than propagating — a corrupted read must
