@@ -43,8 +43,9 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    (3) relief. The expectation changes what the slopes are measured against and retires the interim
    `slopeRationing`/founding invariant; abandonment and relief each need a primitive the game does
    not have and are gated on it.
-   *Next step:* design pass + `/spec-review` for the adaptive expectation (cross-mechanic: save
-   shape, slopes, migration, abandonment's trigger).
+   *Next step:* `/spec-review` on the adaptive-expectation spec
+   ([adaptive-expectation.md](./planned/adaptive-expectation.md) — design pass done; cross-mechanic:
+   save shape, slopes, migration, abandonment's trigger), then `/build-plan`.
    *Don't:* precision-tune any constant before the expectation lands — it re-derives the slopes.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line.
