@@ -17,7 +17,8 @@ throttle *and* pop satisfaction — are measured against `maxStock` (the storage
    93–98% of markets. There is nothing to arbitrage.
 2. **Abundance can't buy contentment.** Satisfaction (`sqrt((stock−min)/(max−min))`) only reaches 1.0 at
    the storage ceiling, so a system sitting exactly at its cycles-of-supply anchor reads only ~0.58
-   satisfied; since equilibrium unrest ≈ dissatisfaction, **unrest floors at ~0.13–0.3 no matter how
+   satisfied; since equilibrium unrest settles with the shortfall folded from satisfaction (today the
+   linear `1 − Provision` — see [economy.md](./economy.md)), **unrest floors at ~0.13–0.3 no matter how
    well-supplied a system is** (audit: mean satisfaction 0.65, mean unrest 0.13).
 
 This phase reframes **both** self-limiting factors to be **anchor-relative**: a producer holds roughly

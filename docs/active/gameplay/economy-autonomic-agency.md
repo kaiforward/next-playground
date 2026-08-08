@@ -228,8 +228,8 @@ land, so the planner can never place capacity nobody can staff. A system already
 nothing left to build, so the build loop is **idle at potential** — visible only where a system is actually
 growing. Three mechanisms, in causal order:
 
-1. **Proactive housing.** Where a system is *fed and calm* (`dissatisfaction ≤ D_settle` and
-   `unrest ≤ unrest_settle`) and has habitable land not yet built out, build housing **ahead** of
+1. **Proactive housing.** Where a system is *fed* (`fed()` — the survival-good test alone; neither
+   the whole-basket Provision fold nor unrest gates housing) and has habitable land not yet built out, build housing **ahead** of
    population, toward the habitable cap — creating the headroom population needs to grow. Housing is paced
    to keep `popCap` only a small margin (`settleMargin`) ahead of current population, so population fills the
    new levels before their idle buffer could expire and shed them. A system short on food
@@ -390,8 +390,8 @@ committed queue); both processors on their own cycle start.
 
 - Logistics: the budget generation rate; surplus/deficit margins; hop budget / max logistics distance; the
   hop-vs-fuel blend in route cost.
-- Build: `settleMargin` (housing headroom ahead of population); `D_settle` / `unrest_settle` (the
-  fed-and-calm gate); `CONSTRUCTION.THROUGHPUT_PER_POP` and the per-build absorption cap (construction
+- Build: `settleMargin` (housing headroom ahead of population); the `fed()` survival gate
+  (`SHORTAGE_SATISFACTION`); `CONSTRUCTION.THROUGHPUT_PER_POP` and the per-build absorption cap (construction
   pace); `CONSTRUCTION.POINTS_PER_LEVEL` / `PAYBACK_HORIZON` / `BACKLOG_WINDOW` (Construction Centre
   output and valuation).
 

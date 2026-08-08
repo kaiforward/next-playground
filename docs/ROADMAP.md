@@ -27,28 +27,25 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
-  *Next step:* Provision (item 6), then PR6.
+  *Next step:* merge `feat/supply-response` (item 6 step 1 — Provision — PR open into shared), then PR6.
 
 ---
 
 ## Queued — supply response, then PR6
 
-6. **[L] Provision + supply response** — [supply-response.md](./planned/supply-response.md). Renames the
-   supply score to **Provision** (a weighted-mean satisfaction percentage) because today's fold squares
-   each good's shortfall and collapsed its range ~5×. Absorbs two items previously booked separately:
-   re-cutting the unrest band, and struck worlds that can neither grow out nor die.
-   Key input, already measured: `foldSupplyState` returns `rationing` for *any* `d > 0` and `supplied`
-   only at exactly 0 — there is no threshold to re-cut because there is no threshold. The exact-zero
-   cliff is real, but the mislabelled cohort is the 43.5% Rationing share at equilibrium (253 of 582
-   settled), not homeworlds: they read 100% Supplied at mean D 0.000 (n = 20, both horizons). The
-   clearest case is the pop ≥ 1K cohort — mean D 0.006 and still 23% Rationing (n = 370, equilibrium).
-   *Next step:* `/build-plan` from the reviewed spec (spec-review done 2026-08-07, all findings
-   accepted and folded in; report in `.agent-reviews/`).
-   Five items inside it, **in order, measuring between** — (1) Provision + band demotion +
-   instrumentation + the constant re-cuts, (2) change-driven unrest, (3) adaptive expectation,
-   (4) abandonment, (5) relief. Items 2 and 3 both change what the slopes are measured against; 4 and 5
-   each need a primitive the game does not have and are gated on it.
-   *Don't:* precision-tune any constant before this lands — it invalidates them twice over.
+6. **[L] Supply response — the remaining arc** — [supply-response.md](./planned/supply-response.md).
+   Item 1 (Provision: the un-squared score, four descriptive bands, constant re-cuts, harness
+   instrument) **shipped on `feat/supply-response`** and passed its A/B gate (Gate 2, 2026-08-08:
+   mislabelling gone, growth/strikes flat-or-better, `strikeExplains` suppression fell ~3×).
+   Three items remain, **in order, measuring between** — (1) the **adaptive expectation** (unrest
+   judged against a persisted per-world baseline of what that world has been getting; absorbs the
+   old change-term item as its fastest-decay calibration arm — decided at Gate 2), (2) abandonment,
+   (3) relief. The expectation changes what the slopes are measured against and retires the interim
+   `slopeRationing`/founding invariant; abandonment and relief each need a primitive the game does
+   not have and are gated on it.
+   *Next step:* design pass + `/spec-review` for the adaptive expectation (cross-mechanic: save
+   shape, slopes, migration, abandonment's trigger).
+   *Don't:* precision-tune any constant before the expectation lands — it re-derives the slopes.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line.
    *Next step:* after item 6.
