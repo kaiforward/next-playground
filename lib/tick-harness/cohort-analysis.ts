@@ -247,6 +247,15 @@ export function cohortsForSystem(s: TickSystem, homeworldIds: Set<string>): Worl
  * Supply and unrest per world cohort. This is what the galaxy-wide mean cannot answer:
  * whether the unrest band grades anything, or whether its boundaries are being crossed by
  * noise in a population that was never comparable in the first place.
+ *
+ * `startPopulationBySystem` is each system's population at the true run start (tick 0), keyed by
+ * system id — the `netGrowthPct` field's denominator. Deliberately NOT `HarnessResults.
+ * populationSnapshots` (whose first entry lands at SNAPSHOT_INTERVAL, after the loop has already
+ * run — colonies founded in that gap would otherwise misread as present at the start). An empty
+ * map means no start reading was taken at all (see `netGrowthPct`'s docstring for the null
+ * convention that produces); a system missing from a non-empty map is read as starting at 0,
+ * which is what lets a colony founded mid-run show up as growth rather than being excluded from
+ * the sum.
  */
 export function computeWorldCohorts(
   systems: TickSystem[],
@@ -254,6 +263,7 @@ export function computeWorldCohorts(
   homeworldIds: Set<string>,
   strikeThreshold: number,
   events: ReadonlyArray<WorldEvent> = [],
+  startPopulationBySystem: ReadonlyMap<string, number> = new Map(),
 ): WorldCohortEntry[] {
   const states = perSystemSupplyState(systems, markets, events);
 
@@ -261,6 +271,7 @@ export function computeWorldCohorts(
     n: number; dSum: number; unrestSum: number; striking: number;
     supplied: number; rationing: number; shortage: number;
     provisionSum: number; worstGoodSats: number[];
+    startPopSum: number; endPopSum: number;
   }>();
 
   for (const s of systems) {
@@ -272,7 +283,7 @@ export function computeWorldCohorts(
       if (!a) {
         a = {
           n: 0, dSum: 0, unrestSum: 0, striking: 0, supplied: 0, rationing: 0, shortage: 0,
-          provisionSum: 0, worstGoodSats: [],
+          provisionSum: 0, worstGoodSats: [], startPopSum: 0, endPopSum: 0,
         };
         acc.set(cohort, a);
       }
@@ -281,6 +292,9 @@ export function computeWorldCohorts(
       a.unrestSum += s.unrest;
       a.provisionSum += state.provision;
       a.worstGoodSats.push(worstGoodSatisfaction(state));
+      // Absent from the start snapshot ⇒ founded during the run ⇒ started at 0, not excluded.
+      a.startPopSum += startPopulationBySystem.get(s.id) ?? 0;
+      a.endPopSum += s.population;
       if (s.unrest >= strikeThreshold) a.striking += 1;
       if (state.regime === "supplied") a.supplied += 1;
       else if (state.regime === "rationing") a.rationing += 1;
@@ -288,6 +302,7 @@ export function computeWorldCohorts(
     }
   }
 
+  const noSnapshot = startPopulationBySystem.size === 0;
   const result: WorldCohortEntry[] = [];
   for (const cohort of COHORT_ORDER) {
     const a = acc.get(cohort);
@@ -304,6 +319,9 @@ export function computeWorldCohorts(
       shortageShare: a.shortage / a.n,
       meanProvision: a.provisionSum / a.n,
       worstGoodMedian: median(a.worstGoodSats),
+      // Summed before dividing, never per-system-then-averaged, so a founded colony's start-0
+      // contributes fully to the numerator without individually dividing by zero.
+      netGrowthPct: noSnapshot ? null : a.startPopSum > 0 ? ((a.endPopSum - a.startPopSum) / a.startPopSum) * 100 : 0,
     });
   }
   return result;

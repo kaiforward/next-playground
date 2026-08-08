@@ -194,6 +194,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const constructionInterval = config.cadence?.construction ?? CONSTRUCTION_INTERVAL;
 
   const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
+  // True tick-0 population per system — netGrowthPct's start denominator. Captured here rather
+  // than read off `populationSnapshots` (whose first entry lands at SNAPSHOT_INTERVAL, after the
+  // loop has already run 50 ticks): the same window `initialPopulationTotal` above is captured
+  // over, so the cohorted reading and the galaxy-wide growthPct measure the identical start.
+  const startPopulationBySystem = new Map(world.systems.map((s) => [s.id, s.population]));
   const initialBuildingTotal = tickSystemsAtStart.reduce(
     (sum, s) => sum + Object.values(s.buildings).reduce((a, c) => a + Math.max(0, c), 0),
     0,
@@ -354,6 +359,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   );
   const worldCohorts = computeWorldCohorts(
     finalTickSystems, currentMarkets, homeworldIds, STRIKE_PARAMS.threshold, world.events,
+    startPopulationBySystem,
   );
   const kneeBinding = computeKneeBinding(finalTickSystems, currentMarkets);
 

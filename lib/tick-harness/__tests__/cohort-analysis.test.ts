@@ -2,9 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts, marketRolesByKey,
 } from "../cohort-analysis";
-import { perSystemSupplyState } from "../population-analysis";
+import { perSystemSupplyState, summarizePopulation } from "../population-analysis";
 import type { MarketRole } from "../types";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
+import { CROWDING } from "@/lib/constants/population";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { WorldMarket } from "@/lib/world/types";
 import type { TickSystem } from "@/lib/tick/rows";
@@ -373,5 +374,83 @@ describe("computeWorldCohorts", () => {
     // Neither system reaches these cohorts.
     expect(byCohort.has("pop >=1K")).toBe(false);
     expect(byCohort.has("pop 10-100")).toBe(false);
+  });
+
+  describe("netGrowthPct", () => {
+    it("agrees with the galaxy-wide growthPct arithmetic when the cohort is everything", () => {
+      // All three systems are homeworlds ⇒ the "homeworld" cohort IS the whole settled galaxy,
+      // so its netGrowthPct must reproduce summarizePopulation's growthPct computed the same way
+      // (same start/end sums, same formula) over the identical systems.
+      const systems = [
+        sys("s1", { population: 120 }),
+        sys("s2", { population: 80 }),
+        sys("s3", { population: 300 }),
+      ];
+      const start = new Map([["s1", 100], ["s2", 100], ["s3", 250]]);
+      const homeworldIds = new Set(["s1", "s2", "s3"]);
+
+      const totalStart = [...start.values()].reduce((a, b) => a + b, 0);
+      const expected = summarizePopulation(systems, totalStart, 0.8, CROWDING.BRAKE_END).growthPct;
+
+      const entries = computeWorldCohorts(systems, [], homeworldIds, 0.8, [], start);
+      const homeworld = entries.find((e) => e.cohort === "homeworld");
+
+      expect(homeworld?.netGrowthPct).toBeCloseTo(expected, 6);
+    });
+
+    it("counts a mid-run founded colony's whole population as growth, not a divide-by-zero", () => {
+      // s1 existed at start (100, unchanged); s2 is absent from the start snapshot — founded
+      // during the run — and ends with population 40. Both land in "colony". Summing before
+      // dividing keeps s2's own start-0 from individually blowing up: (140 - 100) / 100 = 40%.
+      const systems = [sys("s1", { population: 100 }), sys("s2", { population: 40 })];
+      const start = new Map([["s1", 100]]); // s2 absent — founded mid-run
+
+      const entries = computeWorldCohorts(systems, [], new Set(), 0.8, [], start);
+      const colony = entries.find((e) => e.cohort === "colony");
+
+      expect(colony?.netGrowthPct).not.toBeNull();
+      expect(Number.isFinite(colony?.netGrowthPct)).toBe(true);
+      expect(colony?.netGrowthPct).toBeCloseTo(40, 6);
+    });
+
+    it("reports a negative percentage for a cohort that lost population, not a clamp to 0", () => {
+      const systems = [sys("s1", { population: 40 })];
+      const start = new Map([["s1", 100]]);
+
+      const entries = computeWorldCohorts(systems, [], new Set(), 0.8, [], start);
+      const colony = entries.find((e) => e.cohort === "colony");
+
+      expect(colony?.netGrowthPct).toBeCloseTo(-60, 6);
+    });
+
+    it("gives a system in two overlapping cohorts the same correct reading in both, with no cross-cohort bleed", () => {
+      // s1: band "pop <10", not a homeworld ⇒ also "colony". s2: band "pop >=1K" (population
+      // 1500, above the 1K cutoff) and homeworld. Deliberately shares no cohort with s1, so a
+      // denominator leaking between rows shows up as a wrong netGrowthPct on a specific cohort
+      // rather than a coincidental match.
+      const rock = sys("s1", { population: 5 });
+      const homeworld = sys("s2", { population: 1500 });
+      const start = new Map([["s1", 2], ["s2", 1500]]);
+
+      const entries = computeWorldCohorts([rock, homeworld], [], new Set(["s2"]), 0.8, [], start);
+      const byCohort = new Map(entries.map((e) => [e.cohort, e]));
+
+      // s1's two rows: (5 - 2) / 2 = 150%, independently in both.
+      expect(byCohort.get("pop <10")?.netGrowthPct).toBeCloseTo(150, 6);
+      expect(byCohort.get("colony")?.netGrowthPct).toBeCloseTo(150, 6);
+      // s2's two rows: unchanged (1500 → 1500) = 0%, unaffected by s1's 150%.
+      expect(byCohort.get("pop >=1K")?.netGrowthPct).toBeCloseTo(0, 6);
+      expect(byCohort.get("homeworld")?.netGrowthPct).toBeCloseTo(0, 6);
+    });
+
+    it("reports null, not an unmeasured 0, for a run that took no start snapshot", () => {
+      // No 6th argument ⇒ the default empty map, the same shape a run shorter than one
+      // SNAPSHOT_INTERVAL produces (runner.ts's populationSnapshots stays empty).
+      const systems = [sys("s1", { population: 50 })];
+      const entries = computeWorldCohorts(systems, [], new Set(), 0.8, []);
+
+      expect(entries.length).toBeGreaterThan(0);
+      for (const e of entries) expect(e.netGrowthPct).toBeNull();
+    });
   });
 });

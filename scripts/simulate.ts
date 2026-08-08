@@ -422,8 +422,8 @@ function formatTable(results: HarnessResults): string {
     lines.push("Supply & unrest by world cohort (end of simulation):");
 
     lines.push(...renderTable(
-      ["Cohort", "n", "mean D", "Provision", "worst-good", "unrest", "strike%", "Sup/Rat/Sho %"],
-      [16, 6, 8, 10, 11, 8, 9, 20],
+      ["Cohort", "n", "mean D", "Provision", "worst-good", "unrest", "strike%", "Sup/Rat/Sho %", "net growth%"],
+      [16, 6, 8, 10, 11, 8, 9, 20, 12],
       worldCohorts.map((c) => [
         c.cohort,
         String(c.n),
@@ -435,11 +435,14 @@ function formatTable(results: HarnessResults): string {
         `${(c.suppliedShare * 100).toFixed(0)} / ` +
           `${(c.rationingShare * 100).toFixed(0)} / ` +
           `${(c.shortageShare * 100).toFixed(0)}`,
+        c.netGrowthPct === null ? "n/a" : `${c.netGrowthPct.toFixed(1)}%`,
       ]),
     ));
 
     lines.push("  cohorts overlap — a system appears in its population band, in homeworld/colony,");
     lines.push("  and in survival-short if it has no arable slot. Each row's n is its own denominator.");
+    lines.push("  net growth% is (end pop - start pop) / start pop over the cohort's END-of-run");
+    lines.push("  membership, measured from tick 0; n/a only if no start reading was taken at all.");
   }
 
   // Migration throughput (whole run) — reads most meaningfully on a land-tight seed, where colony

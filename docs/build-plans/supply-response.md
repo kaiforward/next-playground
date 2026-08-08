@@ -195,12 +195,17 @@ Files:
 - `lib/tick-harness/cohort-analysis.ts`, `lib/tick-harness/types.ts` (existing)
 - `lib/tick-harness/runner.ts` (existing — `populationSnapshots` accumulation `:287-293`)
 - `scripts/simulate.ts` (existing — cohort table)
-- `lib/tick-harness/__tests__/cohort-analysis.test.ts` (existing)
+- `lib/tick-harness/__tests__/cohort-analysis.test.ts`, `lib/tick-harness/__tests__/runner.test.ts`
+  (existing — the tick-0 capture is runner wiring and is pinned there)
 
 Interface:
 - `computeWorldCohorts(...)` takes an additional `startPopulationBySystem: ReadonlyMap<string, number>` —
-  the run's first population snapshot.
-- `WorldCohortEntry` gains `netGrowthPct: number`. Membership is end-of-run (a system is in the cohort
+  the run's population at **true tick 0, captured before the loop** (as `initialPopulationTotal` already
+  is), never the first periodic snapshot: the periodic cadence starts at `SNAPSHOT_INTERVAL`, and a
+  tick-50 start map counts every colony founded in ticks 1–49 as "present at start".
+- `WorldCohortEntry` gains `netGrowthPct: number | null` — null only for the defensive empty-start-map
+  path ("could not measure" and "measured flat" never share a value; the `meanOpeningProvision`
+  precedent). Membership is end-of-run (a system is in the cohort
   it finished in); a system absent from the start map counts as starting at 0, so a cohort's growth
   includes colonies founded during the run. Both choices are stated in the field's docstring because
   they are what the number means — founding rate is already the spec's named confounder for this
@@ -216,7 +221,9 @@ Proves:
   the reading this metric exists to catch.
 - Overlapping cohorts each carry their own denominator: a system counted in a pop band and in `colony`
   contributes to both without double-counting inside either.
-- A run with fewer than one snapshot interval reports no cohort growth rather than an unmeasured 0.
+- The start map is the true tick-0 population: a run shorter than one snapshot interval still measures
+  growth (the tick-0 capture does not depend on the periodic snapshot cadence), and an empty start map
+  reports null rather than an unmeasured 0.
 
 Consumes: nothing.
 

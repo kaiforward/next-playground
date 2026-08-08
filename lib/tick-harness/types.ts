@@ -145,6 +145,20 @@ export interface WorldCohortEntry {
   /** Median of each system's single worst-demanded-good satisfaction (1 for a system with no
    *  demanded goods) — the quantile a mean would flatten out of a bimodal cohort. */
   worstGoodMedian: number;
+  /**
+   * (end population − start population) / start population, summed over the cohort before
+   * dividing (never averaged per system) so a system absent from the tick-0 population reading —
+   * a colony founded during the run — contributes its whole end population to the numerator
+   * instead of an individual divide-by-zero. Membership is END-of-run: a system is scored in the
+   * cohort it FINISHED in, not the one (if any) it started in, so a cohort's growth includes
+   * colonies founded into it mid-run and excludes ones it grew out of by crossing a population
+   * band. Net growth moves with the crowd brake, migration and founding rate, not only the growth
+   * factor — read this alongside those, never as a clean read on the growth factor alone. 0 when
+   * the cohort's own start-population sum is 0 (matches `growthPct`'s zero-start convention). Null
+   * when the run took no tick-0 population reading at all (`startPopulationBySystem` empty) —
+   * unmeasured, not a lying 0.
+   */
+  netGrowthPct: number | null;
 }
 
 export interface MarketHealthSummary {

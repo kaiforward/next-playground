@@ -69,6 +69,21 @@ describe("runTickHarness: strike-suppression rate", () => {
   });
 });
 
+describe("runTickHarness: world cohort net growth", () => {
+  it("reports non-null netGrowthPct on every cohort row for a run shorter than one SNAPSHOT_INTERVAL", async () => {
+    // CONSTRUCTION_INTERVAL - 1 (23 ticks) is well under SNAPSHOT_INTERVAL (50), so
+    // `populationSnapshots` never fires this run — if netGrowthPct's start reading depended on
+    // that periodic mechanism, every cohort row would read null here. It doesn't: the start
+    // reading is captured at true tick 0, independent of the snapshot cadence.
+    const results = await runTickHarness({ systemCount: 20, seed: 7, tickCount: CONSTRUCTION_INTERVAL - 1 });
+
+    expect(results.worldCohorts.length).toBeGreaterThan(0);
+    for (const cohort of results.worldCohorts) {
+      expect(cohort.netGrowthPct).not.toBeNull();
+    }
+  });
+});
+
 // ── foldFoundingTick ──────────────────────────────────────────────
 // The order inside it is the instrument. Sweeping for new colonies before accumulating the tick's
 // draws loses the founding cycle's own slice — and loses it QUIETLY, since every earlier slice
