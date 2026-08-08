@@ -248,32 +248,42 @@ seed 42, 600 systems, economy scale 100 — the run the spec's evidence table wa
 **Merge condition** — Stage B does not start until each of these is a number or a written decision, in
 `docs/planned/supply-response.md`, next to the measurement it came from:
 
-1. The two Provision bin edges (`SUPPLIED_PROVISION`, `RATIONING_PROVISION`), from the measured
-   Provision distribution. *(Amended at Gate 1: the band was re-specced from worst-good to
-   Provision-binned — the measured worst-good distribution is a cliff and a worst-good label marks
-   the young galaxy distressed while unrest sits at its floor.)*
-2. The demand-share floor for **override** eligibility (the band has no floor — it inherits
-   Provision's weighting).
+1. **DECIDED: `SUPPLIED_PROVISION` = 0.90, `RATIONING_PROVISION` = 0.70.** *(Amended at Gate 1: the
+   band was re-specced from worst-good to Provision-binned — the measured worst-good distribution is
+   a cliff and a worst-good label marks the young galaxy distressed while unrest sits at its floor.)*
+2. **DECIDED: `BAND_MIN_DEMAND_SHARE` = 0.01**, for **override** eligibility only (the band has no
+   floor — it inherits Provision's weighting). Authored as a rule — below 1% of a basket is a trace
+   entry — with the measurement as confirmation; docstring carries the rule and the re-check note
+   (spec, override section).
 3. ~~The necessity floor on band eligibility~~ **Dissolved at Gate 1** with the worst-good band rule:
    the override's `necessity × demand share` weighting performs the filtering the floor existed for.
-4. The criticality line's value. *(The composition rule is no longer open — written into the spec at
-   Gate 1: ramp + `criticalWeight × (slopeShortage − slopeRationing)` capped at `slopeShortage`;
-   band promotion to at-least-Rationing, never Shortage; survival step fires alone when both apply.)*
-5. `D_SHORTAGE_CUT`, `D_SHORTAGE_BLEND`, `slopeRationing` and `slopeShortage` on the Provision scale,
-   with the founding invariant's ceiling computed from the **measured** founding shortfall via the
-   spec's own `maxSlope = (strikeThreshold − maxFloor) / foundingShortfall` — and reconciled with the
-   shipped guarantee at `lib/constants/__tests__/band-constants.test.ts:205-210` ("a broad shortage still
-   strikes, below collapse"), which the spec's restatement table omits and which bounds the same product
-   from the other side (Self-review 4).
-6. The single relaxation rate, chosen on the spec's own recovery-time argument rather than carried over
-   from either of today's two values.
-7. `growthRate` and `declineRate`, cut to hold galaxy-wide net growth against the measured Provision
-   distribution.
-8. The `needSeverity` reconciliation — whether the per-good chip's 0.95 "met" line becomes the band's
-   Supplied boundary as one imported constant, or the two stay apart with a stated reason. The decision
-   must cover `buildProblems`' use of the same function on an **industry input gate**
-   (`components/system/needs-view.ts:37-41`), which is a different quantity from a pop need
-   (Self-review 2).
+4. **DECIDED: `CRITICAL_SATISFACTION` = 0.25** — a rule ("under a quarter met"), not a fit: the cliff
+   distribution makes every value in (0, 0.5) equivalent today, so the value binds only on future
+   partial states. *(The composition rule is no longer open — written into the spec at Gate 1: ramp +
+   `criticalWeight × (slopeShortage − slopeRationing)` capped at `slopeShortage`; the override never
+   touches the band; survival step fires alone when both apply.)*
+5. **DECIDED: `D_SHORTAGE_CUT` = 0.65, `D_SHORTAGE_BLEND` = 0.25, `slopeRationing` = 0.95,
+   `slopeShortage` = 2.1.** The founding invariant is read at the **founding-realistic floor** (0.02,
+   frontier default tax, no crowding — the worst tax-and-crowding pairing collides with the strike
+   guarantee: p10 shortfall 0.59 at floor 0.23 caps the slope at 0.71 < 0.84) giving ceiling 1.07;
+   the shipped strike guarantee (`band-constants.test.ts:205-210`) bounds from below at 0.84. The
+   invariant is **interim scaffolding** — it dissolves at item 3 (adaptive expectation) and the
+   slope's docstring says so. Collapse containment is re-authored: **contained to the Shortage band**
+   (spec, guarantees table) — the "shortfall ≤ 0.5 never collapses" variant is false under the
+   override and must not be used.
+6. **DECIDED: single relaxation rate `decay` = 0.06.** Decided on tick tempo, not the spec's
+   recovery-time argument (270 ticks ≈ under a minute of fast-mode wall clock — both candidates are
+   "watchable"); 0.06 is today's non-Supplied rate, so the only behavioural delta is Supplied worlds
+   losing the 2× recovery branch.
+7. **DECIDED: `growthRate` / `declineRate` stay 0.015 / 0.015.** The feared re-scale was
+   disconfirmed on cliff data (growth factor 0.967 → 0.966); the slope re-cut eases decline pressure.
+   Gate 2 verifies via end-population per cohort across arms, 12k checkpoint included.
+8. **DECIDED: the two lines stay apart, with the reason stated in code.** The chip's 0.95 answers
+   "is this good fully served" (per-good attention); the band's 0.90 answers "is anything wrong here"
+   (world-mean label); they disagree on ~6 of 582 worlds on cliff data. The chip's line becomes a
+   named UI constant with a question-stating docstring; B6 imports nothing from the band; and
+   `buildProblems`' **industry input gate** (`components/system/needs-view.ts:37-41`) keeps today's
+   thresholds untouched — a different quantity from a pop need (Self-review 2).
 
 A constant sized from the Jensen bound instead of the measurement is exactly what this gate exists to
 prevent.
@@ -298,7 +308,8 @@ Files:
   test `:859-914`)
 
 Interface:
-- `UnrestParams` loses `recoveryDecay`. `decay` survives as the single rate and takes Gate 1's value.
+- `UnrestParams` loses `recoveryDecay`. `decay` survives as the single rate and takes Gate 1's value
+  (0.06 — decided; see the merge-condition list).
 - `accumulateUnrest(unrest, d, floor, supply, params)` keeps its signature but stops reading
   `supply.regime` — after this task the label selects nothing, which is the spec's load-bearing
   demotion. `supply` still carries the survival bit (and, after B4, the critical weight).
@@ -364,9 +375,9 @@ Files:
   containment suite `:170-255`)
 
 Interface:
-- Values only, all of them Gate 1's numbers: `D_SHORTAGE_CUT`, `D_SHORTAGE_BLEND`,
-  `UNREST_PARAMS.slopeRationing`, `UNREST_PARAMS.slopeShortage`, `UNREST_PARAMS.decay`,
-  `POPULATION_PARAMS.growthRate`, `POPULATION_PARAMS.declineRate`. No name, type or reader changes.
+- Values only, all of them Gate 1's decided numbers: `D_SHORTAGE_CUT` 0.65, `D_SHORTAGE_BLEND` 0.25,
+  `UNREST_PARAMS.slopeRationing` 0.95, `UNREST_PARAMS.slopeShortage` 2.1, `UNREST_PARAMS.decay` 0.06,
+  `POPULATION_PARAMS.growthRate` / `declineRate` unchanged at 0.015. No name, type or reader changes.
 - Docstrings re-authored, not nudged: `D_SHORTAGE_CUT`'s cited anchors (≈0.14 ambient, ≈0.37 water) are
   gap-1 values and carry no information about the new scale; `UNREST_PARAMS`' "it exceeds 1 because D
   itself is small" premise is exactly what this change invalidates; `POPULATION_PARAMS`' symmetry
@@ -382,11 +393,21 @@ Proves:
 - A partial-satisfaction basket distinguishes the two folds — the suite must fail if the fold is
   reverted to squared. The shipped suite's blind spot is that every `dFor()` scenario is identical under
   both folds.
-- The founding cohort at its measured shortfall settles strictly below the strike threshold at the worst
-  tax-and-crowding floor, and the assertion fails when `slopeRationing` is raised past the ceiling.
-- Sustained worst-case Rationing still strikes and still stays below collapse — simultaneously with the
-  founding invariant. A slope-and-cut pair that satisfies one and breaks the other must fail, because
-  the two bound the same product from opposite sides.
+- The founding cohort at its measured p10 shortfall (0.59) settles strictly below the strike threshold
+  at the **founding-realistic floor** (frontier default tax 0.02, no crowding — the floor a newborn can
+  actually occupy; the worst-floor pairing is measured as unsatisfiable and is not the assertion), and
+  the assertion fails when `slopeRationing` is raised past the 1.07 ceiling.
+- The two sides bound `slopeRationing` from opposite ends and both must hold simultaneously: a broad
+  Shortage-band shortfall (d = 0.5) at the worst tax-and-crowding floor still strikes below collapse on
+  the base ramp (bounds from below at 0.84), while the founding invariant bounds from above at 1.07. A
+  value that satisfies one and breaks the other must fail.
+- **Collapse is contained to the Shortage band** (the Gate 1 re-authoring): a world without famine at
+  Provision ≥ `RATIONING_PROVISION` stays below the 0.75 collapse line at any tax, any crowding, and
+  the maximum override composition the structure permits — the worst case sits at the band edge
+  (`0.23 + (0.95 + (0.30/0.75) × 1.15) × 0.30 = 0.653`). The assertion computes the override worst case
+  from the constants rather than hardcoding 0.653, so it recomputes if a bin edge or slope moves. Do
+  not assert the gate report's "shortfall ≤ 0.5 never collapses" variant — it is false under the
+  override.
 - A total water or food failure still collapses at zero tax and still drives net decline at every tax
   level, with both sides of the decline comparison re-derived — that comparison holds `settled(d, floor)`
   against `1 − d` and both sides move on the new scale.
@@ -429,12 +450,13 @@ Interface:
   per the spec's composition rule (ramp + `criticalWeight × (slopeShortage − slopeRationing)`, capped
   at `slopeShortage`; survival step unchanged and firing alone when both apply).
 - New constants in `lib/constants/economy.ts`, each with its own docstring stating what it is and what
-  it is not: `SUPPLIED_PROVISION` and `RATIONING_PROVISION` (the two Provision bin edges — legibility
-  constants; no gameplay reader), `CRITICAL_SATISFACTION` (the criticality line — deliberately its own
-  constant, so the famine line and the criticality line move independently), and
-  `BAND_MIN_DEMAND_SHARE` (**override eligibility only** — there is no band-level floor; the bin
-  inherits Provision's own weighting, and the necessity-floor variant is dissolved with the
-  worst-good band rule).
+  it is not: `SUPPLIED_PROVISION` = 0.90 and `RATIONING_PROVISION` = 0.70 (the two Provision bin
+  edges — legibility constants; no gameplay reader), `CRITICAL_SATISFACTION` = 0.25 (the criticality
+  line — deliberately its own constant, so the famine line and the criticality line move
+  independently; docstring carries the "under a quarter met" rule), and `BAND_MIN_DEMAND_SHARE` = 0.01
+  (**override eligibility only** — there is no band-level floor; the bin inherits Provision's own
+  weighting, and the necessity-floor variant is dissolved with the worst-good band rule; docstring
+  carries the "below 1% is a trace entry" rule and the high-necessity-trace-share re-check note).
 - `SHORTAGE_SATISFACTION` keeps both existing consumers unchanged — `hasSurvivalShortfall` and `fed()`.
 
 Proves:
@@ -510,10 +532,11 @@ Files:
 - `components/system/population-panel.tsx` (existing — tooltip severity `:25`, ledger `:63-65`)
 
 Interface:
-- `needSeverity`'s two hardcoded lines become imported constants — or stay with Gate 1's written
-  reason. *(Amended at Gate 1: the band now bins the world-mean, so its edges are not per-good lines
-  and cannot be the chip's import; the candidates are `SHORTAGE_SATISFACTION` for "critical" and a
-  named UI constant for the 0.95 "met" line, with the world-bin divergence documented.)* The
+- **Decided at Gate 1: the lines stay apart, with the reason stated in code.** `needSeverity`'s 0.95
+  "met" line becomes a named UI constant whose docstring states the question it answers ("is this
+  particular good fully served" — a per-good attention line, not the band's world-mean "is anything
+  wrong here" at 0.90; the two disagree on ~6 of 582 worlds on cliff data, and that disagreement is
+  correct). The "critical" line imports `SHORTAGE_SATISFACTION`. Nothing imports the band edges. The
   signature is unchanged, so all four reader modules inherit the decision through one function.
 - The industry panel's comment at `:873` asserting what the pressure sort means is restated for the
   un-squared shape; no sort logic moves (the ordering is `computePopNeeds`').

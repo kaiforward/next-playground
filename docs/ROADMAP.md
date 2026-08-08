@@ -113,6 +113,17 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   raise the export reserve (withholds real stock from importers). If grading is wanted, the lever
   is the curve's saturation point — which makes the `MarketCurve.k` item below this work's natural
   first slice.
+- **[M] Good-allocation cliff — how logistics splits a scarce good across demanding systems.**
+  Gate 1 of supply-response measured per-good satisfaction as violently bimodal: on worlds below
+  full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy
+  fill — each receiving system takes its full demand while in-range supply lasts, so at most one
+  system gets a partial fill and everyone after gets zero. If confirmed, the fix is an allocation
+  policy weighing availability against the number of demanding systems (candidate policies in
+  memory `design-logistics-depth-inputs`; possibly player-configurable). Complements the band /
+  critical-good mechanics — partial-satisfaction states make `CRITICAL_SATISFACTION` a live line
+  instead of a formality. Sibling of the logistics-pillar depth check below.
+  *Next step:* `/measure` the directed-logistics fill order to confirm or kill the greedy-drain
+  hypothesis before any policy design.
 - **[M] Per-good price response (`MarketCurve.k`)** — make "water spikes under scarcity, luxuries don't"
   real by giving each good its own price-curve exponent, without touching demand. `DEFAULT_ELASTICITY`
   is 1 for every good and `priceFloor`/`priceCeiling` is a pure tier lookup with zero per-good variation.
@@ -189,6 +200,15 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
   as this system's second tier.
+- **[S] Define a tick-tempo anchor** — a short doc section stating what a tick feels like in play:
+  wall-clock at each speed setting (fast mode is 5 ticks/s today), rough equivalents against
+  genre reference points (Victoria 3 ≈ 146K ticks per 100 years at 4 ticks/day), and the cycle
+  (24 ticks) as the unit pacing arguments should be made in. Exists so calibration decisions stop
+  arguing "N ticks feels long/short" from unanchored intuition — the relaxation-rate call at the
+  supply-response Gate 1 turned on exactly this. Not a design of game-time itself (ticks still
+  have no defined in-fiction span); just the shared measuring language.
+  *Next step:* one section in `docs/SPEC.md` or `docs/active/gameplay/`, plus a one-line pointer
+  wherever pacing constants are authored.
 - **[S] Move the dev cheat-panel button to the header** — the map sidebar and other floating elements block it.
 - **[S] Standardise main content panel size** — system detail should be smaller than command center.
 

@@ -211,8 +211,11 @@ per-good table's job (the needs ledger and the industry panel's input gates alre
 demand per good); the world label's job is consequence.
 
 `SHORTAGE_SATISFACTION` (50%) and `SURVIVAL_GOODS` keep the famine line exactly as shipped. The two
-Provision bin edges are new constants, sized from the measured Provision distribution at Gate 1 —
-a legibility choice, not a balance one, since no gameplay effect reads the band.
+Provision bin edges are new constants — **`SUPPLIED_PROVISION` = 0.90, `RATIONING_PROVISION` = 0.70**,
+decided at Gate 1 from the measured distribution: the mature galaxy reads ~92–96% Supplied (worlds
+below 0.90: 7.9% at 10k ticks, 4.0% at 12k) while the young galaxy reads 80/8/12
+(19.8% below 0.90, 11.9% below 0.70 at 1k) — healthy reads healthy, founding stress stays visible.
+A legibility choice, not a balance one, since no gameplay effect reads the band.
 
 **There is no necessity floor and no band-level demand floor.** Provision's own weighting
 (`goodWeight = demanded × necessity`) already makes negligible demand and negligible necessity
@@ -239,6 +242,20 @@ line to the criticality line permanently. They must move independently.
 `criticalWeight = Σ necessity × demand share` over demanded goods with satisfaction below
 `CRITICAL_SATISFACTION` and demand share at or above `BAND_MIN_DEMAND_SHARE` (the floor's only
 remaining home — it exists so a two-pop stub's epsilon-demand medicine cannot fire the override).
+
+Both constants are authored as rules, not tuned fits, and their docstrings carry the rule:
+
+- **`BAND_MIN_DEMAND_SHARE` = 0.01** — below 1% of a world's demand basket a good is a trace entry,
+  not a real need. The Gate 1 measurement only *confirms* today's tables sit on the right sides of
+  the line: 0.01 excludes exactly the epsilon skilled-basket goods (shares 0.005–0.010), while 0.05
+  would silence medicine (necessity 0.8) on worlds where it holds 1–5% of the basket. Survival goods
+  are immune to the floor by construction — famine punches through via the survival step regardless.
+  Re-check this floor if a high-necessity good is ever deliberately authored at a trace share.
+- **`CRITICAL_SATISFACTION` = 0.25** — a good under a quarter met is critical; half the famine line,
+  so "collapsed" is a distinctly worse state than shortage-grade. The measured per-good distribution
+  is a cliff (goods at 0 or 1), so any line in (0, 0.5) catches the same worlds today — the value
+  binds only on future partial-satisfaction states, which is why it must be a rule the data cannot
+  tune.
 It carries on `SupplyState` and composes in `unrestSlope`, the one place severity composes:
 
 - **Slope:** effective slope = the D-ramp's value plus `criticalWeight × (slopeShortage −
@@ -282,13 +299,13 @@ a silent galaxy-wide balance change.
 | --- | --- | --- |
 | `dissatisfaction()` | `lib/engine/population.ts:57-68` — Σ share × gap² | Σ share × gap; returns `1 − Provision` |
 | `pressure` | `lib/engine/pop-needs.ts:71` (docstring `:9-11,25`) | un-squared in lockstep, docstrings updated |
-| `D_SHORTAGE_CUT` = 0.25 | `lib/constants/economy.ts:99` | re-derived in Provision units |
-| `D_SHORTAGE_BLEND` = 0.05 | `lib/constants/economy.ts:109` | re-derived in Provision units |
-| `slopeRationing` = 1.8, `slopeShortage` = 2.5 | `lib/constants/population.ts:28-29` | re-cut against the new input scale |
-| `decay` = 0.06, `recoveryDecay` = 0.12 | `lib/constants/population.ts:30-31` | collapse to one rate, freshly calibrated |
-| `growthRate` = 0.015, `declineRate` = 0.015 | `lib/constants/population.ts:62-63` | re-cut to hold galaxy-wide net growth |
+| `D_SHORTAGE_CUT` = 0.25 | `lib/constants/economy.ts:99` | **0.65** in Provision-shortfall units (Gate 1) |
+| `D_SHORTAGE_BLEND` = 0.05 | `lib/constants/economy.ts:109` | **0.25** — full shortage slope at shortfall 0.90 (Gate 1) |
+| `slopeRationing` = 1.8, `slopeShortage` = 2.5 | `lib/constants/population.ts:28-29` | **0.95** / **2.1** (Gate 1; derivations below) |
+| `decay` = 0.06, `recoveryDecay` = 0.12 | `lib/constants/population.ts:30-31` | one rate, **0.06** (Gate 1; rationale below) |
+| `growthRate` = 0.015, `declineRate` = 0.015 | `lib/constants/population.ts:62-63` | **unchanged** — the feared re-scale was disconfirmed (below) |
 | `SupplyRegime` | `lib/engine/population.ts:71` — closed 3-member union | four members; harness folds widened |
-| criticality line | does not exist | new constant, distinct from `SHORTAGE_SATISFACTION` |
+| criticality line | does not exist | `CRITICAL_SATISFACTION` = **0.25**, distinct from `SHORTAGE_SATISFACTION` |
 
 **Both D constants are re-derived here, never deferred.** `D_SHORTAGE_CUT` has two consumers —
 `foldSupplyState` (`lib/engine/population.ts:113`) and `unrestSlope` (`:144-146`) — and `D_SHORTAGE_BLEND`
@@ -304,23 +321,26 @@ records the coupling as authored (`:48-51`). The change is therefore not confine
 integral: growth reads the new shortfall, and `POPULATION_PARAMS.growthRate`/`declineRate` are re-cut
 in the same change to hold galaxy-wide net growth roughly constant.
 
-The arithmetic that forces this: at equilibrium the galaxy-wide growth factor is `1 − 0.033 = 0.967`;
-on the un-squared scale it falls to at most `1 − 0.18 = 0.82` (see the bound below) while the same
-re-scale raises unrest-driven decline. Without the rate re-cut, ordinary worlds flip to net decline —
-the exact cancellation this design wants broken *only* for physically unviable worlds, applied
-galaxy-wide, including to the viable-but-stuck cohort a later item is supposed to rescue.
+Gate 1 measured the feared arithmetic and **disconfirmed it: the rates stay at 0.015 / 0.015.** The
+Jensen worst case (growth factor falling from `1 − 0.033 = 0.967` toward `1 − 0.18 = 0.82`) assumed
+uniform gaps; the live galaxy's per-good distribution is a cliff (goods at 0 or 1), where the squared
+and linear folds nearly coincide — mean shortfall 0.034 against mean D 0.033, growth factor
+0.967 → 0.966. The one input that moves materially, the slope re-cut 1.8 → 0.95, lowers settled
+unrest and so *eases* decline pressure. Nothing needs re-cutting; Gate 2 verifies no cohort flips to
+net decline, read as end-population per cohort across arms (same seed) with the 12k checkpoint.
 **Galaxy-wide net growth, cohorted, at both horizons, is a step-1 gate metric.**
 
 **The relaxation branch collapses to one rate.** `UnrestParams.recoveryDecay` is deleted, along with
 its pre-scaling in the population processor (`lib/tick/processors/population.ts:36-40`) and the
 docstring sentence "Supplied recovers twice as fast as either regime accumulates"
-(`lib/constants/population.ts:10-11`). `decay` survives as the single rate, and its value is a fresh
-calibration — neither 0.06 nor 0.12 carried over. The choice does not move where unrest settles (the
-fixed point is rate-independent) but it halves or doubles every recovery: rates are per
-population-processor run, one per 24-tick cycle, so closing half the gap to the fixed point takes
-11.2 cycles at 0.06 and 5.4 at 0.12 — roughly 270 ticks against 130 for a relieved world to shed half
-its unrest. That is the difference between a strike episode a player can watch end and one they
-cannot, which matters most for the relieved struck worlds a later item creates.
+(`lib/constants/population.ts:10-11`). `decay` survives as the single rate at **0.06** (Gate 1). The
+choice does not move where unrest settles (the fixed point is rate-independent), only how fast unrest
+travels toward it: one relaxation step per 24-tick cycle, so closing half the gap takes 11.2 cycles
+(~270 ticks) at 0.06 against 5.4 (~130) at 0.12. The deciding argument was tick tempo, not the
+recovery-time argument this spec originally made: 270 ticks is under a minute of fast-mode wall clock
+(5 ticks/s) and a small fraction of any session — both candidates are "watchable", so the tie breaks
+toward the conservative pick. 0.06 is today's rate for every non-Supplied world, so the only
+behavioural change from shipped is that Supplied worlds lose the 2× recovery branch.
 
 ### The guarantees, restated on Provision
 
@@ -333,7 +353,7 @@ against `COLLAPSE = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold` (0.75,
 | Guarantee today | On Provision |
 | --- | --- |
 | Shortage slope strictly above Rationing (`:171-173`) | unchanged in form |
-| Sustained Rationing never reaches collapse, at any tax (`:175-178`) | same bound, with the cut re-expressed as a Provision shortfall |
+| Sustained Rationing never reaches collapse, at any tax (`:175-178`) | **re-authored at Gate 1: collapse is contained to the Shortage band.** A world without famine, banded Rationing or better (Provision ≥ `RATIONING_PROVISION`), cannot reach the 0.75 collapse line at any tax, any crowding, any override composition — worst case at the band edge is `0.23 + (0.95 + (0.30/0.75) × 1.15) × 0.30 = 0.653`. Collapse first becomes possible near shortfall 0.35 at max tax, just inside Shortage: the label tells the player the truth — Shortage means the world can die of it. (The interim "shortfall ≤ 0.5 never collapses" wording proposed at the gate is **false** under the override — a max-tax world at shortfall 0.5 concentrated in collapsed goods settles ≈ 0.99 — and must not be resurrected.) |
 | A total water or food failure collapses even at zero tax (`:180-183`) | unchanged in form — a gap-1 scenario, identical under both folds |
 | A total water or food failure drives net decline at every tax level (`:185-193`) | must be re-derived: it compares `settled(d, floor)` against `1 − d`, and both sides move |
 | No non-survival good alone reaches the strike threshold at any tax (`:195-202`) | same form, tighter: one good's contribution rises from `share × gap²` to `share × gap` |
@@ -343,11 +363,33 @@ The new invariant is the binding one. The founding cohort is the modal world (56
 equilibrium) and opens at the galaxy's worst supply state; if it settles above 0.65 it opens inside
 production suppression, at up to a 75% output cut, in the regime where `collapseDebt` accrues and
 built levels tear down permanently. The bound is
-`maxSlope = (strikeThreshold − maxFloor) / foundingShortfall`. With founding shortfall ≈ 0.5 (from
-opening D 0.257 ⇒ shortfall ≤ 0.507, and opening demand-weighted satisfaction 0.47 ⇒ 0.53 — the two
-reads agree), that is **0.84** at the worst tax-and-crowding floor and **1.26** at the frontier
-default tax stance of 0.02. Both sit below today's `slopeRationing` of 1.8. The re-cut is not
-optional and it is not small.
+`maxSlope = (strikeThreshold − floor) / foundingShortfall`, and Gate 1 measured the shortfall
+directly: mean 0.27, p10 0.59 (562 of 562 assessed, equilibrium). The two sides collide under the
+conservative pairing — p10 at the worst tax-and-crowding floor (0.23) caps the slope at 0.71, below
+the 0.84 that "broad shortage still strikes" requires — so **the invariant is read at the
+founding-realistic floor**: a newborn colony sits at frontier default tax (0.02) and cannot be
+crowded, so the worst floor describes a state no founding colony occupies. p10 at that floor gives a
+ceiling of **1.07**; with the strike guarantee bounding from below, `slopeRationing` lands in
+[0.84, 1.07] and is set at the midpoint, **0.95**. A max-tax faction founding into the worst decile
+of shortfall *can* birth a striking colony under this reading — punitive policy is outside the
+guarantee's scope, deliberately.
+
+**The invariant is interim scaffolding, not a design law.** It exists only for the window before the
+adaptive expectation (item 3), which dissolves the founding-strike problem structurally — a newborn's
+settlers expect frontier hardship, so its expectation-relative shortfall is ~0 at any tax level.
+Items 2 and 3 change what the slopes are measured against and re-derive them regardless, so within
+[0.84, 1.07] the midpoint's precision is deliberately not worth calibrating; the constant's docstring
+says so. The durable constraint in this family is the other side — broad shortage on an established
+world still strikes, slope ≥ 0.84.
+
+**`slopeShortage` = 2.1** is the durable one, derived from a stated behavioural claim: a total water
+failure must be able to collapse a world even at zero tax. Water's basket weight
+(necessity × demand share) is 0.37 and scale-invariant — a property of the consumption tables, not
+of this run — so the slope must satisfy `slope × 0.37 ≥ 0.75`; 2.1 is the smallest round value that
+clears it (0.78). It survives item 3 better than `slopeRationing` because the survival step is
+absolute, not expectation-relative: famine is famine whatever a population is used to. Down from the
+shipped 2.5, which was authored against the squared scale — keeping it would state a harsher claim
+than anyone authored.
 
 **The existing tests cannot catch this.** Every scenario in `band-constants.test.ts` is built by
 `dFor()` (`:139-144`), which puts the named goods at satisfaction 0 — gap = 1, gap² = gap — so every
@@ -380,8 +422,10 @@ estimate.** Because `D = Σ share·gap²`, Jensen gives `(Σ share·gap)² ≤ D
 with equality only under uniform gaps. Equilibrium mean D 0.033 therefore bounds mean shortfall at
 ≤ 0.18 (Provision ≥ 0.82); startup mean D 0.064 bounds it at ≤ 0.25 (Provision ≥ 0.75). The shortfall
 is measured as *concentrated* rather than uniform, which pushes the true mean shortfall well below
-its bound — true Provision sits well above both floors. The true re-scale factor is somewhere
-between 1× and 5× and is unknown until measured.
+its bound — true Provision sits well above both floors. Gate 1 measured the re-scale factor at
+**≈1× on the live galaxy** (mean shortfall 0.034 against mean D 0.033 — on cliff-shaped per-good
+data the squared and linear folds nearly coincide); the 5× end of the range exists only for future
+partial-satisfaction states.
 
 ## Unrest responds to change as well as level
 
@@ -674,7 +718,7 @@ Each item is measured before the next starts.
 | Nothing is currently emptying | `Emptied 0`, `Stranded 0` | both horizons | all settled |
 | Every Provision figure quoted before instrumentation is an upper bound | mean shortfall ≤ √D by Jensen; D 0.033 ⇒ shortfall ≤ 0.18; D 0.064 ⇒ ≤ 0.25 | equilibrium; startup | all settled |
 | The existing containment tests cannot detect the fold swap | `dFor()` sets named goods to satisfaction 0, so gap² = gap (`lib/constants/__tests__/band-constants.test.ts:139-144`) | — | — |
-| The maximum admissible slope is below the current `slopeRationing` | `(0.65 − 0.23) / 0.5 = 0.84` at max floor; `(0.65 − 0.02) / 0.5 = 1.26` at the frontier default tax; current value 1.8 | equilibrium (founding shortfall) | founding cohort |
+| The maximum admissible slope is below the current `slopeRationing` | Gate 1, measured shortfall mean 0.27 / p10 0.59: p10 at the worst floor gives 0.71 (collides with the ≥ 0.84 strike guarantee); read at the founding-realistic floor 0.02 the ceiling is `(0.65 − 0.02) / 0.59 = 1.07`; shipped value 1.8 | equilibrium (founding cohort, n = 562) | founding cohort |
 | The relaxation rate choice halves or doubles recovery | `ln 0.5 / ln(1 − k)` = 11.2 cycles at 0.06, 5.4 at 0.12; one run per 24-tick cycle | — | — |
 | What parks the struck cohort is unmeasured | no cohort keys on the three-way viability test (`lib/tick-harness/cohort-analysis.ts:242` keys on `slotCap.arable ≤ 0` alone) | — | — (hypothesis: crowd-brake equilibrium, untested) |
 
