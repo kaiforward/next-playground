@@ -5,14 +5,15 @@
  *  - measure:    dissatisfaction() folds per-good satisfaction into one convex number D
  *                weighted by demand × authored necessity, and foldSupplyState() classes
  *                the same goods as supplied/rationing/shortage — a cut on D plus a
- *                water/food survival floor. D picks the magnitude of the shortfall;
- *                the class picks the relaxation rate and carries the survival bit.
+ *                water/food survival floor. D picks the magnitude of the shortfall; the
+ *                class no longer picks a rate (accumulateUnrest reads one relaxation rate
+ *                for every label) but still carries the survival bit.
  *  - accumulate: accumulateUnrest() relaxes unrest toward a standing-pressure floor
  *                (tax + crowding) and integrates D on top of it, with gain =
  *                unrestSlope(D, survivalShortfall) × the relaxation rate. Equilibrium is
  *                therefore min(1, floor + slope × D) at any rate, so the named slopes
  *                state exchange rates and recovery speed, catch-up and equilibrium are
- *                all decoupled (Supplied recovers faster than Rationing).
+ *                all decoupled.
  *  - threshold:  strikeMultiplier() derives the production-suppression regime from
  *                unrest — a smooth ramp, not a binary halt. Unrest's own integral
  *                is the hysteresis, so no separate stored strike flag is needed.
@@ -186,10 +187,8 @@ export interface UnrestParams {
   slopeRationing: number;
   /** …and while Shortage. Strictly above slopeRationing. */
   slopeShortage: number;
-  /** Relaxation rate toward the standing-pressure floor while Rationing/Shortage. */
+  /** Relaxation rate toward the standing-pressure floor — the single rate, whatever the label. */
   decay: number;
-  /** Faster relaxation while Supplied — the recovery rate. */
-  recoveryDecay: number;
 }
 
 /**
@@ -215,7 +214,8 @@ export function unrestSlope(d: number, survivalShortfall: boolean, params: Unres
 /**
  * Relaxes unrest toward its standing-pressure floor and integrates dissatisfaction on top:
  *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + slope*k*clamp(d,0,1), 0, 1)
- * where k = clamp(supplied ? recoveryDecay : decay, 0, 1) and slope = unrestSlope(d, …).
+ * where k = clamp(decay, 0, 1) and slope = unrestSlope(d, …). One relaxation rate for every
+ * label — `supply.regime` is not read here; only `supply.survivalShortfall` feeds the slope.
  *
  * Because the gain is `slope × k` rather than an independent number, the fixed point is
  * `min(1, floor + slope × D)` for ANY relaxation rate — so equilibrium, recovery speed and the
@@ -229,7 +229,7 @@ export function unrestSlope(d: number, survivalShortfall: boolean, params: Unres
  * do collapse to a single maxed-out reading — the graduated response holds everywhere below it.
  *
  * Catastrophe still lives in the integral — one bad cycle is recoverable, chronic shortage climbs
- * toward the settled level. The caller pre-scales the decays by the catch-up factor (never the
+ * toward the settled level. The caller pre-scales decay by the catch-up factor (never the
  * slopes); k is clamped after scaling, so a large catch-up can never flip the relaxation term and
  * overshoot below the floor.
  */
@@ -240,7 +240,7 @@ export function accumulateUnrest(
   supply: SupplyState,
   params: UnrestParams,
 ): number {
-  const k = clamp(supply.regime === "supplied" ? params.recoveryDecay : params.decay, 0, 1);
+  const k = clamp(params.decay, 0, 1);
   const slope = unrestSlope(d, supply.survivalShortfall, params);
   const relaxed = floor + (1 - k) * (unrest - floor);
   return clamp(relaxed + slope * k * clamp(d, 0, 1), 0, 1);

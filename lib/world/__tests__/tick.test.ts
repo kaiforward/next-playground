@@ -856,7 +856,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     expect(crowded.population).toBeGreaterThan(before.population - (decline + ungatedDeath) * catchUp);
   }, 60_000);
 
-  it("drains stored unrest geometrically at recoveryDecay after one full-shortage cycle", async () => {
+  it("drains stored unrest geometrically at the single relaxation rate after one full-shortage cycle", async () => {
     const { world, systemId } = populationFixture(0.92, TAX_FLOOR);
     // Empty the fixture system on the tick before the assessment, so the cycle measures a market
     // that cannot deliver — and nothing else has had a chance to move it.
@@ -890,16 +890,18 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
       unrestByCycle.push(fixtureSystem(recovering, systemId).unrest);
     }
 
-    // The stored excess above the floor decays geometrically at the Supplied relaxation rate.
+    // The stored excess above the floor decays geometrically at the single relaxation rate — the
+    // same rate the shortage cycle above integrated its gain at. There is no second, faster rate
+    // for the now-Supplied label to fall back on.
     const excess = shortageGain;
-    const retained = 1 - UNREST_PARAMS.recoveryDecay;
+    const retained = 1 - UNREST_PARAMS.decay;
     unrestByCycle.forEach((unrest, index) => {
       expect(unrest).toBeCloseTo(TAX_FLOOR + excess * retained ** (index + 1), 12);
     });
 
-    // Stated as the law rather than the values: each supplied cycle keeps exactly (1 - recoveryDecay)
-    // of the previous excess. A rate-agnostic snap to the floor, or a relaxation at the Rationing
-    // rate, breaks this ratio while still "going down".
+    // Stated as the law rather than the values: each cycle keeps exactly (1 - decay) of the
+    // previous excess, whatever the label. A relaxation that snaps straight to the floor, or that
+    // ran at a second rate for the Supplied label, breaks this ratio while still "going down".
     const excessByCycle = [shortageUnrest, ...unrestByCycle].map((u) => u - TAX_FLOOR);
     for (let i = 1; i < excessByCycle.length; i++) {
       expect(excessByCycle[i]).toBeGreaterThan(0);

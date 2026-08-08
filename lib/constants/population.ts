@@ -7,8 +7,13 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
  * (every `CYCLE_LENGTH` ticks, 24), not per game tick. Unrest relaxes toward a standing-pressure
  * floor (tax + crowding) and integrates dissatisfaction on top, settling at
  * `min(1, floor + slope × D)`, independent of the relaxation rate (and therefore of the catch-up
- * factor). Supplied recovers twice as fast as either regime accumulates, so a relieved system sheds
- * unrest quickly while a chronically short one climbs.
+ * factor).
+ *
+ * `decay` is the single relaxation rate for every supply label — the label used to pick a faster
+ * rate while Supplied; that branch is gone, so a Supplied world now sheds unrest at the same rate a
+ * Rationing one does. 0.06 is decided on tick tempo, not recovery time: closing half the gap takes
+ * ~270 ticks either way at fast-mode wall clock, which is "watchable" whichever candidate is picked,
+ * so the choice is not worth heavily calibrating.
  *
  * Each slope is an EXCHANGE RATE, not a cap: how much settled unrest one unit of D buys. It exceeds
  * 1 because D itself is small — measured mean D is ~0.15 and a total water failure only reaches
@@ -28,7 +33,6 @@ export const UNREST_PARAMS: UnrestParams = {
   slopeRationing: 1.8,
   slopeShortage: 2.5,
   decay: 0.06,
-  recoveryDecay: 0.12,
 };
 
 /**

@@ -22,25 +22,25 @@ const BRAKE_END = 1.15;
 const POP_SHAPE = { crowdBrakeEnd: BRAKE_END, overshootDeathUnrestGate: 0.65 };
 
 const PARAMS = {
-  unrest: { slopeRationing: 2, slopeShortage: 4, decay: 0.05, recoveryDecay: 0.1 },
+  unrest: { slopeRationing: 2, slopeShortage: 4, decay: 0.05 },
   population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
   interval: 24,
 };
 
-// Invariance fixture: lower unrest rates than PARAMS. The unrest filter is integrated
+// Invariance fixture: a lower relaxation rate than PARAMS. The unrest filter is integrated
 // with explicit Euler, whose split residue between one full step and two half steps is
 // ≈ 0.25·decay from a zero start — an integrator artifact, not a scaling error. Keeping
-// every relaxation rate small holds that residue well under the 1% first-order bar the
+// the relaxation rate small holds that residue well under the 1% first-order bar the
 // scaling must meet, whichever regime selects it. One slope for both regimes: this fixture
 // measures the time step, not the D-selected slope.
 const INVARIANCE_PARAMS = {
-  unrest: { slopeRationing: 3, slopeShortage: 3, decay: 0.02, recoveryDecay: 0.02 },
+  unrest: { slopeRationing: 3, slopeShortage: 3, decay: 0.02 },
   population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
 };
 
-// Unrest fixture for the floor/regime suites: four pairwise-distinct numbers, so an assertion
+// Unrest fixture for the floor/regime suites: three pairwise-distinct numbers, so an assertion
 // naming the wrong one cannot pass by coincidence.
-const RATES = { slopeRationing: 1.5, slopeShortage: 3, decay: 0.06, recoveryDecay: 0.12 };
+const RATES = { slopeRationing: 1.5, slopeShortage: 3, decay: 0.06 };
 // Frozen population, so a run's only observable is the unrest integrator.
 const FROZEN_POP = { growthRate: 0, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE };
 
@@ -222,10 +222,10 @@ describe("population processor", () => {
   });
 
   it("enters per-system tax pressure as the unrest floor, not as a gain", async () => {
-    // d = 0, unrest starts 0, interval 24 (catchUp 1), calm and supplied: the run relaxes
-    // toward the floor, so unrest moves recoveryDecay of the way to the tax pressure. A
-    // gain term would instead have integrated slopeRationing × decay × pressure — a different
-    // number that then decays back to zero rather than holding.
+    // d = 0, unrest starts 0, interval 24 (catchUp 1), calm: the run relaxes toward the floor,
+    // so unrest moves decay of the way to the tax pressure. A gain term would instead have
+    // integrated slopeRationing × decay × pressure — a different number that then decays back
+    // to zero rather than holding.
     const pressure = TAX_LEVEL_UNREST_PRESSURE.very_high;
     const world = new InMemoryPopulationWorld({
       systems: [
@@ -240,13 +240,15 @@ describe("population processor", () => {
       interval: 24,
       taxPressureBySystem: new Map([["taxed", pressure]]),
     });
-    expect(unrestOf(world, "taxed")).toBeCloseTo(RATES.recoveryDecay * pressure, 9);
+    expect(unrestOf(world, "taxed")).toBeCloseTo(RATES.decay * pressure, 9);
     expect(unrestOf(world, "free")).toBe(0);
   });
 
   it("settles a calm, supplied, taxed system at exactly its tax pressure", async () => {
     // The floor is the equilibrium: however many cycles run, a system with no
-    // dissatisfaction converges on its standing pressure and stops there.
+    // dissatisfaction converges on its standing pressure and stops there. RATES.decay is now
+    // the only relaxation rate (no faster Supplied branch), so convergence to 1e-6 needs more
+    // cycles than it did when this fixture's default "supplied" label picked a faster rate.
     const pressure = TAX_LEVEL_UNREST_PRESSURE.very_high;
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 100, 1000, 0)], markets: [] });
     const ctx = ctxWithD(new Map([["a", 0]]));
@@ -256,7 +258,7 @@ describe("population processor", () => {
       interval: 24,
       taxPressureBySystem: new Map([["a", pressure]]),
     };
-    for (let cycle = 0; cycle < 120; cycle++) await runPopulationProcessor(world, ctx, params);
+    for (let cycle = 0; cycle < 260; cycle++) await runPopulationProcessor(world, ctx, params);
     expect(unrestOf(world, "a")).toBeCloseTo(pressure, 6);
     expect(unrestOf(world, "a")).toBeLessThan(pressure); // approached from below, never overshot
   });
@@ -285,9 +287,9 @@ describe("population processor", () => {
         taxPressureBySystem: new Map([["roomy", pressure], ["half", pressure], ["packed", pressure]]),
       },
     );
-    expect(unrestOf(world, "roomy")).toBeCloseTo(RATES.recoveryDecay * pressure, 9);
-    expect(unrestOf(world, "half")).toBeCloseTo(RATES.recoveryDecay * (pressure + CROWDING.PRESSURE_MAX / 2), 9);
-    expect(unrestOf(world, "packed")).toBeCloseTo(RATES.recoveryDecay * (pressure + CROWDING.PRESSURE_MAX), 9);
+    expect(unrestOf(world, "roomy")).toBeCloseTo(RATES.decay * pressure, 9);
+    expect(unrestOf(world, "half")).toBeCloseTo(RATES.decay * (pressure + CROWDING.PRESSURE_MAX / 2), 9);
+    expect(unrestOf(world, "packed")).toBeCloseTo(RATES.decay * (pressure + CROWDING.PRESSURE_MAX), 9);
   });
 
   it("falls back to a crowding-only floor when no tax map is supplied", async () => {
@@ -301,7 +303,7 @@ describe("population processor", () => {
       population: FROZEN_POP,
       interval: 24,
     });
-    expect(unrestOf(world, "packed")).toBeCloseTo(RATES.recoveryDecay * CROWDING.PRESSURE_MAX, 9);
+    expect(unrestOf(world, "packed")).toBeCloseTo(RATES.decay * CROWDING.PRESSURE_MAX, 9);
     expect(unrestOf(world, "roomy")).toBe(0);
   });
 
@@ -326,20 +328,20 @@ describe("population processor", () => {
     };
 
     const atDefault = await runWithBrakeEnd(BRAKE_END);
-    expect(unrestOf(atDefault, "s")).toBeCloseTo(RATES.recoveryDecay * CROWDING.PRESSURE_MAX, 9);
+    expect(unrestOf(atDefault, "s")).toBeCloseTo(RATES.decay * CROWDING.PRESSURE_MAX, 9);
     expect(atDefault.systems[0].population).toBeCloseTo(population, 9); // growth fully braked
 
     // r = 1.3 over a span of 0.6 ⇒ t = 0.5: half the crowding pressure, and a smoothstep
     // brake of 1 − t²(3 − 2t) = 0.5 on growth.
     const stretched = await runWithBrakeEnd(1.6);
-    expect(unrestOf(stretched, "s")).toBeCloseTo(RATES.recoveryDecay * (CROWDING.PRESSURE_MAX / 2), 9);
+    expect(unrestOf(stretched, "s")).toBeCloseTo(RATES.decay * (CROWDING.PRESSURE_MAX / 2), 9);
     expect(stretched.systems[0].population).toBeCloseTo(population + growthRate * population * 0.5, 9);
   });
 
   it("clamps the standing floor at 1 when tax and crowding would overflow it", async () => {
     // No tax level reaches this today; the clamp guards a future retune. floor saturates at
-    // 1, so one supplied run moves recoveryDecay of the way from 0 to 1 — an unclamped
-    // floor of 1.04 would have landed at 0.1248 instead.
+    // 1, so one run moves decay of the way from 0 to 1 — an unclamped floor of 1.04 would
+    // have landed higher instead.
     const cap = 1000;
     const world = new InMemoryPopulationWorld({ systems: [sys("overtaxed", cap * BRAKE_END, cap, 0)], markets: [] });
     await runPopulationProcessor(world, ctxWithD(new Map([["overtaxed", 0]])), {
@@ -348,13 +350,14 @@ describe("population processor", () => {
       interval: 24,
       taxPressureBySystem: new Map([["overtaxed", 0.99]]),
     });
-    expect(unrestOf(world, "overtaxed")).toBeCloseTo(RATES.recoveryDecay, 9);
+    expect(unrestOf(world, "overtaxed")).toBeCloseTo(RATES.decay, 9);
   });
 
-  it("treats a system missing from the regime map as supplied", async () => {
-    // Equal starting unrest, no floor and no dissatisfaction, so the regime picks the
-    // relaxation rate alone: an unlisted system must shed unrest at the supplied
-    // (recovery) rate, not the slower rationing one.
+  it("relaxes unrest identically whatever supply label a system carries, including one missing from the map", async () => {
+    // Three systems, identical starting unrest and zero D — only the LABEL differs (one is
+    // missing from the regime map entirely, which the ctx builder below defaults to "supplied").
+    // The old behaviour picked a different relaxation rate per label; this is the only test that
+    // would catch a leftover `supply.regime` read reaching the processor.
     const start = 0.5;
     const world = new InMemoryPopulationWorld({
       systems: [
@@ -364,25 +367,26 @@ describe("population processor", () => {
       ],
       markets: [],
     });
-    const regimes = new Map<string, SupplyRegime>([["served", "supplied"], ["short", "rationing"]]);
+    const regimes = new Map<string, SupplyRegime>([["served", "supplied"], ["short", "shortage"]]);
     await runPopulationProcessor(
       world,
       ctxWithD(new Map([["unlisted", 0], ["served", 0], ["short", 0]]), regimes),
       { unrest: RATES, population: FROZEN_POP, interval: 24 },
     );
-    expect(unrestOf(world, "unlisted")).toBeCloseTo(start * (1 - RATES.recoveryDecay), 9);
-    expect(unrestOf(world, "unlisted")).toBe(unrestOf(world, "served"));
-    expect(unrestOf(world, "short")).toBeCloseTo(start * (1 - RATES.decay), 9);
-    expect(unrestOf(world, "short")).toBeGreaterThan(unrestOf(world, "unlisted"));
+    const expected = start * (1 - RATES.decay);
+    expect(unrestOf(world, "unlisted")).toBeCloseTo(expected, 9);
+    expect(unrestOf(world, "served")).toBeCloseTo(expected, 9);
+    expect(unrestOf(world, "short")).toBeCloseTo(expected, 9);
   });
 
-  it("scales the relaxation rates — and hence the derived gains — by the catch-up factor", async () => {
+  it("scales the relaxation rate — and hence the derived gains — by the catch-up factor", async () => {
     // Interval 48 is two reference cycles, so one run must move exactly twice as far as one run at
-    // the reference interval. Only the relaxation rates are scaled; the gain is slope × rate, so it
+    // the reference interval. Only the relaxation rate is scaled; the gain is slope × rate, so it
     // rides along while the slopes stay dimensionless exchange rates. Gains are read from a zero start (no
     // relaxation term) and relaxation from a raised start (D = 0, so no gain term). Which slope
     // applies is selected by D, not by the regime label: D_LOW sits below the shortage cut and D_HIGH
-    // above the top of the blend band.
+    // above the top of the blend band. relax-supplied and relax-rationing carry different LABELS but
+    // the identical rate, so they must land on the identical relaxed value.
     const start = 0.5;
     const D_LOW = 0.1;
     const D_HIGH = 0.5;
@@ -421,8 +425,9 @@ describe("population processor", () => {
     expect(unrestOf(double, "gain-shortage")).toBeCloseTo(2 * shortageGain, 9);
     expect(unrestOf(ref, "relax-rationing")).toBeCloseTo(start * (1 - RATES.decay), 9);
     expect(unrestOf(double, "relax-rationing")).toBeCloseTo(start * (1 - 2 * RATES.decay), 9);
-    expect(unrestOf(ref, "relax-supplied")).toBeCloseTo(start * (1 - RATES.recoveryDecay), 9);
-    expect(unrestOf(double, "relax-supplied")).toBeCloseTo(start * (1 - 2 * RATES.recoveryDecay), 9);
+    expect(unrestOf(ref, "relax-supplied")).toBeCloseTo(start * (1 - RATES.decay), 9);
+    expect(unrestOf(double, "relax-supplied")).toBeCloseTo(start * (1 - 2 * RATES.decay), 9);
+    expect(unrestOf(ref, "relax-supplied")).toBe(unrestOf(ref, "relax-rationing"));
   });
 
   it("settles unrest at the same level whatever the interval", async () => {
