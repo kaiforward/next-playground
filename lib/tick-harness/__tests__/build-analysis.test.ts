@@ -335,10 +335,10 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
   const mkt = (systemId: string, goodId: string, satisfaction: number) =>
     ({ systemId, goodId, satisfaction });
   const rec = (
-    systemId: string, openingSatisfaction: number | null, openingDissatisfaction: number | null,
+    systemId: string, openingSatisfaction: number | null, openingShortfall: number | null,
     openingProvision: number | null = openingSatisfaction,
   ): FoundedColonyRecord => ({
-    systemId, foundedTick: 0, openingSatisfaction, openingDissatisfaction, openingProvision,
+    systemId, foundedTick: 0, openingSatisfaction, openingShortfall, openingProvision,
   });
   /** No staging draws behind these colonies — the detection cases are about who is tracked, not cost. */
   const NO_STAGING = new Map<string, FoundingStagingTotals>();
@@ -373,7 +373,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(hasColonyAwaitingSample(tracker, 48)).toBe(true);
     sampleFoundedColonies(systems, markets, 48, tracker);
     expect(tracker.get("c1")?.openingSatisfaction).toBeCloseTo(1, 6);
-    expect(tracker.get("c1")?.openingDissatisfaction).toBeCloseTo(0, 6);
+    expect(tracker.get("c1")?.openingShortfall).toBeCloseTo(0, 6);
     expect(tracker.get("c1")?.openingProvision).toBeCloseTo(1, 6);
     // Once read, it stops asking to be read again.
     expect(hasColonyAwaitingSample(tracker, 72)).toBe(false);
@@ -419,16 +419,16 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     const luxuriesRecord = noLuxuries.get("c1");
     const waterRecord = noWater.get("c1");
     if (luxuriesRecord?.openingSatisfaction == null ||
-        luxuriesRecord.openingDissatisfaction === null ||
+        luxuriesRecord.openingShortfall === null ||
         waterRecord?.openingSatisfaction == null ||
-        waterRecord.openingDissatisfaction === null) {
+        waterRecord.openingShortfall === null) {
       throw new Error("fixture: expected both colonies to carry an opening reading");
     }
     expect(luxuriesRecord.openingSatisfaction).toBeGreaterThan(0.9);
     expect(waterRecord.openingSatisfaction).toBeLessThan(0.1);
     // ...and the unrest fold agrees, so instrument and simulation cannot drift apart.
-    expect(waterRecord.openingDissatisfaction)
-      .toBeGreaterThan(luxuriesRecord.openingDissatisfaction);
+    expect(waterRecord.openingShortfall)
+      .toBeGreaterThan(luxuriesRecord.openingShortfall);
   });
 
   it("leaves openingProvision null on an empty basket, never recorded as fully provisioned", () => {
@@ -488,7 +488,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(summary.foundedCount).toBe(3);
     expect(summary.sampledCount).toBe(2);       // 'c' never reached a cycle — not a zero in the mean
     expect(summary.meanOpeningSatisfaction).toBeCloseTo(0.5, 6);
-    expect(summary.meanOpeningDissatisfaction).toBeCloseTo(0.41, 6);
+    expect(summary.meanOpeningShortfall).toBeCloseTo(0.41, 6);
     expect(summary.meanOpeningProvision).toBeCloseTo(0.5, 6);   // rec() defaults provision = satisfaction
     expect(summary.openingDeprivedCount).toBe(1);
   });
@@ -519,7 +519,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     const summary = summarizeFoundingStock(new Map());
     expect(summary).toEqual({
       foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
-      meanOpeningDissatisfaction: 0, meanOpeningProvision: null, p10OpeningProvision: null,
+      meanOpeningShortfall: 0, meanOpeningProvision: null, p10OpeningProvision: null,
       openingDeprivedCount: 0,
       meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
       // Same rule for the cadence mark: no colonies means there is no mark, and a 0 would read as
@@ -635,7 +635,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
 
 describe("founding cadence mark", () => {
   const at = (systemId: string, foundedTick: number): FoundedColonyRecord => ({
-    systemId, foundedTick, openingSatisfaction: null, openingDissatisfaction: null, openingProvision: null,
+    systemId, foundedTick, openingSatisfaction: null, openingShortfall: null, openingProvision: null,
   });
   const trackerOf = (...ticks: number[]): Map<string, FoundedColonyRecord> =>
     new Map(ticks.map((t, i) => [`c${i}`, at(`c${i}`, t)]));
@@ -737,7 +737,7 @@ describe("founding lifecycle — stall attribution", () => {
 
 describe("founding lifecycle — commitment, completion and concurrency", () => {
   const colony = (systemId: string, foundedTick: number): FoundedColonyRecord => ({
-    systemId, foundedTick, openingSatisfaction: null, openingDissatisfaction: null, openingProvision: null,
+    systemId, foundedTick, openingSatisfaction: null, openingShortfall: null, openingProvision: null,
   });
   const establish = (systemId: string) => ({ kind: "colony_establish" as const, systemId });
   const build = (systemId: string) => ({ kind: "build" as const, systemId });

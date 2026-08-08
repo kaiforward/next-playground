@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts, marketRolesByKey,
 } from "../cohort-analysis";
-import { perSystemSupplyState, summarizePopulation } from "../population-analysis";
+import { perSystemSupplyState, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
 import type { MarketRole } from "../types";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
 import { CROWDING } from "@/lib/constants/population";
@@ -280,11 +280,49 @@ describe("computeWorldCohorts", () => {
     expect(entries.some((e) => e.cohort === "pop 10-100")).toBe(true);
     expect(entries.some((e) => e.cohort === "pop >=1K")).toBe(false);
     for (const e of entries) {
-      expect(Number.isNaN(e.meanDissatisfaction)).toBe(false);
+      expect(Number.isNaN(e.meanShortfall)).toBe(false);
       expect(Number.isNaN(e.meanUnrest)).toBe(false);
       expect(Number.isNaN(e.meanProvision)).toBe(false);
       expect(Number.isNaN(e.worstGoodMedian)).toBe(false);
+      expect(Number.isNaN(e.strainedShare)).toBe(false);
+      expect(e.suppliedShare + e.strainedShare + e.rationingShare + e.shortageShare).toBeCloseTo(1, 10);
     }
+  });
+
+  it("counts a Strained world into its cohort's strainedShare, not folded into shortageShare", () => {
+    // The same defect population-analysis.test.ts's "counted as Strained" test pins, at the cohort
+    // layer: water at 0.8 sits strictly between RATIONING_PROVISION and SUPPLIED_PROVISION with no
+    // survival good touched, so this system must read Strained. A cohort fold that kept the old
+    // three-way catch-all would silently count it as Shortage instead.
+    const systems = [sys("s1", { population: 5 })];
+    const markets = [{ systemId: "s1", goodId: "water", satisfaction: 0.8 }];
+
+    const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.strainedShare).toBe(1);
+    expect(band?.suppliedShare).toBe(0);
+    expect(band?.rationingShare).toBe(0);
+    expect(band?.shortageShare).toBe(0);
+  });
+
+  it("agrees with the galaxy-wide Strained count when the cohort is the whole settled population", () => {
+    // Both tables fold the SAME perSystemSupplyState map (see population-analysis.ts). A Strained
+    // count that differs between the galaxy-wide summary and the cohorted split means one of the two
+    // folds was missed when the union widened to four members.
+    const systems = [sys("s1", { population: 5 }), sys("s2", { population: 5 })];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 0.8 },
+      { systemId: "s2", goodId: "water", satisfaction: 1 },
+    ];
+
+    const summary = summarizeSupplyRegimes(systems, markets);
+    const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+    const band = entries.find((e) => e.cohort === "pop <10");
+
+    expect(band?.n).toBe(summary.counted);
+    expect(band?.strainedShare).toBeCloseTo(summary.strainedShare, 10);
+    expect(band?.suppliedShare).toBeCloseTo(summary.suppliedShare, 10);
   });
 
   it("folds a cohort's Provision mean from the same per-system map perSystemSupplyState computes", () => {

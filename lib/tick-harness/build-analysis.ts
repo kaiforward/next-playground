@@ -73,8 +73,9 @@ export interface FoundedColonyRecord {
   foundedTick: number;
   /** Demand-weighted satisfaction at that cycle; null until sampled. */
   openingSatisfaction: number | null;
-  /** The convex fold unrest itself reads (`dissatisfaction`) at that cycle; null until sampled. */
-  openingDissatisfaction: number | null;
+  /** The fold unrest itself reads (`dissatisfaction`, 1 − Provision on the linear scale) at that
+   *  cycle; null until sampled. */
+  openingShortfall: number | null;
   /** `provision()` — the necessity-and-demand-weighted MEAN satisfaction — over the same basket as
    *  the two readings above; null until sampled. Differs from `openingSatisfaction` whenever a good's
    *  demand share and its necessity disagree: `openingSatisfaction` weights by demand alone,
@@ -183,7 +184,7 @@ export function trackFoundedColonies(
     const staged = staging.get(s.id);
     tracker.set(s.id, {
       systemId: s.id, foundedTick: tick,
-      openingSatisfaction: null, openingDissatisfaction: null, openingProvision: null,
+      openingSatisfaction: null, openingShortfall: null, openingProvision: null,
       manifestTonnage: staged?.tonnage,
       foundingMoneyCost: staged?.moneyCost,
       founderCoverAfter: staged?.minFounderCover,
@@ -233,7 +234,7 @@ export function sampleFoundedColonies(
     let weighted = 0;
     for (const g of goods) weighted += (Math.max(0, g.demanded) / totalDemand) * g.satisfaction;
     record.openingSatisfaction = weighted;
-    record.openingDissatisfaction = dissatisfaction(goods);
+    record.openingShortfall = dissatisfaction(goods);
     record.openingProvision = provision(goods);
   }
 }
@@ -278,7 +279,7 @@ export function summarizeFoundingStock(
 ): FoundingStockSummary {
   let sampledCount = 0;
   let satisfactionSum = 0;
-  let dissatisfactionSum = 0;
+  let shortfallSum = 0;
   let provisionSum = 0;
   const provisions: number[] = [];
   let openingDeprivedCount = 0;
@@ -290,12 +291,12 @@ export function summarizeFoundingStock(
     moneyCostSum += r.foundingMoneyCost ?? 0;
     // Only a colony that actually drew a manifest says anything about the cost to its founder.
     if (r.founderCoverAfter !== undefined) founderCovers.push(r.founderCoverAfter);
-    if (r.openingSatisfaction === null || r.openingDissatisfaction === null || r.openingProvision === null) {
+    if (r.openingSatisfaction === null || r.openingShortfall === null || r.openingProvision === null) {
       continue;
     }
     sampledCount++;
     satisfactionSum += r.openingSatisfaction;
-    dissatisfactionSum += r.openingDissatisfaction;
+    shortfallSum += r.openingShortfall;
     provisionSum += r.openingProvision;
     provisions.push(r.openingProvision);
     if (r.openingSatisfaction < OPENING_DEPRIVED_SATISFACTION) openingDeprivedCount++;
@@ -304,7 +305,7 @@ export function summarizeFoundingStock(
     foundedCount: tracker.size,
     sampledCount,
     meanOpeningSatisfaction: sampledCount > 0 ? satisfactionSum / sampledCount : 0,
-    meanOpeningDissatisfaction: sampledCount > 0 ? dissatisfactionSum / sampledCount : 0,
+    meanOpeningShortfall: sampledCount > 0 ? shortfallSum / sampledCount : 0,
     // Null rather than 0 when nothing was sampled — the founding invariant reads this as THE
     // measured founding Provision, and a run that founded nothing has no such reading to give.
     meanOpeningProvision: sampledCount > 0 ? provisionSum / sampledCount : null,

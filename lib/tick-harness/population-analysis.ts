@@ -250,13 +250,16 @@ function quantileLevels(xs: number[]): QuantileLevels {
 export interface SupplyRegimeSummary {
   counted: number;
   supplied: number;
+  strained: number;
   rationing: number;
   shortage: number;
   suppliedShare: number;
+  strainedShare: number;
   rationingShare: number;
   shortageShare: number;
-  /** Mean D over counted systems — the magnitude behind the labels. */
-  meanDissatisfaction: number;
+  /** Mean shortfall (1 − Provision, dissatisfaction()'s linear scale) over counted systems — the
+   *  magnitude behind the labels. */
+  meanShortfall: number;
   /** Distribution of per-system Provision (provision()) over counted systems. */
   provisionLevels: QuantileLevels;
   /** Distribution of each system's single worst-demanded-good satisfaction (worstGoods[0],
@@ -332,25 +335,35 @@ export function summarizeSupplyRegimes(
 ): SupplyRegimeSummary {
   const states = perSystemSupplyState(systems, markets, events);
 
-  let supplied = 0, rationing = 0, shortage = 0, dSum = 0;
+  let supplied = 0, strained = 0, rationing = 0, shortage = 0, shortfallSum = 0;
   const provisions: number[] = [];
   const worstGoodSats: number[] = [];
   for (const state of states.values()) {
-    dSum += state.d;
+    shortfallSum += state.d;
     provisions.push(state.provision);
     worstGoodSats.push(worstGoodSatisfaction(state));
-    if (state.regime === "supplied") supplied++;
-    else if (state.regime === "rationing") rationing++;
-    else shortage++;
+    // Exhaustive over the four members — a fifth regime added to the union fails to compile here
+    // instead of silently folding into Shortage, the very defect this widening exists to close.
+    switch (state.regime) {
+      case "supplied": supplied++; break;
+      case "strained": strained++; break;
+      case "rationing": rationing++; break;
+      case "shortage": shortage++; break;
+      default: {
+        const exhaustive: never = state.regime;
+        throw new Error(`unhandled supply regime: ${exhaustive}`);
+      }
+    }
   }
   const counted = states.size;
   const share = (n: number) => (counted > 0 ? n / counted : 0);
   return {
-    counted, supplied, rationing, shortage,
+    counted, supplied, strained, rationing, shortage,
     suppliedShare: share(supplied),
+    strainedShare: share(strained),
     rationingShare: share(rationing),
     shortageShare: share(shortage),
-    meanDissatisfaction: counted > 0 ? dSum / counted : 0,
+    meanShortfall: counted > 0 ? shortfallSum / counted : 0,
     provisionLevels: quantileLevels(provisions),
     worstGoodLevels: quantileLevels(worstGoodSats),
   };

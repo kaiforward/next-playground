@@ -268,8 +268,8 @@ export function computeWorldCohorts(
   const states = perSystemSupplyState(systems, markets, events);
 
   const acc = new Map<WorldCohort, {
-    n: number; dSum: number; unrestSum: number; striking: number;
-    supplied: number; rationing: number; shortage: number;
+    n: number; shortfallSum: number; unrestSum: number; striking: number;
+    supplied: number; strained: number; rationing: number; shortage: number;
     provisionSum: number; worstGoodSats: number[];
     startPopSum: number; endPopSum: number;
   }>();
@@ -282,13 +282,14 @@ export function computeWorldCohorts(
       let a = acc.get(cohort);
       if (!a) {
         a = {
-          n: 0, dSum: 0, unrestSum: 0, striking: 0, supplied: 0, rationing: 0, shortage: 0,
+          n: 0, shortfallSum: 0, unrestSum: 0, striking: 0,
+          supplied: 0, strained: 0, rationing: 0, shortage: 0,
           provisionSum: 0, worstGoodSats: [], startPopSum: 0, endPopSum: 0,
         };
         acc.set(cohort, a);
       }
       a.n += 1;
-      a.dSum += state.d;
+      a.shortfallSum += state.d;
       a.unrestSum += s.unrest;
       a.provisionSum += state.provision;
       a.worstGoodSats.push(worstGoodSatisfaction(state));
@@ -296,9 +297,18 @@ export function computeWorldCohorts(
       a.startPopSum += startPopulationBySystem.get(s.id) ?? 0;
       a.endPopSum += s.population;
       if (s.unrest >= strikeThreshold) a.striking += 1;
-      if (state.regime === "supplied") a.supplied += 1;
-      else if (state.regime === "rationing") a.rationing += 1;
-      else a.shortage += 1;
+      // Exhaustive over the four members — see population-analysis.ts's summarizeSupplyRegimes,
+      // which this fold must never diverge from (both read the same perSystemSupplyState map).
+      switch (state.regime) {
+        case "supplied": a.supplied += 1; break;
+        case "strained": a.strained += 1; break;
+        case "rationing": a.rationing += 1; break;
+        case "shortage": a.shortage += 1; break;
+        default: {
+          const exhaustive: never = state.regime;
+          throw new Error(`unhandled supply regime: ${exhaustive}`);
+        }
+      }
     }
   }
 
@@ -311,10 +321,11 @@ export function computeWorldCohorts(
     result.push({
       cohort,
       n: a.n,
-      meanDissatisfaction: a.dSum / a.n,
+      meanShortfall: a.shortfallSum / a.n,
       meanUnrest: a.unrestSum / a.n,
       strikingShare: a.striking / a.n,
       suppliedShare: a.supplied / a.n,
+      strainedShare: a.strained / a.n,
       rationingShare: a.rationing / a.n,
       shortageShare: a.shortage / a.n,
       meanProvision: a.provisionSum / a.n,

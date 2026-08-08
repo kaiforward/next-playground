@@ -134,10 +134,12 @@ export interface WorldCohortEntry {
   cohort: WorldCohort;
   /** Settled systems in this cohort — this row's own denominator. */
   n: number;
-  meanDissatisfaction: number;
+  /** Mean shortfall (1 − Provision, dissatisfaction()'s linear scale) over the cohort's systems. */
+  meanShortfall: number;
   meanUnrest: number;
   strikingShare: number;
   suppliedShare: number;
+  strainedShare: number;
   rationingShare: number;
   shortageShare: number;
   /** Mean provision() over the cohort's systems. */
@@ -354,10 +356,10 @@ export interface FoundingStockSummary {
    *  what the colony actually needs of it, so no water weighs far heavier than no reactor cores.
    *  Should sit near 1; near 0 is a colony arriving genuinely unprovisioned. */
   meanOpeningSatisfaction: number;
-  /** Mean, over sampled colonies, of the convex `dissatisfaction` fold the unrest engine itself
-   *  reads. Reported alongside the weighted mean so the instrument and the simulation cannot drift
-   *  into disagreeing about whether a colony opened deprived. */
-  meanOpeningDissatisfaction: number;
+  /** Mean, over sampled colonies, of the `dissatisfaction` fold (1 − Provision, linear scale) the
+   *  unrest engine itself reads. Reported alongside the weighted mean so the instrument and the
+   *  simulation cannot drift into disagreeing about whether a colony opened deprived. */
+  meanOpeningShortfall: number;
   /** Mean, over sampled colonies, of `provision()` (necessity-and-demand-weighted mean satisfaction)
    *  at the same cycle and over the same basket as `meanOpeningSatisfaction` — a good's weight is
    *  demand × necessity here, demand alone there, so the two read apart whenever a colony's worst

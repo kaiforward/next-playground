@@ -161,7 +161,7 @@ describe("ExperimentConfig", () => {
         strikeSuppression: { suppressed: 0, eligible: 0, ratePerEligible: 0 },
         foundingStock: {
           foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
-          meanOpeningDissatisfaction: 0, meanOpeningProvision: null, p10OpeningProvision: null,
+          meanOpeningShortfall: 0, meanOpeningProvision: null, p10OpeningProvision: null,
           openingDeprivedCount: 0,
           meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
           cadenceMarkShare: 0.8, cadenceMarkTick: null,
@@ -249,11 +249,12 @@ describe("ExperimentConfig", () => {
       results.worldCohorts = [{
         cohort: "pop >=1K",
         n: 370,
-        meanDissatisfaction: 0.011,
+        meanShortfall: 0.011,
         meanUnrest: 0.14,
         strikingShare: 0,
         suppliedShare: 0.34,
-        rationingShare: 0.627,
+        strainedShare: 0.306,
+        rationingShare: 0.321,
         shortageShare: 0.033,
         meanProvision: 0.94,
         worstGoodMedian: 0.9,
@@ -281,7 +282,7 @@ describe("ExperimentConfig", () => {
       results.demandHunting = { flipRate: 0.12, haulChurnRatio: 0.03 };
       results.foundingStock = {
         foundedCount: 4, sampledCount: 3, meanOpeningSatisfaction: 0.9,
-        meanOpeningDissatisfaction: 0.02, meanOpeningProvision: 0.85, p10OpeningProvision: 0.6,
+        meanOpeningShortfall: 0.02, meanOpeningProvision: 0.85, p10OpeningProvision: 0.6,
         openingDeprivedCount: 0,
         meanManifestTonnage: 250, meanFoundingMoneyCost: 75, medianFounderCoverAfter: 1.4,
         cadenceMarkShare: 0.8, cadenceMarkTick: 1720,
