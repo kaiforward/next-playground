@@ -1,3 +1,5 @@
+import { STRIKE_PARAMS } from "@/lib/constants/population";
+
 /** Stability band labels — derived from unrest (inverted: low unrest = stable). */
 export type StabilityLabel = "Stable" | "Calm" | "Tense" | "Unrest" | "Strike";
 
@@ -10,12 +12,17 @@ export const STABILITY_RAMP_STOPS: Record<StabilityLabel, string> = {
   Strike: "#ef4444", // red         — critical
 };
 
-/** Maps unrest (0…1) to a stability band label. */
+/**
+ * Maps unrest (0…1) to a stability band label. The top edge is bound to
+ * `STRIKE_PARAMS.threshold` — the label may never contradict the mechanic it names, so "Strike"
+ * starts exactly where striking does. The other edges are descriptive literals: they gate no
+ * mechanic, so their placement is a calibration choice, not a contract.
+ */
 export function stabilityLabel(unrest: number): StabilityLabel {
   if (unrest < 0.2) return "Stable";
   if (unrest < 0.4) return "Calm";
   if (unrest < 0.6) return "Tense";
-  if (unrest < 0.8) return "Unrest";
+  if (unrest < STRIKE_PARAMS.threshold) return "Unrest";
   return "Strike";
 }
 

@@ -1,15 +1,17 @@
 /**
- * Read-side per-good pop-needs snapshot — the display projection of the signal
- * the unrest spine integrates. It reads the economy cycle's persisted
- * per-good satisfaction (delivered ÷ demanded) instead of recomputing a
- * stock position — the display and the sim cannot diverge, and the post-tick
- * boundary bias is gone. The stored measure is taken against total civilian
- * demand; rationing is pro-rata, so the delivered fraction is identical for
- * every civilian drawer.
+ * Read-side per-good pop-needs snapshot — the display projection of Provision, the economy fold's
+ * absolute [0,1] delivery measure. It reads the economy cycle's persisted per-good satisfaction
+ * (delivered ÷ demanded) instead of recomputing a stock position — the display and the sim cannot
+ * diverge, and the post-tick boundary bias is gone. The stored measure is taken against total
+ * civilian demand; rationing is pro-rata, so the delivered fraction is identical for every civilian
+ * drawer.
  * Pressure mirrors the necessity-weighted share × gap shape of the `dissatisfaction()` sum — one
- * implementation each, in lockstep, so the two cannot drift apart — weighted by unfloored civilian
- * want × GOOD_NECESSITY (the cycle's own shares fold in demand floors and modifiers, so magnitudes
- * can differ slightly). Pure — callers pass market rows and a demand basis.
+ * implementation each, in lockstep with the Provision fold, weighted by unfloored civilian want ×
+ * GOOD_NECESSITY (the cycle's own shares fold in demand floors and modifiers, so magnitudes can
+ * differ slightly). Pressure stays absolute on purpose: correct for growth and for reading the
+ * world as it is, not for what the unrest spine integrates — that reads grievance against a
+ * persisted memory of Provision (`lib/engine/population.ts`'s `grievanceShortfall`/`accumulateUnrest`),
+ * not this per-good reading. Pure — callers pass market rows and a demand basis.
  */
 import { consumptionBreakdown, consumptionRate, type CivilianDemandBasis, type ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import { GOOD_CONSUMPTION, GOOD_NECESSITY, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";

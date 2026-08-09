@@ -42,7 +42,7 @@ function NeedTooltip({ n }: { n: PopNeedData }) {
           </div>
         ))}
       </div>
-      <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
+      <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this population is used to breeds unrest — famine and critical shortages always do.</p>
     </div>
   );
 }
@@ -126,7 +126,7 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
       <Card variant="bordered" padding="md">
         <SectionHeader as="h4" className="mb-1">Needs</SectionHeader>
         <p className="mb-3 text-xs text-text-tertiary">
-          What the population consumes and how well each want is met — unmet needs drive unrest.
+          What the population consumes and how well each want is met — unrest tracks doing worse than this world is used to, not the raw shortfall.
         </p>
         {needs.length === 0 ? (
           <EmptyState message="No needs." />

@@ -103,8 +103,12 @@ export function provision(goods: GoodSatisfaction[]): number {
 /**
  * Necessity-weighted dissatisfaction D in [0,1] for one system — the exact complement of provision():
  *   D = 1 − provision(goods)
- * One implementation, two names, so the sim and the pop-needs display twin (pop-needs.ts) cannot
- * drift apart. A partial shortfall now reads its own size (a 17% uniform shortfall folds to ~0.17,
+ * One implementation, two names, so the sim's Provision fold and the pop-needs display twin
+ * (pop-needs.ts) cannot drift apart — both read the absolute per-good gap. That lockstep is with
+ * the Provision fold only: the unrest spine no longer integrates this shortfall directly, it reads
+ * grievance against a persisted memory of Provision (`grievanceShortfall`, below), with this
+ * absolute reading kept alive as the crisis-term backstop and for growth/display. A partial
+ * shortfall now reads its own size (a 17% uniform shortfall folds to ~0.17,
  * against the old squared fold's ~0.029) rather than a squared fraction of it — the old convexity,
  * where one deep shortage dominated many shallow ones, is gone: this fold responds identically to any
  * redistribution of the same total weighted gap. Importance is still the AUTHORED necessity weight
