@@ -1255,21 +1255,12 @@ export async function runWorldTick(
   // ── relations (gated by RELATIONS_FREQUENCY, offset 0 — the one stage on its
   // own cadence rather than the cycle start the block above rides) ──
   if (world.factions.length >= 2 && tick % RELATIONS_FREQUENCY === 0) {
-    const territoryByFaction = new Map<string, Set<string>>();
-    for (const s of world.systems) {
-      if (!s.factionId) continue;
-      const set = territoryByFaction.get(s.factionId);
-      if (set) set.add(s.id);
-      else territoryByFaction.set(s.factionId, new Set([s.id]));
-    }
-
     const relationsWorld = new InMemoryRelationsWorld({
       factions: world.factions.map((f) => ({
         id: f.id,
         name: f.name,
         governmentType: f.governmentType,
         doctrine: f.doctrine,
-        territory: territoryByFaction.get(f.id) ?? new Set<string>(),
       })),
       relations,
       alliances: alliancePacts,

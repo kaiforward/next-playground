@@ -15,15 +15,12 @@ import {
   RELATIONS_MIN,
   RELATION_HISTORY_MAX,
 } from "@/lib/constants/relations";
-import { deriveFactionStatus } from "@/lib/types/guards";
 
 interface MemoryFaction {
   id: string;
   name: string;
   governmentType: FactionView["governmentType"];
   doctrine: FactionView["doctrine"];
-  /** Set of systemIds owned by this faction (drives territorySize). */
-  territory: Set<string>;
 }
 
 interface MemoryRelation {
@@ -110,10 +107,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
     events?: MemoryRelationEvent[];
     nextId: number;
   }) {
-    this.factions = initial.factions.map((f) => ({
-      ...f,
-      territory: new Set(f.territory),
-    }));
+    this.factions = initial.factions.map((f) => ({ ...f }));
     this.relations = (initial.relations ?? []).map((r) => {
       const [a, b] = r.factionAId < r.factionBId ? [r.factionAId, r.factionBId] : [r.factionBId, r.factionAId];
       return {
@@ -139,15 +133,12 @@ export class InMemoryRelationsWorld implements RelationsWorld {
   }
 
   getFactions(): Promise<FactionView[]> {
-    const totalSystems = this.factions.reduce((sum, f) => sum + f.territory.size, 0);
     return Promise.resolve(
       this.factions.map((f) => ({
         id: f.id,
         name: f.name,
         governmentType: f.governmentType,
         doctrine: f.doctrine,
-        territorySize: f.territory.size,
-        status: deriveFactionStatus(f.territory.size, totalSystems),
       })),
     );
   }
