@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { summarizeLogistics } from "../logistics-analysis";
-import type { WorldFlowEvent } from "@/lib/world/types";
+import { summarizeLogistics, fundingBoundCensus } from "../logistics-analysis";
+import type { SystemControl, WorldFlowEvent } from "@/lib/world/types";
 
 const flow = (
   tick: number,
@@ -107,7 +107,47 @@ describe("summarizeLogistics", () => {
 
     expect(summary.budgetSpentFrac).toBeCloseTo(0.08, 9);
     expect(summary.fundingBoundEvents).toBe(3);
+    expect(summary.fundingBoundFlaggedMarkets).toBe(5);
+    expect(summary.fundingBoundMarketCount).toBe(50);
     expect(summary.fundingBoundFlagSetRate).toBeCloseTo(0.1, 9);
     expect(summary.flowRowsPerCycle).toBeCloseTo(1.5, 9);
+  });
+});
+
+describe("fundingBoundCensus", () => {
+  const sys = (id: string, control: SystemControl) => ({ id, control });
+  const market = (systemId: string, logisticsFundingBound?: boolean) =>
+    logisticsFundingBound === undefined ? { systemId } : { systemId, logisticsFundingBound };
+
+  it("counts only developed-system markets, in both numerator and denominator", () => {
+    // A flagged market on a controlled (not developed) system must move NEITHER count:
+    // undeveloped systems never enter the logistics assessment, so admitting one would
+    // both dilute the rate and let a stale flag from before a control change leak in.
+    const census = fundingBoundCensus(
+      [sys("dev1", "developed"), sys("dev2", "developed"), sys("outpost", "controlled"), sys("frontier", "unclaimed")],
+      [
+        market("dev1", true),
+        market("dev1", false),
+        market("dev2", false),
+        market("outpost", true),
+        market("frontier", true),
+      ],
+    );
+
+    expect(census.flagged).toBe(1);
+    expect(census.marketCount).toBe(3);
+  });
+
+  it("reads an absent flag as unflagged while a set flag still counts", () => {
+    // logisticsFundingBound is optional on WorldMarket: a market the assessment never
+    // touched carries no flag at all, and must land on the unflagged side — while a
+    // genuinely flagged market must not be swallowed by the same defaulting.
+    const census = fundingBoundCensus(
+      [sys("dev1", "developed")],
+      [market("dev1"), market("dev1", true), market("dev1", false)],
+    );
+
+    expect(census.flagged).toBe(1);
+    expect(census.marketCount).toBe(3);
   });
 });

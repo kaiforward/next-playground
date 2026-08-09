@@ -18,8 +18,8 @@ import {
   flushActiveEvents,
   computeEventImpacts,
 } from "./event-analysis";
-import { summarizeLogistics, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
-import type { LogisticsBudgetTotals, FundingBoundFlagCensus } from "./logistics-analysis";
+import { summarizeLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
+import type { LogisticsBudgetTotals } from "./logistics-analysis";
 import {
   summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summarizeFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
@@ -366,16 +366,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const systemNames = new Map(world.systems.map((s) => [s.id, s.name]));
   const eventImpacts = computeEventImpacts(completedEvents, systemNames);
 
-  // Funding-bound flag census at run end, over developed-system markets only — undeveloped
-  // systems never enter the logistics assessment, so counting them would dilute the rate.
-  const developedIds = new Set(
-    finalTickSystems.filter((s) => s.control === "developed").map((s) => s.id),
-  );
-  const developedMarkets = currentMarkets.filter((m) => developedIds.has(m.systemId));
-  const fundingBoundFlags: FundingBoundFlagCensus = {
-    flagged: developedMarkets.filter((m) => m.logisticsFundingBound ?? false).length,
-    marketCount: developedMarkets.length,
-  };
+  const fundingBoundFlags = fundingBoundCensus(finalTickSystems, currentMarkets);
 
   const migrationThroughput: MigrationThroughputSummary = {
     totalColonists: migrationColonistsTotal,

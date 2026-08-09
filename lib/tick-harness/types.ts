@@ -261,6 +261,12 @@ export interface LogisticsActivitySummary {
   /** Deficits recorded funding-bound from `LOGISTICS_WARMUP_TICKS` onward (events, not markets —
    *  a market recurring every cycle counts every time). */
   fundingBoundEvents: number;
+  /** Developed-system markets carrying the funding-bound flag at run end — the census numerator.
+   *  Exposed raw so a zero rate is checkable against a live census (marketCount > 0). */
+  fundingBoundFlaggedMarkets: number;
+  /** Developed-system markets in the census at run end — the denominator. 0 here with a
+   *  populated galaxy means the census itself is broken, not that funding never bound. */
+  fundingBoundMarketCount: number;
   /** Fraction of developed-system markets carrying the funding-bound flag at run end —
    *  the gameplay blast radius (planner suppression + idle-decay exemption). */
   fundingBoundFlagSetRate: number;

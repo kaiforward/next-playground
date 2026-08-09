@@ -148,6 +148,7 @@ describe("ExperimentConfig", () => {
         logisticsActivity: {
           transferCount: 0, activeTicks: 0, totalQuantity: 0, meanTransferSize: 0,
           participatingSystems: 0, byGood: [], budgetSpentFrac: 0, fundingBoundEvents: 0,
+          fundingBoundFlaggedMarkets: 0, fundingBoundMarketCount: 0,
           fundingBoundFlagSetRate: 0, flowRowsPerCycle: 0,
         },
         buildBurstSummary: { byGood: [], globalMax: 0, worstGood: null, worstTick: null },

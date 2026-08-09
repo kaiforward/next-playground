@@ -13,7 +13,7 @@
  * pruned to `TRADE_SIMULATION.FLOW_HISTORY_TICKS`, so the end-of-run world holds
  * only the tail of a longer run.
  */
-import type { WorldFlowEvent } from "@/lib/world/types";
+import type { SystemControl, WorldFlowEvent } from "@/lib/world/types";
 import type { LogisticsActivitySummary } from "./types";
 
 /**
@@ -44,6 +44,25 @@ export interface LogisticsBudgetTotals {
 export interface FundingBoundFlagCensus {
   flagged: number;
   marketCount: number;
+}
+
+/**
+ * Count the funding-bound flags over developed-system markets only — undeveloped systems never
+ * enter the logistics assessment, so counting them would dilute the rate. An absent flag reads
+ * unflagged, never flagged.
+ */
+export function fundingBoundCensus(
+  systems: ReadonlyArray<{ id: string; control: SystemControl }>,
+  markets: ReadonlyArray<{ systemId: string; logisticsFundingBound?: boolean }>,
+): FundingBoundFlagCensus {
+  const developedIds = new Set(
+    systems.filter((s) => s.control === "developed").map((s) => s.id),
+  );
+  const developedMarkets = markets.filter((m) => developedIds.has(m.systemId));
+  return {
+    flagged: developedMarkets.filter((m) => m.logisticsFundingBound ?? false).length,
+    marketCount: developedMarkets.length,
+  };
 }
 
 export function summarizeLogistics(
@@ -84,6 +103,8 @@ export function summarizeLogistics(
     budgetSpentFrac:
       Number.isFinite(budget.total) && budget.total > 0 ? budget.spent / budget.total : 0,
     fundingBoundEvents: budget.fundingBoundEvents,
+    fundingBoundFlaggedMarkets: flags.flagged,
+    fundingBoundMarketCount: flags.marketCount,
     fundingBoundFlagSetRate:
       Number.isFinite(flags.marketCount) && flags.marketCount > 0
         ? flags.flagged / flags.marketCount
