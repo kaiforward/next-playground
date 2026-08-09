@@ -40,7 +40,7 @@ import { mulberry32, type RNG } from "@/lib/engine/universe-gen";
 import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
 import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
-import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
+import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, EXPECTATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { CYCLE_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -898,7 +898,13 @@ export async function runWorldTick(
     await runPopulationProcessor(
       popWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.cycle, taxPressureBySystem },
+      {
+        unrest: UNREST_PARAMS,
+        population: POPULATION_PARAMS,
+        expectation: EXPECTATION_PARAMS,
+        interval: cadence.cycle,
+        taxPressureBySystem,
+      },
     );
     systems = popWorld.systems;
     markets = popWorld.markets;

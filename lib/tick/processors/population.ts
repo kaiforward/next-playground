@@ -3,8 +3,8 @@ import {
   accumulateUnrest, crowdingPressure, grievanceShortfall, populationDelta, supplyUnrestTerm,
   type UnrestParams,
 } from "@/lib/engine/population";
-import { CROWDING, EXPECTATION_PARAMS } from "@/lib/constants/population";
-import { readExpectation } from "@/lib/engine/expectation";
+import { CROWDING } from "@/lib/constants/population";
+import { readExpectation, updateExpectation } from "@/lib/engine/expectation";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { clamp } from "@/lib/utils/math";
 import type {
@@ -14,8 +14,10 @@ import type {
 /**
  * Pure processor body. Reads the per-system dissatisfaction D and supply state the
  * economy processor recorded this tick (via ctx.results), relaxes unrest toward its
- * standing-pressure floor at the single relaxation rate while integrating D, applies
- * crowd-braked growth/decline, and rewrites demandRate for the new population. Scoped to the
+ * standing-pressure floor at the single relaxation rate while integrating the supply term —
+ * grievance against the persisted expectation memory, or the absolute crisis reading where that
+ * fires (see supplyUnrestTerm) — applies crowd-braked growth/decline (still reading absolute D),
+ * advances the expectation memory, and rewrites demandRate for the new population. Scoped to the
  * economy's shard (D's key set), so per-tick work is bounded and the satisfaction
  * signal is fresh.
  */
@@ -39,6 +41,12 @@ export async function runPopulationProcessor(
     ...params.unrest,
     decay: params.unrest.decay * catchUp,
   };
+  // The expectation update is NOT catch-up invariant the way the relaxation rate above is: it is a
+  // nonlinear, branch-switching filter, so it applies as sub-steps of the UNSCALED rise/resign rates
+  // rather than one step at a scaled rate (lib/engine/expectation.ts). catchUpFactor can return a
+  // non-integer factor (a non-reference interval); round to the nearest whole sub-step, floored at 1
+  // so every run advances the memory at least once.
+  const subSteps = Math.max(1, Math.round(catchUp));
 
   const popUpdates: PopulationUpdate[] = [];
   const demandPops: Array<{ systemId: string; population: number; productionSuppress: number }> = [];
@@ -59,19 +67,27 @@ export async function runPopulationProcessor(
     // constant instead — the mixed shape is deliberate, not an inconsistency.
     const crowd = crowdingPressure(s.population, s.popCap, params.population.crowdBrakeEnd, CROWDING.PRESSURE_MAX);
     const floor = clamp(taxPressure + crowd, 0, 1);
-    // No persisted expectation memory is threaded into this processor yet, so every system reads
-    // the ceiling (E = 1): the grievance term equals the absolute shortfall exactly, and the supply
-    // term keeps responding to D as it always has until the memory lands and narrows grievance to
-    // what a population has actually adjusted to.
-    const grievance = grievanceShortfall(1, 1 - d);
+    // P is this cycle's Provision, the complement of the absolute shortfall d. The read resolves
+    // the CYCLE-START memory — stored, seeded from P on first use — into the floored effective
+    // value the grievance term consumes; the store is not advanced until after the unrest read
+    // below, so this cycle's response is judged against what the population expected walking in.
+    const P = 1 - d;
+    const { stored, effective } = readExpectation(s.provisionExpectation, P, params.expectation);
+    const grievance = grievanceShortfall(effective, P);
     const supplyTerm = supplyUnrestTerm(grievance, d, supply, scaledUnrest);
     const unrest = accumulateUnrest(s.unrest, supplyTerm, floor, scaledUnrest);
     // The delta reads the unrest this cycle just produced, so unrest resolves forward within the
-    // cycle while crowding lags it by one.
+    // cycle while crowding lags it by one. Growth/decline keep the absolute d — the
+    // political/biological split: unrest (political) judges against memory, population change
+    // (biological) reads the goods themselves.
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
-    // The cycle-start memory, seeded from this cycle's Provision on first read and carried
-    // unchanged thereafter — no per-cycle advance yet, and not fed into the grievance term above.
-    const provisionExpectation = readExpectation(s.provisionExpectation, 1 - d, EXPECTATION_PARAMS).stored;
+    // The memory advances only now that this cycle's unrest has already been judged against it.
+    // An emptying world's Provision-1 reading is a denominator artifact, not an experience to
+    // normalise toward, so the update is skipped and the stored value (post-seed, pre-floor)
+    // carries unchanged into next cycle.
+    const provisionExpectation = supply.emptyBasket
+      ? stored
+      : updateExpectation(stored, P, params.expectation, subSteps);
     popUpdates.push({ systemId: s.systemId, population, unrest, provisionExpectation });
     // The scalar the economy actually applied this cycle, not a recompute: the strike params and
     // the treasury-fed maintenance malus never reach this processor, and the unrest just written

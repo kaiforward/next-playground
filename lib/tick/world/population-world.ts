@@ -6,6 +6,7 @@
  * for them. The adapter in `lib/tick/adapters/memory/population.ts` implements this.
  */
 import type { UnrestParams, PopulationParams } from "@/lib/engine/population";
+import type { ExpectationParams } from "@/lib/engine/expectation";
 export interface PopulationStateView {
   systemId: string;
   population: number;
@@ -49,6 +50,8 @@ export interface PopulationWorld {
 export interface PopulationProcessorParams {
   unrest: UnrestParams;
   population: PopulationParams;
+  /** Adaptive expectation: the read/update rates and floor (lib/engine/expectation.ts). */
+  expectation: ExpectationParams;
   /** Cycle length in ticks; rates are reference-denominated and scaled by catchUpFactor. */
   interval: number;
   /** Per-system additive unrest pressure from the owning faction's tax level
