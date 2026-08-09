@@ -64,7 +64,9 @@ reference being fixed at all is the problem, which is what the adaptive expectat
 
 **The founding cohort is still the modal world and the worst-supplied one.** 562 of 582 settled at
 equilibrium are colonies; their opening Provision is mean 0.74 / p10 0.62 (equilibrium cohort;
-mean 0.88 / p10 0.69 at startup). The founding-strike guarantee holding today's `slopeRationing`
+mean 0.88 / p10 0.69 at startup). The pre-change arm (Gate 2 BASE) measured mean 0.73 / p10 0.41 at
+equilibrium — the provenance of the shipped guarantee suite's 0.59-shortfall p10, whose original
+citation target was folded away at the Gate 2 doc consolidation. The founding-strike guarantee holding today's `slopeRationing`
 at 0.95 is interim scaffolding for exactly this cohort — the expectation baseline dissolves it
 structurally (a newborn's settlers expect frontier hardship, so its expectation-relative shortfall
 is ~0 at any tax), after which the slopes are re-derived and only the durable constraints remain
@@ -90,11 +92,15 @@ guarantees, constants, calibration sweep and gate metrics, and its own hazards w
 **[adaptive-expectation.md](./adaptive-expectation.md)**. This doc keeps only what the *later*
 items need from it:
 
-- **Abandonment's trigger keys on sustained physical decline, never unrest** — a world that has
-  normalised its own misery stops emitting the unrest signal, so an unrest-keyed trigger would be
-  quietly disabled by the expectation. Non-negotiable once the expectation ships.
+- **Abandonment's trigger keys on famine-driven or physical decline, never unrest** — a world that
+  has normalised its own misery stops emitting the unrest signal, so an unrest-keyed trigger would
+  be quietly disabled by the expectation; and the expectation's decline flip narrows non-famine
+  physical decline, so the trigger is re-verified against post-change decline rates. Non-negotiable
+  once the expectation ships.
 - **Abandoned worlds leave the settled denominator before any expectation baseline is measured
-  over them** — an emptying world's baseline drifts to 1 on an empty basket.
+  over them**, and **the un-develop transition clears the stored expectation** — the develop-side
+  clear the expectation item ships is the other half of the same rule (a husk's stale memory must
+  not survive into a resettlement).
 - Both later items consume the **worsening-vs-recovering signal** (deviation from baseline) as a
   derived, stated read — never raw field access.
 
