@@ -507,8 +507,9 @@ function inputsAvailable(
   surplusSystemsByGood: Map<string, string[]>,
   routeCost: RouteCost,
 ): boolean {
+  // Callers gate on !isTier0, and every tier-1+ good carries a GOOD_RECIPES entry — a missing
+  // recipe here is a catalog defect and should throw, not read as "no input constraint".
   const recipe = GOOD_RECIPES[goodId];
-  if (!recipe) return true; // tier-0 has no recipe
   return Object.keys(recipe).every((input) => {
     if ((site.buildings[input] ?? 0) > 0) return true;
     const sources = surplusSystemsByGood.get(input);
