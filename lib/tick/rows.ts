@@ -42,6 +42,12 @@ export interface TickSystem {
   buildingIdleCycles: Record<string, number>;
   /** The system's fractional unrest-collapse accumulator; the catastrophic decay channel's state. */
   collapseDebt: number;
+  /** Stored Provision memory (adaptive expectation), optional — the `toTickSystems` join passes
+   *  `WorldSystem.provisionExpectation` through UNCOERCED (contrast `collapseDebt` above, which
+   *  defaults absence to 0): absence here is the lazy-seed marker `readExpectation` relies on, and
+   *  coercing it to 0 would make every never-seeded system read as "remembers the floor" instead of
+   *  "never measured". */
+  provisionExpectation?: number;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

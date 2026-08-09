@@ -201,6 +201,11 @@ export function toTickSystems(world: World): TickSystem[] {
       buildings: roster?.counts ?? {},
       buildingIdleCycles: roster?.idleCycles ?? {},
       collapseDebt: s.collapseDebt ?? 0,
+      // Deliberately NOT `?? 0` (contrast collapseDebt just above): absence is the lazy-seed marker
+      // `readExpectation` (lib/engine/expectation.ts) relies on to seed from this cycle's Provision.
+      // Coercing it here would make an old save — or any system never yet touched — read as
+      // "remembers 0" (the floor) instead of "never measured", silently defeating the seed.
+      provisionExpectation: s.provisionExpectation,
       yields: resourceVectorFromColumns(
         {
           yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -233,7 +238,7 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     if (!tickSystem) return s;
     // factionId + control propagate so the claim/develop expansion steps persist; for every
     // unchanged system they equal the original.
-    return {
+    const merged: WorldSystem = {
       ...s,
       factionId: tickSystem.factionId,
       control: tickSystem.control,
@@ -242,6 +247,14 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
       unrest: tickSystem.unrest,
       collapseDebt: tickSystem.collapseDebt,
     };
+    // Written via delete/assign rather than `provisionExpectation: tickSystem.provisionExpectation`
+    // in the object literal above: the latter would leave the KEY present with value `undefined`
+    // for a never-seeded system (JSON.stringify drops it either way, but the in-memory row would
+    // then differ from a system that never had the key at all — see the join's departure from the
+    // collapseDebt precedent above for why that absence must stay a true absence).
+    if (tickSystem.provisionExpectation === undefined) delete merged.provisionExpectation;
+    else merged.provisionExpectation = tickSystem.provisionExpectation;
+    return merged;
   });
 }
 
@@ -457,7 +470,12 @@ function applyClaims(systems: TickSystem[], claims: SystemClaim[]): TickSystem[]
  * (shrinking) balance rather than both reading the original snapshot — otherwise a shared source would
  * mint population that was never conserved. popCap is raised to the placed housing's capacity (never
  * lowered) — the same figure infrastructure-decay recomputes next tick, set here so the colony is viable
- * the instant it exists.
+ * the instant it exists. Also clears any stored `provisionExpectation` on a system flipping to
+ * `developed` — the resettlement rule: a system re-founded after a previous life (today only a
+ * fresh colony, but the same rule covers a future un-develop/re-develop) seeds its memory from its
+ * own opening state exactly as a first-time colony does, rather than carrying in a drifted-to-1
+ * baseline from before — the mirror image of `addMarketsForSettledSystems`'s "keeps its warehouses"
+ * below: the market rows survive redevelopment, the expectation memory deliberately does not.
  */
 export function applyDevelopments(systems: TickSystem[], developments: SystemDevelopment[]): TickSystem[] {
   if (developments.length === 0) return systems;
@@ -485,13 +503,17 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
     const buildings = nowDeveloped
       ? { ...s.buildings, [HOUSING_TYPE]: (s.buildings[HOUSING_TYPE] ?? 0) + (housingBySystem.get(s.id) ?? 0) }
       : s.buildings;
-    return {
+    const next: TickSystem = {
       ...s,
       population: Math.max(0, s.population + delta),
       control: nowDeveloped ? "developed" : s.control,
       buildings,
       popCap: nowDeveloped ? Math.max(s.popCap, housingPopCap(buildings)) : s.popCap,
     };
+    // The resettlement rule: a stored memory from a previous life must not survive into a system's
+    // new one — see the docstring above.
+    if (nowDeveloped) delete next.provisionExpectation;
+    return next;
   });
 }
 

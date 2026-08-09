@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { runWorldTick, toTickSystems, applyBuildingIncreases, marketRowsBySystem } from "../tick";
+import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serializeWorld, deserializeWorld } from "../save";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { unitResourceVector } from "@/lib/engine/resources";
@@ -179,6 +180,77 @@ describe("runWorldTick", () => {
     const rows = toTickSystems(world);
     expect(rows.find((s) => s.id === indebted)!.collapseDebt).toBe(0.4);
     for (const s of rows.filter((s) => s.id !== indebted)) expect(s.collapseDebt).toBe(0);
+  });
+
+  it("toTickSystems passes provisionExpectation through absent, not `?? 0` (departs from collapseDebt)", () => {
+    // The join's contrast with collapseDebt just above: a `?? 0` here would destroy the lazy-seed
+    // marker readExpectation relies on — an absent WorldSystem field must reach the row as
+    // undefined, never as a coerced 0.
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    expect(base.systems[0].provisionExpectation).toBeUndefined(); // premise: world-gen never seeds it
+    const unseeded = toTickSystems(base)[0];
+    // TickSystem is a transient per-tick row, never serialized — `undefined` (whether or not the
+    // key is technically own-enumerable) is the only thing that matters here; readExpectation's
+    // validity guard treats both identically. The JSON-boundary key-absence guarantee below is
+    // checked at the WorldSystem/save layer instead, where it is actually load-bearing.
+    expect(unseeded.provisionExpectation).toBeUndefined();
+
+    const seeded = {
+      ...base,
+      systems: base.systems.map((s, i) => (i === 0 ? { ...s, provisionExpectation: 0.42 } : s)),
+    };
+    expect(toTickSystems(seeded)[0].provisionExpectation).toBe(0.42);
+  });
+
+  it("mergeSystemsIntoWorld keeps a never-seeded system's provisionExpectation truly key-absent, not present-as-undefined", async () => {
+    // An unclaimed system never enters the economy shard, so the population processor never
+    // touches it — mergeSystemsIntoWorld must not leave the key present with value undefined
+    // (which would still serialize identically, but would diverge from a system that never had
+    // the key at all under a strict structural comparison).
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const unclaimed = base.systems.find((s) => s.control === "unclaimed");
+    expect(unclaimed).toBeDefined();
+    if (!unclaimed) return;
+    const { world: after } = await runWorldTick(base);
+    const stillUnclaimed = after.systems.find((s) => s.id === unclaimed.id)!;
+    expect(stillUnclaimed.provisionExpectation).toBeUndefined();
+    expect("provisionExpectation" in stillUnclaimed).toBe(false);
+  });
+
+  it("InMemoryPopulationWorld.applyPopulationUpdates clamps provisionExpectation and never writes NaN", async () => {
+    // The write-path guarantee: a non-finite value never lands as NaN (⇒ null on serialize) or as
+    // an invented 0 (0 is a real, false memory — "resigned to total collapse"). It falls back to
+    // the row's own prior stored value if one exists, else the key stays absent.
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const target = base.systems[0].id;
+    const rows = toTickSystems(base);
+
+    // No prior stored value: a non-finite write is omitted entirely, never invented as 0.
+    const fresh = new InMemoryPopulationWorld({ systems: rows, markets: base.markets });
+    await fresh.applyPopulationUpdates([
+      { systemId: target, population: 100, unrest: 0, provisionExpectation: Number.NaN },
+    ]);
+    const freshAfter = fresh.systems.find((s) => s.id === target)!;
+    expect(freshAfter.provisionExpectation).toBeUndefined();
+    expect("provisionExpectation" in freshAfter).toBe(false);
+
+    // A prior stored value survives a non-finite write (the safe fallback).
+    const priorSeeded = rows.map((s) => (s.id === target ? { ...s, provisionExpectation: 0.37 } : s));
+    const carried = new InMemoryPopulationWorld({ systems: priorSeeded, markets: base.markets });
+    await carried.applyPopulationUpdates([
+      { systemId: target, population: 100, unrest: 0, provisionExpectation: Number.POSITIVE_INFINITY },
+    ]);
+    expect(carried.systems.find((s) => s.id === target)!.provisionExpectation).toBe(0.37);
+
+    // An out-of-range but finite value clamps into [0, 1] — never serializes as null.
+    const clamped = new InMemoryPopulationWorld({ systems: rows, markets: base.markets });
+    await clamped.applyPopulationUpdates([
+      { systemId: target, population: 100, unrest: 0, provisionExpectation: 7 },
+    ]);
+    const clampedAfter = clamped.systems.find((s) => s.id === target)!;
+    expect(clampedAfter.provisionExpectation).toBe(1);
+    expect(Number.isFinite(clampedAfter.provisionExpectation)).toBe(true);
+    expect(JSON.stringify({ provisionExpectation: clampedAfter.provisionExpectation })).not.toContain("null");
   });
 
   it("accumulates construction projects and lands whole integer building levels over many ticks", async () => {

@@ -11,12 +11,20 @@ export interface PopulationStateView {
   population: number;
   popCap: number;
   unrest: number;
+  /** Stored Provision memory (adaptive expectation), carried from the system row unmodified.
+   *  Optional: absent means never seeded — `readExpectation` (lib/engine/expectation.ts) is the
+   *  only place that turns absence into a value, never a `?? 0` at this seam. */
+  provisionExpectation?: number;
 }
 
 export interface PopulationUpdate {
   systemId: string;
   population: number;
   unrest: number;
+  /** This cycle's resolved memory value — REQUIRED, unlike the view above: the processor always
+   *  has a post-seed number by the time it writes (readExpectation seeds it on first read if
+   *  absent), so there is never a legitimate "no value yet" on the write side. */
+  provisionExpectation: number;
 }
 
 export interface PopulationWorld {

@@ -5,6 +5,7 @@ import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
 import { totalDemandRateForGood } from "@/lib/constants/market-economy";
+import { clamp } from "@/lib/utils/math";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
@@ -26,22 +27,40 @@ export class InMemoryPopulationWorld implements PopulationWorld {
     const out: PopulationStateView[] = [];
     for (const s of this.systems) {
       if (!ids.has(s.id)) continue;
-      out.push({ systemId: s.id, population: s.population, popCap: s.popCap, unrest: s.unrest });
+      out.push({
+        systemId: s.id, population: s.population, popCap: s.popCap, unrest: s.unrest,
+        provisionExpectation: s.provisionExpectation,
+      });
     }
     return Promise.resolve(out);
   }
 
+  /**
+   * `provisionExpectation`'s non-finite fallback, deliberately chosen: NOT 0 (0 reads as "resigned
+   * to total collapse", a real and false memory, not a neutral default) and NOT dropping the write
+   * silently into whatever the merge would do — the row's own prior stored value if one exists,
+   * else the key is left absent so a never-seeded system stays never-seeded. A finite value is
+   * clamped into [0, 1] and written as-is.
+   */
   applyPopulationUpdates(updates: PopulationUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
     const bySystem = new Map(updates.map((u) => [u.systemId, u]));
     this.systems = this.systems.map((s) => {
       const u = bySystem.get(s.id);
       if (!u) return s;
-      return {
+      const next: TickSystem = {
         ...s,
         population: Math.max(0, isFinite(u.population) ? u.population : 0),
         unrest: Math.max(0, Math.min(1, isFinite(u.unrest) ? u.unrest : 0)),
       };
+      if (Number.isFinite(u.provisionExpectation)) {
+        next.provisionExpectation = clamp(u.provisionExpectation, 0, 1);
+      } else if (s.provisionExpectation !== undefined) {
+        next.provisionExpectation = s.provisionExpectation;
+      } else {
+        delete next.provisionExpectation;
+      }
+      return next;
     });
     return Promise.resolve();
   }

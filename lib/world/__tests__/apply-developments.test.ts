@@ -168,6 +168,40 @@ describe("applyDevelopments — no-ops and unresolvable rows", () => {
     expect(after.find((s) => s.id === "source")!.population).toBe(200);
   });
 
+  it("clears a stale stored provisionExpectation when a system flips to developed", () => {
+    // The resettlement rule: a system carrying a drifted memory from a previous life must not
+    // carry it into the new one — it seeds fresh, exactly as a first-time colony does.
+    const source = makeSystem("source", 200);
+    const target = makeSystem("target", 0);
+    target.provisionExpectation = 0.87; // stale memory from a previous life
+    const systems = [source, target];
+    const developments: SystemDevelopment[] = [
+      { systemId: "target", sourceSystemId: "source", seedPop: 50, housingLevels: 3, stockManifest: [] },
+    ];
+
+    const after = applyDevelopments(systems, developments);
+    const developed = after.find((s) => s.id === "target")!;
+    expect(developed.control).toBe("developed");
+    expect(developed.provisionExpectation).toBeUndefined();
+    expect("provisionExpectation" in developed).toBe(false);
+  });
+
+  it("leaves an untouched system's provisionExpectation alone", () => {
+    // The clear is surgical — a system a development did not name keeps whatever it carried.
+    const source = makeSystem("source", 200);
+    source.provisionExpectation = 0.55;
+    const target = makeSystem("target", 0);
+    const systems = [source, target];
+    const developments: SystemDevelopment[] = [
+      { systemId: "target", sourceSystemId: "source", seedPop: 50, housingLevels: 3, stockManifest: [] },
+    ];
+
+    const after = applyDevelopments(systems, developments);
+    const afterSource = after.find((s) => s.id === "source")!;
+    expect(afterSource.control).toBe("controlled"); // never flipped to developed
+    expect(afterSource.provisionExpectation).toBe(0.55);
+  });
+
   it("develops a target whose seed transfer moves nobody", () => {
     // A drained source moves zero people, so the population delta is 0 — but the colony still has to
     // flip to `developed`, or a completed establish silently produces nothing.

@@ -4,6 +4,11 @@ import { serializeWorld, deserializeWorld, sanitizeSaveName, SAVE_FORMAT_VERSION
 import type { World } from "../types";
 import { runWorldTick } from "../tick";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import { provision } from "@/lib/engine/population";
+import { EXPECTATION_PARAMS } from "@/lib/constants/population";
 
 describe("sanitizeSaveName", () => {
   it("lowercases and strips everything but [a-z0-9-_]", () => {
@@ -257,6 +262,24 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.world.markets[0].proposalCycles).toBe(0.5);
   });
 
+  it("round-trips the optional provisionExpectation field", () => {
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, provisionExpectation: 0.42 } : system,
+      ),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].provisionExpectation).toBe(0.42);
+  });
+
+  it("accepts generated systems without a provisionExpectation (never seeded)", () => {
+    expect(world.systems[0].provisionExpectation).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
   it("keeps new optional assessment values omitted in an old-shaped save", () => {
     const world = generateWorld({ systemCount: 60, seed: 7 });
     const oldShaped: World = {
@@ -349,4 +372,73 @@ describe("save compatibility — collapseDebt moved from building rows to system
     // And it still survives a full serialize round-trip after the migration.
     expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
   });
+});
+
+describe("save compatibility — provisionExpectation seeds from Provision, not a coerced 0", () => {
+  /**
+   * A save predating the field loads and its first economy cycle seeds the stored memory from
+   * THAT cycle's Provision — never from a `?? 0` coercion (which would read stored 0, effective =
+   * the expectation floor) and never from a floor-write bug (persisting the read-side `effective`
+   * instead of the raw `stored`, which would read the floor 0.5). The fixture starves both
+   * survival goods on an otherwise-ample homeworld so this cycle's Provision lands well UNDER
+   * EXPECTATION_PARAMS.floor (0.5) — Provision strictly between 0 and the floor is the only
+   * reading that discriminates both failure modes at once.
+   */
+  it("loads and the first cycle seeds stored expectation from that cycle's Provision, not 0 or the floor", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const systemId = base.factions[0].homeworldId;
+    const prepared: World = {
+      ...base,
+      // Strip every producer but housing — the fixture's only output is population, so an emptied
+      // survival good's stock cannot refill and stays a structural deficit for the whole cycle.
+      buildings: [
+        ...base.buildings.filter((b) => b.systemId !== systemId),
+        { systemId, buildingType: HOUSING_TYPE, count: 250, idleCycles: 0 },
+      ],
+      markets: base.markets.map((m) =>
+        m.systemId === systemId
+          ? { ...m, stock: m.goodId === "food" || m.goodId === "water" ? 0 : 1e7, satisfaction: 1 }
+          : m,
+      ),
+    };
+    // Premise: this save predates the field on every system.
+    for (const s of prepared.systems) expect(s.provisionExpectation).toBeUndefined();
+
+    const legacy = JSON.stringify({ formatVersion: SAVE_FORMAT_VERSION, world: prepared });
+    const loaded = deserializeWorld(legacy);
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+
+    // One full cycle so the economy actually assesses and the population processor's bridge seeds
+    // the memory. Construction/logistics parked — noise from those stages is not this test's concern.
+    let ticked: World = loaded.world;
+    const cadence = { cycle: CYCLE_LENGTH, construction: 999_999, logistics: 999_999 };
+    for (let t = 0; t < CYCLE_LENGTH; t++) {
+      ticked = (await runWorldTick(ticked, { cadence })).world;
+    }
+    const system = ticked.systems.find((s) => s.id === systemId)!;
+
+    // Independent oracle: the SAME provision() fold the economy applied, fed the tick's OWN
+    // persisted satisfaction figures and this basis's own demand rates — not a hand-guessed number.
+    const buildingsBySystem: Record<string, number> = {};
+    for (const b of ticked.buildings) if (b.systemId === systemId) buildingsBySystem[b.buildingType] = b.count;
+    const { basis } = computeSystemLabourSnapshot(buildingsBySystem, system.population);
+    const goods = ticked.markets
+      .filter((m) => m.systemId === systemId && consumptionRate(m.goodId, basis) > 0)
+      .map((m) => ({
+        goodId: m.goodId,
+        satisfaction: m.satisfaction ?? 1,
+        demanded: consumptionRate(m.goodId, basis),
+      }));
+    const expectedProvision = provision(goods);
+
+    // Non-vacuity: the fixture actually lands where it needs to for the test to discriminate.
+    expect(expectedProvision).toBeGreaterThan(0);
+    expect(expectedProvision).toBeLessThan(EXPECTATION_PARAMS.floor);
+
+    expect(system.provisionExpectation).toBeCloseTo(expectedProvision, 6);
+    // Falsifies both named failure modes explicitly, not just via the closeness check above.
+    expect(system.provisionExpectation).not.toBeCloseTo(0, 3);
+    expect(system.provisionExpectation).not.toBeCloseTo(EXPECTATION_PARAMS.floor, 3);
+  }, 60_000);
 });

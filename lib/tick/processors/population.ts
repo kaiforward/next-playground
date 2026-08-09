@@ -3,7 +3,8 @@ import {
   accumulateUnrest, crowdingPressure, grievanceShortfall, populationDelta, supplyUnrestTerm,
   type UnrestParams,
 } from "@/lib/engine/population";
-import { CROWDING } from "@/lib/constants/population";
+import { CROWDING, EXPECTATION_PARAMS } from "@/lib/constants/population";
+import { readExpectation } from "@/lib/engine/expectation";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { clamp } from "@/lib/utils/math";
 import type {
@@ -68,7 +69,10 @@ export async function runPopulationProcessor(
     // The delta reads the unrest this cycle just produced, so unrest resolves forward within the
     // cycle while crowding lags it by one.
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
-    popUpdates.push({ systemId: s.systemId, population, unrest });
+    // The cycle-start memory, seeded from this cycle's Provision on first read and carried
+    // unchanged thereafter — no per-cycle advance yet, and not fed into the grievance term above.
+    const provisionExpectation = readExpectation(s.provisionExpectation, 1 - d, EXPECTATION_PARAMS).stored;
+    popUpdates.push({ systemId: s.systemId, population, unrest, provisionExpectation });
     // The scalar the economy actually applied this cycle, not a recompute: the strike params and
     // the treasury-fed maintenance malus never reach this processor, and the unrest just written
     // above is the wrong half of the input anyway. A system the signal omits was unsuppressed.
