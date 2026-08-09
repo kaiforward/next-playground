@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   newCharterCensus, recordCharterCensus, checkCharterDebits, checkFoundingWithinBalance,
   newStagedLedgerCensus, recordStagedLedger, checkStagedLedger, checkNetReconciliation,
-  summarizeConservation, CONSERVATION_TOLERANCE,
+  summarizeConservation, CONSERVATION_TOLERANCE, withinTolerance,
 } from "../conservation-analysis";
 import type { CharterProjectRow, StagedProjectRow } from "../conservation-analysis";
 import type { FactionCycleRecord } from "../treasury-analysis";
@@ -30,6 +30,23 @@ const cycle = (
   tick, factionId, income, foundingExpense, shorted: false,
   fundedMaintenance: 1, fundedConstruction: 1, constructionBill: 1,
   paidTotal, balance,
+});
+
+describe("withinTolerance", () => {
+  it("judges a residual against the larger of the two sides it came from, inclusively", () => {
+    // The bound is inclusive: a residual sitting exactly on the tolerance is inside it. Magnitude
+    // is floored at 1, so this is the smallest-scale case the check ever sees.
+    expect(withinTolerance(1, 0, CONSERVATION_TOLERANCE)).toBe(true);
+    expect(withinTolerance(1, 0, CONSERVATION_TOLERANCE * 1.0001)).toBe(false);
+  });
+
+  it("refuses a non-finite residual rather than letting an infinite scale swallow it", () => {
+    // With an infinite side the tolerance itself goes infinite, and `Infinity <= Infinity` passes —
+    // a corrupt row would clear the identity instead of failing it. The finiteness gate comes first
+    // for exactly that reason.
+    expect(withinTolerance(Infinity, 0, Infinity)).toBe(false);
+    expect(withinTolerance(1, 0, Number.NaN)).toBe(false);
+  });
 });
 
 describe("charter census", () => {
@@ -173,6 +190,64 @@ describe("founding committed vs opening balance", () => {
     expect(check.pass).toBe(false);
     expect(check.note).toContain("non-finite");
   });
+
+  it("adds a corrupt row's fault to the real overruns, never against them", () => {
+    // Both faults raise the same counter. Counting either one downward lets a corrupt row CANCEL a
+    // genuine overrun and the identity reports a clean pass on a run that had two problems.
+    const check = checkFoundingWithinBalance(
+      [
+        cycle("f1", 24, { foundingExpense: Number.NaN, balance: 100 }),
+        cycle("f2", 24, { foundingExpense: 0, balance: 100 }),
+        cycle("f2", 48, { foundingExpense: 250, balance: 0 }),   // 250 committed against 100
+      ],
+      new Map([["f1", 1000], ["f2", 1000]]),
+    );
+    expect(check.pass).toBe(false);
+    expect(check.note).toContain("2 over their opening balance");
+    expect(check.note).toContain("⚠ 1 non-finite rows");
+  });
+
+  it("counts the settled and the committing cycles it actually walked", () => {
+    // Both counts are the note's denominators — the reader's only check that the identity looked
+    // at the run it claims to have looked at.
+    const check = checkFoundingWithinBalance(
+      [
+        cycle("f1", 24, { foundingExpense: 0, balance: 500 }),
+        cycle("f1", 48, { foundingExpense: 100, balance: 400 }),
+        cycle("f1", 72, { foundingExpense: 200, balance: 200 }),
+      ],
+      new Map([["f1", 0]]),
+    );
+    expect(check.pass).toBe(true);
+    expect(check.note).toContain("tightest of 2 founding-committing cycles (of 3 settled)");
+    // No corrupt rows this run, so the warning must be absent entirely rather than reading "0".
+    expect(check.note).not.toContain("non-finite");
+  });
+
+  it("keeps the tightest committing cycle, not the last one it saw", () => {
+    // "Tightest" is the largest residual across the run — the cycle whose founding came closest to
+    // the balance behind it. Taking whichever committing cycle came last reports a windfall-funded
+    // founding as the closest the run ever came.
+    const check = checkFoundingWithinBalance(
+      [
+        cycle("f1", 24, { foundingExpense: 990, balance: 10 }),    // 990 against 1000 — the tightest
+        cycle("f1", 48, { foundingExpense: 0, balance: 5000 }),    // a windfall; commits nothing
+        cycle("f1", 72, { foundingExpense: 100, balance: 4900 }),  // 100 against 5000 — comfortable
+      ],
+      new Map([["f1", 1000]]),
+    );
+    expect(check.pass).toBe(true);
+    expect(check.left).toBeCloseTo(990, 9);
+    expect(check.right).toBeCloseTo(1000, 9);
+  });
+
+  it("does not report a charter revert that never happened", () => {
+    // The ⚠ is an annunciator: printed unconditionally it reads "0 charters reverted" on every
+    // healthy run and stops meaning anything.
+    const census = newCharterCensus();
+    recordCharterCensus([establish("p1", true)], census);
+    expect(checkCharterDebits(census).note).not.toContain("reverted");
+  });
 });
 
 describe("staged goods vs founder draws", () => {
@@ -262,6 +337,45 @@ describe("staged goods vs founder draws", () => {
 
     expect(checkStagedLedger(census).pass).toBe(false);
   });
+
+  it("keeps the worst of two violating ticks, whichever order they arrive in", () => {
+    // Between two failures the bigger loss is the one worth reporting — and it has to win from
+    // either side, or the census is reporting arrival order rather than severity.
+    const worstFirst = newStagedLedgerCensus();
+    recordStagedLedger([staged("c1", [40])], new Map([["c1", totals(100)]]), worstFirst); // −60
+    recordStagedLedger([staged("c2", [40])], new Map([["c2", totals(50)]]), worstFirst);  // −10
+
+    const worstLast = newStagedLedgerCensus();
+    recordStagedLedger([staged("c2", [40])], new Map([["c2", totals(50)]]), worstLast);   // −10
+    recordStagedLedger([staged("c1", [40])], new Map([["c1", totals(100)]]), worstLast);  // −60
+
+    expect(checkStagedLedger(worstFirst).residual).toBeCloseTo(-60, 9);
+    expect(checkStagedLedger(worstLast).residual).toBeCloseTo(-60, 9);
+    expect(worstFirst.violations).toBe(2);
+  });
+
+  it("does not swap one violating tick for another of the same size", () => {
+    // Equal magnitude is not more evidence. A census that displaced on a tie would report whichever
+    // sign happened to land last, and the residual's direction is what says goods vanished rather
+    // than appeared.
+    const census = newStagedLedgerCensus();
+    recordStagedLedger([staged("c1", [40])], new Map([["c1", totals(100)]]), census);  // −60
+    recordStagedLedger([staged("c2", [100])], new Map([["c2", totals(40)]]), census);  // +60
+
+    expect(checkStagedLedger(census).residual).toBeCloseTo(-60, 9);
+  });
+
+  it("prefers the later of two equally large passing ticks", () => {
+    // Among samples that held, the tie-break keeps the most recent equally-big one — so the report
+    // shows the state the run ended in rather than the first tick that ever matched it.
+    const census = newStagedLedgerCensus();
+    recordStagedLedger([staged("c1", [50])], new Map([["c1", totals(50)]]), census);
+    recordStagedLedger([staged("c2", [90])], new Map([["c2", totals(90)]]), census);
+
+    const check = checkStagedLedger(census);
+    expect(check.pass).toBe(true);
+    expect(check.left).toBeCloseTo(90, 9);
+  });
 });
 
 describe("balance delta vs net", () => {
@@ -323,6 +437,73 @@ describe("balance delta vs net", () => {
     expect(check.pass).toBe(true);
     // An absolute epsilon would have judged the same residual a failure.
     expect(Math.abs(check.residual)).toBeGreaterThan(CONSERVATION_TOLERANCE);
+  });
+
+  it("quarantines a corrupt row instead of folding NaN into the run totals", () => {
+    // A non-finite row poisons every number it touches: the running totals go NaN, and the next
+    // cycle's delta is measured against a NaN balance. Both sides of the identity then print as
+    // null through JSON — "not measured", from a run that WAS measured and was broken.
+    const check = checkNetReconciliation(
+      [
+        cycle("f1", 24, { income: Number.NaN, paidTotal: 60, foundingExpense: 0, balance: 1040 }),
+        cycle("f1", 48, { income: 100, paidTotal: 60, foundingExpense: 0, balance: 1080 }),
+      ],
+      new Map([["f1", 1000]]),
+    );
+    expect(check.pass).toBe(false);
+    expect(Number.isFinite(check.left)).toBe(true);
+    expect(Number.isFinite(check.right)).toBe(true);
+    expect(Number.isFinite(check.residual)).toBe(true);
+    expect(check.note).toContain("⚠ 1 non-finite rows");
+  });
+
+  it("adds a corrupt row's fault to the mismatched cycles, never against them", () => {
+    // Same cancellation hazard as the founding chain: one counter serves both faults, so counting
+    // either downward turns two problems into a clean pass.
+    const check = checkNetReconciliation(
+      [
+        cycle("f1", 24, { income: Number.NaN, paidTotal: 60, foundingExpense: 0, balance: 1040 }),
+        cycle("f2", 24, { income: 100, paidTotal: 60, foundingExpense: 0, balance: 1100 }), // +100 vs net +40
+      ],
+      new Map([["f1", 1000], ["f2", 1000]]),
+    );
+    expect(check.pass).toBe(false);
+    // Two faults — one corrupt row and one cycle whose balance did not match its itemisation —
+    // over the one cycle that was walkable at all.
+    expect(check.note).toContain("2 of 1 faction-cycles out");
+    expect(check.note).toContain("⚠ 1 non-finite rows");
+  });
+
+  it("reports the worst single cycle's residual, and no warning when every row was finite", () => {
+    // The note's worst-cycle figure is the size of the problem; the totals beside it telescope.
+    // A run with nothing corrupt must not print the ⚠ at all, or the marker stops meaning anything.
+    const check = checkNetReconciliation(
+      [
+        cycle("f1", 24, { income: 100, paidTotal: 60, foundingExpense: 0, balance: 1045 }), // +45 vs +40
+        cycle("f1", 48, { income: 100, paidTotal: 60, foundingExpense: 0, balance: 1245 }), // +200 vs +40
+        cycle("f1", 72, { income: 100, paidTotal: 60, foundingExpense: 0, balance: 1285 }), // +40 vs +40
+      ],
+      new Map([["f1", 1000]]),
+    );
+    expect(check.pass).toBe(false);
+    expect(check.note).toContain("2 of 3 faction-cycles out");
+    expect(check.note).toContain((160).toExponential(2));
+    expect(check.note).not.toContain("non-finite");
+  });
+
+  it("does not swap the worst cycle for a later one of the same size but the opposite sign", () => {
+    // The residual's SIGN is what the figure says: a balance that ran ahead of its itemisation is
+    // a different fault from one that fell behind. Equal magnitude is not new evidence, so the
+    // first of the two has to stand.
+    const check = checkNetReconciliation(
+      [
+        cycle("f1", 24, { income: 100, paidTotal: 60, foundingExpense: 0, balance: 1160 }), // +120
+        cycle("f1", 48, { income: 100, paidTotal: 60, foundingExpense: 0, balance: 1080 }), // −120
+      ],
+      new Map([["f1", 1000]]),
+    );
+    expect(check.pass).toBe(false);
+    expect(check.note).toContain(` ${(120).toExponential(2)}`);
   });
 });
 

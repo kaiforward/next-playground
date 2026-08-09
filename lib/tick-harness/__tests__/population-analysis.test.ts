@@ -58,6 +58,27 @@ describe("detectPingPong", () => {
     expect(detectPingPong(snapshots, 3)).toBe(1);
   });
 
+  it("reads three snapshots — the shortest series that holds a reversal at all", () => {
+    // Two snapshots give one delta and no direction to reverse; three give the first real reading.
+    // The floor is exclusive at 3, so a series of exactly three must still be measured.
+    const snapshots = [100, 110, 100].map((v) => new Map([["osc", v]]));
+    expect(detectPingPong(snapshots, 1)).toBe(1);
+  });
+
+  it("does not read a flat step as a change of direction", () => {
+    // A system that simply stopped moving for a snapshot has not reversed. Counting the flat
+    // delta as a reversal turns any stalled world into an oscillating one.
+    const snapshots = [100, 110, 110, 120].map((v) => new Map([["stall", v]]));
+    expect(detectPingPong(snapshots, 1)).toBe(0);
+  });
+
+  it("carries the last real direction across a flat step, so the reversal after it still counts", () => {
+    // Up, flat, down IS a reversal — the flat snapshot must not erase the direction it interrupts,
+    // or a system that pauses at each turn reads as perfectly stable.
+    const snapshots = [100, 110, 110, 100].map((v) => new Map([["pause", v]]));
+    expect(detectPingPong(snapshots, 1)).toBe(1);
+  });
+
   it("counts only the oscillating system when mixed with monotone neighbours", () => {
     const oscillating = [100, 110, 100, 110, 100, 110, 100]; // 5 reversals
     const growing     = [100, 110, 120, 130, 140, 150, 160]; // 0 reversals
@@ -91,6 +112,30 @@ describe("summarizeInfrastructure", () => {
     expect(summary.builtEnd).toBe(60);
     expect(summary.decayedPct).toBeCloseTo(40, 6);
     expect(summary.collapsedCount).toBe(1);
+  });
+
+  it("counts a settled system as collapsed only below one whole building", () => {
+    // Ghost industry is a system that HAD industry and lost it. The bound is exclusive at one:
+    // a system down to its last building is not yet a collapse, and an unclaimed rock with no
+    // buildings never was one. Three systems either side, so the count moves whichever way a
+    // flipped comparison points.
+    const systems = [
+      infraSys("collapsed", { ore: 0 }, 100),
+      infraSys("last-building", { ore: 1 }, 100),
+      infraSys("working", { ore: 5, [HOUSING_TYPE]: 3 }, 100),
+      { ...infraSys("rock", {}, 0), control: "unclaimed" as const },
+    ];
+    const summary = summarizeInfrastructure(systems, 20);
+    expect(summary.collapsedCount).toBe(1);
+    expect(summary.builtEnd).toBe(9);
+  });
+
+  it("reports 0 decayed, never a division by the start total, for a galaxy that began with nothing", () => {
+    // A world-gen that shipped no buildings has no baseline to decay from. JSON renders both
+    // Infinity and NaN as null, which prints as "not measured" rather than "measured, and broken".
+    const summary = summarizeInfrastructure([infraSys("s1", { ore: 4 }, 100)], 0);
+    expect(summary.decayedPct).toBe(0);
+    expect(Number.isFinite(summary.decayedPct)).toBe(true);
   });
 });
 
@@ -209,6 +254,98 @@ describe("summarizePopulation — striking share and stranded population", () =>
     const summary = summarizePopulation(systems, 1300, 0.65, BRAKE_END);
     expect(summary.strandedCount).toBe(0);
     expect(summary.strandedPopulation).toBe(0);
+  });
+});
+
+describe("summarizePopulation — the settled denominator and the unrest reads", () => {
+  const BRAKE_END = CROWDING.BRAKE_END;
+
+  /** An unclaimed rock: no people, no housing, no opinion — and no business in any denominator. */
+  function voidSys(id: string): TickSystem {
+    const s = popSys(id, 0, 0, 0);
+    return { ...s, control: "unclaimed" };
+  }
+
+  it("rates unrest over settled systems only, never over the void the galaxy is mostly made of", () => {
+    // Folding the void in does not zero a reading — it halves it, which reads as a calmer galaxy.
+    const systems = [
+      popSys("angry", 100, 1000, 0.8),
+      popSys("calm", 100, 1000, 0.2),
+      voidSys("rock-a"),
+      voidSys("rock-b"),
+    ];
+    const summary = summarizePopulation(systems, 200, 0.65, BRAKE_END);
+
+    expect(summary.meanUnrest).toBeCloseTo(0.5, 9);
+    expect(summary.maxUnrest).toBeCloseTo(0.8, 9);
+    expect(summary.strikingCount).toBe(1);
+    expect(summary.strikingShare).toBeCloseTo(0.5, 9);
+    expect(summary.emptiedCount).toBe(0);
+  });
+
+  it("keeps the running unrest maximum, rather than the last or the smallest reading", () => {
+    // The peak is deliberately neither first nor last: a scan that simply assigns, or that keeps
+    // the minimum, lands on a different system in each direction.
+    const systems = [
+      popSys("mid", 100, 1000, 0.4),
+      popSys("peak", 100, 1000, 0.9),
+      popSys("quiet", 100, 1000, 0.1),
+    ];
+    const summary = summarizePopulation(systems, 300, 0.65, BRAKE_END);
+    expect(summary.maxUnrest).toBeCloseTo(0.9, 9);
+  });
+
+  it("counts a system emptied at exactly one resident, and only counts downward", () => {
+    // The ghost-town watch is inclusive at 1 — a single resident is a ghost town, not a population.
+    const systems = [
+      popSys("ghost", 0.5, 1000),
+      popSys("last-resident", 1, 1000),
+      popSys("alive", 100, 1000),
+    ];
+    const summary = summarizePopulation(systems, 101.5, 0.65, BRAKE_END);
+    expect(summary.emptiedCount).toBe(2);
+  });
+
+  it("counts saturation only above the 98% mark, over more than one candidate", () => {
+    // Two systems below the mark and one at it: a fixture with a single system on each side reads
+    // the same count whichever way the comparison points.
+    const systems = [
+      popSys("at-mark", 980, 1000),
+      popSys("near", 970, 1000),
+      popSys("far", 500, 1000),
+    ];
+    const summary = summarizePopulation(systems, 2450, 0.65, BRAKE_END);
+    expect(summary.saturatedCount).toBe(1);
+  });
+
+  it("counts a cap left at exactly the stranded epsilon as stranded", () => {
+    // STRANDED_POP_CAP is the inclusive bound: a cap sitting exactly on it is no housing at all.
+    const systems = [
+      popSys("exactly-epsilon", 100, 1e-6),
+      popSys("just-above", 100, 2e-6),
+    ];
+    const summary = summarizePopulation(systems, 200, 0.65, BRAKE_END);
+    expect(summary.strandedCount).toBe(1);
+    expect(summary.strandedPopulation).toBe(100);
+  });
+
+  it("reports 0 growth and 0 mean unrest, never NaN, for a galaxy that started empty", () => {
+    // Both guards divide by a run-start quantity: a zero denominator has to print as "no growth",
+    // because JSON renders Infinity and NaN alike as null, which reads as "not measured".
+    const fromNothing = summarizePopulation([popSys("seed", 10, 100, 0.3)], 0, 0.65, BRAKE_END);
+    expect(fromNothing.growthPct).toBe(0);
+
+    const empty = summarizePopulation([], 0, 0.65, BRAKE_END);
+    expect(empty.meanUnrest).toBe(0);
+    expect(Number.isFinite(empty.meanUnrest)).toBe(true);
+    expect(empty.growthPct).toBe(0);
+  });
+
+  it("measures growth against the run's own start total", () => {
+    const systems = [popSys("a", 120, 1000), popSys("b", 60, 1000)];
+    const summary = summarizePopulation(systems, 150, 0.65, BRAKE_END);
+    expect(summary.totalEnd).toBe(180);
+    expect(summary.growthPct).toBeCloseTo(20, 9);
   });
 });
 

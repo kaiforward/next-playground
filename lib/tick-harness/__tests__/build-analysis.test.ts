@@ -4,8 +4,10 @@ import {
   trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summarizeFoundingStock,
   recordFoundingManifest, newFoundingStallTotals, recordFoundingStall, newInFlightEstablishTotals,
   sampleOpenColonies, summarizeFoundingLifecycle, summarizeFounderCohort,
-  foundingCadenceMarkTick, FOUNDING_CADENCE_MARK_SHARE,
+  foundingCadenceMarkTick, FOUNDING_CADENCE_MARK_SHARE, CONSTRUCTION_WARMUP_TICKS,
 } from "../build-analysis";
+import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
+import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import type {
   BuildCommitmentRecord, FoundedColonyRecord, FoundedColonySystem, FoundingStagingTotals,
 } from "../build-analysis";
@@ -144,6 +146,76 @@ describe("summarizeColonisation — per-class build-out", () => {
   });
 });
 
+describe("summarizeColonisation — the tier fold", () => {
+  it("adds every tier into one industry total, and counts tier1-or-better as present", () => {
+    // tier1 and tier2 are equal-sized so any fold that subtracts one from the other reads exactly
+    // zero industry — a fully built colony reported as populated-but-no-industry.
+    const built = devSys("c1", {
+      population: 300,
+      buildings: { metals: 2, electronics: 2 },
+    });
+    const summary = summarizeColonisation([built], new Set(), []);
+
+    expect(summary.colony.populatedButNoIndustry).toBe(0);
+    expect(summary.colony.withTier1Plus).toBe(1);
+    expect(summary.colony.withTier0).toBe(0);
+  });
+
+  it("does not credit tier1-or-better to a system that has neither", () => {
+    // The guard is exclusive at zero: an extraction-only colony has industry but nothing above
+    // tier 0, and a bare rock of a colony has none at all.
+    const tier0Only = devSys("c1", { population: 300, buildings: { ore: 4 } });
+    const nothing = devSys("c2", { population: 300, buildings: {} });
+    const summary = summarizeColonisation([tier0Only, nothing], new Set(), []);
+
+    expect(summary.colony.withTier1Plus).toBe(0);
+    expect(summary.colony.withTier0).toBe(1);
+    expect(summary.colony.populatedButNoIndustry).toBe(1); // c2 only
+  });
+
+  it("routes each level to its own tier, and an untiered building type to none", () => {
+    // Each system holds exactly one tier, so a routing rule that swallows the wrong one shows up
+    // as a colony with no industry at all rather than as a reshuffled total. Two tier2 systems
+    // against one untiered one: with one of each, a rule that swapped the two buckets would read
+    // exactly the same counts.
+    const t1 = devSys("t1", { population: 300, buildings: { metals: 3 } });
+    const t2a = devSys("t2a", { population: 300, buildings: { electronics: 3 } });
+    const t2b = devSys("t2b", { population: 300, buildings: { electronics: 1 } });
+    // A building type the tier table does not know is not industry: counting it as a tier would
+    // report an idle colony as producing.
+    const unknown = devSys("u1", { population: 300, buildings: { mystery: 9 } });
+
+    const summary = summarizeColonisation([t1, t2a, t2b, unknown], new Set(), []);
+    expect(summary.colony.withTier1Plus).toBe(3);
+    expect(summary.colony.populatedButNoIndustry).toBe(1); // the unknown type only
+  });
+
+  it("skips a non-positive level rather than subtracting it from the tier beside it", () => {
+    // A negative roster entry must be dropped, not folded: netted against a real tier it cancels
+    // it out and a producing colony reads as having no industry above extraction.
+    const mixed = devSys("c1", {
+      population: 300,
+      buildings: { metals: 5, electronics: -5 },
+    });
+    const summary = summarizeColonisation([mixed], new Set(), []);
+    expect(summary.colony.withTier1Plus).toBe(1);
+    expect(summary.colony.populatedButNoIndustry).toBe(0);
+  });
+
+  it("flags popCap starvation only for an inhabited system under one whole housing level", () => {
+    // Both bounds are strict, and each is the difference between a real trap and a normal world:
+    // an empty rock is not starved, and a system with exactly one level of cap is housed.
+    const systems = [
+      devSys("starved", { population: 300, popCap: 0 }),
+      devSys("empty", { population: 0, popCap: 0 }),
+      devSys("one-resident", { population: 1, popCap: 0 }),
+      devSys("one-level", { population: 300, popCap: 1 }),
+    ];
+    const summary = summarizeColonisation(systems, new Set(), []);
+    expect(summary.colony.popCapStarved).toBe(1);
+  });
+});
+
 describe("summarizeColonisation — construction queue split", () => {
   it("splits open projects by target class and sums levels + colony progress", () => {
     const homeworldIds = new Set(["hw"]);
@@ -181,6 +253,17 @@ describe("summarizeColonisation — construction queue split", () => {
     expect(summary.queue.colonyByKind).toEqual({
       housing: 1, academy: 2, complex: 1, tier0: 1, tier1: 1, tier2: 1, other: 1,
     });
+  });
+
+  it("keeps tier2 and untiered projects apart when both are in the queue at once", () => {
+    // One of each reads the same totals whichever way the tier2 test points — the two buckets
+    // simply swap names. Two tier2 projects against one unknown breaks the symmetry.
+    const summary = summarizeColonisation([], new Set(), [
+      project("c", "electronics"),
+      project("c", "electronics"),
+      project("c", "mystery"),
+    ]);
+    expect(summary.queue.colonyByKind).toEqual({ tier2: 2, other: 1 });
   });
 
   it("counts open centre projects under kind 'centre'", () => {
@@ -252,6 +335,48 @@ describe("summarizeConstructionPool", () => {
     const outpost = devSys("cc", { control: "controlled", buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1 } });
     const s = summarizeConstructionPool([outpost], []);
     expect(s.centreLevels).toBe(0);
+  });
+
+  it("counts open centre builds only, upward, over a mixed queue", () => {
+    // centreProjects is the pool's own feedback loop made visible — how much of the queue is
+    // capacity to build MORE. The queue below holds two centre builds, an ordinary build and a
+    // colony-establish, so a filter that widens in any direction lands on a different number.
+    const establish: WorldConstructionProject = {
+      kind: "colony_establish", id: "e1", origin: "auto", factionId: "f1", systemId: "c9",
+      sourceSystemId: "hw", seedPop: 40, housingLevels: 2, workTotal: 80, workDone: 20,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    };
+    const projects: WorldConstructionProject[] = [
+      project("s1", CONSTRUCTION_CENTRE_TYPE, { workTotal: 60, workDone: 10 }),
+      project("s2", CONSTRUCTION_CENTRE_TYPE, { workTotal: 60, workDone: 0 }),
+      project("s3", "metals", { workTotal: 40, workDone: 40 }),
+      establish,
+    ];
+    const s = summarizeConstructionPool([], projects);
+
+    expect(s.centreProjects).toBe(2);
+    // Non-vacuous: the queue really does hold work of all three shapes.
+    expect(s.queueRemainingWork).toBe(50 + 60 + 0 + 60);
+  });
+
+  it("reports a zero centre share, never a division by an empty pool", () => {
+    // An empty galaxy funds nothing. JSON renders NaN as null, which reads as "not measured"
+    // rather than "measured, and the pool is empty".
+    const s = summarizeConstructionPool([], []);
+    expect(s.centreShare).toBe(0);
+    expect(Number.isFinite(s.centreShare)).toBe(true);
+  });
+
+  it("sets the construction warm-up at a first cycle plus the persistence window", () => {
+    // Nothing autonomic can commit until a structural deficit has survived the persistence
+    // window, and the first construction cycle only lands at CONSTRUCTION_INTERVAL — so the
+    // warm-up is one interval for that first cycle plus one per persistence cycle, and is
+    // necessarily longer than a single interval.
+    expect(DIRECTED_BUILD.PERSISTENCE_CYCLES).toBeGreaterThan(0);
+    expect(CONSTRUCTION_WARMUP_TICKS).toBe(
+      CONSTRUCTION_INTERVAL + CONSTRUCTION_INTERVAL * DIRECTED_BUILD.PERSISTENCE_CYCLES,
+    );
+    expect(CONSTRUCTION_WARMUP_TICKS).toBeGreaterThan(CONSTRUCTION_INTERVAL);
   });
 });
 
@@ -467,6 +592,19 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(record.openingProvision).toBeLessThan(record.openingSatisfaction);
   });
 
+  it("reads a colony's demand basis off its OWN system row, not merely the first row it is handed", () => {
+    // The lookup is by id. Matching on position instead reads the wrong world's population, which
+    // does not fail loudly — it produces a plausible opening figure for the wrong colony. The
+    // decoy is listed first and holds nobody, so its basis demands nothing at all.
+    const decoy: FoundedColonySystem = { id: "decoy", control: "developed", population: 0, buildings: {} };
+    const colony = sys("c1", "developed");
+    const tracker = new Map<string, FoundedColonyRecord>();
+    trackFoundedColonies([colony], 24, new Set(), tracker, NO_STAGING);
+
+    sampleFoundedColonies([decoy, colony], [mkt("c1", "water", 0.25)], 48, tracker);
+    expect(tracker.get("c1")?.openingSatisfaction).toBeCloseTo(0.25, 9);
+  });
+
   it("keeps the opening reading, ignoring later cycles", () => {
     const tracker = new Map<string, FoundedColonyRecord>();
     const systems = [sys("c1", "developed")];
@@ -491,6 +629,51 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(summary.meanOpeningShortfall).toBeCloseTo(0.41, 6);
     expect(summary.meanOpeningProvision).toBeCloseTo(0.5, 6);   // rec() defaults provision = satisfaction
     expect(summary.openingDeprivedCount).toBe(1);
+  });
+
+  it("excludes a record missing ANY of the three opening readings, not just the last one", () => {
+    // The three are written together, so a record holding only some of them is a half-finished
+    // sample. Counting it folds a null into a sum as 0 — a colony that reads as having opened
+    // with nothing, which is exactly the alarm the founding invariant watches for.
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["no-satisfaction", rec("no-satisfaction", null, 0.2, 0.8)],
+      ["no-shortfall", rec("no-shortfall", 0.8, null, 0.8)],
+      ["no-provision", rec("no-provision", 0.8, 0.2, null)],
+    ]);
+
+    const summary = summarizeFoundingStock(tracker);
+    expect(summary.foundedCount).toBe(3);
+    expect(summary.sampledCount).toBe(0);
+    expect(summary.meanOpeningProvision).toBeNull();
+  });
+
+  it("counts a colony deprived strictly below the half-satisfaction mark", () => {
+    // Exactly half is the boundary the constant names, and it is exclusive: a colony sitting on it
+    // opened at the mark, not below it.
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["under", rec("under", 0.4, 0.6)],
+      ["at-mark", rec("at-mark", 0.5, 0.5)],
+      ["over", rec("over", 0.9, 0.1)],
+    ]);
+    expect(summarizeFoundingStock(tracker).openingDeprivedCount).toBe(1);
+  });
+
+  it("takes the Provision decile from the sampled colonies alone", () => {
+    // p10 is the founding invariant's worst-decile reading. A polluted or pre-seeded distribution
+    // moves it without any colony having changed, and the mean beside it would still look right.
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["a", rec("a", 0.8, 0.2, 0.2)],
+      ["b", rec("b", 0.8, 0.2, 0.4)],
+      ["c", rec("c", 0.8, 0.2, 0.6)],
+      ["d", rec("d", 0.8, 0.2, 0.8)],
+      ["e", rec("e", 0.8, 0.2, 1.0)],
+    ]);
+    const summary = summarizeFoundingStock(tracker);
+    expect(summary.meanOpeningProvision).toBeCloseTo(0.6, 9);
+    // Five readings 0.2…1.0: the 10th percentile sits between the lowest two, well under the mean.
+    expect(summary.p10OpeningProvision).not.toBeNull();
+    expect(summary.p10OpeningProvision ?? 1).toBeGreaterThanOrEqual(0.2);
+    expect(summary.p10OpeningProvision ?? 1).toBeLessThan(0.4);
   });
 
   it("folds meanOpeningProvision from openingProvision, not from openingSatisfaction", () => {

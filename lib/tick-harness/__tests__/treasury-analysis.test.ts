@@ -51,6 +51,46 @@ describe("treasury analysis", () => {
     expect(summary.invalidRows).toBe(0);
   });
 
+  it("reports the poorest faction's real balance, not a floor of zero", () => {
+    // minBalance is the solvency watch. Reported as 0 whenever the roster is non-empty it would
+    // read as "somebody is broke" on a galaxy where nobody is — and hide the run where one is.
+    const rich = makeTreasury({ factionId: "f1", balance: 900 });
+    const poorest = makeTreasury({ factionId: "f2", balance: 30 });
+    const middling = makeTreasury({ factionId: "f3", balance: 120 });
+
+    const snap = sampleTreasuries(24, [rich, poorest, middling]);
+    expect(snap.minBalance).toBe(30);
+
+    const summary = summarizeTreasuries([rich, poorest, middling], [snap]);
+    expect(summary.minBalance).toBe(30);
+    expect(summary.maxBalance).toBe(900);
+  });
+
+  it("does not call a faction that has never settled shorted", () => {
+    // Before its first settlement a faction has funded nothing against bands it was never billed
+    // for. Reading that as a shortfall makes every run open with a galaxy-wide money crisis.
+    const unsettled = makeTreasury({
+      factionId: "new", lastSettlement: null,
+      funded: { maintenance: 0, logistics: 0, construction: 0 },
+    });
+    expect(sampleTreasuries(1, [unsettled]).shortedFactions).toBe(0);
+  });
+
+  it("treats a band funded to within float dust of its slider as fully funded", () => {
+    // The 1e-9 is the accumulation tolerance, and the comparison is strict against it: a band
+    // sitting exactly on the tolerance edge is dust, not a shortfall.
+    const dust = makeTreasury({
+      factionId: "dust",
+      funded: { maintenance: 1 - 1e-9, logistics: 1, construction: 1 },
+    });
+    const real = makeTreasury({
+      factionId: "real",
+      funded: { maintenance: 0.5, logistics: 1, construction: 1 },
+    });
+    expect(sampleTreasuries(24, [dust]).shortedFactions).toBe(0);
+    expect(sampleTreasuries(24, [real]).shortedFactions).toBe(1);
+  });
+
   it("counts non-finite or negative balances as invalid rows", () => {
     const bad = makeTreasury({ factionId: "f3", balance: NaN });
     expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);

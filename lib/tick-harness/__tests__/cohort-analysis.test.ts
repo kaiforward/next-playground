@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts, marketRolesByKey,
+  logisticsTargetsByKey,
 } from "../cohort-analysis";
 import { perSystemSupplyState, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
 import type { MarketRole } from "../types";
@@ -238,9 +239,137 @@ describe("computeRoleCoverLevels", () => {
     expect(entry.countByRole.inert).toBe(2);
     expect(entry.trulyInertCount).toBe(1);
   });
+
+  it("counts sub-floor demand honestly when the two kinds of inert market are unevenly mixed", () => {
+    // Two markets with real sub-floor demand against one wanted by nobody: with one of each, a
+    // count that read the wrong side of the test lands on the same number.
+    const systems = [
+      sys("dead", { population: 0 }),
+      sys("tiny-a", { population: 3 }),
+      sys("tiny-b", { population: 3 }),
+    ];
+    const markets = [
+      mkt("dead", "water", 50, MIN_DEMAND),
+      mkt("tiny-a", "water", 50, MIN_DEMAND),
+      mkt("tiny-b", "water", 50, MIN_DEMAND),
+    ];
+
+    const [entry] = computeRoleCoverLevels(systems, markets);
+    expect(entry.countByRole.inert).toBe(3);
+    expect(entry.trulyInertCount).toBe(1);
+  });
+
+  it("treats an empty pin as no pin at all, rather than a partition that matched nothing", () => {
+    // The zero-match guard exists for a pin written against another world. An EMPTY pin is a
+    // different thing — no pin was supplied — and must classify live instead of throwing.
+    const systems = [sys("s1"), sys("s2")];
+    const markets = [mkt("s1", "water", 50, 10), mkt("s2", "water", 0, MIN_DEMAND)];
+
+    expect(computeRoleCoverLevels(systems, markets, new Map()))
+      .toEqual(computeRoleCoverLevels(systems, markets));
+  });
+
+  it("ignores a market row for a good the catalogue does not have, and one for a system it was not given", () => {
+    // Both are real shapes a stale pin or a partial world produces. Neither may reach the curve
+    // math, which has no reading to give for a good with no definition or a market with no role.
+    const systems = [sys("s1")];
+    const markets = [
+      mkt("s1", "water", 50, 10),
+      mkt("s1", "not_a_good", 50, 10),
+      mkt("elsewhere", "water", 50, 10),
+    ];
+
+    const entries = computeRoleCoverLevels(systems, markets);
+    expect(entries.map((e) => e.goodId)).toEqual(["water"]);
+    expect(entries[0].countByRole.consumer).toBe(1);
+  });
+
+  it("does not read a cover off a market with no target stock to divide by", () => {
+    // targetStock is TARGET_COVER × demandRate, so a row whose demand rate is 0 has no target at
+    // all. An exporter is the shape that reaches the cover fold with one — it is classified on its
+    // production, not its demand rate — and dividing by that zero pushes Infinity into the cover
+    // list, which is not a cover reading at all.
+    const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
+    const systems = [sys("exp", { population: 10, buildings: { water: 1 }, yields: producerYields })];
+    const markets = [mkt("exp", "water", 50, 0)];
+
+    const [entry] = computeRoleCoverLevels(systems, markets);
+    expect(entry.countByRole.exporter).toBe(1); // premise: the row really did reach the cover fold
+    for (const role of ["exporter", "self-supplier", "consumer"] as const) {
+      expect(Number.isFinite(entry.medianCoverByRole[role])).toBe(true);
+    }
+  });
+
+  it("counts only consumer markets as empty, not every market sitting at its band floor", () => {
+    // consumerEmptyFrac is a claim about the markets that are meant to hold stock for people.
+    // An exporter drawn down to its floor is a supply story, not an empty shop.
+    const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
+    const systems = [
+      sys("exp", { population: 10, buildings: { water: 1 }, yields: producerYields }),
+      sys("con", { population: 100 }),
+    ];
+    const markets = [
+      mkt("exp", "water", 0, 1),          // exporter, drawn flat
+      mkt("con", "water", TARGET_COVER, 1), // consumer, well stocked
+    ];
+
+    const [entry] = computeRoleCoverLevels(systems, markets);
+    expect(entry.countByRole.exporter).toBe(1);
+    expect(entry.countByRole.consumer).toBe(1);
+    expect(entry.consumerEmptyFrac).toBe(0);
+  });
+
+  it("reports a zero empty-fraction, never a division by no consumers", () => {
+    // A good nothing consumes still gets a row; its empty fraction has no denominator.
+    const producerYields = { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 1, radioactive: 0 };
+    const systems = [sys("exp", { population: 10, buildings: { water: 1 }, yields: producerYields })];
+    const [entry] = computeRoleCoverLevels(systems, [mkt("exp", "water", 0, 1)]);
+
+    expect(entry.countByRole.consumer).toBe(0);
+    expect(entry.consumerEmptyFrac).toBe(0);
+    expect(Number.isFinite(entry.consumerEmptyFrac)).toBe(true);
+  });
+
+  it("returns the per-good rows in goodId order, whatever order the markets arrived in", () => {
+    const systems = [sys("s1")];
+    const markets = [mkt("s1", "water", 50, 10), mkt("s1", "food", 50, 10)];
+
+    const entries = computeRoleCoverLevels(systems, markets);
+    expect(entries.map((e) => e.goodId)).toEqual(["food", "water"]);
+  });
+});
+
+describe("logisticsTargetsByKey", () => {
+  it("reads a warehousing target for every market the systems it was given actually hold", () => {
+    // The deficit share is measured against these targets; an empty map silently turns that
+    // whole reading into "no deficit anywhere".
+    const systems = [sys("s1"), sys("s2")];
+    const markets = [mkt("s1", "water", 50, 10), mkt("s2", "water", 20, 10)];
+
+    const targets = logisticsTargetsByKey(systems, markets);
+    expect(targets.size).toBe(2);
+    expect(targets.get("s1|water")).toBeGreaterThan(0);
+    expect(targets.get("s2|water")).toBeGreaterThan(0);
+  });
+
+  it("skips a system with no market rows rather than inventing targets for it", () => {
+    const systems = [sys("s1"), sys("bare")];
+    const targets = logisticsTargetsByKey(systems, [mkt("s1", "water", 50, 10)]);
+
+    expect([...targets.keys()]).toEqual(["s1|water"]);
+  });
 });
 
 describe("cohortsForSystem", () => {
+  it("puts a system exactly on a band boundary in the band above it", () => {
+    // The bands are half-open: `below` is the first population NOT in the band, so a world of
+    // exactly ten people is the smallest of the 10-100 band, not the largest of the one under it.
+    expect(cohortsForSystem(sys("s1", { population: 10 }), new Set())).toContain("pop 10-100");
+    expect(cohortsForSystem(sys("s1", { population: 10 }), new Set())).not.toContain("pop <10");
+    expect(cohortsForSystem(sys("s1", { population: 1000 }), new Set())).toContain("pop >=1K");
+    expect(cohortsForSystem(sys("s1", { population: 1000 }), new Set())).not.toContain("pop 100-1K");
+  });
+
   it("places a system in exactly one population band", () => {
     const bands = cohortsForSystem(sys("s1", { population: 50 }), new Set());
     expect(bands).toContain("pop 10-100");
@@ -287,6 +416,85 @@ describe("computeWorldCohorts", () => {
       expect(Number.isNaN(e.strainedShare)).toBe(false);
       expect(e.suppliedShare + e.strainedShare + e.rationingShare + e.shortageShare).toBeCloseTo(1, 10);
     }
+  });
+
+  it("averages shortfall and unrest over a cohort of more than one member", () => {
+    // Two members with different readings: a fold that summed without dividing, or subtracted
+    // rather than added, lands on a number a one-member cohort would have hidden.
+    const systems = [
+      sys("s1", { population: 5, unrest: 0.2 }),
+      sys("s2", { population: 5, unrest: 0.6 }),
+    ];
+    const markets = [
+      { systemId: "s1", goodId: "water", satisfaction: 0.5 },
+      { systemId: "s2", goodId: "water", satisfaction: 1 },
+    ];
+
+    const band = computeWorldCohorts(systems, markets, new Set(), 0.8, [])
+      .find((e) => e.cohort === "pop <10");
+
+    expect(band?.n).toBe(2);
+    expect(band?.meanUnrest).toBeCloseTo(0.4, 9);
+    expect(band?.meanShortfall).toBeGreaterThan(0);
+    expect(band?.meanShortfall).toBeLessThan(0.5);
+  });
+
+  it("counts a system striking at exactly the threshold, and none below it", () => {
+    // The strike gate is inclusive: a world sitting on the threshold is striking. Two calm
+    // members either side of it keep the share from reading the same whichever way it points.
+    const systems = [
+      sys("s1", { population: 5, unrest: 0.8 }),
+      sys("s2", { population: 5, unrest: 0.79 }),
+      sys("s3", { population: 5, unrest: 0.1 }),
+    ];
+    const markets = [{ systemId: "s1", goodId: "water", satisfaction: 1 }];
+
+    const band = computeWorldCohorts(systems, markets, new Set(), 0.8, [])
+      .find((e) => e.cohort === "pop <10");
+    expect(band?.strikingShare).toBeCloseTo(1 / 3, 9);
+  });
+
+  it("keeps rationing and shortage in their own buckets, at their own sizes", () => {
+    // Adjacent arms of the regime switch: a rationing world that fell through into shortage,
+    // or a bucket counted downward, reads as a harsher galaxy than the one measured. The two
+    // buckets are deliberately different sizes so a swap cannot reproduce the same shares.
+    // Rationing is a Provision band; Shortage has exactly one route, a survival-good famine. Both
+    // rationing worlds sit at 0.6 on water and food — under RATIONING_PROVISION (0.7) but above the
+    // survival floor (0.5) — while the shortage world's water is genuinely below it.
+    const systems = [
+      sys("r1", { population: 5 }),
+      sys("r2", { population: 5 }),
+      sys("sh", { population: 5 }),
+    ];
+    const markets = [
+      { systemId: "r1", goodId: "water", satisfaction: 0.6 },
+      { systemId: "r1", goodId: "food", satisfaction: 0.6 },
+      { systemId: "r2", goodId: "water", satisfaction: 0.6 },
+      { systemId: "r2", goodId: "food", satisfaction: 0.6 },
+      { systemId: "sh", goodId: "water", satisfaction: 0.2 },
+    ];
+
+    const band = computeWorldCohorts(systems, markets, new Set(), 0.8, [])
+      .find((e) => e.cohort === "pop <10");
+
+    expect(band?.n).toBe(3);
+    expect(band?.rationingShare).toBeCloseTo(2 / 3, 9);
+    expect(band?.shortageShare).toBeCloseTo(1 / 3, 9);
+    expect((band?.rationingShare ?? 0) + (band?.shortageShare ?? 0)).toBeCloseTo(1, 9);
+  });
+
+  it("reports 0 net growth, never a division by a cohort that started at nobody", () => {
+    // A start map that HAS readings but none for this cohort's members is the colony case: they
+    // were founded during the run and started at zero. That is 0% growth by convention, not an
+    // infinite one — and an infinity here would print as null, i.e. "not measured".
+    const systems = [sys("founded", { population: 40 })];
+    const startPop = new Map([["someone-else", 100]]);
+
+    const band = computeWorldCohorts(systems, [], new Set(), 0.8, [], startPop)
+      .find((e) => e.cohort === "pop 10-100");
+
+    expect(band?.netGrowthPct).toBe(0);
+    expect(Number.isFinite(band?.netGrowthPct ?? 0)).toBe(true);
   });
 
   it("counts a Strained world into its cohort's strainedShare, not folded into shortageShare", () => {

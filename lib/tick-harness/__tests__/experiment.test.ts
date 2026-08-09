@@ -353,9 +353,42 @@ describe("parsePinnedRoles", () => {
     expect(parsed.error).toContain("importer");
   });
 
-  it("rejects a file that is not JSON at all", () => {
+  it("rejects a file that is not JSON at all, and says so", () => {
+    // The two rejections downstream of the parse say different things to whoever is holding the
+    // wrong file — "not valid JSON" and "not a JSON object" are different problems.
     const parsed = parsePinnedRoles("not json {");
     expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toContain("not valid JSON");
+  });
+
+  it("rejects valid JSON that is not an object — including the null and scalar shapes", () => {
+    // `typeof null === "object"`, so the null check is the only thing standing between a
+    // `null` pin file and a crash on the first property read.
+    for (const json of ["null", '"a string"', "42", "[1,2,3]"]) {
+      const parsed = parsePinnedRoles(json);
+      expect(parsed.ok).toBe(false);
+      if (parsed.ok) return;
+      expect(parsed.error).toMatch(/not a JSON object|carries no `marketRoles`/);
+    }
+  });
+
+  it("rejects a marketRoles set to null rather than reading through it", () => {
+    const parsed = parsePinnedRoles(JSON.stringify({ marketRoles: null }));
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.error).toContain("not an object");
+  });
+
+  it("steps over a null-valued top-level key while still reading the horizons beside it", () => {
+    // A saved report carries whatever the writer put in it; `typeof null === "object"` again, so
+    // a null field would be probed for `marketRoles` and take the whole parse down with it.
+    const parsed = parsePinnedRoles(JSON.stringify({
+      label: null,
+      startup: { marketRoles: roles },
+    }));
+    if (!parsed.ok) throw new Error(parsed.error);
+    expect(pinnedRolesFor(parsed.document, "startup")).toEqual(roles);
   });
 
   it("reports no partition for a horizon the document does not carry", () => {
