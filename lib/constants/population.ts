@@ -1,4 +1,5 @@
 import type { UnrestParams, StrikeParams, PopulationParams } from "@/lib/engine/population";
+import type { ExpectationParams } from "@/lib/engine/expectation";
 import type { MigrationFlowParams } from "@/lib/engine/migration";
 import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
 
@@ -73,6 +74,26 @@ export const CROWDING = { BRAKE_END: 1.15, PRESSURE_MAX: 0.05 } as const;
  * the simulator.
  */
 export const STRIKE_PARAMS: StrikeParams = { threshold: 0.65, floorMultiplier: 0.25 };
+
+/**
+ * The persisted per-system memory of the Provision a population is accustomed to (see
+ * lib/engine/expectation.ts, `readExpectation`/`updateExpectation`).
+ *
+ * `floor` (0.5): "No population normalises living on half of what it needs." Applied at read as
+ * `max(stored, floor)` — the stored value itself is never floored. Independent of
+ * `SHORTAGE_SATISFACTION` despite the equal value: that constant is the famine line on ONE good's
+ * satisfaction; this is a floor on remembered WHOLE-BASKET Provision. Do not couple them.
+ *
+ * `riseRate` (0.25/cycle): standards rise fast (half-life ~2-3 cycles). Sweep-decided; stated per
+ * reference cycle, applied as `subSteps` iterations of the unscaled rate — NEVER rate-scaled,
+ * because the asymmetric update is nonlinear (branch-switching) and a scaled rate silently clamps
+ * away the rise:resign ratio once catch-up reaches 4.
+ *
+ * `resignRate` (0.02/cycle): resignation comes slowly (half-life ~34 cycles). Same denomination
+ * and sub-step rule as `riseRate`. Setting both rates to 1 reproduces the old change term (memory
+ * = last cycle) — that arm exists for calibration comparison, not for shipping.
+ */
+export const EXPECTATION_PARAMS: ExpectationParams = { floor: 0.5, riseRate: 0.25, resignRate: 0.02 };
 
 /**
  * Growth/decline rates (per population-processor run, one per economy-shard update). Growth runs at
