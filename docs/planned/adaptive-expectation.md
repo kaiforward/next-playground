@@ -113,7 +113,10 @@ Provision this world is accustomed to.
   `EXPECTATION_RISE_RATE` when `P > stored` (standards rise) or `EXPECTATION_RESIGN_RATE` when
   `P < stored` (resignation). A cycle where the world has no weighted basket (`Σ weight ≤ 0` — an
   emptying world) **skips the update**: an empty basket's Provision-1 reading is a denominator
-  artifact, not an experience to normalise toward.
+  artifact, not an experience to normalise toward. Only the economy-side fold can see Σ weight (the
+  empty basket reads P = 1, indistinguishable by value), so `SupplyState` gains one additive
+  `emptyBasket` bit, computed by `foldSupplyState` — the single stated exception to "EconomySignals
+  unchanged" below, discovered at build planning.
 - **Catch-up: sub-stepped, not scaled.** The asymmetric update is nonlinear (branch-switching), so
   it is NOT catch-up invariant the way the relaxation rate is — one step at `λ × catchUp` diverges
   from `catchUp` steps at `λ` whenever P crosses the stored value inside the interval, and a scaled
@@ -179,7 +182,8 @@ good week), keeping the asymmetry's meaning; the sweep carries this arm so the c
 
 Unchanged, explicitly: the standing floor (tax + crowding) and its constants; the strike threshold
 and collapse line; `provision()`/`dissatisfaction()` and the whole economy-side fold;
-`EconomySignals` (the expectation is population-side state, not an economy signal); the band fold
+`EconomySignals` (the expectation is population-side state, not an economy signal — sole additive
+exception: the `emptyBasket` bit on `SupplyState`, above); the band fold
 and every band constant; growth's `1 − D` factor and migration's inputs (both keep absolute
 readings); the meaning of the `unrest` field itself — still the [0, 1] integral every existing
 reader consumes. Two regime notes on that "unchanged": `accumulateUnrest`'s `min(1, …)` stops being
