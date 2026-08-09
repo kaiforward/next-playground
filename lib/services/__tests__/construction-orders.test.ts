@@ -73,17 +73,94 @@ describe("construction order services", () => {
   beforeEach(() => { clearWorld(); setWorld(seatWorld()); });
 
   it("orders housing at the player's homeworld and batches a second order into the same row", () => {
+    const nextIdBefore = getWorld().nextId;
     const first = orderBuild({ systemId: home().id, buildingType: HOUSING_TYPE, levels: 1 });
     expect(first.ok).toBe(true);
     if (!first.ok) return;
+    // A freshly minted id from the world's shared counter, and the counter advanced by exactly one.
+    expect(first.data.projectId).toBe(`construction-${nextIdBefore}`);
+    expect(getWorld().nextId).toBe(nextIdBefore + 1);
+    const firstRow = getWorld().constructionProjects.find((p) => p.id === first.data.projectId)!;
+    // workTotal = levels × work-per-level (housing is 8/level) — never divided, never left at 0.
+    expect(firstRow.kind === "build" && firstRow.workTotal).toBe(8);
+
     const second = orderBuild({ systemId: home().id, buildingType: HOUSING_TYPE, levels: 1 });
     expect(second.ok).toBe(true);
     if (!second.ok) return;
     expect(second.data.projectId).toBe(first.data.projectId);
     expect(second.data.levels).toBe(2);
+    expect(getWorld().nextId).toBe(nextIdBefore + 1); // batched — no second id minted
     const row = getWorld().constructionProjects.find((p) => p.id === first.data.projectId)!;
     expect(row.origin).toBe("player");
     expect(row.kind === "build" && row.levels).toBe(2);
+    // workTotal accumulates: existing 8 + the new level's own 8, never subtracted or divided.
+    expect(row.kind === "build" && row.workTotal).toBe(16);
+  });
+
+  it("never merges a repeat order into a row of a DIFFERENT origin, system, or building type", () => {
+    const w = getWorld();
+    const pid = w.player!.controlledFactionId;
+    const decoyAuto: WorldBuildProject = {
+      kind: "build", id: "decoy-auto", origin: "auto", factionId: pid,
+      systemId: home().id, buildingType: HOUSING_TYPE, levels: 5, workTotal: 40, workDone: 0,
+    };
+    const decoyType: WorldBuildProject = {
+      kind: "build", id: "decoy-type", origin: "player", factionId: pid,
+      systemId: home().id, buildingType: "ore", levels: 5, workTotal: 60, workDone: 0,
+    };
+    const otherSystemId = w.systems.find((s) => s.id !== home().id)!.id;
+    const decoySystem: WorldBuildProject = {
+      kind: "build", id: "decoy-sys", origin: "player", factionId: pid,
+      systemId: otherSystemId, buildingType: HOUSING_TYPE, levels: 5, workTotal: 40, workDone: 0,
+    };
+    setWorld({ ...w, constructionProjects: [decoyAuto, decoyType, decoySystem] });
+
+    const placed = orderBuild({ systemId: home().id, buildingType: HOUSING_TYPE, levels: 1 });
+    expect(placed.ok).toBe(true);
+    if (!placed.ok) return;
+    expect(placed.data.levels).toBe(1); // a genuinely NEW row, not merged into any decoy's 5
+    // A second order now DOES merge into the row just created — exercising the `p.id === existing.id
+    // ? merged : p` map on a queue that also holds unrelated rows, so a mutant that replaces EVERY
+    // row (not just the matching one) corrupts the decoys.
+    const placed2 = orderBuild({ systemId: home().id, buildingType: HOUSING_TYPE, levels: 1 });
+    expect(placed2.ok).toBe(true);
+    if (!placed2.ok) return;
+    expect(placed2.data.projectId).toBe(placed.data.projectId);
+
+    const after = getWorld().constructionProjects;
+    expect(after).toHaveLength(4); // 3 decoys + 1 real (merged) row
+    expect(after.find((p) => p.id === "decoy-auto")).toMatchObject({ levels: 5, buildingType: HOUSING_TYPE });
+    expect(after.find((p) => p.id === "decoy-type")).toMatchObject({ levels: 5, buildingType: "ore" });
+    expect(after.find((p) => p.id === "decoy-sys")).toMatchObject({ levels: 5, systemId: otherSystemId });
+  });
+
+  it("nets in-flight BUILD levels at this system from EVERY faction (committedAt has no faction filter)", () => {
+    const h = home();
+    setWorld({
+      ...getWorld(),
+      buildings: getWorld().buildings.filter((b) => !(b.systemId === h.id && b.buildingType === "ore")),
+    });
+    h.slotOre = 10;
+    const otherSystemId = getWorld().systems.find((s) => s.id !== h.id)!.id;
+    const rivalHere: WorldBuildProject = {
+      kind: "build", id: "rival-ore", origin: "auto", factionId: "rival-faction",
+      systemId: h.id, buildingType: "ore", levels: 7, workTotal: 70, workDone: 0,
+    };
+    const sameFactionElsewhere: WorldBuildProject = {
+      kind: "build", id: "elsewhere-ore", origin: "auto", factionId: getWorld().player!.controlledFactionId,
+      systemId: otherSystemId, buildingType: "ore", levels: 100, workTotal: 100, workDone: 0,
+    };
+    const wrongKindHere: WorldColonyEstablishProject = {
+      kind: "colony_establish", id: "colony-here", origin: "auto", factionId: "rival-faction",
+      systemId: h.id, sourceSystemId: h.id, seedPop: 2, housingLevels: 1,
+      workTotal: 10, workDone: 0, stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    };
+    setWorld({ ...getWorld(), constructionProjects: [rivalHere, sameFactionElsewhere, wrongKindHere] });
+
+    // 10 slots − 7 committed (same system, same kind, ANY faction) = 3 remain; the other-system and
+    // wrong-kind rows must not count.
+    expect(orderBuild({ systemId: h.id, buildingType: "ore", levels: 4 }).ok).toBe(false);
+    expect(orderBuild({ systemId: h.id, buildingType: "ore", levels: 3 }).ok).toBe(true);
   });
 
   it("hard-rejects a build beyond the physical ceiling", () => {
@@ -103,6 +180,62 @@ describe("construction order services", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.error).toBe("No free deposit slots for that building here.");
+  });
+
+  it("every write verb rejects when no world is loaded", () => {
+    clearWorld();
+    expect(orderBuild({ systemId: "x", buildingType: HOUSING_TYPE, levels: 1 })).toEqual({ ok: false, error: "No world loaded." });
+    expect(orderColony({ systemId: "x" })).toEqual({ ok: false, error: "No world loaded." });
+    expect(cancelOrder({ projectId: "x" })).toEqual({ ok: false, error: "No world loaded." });
+    expect(setAutomation({ build: true, colonisation: true })).toEqual({ ok: false, error: "No world loaded." });
+  });
+
+  it("every write verb rejects when the world has no player seat", () => {
+    clearWorld();
+    setWorld(generateWorld({ systemCount: 40, seed: 7 })); // no playerFaction
+    expect(orderBuild({ systemId: "x", buildingType: HOUSING_TYPE, levels: 1 })).toEqual({ ok: false, error: "This world has no player seat." });
+    expect(orderColony({ systemId: "x" })).toEqual({ ok: false, error: "This world has no player seat." });
+    expect(cancelOrder({ projectId: "x" })).toEqual({ ok: false, error: "This world has no player seat." });
+    expect(setAutomation({ build: true, colonisation: true })).toEqual({ ok: false, error: "This world has no player seat." });
+  });
+
+  it("orderBuild reports the exact not-found and not-yours messages", () => {
+    const r1 = orderBuild({ systemId: "no-such-system", buildingType: HOUSING_TYPE, levels: 1 });
+    expect(r1).toEqual({ ok: false, error: "System no-such-system not found." });
+    const w = getWorld();
+    const foreign = w.systems.find(
+      (s) => s.control === "developed" && s.factionId !== w.player?.controlledFactionId,
+    )!;
+    const r2 = orderBuild({ systemId: foreign.id, buildingType: HOUSING_TYPE, levels: 1 });
+    expect(r2).toEqual({ ok: false, error: "You do not control this system." });
+  });
+
+  it("orderBuild rejects an owned system that is not yet developed, with the exact message", () => {
+    const target = controlledNeighbour(50); // owned, "controlled" — not developed
+    const r = orderBuild({ systemId: target.id, buildingType: HOUSING_TYPE, levels: 1 });
+    expect(r).toEqual({ ok: false, error: "Builds require a developed system." });
+  });
+
+  it("rejects an unknown building type with the exact message", () => {
+    const r = orderBuild({ systemId: home().id, buildingType: "not-a-real-building", levels: 1 });
+    expect(r).toEqual({ ok: false, error: "Unknown building type: not-a-real-building" });
+  });
+
+  it("reports the exact not-enough-space message (distinct from the deposit-slot message)", () => {
+    const h = home();
+    h.generalSpace = 0; // housing is not an extractor, so this blocks it on "no_space", not deposit slots
+    const r = orderBuild({ systemId: h.id, buildingType: HOUSING_TYPE, levels: 1 });
+    expect(r).toEqual({ ok: false, error: "Not enough space: 0 more level(s) fit here." });
+  });
+
+  it("allows an order exactly at the maxLevels ceiling, not just strictly under it", () => {
+    const h = home();
+    setWorld({
+      ...getWorld(),
+      buildings: getWorld().buildings.filter((b) => !(b.systemId === h.id && b.buildingType === "ore")),
+    });
+    h.slotOre = 3;
+    expect(orderBuild({ systemId: h.id, buildingType: "ore", levels: 3 }).ok).toBe(true);
   });
 
   it("rejects builds at systems the player does not control", () => {
@@ -132,7 +265,19 @@ describe("construction order services", () => {
 
     expect(cancelOrder({ projectId: placed.data.projectId }).ok).toBe(true);
     expect(getWorld().constructionProjects.some((p) => p.id === placed.data.projectId)).toBe(false);
+    // The cancellation removed exactly the target — the OTHER (refused-to-cancel) row is still here.
+    expect(getWorld().constructionProjects.some((p) => p.id === "auto-1")).toBe(true);
     expect(cancelOrder({ projectId: "no-such-project" }).ok).toBe(false);
+  });
+
+  it("cancelOrder refuses a project belonging to a different faction, even with origin \"player\"", () => {
+    const foreignPlayerRow: WorldBuildProject = {
+      kind: "build", id: "foreign-player-row", origin: "player", factionId: "someone-else",
+      systemId: home().id, buildingType: HOUSING_TYPE, levels: 1, workTotal: 8, workDone: 0,
+    };
+    setWorld({ ...getWorld(), constructionProjects: [foreignPlayerRow] });
+    expect(cancelOrder({ projectId: "foreign-player-row" }).ok).toBe(false);
+    expect(getWorld().constructionProjects.some((p) => p.id === "foreign-player-row")).toBe(true);
   });
 
   it("orders a colony at an eligible controlled system and rejects an ineligible one", () => {
@@ -149,9 +294,13 @@ describe("construction order services", () => {
       target.control = "controlled";
     }
     fundPlayer(1_000_000); // amply solvent — this test is about the physical gates, not the price
+    const nextIdBefore = getWorld().nextId;
     const r = orderColony({ systemId: target.id });
     if (target.habitableSpace >= 1) {
       expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.data.projectId).toBe(`construction-${nextIdBefore}`);
+      expect(getWorld().nextId).toBe(nextIdBefore + 1);
       const row = getWorld().constructionProjects.find((p) => p.kind === "colony_establish" && p.systemId === target.id)!;
       expect(row.origin).toBe("player");
       // A second order on the same system is "already forming".
@@ -159,8 +308,10 @@ describe("construction order services", () => {
     } else {
       expect(r.ok).toBe(false); // below the habitable floor is a legitimate reject
     }
-    // The developed homeworld is never colony-eligible.
-    expect(orderColony({ systemId: home().id }).ok).toBe(false);
+    // The developed homeworld is never colony-eligible, with the exact control-state message.
+    expect(orderColony({ systemId: home().id })).toEqual({
+      ok: false, error: "Colonies are established at controlled, not-yet-colonised systems.",
+    });
   });
 
   it("refuses a colony the treasury cannot commit to, at the mutation boundary", () => {

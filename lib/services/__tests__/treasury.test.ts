@@ -105,6 +105,42 @@ describe("getFactionTreasury", () => {
 });
 
 describe("updateTreasuryPolicy", () => {
+  it("rejects when no world is loaded", () => {
+    clearWorld();
+    const result = updateTreasuryPolicy("any-faction", { taxLevel: "high" });
+    expect(result).toEqual({ ok: false, error: "No world loaded." });
+  });
+
+  it("falls back to the PLAYER's OWN current taxLevel when none is given, not to array position", () => {
+    // `taxLevel`/`bands` omitted from the input fall back to the resolved treasury row's OWN current
+    // values — the seam that actually reads the `.find()` result (the WRITE itself is keyed off the
+    // `factionId` parameter directly, unaffected by this lookup) — so a lookup that fell back to
+    // array position would leak a DIFFERENT faction's taxLevel through here.
+    const factionId = playerFactionId();
+    const w = getWorld();
+    const otherFactionId = w.factions.find((f) => f.id !== factionId)!.id;
+    setWorld({
+      ...w,
+      treasuries: [
+        ...w.treasuries
+          .filter((t) => t.factionId === otherFactionId)
+          .map((t) => ({ ...t, taxLevel: "very_high" as const })),
+        ...w.treasuries
+          .filter((t) => t.factionId !== otherFactionId)
+          .map((t) => (t.factionId === factionId ? { ...t, taxLevel: "low" as const } : t)),
+      ],
+    });
+    const result = updateTreasuryPolicy(factionId, {});
+    expect(result).toEqual({ ok: true, data: expect.objectContaining({ taxLevel: "low" }) });
+  });
+
+  it("rejects with the exact message when the player's faction has no treasury row at all", () => {
+    const factionId = playerFactionId();
+    setWorld({ ...getWorld(), treasuries: getWorld().treasuries.filter((t) => t.factionId !== factionId) });
+    const result = updateTreasuryPolicy(factionId, { taxLevel: "low" });
+    expect(result).toEqual({ ok: false, error: `Faction ${factionId} has no treasury.` });
+  });
+
   it("rejects when the world has no player seat", () => {
     const seatless = generateWorld({ systemCount: 60, seed: 13 });
     setWorld(seatless);

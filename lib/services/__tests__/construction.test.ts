@@ -87,6 +87,31 @@ describe("getFactionConstruction", () => {
     expect(getFactionConstruction(rival.factionId).buildSystems.map((s) => s.systemId)).toEqual([rival.id]);
   });
 
+  it("orders colonies by progress first, breaking only a tie to the name — never by name alone", () => {
+    // Names deliberately run the OPPOSITE way from progress, so a comparator that used the name as
+    // anything more than a tie-break would sort this list backwards.
+    const spare = world.systems.filter((s) => s.id !== dev.id).slice(0, 4);
+    const [sysHigh, sysMid, sysLowA, sysLowB] = spare;
+    if (!sysHigh || !sysMid || !sysLowA || !sysLowB) throw new Error("fixture: expected four more systems");
+    for (const s of spare) { s.factionId = factionId; s.control = "controlled"; }
+    sysHigh.name = "Zulu"; sysMid.name = "Mike"; sysLowA.name = "Bravo"; sysLowB.name = "Alpha";
+
+    setWorld({
+      ...world,
+      constructionProjects: [
+        { kind: "colony_establish", id: "high", origin: "auto", factionId, systemId: sysHigh.id, sourceSystemId: dev.id, seedPop: 2, housingLevels: 1, workTotal: 100, workDone: 90, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
+        { kind: "colony_establish", id: "mid", origin: "auto", factionId, systemId: sysMid.id, sourceSystemId: dev.id, seedPop: 2, housingLevels: 1, workTotal: 100, workDone: 50, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
+        // A genuine tie at the bottom, where the name tie-break DOES apply.
+        { kind: "colony_establish", id: "lowA", origin: "auto", factionId, systemId: sysLowA.id, sourceSystemId: dev.id, seedPop: 2, housingLevels: 1, workTotal: 100, workDone: 10, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
+        { kind: "colony_establish", id: "lowB", origin: "auto", factionId, systemId: sysLowB.id, sourceSystemId: dev.id, seedPop: 2, housingLevels: 1, workTotal: 100, workDone: 10, stagedManifest: [], charterPaid: true, stalledCycles: 0 },
+      ],
+    });
+
+    const data = getFactionConstruction(factionId);
+    // Progress-descending, with the tied pair ("Alpha", "Bravo") ordered by name.
+    expect(data.colonies.map((c) => c.systemId)).toEqual([sysHigh.id, sysMid.id, sysLowB.id, sysLowA.id]);
+  });
+
   it("throws ServiceError(404) naming the id for an unknown faction", () => {
     expect(() => getFactionConstruction("nope")).toThrow(ServiceError);
     try {
@@ -219,6 +244,91 @@ describe("getSystemConstruction", () => {
       treasuries: purse(10_000_000),
     });
     expect(colonyRow(ctrlWithColony.id).stalledReason).toBe("awaiting_materials");
+  });
+
+  it("resolves the founding treasury by factionId, not by array position", () => {
+    // The faction's own treasury happens to sit at index 0 of the generated treasuries array for
+    // this fixture's seed, which would mask a lookup that just grabbed the first treasury — so force
+    // a DIFFERENT (naturally broke) faction's treasury to index 0 and put the faction's own (funded)
+    // treasury elsewhere.
+    const otherFactionId = world.factions.find((f) => f.id !== factionId)!.id;
+    const stalled = world.constructionProjects.map((p) =>
+      p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
+    );
+    setWorld({
+      ...world,
+      constructionProjects: stalled,
+      markets: world.markets.map((m) => (m.systemId === dev.id ? { ...m, stock: 100_000 } : m)),
+      treasuries: [
+        ...world.treasuries.filter((t) => t.factionId === otherFactionId),
+        ...world.treasuries
+          .filter((t) => t.factionId !== otherFactionId)
+          .map((t) => (t.factionId === factionId ? { ...t, balance: 10_000_000, pendingFounding: 0 } : t)),
+      ],
+    });
+    const data = getSystemConstruction(ctrlWithColony.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    const row = data.projects[0];
+    if (row.kind !== "colony_establish") throw new Error("expected a colony row");
+    // The faction's OWN treasury is amply funded; the decoy at index 0 is not — a lookup that fell
+    // back to array position would read this as starved on funds.
+    expect(row.stalledReason).not.toBe("awaiting_funds");
+  });
+
+  it("reads a working balance of 0 without crashing when the faction has no treasury row at all", () => {
+    const stalled = world.constructionProjects.map((p) =>
+      p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
+    );
+    setWorld({
+      ...world,
+      constructionProjects: stalled,
+      markets: world.markets.map((m) => (m.systemId === dev.id ? { ...m, stock: 100_000 } : m)),
+      treasuries: world.treasuries.filter((t) => t.factionId !== factionId),
+    });
+    let data: ReturnType<typeof getSystemConstruction> | undefined;
+    expect(() => { data = getSystemConstruction(ctrlWithColony.id); }).not.toThrow();
+    if (!data || data.visibility !== "visible") throw new Error("expected visible");
+    const row = data.projects[0];
+    if (row.kind !== "colony_establish") throw new Error("expected a colony row");
+    // No treasury row → a working balance of 0 → ample materials but no money to buy them.
+    expect(row.stalledReason).toBe("awaiting_funds");
+  });
+
+  it("reads the colony's OWN named source's population, not just whichever system is first in the array", () => {
+    // `dev` happens to sit at index 0 of the generated systems array for this fixture's seed, which
+    // would silently mask a lookup that just grabbed the first system instead of matching by id — so
+    // force a decoy to index 0 and put `dev` (the real source) somewhere else entirely. The market
+    // ROWS the sparable-stock computation reads are looked up by the correct source id regardless of
+    // which system object resolves, so the divergence has to be driven through `population` (which
+    // DOES come from the resolved system object, and drives local demand competing for the same
+    // stock) — a small `seedPop` (unlike the 340 in the shared beforeEach fixture) is what makes the
+    // colony's want small enough for local demand at the WRONG system to actually move the outcome.
+    const decoy = world.systems.find((s) => s.id !== dev.id)!;
+    const reordered = [decoy, ...world.systems.filter((s) => s.id !== decoy.id)];
+    const colony = {
+      kind: "colony_establish" as const, id: "c-small", origin: "auto" as const, factionId,
+      systemId: ctrlWithColony.id, sourceSystemId: dev.id, seedPop: 2, housingLevels: 1,
+      workTotal: 100, workDone: 62, stagedManifest: [], charterPaid: true, stalledCycles: 3,
+    };
+    const reading = (decoyPopulation: number) => {
+      setWorld({
+        ...world,
+        systems: reordered.map((s) => (s.id === decoy.id ? { ...s, population: decoyPopulation } : s)),
+        constructionProjects: [colony],
+        // Amply solvent — the money gate must not bind, so any divergence is driven by supply.
+        treasuries: world.treasuries.map((t) =>
+          t.factionId === factionId ? { ...t, balance: 10_000_000, pendingFounding: 0 } : t,
+        ),
+      });
+      const data = getSystemConstruction(ctrlWithColony.id);
+      if (data.visibility !== "visible") throw new Error("expected visible");
+      const row = data.projects[0];
+      if (row.kind !== "colony_establish") throw new Error("expected a colony row");
+      return row.stalledReason;
+    };
+    // If the source resolves correctly to `dev`, the DECOY's population (a system that is never
+    // actually read) must not move the reading at all.
+    expect(reading(0)).toBe(reading(9_000_000));
   });
 
   it("reads a colony whose seed source has gone as still building, not as a crash", () => {
