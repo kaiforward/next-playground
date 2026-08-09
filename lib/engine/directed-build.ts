@@ -536,31 +536,26 @@ function unskilledPerUnit(type: string): number {
 /**
  * Plan the academies a site must add to license `prodUnits` of `goodId`, given its current
  * buildings. Returns the school/institute unit counts (fractional) needed to lift each skill
- * ceiling to cover the post-build skill demand, and the general space + budget + unskilled
- * labour they consume. Tier-0 (no skill draw) → none — academies are never built to unblock a
- * good that doesn't draw on either skill pool.
+ * ceiling to cover the post-build skill demand. Tier-0 (no skill draw) → none — academies are
+ * never built to unblock a good that doesn't draw on either skill pool.
  */
 function academyLift(
   site: BuildSystemState,
   goodId: string,
   prodUnits: number,
-): { schools: number; institutes: number; space: number; units: number; unskilled: number } {
+): { schools: number; institutes: number } {
   const v = BUILDING_TYPES[goodId]?.labour;
   const tier = GOOD_TIER_BY_KEY[goodId] ?? 0;
-  if (!v || tier === 0) return { schools: 0, institutes: 0, space: 0, units: 0, unskilled: 0 };
+  if (!v || tier === 0) return { schools: 0, institutes: 0 };
 
   const need1 = skill1Demand(site.buildings) + prodUnits * v.skill1 - skill1Cap(site.buildings);
   const need2 = skill2Demand(site.buildings) + prodUnits * v.skill2 - skill2Cap(site.buildings);
-  const schools = need1 > 0 ? need1 / SKILL1_PER_SCHOOL : 0;
-  const institutes = need2 > 0 ? need2 / SKILL2_PER_INSTITUTE : 0;
-
-  const space =
-    schools * effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE) +
-    institutes * effectiveSpaceCost(RESEARCH_INSTITUTE_TYPE);
-  const unskilled =
-    schools * unskilledPerUnit(VOCATIONAL_SCHOOL_TYPE) +
-    institutes * unskilledPerUnit(RESEARCH_INSTITUTE_TYPE);
-  return { schools, institutes, space, units: schools + institutes, unskilled };
+  // Fractional lift — the consumer (fitFor) rounds to whole buildings and prices space/labour
+  // itself off the ceiled counts, so no priced fields are returned here.
+  return {
+    schools: need1 > 0 ? need1 / SKILL1_PER_SCHOOL : 0,
+    institutes: need2 > 0 ? need2 / SKILL2_PER_INSTITUTE : 0,
+  };
 }
 
 /**
@@ -574,8 +569,8 @@ function complexLift(
   site: BuildSystemState,
   goodId: string,
   prodUnits: number,
-): { complexType?: string; count: number; space: number; units: number; unskilled: number } {
-  const zero = { count: 0, space: 0, units: 0, unskilled: 0 };
+): { complexType?: string; count: number } {
+  const zero = { count: 0 };
   const family = FAMILY_BY_GOOD[goodId];
   if (!family) return zero;
   let existing = 0;
@@ -585,13 +580,8 @@ function complexLift(
   if (projected < ANCHOR_MIN_THROUGHPUT) return zero;
   const count = Math.min(ANCHOR_CAP - existing, projected / ANCHOR_RATED_COVERAGE);
   if (count <= 0) return zero;
-  return {
-    complexType: family.complexType,
-    count,
-    space: count * effectiveSpaceCost(family.complexType),
-    units: count,
-    unskilled: count * unskilledPerUnit(family.complexType),
-  };
+  // Fractional count — fitFor ceils to whole complexes and prices space/labour itself.
+  return { complexType: family.complexType, count };
 }
 
 /** One whole-level order within a proposal bundle: `levels` of `buildingType`. */
