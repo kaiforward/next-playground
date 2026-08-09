@@ -26,7 +26,13 @@ function migrationFixture(options: { sameFaction: boolean }) {
   const base = generateWorld({ systemCount: 60, seed: 7 });
   const factionId = base.factions[0].id;
   const crowded = base.systems.find((s) => s.factionId === factionId && s.control === "developed");
-  const roomy = base.systems.find((s) => s.control === "developed" && s.factionId !== factionId);
+  // factionId !== null is load-bearing: a null-owned "developed" system is a real state
+  // elsewhere in the codebase (see tick-treasury-latch.test.ts's patched rock) — without this
+  // guard, `roomy` could land on an unowned developed system and this fixture would end up
+  // testing unowned-target exclusion instead of the cross-faction border it's named for.
+  const roomy = base.systems.find(
+    (s) => s.control === "developed" && s.factionId !== null && s.factionId !== factionId,
+  );
   const borderland = base.systems.find((s) => s.control === "unclaimed");
   if (!crowded || !roomy || !borderland) throw new Error("fixture premise: the generated galaxy lacks the three system kinds");
 
@@ -52,6 +58,34 @@ function migrationFixture(options: { sameFaction: boolean }) {
   return { world, crowdedId: crowded.id, roomyId: roomy.id, borderlandId: borderland.id };
 }
 
+/**
+ * Premise for the galaxy-wide zero-diffusion assertion in the border test below: it only
+ * proves border exclusion if no OTHER same-faction developed<->developed edge with a
+ * population gradient exists anywhere in the generated galaxy — otherwise a galaxy-wide zero
+ * could mask a broken border alongside an offsetting confound, or a nonzero total could come
+ * from a source unrelated to the border pair under test. True today because generation gives
+ * each faction exactly one developed system (its homeworld), so no natural same-faction
+ * developed pair can exist; asserted explicitly so a worldgen change that adds a second
+ * per-faction developed system fails loudly on this premise instead of as a mystery diffusion
+ * regression.
+ */
+function assertNoConfoundingSameFactionGradient(world: World) {
+  const byId = new Map(world.systems.map((s) => [s.id, s]));
+  for (const c of world.connections) {
+    const a = byId.get(c.fromId);
+    const b = byId.get(c.toId);
+    if (!a || !b) continue;
+    if (a.control !== "developed" || b.control !== "developed") continue;
+    if (!a.factionId || a.factionId !== b.factionId) continue;
+    if (Math.abs(a.population - b.population) < 1e-6) continue;
+    throw new Error(
+      `fixture premise: a same-faction developed pair (${a.id} pop ${a.population} vs ` +
+        `${b.id} pop ${b.population}) has a population gradient outside the engineered border ` +
+        `pair — the galaxy-wide diffusion===0 assertion no longer isolates border exclusion`,
+    );
+  }
+}
+
 describe("runWorldTick — the cycle's participation set", () => {
   it("diffuses population along a same-faction developed edge", async () => {
     const { world } = migrationFixture({ sameFaction: true });
@@ -64,6 +98,7 @@ describe("runWorldTick — the cycle's participation set", () => {
     // differing only in who owns the far end. Migration rides FACTION-BOUNDED open edges: people move
     // within a realm, never across a border, no matter how much room is on the other side.
     const { world } = migrationFixture({ sameFaction: false });
+    assertNoConfoundingSameFactionGradient(world);
     const result = await runWorldTick(world, { cadence: CYCLE_ONLY });
     expect(result.instrumentation.migrationMoved?.diffusion ?? 0).toBe(0);
   });

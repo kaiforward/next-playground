@@ -483,10 +483,10 @@ describe("housing containment — both directed-build sizing sites land inside t
 });
 
 describe("mutation-acceptance premises — when one of these fails, re-sweep the named scope", () => {
-  // Each assertion below is a premise a 2026-08-09 mutation-sweep acceptance rests on (batch
-  // ledger). They are not design constraints: changing one is allowed, but it silently turns
-  // accepted survivors live, and the incremental sweep will NOT re-run them (the mutants sit in
-  // files a constants change does not touch). The failure message names the re-sweep owed.
+  // Each assertion below is a premise a mutation-sweep acceptance rests on. They are not design
+  // constraints: changing one is allowed, but it silently turns accepted survivors live, and the
+  // incremental sweep will NOT re-run them (the mutants sit in files a constants change does not
+  // touch). The failure message names the re-sweep owed.
 
   it("the shared BFS radius is the logistics hop cap — else world/tick.ts's h > MAX_HOPS arm goes live", () => {
     // runWorldTick's hop map is bounded by max(logistics, build, expansion reach); while that max

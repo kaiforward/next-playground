@@ -16,13 +16,6 @@ import {
   RELATION_HISTORY_MAX,
 } from "@/lib/constants/relations";
 
-interface MemoryFaction {
-  id: string;
-  name: string;
-  governmentType: FactionView["governmentType"];
-  doctrine: FactionView["doctrine"];
-}
-
 interface MemoryRelation {
   factionAId: string;
   factionBId: string;
@@ -83,7 +76,7 @@ interface MemoryRelationEvent {
  * normalize input on every call.
  */
 export class InMemoryRelationsWorld implements RelationsWorld {
-  factions: MemoryFaction[];
+  factions: FactionView[];
   relations: MemoryRelation[];
   alliances: AlliancePactView[];
   systems: MemorySystem[];
@@ -98,7 +91,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
   nextId: number;
 
   constructor(initial: {
-    factions: MemoryFaction[];
+    factions: FactionView[];
     relations?: MemoryRelation[];
     alliances?: AlliancePactView[];
     systems?: MemorySystem[];
@@ -133,14 +126,7 @@ export class InMemoryRelationsWorld implements RelationsWorld {
   }
 
   getFactions(): Promise<FactionView[]> {
-    return Promise.resolve(
-      this.factions.map((f) => ({
-        id: f.id,
-        name: f.name,
-        governmentType: f.governmentType,
-        doctrine: f.doctrine,
-      })),
-    );
+    return Promise.resolve(this.factions.map((f) => ({ ...f })));
   }
 
   getFactionRelations(): Promise<FactionPairView[]> {

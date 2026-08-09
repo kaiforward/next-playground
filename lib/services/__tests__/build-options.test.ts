@@ -125,19 +125,20 @@ describe("getSystemBuildOptions", () => {
     if (baseline.mode !== "build") throw new Error("expected build mode");
     const oreBefore = baseline.options.find((o) => o.buildingType === "ore")!.maxLevels;
 
+    const projects: WorldConstructionProject[] = [
+      // Counts: the player's own faction, kind "build", at home — twice, to prove accumulation.
+      { kind: "build", id: "own-home-ore", origin: "auto", factionId: f.id, systemId: home.id, buildingType: "ore", levels: 3, workTotal: 30, workDone: 0 },
+      { kind: "build", id: "own-home-ore-2", origin: "player", factionId: f.id, systemId: home.id, buildingType: "ore", levels: 2, workTotal: 20, workDone: 0 },
+      // Does not count: a rival faction's identical build at the same system.
+      { kind: "build", id: "rival-home-ore", origin: "auto", factionId: "rival-faction", systemId: home.id, buildingType: "ore", levels: 100, workTotal: 100, workDone: 0 },
+      // Does not count: the player's own build of the same type at a DIFFERENT system.
+      { kind: "build", id: "own-elsewhere-ore", origin: "auto", factionId: f.id, systemId: otherSystemId, buildingType: "ore", levels: 100, workTotal: 100, workDone: 0 },
+      // Does not affect the "ore" total: the player's own build of a DIFFERENT type at home.
+      { kind: "build", id: "own-home-housing", origin: "auto", factionId: f.id, systemId: home.id, buildingType: HOUSING_TYPE, levels: 50, workTotal: 400, workDone: 0 },
+    ];
     setWorld({
       ...getWorld(),
-      constructionProjects: [
-        // Counts: the player's own faction, kind "build", at home — twice, to prove accumulation.
-        { kind: "build", id: "own-home-ore", origin: "auto", factionId: f.id, systemId: home.id, buildingType: "ore", levels: 3, workTotal: 30, workDone: 0 },
-        { kind: "build", id: "own-home-ore-2", origin: "player", factionId: f.id, systemId: home.id, buildingType: "ore", levels: 2, workTotal: 20, workDone: 0 },
-        // Does not count: a rival faction's identical build at the same system.
-        { kind: "build", id: "rival-home-ore", origin: "auto", factionId: "rival-faction", systemId: home.id, buildingType: "ore", levels: 100, workTotal: 100, workDone: 0 },
-        // Does not count: the player's own build of the same type at a DIFFERENT system.
-        { kind: "build", id: "own-elsewhere-ore", origin: "auto", factionId: f.id, systemId: otherSystemId, buildingType: "ore", levels: 100, workTotal: 100, workDone: 0 },
-        // Does not affect the "ore" total: the player's own build of a DIFFERENT type at home.
-        { kind: "build", id: "own-home-housing", origin: "auto", factionId: f.id, systemId: home.id, buildingType: HOUSING_TYPE, levels: 50, workTotal: 400, workDone: 0 },
-      ] as WorldConstructionProject[],
+      constructionProjects: projects,
     });
 
     const after = getSystemBuildOptions(home.id);

@@ -590,10 +590,10 @@ describe("worstGoodSatisfaction", () => {
 describe("the consumption-modifier absence premise", () => {
   it("no shipped event definition carries a consumption_rate modifier — when this fails, re-sweep population-analysis", () => {
     // The consumption-modifier plumbing here (rows → aggregateModifiers → consumptionMult) is
-    // inert today because nothing produces the parameter, and 42 mutation-sweep survivors in it
-    // were accepted on exactly that premise (2026-08-09 batch ledger). This test is the tripwire:
-    // the first event definition to ship a consumption_rate rate_multiplier makes those mutants
-    // live, and the acceptance must be re-earned with a scoped `npm run mutation` over
+    // inert today because nothing produces the parameter, and a batch of mutation-sweep survivors
+    // in it were accepted on exactly that premise. This test is the tripwire: the first event
+    // definition to ship a consumption_rate rate_multiplier makes those mutants live, and the
+    // acceptance must be re-earned with a scoped `npm run mutation` over
     // lib/tick-harness/population-analysis.ts — not inherited.
     const params = Object.values(EVENT_DEFINITIONS)
       .flatMap((d) => d.phases)
