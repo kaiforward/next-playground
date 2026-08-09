@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
 import type { SystemBuildRow, SystemClaim, SystemDevelopment, ProposalPersistenceUpdate } from "@/lib/tick/world/directed-build-world";
+import type { WorldConstructionProject } from "@/lib/world/types";
 import { emptyResourceVector } from "@/lib/engine/resources";
 
 function row(systemId: string, factionId: string | null): SystemBuildRow {
@@ -22,6 +23,19 @@ describe("MemoryDirectedBuildWorld", () => {
     const w = new MemoryDirectedBuildWorld([row("A", "f1"), row("C", null)]);
     const got = await w.getSystemsForFactions(["f1"]);
     expect(got.map((s) => s.systemId)).toEqual(["A"]);
+  });
+
+  it("filters open construction projects by the requested faction keys", async () => {
+    // The shard hands the processor only the due factions' queue. A read that leaked another
+    // faction's projects would fund them off this faction's pool and then persist the whole
+    // mixed set back under the due keys — quietly reassigning work between factions.
+    const mine: WorldConstructionProject = {
+      kind: "build", id: "mine", origin: "auto", factionId: "f1", systemId: "A",
+      buildingType: "food", levels: 1, workTotal: 10, workDone: 0,
+    };
+    const theirs: WorldConstructionProject = { ...mine, id: "theirs", factionId: "f2", systemId: "B" };
+    const w = new MemoryDirectedBuildWorld([row("A", "f1"), row("B", "f2")], [mine, theirs]);
+    expect((await w.getConstructionProjects(["f1"])).map((p) => p.id)).toEqual(["mine"]);
   });
 
   it("captures building-count writes", async () => {

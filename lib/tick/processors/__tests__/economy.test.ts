@@ -9,9 +9,11 @@
  *      (tick % interval === 0), nothing off-boundary.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { runEconomyProcessor } from "@/lib/tick/processors/economy";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
+import type { MarketUpdate, MarketView } from "@/lib/tick/world/economy-world";
+import type { ModifierRow } from "@/lib/engine/events";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { strikeMultiplier } from "@/lib/engine/population";
 import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
@@ -1075,5 +1077,326 @@ describe("economy processor: persisted draw-figure inputs", () => {
     expect(bySystem.get("calm")).toBe(1);
     // The emitted value is the one the tick applied, not a recompute — it must match the rows.
     expect(bySystem.get("strike")).toBe(marketOf(world, "strike", "food").productionSuppressRate);
+  });
+});
+
+// ── World reads, modifier routing and the row guards ──────────────
+// The adapter re-guards every field it is handed, so the processor's own finite/sign guards are only
+// visible in what it PASSES to `applyMarketUpdates`. This world records both the call sequence and
+// the raw update batch, which is the processor's actual contract with any backend.
+
+class RecordingEconomyWorld extends InMemoryEconomyWorld {
+  readonly calls: string[] = [];
+  readonly updates: MarketUpdate[] = [];
+  override getSystemIds(): Promise<string[]> {
+    this.calls.push("getSystemIds");
+    return super.getSystemIds();
+  }
+  override getMarketsForSystems(systemIds: string[]): Promise<MarketView[]> {
+    this.calls.push("getMarketsForSystems");
+    return super.getMarketsForSystems(systemIds);
+  }
+  override getModifiers(systemIds: string[]): Promise<ModifierRow[]> {
+    this.calls.push("getModifiers");
+    return super.getModifiers(systemIds);
+  }
+  override getUnrest(systemIds: string[]): Promise<Map<string, number>> {
+    this.calls.push("getUnrest");
+    return super.getUnrest(systemIds);
+  }
+  override applyMarketUpdates(updates: MarketUpdate[]): Promise<void> {
+    this.calls.push("applyMarketUpdates");
+    this.updates.push(...updates);
+    return super.applyMarketUpdates(updates);
+  }
+}
+
+describe("economy processor: what it reads before it resolves", () => {
+  it("reads nothing at all mid-cycle", async () => {
+    // The mid-cycle bail is placed before the system-id read on purpose: fetching the list only to
+    // hand its length to a shard window that is empty by construction costs a filter and a sort over
+    // every system in the galaxy, 23 ticks out of 24.
+    const world = new RecordingEconomyWorld({
+      systems: [makeProducerSystem("p", 0)],
+      markets: [makeMarket("p", "food", 100)],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(1), { ...ECON_PARAMS, interval: 4 });
+    expect(world.calls).toEqual([]);
+    expect(result.economySignals).toBeUndefined();
+  });
+
+  it("reads no markets for an empty galaxy", async () => {
+    // An empty shard window is the end of the run, not a prelude to a market query for no systems.
+    const world = new RecordingEconomyWorld({ systems: [], markets: [], modifiers: [] });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(world.calls).toEqual(["getSystemIds"]);
+    expect(result.economySignals).toBeUndefined();
+  });
+
+  it("emits no economy signals for a shard whose systems hold no markets", async () => {
+    // No markets means nothing was assessed. Emitting empty signals would tell the downstream
+    // processors (decay, population) that every system resolved as perfectly supplied this cycle.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeProducerSystem("p", 0)],
+      markets: [],
+      modifiers: [],
+    });
+    const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(result.economySignals).toBeUndefined();
+    expect(result.globalEvents!.economyTick![0].systemCount).toBe(0);
+  });
+});
+
+describe("economy processor: modifier target routing", () => {
+  const prodMultOf = (world: InMemoryEconomyWorld, systemId: string) =>
+    world.markets.find((m) => m.systemId === systemId && m.goodId === "food")!.productionMult;
+
+  const rateMod = (targetType: "region" | "system", targetId: string): ModifierRow => ({
+    domain: "economy", type: "rate_multiplier", targetType, targetId,
+    goodId: "food", parameter: "production_rate", value: 0.25,
+  });
+
+  it("applies a region-targeted modifier to that region's systems and to nothing else", async () => {
+    // The two id spaces are separate namespaces that can collide. A region-targeted modifier reaches
+    // the systems IN that region; it must never reach the system that happens to share its id, and
+    // the region's own systems must not be missed for the same reason.
+    const world = new InMemoryEconomyWorld({
+      systems: [
+        { ...makeProducerSystem("sys-a", 0), regionId: "rX" },
+        { ...makeProducerSystem("other", 0), regionId: "sys-a" },
+      ],
+      markets: [makeMarket("sys-a", "food", 100), makeMarket("other", "food", 100)],
+      modifiers: [rateMod("region", "sys-a")],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(prodMultOf(world, "other")).toBeCloseTo(0.25, 9); // in the named region
+    expect(prodMultOf(world, "sys-a")).toBe(1);              // merely shares the region's id
+  });
+
+  it("applies a system-targeted modifier to that system and to nothing else", async () => {
+    // The mirror case: a system-targeted modifier must not be filed as a region's, or every system
+    // in the region that shares the target's id would inherit it.
+    const world = new InMemoryEconomyWorld({
+      systems: [
+        { ...makeProducerSystem("r1", 0), regionId: "rX" },
+        { ...makeProducerSystem("member", 0), regionId: "r1" },
+      ],
+      markets: [makeMarket("r1", "food", 100), makeMarket("member", "food", 100)],
+      modifiers: [rateMod("system", "r1")],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(prodMultOf(world, "r1")).toBeCloseTo(0.25, 9);
+    expect(prodMultOf(world, "member")).toBe(1); // its region merely shares the target's id
+  });
+
+  it("ignores a system-targeted modifier for a system outside the shard", async () => {
+    // The processor keeps only the systems it resolved. A modifier naming another one has no bucket
+    // to land in, and reaching for one is a crash mid-tick — which hard-pauses the loop.
+    class StrayModifierWorld extends RecordingEconomyWorld {
+      override async getModifiers(): Promise<ModifierRow[]> {
+        return [rateMod("system", "somewhere-else")];
+      }
+    }
+    const world = new StrayModifierWorld({
+      systems: [makeProducerSystem("p", 0)],
+      markets: [makeMarket("p", "food", 100)],
+      modifiers: [],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(prodMultOf(world, "p")).toBe(1);
+  });
+});
+
+describe("economy processor: satisfaction under an event-modified demand", () => {
+  it("measures satisfaction against the demand the tick actually applied", async () => {
+    // Satisfaction is delivered ÷ demanded, and BOTH move with the event multiplier. Measured
+    // against an unmodified (or inverted) demand, a world whose demand an event halved would report
+    // itself starving on a delivery that covered everything it asked for.
+    const world = new InMemoryEconomyWorld({
+      systems: [makeConsumerSystem("c", 0)],
+      markets: [makeMarket("c", "food", FIXTURE_BAND.maxStock - 1)],
+      modifiers: [{
+        domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "c",
+        goodId: "food", parameter: "consumption_rate", value: 0.5,
+      }],
+    });
+    await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
+    expect(world.markets[0].satisfaction).toBe(1);
+  });
+
+  it("weights the dissatisfaction fold by the demand the event left, not its inverse", async () => {
+    // The fold's weight is `demanded × necessity`. Halving one good's demand must shrink its share
+    // of the world's shortfall; computing the weight the other way round would make an event that
+    // RELIEVED a good's demand read as if that good mattered four times as much.
+    const rationed = (modifiers: ModifierRow[]) =>
+      new InMemoryEconomyWorld({
+        systems: [makeConsumerSystem("c", 0)],
+        markets: [
+          makeMarket("c", "food", 0.25 * ECON_PARAMS.simParams.rationCover), // satisfaction 0.5
+          makeMarket("c", "water", 100),                                     // fully served
+        ],
+        modifiers,
+      });
+
+    const plain = rationed([]);
+    const plainResult = await runEconomyProcessor(plain, makeCtx(0), { ...ECON_PARAMS });
+    const relieved = rationed([{
+      domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "c",
+      goodId: "water", parameter: "consumption_rate", value: 0.5,
+    }]);
+    const relievedResult = await runEconomyProcessor(relieved, makeCtx(0), { ...ECON_PARAMS });
+
+    // Premise: the rationed good reads the same in both runs — only water's weight moved.
+    const foodSat = (w: InMemoryEconomyWorld) =>
+      w.markets.find((m) => m.goodId === "food")!.satisfaction;
+    expect(foodSat(plain)).toBeCloseTo(0.5, 6);
+    expect(foodSat(relieved)).toBeCloseTo(0.5, 6);
+    // Less water demanded ⇒ the shortfall in food carries a larger share of the basket ⇒ higher D.
+    const dPlain = plainResult.economySignals!.dissatisfactionBySystem.get("c")!;
+    const dRelieved = relievedResult.economySignals!.dissatisfactionBySystem.get("c")!;
+    expect(dRelieved).toBeGreaterThan(dPlain);
+  });
+});
+
+describe("economy processor: the guards on what it writes to a market row", () => {
+  // The processor's finite/sign guards, read from the raw update batch — the memory adapter re-guards
+  // every one of these on the way in, so a row read back through it cannot tell a guarded value from
+  // an unguarded one.
+  const capture = async (
+    world: RecordingEconomyWorld,
+    params: Parameters<typeof runEconomyProcessor>[2],
+  ): Promise<MarketUpdate> => {
+    await runEconomyProcessor(world, makeCtx(0), params);
+    const update = world.updates[0];
+    if (update === undefined) throw new Error("Expected a market update");
+    return update;
+  };
+
+  const producerWorld = () => new RecordingEconomyWorld({
+    systems: [makeProducerSystem("p", 0)],
+    markets: [makeMarket("p", "food", FIXTURE_BAND.targetStock - 2)],
+    modifiers: [],
+  });
+
+  it("never writes a non-finite realized rate, however degenerate the cadence", async () => {
+    // A zero cadence divides the cycle's realized output by a zero catch-up factor. World state must
+    // stay JSON-serializable: a NaN written here becomes `null` in the save file.
+    const update = await capture(producerWorld(), { ...ECON_PARAMS, interval: 0 });
+    expect(update.realizedProductionRate).toBe(0);
+  });
+
+  it("writes a usable suppression scalar for a corrupt, negative or total maintenance malus", async () => {
+    // The scalar gates the logistics draw figure downstream. A non-finite one reads as "no gate"
+    // (1), a negative one is not a gate at all, and an honest zero must survive as a zero — the one
+    // case a `> 0` test would silently promote back to "fully productive".
+    const corrupt = await capture(producerWorld(), {
+      ...ECON_PARAMS, maintenanceMalusBySystem: new Map([["p", NaN]]),
+    });
+    expect(corrupt.productionSuppressRate).toBe(1);
+
+    const negative = await capture(producerWorld(), {
+      ...ECON_PARAMS, maintenanceMalusBySystem: new Map([["p", -1]]),
+    });
+    expect(negative.productionSuppressRate).toBe(1);
+
+    const total = await capture(producerWorld(), {
+      ...ECON_PARAMS, maintenanceMalusBySystem: new Map([["p", 0]]),
+    });
+    expect(total.productionSuppressRate).toBe(0);
+  });
+
+  it("writes a usable event multiplier whatever the modifier caps admit", async () => {
+    // `productionMult` is capped by a PARAMETER, so the row guard is the only thing standing between
+    // a mis-set cap (or a corrupt event value) and a non-finite multiplier in world state. An
+    // authored zero, by contrast, is a real "this good is not being made" and must be written as one.
+    const eventWorld = (value: number) => new RecordingEconomyWorld({
+      systems: [makeProducerSystem("p", 0)],
+      markets: [makeMarket("p", "food", FIXTURE_BAND.targetStock - 2)],
+      modifiers: [{
+        domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "p",
+        goodId: "food", parameter: "production_rate", value,
+      }],
+    });
+
+    const corrupt = await capture(eventWorld(NaN), { ...ECON_PARAMS });
+    expect(corrupt.productionMult).toBe(1);
+
+    const negative = await capture(eventWorld(-2), {
+      ...ECON_PARAMS, modifierCaps: { ...MODIFIER_CAPS, minMultiplier: -3 },
+    });
+    expect(negative.productionMult).toBe(1);
+
+    const total = await capture(eventWorld(0), {
+      ...ECON_PARAMS, modifierCaps: { ...MODIFIER_CAPS, minMultiplier: 0 },
+    });
+    expect(total.productionMult).toBe(0);
+  });
+
+  it("reports a good whose demand an event has zeroed as fully satisfied", async () => {
+    // Nothing demanded is nothing unmet. Dividing the delivery by a zero demand would put a NaN
+    // straight into the satisfaction the whole welfare fold is built on.
+    const world = new RecordingEconomyWorld({
+      systems: [makeConsumerSystem("c", 0)],
+      markets: [makeMarket("c", "food", 100)],
+      modifiers: [{
+        domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "c",
+        goodId: "food", parameter: "consumption_rate", value: 0,
+      }],
+    });
+    const update = await capture(world, {
+      ...ECON_PARAMS, modifierCaps: { ...MODIFIER_CAPS, minMultiplier: 0 },
+    });
+    expect(update.satisfaction).toBe(1);
+  });
+});
+
+describe("economy processor: the shard debug log", () => {
+  const debugWorld = (modifiers: ModifierRow[]) => new InMemoryEconomyWorld({
+    systems: [makeProducerSystem("p", 0)],
+    markets: [makeMarket("p", "food", 100)],
+    modifiers,
+  });
+  const eventMod: ModifierRow = {
+    domain: "economy", type: "rate_multiplier", targetType: "system", targetId: "p",
+    goodId: "food", parameter: "production_rate", value: 0.5,
+  };
+
+  it("says nothing at all unless DEBUG_ECONOMY is set", async () => {
+    // A per-shard line on every cycle boundary is a torrent at galaxy scale — the switch is the
+    // whole point, and it defaults off.
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await runEconomyProcessor(debugWorld([eventMod]), makeCtx(0), { ...ECON_PARAMS });
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("reports the shard, its systems and its markets when DEBUG_ECONOMY is set", async () => {
+    // The switch reads the environment at module load, so the flag has to be set before the module
+    // is imported — the same reason it can never be flipped mid-run.
+    const previous = process.env.DEBUG_ECONOMY;
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      process.env.DEBUG_ECONOMY = "1";
+      vi.resetModules();
+      const debug = await import("@/lib/tick/processors/economy");
+
+      await debug.runEconomyProcessor(debugWorld([]), makeCtx(0), { ...ECON_PARAMS });
+      // Shard index is 1-based for reading; with no active modifiers the count is left off entirely.
+      expect(log).toHaveBeenNthCalledWith(1, "[economy] Shard 1/1: 1 systems / 1 markets");
+
+      await debug.runEconomyProcessor(debugWorld([eventMod]), makeCtx(0), { ...ECON_PARAMS });
+      expect(log).toHaveBeenNthCalledWith(
+        2, "[economy] Shard 1/1: 1 systems / 1 markets, 1 active modifier(s)",
+      );
+    } finally {
+      log.mockRestore();
+      if (previous === undefined) delete process.env.DEBUG_ECONOMY;
+      else process.env.DEBUG_ECONOMY = previous;
+      vi.resetModules();
+    }
   });
 });

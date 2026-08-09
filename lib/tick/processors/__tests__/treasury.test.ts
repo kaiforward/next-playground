@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runTreasuryProcessor } from "@/lib/tick/processors/treasury";
 import { InMemoryTreasuryWorld } from "@/lib/tick/adapters/memory/treasury";
-import type { TreasuryProcessorParams } from "@/lib/tick/world/treasury-world";
+import type { TreasuryProcessorParams, TreasuryFactionSystemRow } from "@/lib/tick/world/treasury-world";
 import type { TickContext } from "@/lib/tick/types";
 import type { WorldFactionTreasury } from "@/lib/world/types";
 
@@ -248,5 +248,166 @@ describe("treasury processor", () => {
     expect(a.funded.construction).toBeCloseTo(1, 6); // 60 covers the 50 bill
     expect(b.funded.construction).toBeCloseTo(0.4, 6); // 40 left for founding ⇒ 20 of 50
     expect(b.balance).toBe(0);
+  });
+});
+
+// ── What the settlement reads, writes and falls back to ──────────
+
+/** Records the call sequence, so a read or a write made for nothing is visible. */
+class RecordingTreasuryWorld extends InMemoryTreasuryWorld {
+  readonly calls: string[] = [];
+  override getTreasuries(): Promise<WorldFactionTreasury[]> {
+    this.calls.push("getTreasuries");
+    return super.getTreasuries();
+  }
+  override getFactionSystems(): Promise<TreasuryFactionSystemRow[]> {
+    this.calls.push("getFactionSystems");
+    return super.getFactionSystems();
+  }
+  override applyTreasuryUpdates(updates: WorldFactionTreasury[]): Promise<void> {
+    this.calls.push("applyTreasuryUpdates");
+    return super.applyTreasuryUpdates(updates);
+  }
+}
+
+const settlementOf = (world: InMemoryTreasuryWorld) => {
+  const settled = world.treasuries[0].lastSettlement;
+  if (settled === null) throw new Error("expected a settlement on the cycle start");
+  return settled;
+};
+
+describe("treasury processor: reads and writes made for nothing", () => {
+  it("collects no faction systems for a galaxy with no treasuries", async () => {
+    // The system fetch is the expensive read here — a settlement with nobody to settle for must
+    // not pay for it.
+    const world = new RecordingTreasuryWorld({ treasuries: [], systems: [SYSTEM] });
+    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams());
+    expect(world.calls).toEqual(["getTreasuries"]);
+  });
+
+  it("collects no faction systems mid-cycle, however much work accrued", async () => {
+    // Mid-cycle the body only banks work against the next settlement; income is a settlement
+    // concern, so nothing about the faction's systems is needed.
+    const world = new RecordingTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    await runTreasuryProcessor(world, { tick: 12, results: new Map() }, makeParams({
+      constructionWorkByFaction: new Map([["faction-1", 8]]),
+    }));
+    expect(world.calls).not.toContain("getFactionSystems");
+    expect(world.treasuries[0].pendingWork.construction).toBe(8); // it did bank the work
+  });
+
+  it("writes nothing for a faction whose pending position did not move", async () => {
+    // Another faction's accrual puts the tick past the early return, but this faction's row is
+    // unchanged: rewriting it would touch every treasury in the galaxy on every tick any faction
+    // did any work, and stamp `updatedAtTick` on rows that did not move.
+    const world = new RecordingTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    await runTreasuryProcessor(world, { tick: 12, results: new Map() }, makeParams({
+      constructionWorkByFaction: new Map([["someone-else", 8]]),
+    }));
+    expect(world.calls).not.toContain("applyTreasuryUpdates");
+    expect(world.treasuries[0].updatedAtTick).toBe(0);
+  });
+
+  it("does not touch a treasury at all on a mid-cycle tick with nothing to accrue", async () => {
+    // The early return is what keeps an idle tick free. The seeded non-finite pending value is the
+    // tracer that makes any write visible at all: it is exactly what `safeMoney` would rewrite, so
+    // a row that comes back unchanged proves the body never ran for it.
+    const world = new RecordingTreasuryWorld({
+      treasuries: [makeTreasury({ pendingWork: { logistics: 0, construction: NaN } })],
+      systems: [SYSTEM],
+    });
+    await runTreasuryProcessor(world, { tick: 7, results: new Map() }, makeParams());
+    expect(world.calls).toEqual(["getTreasuries"]);
+    expect(world.treasuries[0].updatedAtTick).toBe(0);
+  });
+});
+
+describe("treasury processor: fallbacks for unusable inputs", () => {
+  it("normalises logistics work at unit scale when economyScale is unusable", async () => {
+    // S normalises the logistics work signal. A corrupt, negative or zero scale is not a reason to
+    // divide by it — that lands a NaN or an Infinity in `pendingWork`, which `safeMoney` then
+    // flattens to 0 and the work is gone with no bill and no trace.
+    const accrued = async (economyScale: number): Promise<number> => {
+      const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+      await runTreasuryProcessor(world, { tick: 12, results: new Map() }, makeParams({
+        logisticsWorkByFaction: new Map([["faction-1", 40]]),
+        economyScale,
+      }));
+      return world.treasuries[0].pendingWork.logistics;
+    };
+    expect(await accrued(NaN)).toBe(40);
+    expect(await accrued(-2)).toBe(40);
+    expect(await accrued(0)).toBe(40);
+  });
+
+  it("bills a reference cycle when the cadence itself is unusable", async () => {
+    // Heads tax and maintenance are per-cycle RATES scaled by the cadence. A zero cadence cannot
+    // scale them — falling through with it would silently make the whole faction tax-free and
+    // maintenance-free rather than billing a reference cycle.
+    const settle = async (interval: number) => {
+      const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+      await runTreasuryProcessor(
+        world, ctxWithRealized(24, new Map([["sys-1", new Map([["food", 10]])]])),
+        makeParams({ interval }),
+      );
+      return settlementOf(world);
+    };
+    const reference = await settle(24);
+    const degenerate = await settle(0);
+    expect(reference.headsIncome).toBeGreaterThan(0);
+    expect(reference.maintenanceBill).toBeGreaterThan(0);
+    expect(degenerate.headsIncome).toBeCloseTo(reference.headsIncome, 9);
+    expect(degenerate.maintenanceBill).toBeCloseTo(reference.maintenanceBill, 9);
+  });
+
+  it("settles with no production income when the economy stage emitted no signals", async () => {
+    // The economy stage is skipped off its own cycle boundary, so its result carries no signals at
+    // all. Reaching through that for the realized-production map is a crash mid-tick — which hard-
+    // pauses the loop and discards the whole tick.
+    const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    await runTreasuryProcessor(world, { tick: 24, results: new Map([["economy", {}]]) }, makeParams());
+    const settled = settlementOf(world);
+    expect(settled.productionIncome).toBe(0);
+    expect(settled.headsIncome).toBeGreaterThan(0); // the rest of the settlement still ran
+  });
+});
+
+describe("treasury processor: the per-system income lines", () => {
+  it("records a line for every system that earned on either tax, and for no other", async () => {
+    // The lines are the settlement's audit trail. A system that earned on heads alone or on
+    // production alone still earned; one that earned on neither is noise in every faction's
+    // income breakdown, at one row per system per cycle.
+    const world = new InMemoryTreasuryWorld({
+      treasuries: [makeTreasury()],
+      systems: [
+        { ...SYSTEM, systemId: "both" },
+        { ...SYSTEM, systemId: "heads-only" },
+        { ...SYSTEM, systemId: "production-only", population: 0 },
+        { ...SYSTEM, systemId: "idle", population: 0 },
+      ],
+    });
+    await runTreasuryProcessor(
+      world,
+      ctxWithRealized(24, new Map([
+        ["both", new Map([["food", 10]])],
+        ["production-only", new Map([["food", 10]])],
+      ])),
+      makeParams(),
+    );
+    const lines = settlementOf(world).incomeBySystem;
+    expect(lines.map((l) => l.systemId).sort()).toEqual(["both", "heads-only", "production-only"]);
+    expect(lines.find((l) => l.systemId === "heads-only")!.production).toBe(0);
+    expect(lines.find((l) => l.systemId === "production-only")!.heads).toBe(0);
+  });
+
+  it("scales each maintenance line by the same cadence factor as the bill it sums to", async () => {
+    // The per-type breakdown is what the UI renders the maintenance bill from. Scaled the other
+    // way, the lines would read four times the bill at half the cadence and still look plausible.
+    const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams({ interval: 12 }));
+    const settled = settlementOf(world);
+    const summed = settled.maintenanceByType.reduce((total, l) => total + l.amount, 0);
+    expect(settled.maintenanceBill).toBeGreaterThan(0);
+    expect(summed).toBeCloseTo(settled.maintenanceBill, 9);
   });
 });

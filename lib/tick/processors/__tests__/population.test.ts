@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { runPopulationProcessor } from "../population";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
+import type { PopulationStateView, PopulationUpdate } from "@/lib/tick/world/population-world";
 import type { TickContext } from "@/lib/tick/types";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
@@ -529,5 +530,72 @@ describe("population processor: the honest use figure", () => {
     const row = rowOf(world, "ore");
     expect(row.honestUseRate).toBeUndefined();
     expect("honestUseRate" in row).toBe(false);
+  });
+});
+
+// ── What the processor asks the world for ────────────────────────
+
+/** Records the call sequence and the exact batches handed to the world. */
+class RecordingPopulationWorld extends InMemoryPopulationWorld {
+  readonly calls: string[] = [];
+  readonly updates: PopulationUpdate[] = [];
+  readonly demandRows: Array<{ systemId: string; population: number; productionSuppress: number }> = [];
+  override getPopulationState(systemIds: string[]): Promise<PopulationStateView[]> {
+    this.calls.push("getPopulationState");
+    return super.getPopulationState(systemIds);
+  }
+  override applyPopulationUpdates(updates: PopulationUpdate[]): Promise<void> {
+    this.calls.push("applyPopulationUpdates");
+    this.updates.push(...updates);
+    return super.applyPopulationUpdates(updates);
+  }
+  override rewriteDemandRates(
+    pops: Array<{ systemId: string; population: number; productionSuppress: number }>,
+  ): Promise<void> {
+    this.calls.push("rewriteDemandRates");
+    this.demandRows.push(...pops);
+    return super.rewriteDemandRates(pops);
+  }
+}
+
+describe("population processor: the world calls it makes", () => {
+  it("reads and writes nothing when the economy stage resolved no system", async () => {
+    // The processor is scoped to the economy's shard — off the economy's cycle the signal map is
+    // empty, and a run that pushed on would fetch state for no systems and then write two empty
+    // batches back, once per tick, for every tick between cycles.
+    const world = new RecordingPopulationWorld({
+      systems: [sys("a", 500, 1000, 0)],
+      markets: [market("a", "food")],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map()), PARAMS);
+    expect(world.calls).toEqual([]);
+  });
+
+  it("hands the world exactly one row per system it resolved", async () => {
+    const world = new RecordingPopulationWorld({
+      systems: [sys("a", 500, 1000, 0), sys("b", 400, 1000, 0)],
+      markets: [market("a", "food"), market("b", "food")],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map([["a", 0.2], ["b", 0.2]])), PARAMS);
+    expect(world.updates.map((u) => u.systemId)).toEqual(["a", "b"]);
+    expect(world.demandRows.map((p) => p.systemId)).toEqual(["a", "b"]);
+  });
+
+  it("treats a system the supply fold left out as supplied, not as famine-struck", async () => {
+    // The supply state selects the unrest slope. A missing entry is a system the economy did not
+    // classify, not one in famine — defaulting the other way would hand every unclassified world
+    // the shortage slope and double the unrest it settles at.
+    const seed = () => new RecordingPopulationWorld({
+      systems: [sys("a", 500, 1000, 0)],
+      markets: [market("a", "food")],
+    });
+    const omitted = seed();
+    await runPopulationProcessor(omitted, ctxWithD(new Map([["a", 0.1]])), PARAMS);
+    const classified = seed();
+    await runPopulationProcessor(
+      classified, ctxWithD(new Map([["a", 0.1]]), new Map([["a", "supplied"]])), PARAMS,
+    );
+    expect(unrestOf(omitted, "a")).toBeGreaterThan(0); // the slope really is doing work here
+    expect(unrestOf(omitted, "a")).toBeCloseTo(unrestOf(classified, "a"), 12);
   });
 });
