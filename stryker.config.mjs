@@ -23,7 +23,16 @@ export default {
   // force a cold run. The first sweep of any new file set is always full price.
   incremental: true,
   coverageAnalysis: "perTest",
-  reporters: ["clear-text"],
+  // Label/shape/callback mutants (a mutated report string, a stubbed-out object
+  // literal) are noise here: they never change a number a decision reads, and
+  // triaging them costs more than they protect. The operator/conditional classes —
+  // the ones that flip sim math silently — all stay on.
+  mutator: {
+    excludedMutations: ["StringLiteral", "ObjectLiteral", "ArrowFunction"],
+  },
+  reporters: ["clear-text", "progress"],
+  // 4 leaves the machine usable while you work; overnight batch runs pass
+  // --concurrency 8 (16 logical cores) since the box is free.
   concurrency: 4,
   timeoutMS: 60000,
   mutate: [],
