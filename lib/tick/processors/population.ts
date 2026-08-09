@@ -1,6 +1,7 @@
 import type { TickContext, TickProcessorResult } from "../types";
 import {
-  accumulateUnrest, crowdingPressure, populationDelta, type UnrestParams,
+  accumulateUnrest, crowdingPressure, grievanceShortfall, populationDelta, supplyUnrestTerm,
+  type UnrestParams,
 } from "@/lib/engine/population";
 import { CROWDING } from "@/lib/constants/population";
 import { catchUpFactor } from "@/lib/tick/shard";
@@ -43,7 +44,7 @@ export async function runPopulationProcessor(
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
     const supply = signals.supplyStateBySystem.get(s.systemId)
-      ?? { regime: "supplied", survivalShortfall: false, criticalWeight: 0 };
+      ?? { regime: "supplied", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
     // Standing pressure: what a system settles at with nothing going wrong. Tax raises
     // unrest, not hunger, and overcrowding adds a bounded share on top — so both hold
     // unrest up rather than being shed like a supply shock, while the growth/decline
@@ -57,7 +58,13 @@ export async function runPopulationProcessor(
     // constant instead — the mixed shape is deliberate, not an inconsistency.
     const crowd = crowdingPressure(s.population, s.popCap, params.population.crowdBrakeEnd, CROWDING.PRESSURE_MAX);
     const floor = clamp(taxPressure + crowd, 0, 1);
-    const unrest = accumulateUnrest(s.unrest, d, floor, supply, scaledUnrest);
+    // No persisted expectation memory is threaded into this processor yet, so every system reads
+    // the ceiling (E = 1): the grievance term equals the absolute shortfall exactly, and the supply
+    // term keeps responding to D as it always has until the memory lands and narrows grievance to
+    // what a population has actually adjusted to.
+    const grievance = grievanceShortfall(1, 1 - d);
+    const supplyTerm = supplyUnrestTerm(grievance, d, supply, scaledUnrest);
+    const unrest = accumulateUnrest(s.unrest, supplyTerm, floor, scaledUnrest);
     // The delta reads the unrest this cycle just produced, so unrest resolves forward within the
     // cycle while crowding lags it by one.
     const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);

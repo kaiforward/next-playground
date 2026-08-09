@@ -16,7 +16,7 @@ import type { MarketUpdate, MarketView } from "@/lib/tick/world/economy-world";
 import type { ModifierRow } from "@/lib/engine/events";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { strikeMultiplier } from "@/lib/engine/population";
-import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
@@ -334,12 +334,16 @@ describe("economy processor: supply regime signal", () => {
   // fraction is √(stock / 2), so these stocks pin an exact satisfaction:
   //   100    → ≥ knee  → 1     (fully served)
   //   1.28   → √0.64   → 0.8   (short of full, above the shortage line)
-  //   0.405  → √0.2025 → 0.45  (just below the shortage line — D stays under the cut)
-  //   0.125  → √0.0625 → 0.25  (well below the shortage line — D also crosses the cut)
+  //   0.405  → √0.2025 → 0.45  (just below the shortage line, mildly)
+  //   0.125  → √0.0625 → 0.25  (well below the shortage line, deeply)
   const SERVED_STOCK = 100;
   const RATIONED_STOCK = 1.28;
   const MILD_SHORT_STOCK = 0.405;
   const SHORT_STOCK = 0.125;
+  /** An absolute-scale reference only, at the retired escalation cut's old magnitude — used below to
+   *  pin that a fixture's dissatisfaction reads "mild" rather than "near-total collapse". Not tied to
+   *  any live mechanism boundary (the escalation ramp it once gated is gone). */
+  const MILD_D_REFERENCE = 0.65;
 
   const regimeOf = (signals: EconomySignals | undefined, systemId: string) =>
     requireEconomySignals(signals).supplyStateBySystem.get(systemId)?.regime;
@@ -384,27 +388,25 @@ describe("economy processor: supply regime signal", () => {
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    // A deep water shortage drives Shortage through the survival floor alone. D_SHORTAGE_CUT is now
-    // escalation-only and set well above every measured founding shortfall (Gate 1), so even a total
-    // water failure in a food+water-only economy (max D ≈ 0.54, water's weighted share of just the
-    // two) can no longer cross it unaided — the next test isolates the floor from the cut at a milder
-    // depth; "reaches shortage through the D cut, not only the survival shortcut"
-    // (population-analysis.test.ts) is where the cut-without-floor path is exercised, since it now
-    // takes a near-total, whole-basket collapse to reach on its own.
+    // A deep water shortage drives Shortage through the survival floor alone — the next test
+    // isolates the floor from a milder depth; "reaches shortage through the D cut, not only the
+    // survival shortcut" (population-analysis.test.ts) is where a near-total, whole-basket collapse
+    // reaches Shortage on Provision alone rather than through the floor.
     expect(satOf(world, "water")).toBeCloseTo(0.25, 6);
-    expect(dOf(result.economySignals, "sys-starved")).toBeLessThan(D_SHORTAGE_CUT);
+    expect(dOf(result.economySignals, "sys-starved")).toBeLessThan(MILD_D_REFERENCE);
     expect(regimeOf(result.economySignals, "sys-starved")).toBe("shortage");
   });
 
-  it("promotes to shortage from the survival floor alone, with D below the cut", async () => {
+  it("promotes to shortage from the survival floor alone, with D mild", async () => {
     // The floor's whole reason to exist: water just under the shortage line is famine even though the
     // fold alone reads it as mild. Without hasSurvivalShortfall this fixture reads "rationing", so it
     // fails if the floor is removed — which the deep-shortage case above cannot detect.
     // Water and food alone (both necessity 1.0) already carry >50% of the necessity-weighted basket's
     // total weight under the un-squared fold, so a water shortfall deep enough to trip the survival
-    // line (satisfaction < 0.5) would ALSO cross D_SHORTAGE_CUT on its own — that would no longer
-    // isolate the floor from the cut. Three more fully-served goods (medicine, gas, textiles) dilute
-    // water's share enough that D stays below the cut while the floor still fires.
+    // line (satisfaction < 0.5) would also drive D well past MILD_D_REFERENCE on its own — that would
+    // no longer isolate the floor from a genuinely large shortfall. Three more fully-served goods
+    // (medicine, gas, textiles) dilute water's share enough that D stays mild while the floor still
+    // fires.
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("sys-thirsty", 0)],
       markets: [
@@ -419,11 +421,12 @@ describe("economy processor: supply regime signal", () => {
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     expect(satOf(world, "water")).toBeCloseTo(0.45, 6);
     expect(satOf(world, "water")).toBeLessThan(SHORTAGE_SATISFACTION); // below the survival line
-    expect(dOf(result.economySignals, "sys-thirsty")).toBeLessThan(D_SHORTAGE_CUT); // but D is mild
+    expect(dOf(result.economySignals, "sys-thirsty")).toBeLessThan(MILD_D_REFERENCE); // but D is mild
     expect(stateOf(result.economySignals, "sys-thirsty")).toEqual({
       regime: "shortage",
       survivalShortfall: true,
       criticalWeight: 0, // every demanded good here sits above CRITICAL_SATISFACTION
+      emptyBasket: false, // multiple demanded goods carry real weight
     });
   });
 

@@ -6,7 +6,7 @@ import {
 import type { SystemSupplyState } from "../population-analysis";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
-import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { GOOD_NAMES } from "@/lib/constants/goods";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
@@ -352,6 +352,10 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
 
 describe("summarizeSupplyRegimes", () => {
   const mkt = (systemId: string, goodId: string, satisfaction: number) => ({ systemId, goodId, satisfaction });
+  /** An absolute-scale reference only, at the retired escalation cut's old magnitude — used below to
+   *  pin "mild" against "near-total basket collapse" shortfalls. Not tied to any live mechanism
+   *  boundary; unrest now reads grievance and the crisis backstops, not this quantity. */
+  const LARGE_SHORTFALL_REFERENCE = 0.65;
 
   it("classifies settled systems and reports shares that sum to 1", () => {
     const systems = [popSys("fed", 100, 1000), popSys("thirsty", 100, 1000)];
@@ -396,7 +400,7 @@ describe("summarizeSupplyRegimes", () => {
     expect(summary.strained).toBe(0);
     expect(summary.shortage).toBe(0);
     expect(summary.meanShortfall).toBeGreaterThan(0);
-    expect(summary.meanShortfall).toBeLessThan(D_SHORTAGE_CUT);
+    expect(summary.meanShortfall).toBeLessThan(LARGE_SHORTFALL_REFERENCE);
   });
 
   it("stops at rationing for a near-total basket collapse that never crosses the survival floor", () => {
@@ -416,10 +420,10 @@ describe("summarizeSupplyRegimes", () => {
     ]);
     expect(summary.rationing).toBe(1);
     expect(summary.shortage).toBe(0);
-    // The shortfall is large — Gate 1's escalation cut (D_SHORTAGE_CUT, unrestSlope-only now) still
-    // fires on it, which is exactly why band promotion had to be dropped explicitly rather than left
-    // to fall out of the same cut.
-    expect(summary.meanShortfall).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);
+    // The shortfall is large — a near-total basket collapse, well past LARGE_SHORTFALL_REFERENCE —
+    // yet still reads Rationing: band promotion had to be dropped explicitly (see the comment above)
+    // rather than left to fall out of any Provision- or shortfall-level cut.
+    expect(summary.meanShortfall).toBeGreaterThanOrEqual(LARGE_SHORTFALL_REFERENCE);
   });
 
   it("folds active events without disturbing the reading when none touches consumption", () => {

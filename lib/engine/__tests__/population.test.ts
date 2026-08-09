@@ -9,10 +9,10 @@ import {
   crowdFactor,
   crowdingPressure,
   foldSupplyState,
-  unrestSlope,
+  grievanceShortfall,
+  supplyUnrestTerm,
   type UnrestParams,
   type PopulationParams,
-  type SupplyRegime,
   type SupplyState,
 } from "../population";
 import {
@@ -412,33 +412,126 @@ describe("foldSupplyState (four bands binned from Provision, survival punch-thro
     expect(state.criticalWeight).toBe(0);
     expect(Number.isFinite(state.criticalWeight)).toBe(true);
   });
+
+  it("emptyBasket is true exactly when the basket's summed weight is <= 0", () => {
+    // No rows at all: the degenerate case, Σ weight = 0.
+    expect(foldSupplyState([]).emptyBasket).toBe(true);
+    // Rows present but every one contributes zero weight — one at demanded 0, one unauthored
+    // (necessity 0) — so the basket carries no real weight despite not being literally empty.
+    const allZeroWeight = [
+      { goodId: "water", satisfaction: 0.5, demanded: 0 },
+      { goodId: "not_a_good", satisfaction: 0.5, demanded: 100 },
+    ];
+    expect(foldSupplyState(allZeroWeight).emptyBasket).toBe(true);
+    // One weighted good is enough to clear it.
+    const oneWeighted = [...allZeroWeight, { goodId: "food", satisfaction: 0.5, demanded: 10 }];
+    expect(foldSupplyState(oneWeighted).emptyBasket).toBe(false);
+  });
 });
 
-describe("unrestSlope (D-ramp + survival step + critical-good override)", () => {
-  const params: UnrestParams = { slopeRationing: 1, slopeShortage: 3, decay: 0.06 };
-  const supply = (survivalShortfall: boolean, criticalWeight: number): SupplyState => ({
-    regime: "rationing",
-    survivalShortfall,
-    criticalWeight,
+describe("grievanceShortfall (expectation-relative shortfall)", () => {
+  it("reads 0 whenever expectation is at or below provision — matching or beating memory is peace", () => {
+    expect(grievanceShortfall(0.5, 0.5)).toBe(0);
+    expect(grievanceShortfall(0.3, 0.5)).toBe(0);
+    expect(grievanceShortfall(0, 1)).toBe(0);
   });
 
-  it("raises the effective slope by criticalWeight × (slopeShortage − slopeRationing), capped at slopeShortage", () => {
-    // D = 0 isolates the ramp at slopeRationing, so the override's own contribution reads cleanly.
-    const diff = params.slopeShortage - params.slopeRationing; // 2
-    expect(unrestSlope(0, supply(false, 0.5), params)).toBeCloseTo(params.slopeRationing + 0.5 * diff, 10);
-    // A weight large enough to blow past slopeShortage caps there instead of exceeding it.
-    expect(unrestSlope(0, supply(false, 5), params)).toBe(params.slopeShortage);
+  it("never exceeds 1, whatever expectation and provision — including out-of-range inputs", () => {
+    expect(grievanceShortfall(1, 0)).toBe(1);
+    expect(grievanceShortfall(5, -5)).toBe(1);
   });
 
-  it("gets the survival step alone when both the survival floor and override weight apply", () => {
-    // The composition rule is explicit: famine dominates outright rather than stacking with the
-    // override on top of it.
-    expect(unrestSlope(0, supply(true, 0.9), params)).toBe(params.slopeShortage);
-    expect(unrestSlope(0.5, supply(true, 0.9), params)).toBe(params.slopeShortage);
+  it("is exactly expectation minus provision once inside [0,1]", () => {
+    expect(grievanceShortfall(0.8, 0.3)).toBeCloseTo(0.5, 10);
+  });
+});
+
+describe("supplyUnrestTerm (max of a memory-relative grievance reading and an absolute crisis reading)", () => {
+  const params: UnrestParams = { slopeBase: 1.6, slopeShortage: 2.4, decay: 0.06 };
+  const benign: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
+  const survival = (criticalWeight = 0): SupplyState =>
+    ({ regime: "shortage", survivalShortfall: true, criticalWeight, emptyBasket: false });
+  const critical = (criticalWeight: number): SupplyState =>
+    ({ regime: "rationing", survivalShortfall: false, criticalWeight, emptyBasket: false });
+
+  it("is 0 for a benign supply state at zero grievance and zero D — vacuity", () => {
+    // An empty-implementation term (always 0) would also pass this alone — the famine and crisis
+    // entries below are what an always-0 stub fails.
+    expect(supplyUnrestTerm(0, 0, benign, params)).toBe(0);
   });
 
-  it("contributes nothing at zero criticalWeight — an unaffected world sees the D-ramp alone", () => {
-    expect(unrestSlope(0, supply(false, 0), params)).toBe(params.slopeRationing);
+  it("reads famine dominance exactly: at E = 1 (grievance = D) a survival shortfall reads exactly slopeShortage × D", () => {
+    // Famine dominance rests on G <= D whenever E <= 1 (readExpectation's guarantee); the tightest
+    // case is E = 1 exactly, where G = D. A sum-instead-of-max implementation reads
+    // slopeBase × D + slopeShortage × D here instead — strictly more than the exact famine reading.
+    const d = 0.4;
+    const grievance = d;
+    expect(supplyUnrestTerm(grievance, d, survival(), params)).toBeCloseTo(params.slopeShortage * d, 10);
+  });
+
+  it("restores the crisis floor: an accustomed world (G = 0) with critical weight w reads min(slopeShortage, slopeBase + w × span) × D", () => {
+    const d = 0.5;
+    const w = 0.4;
+    const span = params.slopeShortage - params.slopeBase;
+    const expected = Math.min(params.slopeShortage, params.slopeBase + w * span) * d;
+    const term = supplyUnrestTerm(0, d, critical(w), params);
+    expect(term).toBeCloseTo(expected, 10);
+    // A coefficient-only implementation (no base slope, i.e. w × span × d alone) reads far smaller —
+    // guard the margin explicitly so that revert cannot slip past a close-enough tolerance.
+    expect(term).toBeGreaterThan(w * span * d * 2);
+  });
+
+  it("caps the critical-good override at slopeShortage, whatever weight it carries", () => {
+    const d = 0.5;
+    expect(supplyUnrestTerm(0, d, critical(5), params)).toBeCloseTo(params.slopeShortage * d, 10);
+  });
+
+  it("reads exactly 0 crisis contribution absent both a survival shortfall and any critical weight — the ordinary case answers to memory alone", () => {
+    // Grievance is fixed at 0, so any nonzero result here could only have come from the crisis
+    // branch. This is the composition the max() depends on: a crisis term that fired
+    // slopeBase × D on every benign supply state would make the whole term absolute again and erase
+    // the point of reading memory at all.
+    expect(supplyUnrestTerm(0, 0.6, benign, params)).toBe(0);
+  });
+
+  it("is flat and linear in grievance across [0,1] — no reintroduced escalation ramp", () => {
+    // d = 0 zeroes the crisis term regardless of label, isolating the grievance term.
+    const samples = [0, 0.2, 0.5, 0.8, 1];
+    for (const g of samples) {
+      expect(supplyUnrestTerm(g, 0, benign, params)).toBeCloseTo(params.slopeBase * g, 10);
+    }
+    // Doubling grievance (within range) exactly doubles the term — the flat-slope signature a
+    // reintroduced ramp would break.
+    expect(supplyUnrestTerm(0.4, 0, benign, params)).toBeCloseTo(2 * supplyUnrestTerm(0.2, 0, benign, params), 10);
+  });
+
+  it("never exceeds 1 in grievance's own contribution beyond G = 1 — the clamp carries through", () => {
+    // Grievance above 1 (an out-of-range caller value) must not blow the term past slopeBase × 1.
+    expect(supplyUnrestTerm(5, 0, benign, params)).toBeCloseTo(params.slopeBase, 10);
+  });
+
+  it("takes the larger reading, not the sum, when both grievance and crisis apply", () => {
+    const d = 0.5;
+    const w = 0.9;
+    const highGrievance = 1;
+    const term = supplyUnrestTerm(highGrievance, d, critical(w), params);
+    const grievanceTerm = params.slopeBase * highGrievance;
+    const crisisTerm = Math.min(params.slopeShortage, params.slopeBase + w * (params.slopeShortage - params.slopeBase)) * d;
+    expect(term).toBeCloseTo(Math.max(grievanceTerm, crisisTerm), 10);
+    expect(term).toBeLessThan(grievanceTerm + crisisTerm);
+  });
+
+  it("ignores `regime` entirely — only survivalShortfall and criticalWeight feed the term", () => {
+    const g = 0.3;
+    const d = 0.2;
+    for (const regime of ["supplied", "strained", "rationing", "shortage"] as const) {
+      const supply: SupplyState = { regime, survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
+      expect(supplyUnrestTerm(g, d, supply, params)).toBeCloseTo(params.slopeBase * g, 10);
+    }
+  });
+
+  it("clamps a negative criticalWeight to 0 rather than propagating", () => {
+    expect(supplyUnrestTerm(0, 0.5, critical(-3), params)).toBe(0);
   });
 });
 
@@ -509,155 +602,109 @@ describe("crowdingPressure (standing unrest floor from overcrowding)", () => {
   });
 });
 
-describe("accumulateUnrest (floor-relaxation integrator)", () => {
-  const params: UnrestParams = { slopeRationing: 1.8, slopeShortage: 2.5, decay: 0.06 };
-  const state = (regime: SupplyRegime, survivalShortfall = false, criticalWeight = 0): SupplyState => ({
-    regime,
-    survivalShortfall,
-    criticalWeight,
-  });
-  const SUPPLIED = state("supplied");
-  const RATIONING = state("rationing");
-  const SHORTAGE = state("shortage");
+describe("accumulateUnrest (floor-relaxation integrator over a caller-supplied term)", () => {
+  const params: UnrestParams = { slopeBase: 1.8, slopeShortage: 2.5, decay: 0.06 };
 
-  it("relaxes at the identical rate whatever the label carries — regime selects nothing here", () => {
-    // The only test that catches a leftover `supply.regime` read inside accumulateUnrest: a
-    // fixture that changes only the label, holding start/floor/D fixed, must trace identically.
-    const start = 0.6;
-    const floor = 0.2;
-    const d = 0.15;
-    const trajectory = (supply: SupplyState) => {
-      let u = start;
-      const path: number[] = [];
-      for (let i = 0; i < 10; i++) {
-        u = accumulateUnrest(u, d, floor, supply, params);
-        path.push(u);
-      }
-      return path;
-    };
-    const supplied = trajectory(SUPPLIED);
-    expect(trajectory(RATIONING)).toEqual(supplied);
-    expect(trajectory(SHORTAGE)).toEqual(supplied);
+  it("stays exactly at the floor from a start at the floor, at term 0", () => {
+    expect(accumulateUnrest(0.3, 0, 0.3, params)).toBeCloseTo(0.3, 12);
   });
 
-  it("stays exactly at the floor from a start at the floor, whatever the label", () => {
-    for (const supply of [SUPPLIED, RATIONING, SHORTAGE]) {
-      expect(accumulateUnrest(0.3, 0, 0.3, supply, params)).toBeCloseTo(0.3, 12);
-    }
-  });
-
-  it("settles exactly at the floor from above and below at D = 0, whatever the label", () => {
+  it("settles exactly at the floor from above and below at term 0", () => {
     let above = 0.9;
-    for (let i = 0; i < 2000; i++) above = accumulateUnrest(above, 0, 0.2, SUPPLIED, params);
+    for (let i = 0; i < 2000; i++) above = accumulateUnrest(above, 0, 0.2, params);
     expect(above).toBeCloseTo(0.2, 6);
-    let aboveOther = 0.9;
-    for (let i = 0; i < 2000; i++) aboveOther = accumulateUnrest(aboveOther, 0, 0.2, RATIONING, params);
-    expect(aboveOther).toBeCloseTo(0.2, 6);
     // From below (a highly taxed but well-fed colony rising toward its floor).
     let below = 0.05;
-    for (let i = 0; i < 2000; i++) below = accumulateUnrest(below, 0, 0.3, SUPPLIED, params);
+    for (let i = 0; i < 2000; i++) below = accumulateUnrest(below, 0, 0.3, params);
     expect(below).toBeCloseTo(0.3, 6);
   });
 
-  it("settles at floor + slope x D under sustained dissatisfaction", () => {
-    // The reparameterisation's whole point: the slope is settled unrest per unit of D above the
-    // floor, so the settled value is readable straight off the constants rather than implied by a
-    // gain/decay ratio. Two D's, one either side of the shortage cut. Both sums stay under 1, so
-    // the state's own clamp is not in play here — that boundary is pinned separately below.
-    for (const [d, floor] of [[0.1, 0.2], [0.3, 0]] as const) {
+  it("settles at floor + term under a sustained term", () => {
+    // `term` is already the full settled-unrest contribution above the floor — the caller
+    // (supplyUnrestTerm) has already folded slope and D/grievance together — so the fixed point is
+    // readable straight off the two inputs, not implied by a gain/decay ratio. Two (term, floor)
+    // pairs whose sum stays under 1, so the state's own clamp is not in play here — that boundary is
+    // pinned separately below.
+    for (const [term, floor] of [[0.18, 0.2], [0.72, 0]] as const) {
       let u = 0;
-      for (let i = 0; i < 500; i++) u = accumulateUnrest(u, d, floor, RATIONING, params);
-      expect(floor + unrestSlope(d, RATIONING, params) * d, `D=${d}`).toBeLessThan(1);
-      expect(u, `D=${d}`).toBeCloseTo(floor + unrestSlope(d, RATIONING, params) * d, 6);
+      for (let i = 0; i < 500; i++) u = accumulateUnrest(u, term, floor, params);
+      expect(floor + term, `term=${term}`).toBeLessThan(1);
+      expect(u, `term=${term}`).toBeCloseTo(floor + term, 6);
     }
   });
 
-  it("saturates at 1 when floor + slope x D would exceed the state's own range", () => {
-    // The slopes exceed 1 by design — D is small (mean ~0.15), so a slope of 1 could never lift
-    // famine over the strike threshold. That means `floor + slope × D` can ask for more than unrest
-    // can hold, and equilibrium is min(1, …) rather than the raw sum. This is the corner where it
-    // bites: the highest standing floor (very-high tax + full crowding) under a total water failure.
+  it("saturates at 1 when floor + term would exceed the state's own range", () => {
+    // `term` can itself exceed 1 (slopeShortage alone does), so `floor + term` can ask for more than
+    // unrest can hold, and equilibrium is min(1, …) rather than the raw sum.
     const floor = 0.23;
-    const d = 0.37;
-    expect(floor + unrestSlope(d, state("shortage", true), params) * d).toBeGreaterThan(1); // the raw sum overflows
+    const term = params.slopeShortage * 0.37; // the crisis reading for a near-total water failure
+    expect(floor + term).toBeGreaterThan(1); // the raw sum overflows
     let u = 0;
-    for (let i = 0; i < 500; i++) u = accumulateUnrest(u, d, floor, state("shortage", true), params);
+    for (let i = 0; i < 500; i++) u = accumulateUnrest(u, term, floor, params);
     expect(u).toBe(1);
   });
 
   it("reaches the same equilibrium at any relaxation rate", () => {
-    // gain = slope x decay, so the rate sets only how fast equilibrium arrives, never where it is —
+    // gain = term x decay, so the rate sets only how fast equilibrium arrives, never where it is —
     // which is what makes the settled level invariant to the tick's catch-up factor.
     const slow: UnrestParams = { ...params, decay: 0.06 };
     const fast: UnrestParams = { ...params, decay: 0.5 };
     const settle = (p: UnrestParams) => {
       let u = 0;
-      for (let i = 0; i < 500; i++) u = accumulateUnrest(u, 0.3, 0.1, RATIONING, p);
+      for (let i = 0; i < 500; i++) u = accumulateUnrest(u, 0.3, 0.1, p);
       return u;
     };
     expect(settle(fast)).toBeCloseTo(settle(slow), 6);
   });
 
-  it("relaxes stored excess geometrically at the single decay rate, whatever the label", () => {
-    // The re-authored drain law: excess above the floor shrinks by (1 - decay) every step, and
-    // that ratio must hold identically for every label — a leftover regime branch (or a relaxation
-    // that snapped straight to the floor) would break it.
+  it("relaxes stored excess geometrically at the single decay rate", () => {
+    // Excess above the floor shrinks by (1 - decay) every step at term 0.
     const floor = 0.2;
     const start = 0.6;
-    for (const supply of [SUPPLIED, RATIONING, SHORTAGE]) {
-      const s1 = accumulateUnrest(start, 0, floor, supply, params);
-      const s2 = accumulateUnrest(s1, 0, floor, supply, params);
-      expect((s2 - floor) / (start - floor)).toBeCloseTo((1 - params.decay) ** 2, 10);
-    }
+    const s1 = accumulateUnrest(start, 0, floor, params);
+    const s2 = accumulateUnrest(s1, 0, floor, params);
+    expect((s2 - floor) / (start - floor)).toBeCloseTo((1 - params.decay) ** 2, 10);
   });
 
-  it("accumulates faster under a survival shortfall than at the same D without one", () => {
-    // The regime label no longer selects the magnitude — D and the survival bit do. Famine at a D
-    // the fold alone would call mild must still respond like famine.
+  it("integrates a larger term into more settled unrest — composed with supplyUnrestTerm, famine outweighs an ordinary shortfall at the same D", () => {
+    // accumulateUnrest itself no longer picks a severity — supplyUnrestTerm does, upstream — so this
+    // is a composed check that the two functions still agree once wired together: a survival
+    // shortfall at a D the ordinary (benign) reading would call mild must still integrate to more
+    // settled unrest than the benign reading at the identical D and grievance.
     const d = 0.1;
-    const ordinary = accumulateUnrest(0.2, d, 0.2, RATIONING, params);
-    const famine = accumulateUnrest(0.2, d, 0.2, state("shortage", true), params);
-    expect(famine).toBeGreaterThan(ordinary);
-  });
-
-  it("is monotonic in both slope selectors — a worse reading never lowers settled unrest", () => {
-    // Equilibrium, not one step: the regime label picks only the approach rate, so comparing single
-    // steps across labels compares speeds rather than severities.
-    const floor = 0.2;
-    const eq = (d: number, survivalShortfall: boolean) => floor + unrestSlope(d, state("rationing", survivalShortfall), params) * d;
-    for (const d of [0, 0.05, 0.14, 0.25, 0.28, 0.32, 0.5, 1]) {
-      expect(eq(d, true), `D=${d}`).toBeGreaterThanOrEqual(eq(d, false));
-    }
-    const ds = [0, 0.05, 0.14, 0.25, 0.28, 0.32, 0.5, 1];
-    for (let i = 1; i < ds.length; i++) {
-      expect(eq(ds[i], false), `D=${ds[i]}`).toBeGreaterThan(eq(ds[i - 1], false));
-    }
+    const grievance = 0;
+    const benign: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
+    const famine: SupplyState = { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
+    const ordinary = accumulateUnrest(0.2, supplyUnrestTerm(grievance, d, benign, params), 0.2, params);
+    const famineUnrest = accumulateUnrest(0.2, supplyUnrestTerm(grievance, d, famine, params), 0.2, params);
+    expect(famineUnrest).toBeGreaterThan(ordinary);
   });
 
   it("keeps one full-shortage cycle from floor 0.23 below the 0.65 strike threshold", () => {
     // catchUpFactor = 2 is applied by the processor; the engine receives a pre-scaled relaxation rate.
     const scaled: UnrestParams = { ...params, decay: 0.06 * 2 };
-    const next = accumulateUnrest(0.23, 1, 0.23, SHORTAGE, scaled);
+    const famine: SupplyState = { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
+    const term = supplyUnrestTerm(1, 1, famine, scaled);
+    const next = accumulateUnrest(0.23, term, 0.23, scaled);
     expect(next).toBeGreaterThan(0.23); // it rose
     expect(next).toBeLessThan(0.65); // but is recoverable, not an instant strike
   });
 
   it("clamps output to [0,1]", () => {
-    const big: UnrestParams = { ...params, slopeRationing: 50, slopeShortage: 50 };
-    expect(accumulateUnrest(1, 1, 0.9, SHORTAGE, big)).toBe(1);
-    expect(accumulateUnrest(0, 0, 0, SUPPLIED, params)).toBe(0);
+    expect(accumulateUnrest(1, 50, 0.9, params)).toBe(1);
+    expect(accumulateUnrest(0, 0, 0, params)).toBe(0);
   });
 
   it("clamps k so a catch-up-scaled decay can never overshoot below the floor", () => {
     // A large catch-up can scale the decay past 1; without clamping k the relaxation
     // term would flip sign and push unrest below its standing floor.
     const overScaled: UnrestParams = { ...params, decay: 1.5 };
-    const next = accumulateUnrest(0.5, 0, 0.2, SUPPLIED, overScaled);
+    const next = accumulateUnrest(0.5, 0, 0.2, overScaled);
     expect(next).toBe(0.2); // k clamps to 1 -> lands exactly on the floor, no overshoot
     expect(next).toBeGreaterThanOrEqual(0.2);
     // A realistic catch-up = 2 relaxes toward the floor from above without crossing it.
     const scaled: UnrestParams = { ...params, decay: 0.06 * 2 };
-    const step = accumulateUnrest(0.5, 0, 0.2, SUPPLIED, scaled);
+    const step = accumulateUnrest(0.5, 0, 0.2, scaled);
     expect(step).toBeGreaterThan(0.2);
     expect(step).toBeLessThan(0.5);
   });

@@ -23,7 +23,7 @@ const BRAKE_END = 1.15;
 const POP_SHAPE = { crowdBrakeEnd: BRAKE_END, overshootDeathUnrestGate: 0.65 };
 
 const PARAMS = {
-  unrest: { slopeRationing: 2, slopeShortage: 4, decay: 0.05 },
+  unrest: { slopeBase: 2, slopeShortage: 4, decay: 0.05 },
   population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
   interval: 24,
 };
@@ -35,13 +35,13 @@ const PARAMS = {
 // scaling must meet, whichever regime selects it. One slope for both regimes: this fixture
 // measures the time step, not the D-selected slope.
 const INVARIANCE_PARAMS = {
-  unrest: { slopeRationing: 3, slopeShortage: 3, decay: 0.02 },
+  unrest: { slopeBase: 3, slopeShortage: 3, decay: 0.02 },
   population: { growthRate: 0.02, declineRate: 0.02, overshootDeathRate: 0, ...POP_SHAPE },
 };
 
 // Unrest fixture for the floor/regime suites: three pairwise-distinct numbers, so an assertion
 // naming the wrong one cannot pass by coincidence.
-const RATES = { slopeRationing: 1.5, slopeShortage: 3, decay: 0.06 };
+const RATES = { slopeBase: 1.5, slopeShortage: 3, decay: 0.06 };
 // Frozen population, so a run's only observable is the unrest integrator.
 const FROZEN_POP = { growthRate: 0, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE };
 
@@ -68,7 +68,8 @@ function ctxWithD(
   productionSuppressBySystem: Map<string, number> = new Map(),
 ): TickContext {
   const states = new Map<string, SupplyState>(
-    [...regimes].map(([systemId, regime]) => [systemId, { regime, survivalShortfall: false, criticalWeight: 0 }]),
+    [...regimes].map(([systemId, regime]) =>
+      [systemId, { regime, survivalShortfall: false, criticalWeight: 0, emptyBasket: false }]),
   );
   return {
     tick: 0,
@@ -101,16 +102,22 @@ describe("population processor", () => {
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [market("a", "food")] });
     await runPopulationProcessor(world, ctxWithD(new Map([["a", 1]]), new Map([["a", "shortage"]])), PARAMS);
     const a = world.systems.find((s) => s.id === "a")!;
-    // Hand-derived from the start state (pop 500, cap 1000, unrest 0) under D=1 in shortage,
-    // so these are an independent oracle rather than the processor's own output read back:
-    //   floor  = 0 (untaxed, under the housing cap)
-    //   unrest = floor + (1−decay)·(0 − floor) + slopeShortage·decay·1 = 4·0.05 = 0.2
-    //   Δpop   = growth·(1−D)=0 − decline·pop·unrest = −(0.02·500·0.2) = −2.0 → pop 498
-    expect(a.unrest).toBeCloseTo(0.2, 6);
-    expect(a.population).toBeCloseTo(498, 6);
+    // Hand-derived from the start state (pop 500, cap 1000, unrest 0) under D=1, no survival or
+    // critical-good signal (ctxWithD's regime map carries neither — only the "shortage" display
+    // label), so an independent oracle rather than the processor's own output read back. No
+    // persisted expectation memory is threaded into the processor yet, so it reads the ceiling
+    // (E = 1), which makes the grievance term equal the absolute shortfall exactly:
+    //   floor      = 0 (untaxed, under the housing cap)
+    //   grievance  = clamp(1 − provision, 0, 1) = clamp(1 − 0, 0, 1) = 1
+    //   crisisTerm = 0 (no survival shortfall, criticalWeight 0)
+    //   term       = max(slopeBase·1, 0) = 2
+    //   unrest     = floor + (1−decay)·(0 − floor) + term·decay = 2·0.05 = 0.1
+    //   Δpop       = growth·(1−D)=0 − decline·pop·unrest = −(0.02·500·0.1) = −1.0 → pop 499
+    expect(a.unrest).toBeCloseTo(0.1, 6);
+    expect(a.population).toBeCloseTo(499, 6);
     const m = world.markets.find((mm) => mm.systemId === "a")!;
-    // demandRate = civilian-only floor for food at pop 498 (no production-input draw here).
-    expect(m.demandRate).toBeCloseTo(civilianDemandRateForGood("food", popOnly(498)), 5);
+    // demandRate = civilian-only floor for food at pop 499 (no production-input draw here).
+    expect(m.demandRate).toBeCloseTo(civilianDemandRateForGood("food", popOnly(499)), 5);
   });
   it("includes production-input demand in the rewritten demandRate", async () => {
     // A smelter (metals building) draws ore as a recipe input. The ore market's
@@ -225,7 +232,7 @@ describe("population processor", () => {
   it("enters per-system tax pressure as the unrest floor, not as a gain", async () => {
     // d = 0, unrest starts 0, interval 24 (catchUp 1), calm: the run relaxes toward the floor,
     // so unrest moves decay of the way to the tax pressure. A gain term would instead have
-    // integrated slopeRationing × decay × pressure — a different number that then decays back
+    // integrated slopeBase × decay × pressure — a different number that then decays back
     // to zero rather than holding.
     const pressure = TAX_LEVEL_UNREST_PRESSURE.very_high;
     const world = new InMemoryPopulationWorld({
@@ -382,13 +389,15 @@ describe("population processor", () => {
 
   it("scales the relaxation rate — and hence the derived gains — by the catch-up factor", async () => {
     // Interval 48 is two reference cycles, so one run must move exactly twice as far as one run at
-    // the reference interval. Only the relaxation rate is scaled; the gain is slope × rate, so it
-    // rides along while the slopes stay dimensionless exchange rates. Gains are read from a zero start (no
-    // relaxation term) and relaxation from a raised start (D = 0, so no gain term). Which slope
-    // applies is selected by D, not by the regime label: D_LOW sits below the shortage cut and D_HIGH
-    // above the top of the blend band (cut 0.65 + blend 0.25 = 0.90). relax-supplied and
-    // relax-rationing carry different LABELS but the identical rate, so they must land on the
-    // identical relaxed value.
+    // the reference interval. Only the relaxation rate is scaled; the gain is term × rate, so it
+    // rides along while the slope stays a dimensionless exchange rate. Gains are read from a zero
+    // start (no relaxation term) and relaxation from a raised start (D = 0, so no gain term). The
+    // slope is flat now (no D-ramp, no regime selection): neither gain fixture carries a survival or
+    // critical-good signal, so gain-rationing and gain-shortage differ only in their D value —
+    // both driven by the identical slopeBase (no persisted memory is threaded into the processor
+    // yet, so grievance reads the ceiling and tracks D exactly). relax-supplied and relax-rationing
+    // carry different LABELS but the identical rate, so they must land on the identical relaxed
+    // value.
     const start = 0.5;
     const D_LOW = 0.1;
     const D_HIGH = 0.95;
@@ -419,8 +428,8 @@ describe("population processor", () => {
     const ref = await runAt(24);
     const double = await runAt(48);
 
-    const rationingGain = RATES.slopeRationing * RATES.decay * D_LOW;
-    const shortageGain = RATES.slopeShortage * RATES.decay * D_HIGH;
+    const rationingGain = RATES.slopeBase * RATES.decay * D_LOW;
+    const shortageGain = RATES.slopeBase * RATES.decay * D_HIGH;
     expect(unrestOf(ref, "gain-rationing")).toBeCloseTo(rationingGain, 9);
     expect(unrestOf(double, "gain-rationing")).toBeCloseTo(2 * rationingGain, 9);
     expect(unrestOf(ref, "gain-shortage")).toBeCloseTo(shortageGain, 9);
@@ -445,7 +454,7 @@ describe("population processor", () => {
       }
       return unrestOf(world, "a");
     };
-    const expected = RATES.slopeRationing * d;
+    const expected = RATES.slopeBase * d;
     expect(await settleAt(24)).toBeCloseTo(expected, 6);
     expect(await settleAt(48)).toBeCloseTo(expected, 6);
   });
