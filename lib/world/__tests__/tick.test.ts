@@ -146,6 +146,41 @@ describe("runWorldTick", () => {
     }
   });
 
+  it("toTickSystems joins each system's OWNING faction's government, not a blanket default", () => {
+    // The join is the only path a faction's government takes into the tick; "frontier" is the
+    // mid-write fallback for an unowned row, so a test that accepts it everywhere would pass with the
+    // faction lookup gone entirely.
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const governmentById = new Map(base.factions.map((f) => [f.id, f.governmentType]));
+    const owned = toTickSystems(base).filter((s) => s.factionId !== null);
+    expect(owned.length).toBeGreaterThan(0);
+    for (const s of owned) {
+      if (s.factionId === null) continue;
+      expect(s.governmentType).toBe(governmentById.get(s.factionId));
+    }
+    // Premise guard: the world must actually contain a non-frontier government, or the assertion
+    // above is satisfied by the fallback.
+    expect(owned.some((s) => s.governmentType !== "frontier")).toBe(true);
+    // An unclaimed system has no faction to read one from.
+    for (const s of toTickSystems(base).filter((s) => s.factionId === null)) {
+      expect(s.governmentType).toBe("frontier");
+    }
+  });
+
+  it("toTickSystems carries a stored collapseDebt through, and reads an absent one as 0", () => {
+    // The debt is a fractional accumulator: a join that zeroed a live one would restart every
+    // collapsing system's decay regime from scratch, every tick, invisibly.
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const indebted = base.systems[0].id;
+    const world = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === indebted ? { ...s, collapseDebt: 0.4 } : s)),
+    };
+    const rows = toTickSystems(world);
+    expect(rows.find((s) => s.id === indebted)!.collapseDebt).toBe(0.4);
+    for (const s of rows.filter((s) => s.id !== indebted)) expect(s.collapseDebt).toBe(0);
+  });
+
   it("accumulates construction projects and lands whole integer building levels over many ticks", async () => {
     // A single-faction developed corridor drives construction: connect two developed homeworlds so
     // logistics makes them fed-and-calm, then run long enough for committed projects to land.
@@ -528,6 +563,28 @@ describe("runWorldTick — per-stage wiring", () => {
 
     expect(after.flowEvents.some((f) => f.tick === staleTick)).toBe(false);
     expect(after.flowEvents.some((f) => f.tick === freshTick)).toBe(true);
+  });
+
+  it("keeps a flow event sitting exactly on the retention floor, and drops the one a tick below it", async () => {
+    // The window is inclusive of its floor: FLOW_HISTORY_TICKS is how many ticks of history are kept,
+    // so an exclusive comparison would silently shorten every retention window by one tick.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const T = 300;
+    const floorTick = T + 1 - TRADE_SIMULATION.FLOW_HISTORY_TICKS; // the post-tick floor itself
+    const [s0, s1] = base.systems;
+    const flow = (tick: number) => ({
+      tick, fromSystemId: s0.id, toSystemId: s1.id, goodId: "water", quantity: 5,
+    });
+    const world = {
+      ...base,
+      meta: { ...base.meta, currentTick: T },
+      flowEvents: [flow(floorTick - 1), flow(floorTick)],
+    };
+
+    const { world: after } = await runWorldTick(world);
+
+    expect(after.flowEvents.some((f) => f.tick === floorTick)).toBe(true);
+    expect(after.flowEvents.some((f) => f.tick === floorTick - 1)).toBe(false);
   });
 });
 

@@ -133,6 +133,30 @@ describe("generateWorld", () => {
     }
   });
 
+  it("canonicalises a pair whose mint order runs the wrong way lexicographically", () => {
+    // Faction ids are minted after every region and system, so their numeric suffixes can straddle a
+    // digit-width boundary ("faction-99" > "faction-100" as strings). At 80 systems they do — which is
+    // the only shape that exercises the swap branch of the canonical ordering. The pair-count assertion
+    // is the premise guard: if id minting ever stops straddling, this test says so instead of quietly
+    // testing the same ascending case as the 120-system world above.
+    const swapWorld = generateWorld({ systemCount: 80, seed: 42 });
+    const mintOrder = swapWorld.factions.map((f) => f.id);
+    let descendingPairs = 0;
+    for (let i = 0; i < mintOrder.length; i++) {
+      for (let j = i + 1; j < mintOrder.length; j++) {
+        if (mintOrder[i] > mintOrder[j]) descendingPairs++;
+      }
+    }
+    expect(descendingPairs).toBeGreaterThan(0);
+
+    for (const r of swapWorld.relations) {
+      expect(typeof r.factionAId).toBe("string");
+      expect(typeof r.factionBId).toBe("string");
+      expect(r.factionAId < r.factionBId).toBe(true);
+    }
+    expect(swapWorld.relations.length).toBe((mintOrder.length * (mintOrder.length - 1)) / 2);
+  });
+
   it("seeds no ships, events, modifiers, alliance pacts, or flow events", () => {
     expect(world.ships).toEqual([]);
     expect(world.events).toEqual([]);

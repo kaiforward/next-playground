@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   applyDevelopments,
+  addMarketsForSettledSystems,
   applyBuildingIncreases,
   applyStagedManifestDelivery,
   applyFoundingStagingDraws,
@@ -125,6 +126,101 @@ describe("applyDevelopments", () => {
     expect(c.popCap).toBeGreaterThanOrEqual(c.population); // no popCap≈0 stranded state
     expect(src.population).toBe(475);                       // conserved: 500 − 25
     for (const s of after) expect(Number.isFinite(s.popCap)).toBe(true);
+  });
+});
+
+describe("applyDevelopments — no-ops and unresolvable rows", () => {
+  it("returns the very same array when there is nothing to develop", () => {
+    const systems = [makeSystem("a", 10), makeSystem("b", 20)];
+    expect(applyDevelopments(systems, [])).toBe(systems);
+  });
+
+  it("hands back every bystander system by reference, not a rebuilt copy", () => {
+    // Only the pair a development names may be rewritten; a cycle that develops one colony must not
+    // churn every other system row in the galaxy.
+    const source = makeSystem("source", 200);
+    const target = makeSystem("target", 0);
+    const bystander = makeSystem("bystander", 77);
+    const after = applyDevelopments(
+      [source, target, bystander],
+      [{ systemId: "target", sourceSystemId: "source", seedPop: 50, housingLevels: 3, stockManifest: [] }],
+    );
+    expect(after.find((s) => s.id === "bystander")).toBe(bystander);
+  });
+
+  it("skips a development whose source system is not in the list", () => {
+    const target = makeSystem("target", 0);
+    const after = applyDevelopments(
+      [target],
+      [{ systemId: "target", sourceSystemId: "missing", seedPop: 50, housingLevels: 3, stockManifest: [] }],
+    );
+    expect(after).toEqual([target]);
+    expect(after.find((s) => s.id === "target")!.control).toBe("controlled"); // not developed
+  });
+
+  it("skips a development whose target system is not in the list, leaving the source whole", () => {
+    // The source must not be debited for a colony that does not exist to receive the people.
+    const source = makeSystem("source", 200);
+    const after = applyDevelopments(
+      [source],
+      [{ systemId: "missing", sourceSystemId: "source", seedPop: 50, housingLevels: 3, stockManifest: [] }],
+    );
+    expect(after.find((s) => s.id === "source")!.population).toBe(200);
+  });
+
+  it("develops a target whose seed transfer moves nobody", () => {
+    // A drained source moves zero people, so the population delta is 0 — but the colony still has to
+    // flip to `developed`, or a completed establish silently produces nothing.
+    const source = makeSystem("source", 0);
+    const target = makeSystem("target", 0);
+    const after = applyDevelopments(
+      [source, target],
+      [{ systemId: "target", sourceSystemId: "source", seedPop: 50, housingLevels: 3, stockManifest: [] }],
+    );
+    const developed = after.find((s) => s.id === "target")!;
+    expect(developed.control).toBe("developed");
+    expect(developed.population).toBe(0);
+    expect(developed.buildings[HOUSING_TYPE]).toBe(3);
+  });
+});
+
+describe("addMarketsForSettledSystems", () => {
+  it("opens a new colony's rows EMPTY — the founder's manifest is the first stock it holds", () => {
+    const colony = makeSystem("colony", 40);
+    const after = addMarketsForSettledSystems(
+      [],
+      [colony],
+      [{ systemId: "colony", sourceSystemId: "source", seedPop: 40, housingLevels: 3, stockManifest: [] }],
+    );
+    expect(after.length).toBeGreaterThan(0);
+    for (const row of after) {
+      expect(row.systemId).toBe("colony");
+      expect(row.stock).toBe(0);
+    }
+  });
+
+  it("keeps a resettled system's existing warehouses and adds no duplicate row", () => {
+    const colony = makeSystem("colony", 40);
+    const development: SystemDevelopment = {
+      systemId: "colony", sourceSystemId: "source", seedPop: 40, housingLevels: 3, stockManifest: [],
+    };
+    const first = addMarketsForSettledSystems([], [colony], [development]);
+    const stocked = first.map((row, i) => (i === 0 ? { ...row, stock: 500 } : row));
+
+    const second = addMarketsForSettledSystems(stocked, [colony], [development]);
+    expect(second).toBe(stocked); // nothing new to add → the same array, not a rebuilt copy
+    expect(second.length).toBe(first.length);
+    expect(second[0].stock).toBe(500);
+  });
+
+  it("skips a development naming a system that is not in the row list", () => {
+    const markets = [market("elsewhere", "food", 5)];
+    const after = addMarketsForSettledSystems(
+      markets,
+      [makeSystem("colony", 40)],
+      [{ systemId: "missing", sourceSystemId: "source", seedPop: 40, housingLevels: 3, stockManifest: [] }],
+    );
+    expect(after).toBe(markets);
   });
 });
 

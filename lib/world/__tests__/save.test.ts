@@ -53,6 +53,75 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
+  /**
+   * The structural spot-checks, each reached on its own. Every case below carries the CURRENT
+   * formatVersion deliberately: a stale version short-circuits at the version check, so a
+   * wrong-version fixture proves nothing about the shape guards that run after it.
+   */
+  describe("structural spot-checks (each guard reached on its own)", () => {
+    type MalformedValue = object | number | null;
+    function badWorld(worldValue: MalformedValue): string {
+      return JSON.stringify({ formatVersion: SAVE_FORMAT_VERSION, world: worldValue });
+    }
+    function badMeta(meta: MalformedValue): string {
+      return badWorld({ ...world, meta });
+    }
+    function expectRejected(json: string, error: string) {
+      const result = deserializeWorld(json);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe(error);
+    }
+
+    const NOT_OBJECT = "Save file is not a JSON object";
+    const BAD_META = "Save file's world is missing required meta fields";
+
+    it("rejects a top-level JSON scalar", () => {
+      expectRejected("5", NOT_OBJECT);
+    });
+
+    it("rejects a top-level JSON null (typeof null is 'object' — the null arm is load-bearing)", () => {
+      expectRejected("null", NOT_OBJECT);
+    });
+
+    it("rejects a current-version save with no world key at all", () => {
+      expectRejected(JSON.stringify({ formatVersion: SAVE_FORMAT_VERSION }), BAD_META);
+    });
+
+    it("rejects a current-version save whose world is not an object", () => {
+      expectRejected(badWorld(5), BAD_META);
+    });
+
+    it("rejects a current-version save whose world is null", () => {
+      expectRejected(badWorld(null), BAD_META);
+    });
+
+    it("rejects a current-version save whose world has no meta", () => {
+      expectRejected(badWorld({ systems: [] }), BAD_META);
+    });
+
+    it("rejects a world whose meta is not an object", () => {
+      expectRejected(badMeta(5), BAD_META);
+    });
+
+    it("rejects a world whose meta is null", () => {
+      expectRejected(badMeta(null), BAD_META);
+    });
+
+    // One case per numeric meta field: each is checked separately, so a guard that stopped
+    // covering one field would pass every other case here.
+    const NUMERIC_META_FIELDS = ["currentTick", "seed", "mapSize", "systemCount"] as const;
+    for (const field of NUMERIC_META_FIELDS) {
+      it(`rejects a world whose meta.${field} is present but not a number`, () => {
+        expectRejected(badMeta({ ...world.meta, [field]: "not-a-number" }), BAD_META);
+      });
+    }
+
+    it("accepts a meta carrying all four numeric fields (the guards are not rejecting everything)", () => {
+      expect(deserializeWorld(badMeta({ ...world.meta })).ok).toBe(true);
+    });
+  });
+
   it("rejects a save with an unsupported formatVersion", () => {
     const json = JSON.stringify({ formatVersion: 99, world });
     const result = deserializeWorld(json);
