@@ -8,6 +8,7 @@ import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
 import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { GOOD_NAMES } from "@/lib/constants/goods";
+import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
@@ -583,5 +584,22 @@ describe("worstGoodSatisfaction", () => {
       { goodId: "food", satisfaction: 0.6, demandShare: 0.3, necessity: 1 },
     ];
     expect(worstGoodSatisfaction(stateOf(worstGoods))).toBe(0.3);
+  });
+});
+
+describe("the consumption-modifier absence premise", () => {
+  it("no shipped event definition carries a consumption_rate modifier — when this fails, re-sweep population-analysis", () => {
+    // The consumption-modifier plumbing here (rows → aggregateModifiers → consumptionMult) is
+    // inert today because nothing produces the parameter, and 42 mutation-sweep survivors in it
+    // were accepted on exactly that premise (2026-08-09 batch ledger). This test is the tripwire:
+    // the first event definition to ship a consumption_rate rate_multiplier makes those mutants
+    // live, and the acceptance must be re-earned with a scoped `npm run mutation` over
+    // lib/tick-harness/population-analysis.ts — not inherited.
+    const params = Object.values(EVENT_DEFINITIONS)
+      .flatMap((d) => d.phases)
+      .flatMap((p) => p.modifiers)
+      .map((m) => m.parameter);
+    expect(params.length).toBeGreaterThan(0); // premise guard: the census itself saw modifiers
+    expect(params).not.toContain("consumption_rate");
   });
 });

@@ -9,6 +9,8 @@ import {
   CRITICAL_SATISFACTION,
 } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { EXPANSION } from "@/lib/constants/expansion";
+import { GOODS } from "@/lib/constants/goods";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { INITIAL_RESERVE_ANCHOR_FRAC } from "@/lib/constants/market-economy";
 import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING, UNREST_PARAMS } from "@/lib/constants/population";
@@ -477,5 +479,35 @@ describe("housing containment — both directed-build sizing sites land inside t
     // The trigger/target pair is a hysteresis band: a target at or above the trigger would make the
     // sized want non-positive at the moment the valve opens, silently disabling relief entirely.
     expect(DIRECTED_BUILD.RELIEF_TRIGGER).toBeGreaterThan(DIRECTED_BUILD.RELIEF_TARGET);
+  });
+});
+
+describe("mutation-acceptance premises — when one of these fails, re-sweep the named scope", () => {
+  // Each assertion below is a premise a 2026-08-09 mutation-sweep acceptance rests on (batch
+  // ledger). They are not design constraints: changing one is allowed, but it silently turns
+  // accepted survivors live, and the incremental sweep will NOT re-run them (the mutants sit in
+  // files a constants change does not touch). The failure message names the re-sweep owed.
+
+  it("the shared BFS radius is the logistics hop cap — else world/tick.ts's h > MAX_HOPS arm goes live", () => {
+    // runWorldTick's hop map is bounded by max(logistics, build, expansion reach); while that max
+    // IS the logistics cap, no hop beyond it exists and the route-cost guard's far arm is dead.
+    // Raise build/expansion reach past it and the arm becomes reachable: re-sweep lib/world/tick.ts.
+    expect(Math.max(DIRECTED_LOGISTICS.MAX_HOPS, DIRECTED_BUILD.MAX_HOPS, EXPANSION.REACH_JUMPS))
+      .toBe(DIRECTED_LOGISTICS.MAX_HOPS);
+  });
+
+  it("logistics HOP_WEIGHT is exactly 1 — else hop-cost arithmetic acceptances go live", () => {
+    // At 1.0, h * HOP_WEIGHT and h / HOP_WEIGHT coincide, and several route-cost mutants were
+    // accepted as equivalent on that basis. Any other value: re-sweep lib/world/tick.ts.
+    expect(DIRECTED_LOGISTICS.HOP_WEIGHT).toBe(1.0);
+  });
+
+  it("every good carries a positive basePrice — else unitValue/spent guards go live", () => {
+    // Acceptances in the economy/directed-build processors treat `unitValue > 0` and the
+    // `spent > 0` family as always-true because no catalog good prices at 0. A zero-priced good:
+    // re-sweep lib/tick/processors/{economy,directed-build}.ts.
+    for (const [goodId, def] of Object.entries(GOODS)) {
+      expect(def.basePrice, `basePrice of ${goodId}`).toBeGreaterThan(0);
+    }
   });
 });
