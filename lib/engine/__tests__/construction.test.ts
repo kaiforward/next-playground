@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionConstructionPool, proposalRoi, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
+import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionConstructionPool, proposalRoi, orderProposals, orderOpenProjects, forecastEtaCycles, forecastIndependentEtaCycles } from "@/lib/engine/construction";
 import type { Proposal, ColonyProposal } from "@/lib/engine/directed-build";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE, CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE } from "@/lib/constants/industry";
@@ -493,5 +493,105 @@ describe("construction constants", () => {
     expect(CONSTRUCTION.POINTS_PER_LEVEL).toBeGreaterThan(0);
     expect(CONSTRUCTION.PAYBACK_HORIZON).toBeGreaterThan(0);
     expect(CONSTRUCTION.BACKLOG_WINDOW).toBeGreaterThan(0);
+  });
+});
+
+// ── Boundaries and arithmetic the cases above leave unpinned ──
+
+describe("fundQueueWithFloor — the reserve never over-funds", () => {
+  const eligible = () => true;
+
+  it("caps the reserved pass at the work a project has left, not its whole total", () => {
+    // 90 of 100 done: however deep the reserve, only the last 10 points can be absorbed.
+    const result = fundQueueWithFloor([project("p1", HOUSING_TYPE, 1, 90, 100)], 1000, 1000, 1000, eligible);
+    expect(result.absorbed).toBeCloseTo(10);
+    expect(result.landed.map((p) => p.workDone)).toEqual([100]);
+  });
+
+  it("nets the reserved pass's absorption off the general pass's remaining work", () => {
+    // The reserve funds 30 of the 100 remaining; the general pass may only fund the other 70, so the
+    // project lands at exactly its total rather than absorbing the work twice over.
+    const result = fundQueueWithFloor([project("p1", HOUSING_TYPE, 1, 0, 100)], 1000, 1000, 30, eligible);
+    expect(result.absorbed).toBeCloseTo(100);
+    expect(result.landed.map((p) => p.workDone)).toEqual([100]);
+  });
+
+  it("nets a partly-built project's standing work off the general pass too", () => {
+    const result = fundQueueWithFloor([project("p1", HOUSING_TYPE, 1, 60, 100)], 1000, 1000, 10, eligible);
+    expect(result.absorbed).toBeCloseTo(40);
+    expect(result.landed.map((p) => p.workDone)).toEqual([100]);
+  });
+});
+
+describe("orderProposals — the deterministic tiebreak", () => {
+  const build = (systemId: string, buildingType: string, value: number, work: number): Proposal => ({
+    kind: "build", factionId: "f1", systemId, role: "industry",
+    items: [{ buildingType, levels: 1 }], value, work,
+  });
+  const colony = (systemId: string, value: number, work: number): ColonyProposal => ({
+    kind: "colony_establish", factionId: "f1", systemId, sourceSystemId: "home",
+    seedPop: 2, housingLevels: 1, value, work,
+  });
+
+  it("labels a build by its first item's type, so it sorts against a colony at the same system", () => {
+    // Equal ROI at one system: the total order is by label, and "alloys" sorts ahead of "colony".
+    const ordered = orderProposals([colony("s1", 10, 10), build("s1", "alloys", 10, 10)]);
+    expect(ordered.map((p) => p.kind)).toEqual(["build", "colony_establish"]);
+  });
+
+  it("orders two equal-ROI builds at one system by their first item's type", () => {
+    const ordered = orderProposals([build("s1", "zzz_late", 10, 10), build("s1", "alloys", 10, 10)]);
+    expect(ordered.map((p) => (p.kind === "build" ? p.items[0]?.buildingType : "colony")))
+      .toEqual(["alloys", "zzz_late"]);
+  });
+
+  it("labels an item-less build proposal without throwing", () => {
+    // `items[0]` is optional on the type, so the label has to survive an empty bundle.
+    const empty: Proposal = {
+      kind: "build", factionId: "f1", systemId: "s1", role: "industry", items: [], value: 10, work: 10,
+    };
+    const ordered = orderProposals([build("s1", "alloys", 10, 10), empty]);
+    expect(ordered).toHaveLength(2);
+    expect(ordered[0]).toBe(empty); // the empty label "s1|" sorts ahead of "s1|alloys"
+  });
+});
+
+describe("forecastEtaCycles — the stall guard and the cycle horizon", () => {
+  it("stalls everything on a zero pool or a zero cap, including a project already at its total", () => {
+    const done = project("done", HOUSING_TYPE, 1, 100, 100);
+    const open = project("open", HOUSING_TYPE, 1, 0, 100);
+    expect(forecastEtaCycles([done, open], 0, 50)).toEqual([null, null]);
+    expect(forecastEtaCycles([done, open], 50, 0)).toEqual([null, null]);
+    expect(forecastEtaCycles([done, open], Number.NaN, 50)).toEqual([null, null]);
+  });
+
+  it("still reports a project that lands on the very last cycle of the horizon", () => {
+    // 30 points of work at cap 10 lands on cycle 3 — the horizon must include its own last cycle.
+    expect(forecastEtaCycles([project("p", HOUSING_TYPE, 1, 0, 30)], 10, 10, 3)).toEqual([3]);
+    expect(forecastEtaCycles([project("p", HOUSING_TYPE, 1, 0, 40)], 10, 10, 3)).toEqual([null]);
+  });
+});
+
+describe("forecastIndependentEtaCycles — the stall guard, remaining work and the horizon", () => {
+  it("stalls every hypothetical on a zero pool or a zero cap, including one already at its total", () => {
+    const done = project("h-done", HOUSING_TYPE, 1, 100, 100);
+    const open = project("h-open", HOUSING_TYPE, 1, 0, 100);
+    expect(forecastIndependentEtaCycles([], [done, open], 0, 50)).toEqual([null, null]);
+    expect(forecastIndependentEtaCycles([], [done, open], 50, 0)).toEqual([null, null]);
+    expect(forecastIndependentEtaCycles([], [done, open], Number.NaN, 50)).toEqual([null, null]);
+  });
+
+  it("counts a hypothetical's REMAINING work, not its whole total", () => {
+    // 80 of 100 done, cap 10 ⇒ two cycles left, not ten (and certainly not eighteen).
+    expect(forecastIndependentEtaCycles([], [project("h", HOUSING_TYPE, 1, 80, 100)], 100, 10)).toEqual([2]);
+  });
+
+  it("reports null for a hypothetical the horizon cannot finish", () => {
+    // 100 points at cap 10 needs ten cycles; the horizon stops at three.
+    expect(forecastIndependentEtaCycles([], [project("h", HOUSING_TYPE, 1, 0, 100)], 100, 10, 3)).toEqual([null]);
+  });
+
+  it("still reports a hypothetical that lands on the very last cycle of the horizon", () => {
+    expect(forecastIndependentEtaCycles([], [project("h", HOUSING_TYPE, 1, 0, 30)], 100, 10, 3)).toEqual([3]);
   });
 });

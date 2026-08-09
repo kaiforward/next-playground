@@ -274,3 +274,14 @@ describe("foundingStagedFraction", () => {
     expect(foundingStagedFraction(SOURCE_GOODS, doubled, SEED_POP, 6)).toBe(1);
   });
 });
+
+
+describe("referenceMaintenanceBill — an unreadable stored bill", () => {
+  it("reads a non-finite stored bill as zero, not as a NaN charter base", async () => {
+    // A defined-but-unreadable bill is not the same case as an absent one, and Math.max(0, NaN) is
+    // NaN — which would reach a colony's charter and thence world state.
+    const { referenceMaintenanceBill } = await import("@/lib/engine/founding-cost");
+    expect(referenceMaintenanceBill(Number.NaN, 24)).toBe(0);
+    expect(referenceMaintenanceBill(Number.POSITIVE_INFINITY, 24)).toBe(0);
+  });
+});

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { forecastEtaCycles, forecastIndependentEtaCycles } from "@/lib/engine/construction";
 import type { WorldBuildProject } from "@/lib/world/types";
 import {
-  computeFactionConstruction, buildingLabel, describeBuildProject, nextCycleGains,
+  computeFactionConstruction, buildingLabel, describeBuildProject, nextCycleGains, foundingCeilings,
   type ConstructionSystemInfo, type FoundingReadoutInputs,
 } from "@/lib/engine/construction-readout";
 import {
@@ -238,7 +238,7 @@ describe("computeFactionConstruction", () => {
 
   it("labels a centre build project", () => {
     expect(buildingLabel(CONSTRUCTION_CENTRE_TYPE)).toBe("Construction Centre");
-    expect(describeBuildProject(CONSTRUCTION_CENTRE_TYPE)).toContain("construction");
+    expect(describeBuildProject(CONSTRUCTION_CENTRE_TYPE)).toBe("construction · adds faction build throughput");
   });
 
   it("carries each project's origin through to its row", () => {
@@ -478,5 +478,79 @@ describe("computeFactionConstruction — why a founding is stuck", () => {
     );
     expect(partial).toBeGreaterThan(0);
     expect(partial).toBeLessThan(1);
+  });
+});
+
+describe("construction readout — ceilings, progress and ordering", () => {
+  const SEED_POP = 2;
+  const systems: ConstructionSystemInfo[] = [
+    { id: "src", name: "Source", control: "developed", population: 100, buildings: {} },
+    { id: "ctrl", name: "Kepler Reach", control: "controlled", population: 0, buildings: {} },
+    { id: "ctrl2", name: "Alpha Reach", control: "controlled", population: 0, buildings: {} },
+  ];
+
+  function colonyRow(over: Partial<WorldColonyEstablishProject> = {}): WorldColonyEstablishProject {
+    return {
+      kind: "colony_establish", id: "c1", origin: "auto", factionId: "f1", systemId: "ctrl",
+      sourceSystemId: "src", seedPop: SEED_POP, housingLevels: 1, workTotal: 100, workDone: 40,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0, ...over,
+    };
+  }
+  const from = (rows: FoundingSourceSupply[]) => new Map([["src", rows]]);
+
+  it("holds a colony at zero absorption while its unpaid charter is out of reach, and lets it move the moment the balance reaches the fee", () => {
+    // A source with nothing to spare: the achievable-want rule counts what cannot be spared as
+    // satisfied, so the charter is the only thing that can hold the ceiling down here.
+    const bare = supply(0);
+    const unaffordable = foundingCeilings(
+      [colonyRow({ charterPaid: false })],
+      founded({ workingBalance: CHARTER - 1, supplyBySource: from(bare) }), 4,
+    );
+    expect(unaffordable.get("c1")).toBe(0);
+    // Exactly the fee IS affordable — the cut is a strict "costs more than we have".
+    const exactly = foundingCeilings(
+      [colonyRow({ charterPaid: false })],
+      founded({ workingBalance: CHARTER, supplyBySource: from(bare) }), 4,
+    );
+    expect(exactly.get("c1")).toBe(4);
+  });
+
+  it("stops ceilinging a colony that has written its manifest off — at the write-off cycle itself", () => {
+    const inputs = founded({ workingBalance: 0, supplyBySource: from(supply(1000)), writeOffCycles: 5 });
+    // One cycle short of the write-off it is still materials-gated …
+    expect(foundingCeilings([colonyRow({ stalledCycles: 4 })], inputs, 4).has("c1")).toBe(true);
+    // … and at the write-off cycle it runs on work alone, with no ceiling recorded at all.
+    expect(foundingCeilings([colonyRow({ stalledCycles: 5 })], inputs, 4).has("c1")).toBe(false);
+  });
+
+  it("sizes this cycle's staging off the work REMAINING, so a nearly-finished founding asks for less", () => {
+    // A purse that cannot buy a whole slice: the ceiling is then the fraction of the ask it covers,
+    // and the ask scales with the share of the establish this cycle would build.
+    const rows = supply(1000);
+    const inputs = founded({ workingBalance: 1, supplyBySource: from(rows) });
+    const ceilingFor = (workDone: number) =>
+      foundingCeilings([colonyRow({ workDone })], inputs, 1000).get("c1") ?? 0;
+    expect(ceilingFor(0)).toBeGreaterThan(0);
+    expect(ceilingFor(90)).toBeGreaterThan(ceilingFor(0));
+  });
+
+  it("reads a zero-work project as zero progress rather than NaN", () => {
+    const zeroWork: WorldConstructionProject = {
+      kind: "build", id: "z", origin: "auto", factionId: "f1", systemId: "src",
+      buildingType: "housing", levels: 1, workTotal: 0, workDone: 0,
+    };
+    const r = computeFactionConstruction([zeroWork], systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
+    expect(r.buildOut[0]!.progress).toBe(0);
+  });
+
+  it("orders the expansion list soonest-ETA-first, independent of input order", () => {
+    const inputs = founded({ supplyBySource: from(supply(1000)) });
+    const slowThenFast: WorldConstructionProject[] = [
+      colonyRow({ id: "slow", systemId: "ctrl", workTotal: 200, workDone: 0 }),
+      colonyRow({ id: "fast", systemId: "ctrl2", workTotal: 20, workDone: 0 }),
+    ];
+    const r = computeFactionConstruction(slowThenFast, systems, { throughputPerPop: 0.5, pointsPerLevel: 5 }, 4, inputs);
+    expect(r.expansion.map((p) => p.id)).toEqual(["fast", "slow"]);
+    expect(r.expansion[0]!.etaCycles).not.toBeNull();
   });
 });

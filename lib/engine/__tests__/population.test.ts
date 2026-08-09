@@ -763,3 +763,28 @@ describe("populationDelta — gated overshoot death", () => {
     expect(populationDelta(1200, 1000, 0, 1, violent)).toBeCloseTo(-(18 + 20), 6);
   });
 });
+
+describe("criticalGoodWeight (via foldSupplyState) — the two eligibility edges", () => {
+  it("counts a good exactly ON the demand-share floor and excludes one exactly AT the criticality line", () => {
+    // Shares over demanded goods: food 0.49, gas 0.50, ore 0.01.
+    //  · ore sits exactly ON the 1% share floor and below the criticality line ⇒ it counts.
+    //  · gas sits exactly AT the criticality line (0.25) ⇒ it does not; the line is "below", not "at".
+    // The weight is therefore ore alone: necessity 0.1 × share 0.01.
+    const goods = [
+      { goodId: "food", satisfaction: 1, demanded: 49 },
+      { goodId: "gas", satisfaction: CRITICAL_SATISFACTION, demanded: 50 },
+      { goodId: "ore", satisfaction: 0.1, demanded: 1 },
+    ];
+    const state = foldSupplyState(goods);
+    expect(state.survivalShortfall).toBe(false); // the punch-through is not what is being measured
+    expect(state.criticalWeight).toBeCloseTo(GOOD_NECESSITY.ore! * 0.01, 9);
+  });
+});
+
+describe("crowdFactor — the degenerate cap", () => {
+  it("reads an empty world with no housing as fully crowded, not as NaN", () => {
+    // popCap 0 with population 0 is 0/0 — the guard is what keeps a NaN out of the growth term.
+    expect(crowdFactor(0, 0, 1.5)).toBe(0);
+    expect(crowdFactor(10, 0, 1.5)).toBe(0);
+  });
+});

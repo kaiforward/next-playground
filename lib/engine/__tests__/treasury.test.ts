@@ -132,3 +132,39 @@ describe("maintenanceBufferScale", () => {
     expect(maintenanceBufferScale(Number.NaN, 0.25)).toBeCloseTo(1.25, 9);
   });
 });
+
+describe("treasury — per-term arithmetic and the input guards", () => {
+  it("multiplies each grade's heads by its own weight", () => {
+    // The default fixture weights unskilled at 1, where a division reads the same. Weight it at 2.
+    const heavy = { unskilled: 2, technicians: 3, engineers: 9 };
+    // weighted = 100×2 + 10×3 + 1×9 = 239
+    expect(headsTaxIncome({ unskilled: 100, technicians: 10, engineers: 1 }, heavy, 0.01, 1))
+      .toBeCloseTo(2.39, 6);
+  });
+
+  it("applies the production rate multiplier as a multiplier", () => {
+    const realized = new Map([["ore", 200]]);
+    const once = productionTaxIncome(realized, { ore: 30 }, 0.05, 1, 1);
+    expect(productionTaxIncome(realized, { ore: 30 }, 0.05, 2, 1)).toBeCloseTo(once * 2, 6);
+  });
+
+  it("treats an unusable economy scale as no scaling rather than dividing by it", () => {
+    const realized = new Map([["ore", 200]]);
+    const unscaled = productionTaxIncome(realized, { ore: 30 }, 0.05, 1, 1);
+    for (const scale of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(productionTaxIncome(realized, { ore: 30 }, 0.05, 1, scale), `scale ${scale}`)
+        .toBeCloseTo(unscaled, 6);
+    }
+  });
+
+  it("ignores a negative realized quantity rather than crediting it against the tax base", () => {
+    const realized = new Map([["ore", 200], ["alloys", -1000]]);
+    expect(productionTaxIncome(realized, { ore: 30, alloys: 50 }, 0.05, 1, 1))
+      .toBeCloseTo(productionTaxIncome(new Map([["ore", 200]]), { ore: 30 }, 0.05, 1, 1), 6);
+  });
+
+  it("itemises only the lines that actually cost something", () => {
+    const result = maintenanceBill(new Map([["housing", 0], ["ore", 5]]), 0.002);
+    expect(result.byType.map((l) => l.buildingType)).toEqual(["ore"]);
+  });
+});

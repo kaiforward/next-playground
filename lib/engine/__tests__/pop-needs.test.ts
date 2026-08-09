@@ -104,3 +104,39 @@ describe("computePopNeeds — stored satisfaction", () => {
     expect(water.pressure).toBeGreaterThan(luxuries.pressure);
   });
 });
+
+describe("computePopNeeds — what enters the list, and in what order", () => {
+  it("drops every good the basis wants none of, rather than listing it at want 0", () => {
+    // A technician-only basis (no civilians, no engineers) wants exactly the technician basket. Food
+    // is wanted by nobody here, and a zero-want row would dilute every share below it.
+    const techniciansOnly = { population: 0, technicians: 10, engineers: 0 };
+    const needs = computePopNeeds(techniciansOnly, []);
+    expect(needs.length).toBeGreaterThan(0);
+    expect(needs.every((n) => n.want > 0)).toBe(true);
+    expect(needs.some((n) => n.goodId === "food")).toBe(false);
+    // The same basket WITH civilians does carry food, so it is the basis and not the catalogue.
+    expect(computePopNeeds({ ...techniciansOnly, population: 1000 }, []).some((n) => n.goodId === "food"))
+      .toBe(true);
+  });
+
+  it("sorts by descending pressure, breaking ties on descending want", () => {
+    const withEveryone = { population: 1000, technicians: 50, engineers: 10 };
+    // Two readings: one where nothing is delivered (pressures spread across the necessity weights)
+    // and one where everything is (every pressure 0, so the want tiebreak carries the whole order).
+    const starved = computePopNeeds(withEveryone, []);
+    const fed = computePopNeeds(withEveryone, starved.map((n) => ({ goodId: n.goodId, satisfaction: 1 })));
+    expect(starved.length).toBeGreaterThan(3);
+    expect(new Set(starved.map((n) => n.pressure)).size).toBeGreaterThan(1); // pressures really do differ
+    expect(new Set(fed.map((n) => n.pressure))).toEqual(new Set([0]));       // and really do all tie
+    for (const needs of [starved, fed]) {
+      for (let i = 1; i < needs.length; i++) {
+        const prev = needs[i - 1]!;
+        const cur = needs[i]!;
+        expect(prev.pressure, `${prev.goodId} before ${cur.goodId}`).toBeGreaterThanOrEqual(cur.pressure);
+        if (prev.pressure === cur.pressure) {
+          expect(prev.want, `${prev.goodId} before ${cur.goodId}`).toBeGreaterThanOrEqual(cur.want);
+        }
+      }
+    }
+  });
+});
