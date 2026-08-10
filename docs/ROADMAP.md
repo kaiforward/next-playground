@@ -183,6 +183,14 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   correctness; worth one shared staffing-estimate helper.
 
 **UI**
+- **[M] Dedicated goods tab** — a per-system goods surface with more depth than the Population or
+  Industry tabs carry: per-good cycles of cover against the anchor, the regime (Supplied / Low
+  reserve / Rationing / Shortage / Glut), civilian versus industrial draw, local production against
+  local use, and what logistics is moving in or out. Replaces what the Market tab was for; the
+  market table is a trading-game leftover and PR6 deliberately left it alone rather than half-fixing
+  it. Needs an interaction design pass — this is the third goods-bearing surface, so it must earn
+  its place against the needs ledger and the industry roster rather than duplicating them.
+  *Don't:* rebuild it as a price table — cycles of cover is the unit, price is a secondary read.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a
