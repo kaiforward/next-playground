@@ -200,6 +200,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
   as this system's second tier.
+- **[S] Game-term glossary** — one doc defining the game's terms of art in plain language (pop = 1
+  million people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as
+  the single source tooltips and tutorials quote from. The nested-tooltips row's "cross-linking
+  concept glossary" is this doc grown hyperlinks — start it flat, don't wait for that system.
+  Sibling of the tick-tempo anchor row below (that one anchors time; this anchors vocabulary).
 - **[S] Define a tick-tempo anchor** — a short doc section stating what a tick feels like in play:
   wall-clock at each speed setting (fast mode is 5 ticks/s today), rough equivalents against
   genre reference points (Victoria 3 ≈ 146K ticks per 100 years at 4 ticks/day), and the cycle
