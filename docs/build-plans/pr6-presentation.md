@@ -114,7 +114,12 @@ The population world interface gains the write alongside the existing `provision
 
 ### Task 2 — Provisioned, band, memory and grievance on the per-system reads
 
-**Files:** `lib/services/system-population.ts`, `lib/services/system-vitals.ts`, `lib/types/api.ts`
+**Files:** `lib/services/system-population.ts`, `lib/services/system-vitals.ts`, `lib/types/api.ts`,
+`lib/hooks/use-system-population.ts`, `lib/hooks/use-system-vitals.ts`
+
+The two hooks need no logic change — they pass the typed payload through whole — but both
+docstrings enumerate what the read carries, so this diff falsifies them. They are Files, not a
+doc-sync afterthought.
 
 **Interface:** a shared `SystemProvisionRead { pct: number; band: SupplyRegime; expectationPct:
 number; grievance: number } | { assessed: false }` added to both `SystemPopulationData` and
@@ -237,9 +242,19 @@ already the isolated selling accessor §6 asks for.
 ### Task 7 — Provisioned map mode
 
 **Files:** `lib/services/provision-map.ts` (new), `lib/types/game.ts`, `lib/types/map.ts`,
-`components/map/pixi/value-ramp.ts`, `components/map/map-overlay-controls.tsx`,
-`lib/query/keys.ts`, `lib/hooks/use-provision.ts` (new),
+`components/map/pixi/value-ramp.ts`, `components/map/pixi/number-aggregation.ts`,
+`components/map/pixi/number-format.ts`, `components/map/pixi/layers/value-choropleth-layer.ts`,
+`components/map/pixi/pixi-map-canvas.tsx`, `components/map/star-map.tsx`,
+`components/map/map-overlay-controls.tsx`, `lib/query/keys.ts`,
+`lib/hooks/use-tick-invalidation.ts`, `lib/hooks/use-provision.ts` (new),
 `app/api/game/systems/provision/route.ts` (new)
+
+The list is the full set `migration` — the most recently added value mode — touches, walked rather
+than assumed. A `ValueMode` is not just a ramp and a service: it threads the aggregation and
+formatting used at zoomed-out LOD, the choropleth layer, the canvas, the map shell, and the tick
+invalidation that keeps it fresh. Their tests
+(`components/map/pixi/__tests__/{value-ramp,number-aggregation,number-format}.test.ts`) are where
+this task's detection list lands.
 
 **Interface:** `ProvisionEntry { systemId: string; provision: number; band: SupplyRegime }` and
 `getProvisionBySystem(): ProvisionEntry[]`, mirroring `getStabilityBySystem`. `MapMode` and
