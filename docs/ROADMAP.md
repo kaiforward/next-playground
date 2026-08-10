@@ -34,15 +34,18 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 ## Queued — supply response, then PR6
 
 6. **[L] Supply response — the remaining arc** — [supply-response.md](./planned/supply-response.md).
-   Item 1 (Provision) and item 2 (the **adaptive expectation**) are **shipped**: unrest is judged
-   against a persisted per-world baseline of what that world has been getting, the interim
-   `slopeRationing`/founding invariant retired, all three gate decisions resolved (mechanism +
-   guarantee ladder: [economy.md](./active/gameplay/economy.md)). Two items remain, **in order,
-   measuring between** — (1) abandonment, (2) relief; each needs a primitive the game does not
-   have and is gated on it, and each consumes the shipped worsening-vs-recovering signal
-   (deviation from expectation).
-   *Next step:* abandonment's prerequisite measurement — which worlds actually cannot feed
-   themselves (supply-response.md, "Which worlds are which") — then its spec.
+   Items 1–3 (Provision, the **adaptive expectation**, **abandonment**) are **shipped** — the last
+   as a deliberately minimal stopgap: famine gates both population-inflow paths and famine + pop
+   < 1 resets a system to unclaimed frontier ([colonisation.md](./active/gameplay/colonisation.md),
+   "A colony is allowed to die"; abandonment awaits its PR into shared). One item remains:
+   **relief** — a player-funded intervention that buys a viable world out of the strike loop by
+   moving goods, never by deleting unrest. Its cohort is measured: large non-famine
+   rationing-regime strikers plus calmed-tiny worlds (supply-response.md, "The strike loop").
+   *Next step:* PR `feat/abandonment-framing` into shared, then the relief design pass (gated on
+   the treasury accounting decision, the targeted-transfer export, and a costing — see
+   supply-response.md "Relief").
+   *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
+   exception to the money-is-fuel invariant.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line. Two UI scopes:
    the §6 presentation contract (panels speak regimes) from
@@ -196,6 +199,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
   as this system's second tier.
+- **[S] Game-term glossary** — one doc defining the game's terms of art in plain language (pop = 1
+  million people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as
+  the single source tooltips and tutorials quote from. The nested-tooltips row's "cross-linking
+  concept glossary" is this doc grown hyperlinks — start it flat, don't wait for that system.
+  Sibling of the tick-tempo anchor row below (that one anchors time; this anchors vocabulary).
 - **[S] Define a tick-tempo anchor** — a short doc section stating what a tick feels like in play:
   wall-clock at each speed setting (fast mode is 5 ticks/s today), rough equivalents against
   genre reference points (Victoria 3 ≈ 146K ticks per 100 years at 4 ticks/day), and the cycle
@@ -218,7 +226,10 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   logistics was inherited from a retired umbrella and never built. Its own pass before calling the
   pillar done. Includes **hauling founding freight with real ships** — the staged manifest currently
   teleports source→colony at completion; deferred at colonisation-economics to whenever logistics
-  carries real cargo. Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
+  carries real cargo. Also absorbs **unifying people-movement**: one-hop diffusion migration and the
+  faction-pool colonist delivery do the same task for different reasons and should become one routed
+  system when logistics carries people (decided at the abandonment measurement, 2026-08-10; the
+  interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
   coarse in-fiction valve at most) are preserved in memory `design-logistics-depth-inputs`.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.

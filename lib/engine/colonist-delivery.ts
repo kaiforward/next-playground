@@ -27,6 +27,12 @@ export interface ColonistSystem {
   popCap: number;
   /** Heads the built base wants (Σ labour); pop above this is idle spare, the primary donatable pool. */
   labourDemand: number;
+  /**
+   * Famine inflow gate (abandonment Rule 1): true forces this system's sink headroom to 0 for this
+   * cycle — it receives no colonist delivery. Does NOT affect its eligibility as a source; a flagged
+   * system above `minSourcePopulation` still donates its idle spare. Absent/false ⇒ normal headroom.
+   */
+  inflowBlocked?: boolean;
 }
 
 export interface ColonistDeliveryParams {
@@ -121,7 +127,13 @@ export function allocateColonists(
     const pool = contributions.reduce((a, b) => a + b, 0);
     if (pool <= 0) continue;
 
-    const sinks = group.map((s) => ({ pop: s.population, headroom: Math.max(0, s.popCap - s.population) }));
+    // A famine (inflow-blocked) system keeps its place in the group — sinks/contributions/added stay
+    // index-aligned with it — but its headroom is forced to 0, so water-fill gives it nothing while it
+    // may still donate above (drawableContribution does not read inflowBlocked).
+    const sinks = group.map((s) => ({
+      pop: s.population,
+      headroom: s.inflowBlocked ? 0 : Math.max(0, s.popCap - s.population),
+    }));
     const added = waterFill(sinks, pool);
     const placed = added.reduce((a, b) => a + b, 0);
     if (placed <= 0) continue;

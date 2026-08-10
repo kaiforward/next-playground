@@ -148,6 +148,34 @@ describe("migrationFlow — destination fills housing headroom, not just open jo
   });
 });
 
+describe("migrationFlow — famine inflow gate (abandonment Rule 1)", () => {
+  it("moves zero toward a flagged (famine) destination, whichever endpoint it is", () => {
+    // b would otherwise be the calmer, roomier, job-rich puller — flagged, it absorbs nobody.
+    const a = { unrest: 0.9, population: 1000, popCap: 1000, labourDemand: 0 };
+    const b = { unrest: 0.0, population: 100, popCap: 1000, labourDemand: 1000, inflowBlocked: true };
+    const { quantity } = migrationFlow(a, b, 10, FLOW);
+    expect(quantity).toBe(0);
+  });
+
+  it("still moves nonzero away from a flagged (famine) source toward a calmer neighbour", () => {
+    // The famine world is the LESS attractive endpoint (high unrest) — flow runs a→b regardless of
+    // a's flag, since the gate only zeroes a DESTINATION's headroom, never a source's outflow.
+    const a = { unrest: 0.9, population: 1000, popCap: 1000, labourDemand: 0, inflowBlocked: true };
+    const b = { unrest: 0.0, population: 100, popCap: 1000, labourDemand: 1000 };
+    const { fromIsA, quantity } = migrationFlow(a, b, 10, FLOW);
+    expect(fromIsA).toBe(true);
+    expect(quantity).toBeGreaterThan(0);
+  });
+
+  it("an overshot, calm famine source still drains toward its neighbour (exodus, not trapped)", () => {
+    const source = { unrest: 0, population: 1500, popCap: 1000, labourDemand: 0, inflowBlocked: true };
+    const dest = { unrest: 0, population: 100, popCap: 1000, labourDemand: 1000 };
+    const { fromIsA, quantity } = migrationFlow(source, dest, 10, FLOW);
+    expect(fromIsA).toBe(true);
+    expect(quantity).toBeGreaterThan(0);
+  });
+});
+
 describe("migrationFlow — source two-tier draw", () => {
   const W3 = { contentment: 1, headroom: 1, jobs: 1 };
   const base = { weights: W3, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedLeakFraction: 0 };

@@ -7,17 +7,16 @@ share of what a world needs — driving unrest and growth, with four descriptive
 severity overrides, and a persisted per-world **expectation** unrest is judged against: a frontier
 colony that has always scraped by is content, a rich world that dips is not, and recovery visibly
 calms a world while its level is still poor (both shipped; mechanism and guarantee ladder in
-[economy.md](../active/gameplay/economy.md)). What remains of this arc is giving stuck worlds an
-exit:
+[economy.md](../active/gameplay/economy.md)). **Abandonment is also shipped** — people no longer
+move to famine worlds (either inflow path), and a famine world below one pop resets to unclaimed
+frontier (mechanism: [colonisation.md](../active/gameplay/colonisation.md), "A colony is allowed
+to die"). What remains of this arc is one item:
 
-- **Abandonment.** A world that cannot sustain itself declines to empty and returns to the map as a
-  candidate for later resettlement, instead of parking half-dead forever.
 - **Relief.** A player-funded intervention buys a viable world out of the strike loop — spending to
   *move goods* through the logistics simulation, never spending to delete unrest.
 
-Each item is measured before the next starts. Abandonment and relief both consume the
-worsening-vs-recovering signal the expectation baseline provides (deviation from expectation), which
-is why they sequence after it.
+Relief consumes the worsening-vs-recovering signal the expectation baseline provides (deviation
+from expectation), which is why it sequences after it.
 
 ## Where the galaxy stands
 
@@ -88,101 +87,28 @@ floor, the absolute famine/critical channels, the six-promise guarantee ladder, 
 [economy.md](../active/gameplay/economy.md). This doc keeps only what the *later* items need from
 it:
 
-- **Abandonment's trigger keys on famine-driven or physical decline, never unrest** — a world that
-  has normalised its own misery stops emitting the unrest signal, so an unrest-keyed trigger would
-  be quietly disabled by the expectation; and the expectation's decline flip narrows non-famine
-  physical decline, so the trigger is re-verified against post-change decline rates. Non-negotiable
-  now the expectation is live.
-- **Abandoned worlds leave the settled denominator before any expectation baseline is measured
-  over them**, and **the un-develop transition clears the stored expectation** — the shipped develop-transition
-  clear is the other half of the same rule (a husk's stale memory must
-  not survive into a resettlement).
-- Both later items consume the **worsening-vs-recovering signal** (deviation from baseline) as a
-  derived, stated read — never raw field access.
+- Relief consumes the **worsening-vs-recovering signal** (deviation from baseline) as a derived,
+  stated read — never raw field access.
 
-## Struck worlds resolve
+## The strike loop — where it stands after abandonment
 
-Worlds above the strike threshold suppress their own production, which reduces supply, which raises
-unrest. The loop is self-reinforcing and has no exit: growth carries `1 − shortfall` and decline
-carries unrest, so at high shortfall the two terms cancel and the world parks. Measured at the
-step-1 gate: 15 worlds (2.6% of 582 settled) sit in the strike regime and none of the galaxy is
-emptying (Emptied 0, Stranded 0, both horizons).
+A striking world makes less, which supplies it worse, which keeps it striking. The prerequisite
+measurement (2026-08-10; evidence preserved in git — `docs/build-plans/abandonment.md` at
+`4631eeab`) found the fork it was asked to settle was a false dichotomy: the chronically striking
+worlds were **starving but not shrinking** — held at exactly `popCap` by colonist delivery
+restocking their dead every cycle — while the broader parked small-world cohort was fed and
+crowd-held (healthy). That produced the shipped abandonment scope: a stateless famine gate on both
+population-inflow paths plus a one-pop death line
+([colonisation.md](../active/gameplay/colonisation.md), "A colony is allowed to die").
 
-They need resolution for two reasons. As gameplay, a stuck world with no route out and no way to
-fail is dead content. As instrumentation, they are permanent outliers inside every galaxy-wide
-average.
-
-Both resolutions are sequenced after the adaptive expectation: each consumes the
-worsening-vs-recovering signal (deviation from baseline), and each consumes a primitive the game
-does not have, listed with its prerequisites below.
-
-### Which worlds are which — the prerequisite measurement
-
-The split the design wants is between worlds that can feed themselves and worlds that cannot. **No
-instrument measures that.** The nearest cohort, `survival-short`, is keyed solely on
-`slotCap.arable ≤ 0` (`lib/tick-harness/cohort-analysis.ts`) — not "no deposits, no arable land,
-nothing to build on".
-
-The measured evidence cuts against the identification: 91.5% of the landless cohort is *not*
-striking, and striking is dominated by small worlds (pop 10–100 at 14.7% vs pop ≥ 1K at 0.0%).
-The untested alternative explanation for the parked cohort is the **crowd-brake equilibrium** —
-growth held near zero by housing, not by shortfall. Which mechanism is parking them is unmeasured
-and is the first thing to establish.
-
-**Prerequisite:** a harness cohort keyed on this design's own test — no deposits **and** no arable
-**and** nothing to build on — measured at both horizons, and a measurement of what actually holds
-the parked cohort at constant population. Any figure for "how many struck worlds are unviable"
-before that is a guess.
-
-The predicate itself does not exist either. The raw fields are on `StarSystem` — `slotArable`,
-`slotWater`, `slotBiomass` and the rest of the slot counts (`lib/world/types.ts:98-105`) with their
-yield multipliers (`:106-112`) — but nothing folds them into a judgement. It must be named
-`canSustainItself`, not `viable`: `viable` already means `popCap ≥ seedPop` at colony founding
-(`lib/engine/directed-build.ts`).
-
-### Abandonment: a world is allowed to die
-
-A world that cannot sustain itself should decline until it empties and returns to the map as a
-candidate for later resettlement. **Four things stand between the current code and that outcome.**
-
-**There is no un-develop primitive.** `control` is written toward `developed` in exactly one place
-(`lib/world/tick.ts:491`) and never reversed; the ladder is documented one-way ("unclaimed frontier
-→ controlled (outpost tier) → developed", `lib/world/types.ts:74`); and a shipped invariant test
-asserts that non-developed systems hold population exactly 0
-(`lib/world/__tests__/developed-gate-invariant.test.ts:34`) and relies on monotonicity in a comment
-(`:45`). The reversion was anticipated — `addMarketsForSettledSystems` leaves existing rows alone so
-a redeveloped system "keeps its warehouses" (`lib/world/tick.ts:498-505`) — and never built.
-
-**A husk cannot be resettled.** Colony candidates require `control === "controlled"`
-(`lib/world/tick.ts:1065`) and claims require an unclaimed system (`:1037`), so a world left
-`developed` with a `factionId` is a candidate for neither. Every repopulation path is headroom-gated
-to zero once housing is gone: the relief-housing valve (`lib/engine/directed-build.ts:185-198`),
-migration's `destHeadroom` (`lib/engine/migration.ts:113,124`) and colonist delivery's water-fill
-(`lib/engine/colonist-delivery.ts:118-128`).
-
-**Decline never completes on its own.** All three `populationDelta` terms are proportional to
-population, so decay is exponential and never reaches zero. Worse, the loop has a stabilising
-feedback: a shrinking population shrinks demand, which raises satisfaction against the same
-delivery, which raises Provision and lowers unrest — while `popCap` tracks population down
-(`housingFloor`, `lib/engine/infrastructure-decay.ts:157`) so `crowdFactor` stays 1 and never
-brakes growth. The world settles half-dead at an interior fixed point. **The trigger must therefore
-be a sustained-decline counter or a population floor that bypasses the Provision term entirely** —
-an instantaneous state test parks the world at that fixed point instead of finishing it, and an
-unrest-keyed trigger is additionally disabled by the adaptive expectation (a world used to misery
-is calm).
-
-**An emptied world reads as a clean Supplied datapoint.** Zero demand means every row is skipped
-(`lib/tick-harness/good-satisfaction.ts:42`), the fold returns Provision 1 on empty weight, and the
-band reads Supplied. The harness counts it in every settled denominator. So the outlier this item
-exists to remove does not disappear — it changes sign, from a permanent worst reading to a
-permanent perfect one.
-
-**What the item must specify:** the sustained-decline trigger and its threshold; the target
-`control` state and the `factionId` disposition (both must land somewhere the claim and colony
-providers will pick the world up again); what happens to buildings, market rows and `popCap`; which
-processor owns the write; how the developed-gate invariant is re-authored now that `control` is no
-longer monotonic; and that abandoned systems leave the harness's settled denominator **before** any
-baseline is measured over them.
+**What remains for relief, measured post-abandonment (same seed/conditions):** famine strikers now
+genuinely decline (−30.7% per 50 cycles) and will die or rebalance on their own. The residual
+strike-loop cohort relief exists for is different in kind: **large rationing-regime worlds that
+are not in famine** — measured instance: a pop-2,280 world with arable land, Provision 0.63,
+unrest 0.72, parked at its cap with a flat trend — plus any world that calms at a tiny size and
+never recovers on its own (one observed below one pop). The famine gate deliberately does not
+touch either: they are fed enough to live and stuck enough to need buying out — exactly relief's
+premise.
 
 ### Relief: a viable world is bought out of the loop
 
@@ -227,71 +153,54 @@ fastest-decay calibration arm.)
    [economy.md](../active/gameplay/economy.md)). The persisted per-world baseline; unrest responds
    to supply measured against it; the founding invariant and interim `slopeRationing` retired. All
    three gate decisions resolved no-change except the stability-label edge re-read.
-2. **Abandonment** — a world that cannot sustain itself declines to empty and returns to the map.
-   Gated on: the `canSustainItself` predicate, the viability cohort in the harness (the
-   prerequisite measurement above), the un-develop primitive, and the re-authored developed-gate
-   invariant. Trigger keys on sustained physical decline, never unrest.
+2. **Abandonment** — SHIPPED, deliberately smaller than originally sketched (owner call: minimal,
+   temporary until the logistics pass unifies people-movement). A stateless famine gate on both
+   population-inflow paths plus the one-pop death line; the `canSustainItself` predicate and
+   viability cohort were dropped from scope after the measurement showed the three-way test marks
+   none of the actually-stuck worlds. Mechanism:
+   [colonisation.md](../active/gameplay/colonisation.md), "A colony is allowed to die".
 3. **Relief** — a player-funded intervention buys a viable world out of the strike loop.
-   Independent of abandonment. Gated on: the treasury accounting decision, the targeted-transfer
-   export, and either a self-contained costing or a booked logistics-cost row.
+   Gated on: the treasury accounting decision, the targeted-transfer export, and either a
+   self-contained costing or a booked logistics-cost row.
 
 ## Design hazards worksheet
 
-(Rows for the shipped item 1 are retired with it; these are the rows the remaining items still
-need, updated to the post-gate state.)
+(Rows for the shipped items are retired with them; these are the rows relief still needs.)
 
 ### One quantity, several unrelated jobs
 
-The expectation item shipped with its own worksheet (the shortfall's political/biological split,
-the slope re-derivation, `unrest`'s deliberately-unchanged meaning — git holds the spec). No
-quantity row is specific to abandonment or relief yet — their specs fill this section when written.
-
-### A constant read for a meaning it was not authored to have
-
-| Constant | Authored meaning | Remaining-item use | Same thing? |
-| --- | --- | --- | --- |
-| `viable` (directed-build) | `popCap ≥ seedPop` at founding | must NOT be reused for the sustainability predicate | name the new one `canSustainItself` |
-
-(The expectation item's constants are documented in [economy.md](../active/gameplay/economy.md).)
+No quantity row is specific to relief yet — its spec fills this section when written.
 
 ### A system you did not think about
 
-| System | Interaction with the remaining items |
+| System | Interaction with relief |
 | --- | --- |
-| Events | abandonment must not trigger off an event-length decline — the sustained-decline window must outlast any event arc |
-| Migration | an expectation-calmed poor world stops shedding population (decided wanted, at the expectation item) — which slows abandonment's feeder; its trigger cannot rely on emigration finishing the job |
-| Save format | abandonment changes what `control` may hold and re-authors the developed-gate invariant |
-| The harness's own metrics | the abandoned cohort must leave the settled denominator before any baseline is measured over it; an emptied world otherwise reads Provision 1.0 / Supplied forever |
+| Events | a relief order racing an event-driven famine — does relief target the event dip or the chronic state? |
+| Migration + the famine gate | relief goods arriving lift a world out of survival shortfall, which re-opens population inflow the same cycle — relief's visible effect includes people returning, state that |
+| Abandonment | a world relief is actively supplying can still cross the one-pop death line if the goods arrive too late — decide whether an active relief order suspends the trigger or the race is accepted |
+| The harness's own metrics | relief spend must be attributable (the treasury spend-attribution tooling row is a prerequisite) |
 
 ### A symptom asserted without a measurement — or with the wrong one
 
 | Claim | Evidence | Horizon | Cohort |
 | --- | --- | --- | --- |
-| the fixed bar makes supply's unrest share shrink as the galaxy matures | mean shortfall 0.065 → 0.038 while mean unrest 0.054 → 0.153 (tax + crowding floor up to 0.23) | startup → equilibrium, same run (Gate 2, post-swap arm) | all settled |
-| the founding cohort is modal and worst-supplied | 562 of 582 settled; opening Provision mean 0.74 / p10 0.62 | equilibrium | founding cohort |
-| strikes are small-world, not landless-world | pop 10–100 14.7% vs pop ≥ 1K 0.0%; survival-short 91.5% not striking | equilibrium (Gate 2) | pop bands; survival-short |
-| nothing is emptying | Emptied 0, Stranded 0 | both horizons (Gate 2) | all settled |
-| the strike loop's planner exit narrowed less than feared | `strikeExplains` suppression fell 2.38% → 0.86% (10k), 1.97% → 0.71% (12k) across the step-1 swap | both + 12k | per eligible (system, good) pair |
-| what parks the struck cohort is unmeasured | no cohort keys on the three-way viability test; crowd-brake hypothesis untested | — | — |
+| the residual strike cohort is rationing-regime, not famine | post-abandonment diag: famine strikers decline at −30.7%/50cyc; remaining chronic strikers are non-famine rationing worlds (one at pop 2,280 with arable) | equilibrium, seed 42 | chronic strikers (trailing-window definition) |
+| a calmed sub-floor ghost exists | 1 settled world below one pop, not in famine, persisting | equilibrium, seed 42 | all settled |
 
 ### Designing against a threshold, signal or primitive that does not exist
 
 | Consumes | Produced at | Actual shape today | Design assumes |
 | --- | --- | --- | --- |
-| the worsening-vs-recovering signal | the shipped stored baseline (`provisionExpectation`; read via `lib/engine/expectation.ts`, never raw field access) | **live** | both items consume it as a derived read |
-| un-develop / abandonment transition | **nowhere** — `control` written toward `developed` only (`lib/world/tick.ts:491`); invariant asserts monotonicity | one-way ladder | abandonment builds it and re-authors the invariant |
-| resettlement of an emptied world | claims need unclaimed (`lib/world/tick.ts:1037`); colony candidates need `controlled` (`:1065`); repopulation headroom-gated to zero | a `developed` husk is a candidate for nothing | abandonment states the target `control` + `factionId` |
+| the worsening-vs-recovering signal | the shipped stored baseline (`provisionExpectation`; read via `lib/engine/expectation.ts`, never raw field access) | **live** | relief consumes it as a derived read |
 | targeted logistics transfer | **nowhere** — autonomic matcher only; player orders exist for construction only | — | relief builds it |
 | a fourth treasury category | **nowhere** — three bands + `foundingExpense` off the top | — | relief chooses (band vs off-the-top) and states precedence |
-| a viability predicate | **nowhere** — raw slot fields only (`lib/world/types.ts:98-112`); `viable` is taken | — | `canSustainItself`, written before abandonment is designed |
-| a viability cohort in the harness | nearest is `survival-short` (`slotCap.arable ≤ 0` alone) | one slot test | the three-way test, added before any unviability figure is quoted |
+| per-category spend attribution | **nowhere** — one merged `foundingDebitsByFaction` figure | — | the ROADMAP tooling row lands first |
 
 ### Designing against an aggregate that moves for other reasons
 
 | Metric | What else moves this number |
 | --- | --- |
-| band shares / mean Provision | **founding rate — the dominant confounder** (562 colonies at equilibrium vs 233 at startup, each opening at the galaxy's worst supply state); the maturity trajectory; event incidence |
+| band shares / mean Provision | **founding rate — the dominant confounder** (562 colonies at equilibrium vs 233 at startup, each opening at the galaxy's worst supply state); the maturity trajectory; event incidence; and now abandonment removing worst-cohort members from the settled denominator |
 | mean unrest / strike share | tax stance + crowding: an additive floor up to 0.23 before supply contributes anything; under the expectation, the *baseline's own drift* becomes a further mover — record the decay setting beside every reading |
-| galaxy-wide net growth | the crowd brake (mean occupancy > 1 at equilibrium), migration and colonist delivery redistributing rather than creating, overshoot-death above the strike threshold |
+| galaxy-wide net growth | the crowd brake (mean occupancy > 1 at equilibrium), migration and colonist delivery redistributing rather than creating, overshoot-death above the strike threshold, and famine worlds now genuinely declining |
 | `strikeExplains` suppression | the eligible-pair count grows with the galaxy — read as a rate per eligible pair, never a raw count |
-| abandoned-world count | an emptied world reads Provision 1.0 / Supplied on an empty basket — it must leave the settled denominator first or it inflates every supply reading |
