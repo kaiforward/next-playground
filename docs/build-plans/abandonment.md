@@ -315,6 +315,26 @@ measures the trigger's own definition.
   (ROADMAP, Unqueued). Do not grow the interim gate toward it (no appeal-weighted allocation;
   that was considered and set aside as overworking a system the logistics pass replaces).
 
+## Post-implementation verification (2026-08-10, `8eb266e4`, `temp/stuck-worlds-diag.ts` rerun)
+
+Same conditions as the Evidence run (600 systems, seed 42, scale 100, both horizons). Before → after:
+
+- **The refill is dead and decline is unmasked.** Chronic strikers 11 → 5; the three remaining
+  famine strikers now decline at **−30.7% per 50 cycles** (before: −0.00%, pinned at popCap) and
+  sit at r = 0.13–0.72 — the death spiral runs. At the measured rate the first (pop 2.6 at t=10k)
+  crosses the 1-pop line around t≈13k; no abandonment fires inside 10k, as the spec's own
+  arithmetic predicted and the owner accepted.
+- **The parked small cohort is clean.** Parked pop 10–100 shortfall-held 10 → 0 (all 34 now
+  crowd-held); starving-parked 18 → 6. Sick worlds are no longer "parked" — they are dying.
+- **Founding untouched.** Startup horizon: 253 settled, regime split 80.6/7.9/9.9/1.6, zero
+  emptied, zero famine newborn deaths.
+- **Galaxy slightly healthier at equilibrium:** Shortage share 2.2% → 1.2%, striking-now 12 → 8.
+- **Known accepted edge, observed once:** 1 settled world at pop < 1 that is not in famine (its
+  tiny demand is now met, so it calmed below the floor and the conjunct never fires) — the
+  "shrinks and balances itself" ghost the owner explicitly accepted; relief's business later.
+- Two non-famine chronic strikers remain by design (rationing-regime worlds, one at pop 2,280 with
+  arable land): the famine gate correctly does not touch them — they are the relief item's cohort.
+
 ## Spec review record (single-agent adversarial pass, opus, 2026-08-10)
 
 Owner chose one adversarial agent over the full multi-agent `/spec-review` (cost call; narrow
