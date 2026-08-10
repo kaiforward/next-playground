@@ -180,6 +180,68 @@ viability test as drafted identifies none of the worlds actually stuck.
 Open follow-up measurement if the spec needs it: attribute the refill between colonist delivery
 and migration (needs a processor hook counting per-system inflow by path).
 
+## Spec (owner-decided scope, 2026-08-10 — deliberately minimal)
+
+**Headline.** Two small rules, nothing else. (1) Colonist delivery stops topping up worlds that are
+currently in famine, which un-masks real decline on doomed worlds. (2) A world in famine whose
+population has collapsed below a floor is over: its remaining pops are removed and the system
+resets to unclaimed, factionless frontier — claimable and colonisable again through the existing
+paths. Everything in between — a world that shrinks, rebalances at a tiny size and stabilises — is
+left alone by design: the maths self-balances (shrinking demand raises satisfaction), a tiny stable
+outpost is legitimate negative space, and buying one out of its rut is the relief item's business.
+Both rules are explicitly temporary scaffolding until the logistics pass unifies people-movement.
+
+### Rule 1 — the delivery famine gate
+
+A system currently in survival shortfall (`SupplyState.survivalShortfall` — a demanded survival
+good below `SHORTAGE_SATISFACTION`, the same bit that bands a world Shortage) is excluded from
+colonist delivery's **sink** list for that cycle. Recovery re-includes it automatically next cycle;
+no persisted state, no window, no threshold constant.
+
+- Wiring: economy runs at cycle start and produces `supplyStateBySystem`
+  (`lib/world/tick.ts:853`); migration (which owns the delivery pass) runs later in the same tick
+  body (`:984`) — pass the famine set into the migration processor's params. Delivery only runs on
+  cycle-start ticks, exactly when the signal exists.
+- Donation is untouched: a famine world above `minSourcePopulation` still donates idle spare
+  (that outflow is exodus, which is wanted). Diffusion migration is untouched entirely.
+
+### Rule 2 — the death line
+
+At the population processor's cycle resolution: if a system is in survival shortfall **and** its
+(post-delta) population is below `ABANDON_POP_FLOOR = 0.1`, the colony is over. The processor
+reports it; the tick body (the sole owner of `control` writes) applies the reset:
+
+- `population → 0`, `unrest → 0`, `collapseDebt` cleared, `provisionExpectation` cleared (the
+  stale-memory-must-not-survive-resettlement rule the expectation item already stated);
+- `factionId → null`, `control → "unclaimed"` — ordinary claimable frontier again via the existing
+  claim (`lib/world/tick.ts:1037`) and colony-candidate (`:1065`) paths; no new resettlement
+  machinery;
+- buildings and market rows are left standing: infrastructure decay's idle channel already prunes
+  an emptied colony's structures, and `addMarketsForSettledSystems` was deliberately written to
+  let a redeveloped system keep its warehouses (`lib/world/tick.ts:498-505`) — the ruins/husk
+  affordance was pre-built;
+- no save-format change: every touched field already exists and `control`'s union is unchanged.
+
+Founding safety needs no extra guard: seeds open at 2 pops, 20× the floor; the famine conjunct
+alone cannot fire on a world that merely opened poor.
+
+The floor is a **backstop, not a mercy kill** — with decline proportional to remaining population
+it fires only after deep collapse (event-driven crashes, overshoot death), rarely in steady state.
+That is the owner's stated intent: most declining worlds rebalance small and live.
+
+### Invariants and consumers
+
+- The developed-gate invariant ("non-developed systems hold population exactly 0",
+  `lib/world/__tests__/developed-gate-invariant.test.ts:34`) **survives as stated**: the reset
+  zeroes population in the same application as the control flip. Only the comment asserting
+  `control` monotonicity (`:45`) is re-authored; a transition test is added.
+- The harness's settled denominator (`control === "developed"`) drops the world automatically at
+  the reset — the "emptied world reads Supplied forever" trap closes structurally.
+- Verification gate (sim, both horizons, seed 42): strikers' decline un-masks after rule 1 (their
+  trailing trend goes negative); the startup founding cohort does not collapse (newborns skipped
+  by the gate in a famine cycle are topped up on recovery — read the opening-Provision and colony
+  net-growth instruments); Emptied/abandoned counts reported; band shares stay sane.
+
 ### Design decision from the measurement review (owner call, 2026-08-10)
 
 - Migration is not at fault and is untouched: it already scores liveability (contentment ×
