@@ -178,7 +178,7 @@ export interface WorldCohortEntry {
 // ── Episode costs ────────────────────────────────────────────────
 //
 // A grievance episode's cost is real and irreversible (teardown, overshoot death) —
-// docs/planned/adaptive-expectation.md, promise 5. Accumulated per-cycle from `TickInstrumentation`
+// docs/active/gameplay/economy.md, unrest promise 5. Accumulated per-cycle from `TickInstrumentation`
 // (`population-analysis.ts`'s `EpisodeCostTotals`), folded here by world cohort.
 
 /** One cohort's cumulative episode costs over the whole run. */
@@ -209,8 +209,8 @@ export interface EpisodeCostSummary {
 
 // ── The ratchet check ───────────────────────────────────────────
 //
-// The memory's known hazard on a jittering input is a rectifier (docs/planned/adaptive-expectation.md,
-// "What the memory does to a jittering input"). This buckets settled systems by their trailing
+// The memory's known hazard on a jittering input is a rectifier — an asymmetric filter fed an
+// oscillation tracks its peaks, so mean-preserving jitter would read as permanent grievance. This buckets settled systems by their trailing
 // Provision variance (`population-analysis.ts`'s `computeTrailingProvisionVariance`) and reads mean
 // grievance per bucket, per cohort: a positive slope (higher variance ⇒ higher mean grievance at
 // comparable Provision) is the rectifier firing.

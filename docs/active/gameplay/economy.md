@@ -231,6 +231,19 @@ unrest     ← clamp(floor + (1 − decay)·(unrest − floor) + term·decay, 0,
 - **Survival floor** — water or food below `SHORTAGE_SATISFACTION` (50%) reads `slopeShortage × (1 − Provision)` outright and bands the world Shortage, whatever the average or the memory says. Famine is never averaged away, and a population never gets "used to" it.
 - **Critical-good override** — each demanded good below `CRITICAL_SATISFACTION` (0.25, a separate line from the famine one) holding at least `BAND_MIN_DEMAND_SHARE` (1%) of the basket reads `min(slopeShortage, slopeBase + criticalWeight × (slopeShortage − slopeBase)) × (1 − Provision)`, on the absolute scale — expectation-independent, so no re-cut of `slopeBase` can silently weaken it. Slope-only: it never moves the band, and a world that also has famine fires the survival step alone.
 
+**The memory** (`lib/engine/expectation.ts`; `EXPECTATION_PARAMS` in `lib/constants/population.ts`): each developed system persists `provisionExpectation`, an asymmetric per-cycle relaxation toward that cycle's Provision — rising fast (`riseRate` 0.25/cycle: standards climb within a few good cycles) and resigning slowly (`resignRate` 0.02/cycle, half-life ≈ 34 cycles: accepting less takes a political generation). The update runs as catch-up sub-steps of the unscaled rates, the rise/resign branch re-evaluated every sub-step, so changing the tick cadence cannot bend the rise:resign ratio. The unrest read uses `max(stored, 0.5)` — the floor is read-time policy only, never written back, so the effective standard never falls below half-provision while the stored memory stays honest. A stored value that is absent, non-finite, or outside [0, 1] reads as absent and seeds from that cycle's own Provision — one rule covering world-gen, colony founding, old saves, and corruption alike, and the reason a newborn colony opens calm: its memory starts at its own opening state, so opening grievance is `max(0, 0.5 − opening P)`. A system transitioning into `developed` clears any stored baseline (a resettled world's stale memory must not judge its new colonists), and a cycle with an empty consumption basket skips the update — nothing was measured, so nothing is learned.
+
+The guarantee suite (`lib/constants/__tests__/band-constants.test.ts`) pins six promises, computed from the constants (`slopeBase` 1.6 flat — window [1.3, 2.08) from promises 3 and 4 — `slopeShortage` 2.4, strike 0.65, collapse/teardown 0.75, max standing floor 0.23) so a re-cut moves the numbers and fails pins rather than drifting silently:
+
+| # | Promise |
+| --- | --- |
+| 1 | A newborn colony opens calm at any tax — structural: the memory seeds at the colony's own opening state. The manifest-exhaustion window is measured, not promised: the harness reads founding trajectories over colony age plus the opening-Provision tail (`openedDeprived`, run minimum). |
+| 2 | Total failure of either survival good collapses an untaxed world — the crisis term reads the absolute scale. |
+| 3 | An accustomed world that loses half of what it is used to strikes at any tax: `slopeBase × 0.5 ≥ 0.65` ⇒ `slopeBase` ≥ 1.3. |
+| 4 | A quarter-dip never collapses or tears down at any tax: `slopeBase × 0.25 + maxFloor < 0.75` ⇒ `slopeBase` < 2.08. |
+| 5 | The escalation ladder is pinned as formulas, not literals: teardown onset at max floor at `G = (0.75 − maxFloor)/slopeBase` ≈ 0.325 (≈ a third-dip), unrest ceiling reachable from `G` ≈ 0.48 (max floor) / 0.625 (zero tax). |
+| 6 | The critical-good backstop holds shipped strength independent of expectation — no `slopeBase` re-cut can silently weaken the channel. |
+
 The **band is description, not mechanism** — four labels binned from Provision, read by the sim harness today (the player-facing Provision surface is a separately booked roadmap row):
 
 | Band | Rule |
@@ -240,7 +253,7 @@ The **band is description, not mechanism** — four labels binned from Provision
 | **Rationing** | Provision < `RATIONING_PROVISION` (0.70) |
 | **Shortage** | a *survival* good below 50%, whatever Provision says |
 
-No gameplay effect keys off the band — effects read Provision or the shortfall, so the label can never disagree with what is happening to the world, and the bin edges are a legibility choice rather than a balance risk. The containment guarantee is proved from the constants (`lib/constants/__tests__/band-constants.test.ts`): a world without famine banded Supplied or Strained cannot reach the 0.75 infrastructure-collapse line at any tax, crowding or override composition; collapse first becomes possible inside Rationing. Chronic unmet demand climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; sustained shortage crosses the thresholds.
+No gameplay effect keys off the band — effects read Provision or the grievance, so the label can never disagree with what is happening to the world, and the bin edges are a legibility choice rather than a balance risk. There is no band-level collapse guarantee: collapse keys on dip depth (promise 4), famine (promise 2), and chronic critical failure (promise 6), never on the band label. Chronic delivery below the memory climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; a sustained episode crosses the thresholds, and only resignation (the slow rate) ends an episode the supply doesn't.
 
 **Strikes** are derived each tick from `unrest` (no separate stored flag): above the strike threshold, a smooth suppression multiplier scales down production output only. People still consume — consumption is never suppressed. The strike state feeds back into the next economy tick's production.
 

@@ -359,8 +359,8 @@ export function computeWorldCohorts(
 /**
  * Fold the run's accumulated episode costs (`population-analysis.ts`'s `EpisodeCostTotals`) by
  * world cohort — cumulative levels torn down and overshoot deaths are irreversible, and a
- * galaxy-wide total hides which cohort actually pays for them (docs/planned/adaptive-expectation.md,
- * promise 5 + the gate's episode-costs reading). Cohorts overlap (see `cohortsForSystem`), so
+ * galaxy-wide total hides which cohort actually pays for them (docs/active/gameplay/economy.md,
+ * unrest promise 5 — episode costs are the promise's evidence). Cohorts overlap (see `cohortsForSystem`), so
  * `totalTeardownLevels`/`totalOvershootDeaths` are summed once over the settled galaxy, never as a
  * sum of `byCohort`'s rows.
  */

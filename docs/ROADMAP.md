@@ -34,19 +34,15 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 ## Queued — supply response, then PR6
 
 6. **[L] Supply response — the remaining arc** — [supply-response.md](./planned/supply-response.md).
-   Item 1 (Provision: the un-squared score, four descriptive bands, constant re-cuts, harness
-   instrument) **shipped on `feat/supply-response`** and passed its A/B gate (Gate 2, 2026-08-08:
-   mislabelling gone, growth/strikes flat-or-better, `strikeExplains` suppression fell ~3×).
-   Three items remain, **in order, measuring between** — (1) the **adaptive expectation** (unrest
-   judged against a persisted per-world baseline of what that world has been getting; absorbs the
-   old change-term item as its fastest-decay calibration arm — decided at Gate 2), (2) abandonment,
-   (3) relief. The expectation changes what the slopes are measured against and retires the interim
-   `slopeRationing`/founding invariant; abandonment and relief each need a primitive the game does
-   not have and are gated on it.
-   *Next step:* `/spec-review` on the adaptive-expectation spec
-   ([adaptive-expectation.md](./planned/adaptive-expectation.md) — design pass done; cross-mechanic:
-   save shape, slopes, migration, abandonment's trigger), then `/build-plan`.
-   *Don't:* precision-tune any constant before the expectation lands — it re-derives the slopes.
+   Item 1 (Provision) and item 2 (the **adaptive expectation**) are **shipped**: unrest is judged
+   against a persisted per-world baseline of what that world has been getting, the interim
+   `slopeRationing`/founding invariant retired, all three gate decisions resolved (mechanism +
+   guarantee ladder: [economy.md](./active/gameplay/economy.md)). Two items remain, **in order,
+   measuring between** — (1) abandonment, (2) relief; each needs a primitive the game does not
+   have and is gated on it, and each consumes the shipped worsening-vs-recovering signal
+   (deviation from expectation).
+   *Next step:* abandonment's prerequisite measurement — which worlds actually cannot feed
+   themselves (supply-response.md, "Which worlds are which") — then its spec.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line.
    *Next step:* after item 6.
@@ -177,13 +173,15 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 
 **UI**
 - **[M] Provision display — population-tab row + Provision vital tile + map value mode.** Surfaces
-  the Provision score (supply-response item 1) to the player: a row + band badge on the Population
-  tab, a vitals-grid tile, and a Provision choropleth alongside the existing stability/population/
-  development map modes. Gated on supply-response item 1 shipping (the score must exist). Needs the
-  collaborative design pass + HTML prototype first (three surfaces, one of them a map mode). The
-  tooltip must carry the spec's wording — "weighted by how badly it needs it" — the bare percentage
-  invites the misreading the spec warns about; deliberately decided as a follow-up rather than part
-  of item 1.
+  the Provision score to the player: a row + band badge on the Population tab, a vitals-grid tile,
+  and a Provision choropleth alongside the existing stability/population/development map modes.
+  **Also the landing zone for the adaptive-expectation surface**: what this world is accustomed to
+  (`provisionExpectation`) and today's grievance against it — the worsening-vs-recovering read the
+  mechanic already computes; today neither is visible anywhere in the UI. Needs the collaborative
+  design pass + HTML prototype first (three-plus surfaces, one of them a map mode). The tooltip
+  must carry the spec's wording — "weighted by how badly it needs it" — the bare percentage
+  invites the misreading the spec warns about; deliberately decided as a follow-up rather than
+  part of the mechanic items.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a

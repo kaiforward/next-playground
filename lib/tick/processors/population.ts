@@ -50,8 +50,8 @@ export async function runPopulationProcessor(
 
   const popUpdates: PopulationUpdate[] = [];
   const demandPops: Array<{ systemId: string; population: number; productionSuppress: number }> = [];
-  // Calibration-only: per-system overshoot-death amount this cycle — the episode-cost evidence the
-  // adaptive-expectation gate reads. Absent system ⇒ 0 (kept sparse: the gate is off for most
+  // Calibration-only: per-system overshoot-death amount this cycle — the harness's
+  // episode-cost instrument reads. Absent system ⇒ 0 (kept sparse: the gate fires on few
   // systems most cycles). Populated below, observational only — it changes nothing about `population`.
   const overshootDeathBySystem = new Map<string, number>();
   for (const s of states) {

@@ -1,6 +1,6 @@
 /**
  * Adaptive expectation — the persisted per-system memory of the Provision a population has grown
- * accustomed to (see docs/planned/adaptive-expectation.md, "The persisted baseline"). Unrest's
+ * accustomed to (docs/active/gameplay/economy.md, "The memory"). Unrest's
  * supply term reads the gap between this memory and today's delivery, not the distance from
  * perfection. Two pure functions, no I/O:
  *  - readExpectation()   resolves a stored value (or its absence) into what this cycle's unrest

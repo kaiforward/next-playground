@@ -808,7 +808,7 @@ describe("population processor: adaptive expectation", () => {
 });
 
 // ── Calibration instrumentation: the overshoot-death gate's magnitude, isolated per system —
-// the adaptive-expectation gate's episode-cost evidence (docs/planned/adaptive-expectation.md,
+// the harness's episode-cost evidence (docs/active/gameplay/economy.md, unrest
 // promise 5). Observational: the amount reported must match what actually left `population`. ──
 
 describe("population processor: overshoot-death instrumentation", () => {

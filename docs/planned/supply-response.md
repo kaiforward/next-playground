@@ -3,18 +3,13 @@
 ## Headline
 
 A world's supply state is now one readable number — **Provision**, the necessity-and-demand-weighted
-share of what a world needs — driving unrest and growth, with four descriptive bands and two explicit
-severity overrides (shipped; see [economy.md](../active/gameplay/economy.md)). What remains of this
-arc is making the *response* to that number behave like a population rather than a thermostat, and
-giving stuck worlds an exit:
+share of what a world needs — driving unrest and growth, with four descriptive bands, two explicit
+severity overrides, and a persisted per-world **expectation** unrest is judged against: a frontier
+colony that has always scraped by is content, a rich world that dips is not, and recovery visibly
+calms a world while its level is still poor (both shipped; mechanism and guarantee ladder in
+[economy.md](../active/gameplay/economy.md)). What remains of this arc is giving stuck worlds an
+exit:
 
-- **The adaptive expectation** — fully designed, spec in
-  [adaptive-expectation.md](./adaptive-expectation.md). Unrest stops judging every world against one
-  fixed global bar and judges it against **what that world has been getting**: a frontier colony
-  that has always scraped by is content; a rich world that dips is not; a world whose supply is
-  *falling* radicalises before its level looks bad, and one that is *recovering* visibly calms. One
-  mechanism — a persisted, slow-moving per-world baseline — whose fastest-decay setting is the old
-  "change term" (previously sequenced as its own item; merged into the spec's calibration sweep).
 - **Abandonment.** A world that cannot sustain itself declines to empty and returns to the map as a
   candidate for later resettlement, instead of parking half-dead forever.
 - **Relief.** A player-funded intervention buys a viable world out of the strike loop — spending to
@@ -86,20 +81,19 @@ abandonment design against the narrower residual, not the pre-change number.
 
 ## The adaptive expectation
 
-Fully designed — the spec, with the decided mechanism (memory bar with asymmetric rise/resign
-rates, the 0.5 destitution floor, the absolute famine/critical channels, the four re-authored
-guarantees, constants, calibration sweep and gate metrics, and its own hazards worksheet), lives in
-**[adaptive-expectation.md](./adaptive-expectation.md)**. This doc keeps only what the *later*
-items need from it:
+Shipped — the mechanism (memory bar with asymmetric rise/resign rates, the 0.5 destitution
+floor, the absolute famine/critical channels, the six-promise guarantee ladder, constants) lives in
+[economy.md](../active/gameplay/economy.md). This doc keeps only what the *later* items need from
+it:
 
 - **Abandonment's trigger keys on famine-driven or physical decline, never unrest** — a world that
   has normalised its own misery stops emitting the unrest signal, so an unrest-keyed trigger would
   be quietly disabled by the expectation; and the expectation's decline flip narrows non-famine
   physical decline, so the trigger is re-verified against post-change decline rates. Non-negotiable
-  once the expectation ships.
+  now the expectation is live.
 - **Abandoned worlds leave the settled denominator before any expectation baseline is measured
-  over them**, and **the un-develop transition clears the stored expectation** — the develop-side
-  clear the expectation item ships is the other half of the same rule (a husk's stale memory must
+  over them**, and **the un-develop transition clears the stored expectation** — the shipped develop-transition
+  clear is the other half of the same rule (a husk's stale memory must
   not survive into a resettlement).
 - Both later items consume the **worsening-vs-recovering signal** (deviation from baseline) as a
   derived, stated read — never raw field access.
@@ -227,11 +221,10 @@ Each item is measured before the next starts. (Renumbered from the original five
 item 1 shipped; the old item 2, the change term, is absorbed into the adaptive expectation as its
 fastest-decay calibration arm.)
 
-1. **The adaptive expectation** — spec: [adaptive-expectation.md](./adaptive-expectation.md). The
-   persisted per-world baseline; unrest responds to supply measured against it. Adds the one
-   persisted field; slopes re-derived; founding invariant and interim `slopeRationing` retire. The
-   decay-rate sweep is the item's calibration, with the one-cycle arm reproducing the old change
-   term for comparison.
+1. **The adaptive expectation** — SHIPPED (mechanism + guarantees:
+   [economy.md](../active/gameplay/economy.md)). The persisted per-world baseline; unrest responds
+   to supply measured against it; the founding invariant and interim `slopeRationing` retired. All
+   three gate decisions resolved no-change except the stability-label edge re-read.
 2. **Abandonment** — a world that cannot sustain itself declines to empty and returns to the map.
    Gated on: the `canSustainItself` predicate, the viability cohort in the harness (the
    prerequisite measurement above), the un-develop primitive, and the re-authored developed-gate
@@ -247,10 +240,9 @@ need, updated to the post-gate state.)
 
 ### One quantity, several unrelated jobs
 
-The expectation item's rows (the shortfall's political/biological split, the slope re-derivation,
-`unrest`'s deliberately-unchanged meaning) moved to
-[adaptive-expectation.md](./adaptive-expectation.md)'s worksheet. No quantity row is specific to
-abandonment or relief yet — their specs fill this section when written.
+The expectation item shipped with its own worksheet (the shortfall's political/biological split,
+the slope re-derivation, `unrest`'s deliberately-unchanged meaning — git holds the spec). No
+quantity row is specific to abandonment or relief yet — their specs fill this section when written.
 
 ### A constant read for a meaning it was not authored to have
 
@@ -258,7 +250,7 @@ abandonment or relief yet — their specs fill this section when written.
 | --- | --- | --- | --- |
 | `viable` (directed-build) | `popCap ≥ seedPop` at founding | must NOT be reused for the sustainability predicate | name the new one `canSustainItself` |
 
-(The expectation item's constant rows moved to its own spec.)
+(The expectation item's constants are documented in [economy.md](../active/gameplay/economy.md).)
 
 ### A system you did not think about
 
@@ -284,7 +276,7 @@ abandonment or relief yet — their specs fill this section when written.
 
 | Consumes | Produced at | Actual shape today | Design assumes |
 | --- | --- | --- | --- |
-| the worsening-vs-recovering signal | the expectation item's stored baseline ([adaptive-expectation.md](./adaptive-expectation.md)) — a derived read, not raw field access | designed, not yet built | both items sequence after it |
+| the worsening-vs-recovering signal | the shipped stored baseline (`provisionExpectation`; read via `lib/engine/expectation.ts`, never raw field access) | **live** | both items consume it as a derived read |
 | un-develop / abandonment transition | **nowhere** — `control` written toward `developed` only (`lib/world/tick.ts:491`); invariant asserts monotonicity | one-way ladder | abandonment builds it and re-authors the invariant |
 | resettlement of an emptied world | claims need unclaimed (`lib/world/tick.ts:1037`); colony candidates need `controlled` (`:1065`); repopulation headroom-gated to zero | a `developed` husk is a candidate for nothing | abandonment states the target `control` + `factionId` |
 | targeted logistics transfer | **nowhere** — autonomic matcher only; player orders exist for construction only | — | relief builds it |

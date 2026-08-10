@@ -120,14 +120,14 @@ export interface TickProcessorResult {
    *  `populationDelta`'s gate (fires only above the strike-level unrest gate), already scaled by
    *  this run's catch-up factor. A system absent from the map lost none this cycle (the gate did not
    *  fire, or the system was not in this tick's shard). Calibration instrumentation — the episode-cost
-   *  evidence the adaptive-expectation gate reads (docs/planned/adaptive-expectation.md, promise 5);
+   *  evidence the harness reads (docs/active/gameplay/economy.md, unrest promise 5);
    *  surfaced via `runWorldTick().instrumentation`, never broadcast or persisted. */
   overshootDeathBySystem?: Map<string, number>;
   /** Per-system whole building levels torn down this cycle — both infrastructure-decay channels
    *  (sustained-idle contraction and the unrest-collapse catastrophe) combined, since both remove
    *  capacity a population must live without either way. A system absent from the map lost no levels
-   *  this cycle. Calibration instrumentation — the episode-cost evidence the adaptive-expectation
-   *  gate reads (docs/planned/adaptive-expectation.md, promise 5); surfaced via
+   *  this cycle. Calibration instrumentation — the episode-cost evidence the harness
+   *  reads (docs/active/gameplay/economy.md, unrest promise 5); surfaced via
    *  `runWorldTick().instrumentation`, never broadcast or persisted. */
   teardownLevelsBySystem?: Map<string, number>;
 }

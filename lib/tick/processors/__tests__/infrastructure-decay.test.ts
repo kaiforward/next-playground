@@ -184,8 +184,8 @@ describe("infrastructure-decay processor", () => {
 });
 
 // ── Calibration instrumentation: whole levels torn down per system, combining both decay
-// channels — the adaptive-expectation gate's episode-cost evidence
-// (docs/planned/adaptive-expectation.md, promise 5). ──
+// channels — the harness's episode-cost evidence
+// (docs/active/gameplay/economy.md, unrest promise 5). ──
 
 describe("infrastructure-decay processor: teardown instrumentation", () => {
   it("reports no entry (undefined map) when nothing decays", async () => {

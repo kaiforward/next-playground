@@ -345,8 +345,8 @@ export function summarizeFoundingStock(
 
 // ── Founding trajectory: Provision and unrest over colony age, not just at opening ──────
 //
-// `summarizeFoundingStock` above reads ONE snapshot per colony — its first assessed cycle. Promise
-// 1's window half (docs/planned/adaptive-expectation.md) covers the whole ~60-cycle dowry +
+// `summarizeFoundingStock` above reads ONE snapshot per colony — its first assessed cycle. Unrest promise
+// 1's window half (docs/active/gameplay/economy.md) covers the whole ~60-cycle dowry +
 // resignation period, including the manifest-exhaustion transition the opening snapshot cannot see
 // at all: a colony that opens calm and then dips as its founding stock (`FOUNDING_STOCK_COVER`)
 // runs out is invisible to a single opening read. This tracks the SAME founded-colony roster

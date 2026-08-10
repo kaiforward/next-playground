@@ -38,8 +38,8 @@ export async function runInfrastructureDecayProcessor(
   const idleUpdates: IdleCyclesUpdate[] = [];
   const debtUpdates: CollapseDebtUpdate[] = [];
   const popCapUpdates: PopCapUpdate[] = [];
-  // Calibration-only: per-system whole levels torn down this cycle — the episode-cost evidence the
-  // adaptive-expectation gate reads. Absent system ⇒ 0 levels lost. `computeSystemDecay` only ever
+  // Calibration-only: per-system whole levels torn down this cycle — the harness's
+  // episode-cost instrument reads. Absent system ⇒ 0 levels lost. `computeSystemDecay` only ever
   // writes a strictly-lower count into `newCounts` (both the idle-buffer channel and the
   // unrest-collapse channel), so the pre/post difference here is exactly what left this cycle,
   // combining both channels without needing to re-derive which one fired.
