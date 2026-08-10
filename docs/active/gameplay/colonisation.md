@@ -511,7 +511,7 @@ owns downward moves). Without this a colony could build housing but never grow i
 the seed and pin population there forever.
 
 Housing also **leads** population: the autonomic build planner's proactive-housing pass builds housing ahead of
-population at *fed and calm* systems, paced to keep `popCap` a small margin ahead of current population and
+population wherever `fed()` passes (survival satisfaction only, no unrest input), paced to keep `popCap` a small margin ahead of current population and
 rounded up to at least one whole level once occupancy catches the margin (so a one-level colony can ratchet up
 instead of needing population to exceed its own cap). This creates the headroom migration and delivery then
 fill. (Full autonomic-build detail: [economy-autonomic-agency.md](./economy-autonomic-agency.md).)

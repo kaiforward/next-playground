@@ -43,7 +43,7 @@ Whatever the pools cannot serve remains as a permanent residual — the **negati
 standing player opportunity the later scaling/bounty rework turns into contestable trade.
 
 The two halves reinforce each other and are why **logistics-first** was the correct sequencing: logistics
-delivers supply → a system becomes *fed and calm* → a fed, calm system is what the build planner grows.
+delivers supply → a system passes `fed()` (survival satisfaction only, no unrest input) → a fed system is what the build planner grows.
 Supply makes a system viable; a viable system builds.
 
 ---
@@ -263,7 +263,7 @@ flight, so it never double-commits — and the **per-faction construction pool**
 as a full staffable level; build duration is therefore *emergent* (`work ÷ absorbed`, a floor wealth cannot
 buy past) and a larger pool spreads across more parallel fronts rather than finishing any one build faster.
 The gates sequence the work on their own: a system with no spare labour queues only housing (and only if
-fed and calm), and industry is queued only where spare labour already exists.
+`fed()` passes — survival satisfaction only, no unrest input), and industry is queued only where spare labour already exists.
 
 ### The pool — eligible heads, substituted by Construction Centres
 
@@ -379,7 +379,7 @@ committed queue); both processors on their own cycle start.
 - **Strategic bottleneck-relief weighting** — faction-wide chokepoint targeting + doctrine bias (the
   demand *term* is in v1; the prioritisation strategy on top is deferred).
 - **Full "Population ← economic viability"** (food + jobs carrying capacity as the dominant growth lever)
-  → SP4; the "fed and calm" gate is a deliberately narrow slice of it.
+  → SP4; the `fed()` survival-satisfaction gate is a deliberately narrow slice of it.
 - **Habitat / terraforming** that *raises* a world's habitable ceiling → later.
 - **Faction `factionId` mutation** (capture/rebellion) and the `topology.ts getOpenEdges()` cache-
   invalidation it would force → SP5-full / war.
@@ -407,6 +407,6 @@ until SP4 / SP5-full land.
   one moving substrate.
 - **Builds on** substrate-v2 available-space and the SP3 input-gating cascade (both unchanged).
 - **Vision §13:** the autonomic (item 5) half, logistics-first, with a narrow slice of item 4
-  (pop-viability) as the "fed and calm" build gate. Full SP4 (events + the dominant-lever pop-viability
+  (pop-viability) as the `fed()` survival-satisfaction build gate. Full SP4 (events + the dominant-lever pop-viability
   rework), the player-facing scaling/bounty rework, full faction agency (treasury, military ceiling), and
   the war capstone follow on top of this substrate.

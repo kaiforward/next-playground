@@ -21,7 +21,7 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
  * Each slope is an EXCHANGE RATE, not a cap: how much settled unrest one unit of grievance (or, for
  * the crisis term, of absolute shortfall) buys.
  *
- * `slopeBase` (renamed from `slopeRationing`) settles unrest above the floor per unit of
+ * `slopeBase` settles unrest above the floor per unit of
  * *grievance* — one flat exchange rate, no escalation ramp. It sits in the window the guarantees
  * derive: ≥ 1.3 (a fully-accustomed world losing half of what it is used to must reach strike at
  * any tax) and < 2.08 (a quarter-dip must never collapse or tear down, even at the max standing
