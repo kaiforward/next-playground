@@ -21,31 +21,18 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   the replacement skills.
 
 - **[L] Economy band reconciliation** — the `shared/band-reconciliation` integration branch
-  (sub-features ride `feat/*` branches PR'd into it; item 6 is on `feat/supply-response`). Design:
+  (sub-features ride `feat/*` branches PR'd into it). Design:
   [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md). PR1-5 shipped plus #202-#217
-  (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics).
+  (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics), the
+  adaptive expectation, and abandonment (#221).
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
-  *Next step:* merge `feat/supply-response` (item 6 step 1 — Provision — PR open into shared), then PR6.
+  *Next step:* PR6 (the presentation layer, below), then shared→main.
 
 ---
 
-## Queued — supply response, then PR6
-
-6. **[L] Supply response — the remaining arc** — [supply-response.md](./planned/supply-response.md).
-   Items 1–3 (Provision, the **adaptive expectation**, **abandonment**) are **shipped** — the last
-   as a deliberately minimal stopgap: famine gates both population-inflow paths and famine + pop
-   < 1 resets a system to unclaimed frontier ([colonisation.md](./active/gameplay/colonisation.md),
-   "A colony is allowed to die"; abandonment awaits its PR into shared). One item remains:
-   **relief** — a player-funded intervention that buys a viable world out of the strike loop by
-   moving goods, never by deleting unrest. Its cohort is measured: large non-famine
-   rationing-regime strikers plus calmed-tiny worlds (supply-response.md, "The strike loop").
-   *Next step:* PR `feat/abandonment-framing` into shared, then the relief design pass (gated on
-   the treasury accounting decision, the targeted-transfer export, and a costing — see
-   supply-response.md "Relief").
-   *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
-   exception to the money-is-fuel invariant.
+## Queued — PR6, then player seat
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line. Two UI scopes:
    the §6 presentation contract (panels speak regimes) from
@@ -57,7 +44,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    Needs the collaborative design pass + HTML prototype first (three-plus surfaces, one a map
    mode). The Provision tooltip must carry the spec's wording — "weighted by how badly it needs
    it" — the bare percentage invites the misreading the spec warns about.
-   *Next step:* after item 6.
+   *Next step:* the collaborative design pass + HTML prototype (breadth-first wireframes, then
+   refine the chosen one).
    **PR6 owns the doc fold**, which is bigger than it looks — do it on the branch, before the final review:
    - Four **active** docs the arc made stale: `economy-autonomic-agency.md`, `colonisation.md`,
      `tick-engine.md`, and `economy.md` (its decay section still documents the continuous
@@ -86,6 +74,17 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 No order. Pull from here when the queue empties, or fold one in when a PR is already in the file.
 
 **Economy / simulation**
+- **[M] Relief — a player-funded intervention buys a viable world out of the strike loop** by
+  moving goods through the real logistics simulation, never by deleting unrest. Design:
+  [supply-response.md](./planned/supply-response.md) "Relief" (the arc's other items all shipped).
+  Deferred from the queue by explicit decision (2026-08-10): the residual cohort is small (large
+  non-famine rationing strikers + calmed-tiny worlds) and the owner wanted player-facing work
+  after a long economy-math run. Gated on: the treasury accounting decision (band vs
+  off-the-top), the targeted-transfer export, a costing (or booked logistics-cost row), and the
+  per-category spend-attribution tooling row. New question since abandonment shipped: does an
+  active relief order suspend the death line, or is the race accepted?
+  *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
+  exception to the money-is-fuel invariant.
 - **[L] Physical warehouse model — storage as a real, brake-relevant limit.** Today's storage
   constants (`EXTRACTOR/PRODUCTION_STORAGE_PER_UNIT`, `POP_CENTRE_STORAGE`) only deepen `maxStock`;
   they are authored per *producing* building while the brake knee is 40 cycles of *system-wide*
