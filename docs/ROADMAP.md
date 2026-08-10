@@ -44,7 +44,16 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    *Next step:* abandonment's prerequisite measurement — which worlds actually cannot feed
    themselves (supply-response.md, "Which worlds are which") — then its spec.
 
-7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line.
+7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line. Two UI scopes:
+   the §6 presentation contract (panels speak regimes) from
+   [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md), **plus the Provision
+   display** (folded in from the UI queue): a Provision row + band badge on the Population tab, a
+   vitals-grid tile, a Provision choropleth alongside the existing map value modes, and the
+   adaptive-expectation surface — what this world is accustomed to (`provisionExpectation`) and
+   today's grievance against it, the worsening-vs-recovering read the mechanic already computes.
+   Needs the collaborative design pass + HTML prototype first (three-plus surfaces, one a map
+   mode). The Provision tooltip must carry the spec's wording — "weighted by how badly it needs
+   it" — the bare percentage invites the misreading the spec warns about.
    *Next step:* after item 6.
    **PR6 owns the doc fold**, which is bigger than it looks — do it on the branch, before the final review:
    - Four **active** docs the arc made stale: `economy-autonomic-agency.md`, `colonisation.md`,
@@ -172,16 +181,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   correctness; worth one shared staffing-estimate helper.
 
 **UI**
-- **[M] Provision display — population-tab row + Provision vital tile + map value mode.** Surfaces
-  the Provision score to the player: a row + band badge on the Population tab, a vitals-grid tile,
-  and a Provision choropleth alongside the existing stability/population/development map modes.
-  **Also the landing zone for the adaptive-expectation surface**: what this world is accustomed to
-  (`provisionExpectation`) and today's grievance against it — the worsening-vs-recovering read the
-  mechanic already computes; today neither is visible anywhere in the UI. Needs the collaborative
-  design pass + HTML prototype first (three-plus surfaces, one of them a map mode). The tooltip
-  must carry the spec's wording — "weighted by how badly it needs it" — the bare percentage
-  invites the misreading the spec warns about; deliberately decided as a follow-up rather than
-  part of the mechanic items.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a
