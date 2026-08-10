@@ -179,3 +179,17 @@ viability test as drafted identifies none of the worlds actually stuck.
 
 Open follow-up measurement if the spec needs it: attribute the refill between colonist delivery
 and migration (needs a processor hook counting per-system inflow by path).
+
+### Design decision from the measurement review (owner call, 2026-08-10)
+
+- Migration is not at fault and is untouched: it already scores liveability (contentment ×
+  headroom × jobs) and avoids famine worlds; the blind path is colonist delivery's
+  emptiest-first, headroom-only water-fill (receipts above). Delivery was added deliberately
+  (`f817be76`) because one-hop diffusion cannot reach the multi-hop frontier.
+- **The fix here is the minimal famine gate: delivery skips worlds currently in survival
+  shortfall.** One condition on the sink list, no new state, no thresholds. Explicitly temporary
+  scaffolding — kept as simple as possible on purpose.
+- The real fix — unifying diffusion migration and colonist delivery into one routed
+  people-movement system alongside goods — is booked to the logistics-pillar depth check
+  (ROADMAP, Unqueued). Do not grow the interim gate toward it (no appeal-weighted allocation;
+  that was considered and set aside as overworking a system the logistics pass replaces).

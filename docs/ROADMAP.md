@@ -222,7 +222,10 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   logistics was inherited from a retired umbrella and never built. Its own pass before calling the
   pillar done. Includes **hauling founding freight with real ships** — the staged manifest currently
   teleports source→colony at completion; deferred at colonisation-economics to whenever logistics
-  carries real cargo. Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
+  carries real cargo. Also absorbs **unifying people-movement**: one-hop diffusion migration and the
+  faction-pool colonist delivery do the same task for different reasons and should become one routed
+  system when logistics carries people (decided at the abandonment measurement, 2026-08-10; the
+  interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
   coarse in-fiction valve at most) are preserved in memory `design-logistics-depth-inputs`.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
