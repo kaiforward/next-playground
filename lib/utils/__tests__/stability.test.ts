@@ -19,13 +19,14 @@ describe("stabilityLabel", () => {
     expect(stabilityLabel(0.39)).toBe("Calm");
   });
 
-  it("returns Tense at the 0.4 boundary up to < 0.6", () => {
+  it("returns Tense at the 0.4 boundary up to < 0.5", () => {
     expect(stabilityLabel(0.4)).toBe("Tense");
-    expect(stabilityLabel(0.5)).toBe("Tense");
-    expect(stabilityLabel(0.59)).toBe("Tense");
+    expect(stabilityLabel(0.45)).toBe("Tense");
+    expect(stabilityLabel(0.49)).toBe("Tense");
   });
 
-  it("returns Unrest at the 0.6 boundary up to just below the strike threshold", () => {
+  it("returns Unrest at the 0.5 boundary up to just below the strike threshold", () => {
+    expect(stabilityLabel(0.5)).toBe("Unrest");
     expect(stabilityLabel(0.6)).toBe("Unrest");
     expect(stabilityLabel(STRIKE_PARAMS.threshold - 0.01)).toBe("Unrest");
   });
@@ -52,11 +53,11 @@ describe("stabilityRampColor", () => {
 
   it("returns the Tense colour at the 0.4 threshold", () => {
     expect(stabilityRampColor(0.4)).toBe(STABILITY_RAMP_STOPS.Tense);
-    expect(stabilityRampColor(0.5)).toBe(STABILITY_RAMP_STOPS.Tense);
+    expect(stabilityRampColor(0.45)).toBe(STABILITY_RAMP_STOPS.Tense);
   });
 
-  it("returns the Unrest colour at the 0.6 threshold up to just below the strike threshold", () => {
-    expect(stabilityRampColor(0.6)).toBe(STABILITY_RAMP_STOPS.Unrest);
+  it("returns the Unrest colour at the 0.5 threshold up to just below the strike threshold", () => {
+    expect(stabilityRampColor(0.5)).toBe(STABILITY_RAMP_STOPS.Unrest);
     expect(stabilityRampColor(STRIKE_PARAMS.threshold - 0.01)).toBe(STABILITY_RAMP_STOPS.Unrest);
   });
 

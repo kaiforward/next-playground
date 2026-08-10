@@ -21,7 +21,7 @@ export const STABILITY_RAMP_STOPS: Record<StabilityLabel, string> = {
 export function stabilityLabel(unrest: number): StabilityLabel {
   if (unrest < 0.2) return "Stable";
   if (unrest < 0.4) return "Calm";
-  if (unrest < 0.6) return "Tense";
+  if (unrest < 0.5) return "Tense";
   if (unrest < STRIKE_PARAMS.threshold) return "Unrest";
   return "Strike";
 }

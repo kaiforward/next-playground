@@ -71,6 +71,24 @@ A well-kept file carries its own provenance line ("committed at `<sha>`, moved h
 - **written alongside** — falsifier and conclusion first appear in one commit. Not fatal, but a falsifier written after the number exists is not a falsifier; the `Licenses` line gets extra scrutiny.
 - **absent** — every current-behaviour claim in the spec is an untested hypothesis unless row 4 evidences it individually.
 
+### 1a. Current-behaviour sentences — every one, anywhere in the doc
+
+Any sentence stating how the game works **today** is a checkable claim, no matter where it sits —
+headline, rationale, a caveat, an aside inside a hazard row. Build the list while reading the spec
+in full, and hand it to the lenses beside the worksheet audit. Each sentence is one of two kinds:
+
+- **mechanic** ("X is computed per cycle", "the allocator fills worst-first") — must match the
+  code; verified with `file:line`.
+- **observation** ("measured as bimodal at Gate 1") — must name the measurement it came from, and
+  must be worded as an observation, never as a mechanism. An observed distribution written in
+  mechanism language ("the 0-or-1 cliff") is a finding by itself: the next reader will quote it as
+  a rule of the game.
+
+A false side-remark is *more* dangerous than a false conclusion — conclusions get attacked by
+every lens, while side-remarks get quoted in later design discussions as established fact. This
+check exists because exactly that happened once: a wrong aside survived a full review inside a
+correctly-hedged hazard row, then derailed the gate discussion built on top of it.
+
 ### 2. Map the spec
 
 Read `docs/SPEC.md` (the system interaction map). Build two lists:
@@ -86,7 +104,7 @@ Each lens owns specific hazard rows:
 |---|---|
 | consumer-sweep | 1 (one quantity, several jobs), 2 (constant misread), 5 (primitive that doesn't exist) |
 | interaction-attack | 3 (a system you did not think about) |
-| consistency-attack | 4 (claims without measurement), 6 (aggregate moves for other reasons), + spec-internal contradiction and stability |
+| consistency-attack | 4 (claims without measurement), 6 (aggregate moves for other reasons), + spec-internal contradiction and stability, + the step-1a current-behaviour sentence list (mechanic sentences vs code, observation sentences vs their measurement) |
 
 For each lens, write a 2–4 sentence attack framing **specific to this spec**, derived from the audit and the two lists. A row classified `assertion` or `missing` is that lens's primary target — it will produce the row's artifact itself and attack the spec with it; a row classified `evidence` gets spot-checked for completeness instead. Beyond the rows, aim at the spec's probable blind side — identify which *side* of each mechanism the spec redesigns and point the lens at the other side, e.g. "this spec redesigns the push side of each loop — sweep the receiving/clamping consumers whose triggers were previously synonymous with pathology." The sharpening never tells the lens what to conclude.
 

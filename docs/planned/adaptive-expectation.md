@@ -172,8 +172,10 @@ filter fed an oscillating input is a rectifier: for a per-cycle H/L alternation 
 rates the fixed point is `E = 0.9245·H + 0.0755·L` — the memory settles at ~92% of the *peak*, so a
 world whose supply merely cycles would carry permanent grievance ≈ 0.92 × amplitude at a healthy
 mean, punishing lumpy logistics rather than poverty, hardest on small-basket worlds. Whether
-healthy-world Provision actually jitters cycle-to-cycle is **unmeasured** (the per-good 0-or-1
-cliff is cross-sectional; stock buffers may hold satisfaction through delivery gaps), so this item
+healthy-world Provision actually jitters cycle-to-cycle is **unmeasured** (the measured 0-or-1
+bimodality is a cross-sectional observation of the allocation layer — per-good satisfaction itself
+is mechanically continuous, pro-rata delivered ÷ demanded per economy cycle; stock buffers may
+hold satisfaction through delivery gaps), so this item
 measures before mechanising: the gate instruments temporal per-world Provision variance and mean G
 against that variance per cohort — a positive relationship is the rectifier firing and is a defect
 by definition, not a tuning question. **Pre-named mitigation if it fires:** the rise arm reads a
@@ -398,7 +400,7 @@ noted per row):
 | strikes are small-world, not landless-world | pop 10–100 14.7% vs pop ≥ 1K 0.0%; survival-short 91.5% not striking | equilibrium (step-1 gate) | pop bands; survival-short |
 | the planner's strike-loop exit baseline | `strikeExplains` suppression 0.86% (10k) / 0.71% (12k) per eligible pair | both + 12k | eligible (system, good) pairs |
 | slow chronic decline self-forgives at the resign rate | **hypothesis by construction** — the sweep's slow-resign arms measure it; the asymmetry's job | — (gate) | — |
-| healthy-world Provision jitters cycle-to-cycle (the rectifier's trigger) | **unmeasured** — the per-good 0-or-1 cliff is cross-sectional; stock buffers may smooth consumption through delivery gaps. The ratchet check measures it before the mitigation is built | — (gate) | per cohort |
+| healthy-world Provision jitters cycle-to-cycle (the rectifier's trigger) | **unmeasured** — the measured 0-or-1 bimodality is a cross-sectional allocation-layer observation (per-good satisfaction is mechanically continuous, pro-rata delivered ÷ demanded per cycle); stock buffers may smooth consumption through delivery gaps. The ratchet check measures it before the mitigation is built | — (gate) | per cohort |
 | the manifest-exhaustion transition dips a colony's Provision | **unmeasured** — colonist delivery/migration/logistics may carry colonies over it smoothly. The founding trajectory read measures it; the seed-timing fallback is pre-named | — (gate) | founding cohort |
 
 ### 5. Designing against a threshold, signal or primitive that does not exist
