@@ -1,14 +1,16 @@
 import type { UnrestParams, StrikeParams, PopulationParams } from "@/lib/engine/population";
+import type { ExpectationParams } from "@/lib/engine/expectation";
 import type { MigrationFlowParams } from "@/lib/engine/migration";
 import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
 
 /**
  * Unrest integration. Rates are per *population-processor run* — i.e. per economy-shard update
  * (every `CYCLE_LENGTH` ticks, 24), not per game tick. Unrest relaxes toward a standing-pressure
- * floor (tax + crowding) and integrates dissatisfaction on top, settling at
- * `min(1, floor + slope × D)`, independent of the relaxation rate (and therefore of the catch-up
- * factor). `D` is the Provision shortfall (`1 − provision()`), a linear mean — a partial
- * shortfall reads its own size, not its square.
+ * floor (tax + crowding) and integrates the supply term on top, settling at
+ * `min(1, floor + term)`, independent of the relaxation rate (and therefore of the catch-up
+ * factor). The term is whichever reads larger of the memory-relative grievance reading and the
+ * absolute crisis reading (see `supplyUnrestTerm`) — famine and critical-good collapse stay
+ * absolute; everything else is judged against what a population has grown accustomed to.
  *
  * `decay` is the single relaxation rate for every supply label — the label used to pick a faster
  * rate while Supplied; that branch is gone, so a Supplied world now sheds unrest at the same rate a
@@ -16,18 +18,23 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
  * ~270 ticks either way at fast-mode wall clock, which is "watchable" whichever candidate is picked,
  * so the choice is not worth heavily calibrating.
  *
- * Each slope is an EXCHANGE RATE, not a cap: how much settled unrest one unit of D buys.
+ * Each slope is an EXCHANGE RATE, not a cap: how much settled unrest one unit of grievance (or, for
+ * the crisis term, of absolute shortfall) buys.
  *
- * `slopeRationing` is INTERIM SCAFFOLDING, not a design law — it dissolves once the adaptive
- * expectation re-derives it against a newborn's own expectations rather than an
- * absolute floor. It sits in [0.84, 1.07] — the founding cohort (the modal world, opening at
- * the galaxy's worst supply state) must settle below the 0.65 strike threshold at the
- * FOUNDING-REALISTIC floor (frontier default tax 0.02, no crowding — the floor a newborn actually
- * occupies) — its measured p10 shortfall (0.59) gives ceiling `(0.65 − 0.02) / 0.59 ≈ 1.07`. Reading
- * that same p10 at the WORST tax-and-crowding floor instead collides with the durable constraint
- * below (it caps the slope at 0.71, under 0.84), which is why the founding-realistic floor is the
- * one that matters here. 0.95 is the midpoint of [0.84, 1.07]; do not heavily calibrate within the
- * range, since items 2-3 replace this derivation entirely.
+ * `slopeBase` settles unrest above the floor per unit of
+ * *grievance* — one flat exchange rate, no escalation ramp. It sits in the window the guarantees
+ * derive: ≥ 1.3 (a fully-accustomed world losing half of what it is used to must reach strike at
+ * any tax) and < 2.08 (a quarter-dip must never collapse or tear down, even at the max standing
+ * floor). It is no longer bounded by founding: the interim scaffolding this constant used to carry
+ * — cut to [0.84, 1.07] so a newborn colony's opening state stayed below the strike threshold —
+ * dissolves under the memory bar, because a newborn's grievance seeds from its own opening state
+ * (readExpectation seeds stored = P on first read, so the same-cycle update is a no-op) rather than
+ * from perfection — but the read-side floor (EXPECTATION_PARAMS.floor, 0.5) still applies on top of
+ * that seed: seed grievance = max(0, floor − opening P), zero for the ~90% of openings above 0.5
+ * (post-change p10 0.62) and up to 0.5 in the measured tail (a 0.0 opener reads term slopeBase × 0.5
+ * = 0.8, above the strike threshold). That tail is bounded by measurement (the harness's
+ * `openingDeprivedCount`/`minOpeningProvision` instruments), not by construction. 1.6 is the
+ * authored starting point inside the derived window; the calibration sweep owns the final cut.
  *
  * `slopeShortage` is the durable rule: a total failure of EITHER survival good must be able to
  * collapse a world (unrest ≥ the 0.75 threshold) even at zero tax — not just the heavier of the two.
@@ -35,25 +42,21 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
  * the consumption tables, not of any one run) so it is the binding constraint: `slope × 0.32 ≥ 0.75`.
  * 2.4 is the smallest 0.1-step value that clears it with real margin (food ≈ 0.77, water ≈ 0.90);
  * 2.35 was rejected as a 0.0008 knife edge on food's own arithmetic, not a value anyone could stand
- * behind. It survives the adaptive-expectation change better than slopeRationing because the survival
- * step is absolute, not expectation-relative: famine is famine whatever a population is used to. Down
- * from the shipped 2.5, which was authored against the squared fold — keeping it on the linear scale
- * would have stated a harsher claim than anyone authored, but not so far down that it stops covering
- * the weaker of the two survival goods, which the first linear cut (2.1, sized to water's ~0.37 alone)
- * did not. Both slopes reach settled unrest only at D = 1 (every good wholly undelivered), which does
- * not occur, and the state itself is [0,1] and saturates there — the highest tax plus full crowding
- * plus a total water failure already asks for more than 1 and gets 1.0.
+ * behind. It also caps the critical-good override (see `supplyUnrestTerm`) and is also the cap and
+ * span of that override. Down from the shipped 2.5, which was authored against the squared fold;
+ * keeping it on the linear scale would have stated a harsher claim than anyone authored, but not so
+ * far down that it stops covering the weaker of the two survival goods, which the first linear cut
+ * (2.1, sized to water's ~0.37 alone) did not. Both slopes reach settled unrest only at D or
+ * grievance = 1, which does not occur, and the state itself is [0,1] and saturates there.
  *
- * Both slopes are load-bearing and no single number replaces them: collapse is contained to the
- * Shortage band (a world without famine, Provision at the Rationing edge or better, cannot reach the
- * 0.75 line at any tax, crowding or override composition — re-authored on the Provision band from a
- * D-cut-based bound that the wider cut has since made false), while a total failure of either
- * survival good crosses it at zero tax. Those two do not overlap — famine genuinely needs a steeper response than
- * ordinary scarcity, not merely a larger D. Both are asserted from the shared constants in
+ * Both slopes are load-bearing and no single number replaces them: collapse is contained to a
+ * deep-enough grievance dip (promises 4 and 5), while a total failure of either survival good
+ * crosses it at zero tax (promise 2) — famine genuinely needs a steeper response than ordinary
+ * scarcity, not merely a larger shortfall. Both are asserted from the shared constants in
  * lib/constants/__tests__/band-constants.test.ts. First cuts; the simulator owns the finals.
  */
 export const UNREST_PARAMS: UnrestParams = {
-  slopeRationing: 0.95,
+  slopeBase: 1.6,
   slopeShortage: 2.4,
   decay: 0.06,
 };
@@ -69,10 +72,31 @@ export const CROWDING = { BRAKE_END: 1.15, PRESSURE_MAX: 0.05 } as const;
 /**
  * Strike production-suppression regime derived from unrest. Threshold triggers
  * the ramp; at full unrest (1.0), production falls to 25% (75% cut). Threshold
- * raised to 0.7 so only genuinely high-unrest systems strike. Calibrated against
- * the simulator.
+ * raised to 0.65 so only genuinely high-unrest systems strike — every guarantee in
+ * lib/engine/population.ts and lib/constants/__tests__/band-constants.test.ts derives against this
+ * value. Calibrated against the simulator.
  */
 export const STRIKE_PARAMS: StrikeParams = { threshold: 0.65, floorMultiplier: 0.25 };
+
+/**
+ * The persisted per-system memory of the Provision a population is accustomed to (see
+ * lib/engine/expectation.ts, `readExpectation`/`updateExpectation`).
+ *
+ * `floor` (0.5): "No population normalises living on half of what it needs." Applied at read as
+ * `max(stored, floor)` — the stored value itself is never floored. Independent of
+ * `SHORTAGE_SATISFACTION` despite the equal value: that constant is the famine line on ONE good's
+ * satisfaction; this is a floor on remembered WHOLE-BASKET Provision. Do not couple them.
+ *
+ * `riseRate` (0.25/cycle): standards rise fast (half-life ~2-3 cycles). Sweep-decided; stated per
+ * reference cycle, applied as `subSteps` iterations of the unscaled rate — NEVER rate-scaled,
+ * because the asymmetric update is nonlinear (branch-switching) and a scaled rate silently clamps
+ * away the rise:resign ratio once catch-up reaches 4.
+ *
+ * `resignRate` (0.02/cycle): resignation comes slowly (half-life ~34 cycles). Same denomination
+ * and sub-step rule as `riseRate`. Setting both rates to 1 reproduces the old change term (memory
+ * = last cycle) — that arm exists for calibration comparison, not for shipping.
+ */
+export const EXPECTATION_PARAMS: ExpectationParams = { floor: 0.5, riseRate: 0.25, resignRate: 0.02 };
 
 /**
  * Growth/decline rates (per population-processor run, one per economy-shard update). Growth runs at
@@ -87,10 +111,16 @@ export const STRIKE_PARAMS: StrikeParams = { threshold: 0.65, floorMultiplier: 0
  * (uniform gaps, growth factor falling from `1 − 0.033 = 0.967` toward `1 − 0.18 = 0.82`). The live
  * galaxy's per-good distribution is a cliff (goods delivered in full or not at all), where the squared and
  * linear folds nearly coincide: mean shortfall 0.034 against the old mean D 0.033, growth factor
- * 0.967 → 0.966. The feared re-scale is disconfirmed, so the values deliberately did not move; the
- * slope re-cut (`UNREST_PARAMS`, 1.8 → 0.95) actually eases decline pressure on top of that. The
- * overshoot-death sink fires only in the strike regime (`overshootDeathUnrestGate`), so a calm
- * over-capacity system displaces via migration, not death. Calibrated against the simulator.
+ * 0.967 → 0.966. The feared re-scale is disconfirmed, so the values deliberately did not move — that
+ * finding stands on its own regardless of the unrest slope in force. Decline itself scales with
+ * UNREST, not D, so what actually changed under the memory bar is `UNREST_PARAMS.slopeBase` (1.6,
+ * replacing the retired `slopeRationing` 0.95): above-floor unrest per unit of shortfall now reads
+ * higher than the 0.95 world for an ACCUSTOMED population (whose grievance tracks the shortfall
+ * directly, since memory has not resigned) and lower for a RESIGNED one (whose memory has already
+ * fallen to meet it, so grievance reads well under D) — decline pressure moves with which world a
+ * system is, not uniformly in either direction. The overshoot-death sink fires only in the strike
+ * regime (`overshootDeathUnrestGate`), so a calm over-capacity system displaces via migration, not
+ * death. Calibrated against the simulator.
  */
 export const POPULATION_PARAMS: PopulationParams = {
   growthRate: 0.015,

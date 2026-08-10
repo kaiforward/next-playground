@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts, marketRolesByKey,
-  logisticsTargetsByKey,
+  logisticsTargetsByKey, summarizeEpisodeCostsByCohort, summarizeRatchetCheck,
 } from "../cohort-analysis";
-import { perSystemSupplyState, summarizePopulation, summarizeSupplyRegimes } from "../population-analysis";
+import {
+  newEpisodeCostTotals, perSystemSupplyState, recordEpisodeCosts, summarizePopulation,
+  summarizeSupplyRegimes,
+} from "../population-analysis";
 import type { MarketRole } from "../types";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
 import { CROWDING } from "@/lib/constants/population";
@@ -698,5 +701,106 @@ describe("computeWorldCohorts", () => {
       expect(entries.length).toBeGreaterThan(0);
       for (const e of entries) expect(e.netGrowthPct).toBeNull();
     });
+  });
+
+  describe("adaptive-expectation distributions", () => {
+    it("excludes a stale (emptyBasket) system from expectation/grievance while counting it, and reads grievance — not 1-Provision — for the one that remains", () => {
+      // "stale" carries no market rows of its own, so its goods basket folds empty and
+      // perSystemSupplyState reads emptyBasket: true for it (the same convention
+      // goodSatisfactionsBySystem/foldSupplyState use for a system with no demanded goods).
+      const stale = sys("stale", { population: 5 });
+      const normal = { ...sys("normal", { population: 5 }), provisionExpectation: 0.7 };
+      const markets = [{ systemId: "normal", goodId: "water", satisfaction: 0.4 }];
+      const systems = [stale, normal];
+
+      // Premise: grievance and D genuinely differ for "normal" here, or a grievance/D swap in the
+      // cohort fold could pass by coincidence instead of by actually reading grievance.
+      const normalState = perSystemSupplyState(systems, markets).get("normal")!;
+      expect(normalState.grievance).not.toBeCloseTo(normalState.d, 6);
+
+      const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+      const band = entries.find((e) => e.cohort === "pop <10")!;
+
+      expect(band.n).toBe(2);
+      expect(band.staleExpectationCount).toBe(1);
+      // Only "normal" contributes — its own stored value exactly, unmixed with the stale system's
+      // seeded-from-provision(1) reading.
+      expect(band.expectationLevels.median).toBeCloseTo(0.7, 9);
+      expect(band.grievanceLevels.median).toBeCloseTo(normalState.grievance, 9);
+      expect(band.grievanceLevels.median).not.toBeCloseTo(normalState.d, 6);
+    });
+  });
+});
+
+describe("summarizeEpisodeCostsByCohort", () => {
+  it("folds per-system totals into every cohort the system belongs to at run-end membership", () => {
+    const systems = [
+      sys("small", { population: 5 }), // "pop <10" + "colony"
+      sys("big", { population: 1500 }), // "pop >=1K" + "homeworld" (via homeworldIds)
+    ];
+    const totals = newEpisodeCostTotals();
+    recordEpisodeCosts(totals, new Map([["small", 3]]), new Map([["big", 2]]));
+
+    const summary = summarizeEpisodeCostsByCohort(totals, systems, new Set(["big"]));
+    expect(summary.totalTeardownLevels).toBe(3);
+    expect(summary.totalOvershootDeaths).toBe(2);
+
+    const small = summary.byCohort.find((c) => c.cohort === "pop <10")!;
+    expect(small.teardownLevels).toBe(3);
+    expect(small.systemsWithTeardown).toBe(1);
+    expect(small.overshootDeaths).toBe(0);
+    expect(small.systemsWithOvershootDeath).toBe(0);
+
+    const big = summary.byCohort.find((c) => c.cohort === "homeworld")!;
+    expect(big.overshootDeaths).toBe(2);
+    expect(big.systemsWithOvershootDeath).toBe(1);
+    expect(big.teardownLevels).toBe(0);
+  });
+
+  it("omits a cohort row for a system with no recorded costs, rather than a 0 row", () => {
+    const systems = [sys("quiet", { population: 5 })];
+    const summary = summarizeEpisodeCostsByCohort(newEpisodeCostTotals(), systems, new Set());
+    const quiet = summary.byCohort.find((c) => c.cohort === "pop <10")!;
+    expect(quiet.n).toBe(1);
+    expect(quiet.teardownLevels).toBe(0);
+    expect(quiet.systemsWithTeardown).toBe(0);
+  });
+});
+
+describe("summarizeRatchetCheck", () => {
+  it("buckets by within-cohort variance rank — a calmer system lands in a lower bucket than a jitterier one", () => {
+    const systems = [sys("calm", { population: 5 }), sys("jittery", { population: 5 })];
+    const markets = [
+      { systemId: "calm", goodId: "water", satisfaction: 0.5 },
+      { systemId: "jittery", goodId: "water", satisfaction: 0.5 },
+    ];
+    const variance = new Map([["calm", 0.001], ["jittery", 0.05]]);
+
+    const summary = summarizeRatchetCheck(variance, 6, systems, markets, new Set());
+    const rows = summary.buckets.filter((b) => b.cohort === "pop <10");
+
+    expect(rows.length).toBe(2); // two systems, two distinct quartile ranks at n=2
+    const calmRow = rows.find((r) => r.meanVariance === 0.001)!;
+    const jitteryRow = rows.find((r) => r.meanVariance === 0.05)!;
+    expect(calmRow.bucket).toBeLessThan(jitteryRow.bucket);
+    expect(summary.window).toBe(6);
+  });
+
+  it("excludes a system absent from the variance map entirely, never as a phantom bucket-0 member", () => {
+    const systems = [sys("varianced", { population: 5 }), sys("novariance", { population: 5 })];
+    const markets = [{ systemId: "varianced", goodId: "water", satisfaction: 0.5 }];
+    const variance = new Map([["varianced", 0.01]]); // "novariance" carries no variance reading
+
+    const summary = summarizeRatchetCheck(variance, 6, systems, markets, new Set());
+    const n = summary.buckets
+      .filter((b) => b.cohort === "pop <10")
+      .reduce((sum, row) => sum + row.n, 0);
+    expect(n).toBe(1); // only the varianced system is bucketed
+  });
+
+  it("reports an empty table, never a crash, for a galaxy with no variance readings", () => {
+    const summary = summarizeRatchetCheck(new Map(), 8, [], [], new Set());
+    expect(summary.window).toBe(8);
+    expect(summary.buckets).toEqual([]);
   });
 });

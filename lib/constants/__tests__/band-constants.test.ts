@@ -3,34 +3,34 @@ import {
   ECONOMY_CONSTANTS,
   TARGET_COVER,
   SHORTAGE_SATISFACTION,
-  D_SHORTAGE_CUT,
-  D_SHORTAGE_BLEND,
-  RATIONING_PROVISION,
-  CRITICAL_SATISFACTION,
 } from "@/lib/constants/economy";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { GOODS } from "@/lib/constants/goods";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { INITIAL_RESERVE_ANCHOR_FRAC } from "@/lib/constants/market-economy";
-import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING, UNREST_PARAMS } from "@/lib/constants/population";
+import { STRIKE_PARAMS, POPULATION_PARAMS, CROWDING, UNREST_PARAMS, EXPECTATION_PARAMS } from "@/lib/constants/population";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { VACANCY_SLACK, INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, INPUT_DEMAND_MULTIPLIER } from "@/lib/constants/industry";
-import { GOOD_NAMES, GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
+import { GOOD_NAMES } from "@/lib/constants/goods";
 import { GOOD_NECESSITY, SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import {
-  unrestSlope,
+  supplyUnrestTerm,
   dissatisfaction,
+  provision,
   hasSurvivalShortfall,
+  foldSupplyState,
+  grievanceShortfall,
   accumulateUnrest,
   type GoodSatisfaction,
   type SupplyState,
 } from "@/lib/engine/population";
+import { readExpectation } from "@/lib/engine/expectation";
 import { sizeColonyEstablish, fed, type BuildSystemState } from "@/lib/engine/directed-build";
 import { housingUsed, idleLevels } from "@/lib/engine/infrastructure-decay";
 import { emptyResourceVector } from "@/lib/engine/resources";
@@ -157,6 +157,22 @@ function dFor(empty: readonly string[]): number {
 }
 
 /**
+ * The full basket at population-proportional demand (same basis dFor() derives its shares from),
+ * one good crashed to satisfaction 0 and everything else fully delivered. Unlike dFor() (which
+ * returns only the resulting D), this is the actual basket — so provision()/dissatisfaction()/
+ * foldSupplyState() can all read it directly and the composed reading uses the real crisis-term
+ * inputs (criticalWeight, survivalShortfall) rather than a re-derived stand-in for them.
+ */
+function basketWithOneGoodFailing(goodId: string): GoodSatisfaction[] {
+  const basis = { population: 1000, technicians: 0, engineers: 0 };
+  return GOOD_NAMES.map((id) => ({
+    goodId: id,
+    satisfaction: id === goodId ? 0 : 1,
+    demanded: consumptionRate(id, basis),
+  }));
+}
+
+/**
  * Every good in the table at the SAME satisfaction level. Weight-independent: for a uniform gap the
  * weighted mean equals that gap exactly, whatever the necessity/demand weights are — so D = 1 −
  * satisfaction here, regardless of the fold. This is the shape dFor() cannot express (dFor always
@@ -168,24 +184,20 @@ function uniformBasket(satisfaction: number): GoodSatisfaction[] {
   return GOOD_NAMES.map((goodId) => ({ goodId, satisfaction, demanded: 1 }));
 }
 
-/** Equilibrium unrest under sustained D at a given standing floor: floor + slope(D) × D. */
+/**
+ * Equilibrium unrest under a sustained absolute shortfall at a given standing floor:
+ * floor + supplyUnrestTerm(grievance, d, supply, UNREST_PARAMS). Grievance is fixed at 0
+ * (a fully-accustomed world, E = P) so every reading here isolates the CRISIS term alone — the
+ * hardest case for the absolute backstops (survival, critical-good) to carry the guarantee on their
+ * own, with the grievance term contributing nothing.
+ */
 function settled(d: number, floor: number, survivalShortfall = false, criticalWeight = 0): number {
-  const supply: SupplyState = { regime: "rationing", survivalShortfall, criticalWeight };
-  return floor + unrestSlope(d, supply, UNREST_PARAMS) * d;
+  const supply: SupplyState = { regime: "rationing", survivalShortfall, criticalWeight, emptyBasket: false };
+  return floor + supplyUnrestTerm(0, d, supply, UNREST_PARAMS);
 }
 
 const MAX_FLOOR = Math.max(...Object.values(TAX_LEVEL_UNREST_PRESSURE)) + CROWDING.PRESSURE_MAX;
 const COLLAPSE = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
-const TIER1PLUS2 = GOOD_NAMES.filter((g) => (GOOD_TIER_BY_KEY[g] ?? 0) > 0);
-
-/** Measured founding shortfall distribution (equilibrium founding cohort, n = 562) — see
- *  docs/planned/supply-response.md, "The guarantees, restated on Provision". Not a code constant: it
- *  is what the founding cohort was measured at, not a value the sim reads. */
-const FOUNDING_SHORTFALL_P10 = 0.59;
-
-/** Frontier default tax stance, no crowding — the floor a newborn colony can actually occupy (never
- *  the worst tax-and-crowding floor, which no founding colony occupies). */
-const FOUNDING_FLOOR = TAX_LEVEL_UNREST_PRESSURE.low;
 
 describe("the linear fold — the shape a gap-1 scenario can't see", () => {
   it("reads a uniform partial shortfall as its own size, not its square", () => {
@@ -206,52 +218,21 @@ describe("the linear fold — the shape a gap-1 scenario can't see", () => {
   });
 });
 
-describe("shortage cut and blend — escalation-only now, not a band boundary", () => {
-  it("grades a total water or food failure above the ambient barren-galaxy deficit", () => {
-    // The whole point of the weight. Unweighted, the ambient deficit scored 2.2x a total water
-    // failure, so no cut could separate them; weighted, the ordering inverts. Unaffected by the fold
-    // or the cut/blend re-cut — dFor() always reads gap = 1, so this separation held before this task
-    // and still holds after it.
-    const ambient = dFor(TIER1PLUS2);
-    expect(dFor(["water"])).toBeGreaterThan(ambient * 2);
-    expect(dFor(["food"])).toBeGreaterThan(ambient * 2);
-  });
-
-  it("no longer separates ambient scarcity from famine — it only decides when escalation engages", () => {
-    // D_SHORTAGE_CUT is no longer a band boundary — the band bins Provision directly instead
-    // (foldSupplyState) — the survival floor is the only thing that still grades famine outright. The cut's one
-    // remaining job is to stay above every measured founding shortfall, so a newborn colony's own
-    // worst reading never engages the ramp, and to reach full Shortage weight at shortfall 0.90.
-    expect(D_SHORTAGE_CUT).toBeGreaterThan(FOUNDING_SHORTFALL_P10);
-    expect(D_SHORTAGE_CUT + D_SHORTAGE_BLEND).toBeCloseTo(0.9, 10);
-  });
-});
-
 describe("unrest containment — the guarantees the two slopes carry", () => {
-  /** A SupplyState carrying only the survival bit — zero override weight, so these fixtures
-   *  isolate the D-ramp/survival-step pair from the critical-good composition tested separately. */
-  const supplyOf = (survivalShortfall: boolean): SupplyState => ({
-    regime: "rationing",
-    survivalShortfall,
-    criticalWeight: 0,
-  });
+  /** An absolute-scale reference only, at the retired escalation cut's old magnitude — used below to
+   *  pin that the ambient barren-galaxy fixture's shortfall stays well short of a near-total
+   *  collapse. Not tied to any live mechanism boundary — unrest now reads grievance and the crisis
+   *  backstops, not a D-level cut. */
+  const LARGE_SHORTFALL_REFERENCE = 0.65;
 
   it("keeps the Shortage slope strictly above the Rationing one", () => {
-    expect(UNREST_PARAMS.slopeShortage).toBeGreaterThan(UNREST_PARAMS.slopeRationing);
+    expect(UNREST_PARAMS.slopeShortage).toBeGreaterThan(UNREST_PARAMS.slopeBase);
   });
 
-  // "Never lets sustained Rationing reach collapse, at any tax" is RETIRED, not restated: at
-  // D_SHORTAGE_CUT − ε (now 0.65) and MAX_FLOOR, settled = 0.23 + 0.95 × 0.65 ≈ 0.85 — already past
-  // the 0.75 line. The wider cut makes a D-cut-based Rationing ceiling false; containment is
-  // re-authored on the Provision band instead (see "collapse containment to the Shortage band"
-  // below), which is the guarantee that actually holds.
-
   it("lets a total failure of EITHER survival good collapse, even at zero tax", () => {
-    // A survival good's total failure reaches the Shortage slope through hasSurvivalShortfall's
-    // promotion, NOT through the D-ramp: each good's own weighted share sits deep inside Rationing
-    // territory under the new cut (0.65) and would never reach the ramp on D alone. Passing
-    // survivalShortfall = true is what the real foldSupplyState/accumulateUnrest pair does for any
-    // demanded survival good below SHORTAGE_SATISFACTION, whatever D says.
+    // A survival good's total failure reaches the crisis term's slopeShortage reading through
+    // hasSurvivalShortfall's promotion, absolute and expectation-independent (settled() fixes
+    // grievance at 0, so this is the crisis term carrying the guarantee entirely on its own).
     //
     // Food is the weaker basket weight (~0.32 vs water's ~0.37) and the binding case: the owner
     // decided slopeShortage must clear BOTH goods, not just the heavier one — the first linear cut
@@ -274,69 +255,27 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
     }
   });
 
-  it("lets no non-survival good, alone, reach the strike threshold at any tax", () => {
-    // The guarantee the deleted per-good contribution cap was meant to carry. It is a claim about
-    // the constants, so it is a test rather than a runtime min() that can only cause harm when it fires.
+  it("lets no non-survival good, alone, reach the strike threshold on a fully-accustomed world (E = 1) — grievance composed with the restored crisis term", () => {
+    // The guarantee the deleted per-good contribution cap was meant to carry, re-composed under the
+    // memory-relative term: a fully-accustomed world (E = 1, the worst case — grievance = E − P is
+    // maximised there) loses one non-survival good entirely. foldSupplyState() reads the real
+    // crisis-term inputs (criticalWeight, survivalShortfall) off the SAME basket rather than
+    // re-deriving them, so a drift in the critical-good eligibility rule shows up here too — this is
+    // the composed reading, not the crisis term alone.
     for (const goodId of GOOD_NAMES) {
       if (SURVIVAL_GOODS.includes(goodId)) continue;
-      const d = dFor([goodId]);
-      expect(settled(d, MAX_FLOOR), goodId).toBeLessThan(STRIKE_PARAMS.threshold);
+      const basket = basketWithOneGoodFailing(goodId);
+      const d = dissatisfaction(basket);
+      const supply = foldSupplyState(basket);
+      const grievance = grievanceShortfall(1, provision(basket));
+      const term = supplyUnrestTerm(grievance, d, supply, UNREST_PARAMS);
+      expect(MAX_FLOOR + term, goodId).toBeLessThan(STRIKE_PARAMS.threshold);
     }
   });
 
-  it("still lets a broad shortage strike under overcrowding and very-high tax, below collapse — the 0.84 lower bound", () => {
-    // "Only famine collapses" must not become "nothing but famine ever strikes". Fixed at a broad
-    // Shortage-band shortfall (d = 0.5, not the cut — D_SHORTAGE_CUT − ε now sits ABOVE collapse at
-    // MAX_FLOOR, see the retired test above) on the base ramp alone.
-    const worstBroadShortfall = settled(0.5, MAX_FLOOR);
-    expect(worstBroadShortfall).toBeGreaterThanOrEqual(STRIKE_PARAMS.threshold);
-    expect(worstBroadShortfall).toBeLessThan(COLLAPSE);
-
-    const lowerBound = (STRIKE_PARAMS.threshold - MAX_FLOOR) / 0.5;
-    expect(lowerBound).toBeCloseTo(0.84, 2);
-    expect(UNREST_PARAMS.slopeRationing).toBeGreaterThanOrEqual(lowerBound);
-  });
-
-  it("settles the founding cohort's p10 shortfall below the strike threshold at the founding-realistic floor — the 1.07 upper bound", () => {
-    // The new invariant (spec, "the guarantees, restated on Provision"): the founding cohort is the
-    // modal world and opens at the galaxy's worst supply state, so it must not open inside production
-    // suppression. Read at the founding-realistic floor (frontier default tax, no crowding) — the
-    // worst tax-and-crowding floor collides with the lower bound above and is not a state any
-    // founding colony occupies.
-    expect(settled(FOUNDING_SHORTFALL_P10, FOUNDING_FLOOR)).toBeLessThan(STRIKE_PARAMS.threshold);
-
-    const upperBound = (STRIKE_PARAMS.threshold - FOUNDING_FLOOR) / FOUNDING_SHORTFALL_P10;
-    expect(upperBound).toBeCloseTo(1.07, 2);
-    expect(UNREST_PARAMS.slopeRationing).toBeLessThanOrEqual(upperBound);
-  });
-
-  it("bounds slopeRationing from both ends at once — a value satisfying one guarantee and breaking the other must fail", () => {
-    const lowerBound = (STRIKE_PARAMS.threshold - MAX_FLOOR) / 0.5;
-    const upperBound = (STRIKE_PARAMS.threshold - FOUNDING_FLOOR) / FOUNDING_SHORTFALL_P10;
-    expect(lowerBound).toBeLessThan(upperBound);
-    expect(UNREST_PARAMS.slopeRationing).toBeGreaterThanOrEqual(lowerBound);
-    expect(UNREST_PARAMS.slopeRationing).toBeLessThanOrEqual(upperBound);
-  });
-
-  it("blends the slope across the cut instead of switching it", () => {
-    const below = unrestSlope(D_SHORTAGE_CUT - 1e-6, supplyOf(false), UNREST_PARAMS);
-    const above = unrestSlope(D_SHORTAGE_CUT + 1e-6, supplyOf(false), UNREST_PARAMS);
-    expect(Math.abs(above - below)).toBeLessThan(1e-4);
-    expect(below).toBe(UNREST_PARAMS.slopeRationing);
-    expect(unrestSlope(D_SHORTAGE_CUT + D_SHORTAGE_BLEND, supplyOf(false), UNREST_PARAMS))
-      .toBeCloseTo(UNREST_PARAMS.slopeShortage, 10);
-  });
-
-  it("holds the Rationing slope across the whole Rationing range", () => {
-    // The ramp starts AT the cut, never below it — otherwise the containment guarantee above
-    // would only hold at the bottom of the band.
-    for (const d of [0, 0.05, 0.1, 0.2, D_SHORTAGE_CUT - 1e-9]) {
-      expect(unrestSlope(d, supplyOf(false), UNREST_PARAMS), `D=${d}`).toBe(UNREST_PARAMS.slopeRationing);
-    }
-  });
-
-  it("promotes a survival shortfall to the Shortage slope at any D", () => {
-    expect(unrestSlope(0.05, supplyOf(true), UNREST_PARAMS)).toBe(UNREST_PARAMS.slopeShortage);
+  it("promotes a survival shortfall to the crisis reading of slopeShortage × D at any D", () => {
+    expect(supplyUnrestTerm(0, 0.05, { regime: "rationing", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }, UNREST_PARAMS))
+      .toBeCloseTo(UNREST_PARAMS.slopeShortage * 0.05, 10);
   });
 
   it("refuses housing on exactly the systems the survival floor calls starving", () => {
@@ -349,7 +288,7 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
     expect(fed(sysWithGoods(starving))).toBe(false);
 
     // The ambient barren-galaxy basket: staples fully delivered, an unmakeable tier-1 good at zero.
-    // Its necessity-weighted fold clears the shortage cut yet exceeds a 0.20 basket-wide gate — the
+    // Its necessity-weighted fold exceeds a 0.20 basket-wide gate while staying a mild shortfall — the
     // band in which a fed world used to be refused its own housing.
     const ambient = [
       ...SURVIVAL_GOODS.map((goodId) => ({ goodId, satisfaction: 1, demanded: 1 })),
@@ -357,47 +296,48 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
     ];
     const ambientD = dissatisfaction(ambient);
     expect(ambientD).toBeGreaterThan(0.2);
-    expect(ambientD).toBeLessThan(D_SHORTAGE_CUT);
+    expect(ambientD).toBeLessThan(LARGE_SHORTFALL_REFERENCE);
     expect(hasSurvivalShortfall(ambient)).toBe(false);
     expect(fed(sysWithGoods(ambient))).toBe(true);
   });
 });
 
-describe("collapse containment — Supplied and Strained worlds never collapse", () => {
-  const RATIONING_SHORTFALL = 1 - RATIONING_PROVISION;
+describe("promise 4 — a quarter-dip against memory never collapses or tears down, at any tax", () => {
+  const benignSupply: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
 
-  it("keeps every Strained-or-better world (Provision >= RATIONING_PROVISION) below collapse at the worst tax, crowding and override composition", () => {
-    // Not "shortfall ≤ 0.5 never collapses" (measured false under the override, and not to
-    // be resurrected) — the guarantee is edge-of-band, computed from the constants so it recomputes
-    // if a bin edge or slope moves. Maximum criticalWeight compatible with a FIXED total shortfall of
-    // RATIONING_SHORTFALL: critical goods sit just under the criticality line (gap → 1 − CRITICAL_SATISFACTION)
-    // so the same total shortfall budget buys the most possible critical-flagged weight.
-    const maxCriticalWeight = RATIONING_SHORTFALL / (1 - CRITICAL_SATISFACTION);
-    // Route through the real unrestSlope rather than re-deriving its cap/override composition here —
-    // otherwise this test keeps passing if that composition drifts. RATIONING_SHORTFALL (0.3) sits
-    // below D_SHORTAGE_CUT (0.65), so the D-ramp term clamps to 0 and contributes nothing: the
-    // override alone (criticalWeight × (slopeShortage − slopeRationing)) drives the slope here, which
-    // is exactly the edge-of-band case this test is proving contained.
-    const worstSupply: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: maxCriticalWeight };
-    const worstSlope = unrestSlope(RATIONING_SHORTFALL, worstSupply, UNREST_PARAMS);
-    const worstCase = MAX_FLOOR + worstSlope * RATIONING_SHORTFALL;
-    expect(worstCase).toBeCloseTo(0.689, 3);
-    expect(worstCase).toBeLessThan(COLLAPSE);
+  it("keeps a grievance of 0.25 below the collapse/teardown line even at the max standing floor — single-constant guarantee slopeBase < (collapse − maxFloor)/0.25", () => {
+    // Dip-depth containment: this is the memory-relative claim, computed from the live constants so
+    // it recomputes if the collapse line or the floor moves, never a re-derived literal.
+    const quarterDipTerm = supplyUnrestTerm(0.25, 0, benignSupply, UNREST_PARAMS);
+    expect(MAX_FLOOR + quarterDipTerm).toBeLessThan(COLLAPSE);
+    expect(UNREST_PARAMS.slopeBase).toBeLessThan((COLLAPSE - MAX_FLOOR) / 0.25);
+  });
+
+  it("does not extend to the crisis term — a memory resigned to the floor can still carry a fatal absolute shortfall, which is promise 6's job, not promise 4's", () => {
+    // G ≤ 0.25 bounds only how far delivery has fallen BELOW memory; it says nothing about how low
+    // memory itself has resigned. At the expectation floor (E = EXPECTATION_PARAMS.floor) a further
+    // dip to P = E − 0.25 still reads G = 0.25 exactly, yet D = 1 − P is far larger — the crisis term
+    // reads that absolute D unconstrained by G. A critical-good weight at or above 1 saturates the
+    // override at slopeShortage × D, which clears the collapse line even at zero tax. That is
+    // deliberate — promise 6 keeps the crisis backstop expectation-independent at full strength —
+    // so promise 4's containment is provably a grievance-only claim, not one composed with the
+    // crisis term: this is the demonstration, not just an assertion of the scoping choice.
+    const grievance = 0.25;
+    const worstCompatibleProvision = EXPECTATION_PARAMS.floor - grievance;
+    const worstCompatibleD = 1 - worstCompatibleProvision;
+    const crisisAtCeiling: SupplyState = { regime: "shortage", survivalShortfall: false, criticalWeight: 1, emptyBasket: false };
+    const term = supplyUnrestTerm(grievance, worstCompatibleD, crisisAtCeiling, UNREST_PARAMS);
+    expect(MAX_FLOOR + term).toBeGreaterThan(COLLAPSE);
   });
 });
 
 describe("transient event shocks — a shock's duration, not just its magnitude, keeps it contained", () => {
-  it("keeps a solar storm's peak unrest below collapse while active, on a Rationing world, and trending down once it expires", () => {
+  it("keeps a solar storm's peak unrest below collapse while active, on a fully-accustomed world at the worst standing floor, and trending down once it expires", () => {
     // The event hits every good system-wide (goodId: null), including the survival goods, at
     // production_rate × 0.05 — modelled conservatively as every demanded good crashing to that
     // satisfaction level for the shock's duration (worse than reality, which has stock buffers).
     // "Whole cycles": the population processor runs once per CYCLE_LENGTH ticks, so the shock's
     // effect is applied as that many whole accumulateUnrest steps, rounding its duration UP.
-    // This margin is thin — the peak clears 0.75 by ~0.0028 at the current constants — and erodes
-    // further if `decay` rises, the storm phase's duration range is widened, or its production
-    // multiplier is lowered (any of which raises how far unrest closes toward the shocked settled
-    // value before the shock ends); a change to any of those three should re-run this test, not
-    // assume it still holds.
     const stormPhase = EVENT_DEFINITIONS.solar_storm.phases.find((p) => p.name === "storm")!;
     const productionMultiplier = stormPhase.modifiers.find((m) => m.parameter === "production_rate")!.value;
     const eventCycles = Math.ceil(stormPhase.durationRange[1] / CYCLE_LENGTH);
@@ -407,27 +347,129 @@ describe("transient event shocks — a shock's duration, not just its magnitude,
     const eventSurvival = hasSurvivalShortfall(eventGoods);
     expect(eventSurvival).toBe(true); // the system-wide modifier crashes water/food too
 
-    // A Rationing world sitting at the band edge (worst tax and crowding, no override, no famine) —
-    // its own pre-event equilibrium.
-    const baseD = 0.3; // RATIONING_SHORTFALL, matching the containment describe above
+    // The pre-event world: worst standing floor (tax + crowding), and — the test's own author
+    // choice, per the disposition — fully accustomed to exactly what it currently has (E = 1 via a
+    // stored expectation of 1, P = 1: calm, matching its own memory). "Fully accustomed" is the
+    // worst case for what the SHOCK itself produces: memory has not resigned to anything, so the
+    // storm's own drop reads at its largest possible grievance.
     const floor = MAX_FLOOR;
-    let unrest = settled(baseD, floor);
+    const fullyAccustomed = 1;
+    const restedSupply: SupplyState = { regime: "supplied", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
+    let unrest = floor + supplyUnrestTerm(grievanceShortfall(fullyAccustomed, 1), 0, restedSupply, UNREST_PARAMS);
+
+    const eventSupply: SupplyState = { regime: "shortage", survivalShortfall: eventSurvival, criticalWeight: 0, emptyBasket: false };
+    const eventGrievance = grievanceShortfall(fullyAccustomed, 1 - eventD);
+    const term = supplyUnrestTerm(eventGrievance, eventD, eventSupply, UNREST_PARAMS);
+    // The crisis-term arithmetic itself, pinned directly: a survival shortfall reads slopeShortage × D
+    // outright regardless of grievance, so this catches a slopeShortage-family arithmetic revert that
+    // a looser "stays below collapse" bound alone would not — the margin below is comfortable, not a
+    // knife edge (the old 0.0028 margin does not carry over under the re-cut slopeBase), so a smaller
+    // slope would still clear that bound without this direct pin.
+    expect(term).toBeCloseTo(UNREST_PARAMS.slopeShortage * eventD, 10);
 
     for (let cycle = 1; cycle <= eventCycles; cycle++) {
-      unrest = accumulateUnrest(
-        unrest, eventD, floor,
-        { regime: "shortage", survivalShortfall: eventSurvival, criticalWeight: 0 },
-        UNREST_PARAMS,
-      );
+      unrest = accumulateUnrest(unrest, term, floor, UNREST_PARAMS);
       expect(unrest, `cycle ${cycle}`).toBeLessThan(COLLAPSE);
     }
 
-    const afterExpiry = accumulateUnrest(
-      unrest, baseD, floor,
-      { regime: "rationing", survivalShortfall: false, criticalWeight: 0 },
-      UNREST_PARAMS,
-    );
+    const restedTerm = supplyUnrestTerm(grievanceShortfall(fullyAccustomed, 1), 0, restedSupply, UNREST_PARAMS);
+    const afterExpiry = accumulateUnrest(unrest, restedTerm, floor, UNREST_PARAMS);
     expect(afterExpiry).toBeLessThan(unrest); // already heading back toward its own settled value
+  });
+});
+
+describe("promise 3 — broad shortage on an established world strikes while its memory holds", () => {
+  const benignSupply: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
+
+  it("reaches strike at zero tax when a fully-accustomed world loses half of what it is used to — single-constant guarantee slopeBase × 0.5 >= STRIKE_PARAMS.threshold", () => {
+    const halfDipTerm = supplyUnrestTerm(0.5, 0, benignSupply, UNREST_PARAMS);
+    expect(halfDipTerm).toBeGreaterThanOrEqual(STRIKE_PARAMS.threshold); // zero tax: settled unrest is the term itself
+    expect(UNREST_PARAMS.slopeBase * 0.5).toBeGreaterThanOrEqual(STRIKE_PARAMS.threshold);
+  });
+
+  it("keeps the grievance slope flat across [0,1] — no reintroduced escalation ramp, read off the live UNREST_PARAMS", () => {
+    for (const g of [0, 0.2, 0.5, 0.8, 1]) {
+      expect(supplyUnrestTerm(g, 0, benignSupply, UNREST_PARAMS)).toBeCloseTo(UNREST_PARAMS.slopeBase * g, 10);
+    }
+    // Doubling grievance (within range) exactly doubles the term — the flat-slope signature a
+    // reintroduced ramp would break.
+    expect(supplyUnrestTerm(0.4, 0, benignSupply, UNREST_PARAMS))
+      .toBeCloseTo(2 * supplyUnrestTerm(0.2, 0, benignSupply, UNREST_PARAMS), 10);
+  });
+});
+
+describe("promise 5 — the escalation ladder is computed from the live constants, not hardcoded", () => {
+  const benignSupply: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
+  const settledFromGrievance = (g: number, floor: number) =>
+    floor + supplyUnrestTerm(g, 0, benignSupply, UNREST_PARAMS);
+
+  it("places teardown onset exactly at (collapse − floor)/slopeBase, at the max standing floor and at zero tax", () => {
+    // A hardcoded onset (e.g. asserting 0.325 as a literal) would survive INFRASTRUCTURE_DECAY_PARAMS
+    // .unrestThreshold or the max floor moving out from under it — this pin recomputes the onset from
+    // both live constants every run, so it moves with them instead.
+    for (const floor of [MAX_FLOOR, 0]) {
+      const onset = (COLLAPSE - floor) / UNREST_PARAMS.slopeBase;
+      expect(settledFromGrievance(onset - 0.01, floor), `floor=${floor}`).toBeLessThan(COLLAPSE);
+      expect(settledFromGrievance(onset + 0.01, floor), `floor=${floor}`).toBeGreaterThanOrEqual(COLLAPSE);
+      if (floor === MAX_FLOOR) {
+        // Order pin across the promises, at the worst standing floor: teardown must not fire as
+        // early as promise 4's quarter-dip guarantee (0.25, which must stay safe) nor as late as
+        // promise 3's half-dip strike trigger (0.5) — it sits strictly between the two.
+        expect(onset).toBeGreaterThan(0.25);
+        expect(onset).toBeLessThan(0.5);
+      }
+    }
+  });
+
+  it("saturates the response to the ceiling exactly at (1 − floor)/slopeBase, graduated below it", () => {
+    for (const floor of [MAX_FLOOR, 0]) {
+      const onset = (1 - floor) / UNREST_PARAMS.slopeBase;
+      expect(settledFromGrievance(onset - 0.01, floor), `floor=${floor}`).toBeLessThan(1); // graduated, not yet the ceiling
+      expect(settledFromGrievance(onset + 0.01, floor), `floor=${floor}`).toBeGreaterThanOrEqual(1); // saturates past this line
+    }
+  });
+});
+
+describe("promise 6 — the critical-good backstop is expectation-independent at shipped strength", () => {
+  it("reads at least min(slopeShortage, slopeBase + w × span) × D whatever the stored expectation — read through readExpectation across several stored values", () => {
+    const w = 0.4;
+    const d = 0.5;
+    const span = UNREST_PARAMS.slopeShortage - UNREST_PARAMS.slopeBase;
+    const expectedFloor = Math.min(UNREST_PARAMS.slopeShortage, UNREST_PARAMS.slopeBase + w * span) * d;
+    const provisionNow = 1 - d;
+    for (const stored of [0, 0.3, 0.5, 0.7, 1, undefined, NaN, -1, 2]) {
+      const { effective } = readExpectation(stored, provisionNow, EXPECTATION_PARAMS);
+      const grievance = grievanceShortfall(effective, provisionNow);
+      const supply: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: w, emptyBasket: false };
+      const term = supplyUnrestTerm(grievance, d, supply, UNREST_PARAMS);
+      expect(term, `stored=${stored}`).toBeGreaterThanOrEqual(expectedFloor - 1e-9);
+    }
+  });
+});
+
+describe("validity + famine dominance — composed at the guarantee-suite level", () => {
+  it("reads finite unrest in [0,1] for a corrupt stored expectation, and famine still reads exactly slopeShortage × D", () => {
+    // The read guard (readExpectation) treats a non-finite or out-of-range stored value as absent —
+    // re-seeded from this cycle's Provision — which is also what keeps E ≤ 1, on which famine
+    // dominance rests (G ≤ D always). Composed here at the guarantee-suite level: a corrupt stored
+    // value must neither produce a non-finite/out-of-range unrest reading nor weaken famine.
+    const d = 0.4;
+    const provisionNow = 1 - d;
+    const survival: SupplyState = { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
+    for (const stored of [NaN, -1, 2]) {
+      const { effective } = readExpectation(stored, provisionNow, EXPECTATION_PARAMS);
+      expect(Number.isFinite(effective), `stored=${stored}`).toBe(true);
+      expect(effective, `stored=${stored}`).toBeGreaterThanOrEqual(0);
+      expect(effective, `stored=${stored}`).toBeLessThanOrEqual(1);
+
+      const grievance = grievanceShortfall(effective, provisionNow);
+      const term = supplyUnrestTerm(grievance, d, survival, UNREST_PARAMS);
+      const unrest = accumulateUnrest(0, term, MAX_FLOOR, UNREST_PARAMS);
+      expect(Number.isFinite(unrest), `stored=${stored}`).toBe(true);
+      expect(unrest, `stored=${stored}`).toBeGreaterThanOrEqual(0);
+      expect(unrest, `stored=${stored}`).toBeLessThanOrEqual(1);
+      expect(term, `stored=${stored}`).toBeCloseTo(UNREST_PARAMS.slopeShortage * d, 10);
+    }
   });
 });
 

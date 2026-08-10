@@ -87,6 +87,14 @@ export interface WorldSystem {
    *  resets whenever unrest falls back to the decay threshold. Absent ⇒ 0, so world-gen and older
    *  saves both omit it: the debt is transient regime state, not an accrued balance. */
   collapseDebt?: number;
+  /** 0…1 — the stored memory of the Provision this population has grown accustomed to (adaptive
+   *  expectation; docs/active/gameplay/economy.md, unrest's supply term). Absent means never
+   *  seeded — load-bearing, and deliberately NOT the `collapseDebt` "absent ⇒ 0" convention just
+   *  above: coercing absence to 0 here would read as "remembers total collapse" and destroy the
+   *  lazy first-use seed that world-gen, colony founding and old saves all rely on. Cleared
+   *  whenever the system transitions into `developed` (resettlement seeds fresh —
+   *  `applyDevelopments`, `lib/world/tick.ts`). */
+  provisionExpectation?: number;
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */

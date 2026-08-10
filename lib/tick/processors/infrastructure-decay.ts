@@ -38,6 +38,12 @@ export async function runInfrastructureDecayProcessor(
   const idleUpdates: IdleCyclesUpdate[] = [];
   const debtUpdates: CollapseDebtUpdate[] = [];
   const popCapUpdates: PopCapUpdate[] = [];
+  // Calibration-only: per-system whole levels torn down this cycle — the harness's
+  // episode-cost instrument reads. Absent system ⇒ 0 levels lost. `computeSystemDecay` only ever
+  // writes a strictly-lower count into `newCounts` (both the idle-buffer channel and the
+  // unrest-collapse channel), so the pre/post difference here is exactly what left this cycle,
+  // combining both channels without needing to re-derive which one fired.
+  const teardownLevelsBySystem = new Map<string, number>();
   for (const s of states) {
     const selling = signals.sellingFactorBySystem.get(s.systemId);
     const fundingBound = params.logisticsFundingBoundBySystem?.get(s.systemId);
@@ -61,9 +67,12 @@ export async function runInfrastructureDecayProcessor(
       decayParams,
       catchUp,
     );
+    let teardown = 0;
     for (const [buildingType, count] of Object.entries(result.newCounts)) {
       countUpdates.push({ systemId: s.systemId, buildingType, count });
+      teardown += Math.max(0, (s.buildings[buildingType] ?? 0) - count);
     }
+    if (teardown > 0) teardownLevelsBySystem.set(s.systemId, teardown);
     for (const [buildingType, idleCycles] of Object.entries(result.newIdleCycles)) {
       idleUpdates.push({ systemId: s.systemId, buildingType, idleCycles });
     }
@@ -79,5 +88,5 @@ export async function runInfrastructureDecayProcessor(
   await world.applyIdleCycles(idleUpdates);
   await world.applyCollapseDebts(debtUpdates);
   await world.applyPopCapUpdates(popCapUpdates);
-  return {};
+  return teardownLevelsBySystem.size > 0 ? { teardownLevelsBySystem } : {};
 }

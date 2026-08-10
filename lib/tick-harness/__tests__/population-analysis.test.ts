@@ -1,12 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
-  detectPingPong, perSystemSupplyState, summarizeInfrastructure, summarizePopulation,
+  computeTrailingProvisionVariance, detectPingPong, newEpisodeCostTotals, perSystemSupplyState,
+  recordEpisodeCosts, sampleProvisionBySystem, summarizeInfrastructure, summarizePopulation,
   summarizeSupplyRegimes, worstGoodSatisfaction,
 } from "../population-analysis";
 import type { SystemSupplyState } from "../population-analysis";
+import { EXPECTATION_PARAMS } from "@/lib/constants/population";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { CROWDING } from "@/lib/constants/population";
-import { D_SHORTAGE_CUT, SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
+import { SHORTAGE_SATISFACTION } from "@/lib/constants/economy";
 import { GOOD_NAMES } from "@/lib/constants/goods";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
@@ -352,6 +354,10 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
 
 describe("summarizeSupplyRegimes", () => {
   const mkt = (systemId: string, goodId: string, satisfaction: number) => ({ systemId, goodId, satisfaction });
+  /** An absolute-scale reference only, at the retired escalation cut's old magnitude — used below to
+   *  pin "mild" against "near-total basket collapse" shortfalls. Not tied to any live mechanism
+   *  boundary; unrest now reads grievance and the crisis backstops, not this quantity. */
+  const LARGE_SHORTFALL_REFERENCE = 0.65;
 
   it("classifies settled systems and reports shares that sum to 1", () => {
     const systems = [popSys("fed", 100, 1000), popSys("thirsty", 100, 1000)];
@@ -396,7 +402,7 @@ describe("summarizeSupplyRegimes", () => {
     expect(summary.strained).toBe(0);
     expect(summary.shortage).toBe(0);
     expect(summary.meanShortfall).toBeGreaterThan(0);
-    expect(summary.meanShortfall).toBeLessThan(D_SHORTAGE_CUT);
+    expect(summary.meanShortfall).toBeLessThan(LARGE_SHORTFALL_REFERENCE);
   });
 
   it("stops at rationing for a near-total basket collapse that never crosses the survival floor", () => {
@@ -416,10 +422,10 @@ describe("summarizeSupplyRegimes", () => {
     ]);
     expect(summary.rationing).toBe(1);
     expect(summary.shortage).toBe(0);
-    // The shortfall is large — Gate 1's escalation cut (D_SHORTAGE_CUT, unrestSlope-only now) still
-    // fires on it, which is exactly why band promotion had to be dropped explicitly rather than left
-    // to fall out of the same cut.
-    expect(summary.meanShortfall).toBeGreaterThanOrEqual(D_SHORTAGE_CUT);
+    // The shortfall is large — a near-total basket collapse, well past LARGE_SHORTFALL_REFERENCE —
+    // yet still reads Rationing: band promotion had to be dropped explicitly (see the comment above)
+    // rather than left to fall out of any Provision- or shortfall-level cut.
+    expect(summary.meanShortfall).toBeGreaterThanOrEqual(LARGE_SHORTFALL_REFERENCE);
   });
 
   it("folds active events without disturbing the reading when none touches consumption", () => {
@@ -572,6 +578,7 @@ describe("perSystemSupplyState", () => {
 describe("worstGoodSatisfaction", () => {
   const stateOf = (worstGoods: SystemSupplyState["worstGoods"]): SystemSupplyState => ({
     d: 0, regime: "rationing", provision: 1, worstGoods,
+    expectationStored: 1, expectationEffective: 1, grievance: 0, emptyBasket: false,
   });
 
   it("reads 1 for an empty basket — counted as fully served, not dropped", () => {
@@ -584,6 +591,131 @@ describe("worstGoodSatisfaction", () => {
       { goodId: "food", satisfaction: 0.6, demandShare: 0.3, necessity: 1 },
     ];
     expect(worstGoodSatisfaction(stateOf(worstGoods))).toBe(0.3);
+  });
+});
+
+describe("perSystemSupplyState — adaptive expectation", () => {
+  it("reads grievance from the stored memory (G), never re-derived as the absolute shortfall (D)", () => {
+    // Stored expectation sits at the read-side floor (0.5) while Provision (0.7) is well above it —
+    // this population is doing BETTER than what it is accustomed to, so G = clamp(0.5 - 0.7, 0, 1)
+    // = 0, even though the absolute shortfall D = 1 - 0.7 = 0.3 is very much nonzero. A harness that
+    // re-derives grievance as 1 - Provision (D) instead of importing grievanceShortfall would read
+    // 0.3 here instead of 0 — the two numbers are pinned apart, not just both present.
+    const systems = [sys("a", { provisionExpectation: EXPECTATION_PARAMS.floor })];
+    const markets = [{ systemId: "a", goodId: "water", satisfaction: 0.7 }];
+    const state = perSystemSupplyState(systems, markets).get("a")!;
+    expect(state.d).toBeCloseTo(0.3, 6);
+    expect(state.grievance).toBeCloseTo(0, 9);
+    expect(state.grievance).not.toBeCloseTo(state.d, 2);
+  });
+
+  it("resolves an absent stored value by seeding from this cycle's Provision — grievance 0 on a newborn read", () => {
+    const systems = [sys("newborn")]; // no provisionExpectation at all
+    const markets = [{ systemId: "newborn", goodId: "water", satisfaction: 0.6 }];
+    const state = perSystemSupplyState(systems, markets).get("newborn")!;
+    expect(state.expectationStored).toBeCloseTo(0.6, 6); // seeded to P
+    expect(state.grievance).toBeCloseTo(0, 9);
+  });
+});
+
+describe("summarizeSupplyRegimes — expectation & grievance distributions, and the stale flag", () => {
+  it("flags an emptyBasket system as stale rather than folding its stored memory into the mean", () => {
+    // "stale" carries no market rows at all -> an empty goods basket -> emptyBasket: true. Its
+    // stored memory (0.9) must be EXCLUDED from expectationLevels, not blended into the mean with
+    // "normal"'s 0.6 — the population processor itself skips the update on exactly this condition
+    // (SupplyState.emptyBasket), so folding it in would read a frozen, possibly stale number as a
+    // current one.
+    const systems = [
+      sys("stale", { provisionExpectation: 0.9 }),
+      sys("normal", { provisionExpectation: 0.6 }),
+    ];
+    const markets = [{ systemId: "normal", goodId: "water", satisfaction: 0.6 }];
+    const summary = summarizeSupplyRegimes(systems, markets);
+    expect(summary.staleExpectationCount).toBe(1);
+    // Only "normal" contributes — median must land exactly on its own stored value, not a blend.
+    expect(summary.expectationLevels.median).toBeCloseTo(0.6, 6);
+    expect(summary.expectationLevels.median).not.toBeCloseTo((0.9 + 0.6) / 2, 6);
+  });
+
+  it("reports 0/empty distributions, never NaN, when every system is stale", () => {
+    const systems = [sys("stale", { provisionExpectation: 0.9 })];
+    const summary = summarizeSupplyRegimes(systems, []); // no markets -> empty basket
+    expect(summary.staleExpectationCount).toBe(1);
+    expect(summary.expectationLevels).toEqual({ median: 0, p10: 0, p90: 0 });
+    expect(summary.grievanceLevels).toEqual({ median: 0, p10: 0, p90: 0 });
+  });
+});
+
+describe("episode costs: newEpisodeCostTotals / recordEpisodeCosts", () => {
+  it("conserves — the running total equals the sum of every per-cycle map fed in", () => {
+    const totals = newEpisodeCostTotals();
+    recordEpisodeCosts(totals, new Map([["a", 2], ["b", 1]]), new Map([["a", 0.5]]));
+    recordEpisodeCosts(totals, new Map([["a", 1]]), undefined); // overshoot absent this cycle
+    recordEpisodeCosts(totals, undefined, new Map([["b", 3]])); // teardown absent this cycle
+
+    expect(totals.teardownBySystem.get("a")).toBeCloseTo(2 + 1, 9);
+    expect(totals.teardownBySystem.get("b")).toBeCloseTo(1, 9);
+    expect(totals.overshootDeathBySystem.get("a")).toBeCloseTo(0.5, 9);
+    expect(totals.overshootDeathBySystem.get("b")).toBeCloseTo(3, 9);
+
+    // The conservation property itself: Σ of every per-cycle contribution equals the running total —
+    // breaking the accumulator's addition (e.g. an overwrite instead of a `+=`) fails this.
+    const teardownSum = [...totals.teardownBySystem.values()].reduce((a, b) => a + b, 0);
+    const overshootSum = [...totals.overshootDeathBySystem.values()].reduce((a, b) => a + b, 0);
+    expect(teardownSum).toBeCloseTo(2 + 1 + 1, 9);
+    expect(overshootSum).toBeCloseTo(0.5 + 3, 9);
+  });
+
+  it("is a no-op when both maps are absent this cycle", () => {
+    const totals = newEpisodeCostTotals();
+    recordEpisodeCosts(totals, undefined, undefined);
+    expect(totals.teardownBySystem.size).toBe(0);
+    expect(totals.overshootDeathBySystem.size).toBe(0);
+  });
+});
+
+describe("computeTrailingProvisionVariance", () => {
+  it("separates jitter from level — equal means, distinguishably different variance", () => {
+    const steady = [0.8, 0.8, 0.8, 0.8, 0.8, 0.8];
+    const jittery = [0.6, 1.0, 0.6, 1.0, 0.6, 1.0]; // same mean as steady (0.8)
+    const meanOf = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    expect(meanOf(steady)).toBeCloseTo(meanOf(jittery), 9); // premise: the means really do agree
+
+    const snapshots = steady.map((s, i) => new Map([["steady", s], ["jittery", jittery[i]]]));
+    const variances = computeTrailingProvisionVariance(snapshots);
+    expect(variances.get("steady")).toBeCloseTo(0, 9);
+    expect(variances.get("jittery")).toBeCloseTo(0.04, 9); // ((0.2)^2 * 6) / 6 = 0.04
+    expect(variances.get("jittery")).toBeGreaterThan(variances.get("steady") ?? -1);
+  });
+
+  it("omits a system with fewer than the minimum trailing samples, rather than reporting 0", () => {
+    const snapshots = [new Map([["a", 0.5]]), new Map([["a", 0.6]])]; // 2 samples — below the minimum
+    const variances = computeTrailingProvisionVariance(snapshots);
+    expect(variances.has("a")).toBe(false);
+  });
+
+  it("reads only the trailing window, not the whole history", () => {
+    // A calm head followed by a jittery tail: reading the whole array would dilute the tail's
+    // variance toward a smaller number than the window alone reports.
+    const calm = Array.from({ length: 10 }, () => new Map([["a", 0.8]]));
+    const jitter = [0.6, 1.0, 0.6, 1.0, 0.6, 1.0].map((v) => new Map([["a", v]]));
+    const windowOnly = computeTrailingProvisionVariance(jitter, 6).get("a") ?? -1;
+    const wholeHistory = computeTrailingProvisionVariance([...calm, ...jitter], 6).get("a") ?? -1;
+    expect(wholeHistory).toBeCloseTo(windowOnly, 9);
+  });
+});
+
+describe("sampleProvisionBySystem", () => {
+  it("reads the same Provision perSystemSupplyState computes, for every settled system", () => {
+    const systems = [sys("a"), sys("b")];
+    const markets = [
+      { systemId: "a", goodId: "water", satisfaction: 0.4 },
+      { systemId: "b", goodId: "water", satisfaction: 0.9 },
+    ];
+    const sampled = sampleProvisionBySystem(systems, markets);
+    const states = perSystemSupplyState(systems, markets);
+    expect(sampled.get("a")).toBeCloseTo(states.get("a")!.provision, 9);
+    expect(sampled.get("b")).toBeCloseTo(states.get("b")!.provision, 9);
   });
 });
 

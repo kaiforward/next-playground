@@ -88,31 +88,6 @@ export const ECONOMY_SIM_PARAMS: Readonly<EconomySimParams> = {
 export const SHORTAGE_SATISFACTION = 0.5;
 
 /**
- * Provision shortfall (`1 − provision()`, a linear mean — a partial shortfall reads its own size, not
- * its square) at or above which the unrest slope BEGINS ramping from `slopeRationing` toward
- * `slopeShortage` (full Shortage weight lands at cut + blend = 0.90). Its only consumer is
- * `unrestSlope` — the band bins Provision directly and never reads this cut — which is why it is
- * authored as ESCALATION-ONLY: it does not separate ambient scarcity from famine (the
- * survival floor already does that job outright), it only decides when the ramp engages. Set well
- * above every measured founding shortfall (p10 0.59, mean 0.27 — equilibrium founding cohort,
- * n = 562, docs/planned/supply-response.md) so a newborn colony's own worst reading never engages it.
- * The old gap-1/squared-scale anchors (≈0.14 ambient, ≈0.37 water, as D values on the squared fold)
- * carried no information about the linear scale and are retired rather than restated. Re-derive
- * rather than nudge if the founding shortfall distribution moves
- * (lib/constants/__tests__/band-constants.test.ts pins it above the measured p10).
- */
-export const D_SHORTAGE_CUT = 0.65;
-
-/**
- * Width of the D band above the cut across which the unrest slope ramps from the Rationing value to
- * the Shortage one — full Shortage weight lands at shortfall 0.90. The ramp starts AT the cut and
- * never below it, so no system takes a hard step in settled unrest for an arbitrarily small change in
- * delivered goods. Escalation-only, like the cut it extends: it no longer marks where a band boundary
- * sits (the band bins Provision directly instead), only how fast the ramp climbs once above it.
- */
-export const D_SHORTAGE_BLEND = 0.25;
-
-/**
  * Provision at or above which a system bands Supplied — the healthiest of the four descriptive
  * bands (Supplied / Strained / Rationing / Shortage). A legibility line only: no gameplay effect
  * reads the band (effects that scale with supply read Provision or the shortfall directly instead),
@@ -134,7 +109,7 @@ export const RATIONING_PROVISION = 0.7;
 
 /**
  * Civilian satisfaction below which a demanded good counts toward the critical-good override's
- * weight (see `unrestSlope`) — a good under a quarter met is critical. Its own constant, not
+ * weight (see `supplyUnrestTerm`) — a good under a quarter met is critical. Its own constant, not
  * SHORTAGE_SATISFACTION: the famine line and the criticality line must be able to move
  * independently, and extending SHORTAGE_SATISFACTION to a third meaning would fuse them
  * permanently. Set at half of SHORTAGE_SATISFACTION (0.5) — "collapsed" is a distinctly worse state

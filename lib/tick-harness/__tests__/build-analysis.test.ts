@@ -5,11 +5,14 @@ import {
   recordFoundingManifest, newFoundingStallTotals, recordFoundingStall, newInFlightEstablishTotals,
   sampleOpenColonies, summarizeFoundingLifecycle, summarizeFounderCohort,
   foundingCadenceMarkTick, FOUNDING_CADENCE_MARK_SHARE, CONSTRUCTION_WARMUP_TICKS,
+  newFoundingTrajectoryTotals, sampleFoundingTrajectory, summarizeFoundingTrajectory,
+  hasColonyInTrajectoryWindow, FOUNDING_TRAJECTORY_BUCKET_CYCLES, FOUNDING_TRAJECTORY_BUCKET_COUNT,
 } from "../build-analysis";
 import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import type {
   BuildCommitmentRecord, FoundedColonyRecord, FoundedColonySystem, FoundingStagingTotals,
+  FoundingTrajectorySystem,
 } from "../build-analysis";
 import type { FoundingStallEvent } from "@/lib/tick/types";
 import { EXPANSION } from "@/lib/constants/expansion";
@@ -676,6 +679,26 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(summary.p10OpeningProvision ?? 1).toBeLessThan(0.4);
   });
 
+  it("reports the literal minimum, never the p10 percentile, on a fixture where the two diverge", () => {
+    // 10 colonies: eight cluster at 0.3, one deep outlier at 0.05, one healthy at 0.9. This
+    // library's quantile() is nearest-rank (s[floor(q*n)]): p10 of 10 sorted readings picks index 1
+    // (0.3), not the true minimum (0.05) — exactly the case promise 1's tail check needs a REAL
+    // minimum for: p10 bounds 90% of the cohort, but the worst reading can sit well under it, and an
+    // implementation that read minOpeningProvision off p10OpeningProvision (or off the sorted
+    // percentile neighbour) would report 0.3 here instead of the true 0.05.
+    const tracker = new Map<string, FoundedColonyRecord>([
+      ["low", rec("low", 0.05, 0.95, 0.05)],
+      ["b", rec("b", 0.3, 0.7, 0.3)], ["c", rec("c", 0.3, 0.7, 0.3)], ["d", rec("d", 0.3, 0.7, 0.3)],
+      ["e", rec("e", 0.3, 0.7, 0.3)], ["f", rec("f", 0.3, 0.7, 0.3)], ["g", rec("g", 0.3, 0.7, 0.3)],
+      ["h", rec("h", 0.3, 0.7, 0.3)], ["i", rec("i", 0.3, 0.7, 0.3)],
+      ["j", rec("j", 0.9, 0.1, 0.9)],
+    ]);
+    const summary = summarizeFoundingStock(tracker);
+    expect(summary.p10OpeningProvision).toBeCloseTo(0.3, 9);
+    expect(summary.minOpeningProvision).toBeCloseTo(0.05, 9);
+    expect(summary.minOpeningProvision).not.toBeCloseTo(summary.p10OpeningProvision ?? -1, 3);
+  });
+
   it("folds meanOpeningProvision from openingProvision, not from openingSatisfaction", () => {
     // Every OTHER summary-level test in this file uses rec()'s default, which sets openingProvision
     // equal to openingSatisfaction per record — so a bug that aliased the two summary accumulators
@@ -703,6 +726,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     expect(summary).toEqual({
       foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
       meanOpeningShortfall: 0, meanOpeningProvision: null, p10OpeningProvision: null,
+      minOpeningProvision: null,
       openingDeprivedCount: 0,
       meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
       // Same rule for the cadence mark: no colonies means there is no mark, and a 0 would read as
@@ -813,6 +837,78 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     const summary = summarizeFoundingStock(tracker);
     expect(summary.medianFounderCoverAfter).toBeCloseTo(0.8, 9);
     expect(summary.meanManifestTonnage).toBeCloseTo(50, 9); // 100 over both founded colonies
+  });
+});
+
+describe("sampleFoundingTrajectory / summarizeFoundingTrajectory", () => {
+  const trajSys = (id: string, unrest: number): FoundingTrajectorySystem => ({
+    id, population: EXPANSION.COLONY_SEED_POP, buildings: {}, unrest,
+  });
+  const mkt = (systemId: string, goodId: string, satisfaction: number) => ({ systemId, goodId, satisfaction });
+  const recordAt = (foundedTick: number): FoundedColonyRecord => ({
+    systemId: "c1", foundedTick, openingSatisfaction: null, openingShortfall: null, openingProvision: null,
+  });
+
+  it("buckets by AGE SINCE FOUNDING, not absolute tick — a mid-run founding lands in bucket 0", () => {
+    const foundedTick = 240; // mid-run, well past tick 0
+    const tracker = new Map([["c1", recordAt(foundedTick)]]);
+    const totals = newFoundingTrajectoryTotals();
+    // One cycle old: correct (age-keyed) bucketing reads bucket 0. An absolute-tick bucketing
+    // (tick / cycleLength / bucketCycles = (240+24)/24/10 = 1.1 -> bucket 1) would instead land
+    // this sample in bucket 1 — the fixture is chosen so the two disagree, not just differ in degree.
+    const oneCycleOld = foundedTick + 24;
+    sampleFoundingTrajectory(
+      [trajSys("c1", 0.1)], [mkt("c1", "water", 0.5)], oneCycleOld, 24, tracker, totals,
+    );
+    const summary = summarizeFoundingTrajectory(totals);
+    expect(summary.buckets[0].n).toBe(1);
+    expect(summary.buckets[1].n).toBe(0);
+    expect(summary.buckets[0].meanUnrest).toBeCloseTo(0.1, 9);
+  });
+
+  it("excludes a colony once it ages past the whole bucketed window", () => {
+    const tracker = new Map([["c1", recordAt(0)]]);
+    const totals = newFoundingTrajectoryTotals();
+    const windowEdgeTick = FOUNDING_TRAJECTORY_BUCKET_COUNT * FOUNDING_TRAJECTORY_BUCKET_CYCLES * 24;
+    sampleFoundingTrajectory(
+      [trajSys("c1", 0.5)], [mkt("c1", "water", 0.5)], windowEdgeTick, 24, tracker, totals,
+    );
+    const summary = summarizeFoundingTrajectory(totals);
+    expect(summary.buckets.every((b) => b.n === 0)).toBe(true);
+  });
+
+  it("accumulates every sample a colony contributes as it ages through a bucket, not just the last", () => {
+    const tracker = new Map([["c1", recordAt(0)]]);
+    const totals = newFoundingTrajectoryTotals();
+    sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.4)], 24, 24, tracker, totals); // age 1 cycle
+    sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.8)], 5 * 24, 24, tracker, totals); // age 5 cycles — still bucket 0
+    const summary = summarizeFoundingTrajectory(totals);
+    expect(summary.buckets[0].n).toBe(2);
+    expect(summary.buckets[0].meanProvision).toBeCloseTo(0.6, 6);
+  });
+
+  it("contributes no sample on the founding tick itself — the market-seeding placeholder, not a real reading — only from the first cycle strictly after it", () => {
+    const tracker = new Map([["c1", recordAt(0)]]);
+    const totals = newFoundingTrajectoryTotals();
+    // Same tick as founding: age 0. This is provision()'s market-seeding placeholder (1.0), not a
+    // lived cycle — must contribute nothing to bucket 0.
+    sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 1)], 0, 24, tracker, totals);
+    let summary = summarizeFoundingTrajectory(totals);
+    expect(summary.buckets[0].n).toBe(0);
+
+    // The very next cycle: a real reading, now counted.
+    sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.5)], 24, 24, tracker, totals);
+    summary = summarizeFoundingTrajectory(totals);
+    expect(summary.buckets[0].n).toBe(1);
+    expect(summary.buckets[0].meanProvision).toBeCloseTo(0.5, 6);
+  });
+
+  it("hasColonyInTrajectoryWindow: false on the founding tick itself, true once the first cycle begins, false once past the window", () => {
+    const tracker = new Map([["c1", recordAt(0)]]);
+    expect(hasColonyInTrajectoryWindow(tracker, 0, 24)).toBe(false); // founding tick itself — nothing due yet
+    expect(hasColonyInTrajectoryWindow(tracker, 24, 24)).toBe(true); // one cycle later — due
+    const windowEdgeTick = FOUNDING_TRAJECTORY_BUCKET_COUNT * FOUNDING_TRAJECTORY_BUCKET_CYCLES * 24;
+    expect(hasColonyInTrajectoryWindow(tracker, windowEdgeTick, 24)).toBe(false);
   });
 });
 

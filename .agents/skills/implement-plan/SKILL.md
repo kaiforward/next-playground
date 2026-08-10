@@ -50,13 +50,18 @@ silently is the failure this file exists to prevent. "Minor" is a severity, not 
 3. **Per-task review, before commit.** A reviewer agent checks the diff against the task's
    `Interface` (contract drift), its detection list (every entry actually pinned; vacuity), and
    the code-standards rules. This is checklist review — it verifies written invariants.
+   **The reviewer also re-executes at least one recorded red-proof**: apply the record's exact
+   break, run the scoped suite, confirm the named test fails, revert. The record names the break
+   and the test, so this is mechanical — it converts the implementer's red-proof record from a
+   trusted claim into an independently reproduced one. A re-run that does NOT go red is a
+   review-blocking finding, not a note.
 4. **Triage every review finding on the spot**: fix now (cheap, in-diff, correctness — the
    implementer fixes it before the commit) or ledger it in `## Issues`. No third state.
-5. **The session verifies the claims.** Run the suite and build yourself; spot-check the red-proof
-   record by re-breaking at least one listed behaviour; and treat **"the instrument prints X" as a
-   claim verified only by running the instrument** and matching its output against the plan — a
-   plan once asserted its gate reads were "all now printed" while two had never been implemented,
-   and nothing caught it until the gate ran.
+5. **The session verifies the claims.** Run the suite and build yourself (red-proof re-execution
+   is the reviewer's job in step 3 — the session does not re-break tests itself); and treat
+   **"the instrument prints X" as a claim verified only by running the instrument** and matching
+   its output against the plan — a plan once asserted its gate reads were "all now printed" while
+   two had never been implemented, and nothing caught it until the gate ran.
 6. **Commit per task**, message naming the task. Update the ledger before moving on.
 
 ## Gates

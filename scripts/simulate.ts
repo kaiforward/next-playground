@@ -414,6 +414,18 @@ function formatTable(results: HarnessResults): string {
       `  Worst demanded good: median ${regimes.worstGoodLevels.median.toFixed(3)}, ` +
         `p10 ${regimes.worstGoodLevels.p10.toFixed(3)}, p90 ${regimes.worstGoodLevels.p90.toFixed(3)}`,
     );
+    // Galaxy-wide adaptive-expectation reading — the harness addition the spec's "Calibration and
+    // the gate" section names. A stale (emptyBasket) system is excluded from both distributions
+    // rather than folded in with a frozen memory reading — see staleExpectationCount below.
+    lines.push(
+      `  Expectation (stored memory): median ${regimes.expectationLevels.median.toFixed(3)}, ` +
+        `p10 ${regimes.expectationLevels.p10.toFixed(3)}, p90 ${regimes.expectationLevels.p90.toFixed(3)}`,
+    );
+    lines.push(
+      `  Grievance (unrest's actual read): median ${regimes.grievanceLevels.median.toFixed(3)}, ` +
+        `p10 ${regimes.grievanceLevels.p10.toFixed(3)}, p90 ${regimes.grievanceLevels.p90.toFixed(3)}` +
+        `  |  stale (emptyBasket, excluded above): ${regimes.staleExpectationCount}`,
+    );
   }
 
   // Cohorts overlap by design: a system is in one population band, one of homeworld/colony,
@@ -445,6 +457,78 @@ function formatTable(results: HarnessResults): string {
     lines.push("  and in survival-short if it has no arable slot. Each row's n is its own denominator.");
     lines.push("  net growth% is (end pop - start pop) / start pop over the cohort's END-of-run");
     lines.push("  membership, measured from tick 0; n/a only if no start reading was taken at all.");
+
+    // Adaptive-expectation reading, cohorted — the spec's "Calibration and the gate" bullet on
+    // expectation/grievance distributions. A cohort with every member stale (emptyBasket) reads
+    // n=0/median 0 here rather than a divide-by-zero — see the stale count for why.
+    lines.push("");
+    lines.push("Adaptive expectation & grievance, by world cohort (end of simulation):");
+    lines.push(...renderTable(
+      ["Cohort", "n", "Expect median", "Expect p10", "Grievance median", "Grievance p10", "stale"],
+      [16, 6, 14, 12, 18, 15, 7],
+      worldCohorts.map((c) => [
+        c.cohort,
+        String(c.n),
+        c.expectationLevels.median.toFixed(3),
+        c.expectationLevels.p10.toFixed(3),
+        c.grievanceLevels.median.toFixed(3),
+        c.grievanceLevels.p10.toFixed(3),
+        String(c.staleExpectationCount),
+      ]),
+    ));
+  }
+
+  // Episode costs — an episode's cost is real and irreversible (teardown, overshoot death), so the
+  // gate reads cumulative totals rather than only peak unrest (promise 5). Printed unconditionally:
+  // a run with nothing to report reads 0, which is itself evidence, not a skipped section.
+  {
+    const ec = results.episodeCosts;
+    lines.push("");
+    lines.push("Episode Costs — cumulative teardown + overshoot death (whole run):");
+    lines.push(
+      `Galaxy-wide: ${fmtNum(ec.totalTeardownLevels)} building levels torn down, ` +
+        `${fmtNum(ec.totalOvershootDeaths)} population lost to overshoot death`,
+    );
+    if (ec.byCohort.length > 0) {
+      lines.push(...renderTable(
+        ["Cohort", "n", "Teardown lvls", "w/ teardown", "Overshoot death", "w/ overshoot"],
+        [16, 6, 14, 12, 16, 13],
+        ec.byCohort.map((c) => [
+          c.cohort,
+          String(c.n),
+          fmtNum(c.teardownLevels),
+          String(c.systemsWithTeardown),
+          fmtNum(c.overshootDeaths),
+          String(c.systemsWithOvershootDeath),
+        ]),
+      ));
+    }
+  }
+
+  // The ratchet check — a positive slope (higher trailing Provision variance -> higher mean
+  // grievance, at comparable Provision) is the memory rectifying jitter into permanent grievance,
+  // a defect per the spec, not a reading. Bucket 0 = calmest quartile, 3 = jitteriest, WITHIN cohort.
+  {
+    const pr = results.provisionRatchet;
+    lines.push("");
+    lines.push(`Provision Ratchet Check (trailing window = ${pr.window} periodic samples):`);
+    if (pr.buckets.length > 0) {
+      lines.push(...renderTable(
+        ["Cohort", "Bucket", "n", "mean variance", "mean grievance"],
+        [16, 8, 6, 15, 15],
+        pr.buckets.map((b) => [
+          b.cohort,
+          String(b.bucket),
+          String(b.n),
+          b.meanVariance.toExponential(2),
+          b.meanGrievance.toFixed(3),
+        ]),
+      ));
+      lines.push("  bucket 0 = calmest quartile by trailing Provision variance, 3 = jitteriest — WITHIN");
+      lines.push("  each cohort. A positive slope (rising mean grievance across 0->3) is the rectifier firing.");
+    } else {
+      lines.push("  NO READINGS — no settled system carried enough trailing samples this run (short horizon).");
+    }
   }
 
   // Migration throughput (whole run) — reads most meaningfully on a land-tight seed, where colony
@@ -535,7 +619,10 @@ function formatTable(results: HarnessResults): string {
       lines.push(
         `  opening satisfaction (demand-weighted): mean ${fs.meanOpeningSatisfaction.toFixed(2)}, ` +
           `shortfall ${fs.meanOpeningShortfall.toFixed(3)} | ` +
-          `opened deprived (<0.50): ${fs.openingDeprivedCount}`,
+          `opened deprived (<0.50): ${fs.openingDeprivedCount} | ` +
+          // The measured floor under promise 1's p10 — a percentile bounds only 90% of the cohort,
+          // so the sub-p10 tail is checked against this literal minimum, not inferred from p10.
+          `min opening Provision: ${fs.minOpeningProvision !== null ? fs.minOpeningProvision.toFixed(2) : "n/a"}`,
       );
       // A different weighting from the line above (necessity × demand, not demand alone) — reported
       // on its own line so the two quantities are never read as the same number.
@@ -545,6 +632,26 @@ function formatTable(results: HarnessResults): string {
             `p10 ${fs.p10OpeningProvision.toFixed(2)}`,
         );
       }
+    }
+    // Founding trajectory — unrest promise 1's window half (docs/active/gameplay/economy.md): does
+    // the colony stay calm through manifest exhaustion, not just at opening? Buckets by cycles since
+    // FOUNDING, not absolute tick, so every colony's own age-60 window lands in the same six rows.
+    const ft = results.foundingTrajectory;
+    if (ft.buckets.some((b) => b.n > 0)) {
+      lines.push("");
+      lines.push("  Founding trajectory — Provision & unrest by colony age (samples, not colony count):");
+      lines.push(...renderTable(
+        ["Age (cycles)", "samples", "Provision mean", "Provision p10", "unrest mean", "unrest p10"],
+        [14, 9, 15, 14, 12, 11],
+        ft.buckets.map((b) => [
+          `${b.ageStartCycles}-${b.ageEndCycles}`,
+          String(b.n),
+          b.n > 0 ? b.meanProvision.toFixed(3) : "-",
+          b.n > 0 ? b.p10Provision.toFixed(3) : "-",
+          b.n > 0 ? b.meanUnrest.toFixed(3) : "-",
+          b.n > 0 ? b.p10Unrest.toFixed(3) : "-",
+        ]),
+      ));
     }
     if (fs.foundedCount > 0) {
       lines.push(

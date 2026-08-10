@@ -3,17 +3,13 @@
 ## Headline
 
 A world's supply state is now one readable number — **Provision**, the necessity-and-demand-weighted
-share of what a world needs — driving unrest and growth, with four descriptive bands and two explicit
-severity overrides (shipped; see [economy.md](../active/gameplay/economy.md)). What remains of this
-arc is making the *response* to that number behave like a population rather than a thermostat, and
-giving stuck worlds an exit:
+share of what a world needs — driving unrest and growth, with four descriptive bands, two explicit
+severity overrides, and a persisted per-world **expectation** unrest is judged against: a frontier
+colony that has always scraped by is content, a rich world that dips is not, and recovery visibly
+calms a world while its level is still poor (both shipped; mechanism and guarantee ladder in
+[economy.md](../active/gameplay/economy.md)). What remains of this arc is giving stuck worlds an
+exit:
 
-- **The adaptive expectation.** Unrest stops judging every world against one fixed global bar and
-  judges it against **what that world has been getting**: a frontier colony that has always scraped
-  by is content; a rich world that dips is not; a world whose supply is *falling* radicalises before
-  its level looks bad, and one that is *recovering* visibly calms. One mechanism — a persisted,
-  slow-moving per-world baseline — whose fastest-decay setting is the old "change term" (previously
-  sequenced as its own item; merged here, see below).
 - **Abandonment.** A world that cannot sustain itself declines to empty and returns to the map as a
   candidate for later resettlement, instead of parking half-dead forever.
 - **Relief.** A player-funded intervention buys a viable world out of the strike loop — spending to
@@ -63,11 +59,15 @@ reference being fixed at all is the problem, which is what the adaptive expectat
 
 **The founding cohort is still the modal world and the worst-supplied one.** 562 of 582 settled at
 equilibrium are colonies; their opening Provision is mean 0.74 / p10 0.62 (equilibrium cohort;
-mean 0.88 / p10 0.69 at startup). The founding-strike guarantee holding today's `slopeRationing`
-at 0.95 is interim scaffolding for exactly this cohort — the expectation baseline dissolves it
-structurally (a newborn's settlers expect frontier hardship, so its expectation-relative shortfall
-is ~0 at any tax), after which the slopes are re-derived and only the durable constraints remain
-(broad shortage on an established world still strikes; famine's absolute floor).
+mean 0.88 / p10 0.69 at startup). The pre-change arm (Gate 2 BASE) measured mean 0.73 / p10 0.41 at
+equilibrium — the provenance of the shipped guarantee suite's 0.59-shortfall p10, whose original
+citation target was folded away at the Gate 2 doc consolidation. At the time of this measurement the
+founding-strike guarantee held the pre-expectation `slopeRationing` at 0.95 as interim scaffolding for
+exactly this cohort. That scaffolding has since dissolved structurally, as predicted: the expectation
+baseline shipped (a newborn's settlers expect frontier hardship, so its expectation-relative shortfall
+is ~0 at any tax), `slopeRationing` is retired, and the slopes were re-derived — the surviving one is
+`UNREST_PARAMS.slopeBase` (1.6) — leaving only the durable constraints (broad shortage on an
+established world still strikes; famine's absolute floor).
 
 **Strikes are a small-world story, not a landless-world story.** pop 10–100 strikes at 14.7%
 (n = 68) against 0.0% for pop ≥ 1K (n = 370); 91.5% of the survival-short cohort is *not* striking.
@@ -83,84 +83,22 @@ abandonment design against the narrower residual, not the pre-change number.
 
 ## The adaptive expectation
 
-### What it is
+Shipped — the mechanism (memory bar with asymmetric rise/resign rates, the 0.5 destitution
+floor, the absolute famine/critical channels, the six-promise guarantee ladder, constants) lives in
+[economy.md](../active/gameplay/economy.md). This doc keeps only what the *later* items need from
+it:
 
-Each world carries a persisted, slow-moving **expectation baseline** — what Provision this world has
-been getting — and the unrest response is driven by supply measured **against that baseline** rather
-than against a fixed global scale. Three behaviours fall out of one mechanism:
-
-- **Change response.** A world whose supply drops below what it is used to radicalises *while the
-  level is still healthy*; a recovering world's unrest visibly eases while its level is still poor.
-  This is the old "change term" — unrest responds to supply moving, not only to its level.
-- **Normalisation.** A world that has always been at 0.7 is calm there; a world that lived at 1.0
-  and slid to 0.9 is not. Development raises the bar rather than clearing it (Victoria 3's standard
-  of living vs *expected* standard of living — the precedent attaches to this shape, not to a raw
-  one-cycle derivative).
-- **Threshold dissolution.** The absolute-threshold placement problem (where exactly does "content"
-  sit for a two-pop frontier colony vs a developed homeworld?) stops existing: there is no absolute
-  threshold left to place. The founding-strike invariant and the interim `slopeRationing` retire
-  with it, and the slopes are re-derived against expectation-relative shortfall.
-
-### Why this absorbed the change term
-
-The change term was previously its own item, sequenced first, with the expectation recorded as its
-generalisation. Merged, with the step-1 gate's data in hand, because:
-
-- **They share their only infrastructure.** Both need one persisted per-system field, updated each
-  cycle. "Compare against last cycle" is the fastest-decay special case of "compare against a
-  slow-moving baseline" — one update rule, one constant apart. Shipping them as two items means
-  shipping the same field twice.
-- **The attribution argument aged out.** The original sequencing existed so the re-scale and a
-  derivative term would not land together unattributably. The re-scale shipped alone and gated
-  cleanly; whatever ships next is singly attributable regardless of its shape.
-- **The gate showed the level response alone is not enough** for the arc's remaining goals: labels
-  are truthful and suppression fell, but small-world strike dynamics did not move, famine worlds
-  still pin unrest at 1.000, and nothing escalates on deterioration or eases on recovery.
-
-The exploratory half of the old item survives as **calibration, not code**: the decay rate of the
-baseline is the knob, and the harness sweeps it — the one-cycle end of the spectrum *is* the old
-change term, the slow end is full normalisation. The behavioural read at each setting (strike
-churn, oscillation, founding-cohort trajectories, recovering-world visibility) is the experiment
-the old item existed to run.
-
-### Design constraints the spec must carry
-
-- **Famine is never normalised.** The survival floor is absolute — `slopeShortage` survives
-  expectation-relativity precisely because famine is famine whatever a population is used to. The
-  expectation baseline must not be able to average a survival-good failure into contentment; the
-  survival override composes exactly as shipped.
-- **The ratchet wants asymmetry, stated or rejected.** Symmetric decay means expectations fall as
-  fast as they rise, so chronic decline self-forgives at the decay rate. Whether hardship is
-  normalised slower than plenty (Victoria 3 does this) is a design decision to make explicitly.
-- **Abandonment interplay.** A world that has normalised its own misery stops emitting the unrest
-  signal — but abandonment (next item) needs decliners to *finish*. Its trigger must therefore key
-  on sustained physical decline (population trend), not on unrest, or the expectation quietly
-  disables it. This was already true (an unrest-keyed trigger parks at the interior fixed point);
-  the expectation makes it non-negotiable.
-- **Expectation floor and seed.** A newborn colony's baseline seeds from its opening state (first
-  delta exactly zero — founding must not open with a shock), and the baseline needs a stated floor
-  so "used to nothing" cannot read as content at Provision 0 outside the famine floor's reach.
-- **What stays absolute.** The band (the player-facing label) stays binned from absolute Provision —
-  a world at 0.6 is Rationing however accustomed it is; the *label* tells the truth about supply,
-  the *response* is relative. Growth's `1 − shortfall` factor: decide explicitly whether growth
-  reads absolute or expectation-relative shortfall, and state why (the default lean is absolute —
-  bodies need goods, not satisfied expectations).
-
-### Mechanics
-
-**This is the step that changes the save format.** Nothing persists a prior-cycle supply reading:
-the fold lives in `EconomySignals`, threaded in-memory through `ctx.results` for one tick and
-explicitly not persisted (`lib/tick/types.ts:47-57`). The baseline is a new per-system field —
-optional with a default so old saves load, finite-guarded (a non-finite value serializes to `null`
-and corrupts the save), seeded from the current cycle at both founding and world-gen. Updated once
-per cycle by the population processor (the fold's owner), read in the same tick.
-
-*Gate metrics, cohorted at both horizons plus the 12k checkpoint:* strike share and unrest
-distribution per cohort against the step-1 gate's baselines above; founding-cohort opening
-trajectory (does a newborn still open calm at every tax level once the invariant retires); a
-recovering-world trace (unrest visibly easing during recovery, the behaviour the level response
-cannot produce); no oscillation (the derivative response must not ring against the relaxation
-rate); decay-rate sweep results recorded with the chosen value's rationale.
+- **Abandonment's trigger keys on famine-driven or physical decline, never unrest** — a world that
+  has normalised its own misery stops emitting the unrest signal, so an unrest-keyed trigger would
+  be quietly disabled by the expectation; and the expectation's decline flip narrows non-famine
+  physical decline, so the trigger is re-verified against post-change decline rates. Non-negotiable
+  now the expectation is live.
+- **Abandoned worlds leave the settled denominator before any expectation baseline is measured
+  over them**, and **the un-develop transition clears the stored expectation** — the shipped develop-transition
+  clear is the other half of the same rule (a husk's stale memory must
+  not survive into a resettlement).
+- Both later items consume the **worsening-vs-recovering signal** (deviation from baseline) as a
+  derived, stated read — never raw field access.
 
 ## Struck worlds resolve
 
@@ -285,10 +223,10 @@ Each item is measured before the next starts. (Renumbered from the original five
 item 1 shipped; the old item 2, the change term, is absorbed into the adaptive expectation as its
 fastest-decay calibration arm.)
 
-1. **The adaptive expectation** — the persisted per-world baseline; unrest responds to supply
-   measured against it. Adds the one persisted field; slopes re-derived; founding invariant and
-   interim `slopeRationing` retire. The decay-rate sweep is the item's calibration, with the
-   one-cycle arm reproducing the old change term for comparison.
+1. **The adaptive expectation** — SHIPPED (mechanism + guarantees:
+   [economy.md](../active/gameplay/economy.md)). The persisted per-world baseline; unrest responds
+   to supply measured against it; the founding invariant and interim `slopeRationing` retired. All
+   three gate decisions resolved no-change except the stability-label edge re-read.
 2. **Abandonment** — a world that cannot sustain itself declines to empty and returns to the map.
    Gated on: the `canSustainItself` predicate, the viability cohort in the harness (the
    prerequisite measurement above), the un-develop primitive, and the re-authored developed-gate
@@ -304,29 +242,26 @@ need, updated to the post-gate state.)
 
 ### One quantity, several unrelated jobs
 
-| Quantity | Readers | What the expectation item moves | Decision required |
-| --- | --- | --- | --- |
-| the shortfall `1 − Provision` | unrest integral; growth factor (`populationDelta`); harness | unrest's reading becomes expectation-relative | whether growth stays absolute (default lean: yes — bodies need goods, not satisfied expectations), stated in the item's spec |
-| `slopeRationing` / `slopeShortage` | `unrestSlope`; `band-constants.test.ts` guarantees | re-derived against expectation-relative shortfall; interim `slopeRationing` (0.95) retires with the founding invariant | the durable constraints that survive: broad shortage on an established world still strikes; either survival good's total failure can collapse an untaxed world (`slopeShortage` × food's ~0.32 basket share ≥ 0.75) |
-| `unrest` | strike suppression, migration, infrastructure teardown, overshoot split | unchanged in meaning — still the [0,1] integral; only what feeds it changes | — |
+The expectation item shipped with its own worksheet (the shortfall's political/biological split,
+the slope re-derivation, `unrest`'s deliberately-unchanged meaning — git holds the spec). No
+quantity row is specific to abandonment or relief yet — their specs fill this section when written.
 
 ### A constant read for a meaning it was not authored to have
 
 | Constant | Authored meaning | Remaining-item use | Same thing? |
 | --- | --- | --- | --- |
-| `SHORTAGE_SATISFACTION` | the famine line (survival floor; `fed()`) | unchanged; the expectation must not reach it | Yes — famine stays absolute by design |
-| `STRIKE_PARAMS.threshold` = 0.65 | "only genuinely high-unrest systems strike" | unchanged; the expectation changes how many worlds reach it | Yes |
-| `UNREST_PARAMS.decay` = 0.06 | the single relaxation rate (interim, no heavy calibration) | interacts with the baseline's decay rate — two time constants in one loop; the oscillation check at the item's gate exists for this pair | re-examine together at the item |
 | `viable` (directed-build) | `popCap ≥ seedPop` at founding | must NOT be reused for the sustainability predicate | name the new one `canSustainItself` |
+
+(The expectation item's constants are documented in [economy.md](../active/gameplay/economy.md).)
 
 ### A system you did not think about
 
 | System | Interaction with the remaining items |
 | --- | --- |
-| Events | a transient production event now also produces an expectation *shock on recovery* (supply returns above baseline) — the ringing check at the expectation gate covers it; abandonment must not trigger off an event-length decline |
-| Migration | reads unrest via contentment — an expectation-calmed poor world stops shedding population; state whether that is wanted (it is the "content frontier" behaviour, but it also slows abandonment's feeder) |
-| Save format | the expectation item adds the one persisted field (optional, defaulted, finite-guarded, seeded at founding/world-gen); abandonment changes what `control` may hold and the developed-gate invariant |
-| The harness's own metrics | expectation-relative unrest re-keys every unrest baseline; the abandoned cohort must leave the settled denominator before any baseline is measured; Gate 2's absolute-Provision distributions stay comparable (the fold itself does not change) |
+| Events | abandonment must not trigger off an event-length decline — the sustained-decline window must outlast any event arc |
+| Migration | an expectation-calmed poor world stops shedding population (decided wanted, at the expectation item) — which slows abandonment's feeder; its trigger cannot rely on emigration finishing the job |
+| Save format | abandonment changes what `control` may hold and re-authors the developed-gate invariant |
+| The harness's own metrics | the abandoned cohort must leave the settled denominator before any baseline is measured over it; an emptied world otherwise reads Provision 1.0 / Supplied forever |
 
 ### A symptom asserted without a measurement — or with the wrong one
 
@@ -343,7 +278,7 @@ need, updated to the post-gate state.)
 
 | Consumes | Produced at | Actual shape today | Design assumes |
 | --- | --- | --- | --- |
-| a persisted prior-supply reading | **nowhere** — `EconomySignals` is transient, one tick (`lib/tick/types.ts:47-57`) | in-memory only | the expectation item adds the baseline field |
+| the worsening-vs-recovering signal | the shipped stored baseline (`provisionExpectation`; read via `lib/engine/expectation.ts`, never raw field access) | **live** | both items consume it as a derived read |
 | un-develop / abandonment transition | **nowhere** — `control` written toward `developed` only (`lib/world/tick.ts:491`); invariant asserts monotonicity | one-way ladder | abandonment builds it and re-authors the invariant |
 | resettlement of an emptied world | claims need unclaimed (`lib/world/tick.ts:1037`); colony candidates need `controlled` (`:1065`); repopulation headroom-gated to zero | a `developed` husk is a candidate for nothing | abandonment states the target `control` + `factionId` |
 | targeted logistics transfer | **nowhere** — autonomic matcher only; player orders exist for construction only | — | relief builds it |

@@ -6,17 +6,31 @@
  * for them. The adapter in `lib/tick/adapters/memory/population.ts` implements this.
  */
 import type { UnrestParams, PopulationParams } from "@/lib/engine/population";
+import type { ExpectationParams } from "@/lib/engine/expectation";
 export interface PopulationStateView {
   systemId: string;
   population: number;
   popCap: number;
   unrest: number;
+  /** Stored Provision memory (adaptive expectation), carried from the system row unmodified.
+   *  Optional: absent means never seeded — `readExpectation` (lib/engine/expectation.ts) is the
+   *  only place that turns absence into a value, never a `?? 0` at this seam. */
+  provisionExpectation?: number;
 }
 
 export interface PopulationUpdate {
   systemId: string;
   population: number;
   unrest: number;
+  /** This cycle's resolved memory value — absent for exactly one case: a never-seeded system (no
+   *  stored value on the way in) whose basket was empty this cycle. That combination must not
+   *  persist Provision's own empty-basket-artifact seed (`readExpectation`'s `provision = 1`
+   *  fallback) as if it were a real memory, so the field stays absent rather than writing a false
+   *  1. Every other path writes a number: a system with an existing stored value carries it
+   *  unchanged through an empty-basket cycle, and a non-empty cycle always writes the resolved
+   *  update. The adapter (`lib/tick/adapters/memory/population.ts`) treats an absent write here
+   *  the same as a non-finite one — keep the row's prior value if it has one, else stay absent. */
+  provisionExpectation?: number;
 }
 
 export interface PopulationWorld {
@@ -41,6 +55,8 @@ export interface PopulationWorld {
 export interface PopulationProcessorParams {
   unrest: UnrestParams;
   population: PopulationParams;
+  /** Adaptive expectation: the read/update rates and floor (lib/engine/expectation.ts). */
+  expectation: ExpectationParams;
   /** Cycle length in ticks; rates are reference-denominated and scaled by catchUpFactor. */
   interval: number;
   /** Per-system additive unrest pressure from the owning faction's tax level

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { computePopNeeds } from "@/lib/engine/pop-needs";
-import { dissatisfaction } from "@/lib/engine/population";
+import { dissatisfaction, provision, grievanceShortfall } from "@/lib/engine/population";
 import { GOOD_CONSUMPTION, GOOD_NECESSITY } from "@/lib/constants/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
+import { EXPECTATION_PARAMS } from "@/lib/constants/population";
 
 const basis = { population: 1000, technicians: 50, engineers: 10 };
 
@@ -83,6 +84,23 @@ describe("computePopNeeds — stored satisfaction", () => {
     const totalPressure = needs.reduce((sum, n) => sum + n.pressure, 0);
     const asGoods = needs.map((n) => ({ goodId: n.goodId, satisfaction: n.satisfaction, demanded: n.want }));
     expect(totalPressure).toBeCloseTo(dissatisfaction(asGoods), 10);
+  });
+
+  it("stays the absolute per-good decomposition — non-zero even where grievance (memory vs Provision) is zero", () => {
+    // The unrest spine now integrates grievance, not this pressure fold — this pins that pressure
+    // did NOT move to track grievance instead. Fixture: one shallow gap (water) in an otherwise
+    // fully-served basket keeps Provision near 1, so a floored, well-below-Provision remembered
+    // expectation reads zero grievance — the world isn't grieving — while water's absolute gap is
+    // still real. A pressure implementation that read a G-based (relative) reading instead of the
+    // absolute gap would report 0 here.
+    const markets = consumedIds.map((id) => ({ goodId: id, satisfaction: id === "water" ? 0.8 : 1 }));
+    const needs = computePopNeeds(basis, markets);
+    const water = needs.find((n) => n.goodId === "water")!;
+    const asGoods = needs.map((n) => ({ goodId: n.goodId, satisfaction: n.satisfaction, demanded: n.want }));
+    const p = provision(asGoods);
+    const grievance = grievanceShortfall(EXPECTATION_PARAMS.floor, p);
+    expect(grievance).toBe(0); // memory well below this near-full Provision — nothing to grieve
+    expect(water.pressure).toBeGreaterThan(0); // but the absolute gap is real and pressure reports it
   });
 
   it("ranking inverts for the case that motivated the coupling: linear favours the shallow, high-weight, high-volume good over a deep gap in a negligible one", () => {

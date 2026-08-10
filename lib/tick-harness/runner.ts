@@ -24,9 +24,12 @@ import {
   summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
   summarizeFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
   newInFlightEstablishTotals, sampleOpenColonies, summarizeFoundingLifecycle, summarizeFounderCohort,
+  newFoundingTrajectoryTotals, sampleFoundingTrajectory, hasColonyInTrajectoryWindow,
+  summarizeFoundingTrajectory,
 } from "./build-analysis";
 import type {
   BuildCommitmentRecord, FoundedColonyRecord, FoundingStagingRecord, FoundingStagingTotals,
+  FoundingTrajectoryTotals,
 } from "./build-analysis";
 import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import {
@@ -37,7 +40,15 @@ import {
   newCharterCensus, recordCharterCensus, newStagedLedgerCensus, recordStagedLedger,
   summarizeConservation,
 } from "./conservation-analysis";
-import { computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey, marketRolesByKey } from "./cohort-analysis";
+import {
+  computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey, marketRolesByKey,
+  summarizeEpisodeCostsByCohort, summarizeRatchetCheck,
+} from "./cohort-analysis";
+import {
+  newEpisodeCostTotals, recordEpisodeCosts, computeTrailingProvisionVariance,
+  RATCHET_TRAILING_WINDOW, sampleProvisionBySystem,
+} from "./population-analysis";
+import type { EpisodeCostTotals } from "./population-analysis";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import type { GovernmentType } from "@/lib/types/game";
@@ -192,6 +203,16 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   const demandHunting = newDemandHuntingAccumulator();
   const cycleLength = config.cadence?.cycle ?? CYCLE_LENGTH;
   const constructionInterval = config.cadence?.construction ?? CONSTRUCTION_INTERVAL;
+  // Episode costs (adaptive-expectation gate): per-system running totals of the two
+  // TickInstrumentation counters, folded into cohort incidence at the end of the run.
+  const episodeCostTotals: EpisodeCostTotals = newEpisodeCostTotals();
+  // Founding trajectory: repeated Provision/unrest readings per tracked colony, bucketed by age
+  // since founding — see build-analysis.ts's founding-trajectory section.
+  const foundingTrajectoryTotals: FoundingTrajectoryTotals = newFoundingTrajectoryTotals();
+  // The ratchet check's raw material: per-settled-system Provision sampled at the same cadence as
+  // populationSnapshots, so computeTrailingProvisionVariance can read a trailing window off it at
+  // the end of the run.
+  const provisionSnapshots: Array<Map<string, number>> = [];
 
   const initialPopulationTotal = world.systems.reduce((sum, s) => sum + s.population, 0);
   // True tick-0 population per system — netGrowthPct's start denominator. Captured here rather
@@ -252,6 +273,15 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       strikeEligibleTotal += result.instrumentation.strikeSuppressedProposals.eligible;
     }
 
+    // Episode costs: fold this tick's per-system teardown/overshoot-death counters into the
+    // running totals. Either or both may be absent (the common case — see the instrumentation's
+    // own sparse-map contract), which recordEpisodeCosts is a no-op for.
+    recordEpisodeCosts(
+      episodeCostTotals,
+      result.instrumentation.teardownLevelsBySystem,
+      result.instrumentation.overshootDeathBySystem,
+    );
+
     for (const draw of result.instrumentation.foundingManifests ?? []) {
       founderSystemIds.add(draw.sourceSystemId);
     }
@@ -287,10 +317,15 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     recordStagedLedger(world.constructionProjects, foundingStaging, stagedLedgerCensus);
     // The colony opening sample needs full tick rows (buildings + government drive the demand
     // weights). Due colonies are rare, so the rows are built only on the ticks that need them.
+    // trajectoryDue extends this to the whole founding-trajectory window (~60 cycles), not just
+    // the single opening read, for the SAME reason — full rows only when something is due.
     const colonyDue =
       cycleLength > 0 && world.meta.currentTick % cycleLength === 0 &&
       hasColonyAwaitingSample(foundedColonies, world.meta.currentTick);
-    const tickSystems = colonyDue ? toTickSystems(world) : undefined;
+    const trajectoryDue =
+      cycleLength > 0 && world.meta.currentTick % cycleLength === 0 &&
+      hasColonyInTrajectoryWindow(foundedColonies, world.meta.currentTick, cycleLength);
+    const tickSystems = colonyDue || trajectoryDue ? toTickSystems(world) : undefined;
 
     // The flip half of the hunting reading is a per-cycle observation; the churn half comes off
     // the whole flow log at the end.
@@ -300,6 +335,12 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     if (tickSystems && colonyDue) {
       sampleFoundedColonies(tickSystems, currentMarkets, world.meta.currentTick, foundedColonies);
     }
+    if (tickSystems && trajectoryDue) {
+      sampleFoundingTrajectory(
+        tickSystems, currentMarkets, world.meta.currentTick, cycleLength, foundedColonies,
+        foundingTrajectoryTotals,
+      );
+    }
 
     if (world.meta.currentTick % SNAPSHOT_INTERVAL === 0) {
       marketSnapshots.push({ tick: world.meta.currentTick, markets: takeMarketSnapshot(currentMarkets) });
@@ -307,6 +348,9 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       for (const s of world.systems) popSnap.set(s.id, s.population);
       populationSnapshots.push(popSnap);
       treasurySnapshots.push(sampleTreasuries(world.meta.currentTick, world.treasuries));
+      // The ratchet check's raw material — reuses the same full-row build the founding trajectory
+      // needs, when one was already built for this tick, rather than paying for a second pass.
+      provisionSnapshots.push(sampleProvisionBySystem(tickSystems ?? toTickSystems(world), currentMarkets));
     }
 
     completedEvents.push(
@@ -384,6 +428,14 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     ratePerEligible: strikeEligibleTotal > 0 ? strikeSuppressedTotal / strikeEligibleTotal : 0,
   };
 
+  const episodeCosts = summarizeEpisodeCostsByCohort(episodeCostTotals, finalTickSystems, homeworldIds);
+  const foundingTrajectory = summarizeFoundingTrajectory(foundingTrajectoryTotals);
+  const provisionVarianceBySystem = computeTrailingProvisionVariance(provisionSnapshots, RATCHET_TRAILING_WINDOW);
+  const provisionRatchet = summarizeRatchetCheck(
+    provisionVarianceBySystem, RATCHET_TRAILING_WINDOW, finalTickSystems, currentMarkets, homeworldIds,
+    world.events,
+  );
+
   return {
     config,
     economyScale: ECONOMY_SCALE,
@@ -420,5 +472,8 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       startingBalances,
       stagedLedger: stagedLedgerCensus,
     }),
+    episodeCosts,
+    foundingTrajectory,
+    provisionRatchet,
   };
 }

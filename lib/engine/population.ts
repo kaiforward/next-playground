@@ -9,14 +9,17 @@
  *                provision() alone (Supplied/Strained/Rationing), plus a water/food survival
  *                floor that punches through to Shortage whatever Provision says. The band gates
  *                no rate or effect (accumulateUnrest reads one relaxation rate for every label);
- *                the survival bit and the critical-good weight (goods deep below the criticality
- *                line) ride alongside the label for unrestSlope to read instead.
+ *                the survival bit, the critical-good weight (goods deep below the criticality
+ *                line) and the empty-basket bit ride alongside the label for supplyUnrestTerm to
+ *                read instead.
  *  - accumulate: accumulateUnrest() relaxes unrest toward a standing-pressure floor
- *                (tax + crowding) and integrates D on top of it, with gain =
- *                unrestSlope(D, supply) × the relaxation rate. Equilibrium is
- *                therefore min(1, floor + slope × D) at any rate, so the named slopes
- *                state exchange rates and recovery speed, catch-up and equilibrium are
- *                all decoupled.
+ *                (tax + crowding) and integrates the supply term on top of it, with gain =
+ *                the relaxation rate × supplyUnrestTerm(grievance, D, supply). Equilibrium is
+ *                therefore min(1, floor + term) at any rate, so recovery speed, catch-up and
+ *                equilibrium are all decoupled. The term itself is whichever reads larger of a
+ *                memory-relative grievance reading and an absolute crisis reading (see
+ *                supplyUnrestTerm) — famine and critical-good collapse stay absolute; everything
+ *                else is judged against what a population has grown accustomed to.
  *  - threshold:  strikeMultiplier() derives the production-suppression regime from
  *                unrest — a smooth ramp, not a binary halt. Unrest's own integral
  *                is the hysteresis, so no separate stored strike flag is needed.
@@ -33,8 +36,6 @@
 import { clamp } from "@/lib/utils/math";
 import {
   SHORTAGE_SATISFACTION,
-  D_SHORTAGE_CUT,
-  D_SHORTAGE_BLEND,
   SUPPLIED_PROVISION,
   RATIONING_PROVISION,
   CRITICAL_SATISFACTION,
@@ -61,10 +62,35 @@ function goodWeight(g: GoodSatisfaction): number {
   return demanded * Math.max(0, GOOD_NECESSITY[g.goodId] ?? 0);
 }
 
+/** Σ goodWeight over the basket — the same sum provision() folds over, extracted so foldSupplyState()
+ *  can read the empty-basket condition (Σ weight ≤ 0) without re-implementing the fold. */
+function totalGoodWeight(goods: GoodSatisfaction[]): number {
+  let total = 0;
+  for (const g of goods) total += goodWeight(g);
+  return total;
+}
+
 /** Satisfaction clamped into [0,1]; NaN clamps to 0 rather than propagating — a corrupted read must
  *  read as the worst case, never silently pass a NaN into a mean (or, worse, into the world). */
 function clampSatisfaction(satisfaction: number): number {
   return Number.isNaN(satisfaction) ? 0 : clamp(satisfaction, 0, 1);
+}
+
+/**
+ * Provision computed against an ALREADY-KNOWN total basket weight — the shared core `provision()`
+ * below and `foldSupplyState()` both call, so a caller that needs both Provision and the
+ * empty-basket bit off the same goods array (foldSupplyState does) sums the basket exactly once,
+ * not twice. `totalWeight` is trusted as-is: the caller owns computing it (via `totalGoodWeight`),
+ * so this never re-derives it.
+ */
+function provisionFromWeight(goods: GoodSatisfaction[], totalWeight: number): number {
+  if (totalWeight <= 0) return 1;
+  let mean = 0;
+  for (const g of goods) {
+    const share = goodWeight(g) / totalWeight;
+    mean += share * clampSatisfaction(g.satisfaction);
+  }
+  return mean;
 }
 
 /**
@@ -81,22 +107,18 @@ function clampSatisfaction(satisfaction: number): number {
  * load-bearing: it is what an emptying world reads on its way out.
  */
 export function provision(goods: GoodSatisfaction[]): number {
-  let totalWeight = 0;
-  for (const g of goods) totalWeight += goodWeight(g);
-  if (totalWeight <= 0) return 1;
-  let mean = 0;
-  for (const g of goods) {
-    const share = goodWeight(g) / totalWeight;
-    mean += share * clampSatisfaction(g.satisfaction);
-  }
-  return mean;
+  return provisionFromWeight(goods, totalGoodWeight(goods));
 }
 
 /**
  * Necessity-weighted dissatisfaction D in [0,1] for one system — the exact complement of provision():
  *   D = 1 − provision(goods)
- * One implementation, two names, so the sim and the pop-needs display twin (pop-needs.ts) cannot
- * drift apart. A partial shortfall now reads its own size (a 17% uniform shortfall folds to ~0.17,
+ * One implementation, two names, so the sim's Provision fold and the pop-needs display twin
+ * (pop-needs.ts) cannot drift apart — both read the absolute per-good gap. That lockstep is with
+ * the Provision fold only: the unrest spine no longer integrates this shortfall directly, it reads
+ * grievance against a persisted memory of Provision (`grievanceShortfall`, below), with this
+ * absolute reading kept alive as the crisis-term backstop and for growth/display. A partial
+ * shortfall now reads its own size (a 17% uniform shortfall folds to ~0.17,
  * against the old squared fold's ~0.029) rather than a squared fraction of it — the old convexity,
  * where one deep shortage dominated many shallow ones, is gone: this fold responds identically to any
  * redistribution of the same total weighted gap. Importance is still the AUTHORED necessity weight
@@ -152,11 +174,14 @@ export type SupplyRegime = "supplied" | "strained" | "rationing" | "shortage";
 
 /**
  * The system's supply reading. `regime` is a coarse rendering of Provision for display — it drives
- * no rate or effect. `survivalShortfall` and `criticalWeight` ride alongside it because neither is
- * inferrable back from the label: a famine-driven Shortage carries the survival bit that a
- * low-Provision Rationing world does not, and two systems banded identically (both Strained, say)
- * can carry very different critical-good weight. `unrestSlope` is the one place all three compose
- * into a severity.
+ * no rate or effect. `survivalShortfall`, `criticalWeight` and `emptyBasket` ride alongside it
+ * because none is inferrable back from the label: a famine-driven Shortage carries the survival bit
+ * that a low-Provision Rationing world does not, two systems banded identically (both Strained, say)
+ * can carry very different critical-good weight, and an emptying world's Provision-1 reading is
+ * indistinguishable by value from a genuinely well-fed one. `supplyUnrestTerm` is the one place
+ * `survivalShortfall` and `criticalWeight` compose into a severity; `emptyBasket` instead tells the
+ * population processor's expectation update to skip this cycle rather than normalise toward a
+ * denominator artifact.
  */
 export interface SupplyState {
   regime: SupplyRegime;
@@ -164,10 +189,15 @@ export interface SupplyState {
    *  Shortage outright, whatever Provision says. */
   survivalShortfall: boolean;
   /** The critical-good override's weight: Σ necessity × demand share over demanded goods below
-   *  CRITICAL_SATISFACTION and at or above BAND_MIN_DEMAND_SHARE (see `unrestSlope`). Never moves
-   *  `regime` — a binary promotion was measured and rejected, so this is carried purely for the
-   *  slope side. Always finite and non-negative. */
+   *  CRITICAL_SATISFACTION and at or above BAND_MIN_DEMAND_SHARE (see `supplyUnrestTerm`). Never
+   *  moves `regime` — a binary promotion was measured and rejected, so this is carried purely for
+   *  the crisis-term side. Always finite and non-negative. */
   criticalWeight: number;
+  /** True when Σ goodWeight over the basket is ≤ 0 — the same sum provision() folds over. An
+   *  emptying world (or one with no demanded-and-necessary goods at all) reads Provision = 1 as a
+   *  denominator artifact, not an experience anyone had; the persisted expectation memory reads this
+   *  bit to skip its update for the cycle rather than normalise toward that artifact. */
+  emptyBasket: boolean;
 }
 
 /**
@@ -207,96 +237,127 @@ function criticalGoodWeight(goods: GoodSatisfaction[]): number {
  *  - supplied  — Provision at or above SUPPLIED_PROVISION.
  *  - strained  — Provision at or above RATIONING_PROVISION, below SUPPLIED_PROVISION.
  *  - rationing — Provision below RATIONING_PROVISION.
- * Provision is computed here from `goods` directly (via `provision()`), not passed in, so the band
- * and the number it renders cannot drift apart — one implementation, not a re-derived mean.
- * `criticalWeight` rides on the returned state for `unrestSlope` to read; it never moves the band.
- * This label is about the whole system; the per-good chips read stock cover and are a different
+ * Provision is computed here from `goods` directly (via `provisionFromWeight`, `provision()`'s own
+ * shared core), not passed in, so the band and the number it renders cannot drift apart — one
+ * implementation, not a re-derived mean. The total basket weight is computed once here and handed
+ * to `provisionFromWeight` rather than calling `provision(goods)` (which would re-sum it): this fold
+ * already needs the total for `emptyBasket`, so re-deriving it a second time inside `provision()`
+ * would sum the same basket twice for one call. `criticalWeight` rides on the returned state for
+ * `supplyUnrestTerm` to read; it never moves the band. `emptyBasket` is Σ goodWeight ≤ 0 — the same
+ * sum provision() folds over — computed here because only this fold sees the raw weights; the
+ * Provision-1 reading alone cannot distinguish an empty basket from a genuinely well-fed one. This
+ * label is about the whole system; the per-good chips read stock cover and are a different
  * labelling entirely.
  */
 export function foldSupplyState(goods: GoodSatisfaction[]): SupplyState {
   const survivalShortfall = hasSurvivalShortfall(goods);
   const criticalWeight = criticalGoodWeight(goods);
-  if (survivalShortfall) return { regime: "shortage", survivalShortfall, criticalWeight };
-  const p = provision(goods);
+  const totalWeight = totalGoodWeight(goods);
+  const emptyBasket = totalWeight <= 0;
+  if (survivalShortfall) return { regime: "shortage", survivalShortfall, criticalWeight, emptyBasket };
+  const p = provisionFromWeight(goods, totalWeight);
   const regime: SupplyRegime =
     p >= SUPPLIED_PROVISION ? "supplied" : p >= RATIONING_PROVISION ? "strained" : "rationing";
-  return { regime, survivalShortfall, criticalWeight };
+  return { regime, survivalShortfall, criticalWeight, emptyBasket };
 }
 
 export interface UnrestParams {
-  /** Settled unrest ABOVE the standing floor, per unit of D, while Rationing — an exchange rate, not
-   *  a cap. It equals settled unrest only at D = 1, which does not occur (mean shortfall ~0.03 at
-   *  equilibrium — D reads its own size now, not a squared fraction of it); the state itself is
-   *  [0,1] and saturates there. */
-  slopeRationing: number;
-  /** …and while Shortage. Strictly above slopeRationing. */
+  /** Settled unrest ABOVE the standing floor, per unit of grievance — one flat exchange rate, no
+   *  escalation ramp. Window from the guarantees: ≥ 1.3 (a fully-accustomed world losing half of
+   *  what it is used to must reach strike at any tax) and < 2.08 (a quarter-dip must never collapse
+   *  or tear down, even at the max standing floor); no longer bounded by founding — the newborn's
+   *  memory seeds from its own opening state (not from perfection), but the read-side floor still
+   *  applies on top of that seed: grievance = max(0, floor − opening P), zero above a 0.5 opening
+   *  and up to 0.5 in the measured tail — well short of what founding used to need protecting from,
+   *  so that window dissolves. */
+  slopeBase: number;
+  /** …and for the absolute crisis term (famine, critical-good collapse). Strictly above slopeBase. */
   slopeShortage: number;
   /** Relaxation rate toward the standing-pressure floor — the single rate, whatever the label. */
   decay: number;
 }
 
 /**
- * The unrest-per-D slope this reading carries, in [slopeRationing, slopeShortage].
- *
- * Three terms, deliberately shaped differently:
- *  - D drives a CONTINUOUS ramp across [D_SHORTAGE_CUT, D_SHORTAGE_CUT + D_SHORTAGE_BLEND]:
- *    switching there would double a system's settled unrest for an arbitrarily small change in
- *    delivered goods and land that step across strike onset. The ramp starts at the cut, so the
- *    slope is exactly slopeRationing below it, whatever the system bands.
- *  - A survival shortfall is a step to slopeShortage outright: famine in water or food is graded as
- *    famine whatever the rest of the basket looks like. It dominates the override below rather than
- *    composing with it — a world with both fires this step alone.
- *  - The critical-good override adds `criticalWeight × (slopeShortage − slopeRationing)` on top of
- *    the D-ramp's value, capped at slopeShortage: a basket carrying real weight below the
- *    criticality line responds like a worse-than-its-Provision world, without ever being LABELLED
- *    one (see foldSupplyState). The cap means it can approach famine weight but never exceed it.
- * Total and monotone in D and in criticalWeight.
+ * The expectation-relative shortfall a population is grieving: how much worse today's delivery is
+ * than what it has grown accustomed to. `clamp(expectation − provision, 0, 1)` — zero once delivery
+ * matches or exceeds memory, whatever the absolute level; 1 only if memory is perfect and delivery is
+ * nothing. `expectation` is the read-side effective value (`readExpectation`'s output, already
+ * floored), never the raw stored memory.
  */
-export function unrestSlope(d: number, supply: SupplyState, params: UnrestParams): number {
-  if (supply.survivalShortfall) return params.slopeShortage;
-  const ramp = D_SHORTAGE_BLEND > 0
-    ? clamp((d - D_SHORTAGE_CUT) / D_SHORTAGE_BLEND, 0, 1)
-    : (d >= D_SHORTAGE_CUT ? 1 : 0);
-  const diff = params.slopeShortage - params.slopeRationing;
-  const base = params.slopeRationing + ramp * diff;
-  const override = Math.max(0, supply.criticalWeight) * diff;
-  return Math.min(params.slopeShortage, base + override);
+export function grievanceShortfall(expectation: number, provision: number): number {
+  return clamp(expectation - provision, 0, 1);
 }
 
 /**
- * Relaxes unrest toward its standing-pressure floor and integrates dissatisfaction on top:
- *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + slope*k*clamp(d,0,1), 0, 1)
- * where k = clamp(decay, 0, 1) and slope = unrestSlope(d, …). One relaxation rate for every
- * label — `supply.regime` is not read here; only `supply.survivalShortfall` and
- * `supply.criticalWeight` feed the slope.
- *
- * Because the gain is `slope × k` rather than an independent number, the fixed point is
- * `min(1, floor + slope × D)` for ANY relaxation rate — so equilibrium, recovery speed and the
- * tick's catch-up factor are fully decoupled, and each slope constant states an exchange rate
- * rather than implying one through a ratio. `floor` is the standing pressure (tax + crowding),
- * clamped to [0,1] by the caller; at D = 0 unrest settles exactly at `floor`.
- *
- * The `min` is load-bearing, not defensive: unrest is a [0,1] state while the slopes exceed 1, so
- * `floor + slope × D` can ask for more than the state can hold. That only happens in the extreme
- * corner (highest tax + full crowding + a total food failure asks ~1.16), where distinct severities
- * do collapse to a single maxed-out reading — the graduated response holds everywhere below it.
- *
- * Catastrophe still lives in the integral — one bad cycle is recoverable, chronic shortage climbs
- * toward the settled level. The caller pre-scales decay by the catch-up factor (never the
- * slopes); k is clamped after scaling, so a large catch-up can never flip the relaxation term and
- * overshoot below the floor.
+ * The supply term `accumulateUnrest` integrates: whichever reads larger of a memory-relative
+ * grievance reading and an absolute crisis reading (max, not sum — a world in famine that also
+ * dropped below its own memory must not count the same missing goods twice; famine dominates rather
+ * than composing).
+ *  - Grievance (relative): `slopeBase × grievance` — flat, no ramp. Judges delivery against what
+ *    this population has grown accustomed to, not against perfection.
+ *  - Crisis (absolute): fires only in the severe absolute states, reading the absolute shortfall
+ *    `d`. A survival shortfall reads `slopeShortage × d` outright — famine in water or food is
+ *    famine whatever a population is used to. Otherwise a non-zero critical-good weight reads the
+ *    shipped override arithmetic on the absolute scale: `min(slopeShortage, slopeBase +
+ *    criticalWeight × (slopeShortage − slopeBase)) × d` — the base slope always applies once any
+ *    critical weight is present, escalating toward famine weight and capped there. Absent both a
+ *    survival shortfall and any critical weight, the crisis reading is exactly 0: an ordinary
+ *    shortfall with no severe absolute signal answers to memory alone, which is what keeps the
+ *    grievance term meaningful under the max() — a crisis floor that fired on every shortfall would
+ *    make the whole term absolute again and erase the point of reading memory at all.
+ * Total and finite for any input (grievance and d clamped into [0,1]; a negative criticalWeight
+ * reads as 0 rather than propagating).
  */
-export function accumulateUnrest(
-  unrest: number,
+export function supplyUnrestTerm(
+  grievance: number,
   d: number,
-  floor: number,
   supply: SupplyState,
   params: UnrestParams,
 ): number {
+  const g = clamp(grievance, 0, 1);
+  const dd = clamp(d, 0, 1);
+  const grievanceTerm = params.slopeBase * g;
+  const criticalWeight = Math.max(0, supply.criticalWeight);
+  const crisisTerm = supply.survivalShortfall
+    ? params.slopeShortage * dd
+    : criticalWeight > 0
+      ? Math.min(params.slopeShortage, params.slopeBase + criticalWeight * (params.slopeShortage - params.slopeBase)) * dd
+      : 0;
+  return Math.max(grievanceTerm, crisisTerm);
+}
+
+/**
+ * Relaxes unrest toward its standing-pressure floor and integrates the supply term on top:
+ *   unrest <- clamp(floor + (1 - k)*(unrest - floor) + term*k, 0, 1)
+ * where k = clamp(decay, 0, 1) and `term` is `supplyUnrestTerm(grievance, d, supply, params)`,
+ * already the full settled-unrest contribution above the floor — not a rate to be multiplied by D
+ * again here.
+ *
+ * Because the gain is `term × k` rather than an independent number, the fixed point is
+ * `min(1, floor + term)` for ANY relaxation rate — so equilibrium, recovery speed and the tick's
+ * catch-up factor are fully decoupled. `floor` is the standing pressure (tax + crowding), clamped to
+ * [0,1] by the caller; at term = 0 unrest settles exactly at `floor`.
+ *
+ * The `min` is load-bearing, not defensive: unrest is a [0,1] state while `term` can itself exceed 1
+ * (slopeShortage alone does, and the flat grievance slope is cut to reach strike from grievance
+ * alone — see the guarantees). Under the re-cut slope the ceiling is reachable from deep grievance
+ * on its own, not only from the combined extreme corner of tax, crowding and famine together — the
+ * graduated response holds up to that reachable point and saturates beyond it.
+ *
+ * Catastrophe still lives in the integral — one bad cycle is recoverable, chronic shortage climbs
+ * toward the settled level. The caller pre-scales decay by the catch-up factor (never the slopes
+ * that feed `term`); k is clamped after scaling, so a large catch-up can never flip the relaxation
+ * term and overshoot below the floor.
+ */
+export function accumulateUnrest(
+  unrest: number,
+  supplyTerm: number,
+  floor: number,
+  params: UnrestParams,
+): number {
   const k = clamp(params.decay, 0, 1);
-  const slope = unrestSlope(d, supply, params);
   const relaxed = floor + (1 - k) * (unrest - floor);
-  return clamp(relaxed + slope * k * clamp(d, 0, 1), 0, 1);
+  return clamp(relaxed + supplyTerm * k, 0, 1);
 }
 
 export interface StrikeParams {
