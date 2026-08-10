@@ -69,3 +69,39 @@ describe("allocateColonists", () => {
     expect(deltas).toHaveLength(0);
   });
 });
+
+describe("allocateColonists — famine inflow gate (abandonment Rule 1)", () => {
+  it("gives a flagged sink nothing while conservation holds", () => {
+    const flagged: ColonistSystem = { ...sys("famine", "f1", 10, 1000), inflowBlocked: true };
+    const deltas = allocateColonists(
+      [sys("core", "f1", 1000, 1000), flagged, sys("healthy", "f1", 10, 1000)],
+      P,
+    );
+    expect(net(deltas, "famine")).toBe(0); // headroom forced to 0 — water-fill gives it nothing
+    expect(net(deltas, "healthy")).toBeGreaterThan(0); // the pool still reaches the unflagged sink
+    expect(sum(deltas)).toBeCloseTo(0, 6); // still conserved
+  });
+
+  it("still lets a flagged system donate its idle spare (the gate blocks inflow only)", () => {
+    const flagged: ColonistSystem = { ...sys("famine-core", "f1", 1000, 1000), inflowBlocked: true };
+    const deltas = allocateColonists([flagged, sys("colony", "f1", 10, 1000)], P);
+    expect(net(deltas, "famine-core")).toBeLessThan(0); // donates normally
+    expect(net(deltas, "colony")).toBeGreaterThan(0); // and the colony still receives it
+  });
+
+  it("keeps sinks/contributions/added index-aligned — a flagged system is not filtered out of the group", () => {
+    // Three systems, the middle one flagged: if the implementation filtered the array instead of
+    // zeroing headroom, "after" would silently receive what "famine" should have been denied,
+    // and the group size / donor accounting would shift. Pin the exact per-system split instead of
+    // just an aggregate, so an index-alignment bug (off-by-one after a filter) cannot pass by luck.
+    const before = sys("before", "f1", 10, 1000);
+    const famine: ColonistSystem = { ...sys("famine", "f1", 10, 1000), inflowBlocked: true };
+    const after = sys("after", "f1", 10, 1000);
+    const deltas = allocateColonists([sys("core", "f1", 1000, 1000), before, famine, after], P);
+    expect(net(deltas, "famine")).toBe(0);
+    expect(net(deltas, "before")).toBeGreaterThan(0);
+    expect(net(deltas, "after")).toBeGreaterThan(0);
+    // The pool that would have gone to "famine" is redistributed to the still-eligible sinks, not lost.
+    expect(sum(deltas)).toBeCloseTo(0, 6);
+  });
+});

@@ -991,3 +991,100 @@ describe("population processor: overshoot-death instrumentation", () => {
     expect(a.population).toBeCloseTo(105, 9);
   });
 });
+
+// ── Abandonment Rule 2 (the death line): the processor REPORTS a famine system whose post-delta
+// population has collapsed below ABANDON_POP_FLOOR — it never writes control itself, only names
+// the candidate for the tick body to reset (docs/build-plans/abandonment.md). ──
+
+describe("population processor: abandonment reporting (Rule 2)", () => {
+  // FROZEN_POP (growth/decline/death all zero) makes the fixture's starting population the
+  // post-delta population the gate reads — deterministic without deriving the delta formula.
+  function shortfallCtx(population: number, survivalShortfall: boolean): TickContext {
+    return {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["a", 0.5]]),
+          supplyStateBySystem: new Map([
+            ["a", { regime: "shortage", survivalShortfall, criticalWeight: 0, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realizedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+  }
+
+  it("reports a system in famine whose (frozen) population sits below the floor", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, shortfallCtx(0.5, true), {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystems).toEqual(["a"]);
+  });
+
+  it("does not report a famine system whose population sits at or above the floor", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 5, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, shortfallCtx(5, true), {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystems).toBeUndefined();
+  });
+
+  it("does not report a below-floor system that is NOT in survival shortfall (the famine conjunct)", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, shortfallCtx(0.5, false), {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystems).toBeUndefined();
+  });
+
+  it("keeps the field absent entirely (not an empty array) when nothing qualifies — the sparse convention", async () => {
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("a", 500, 1000, 0)],
+      markets: [market("a", "food")],
+    });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), PARAMS);
+    expect(result.abandonedSystems).toBeUndefined();
+    expect("abandonedSystems" in result).toBe(false);
+  });
+
+  it("reports only the qualifying system out of several", async () => {
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("dying", 0.5, 1000, 0), sys("fine", 5, 1000, 0)],
+      markets: [],
+    });
+    const ctx: TickContext = {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["dying", 0.5], ["fine", 0.5]]),
+          supplyStateBySystem: new Map([
+            ["dying", { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+            ["fine", { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realizedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+    const result = await runPopulationProcessor(world, ctx, {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystems).toEqual(["dying"]);
+  });
+});

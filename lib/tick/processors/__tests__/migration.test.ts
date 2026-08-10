@@ -14,6 +14,7 @@ const PARAMS = {
   interval: REFERENCE_INTERVAL, // catch-up factor 1 → calibrated per-edge magnitudes
   flow: { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 },
   delivery: NO_DELIVERY,
+  inflowBlockedSystemIds: new Set<string>(),
 };
 
 // Migration is now a cycle start: all edges process on ticks where tick % interval === 0.
@@ -118,6 +119,43 @@ describe("migration processor", () => {
     await runMigrationProcessor(world, ctx(1), params); // tick 1 % 24 ≠ 0 → off-boundary, whole cycle skipped
     expect(world.systems.find((s) => s.id === "core")!.population).toBe(1000);
     expect(world.systems.find((s) => s.id === "colony")!.population).toBe(10);
+  });
+});
+
+describe("migration processor: famine inflow gate (abandonment Rule 1)", () => {
+  it("blocks colonist delivery into a famine sink while diffusion stays off (isolates delivery)", async () => {
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const params = {
+      ...PARAMS,
+      flow: { ...PARAMS.flow, maxOutflowFraction: 0 },
+      delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 },
+      inflowBlockedSystemIds: new Set(["colony"]),
+    };
+    await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(world.systems.find((s) => s.id === "colony")!.population).toBe(10); // no inflow received
+  });
+
+  it("blocks diffusion into a famine destination while its outflow (donation) is untouched", async () => {
+    // The famine system ("a") is also the more attractive endpoint were it not blocked — flip the
+    // roles from the ordinary diffusion case: a calm famine world would otherwise pull in "b"'s spare.
+    const systems = [sys("a", "f1", 100, 1000, 0, JOBS), sys("b", "f1", 1000, 1000, 0.9)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
+    const params = { ...PARAMS, inflowBlockedSystemIds: new Set(["a"]) };
+    await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(world.systems.find((s) => s.id === "a")!.population).toBe(100); // blocked as a destination
+  });
+
+  it("still lets a famine system's outflow (donation/exodus) run — the gate blocks inflow only", async () => {
+    // "a" is overshot and calm — migration drains it toward "b" regardless of "a" being famine-flagged,
+    // since the flag only zeroes DESTINATION headroom, never a source's outflow.
+    const systems = [sys("a", "f1", 1500, 1000, 0), sys("b", "f1", 100, 1000, 0, JOBS)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
+    const before = world.systems.reduce((s, x) => s + x.population, 0);
+    const params = { ...PARAMS, inflowBlockedSystemIds: new Set(["a"]) };
+    await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(world.systems.find((s) => s.id === "a")!.population).toBeLessThan(1500); // still donates/exodus
+    expect(world.systems.reduce((s, x) => s + x.population, 0)).toBeCloseTo(before, 5); // conserved
   });
 });
 

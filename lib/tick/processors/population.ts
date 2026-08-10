@@ -3,7 +3,7 @@ import {
   accumulateUnrest, crowdingPressure, grievanceShortfall, populationDelta, supplyUnrestTerm,
   type UnrestParams,
 } from "@/lib/engine/population";
-import { CROWDING } from "@/lib/constants/population";
+import { ABANDON_POP_FLOOR, CROWDING } from "@/lib/constants/population";
 import { readExpectation, updateExpectation } from "@/lib/engine/expectation";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { clamp } from "@/lib/utils/math";
@@ -54,6 +54,11 @@ export async function runPopulationProcessor(
   // episode-cost instrument reads. Absent system ⇒ 0 (kept sparse: the gate fires on few
   // systems most cycles). Populated below, observational only — it changes nothing about `population`.
   const overshootDeathBySystem = new Map<string, number>();
+  // Abandonment Rule 2 (the death line): systems this cycle found in survival shortfall with
+  // post-delta population below ABANDON_POP_FLOOR. Reported, never applied here — this processor
+  // stays pure and leaves the control-flip/reset to the tick body (lib/world/tick.ts), the sole
+  // owner of `control` writes.
+  const abandonedSystems: string[] = [];
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
     // Unreachable in real play: the economy processor writes dissatisfactionBySystem and
@@ -95,6 +100,10 @@ export async function runPopulationProcessor(
     // (biological) reads the goods themselves.
     const delta = populationDelta(s.population, s.popCap, d, unrest, params.population);
     const population = Math.max(0, s.population + delta * catchUp);
+    // Abandonment Rule 2: famine (survival shortfall) AND the post-delta population has collapsed
+    // below the floor — the colony is over. Reads the SAME `supply` this cycle already resolved
+    // (the famine conjunct is the newborn guard: an unlucky opening never reads this on its own).
+    if (supply.survivalShortfall && population < ABANDON_POP_FLOOR) abandonedSystems.push(s.systemId);
     // Isolates the death component of `delta` by re-running the same pure fold with the death rate
     // zeroed — growth and decline are unaffected by that rate, so the difference is exactly what the
     // gate removed, without re-implementing populationDelta's internal formula here (which would
@@ -129,5 +138,8 @@ export async function runPopulationProcessor(
 
   await world.applyPopulationUpdates(popUpdates);
   await world.rewriteDemandRates(demandPops);
-  return overshootDeathBySystem.size > 0 ? { overshootDeathBySystem } : {};
+  const result: TickProcessorResult = {};
+  if (overshootDeathBySystem.size > 0) result.overshootDeathBySystem = overshootDeathBySystem;
+  if (abandonedSystems.length > 0) result.abandonedSystems = abandonedSystems;
+  return result;
 }

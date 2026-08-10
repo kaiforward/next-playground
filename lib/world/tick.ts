@@ -41,6 +41,7 @@ import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/l
 import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, EXPECTATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
+import { MIN_DEMAND } from "@/lib/constants/market-economy";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { CYCLE_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -118,6 +119,7 @@ import type {
 import type {
   World,
   WorldBuilding,
+  WorldConstructionProject,
   WorldEvent,
   WorldEventMetadata,
   WorldEventModifier,
@@ -518,6 +520,79 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
 }
 
 /**
+ * Abandonment Rule 2 (the death line, docs/build-plans/abandonment.md): reset each system the
+ * population processor reported (famine AND post-delta population below `ABANDON_POP_FLOOR`) back
+ * to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
+ * collapse debt zero; the stored Provision memory is deleted (the same resettlement rule
+ * `applyDevelopments` observes above — a previous life's memory must not survive into the next
+ * one); buildings and their idle-cycle state are cleared and popCap drops to 0 — infrastructure
+ * decay runs only on developed systems, so left standing they would freeze forever and hand any
+ * resettler a free, fully-built colony. Ordinary claimable frontier again via the existing claim
+ * (`applyClaims`) and colony-candidate (the directed-build `develop` provider) paths — no new
+ * resettlement machinery. Market rows and construction-project drops are separate applications
+ * (`resetAbandonedMarkets`, `dropAbandonedBuildProjects`) — this function owns the system row only.
+ */
+export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: string[]): TickSystem[] {
+  if (abandonedSystemIds.length === 0) return systems;
+  const abandoned = new Set(abandonedSystemIds);
+  return systems.map((s): TickSystem => {
+    if (!abandoned.has(s.id)) return s;
+    const next: TickSystem = {
+      ...s,
+      population: 0,
+      popCap: 0,
+      unrest: 0,
+      collapseDebt: 0,
+      factionId: null,
+      control: "unclaimed",
+      buildings: {},
+      buildingIdleCycles: {},
+    };
+    delete next.provisionExpectation;
+    return next;
+  });
+}
+
+/**
+ * Abandonment Rule 2's market-side application: an abandoned system keeps its market rows (the
+ * warehouses affordance is real — a resettler inherits real stock), but the demand-derived fields
+ * reset with the system, so a resettled colony does not spend its first cycle priced and rationed
+ * as the dead world it replaced. Stock is left untouched. `honestUseRate`, `squeezeCycles` and
+ * `logisticsFundingBound` are all optional fields whose absence already reads as "not yet
+ * assessed" — cleared (deleted) rather than zeroed, exactly as a freshly-created market row would
+ * be. `productionSuppressed` has no such absent-reads-as-fresh convention, so it is explicitly set
+ * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above.
+ */
+export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
+  if (abandonedSystemIds.length === 0) return markets;
+  const abandoned = new Set(abandonedSystemIds);
+  return markets.map((m): WorldMarket => {
+    if (!abandoned.has(m.systemId)) return m;
+    const next: WorldMarket = { ...m, demandRate: MIN_DEMAND, productionSuppressed: false };
+    delete next.honestUseRate;
+    delete next.squeezeCycles;
+    delete next.logisticsFundingBound;
+    return next;
+  });
+}
+
+/**
+ * Abandonment Rule 2's construction-side application: an open `build` project targeting a system
+ * that just died would otherwise keep funding invisible construction on a world its former owner
+ * lost — the UI hides it the moment `factionId` is null, but the pool would keep absorbing work
+ * into it regardless. Scoped to `kind: "build"` only: a `colony_establish` project never targets an
+ * already-developed system (its target is still `controlled`, which is never in survival shortfall
+ * — the economy only classifies developed systems), so it is out of scope by construction.
+ */
+export function dropAbandonedBuildProjects(
+  projects: WorldConstructionProject[], abandonedSystemIds: string[],
+): WorldConstructionProject[] {
+  if (abandonedSystemIds.length === 0) return projects;
+  const abandoned = new Set(abandonedSystemIds);
+  return projects.filter((p) => !(p.kind === "build" && abandoned.has(p.systemId)));
+}
+
+/**
  * Give each newly settled system its market rows, opening EMPTY. World-gen builds markets only for
  * systems that are already developed — an unclaimed rock holds nothing — so a colony has no market at
  * all until this runs, and the founder's endowment is the first stock it ever holds. Must therefore
@@ -868,6 +943,18 @@ export async function runWorldTick(
     });
   }
 
+  // ── famine inflow gate (abandonment Rule 1) ──
+  // Systems currently in survival shortfall — no population inflow this cycle, either path
+  // (colonist delivery or diffusion migration; see the migration call below). Empty when the
+  // economy signal is absent (no cycle to gate on): delivery and economy are gated by the same
+  // cycle-start predicate, so delivery can never run on a tick where this signal would be absent.
+  const famineSystemIds = new Set<string>();
+  if (economySignals) {
+    for (const [systemId, supply] of economySignals.supplyStateBySystem) {
+      if (supply.survivalShortfall) famineSystemIds.add(systemId);
+    }
+  }
+
   // ── infrastructure-decay ──
   // Calibration-only: per-cycle whole building levels torn down, keyed by system (both decay
   // channels combined). Declared here, read only by the final `instrumentation` return below.
@@ -899,6 +986,10 @@ export async function runWorldTick(
   // ── population ──
   // Calibration-only: per-cycle overshoot-death amount, keyed by system. Same reason as above.
   let overshootDeathBySystem: TickInstrumentation["overshootDeathBySystem"];
+  // Abandonment Rule 2 (the death line): systems the population processor found in famine with
+  // post-delta population below ABANDON_POP_FLOOR this cycle. Applied just below, outside the
+  // gate — the tick body is the sole owner of the control-flip/reset the processor only reports.
+  let abandonedSystemIds: string[] = [];
   if (economySignals) {
     const popWorld = new InMemoryPopulationWorld({ systems, markets });
     const popResult = await runPopulationProcessor(
@@ -915,7 +1006,19 @@ export async function runWorldTick(
     systems = popWorld.systems;
     markets = popWorld.markets;
     overshootDeathBySystem = popResult.overshootDeathBySystem;
+    abandonedSystemIds = popResult.abandonedSystems ?? [];
     processorsRun.push("population");
+  }
+
+  // ── abandonment (Rule 2 — the death line) ──
+  // Applied in one pass across the three touched state slices, before the cycle-start block below
+  // reads `systems`/`constructionProjects` — so a resettable frontier and a dropped project are
+  // both visible to this SAME tick's claim/develop paths (same-tick re-claim is possible and
+  // accepted as harmless — spec review finding 9).
+  if (abandonedSystemIds.length > 0) {
+    systems = applyAbandonments(systems, abandonedSystemIds);
+    markets = resetAbandonedMarkets(markets, abandonedSystemIds);
+    constructionProjects = dropAbandonedBuildProjects(constructionProjects, abandonedSystemIds);
   }
 
   // ── cycle start: migration, directed-logistics, directed-build (cycle-start-gated) ──
@@ -985,6 +1088,7 @@ export async function runWorldTick(
         interval: cadence.cycle,
         flow: MIGRATION_PARAMS,
         delivery: COLONY_DELIVERY_PARAMS,
+        inflowBlockedSystemIds: famineSystemIds,
       });
       systems = migWorld.systems;
       migrationMoved = migResult.migrationMoved;

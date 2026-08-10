@@ -131,6 +131,15 @@ export const POPULATION_PARAMS: PopulationParams = {
 };
 
 /**
+ * Abandonment's death line (docs/build-plans/abandonment.md, Rule 2): famine + population below
+ * one pop — under a million people — means the colony is over. A backstop, deliberately un-tuned:
+ * no window, no calibration sweep owns this number. The famine conjunct (survival shortfall) is
+ * the newborn guard — a freshly-seeded colony can only cross this floor after a sustained,
+ * unbroken famine the inflow gate (Rule 1) never once relieved, not from an unlucky opening.
+ */
+export const ABANDON_POP_FLOOR = 1;
+
+/**
  * Migration over the de-regioned intra-faction topology — the sole consumer of the
  * open edges + fixed-interval edge shard. Gateways throttle like goods (high fuelCost →
  * strong distance attenuation); a gateway-preferred-migration term is a deliberate future

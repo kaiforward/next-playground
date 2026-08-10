@@ -5,13 +5,17 @@ import {
   applyBuildingIncreases,
   applyStagedManifestDelivery,
   applyFoundingStagingDraws,
+  applyAbandonments,
+  resetAbandonedMarkets,
+  dropAbandonedBuildProjects,
 } from "@/lib/world/tick";
 import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
-import type { WorldMarket } from "@/lib/world/types";
+import type { WorldConstructionProject, WorldMarket } from "@/lib/world/types";
 import type { SystemDevelopment, BuildBuildingUpdate } from "@/lib/tick/world/directed-build-world";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY } from "@/lib/constants/industry";
 import { housingPopCap } from "@/lib/engine/industry";
+import { MIN_DEMAND } from "@/lib/constants/market-economy";
 
 /** Minimal valid TickSystem fixture — only the fields `applyDevelopments` reads/writes matter for
  * this suite; the rest are innocuous placeholders that still type-check. */
@@ -448,5 +452,131 @@ describe("applyFoundingStagingDraws", () => {
     ]);
     expect(after).toBe(markets); // no delta at all — the same array, not a rebuilt copy
     for (const m of after) expect(Number.isFinite(m.stock)).toBe(true);
+  });
+});
+
+// ── Abandonment Rule 2 (the death line) — the tick body's own control-write applications,
+// driven directly exactly like applyDevelopments above. ──────────────────
+
+describe("applyAbandonments / resetAbandonedMarkets / dropAbandonedBuildProjects — the death line's full reset", () => {
+  /** A famine world just under the floor: developed, owned, populated, built. */
+  function dyingColony(id: string, factionId: string | null = "faction-1"): TickSystem {
+    const s = makeSystem(id, 0.4); // post-delta population < ABANDON_POP_FLOOR (1)
+    s.control = "developed";
+    s.factionId = factionId;
+    s.popCap = 20;
+    s.unrest = 1;
+    s.collapseDebt = 0.7;
+    s.buildings = { housing: 2, farm: 1 };
+    s.buildingIdleCycles = { housing: 3, farm: 5 };
+    s.provisionExpectation = 0.12;
+    return s;
+  }
+
+  function richMarket(systemId: string, goodId: string, stock: number): WorldMarket {
+    return {
+      systemId, goodId, stock, anchorMult: 1.4, demandRate: 3.2, storageCapacity: 500,
+      honestUseRate: 2.9, squeezeCycles: 2, logisticsFundingBound: true, productionSuppressed: true,
+    };
+  }
+
+  function buildProject(id: string, systemId: string, factionId = "faction-1"): WorldConstructionProject {
+    return {
+      kind: "build", id, factionId, systemId, origin: "auto",
+      buildingType: "housing", levels: 1, workTotal: 100, workDone: 40,
+    };
+  }
+
+  it("resets population/unrest/collapseDebt/expectation/faction/control/buildings/popCap in one application", () => {
+    const dying = dyingColony("doomed");
+    const bystander = makeSystem("alive", 200);
+    bystander.control = "developed";
+
+    const after = applyAbandonments([dying, bystander], ["doomed"]);
+    const husk = after.find((s) => s.id === "doomed")!;
+
+    expect(husk.population).toBe(0);
+    expect(husk.popCap).toBe(0);
+    expect(husk.unrest).toBe(0);
+    expect(husk.collapseDebt).toBe(0); // explicit zero, not merely falsy/absent
+    expect(husk.provisionExpectation).toBeUndefined();
+    expect("provisionExpectation" in husk).toBe(false); // truly absent, not a written undefined
+    expect(husk.factionId).toBeNull();
+    expect(husk.control).toBe("unclaimed");
+    expect(husk.buildings).toEqual({}); // every building row gone
+    expect(husk.buildingIdleCycles).toEqual({}); // its idle-cycle state cleared alongside
+
+    // The bystander is untouched — the reset is surgical, not a galaxy-wide sweep.
+    const alive = after.find((s) => s.id === "alive")!;
+    expect(alive.population).toBe(200);
+    expect(alive.control).toBe("developed");
+  });
+
+  it("keeps market rows but resets only the demand-derived fields — stock is untouched", () => {
+    const markets = [richMarket("doomed", "food", 340), richMarket("doomed", "water", 12)];
+    const after = resetAbandonedMarkets(markets, ["doomed"]);
+
+    for (const m of after) {
+      expect(m.demandRate).toBe(MIN_DEMAND);
+      expect(m.honestUseRate).toBeUndefined();
+      expect("honestUseRate" in m).toBe(false);
+      expect(m.squeezeCycles).toBeUndefined();
+      expect("squeezeCycles" in m).toBe(false);
+      expect(m.logisticsFundingBound).toBeUndefined();
+      expect("logisticsFundingBound" in m).toBe(false);
+      expect(m.productionSuppressed).toBe(false); // explicit false, not merely absent
+    }
+    expect(after.find((m) => m.goodId === "food")!.stock).toBe(340); // stock is the one thing kept
+    expect(after.find((m) => m.goodId === "water")!.stock).toBe(12);
+  });
+
+  it("leaves an unrelated system's market rows byte-identical", () => {
+    const markets = [richMarket("doomed", "food", 340), richMarket("alive", "food", 900)];
+    const after = resetAbandonedMarkets(markets, ["doomed"]);
+    expect(after.find((m) => m.systemId === "alive")).toBe(markets[1]); // same reference — untouched
+  });
+
+  it("drops open build projects targeting the dead system, leaves everyone else's queue alone", () => {
+    const projects: WorldConstructionProject[] = [
+      buildProject("p1", "doomed"),
+      buildProject("p2", "alive"),
+    ];
+    const after = dropAbandonedBuildProjects(projects, ["doomed"]);
+    expect(after.map((p) => p.id)).toEqual(["p2"]);
+  });
+
+  it("leaves a colony_establish project alone even when its OWN systemId is the abandoned one", () => {
+    // The kind check, isolated: `systemId` here deliberately matches the abandoned set (unrealistic
+    // in play — a colony_establish target is never itself developed, so it can never be abandoned —
+    // but the only way to prove this function filters by KIND, not merely by id, is to construct the
+    // case where the id alone would have matched).
+    const establishProject: WorldConstructionProject = {
+      kind: "colony_establish", id: "e1", factionId: "faction-1", systemId: "doomed", origin: "auto",
+      workTotal: 100, workDone: 10, sourceSystemId: "founder", seedPop: 5, housingLevels: 1,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    };
+    const after = dropAbandonedBuildProjects([establishProject], ["doomed"]);
+    expect(after).toEqual([establishProject]);
+  });
+
+  it("leaves a colony_establish project alone even if it happens to name the system as its source", () => {
+    // A founder that died as someone's sourceSystemId is a different question the spec does not ask
+    // this rule to answer; pin that this function does not reach for it either.
+    const establishProject: WorldConstructionProject = {
+      kind: "colony_establish", id: "e1", factionId: "faction-1", systemId: "newborn", origin: "auto",
+      workTotal: 100, workDone: 10, sourceSystemId: "doomed", seedPop: 5, housingLevels: 1,
+      stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    };
+    const after = dropAbandonedBuildProjects([establishProject], ["doomed"]);
+    expect(after).toEqual([establishProject]);
+  });
+
+  it("no-ops (same references) when nothing was abandoned this cycle", () => {
+    const systems = [dyingColony("doomed")];
+    const markets = [richMarket("doomed", "food", 1)];
+    const projects = [buildProject("p1", "doomed")];
+    expect(applyAbandonments(systems, [])).toBe(systems);
+    expect(resetAbandonedMarkets(markets, [])).toBe(markets);
+    expect(dropAbandonedBuildProjects(projects, [])).toBe(projects);
   });
 });

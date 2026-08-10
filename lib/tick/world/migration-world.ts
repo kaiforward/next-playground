@@ -22,4 +22,11 @@ export interface MigrationProcessorParams {
   flow: MigrationFlowParams;
   /** Targeted, equalising colonist delivery — the primary colony pop supply; diffusion is local balancing. */
   delivery: ColonistDeliveryParams;
+  /**
+   * Systems currently in survival shortfall (abandonment Rule 1, the famine inflow gate) — receive
+   * no population inflow this cycle by either path (colonist delivery or diffusion migration).
+   * Outflow from a listed system is unaffected. Empty when the economy signal is absent (no cycle
+   * to gate on).
+   */
+  inflowBlockedSystemIds: ReadonlySet<string>;
 }

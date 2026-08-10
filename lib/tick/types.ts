@@ -119,6 +119,15 @@ export interface TickProcessorResult {
    *  galaxy). Calibration instrumentation only — surfaced via `runWorldTick().instrumentation`, never
    *  broadcast or persisted. */
   strikeSuppressedProposals?: { suppressed: number; eligible: number };
+  /**
+   * Systems the population processor found in survival shortfall with post-delta population below
+   * `ABANDON_POP_FLOOR` (abandonment Rule 2, the death line) — one entry per system, this cycle
+   * only. A control signal, not instrumentation: the tick body (the sole owner of `control` writes)
+   * reads this to apply the reset-to-frontier in one application. Never broadcast, never persisted,
+   * and deliberately absent from `TickInstrumentation` — the population processor stays pure and
+   * reports the finding; it never writes `control` itself.
+   */
+  abandonedSystems?: string[];
   /** Per-system overshoot-death amount removed this cycle — the non-conserved sink inside
    *  `populationDelta`'s gate (fires only above the strike-level unrest gate), already scaled by
    *  this run's catch-up factor. A system absent from the map lost none this cycle (the gate did not
