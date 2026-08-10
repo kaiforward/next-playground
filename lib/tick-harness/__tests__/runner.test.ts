@@ -421,6 +421,53 @@ describe("runTickHarness: world cohort net growth", () => {
   });
 });
 
+// ── Adaptive-expectation instruments: episode costs, founding trajectory, the ratchet check ──
+
+describe("runTickHarness: episode costs, founding trajectory, the ratchet check", () => {
+  it("reports well-formed episode-cost, trajectory and ratchet sections, never NaN or negative", async () => {
+    const results = await runTickHarness(BUSY);
+
+    expect(Number.isFinite(results.episodeCosts.totalTeardownLevels)).toBe(true);
+    expect(results.episodeCosts.totalTeardownLevels).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(results.episodeCosts.totalOvershootDeaths)).toBe(true);
+    expect(results.episodeCosts.totalOvershootDeaths).toBeGreaterThanOrEqual(0);
+    for (const c of results.episodeCosts.byCohort) {
+      expect(c.teardownLevels).toBeGreaterThanOrEqual(0);
+      expect(c.overshootDeaths).toBeGreaterThanOrEqual(0);
+      expect(c.systemsWithTeardown).toBeLessThanOrEqual(c.n);
+      expect(c.systemsWithOvershootDeath).toBeLessThanOrEqual(c.n);
+    }
+
+    // All 6 buckets are always present (even empty), spanning the whole 60-cycle window.
+    expect(results.foundingTrajectory.buckets.length).toBe(6);
+    results.foundingTrajectory.buckets.forEach((b, i) => {
+      expect(b.bucket).toBe(i);
+      expect(b.n).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(b.meanProvision)).toBe(true);
+      expect(Number.isFinite(b.meanUnrest)).toBe(true);
+    });
+
+    expect(results.provisionRatchet.window).toBeGreaterThan(0);
+    for (const row of results.provisionRatchet.buckets) {
+      expect(row.n).toBeGreaterThan(0); // a row is only emitted for a non-empty cell
+      expect(Number.isFinite(row.meanVariance)).toBe(true);
+      expect(Number.isFinite(row.meanGrievance)).toBe(true);
+      expect(row.meanGrievance).toBeGreaterThanOrEqual(0);
+      expect(row.meanGrievance).toBeLessThanOrEqual(1);
+    }
+  }, 60_000);
+
+  it("actually wires activity through — BUSY is not a run where every new section reads zero", async () => {
+    // A genuinely broken wire (accumulator never fed, or the summary always empty) and a genuinely
+    // quiet galaxy both print zero — this fixture confirms BUSY is the former's counter-example, so
+    // the "well-formed, never negative" test above cannot be passing vacuously.
+    const results = await runTickHarness(BUSY);
+    expect(results.episodeCosts.totalTeardownLevels).toBeGreaterThan(0);
+    expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
+    expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
+  }, 60_000);
+});
+
 // ── foldFoundingTick ──────────────────────────────────────────────
 // The order inside it is the instrument. Sweeping for new colonies before accumulating the tick's
 // draws loses the founding cycle's own slice — and loses it QUIETLY, since every earlier slice

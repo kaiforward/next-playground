@@ -163,6 +163,7 @@ describe("ExperimentConfig", () => {
         foundingStock: {
           foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
           meanOpeningShortfall: 0, meanOpeningProvision: null, p10OpeningProvision: null,
+          minOpeningProvision: null,
           openingDeprivedCount: 0,
           meanManifestTonnage: 0, meanFoundingMoneyCost: 0, medianFounderCoverAfter: null,
           cadenceMarkShare: 0.8, cadenceMarkTick: null,
@@ -196,6 +197,9 @@ describe("ExperimentConfig", () => {
           startingBalances: new Map(),
           stagedLedger: newStagedLedgerCensus(),
         }),
+        episodeCosts: { totalTeardownLevels: 0, totalOvershootDeaths: 0, byCohort: [] },
+        foundingTrajectory: { buckets: [] },
+        provisionRatchet: { window: 6, buckets: [] },
       };
     }
 
@@ -260,6 +264,9 @@ describe("ExperimentConfig", () => {
         meanProvision: 0.94,
         worstGoodMedian: 0.9,
         netGrowthPct: 2.1,
+        expectationLevels: { median: 0.9, p10: 0.7, p90: 0.99 },
+        grievanceLevels: { median: 0, p10: 0, p90: 0.1 },
+        staleExpectationCount: 0,
       }];
       const saved = buildExperimentResult(results);
       expect(saved.worldCohorts).toEqual(results.worldCohorts);
@@ -284,6 +291,7 @@ describe("ExperimentConfig", () => {
       results.foundingStock = {
         foundedCount: 4, sampledCount: 3, meanOpeningSatisfaction: 0.9,
         meanOpeningShortfall: 0.02, meanOpeningProvision: 0.85, p10OpeningProvision: 0.6,
+        minOpeningProvision: 0.4,
         openingDeprivedCount: 0,
         meanManifestTonnage: 250, meanFoundingMoneyCost: 75, medianFounderCoverAfter: 1.4,
         cadenceMarkShare: 0.8, cadenceMarkTick: 1720,

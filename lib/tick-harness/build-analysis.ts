@@ -203,6 +203,24 @@ export function hasColonyAwaitingSample(
   return false;
 }
 
+/** Is any tracked colony still inside the founding-trajectory window on this tick? Mirrors
+ *  `hasColonyAwaitingSample`'s job for `sampleFoundingTrajectory`: the runner builds full tick
+ *  rows only when a repeated trajectory reading is actually due, not on every cycle. */
+export function hasColonyInTrajectoryWindow(
+  tracker: ReadonlyMap<string, FoundedColonyRecord>,
+  tick: number,
+  cycleLength: number,
+): boolean {
+  if (cycleLength <= 0) return false;
+  const windowCycles = FOUNDING_TRAJECTORY_BUCKET_COUNT * FOUNDING_TRAJECTORY_BUCKET_CYCLES;
+  for (const r of tracker.values()) {
+    const ageTicks = tick - r.foundedTick;
+    if (ageTicks < 0) continue;
+    if (Math.floor(ageTicks / cycleLength) < windowCycles) return true;
+  }
+  return false;
+}
+
 /**
  * Take the opening reading for every tracked colony whose first post-founding economy cycle is this
  * tick. Call only on an economy cycle — satisfaction is written by that cycle and is unchanged between.
@@ -310,6 +328,10 @@ export function summarizeFoundingStock(
     // measured founding Provision, and a run that founded nothing has no such reading to give.
     meanOpeningProvision: sampledCount > 0 ? provisionSum / sampledCount : null,
     p10OpeningProvision: sampledCount > 0 ? quantile(provisions, 0.1) : null,
+    // The literal minimum, over the SAME samples p10/mean read — not derived from p10, which
+    // bounds only 90% of the cohort. Promise 1's tail check needs the worst actual reading: p10 can
+    // sit well above the true minimum whenever the bottom decile itself has spread.
+    minOpeningProvision: sampledCount > 0 ? Math.min(...provisions) : null,
     openingDeprivedCount,
     // Denominated over every colony founded, so a run that ships nothing reads 0 rather than
     // hiding behind a shrunken denominator.
@@ -319,6 +341,131 @@ export function summarizeFoundingStock(
     cadenceMarkShare: FOUNDING_CADENCE_MARK_SHARE,
     cadenceMarkTick: foundingCadenceMarkTick(tracker),
   };
+}
+
+// ── Founding trajectory: Provision and unrest over colony age, not just at opening ──────
+//
+// `summarizeFoundingStock` above reads ONE snapshot per colony — its first assessed cycle. Promise
+// 1's window half (docs/planned/adaptive-expectation.md) covers the whole ~60-cycle dowry +
+// resignation period, including the manifest-exhaustion transition the opening snapshot cannot see
+// at all: a colony that opens calm and then dips as its founding stock (`FOUNDING_STOCK_COVER`)
+// runs out is invisible to a single opening read. This tracks the SAME founded-colony roster
+// (`FoundedColonyRecord.foundedTick`) across repeated readings, bucketed by age since founding.
+
+/** Width of one trajectory bucket, in economy CYCLES (not ticks) since founding. */
+export const FOUNDING_TRAJECTORY_BUCKET_CYCLES = 10;
+
+/** Bucket count — 6 × 10 cycles spans 60 cycles, promise 1's whole stated window (dowry +
+ *  resignation). A colony older than that has left the window this instrument reads; the promise
+ *  makes no claim about it. */
+export const FOUNDING_TRAJECTORY_BUCKET_COUNT = 6;
+
+/** The fields a founding-trajectory sample needs off its system row — the same demand basis
+ *  `sampleFoundedColonies` reads, plus `unrest` (the opening read never needed it). */
+export type FoundingTrajectorySystem = Pick<TickSystem, "id" | "population" | "buildings" | "unrest">;
+
+interface TrajectoryBucketAccumulator {
+  provisions: number[];
+  unrests: number[];
+}
+
+/** Running per-bucket samples across a run — index `i` covers cycles
+ *  `[i * FOUNDING_TRAJECTORY_BUCKET_CYCLES, (i + 1) * FOUNDING_TRAJECTORY_BUCKET_CYCLES)`. */
+export interface FoundingTrajectoryTotals {
+  buckets: TrajectoryBucketAccumulator[];
+}
+
+export function newFoundingTrajectoryTotals(): FoundingTrajectoryTotals {
+  return {
+    buckets: Array.from({ length: FOUNDING_TRAJECTORY_BUCKET_COUNT }, () => ({ provisions: [], unrests: [] })),
+  };
+}
+
+/**
+ * Sample every tracked colony still inside the trajectory window (age < the whole bucketed span) at
+ * this cycle, bucketing by AGE SINCE FOUNDING (`tick - foundedTick`, in whole cycles) — never by
+ * absolute tick, which would put a colony founded mid-run in the wrong bucket entirely and make two
+ * colonies founded at different times incomparable. Call only on an economy cycle (Provision is
+ * written by that cycle and unchanged between), same cadence as `sampleFoundedColonies`.
+ */
+export function sampleFoundingTrajectory(
+  systems: ReadonlyArray<FoundingTrajectorySystem>,
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
+  tick: number,
+  cycleLength: number,
+  tracker: ReadonlyMap<string, FoundedColonyRecord>,
+  totals: FoundingTrajectoryTotals,
+): void {
+  if (cycleLength <= 0) return;
+  const windowCycles = FOUNDING_TRAJECTORY_BUCKET_COUNT * FOUNDING_TRAJECTORY_BUCKET_CYCLES;
+
+  const due = new Map<string, FoundingTrajectorySystem>();
+  const bucketBySystem = new Map<string, number>();
+  for (const r of tracker.values()) {
+    const ageTicks = tick - r.foundedTick;
+    if (ageTicks < 0) continue; // founded later this same tick — nothing to read yet
+    const ageCycles = Math.floor(ageTicks / cycleLength);
+    if (ageCycles >= windowCycles) continue; // past promise 1's window — not this instrument's claim
+    const sys = systems.find((s) => s.id === r.systemId);
+    if (!sys) continue;
+    due.set(r.systemId, sys);
+    bucketBySystem.set(r.systemId, Math.floor(ageCycles / FOUNDING_TRAJECTORY_BUCKET_CYCLES));
+  }
+  if (due.size === 0) return;
+
+  const goodsBySystem = goodSatisfactionsBySystem(due, markets);
+  for (const [systemId, sys] of due) {
+    const bucket = bucketBySystem.get(systemId);
+    if (bucket === undefined) continue;
+    totals.buckets[bucket].provisions.push(provision(goodsBySystem.get(systemId) ?? []));
+    totals.buckets[bucket].unrests.push(sys.unrest);
+  }
+}
+
+/** One age bucket's mean and p10 of Provision and unrest, over every sample taken in that bucket
+ *  across the whole run (one colony contributes many samples as it ages through the bucket). */
+export interface FoundingTrajectoryBucketEntry {
+  /** 0-based bucket index. */
+  bucket: number;
+  ageStartCycles: number;
+  ageEndCycles: number;
+  /** Samples in this bucket — NOT a colony count: one colony contributes a sample at every economy
+   *  cycle it spends inside the bucket's age span. */
+  n: number;
+  meanProvision: number;
+  p10Provision: number;
+  /** Mean and p10 of unrest. p10 reads the CALM tail (not the worst — that would be p90); reported
+   *  alongside mean for the same reason Provision gets a tail reading, not because it is the more
+   *  diagnostic percentile for unrest. */
+  meanUnrest: number;
+  p10Unrest: number;
+}
+
+export interface FoundingTrajectorySummary {
+  buckets: FoundingTrajectoryBucketEntry[];
+}
+
+function bucketStats(values: number[]): { mean: number; p10: number } {
+  if (values.length === 0) return { mean: 0, p10: 0 };
+  return { mean: values.reduce((a, b) => a + b, 0) / values.length, p10: quantile(values, 0.1) };
+}
+
+export function summarizeFoundingTrajectory(totals: FoundingTrajectoryTotals): FoundingTrajectorySummary {
+  const buckets = totals.buckets.map((b, i) => {
+    const p = bucketStats(b.provisions);
+    const u = bucketStats(b.unrests);
+    return {
+      bucket: i,
+      ageStartCycles: i * FOUNDING_TRAJECTORY_BUCKET_CYCLES,
+      ageEndCycles: (i + 1) * FOUNDING_TRAJECTORY_BUCKET_CYCLES - 1,
+      n: b.provisions.length,
+      meanProvision: p.mean,
+      p10Provision: p.p10,
+      meanUnrest: u.mean,
+      p10Unrest: u.p10,
+    };
+  });
+  return { buckets };
 }
 
 // ── Founding lifecycle: how long a founding takes, and what holds it up ──────────

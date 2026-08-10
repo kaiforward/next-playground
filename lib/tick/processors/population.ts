@@ -50,6 +50,10 @@ export async function runPopulationProcessor(
 
   const popUpdates: PopulationUpdate[] = [];
   const demandPops: Array<{ systemId: string; population: number; productionSuppress: number }> = [];
+  // Calibration-only: per-system overshoot-death amount this cycle — the episode-cost evidence the
+  // adaptive-expectation gate reads. Absent system ⇒ 0 (kept sparse: the gate is off for most
+  // systems most cycles). Populated below, observational only — it changes nothing about `population`.
+  const overshootDeathBySystem = new Map<string, number>();
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
     const supply = signals.supplyStateBySystem.get(s.systemId)
@@ -80,7 +84,18 @@ export async function runPopulationProcessor(
     // cycle while crowding lags it by one. Growth/decline keep the absolute d — the
     // political/biological split: unrest (political) judges against memory, population change
     // (biological) reads the goods themselves.
-    const population = Math.max(0, s.population + populationDelta(s.population, s.popCap, d, unrest, params.population) * catchUp);
+    const delta = populationDelta(s.population, s.popCap, d, unrest, params.population);
+    const population = Math.max(0, s.population + delta * catchUp);
+    // Isolates the death component of `delta` by re-running the same pure fold with the death rate
+    // zeroed — growth and decline are unaffected by that rate, so the difference is exactly what the
+    // gate removed, without re-implementing populationDelta's internal formula here (which would
+    // silently drift from the engine if its shape ever changed). Observational only: `delta` itself,
+    // and therefore `population` above, is untouched.
+    const deltaWithoutDeath = populationDelta(
+      s.population, s.popCap, d, unrest, { ...params.population, overshootDeathRate: 0 },
+    );
+    const overshootDeath = Math.max(0, deltaWithoutDeath - delta) * catchUp;
+    if (overshootDeath > 0) overshootDeathBySystem.set(s.systemId, overshootDeath);
     // The memory advances only now that this cycle's unrest has already been judged against it.
     // An emptying world's Provision-1 reading is a denominator artifact, not an experience to
     // normalise toward, so the update is skipped and the stored value (post-seed, pre-floor)
@@ -101,5 +116,5 @@ export async function runPopulationProcessor(
 
   await world.applyPopulationUpdates(popUpdates);
   await world.rewriteDemandRates(demandPops);
-  return {};
+  return overshootDeathBySystem.size > 0 ? { overshootDeathBySystem } : {};
 }

@@ -806,3 +806,69 @@ describe("population processor: adaptive expectation", () => {
     expect(written).toBeCloseTo(updateExpectation(stored0, P, EXPECTATION_PARAMS, 1), 9);
   });
 });
+
+// ── Calibration instrumentation: the overshoot-death gate's magnitude, isolated per system —
+// the adaptive-expectation gate's episode-cost evidence (docs/planned/adaptive-expectation.md,
+// promise 5). Observational: the amount reported must match what actually left `population`. ──
+
+describe("population processor: overshoot-death instrumentation", () => {
+  // decay: 0 makes accumulateUnrest a no-op (relaxed = floor + 1*(unrest - floor) = unrest,
+  // gain = term*0 = 0), so the fixture's starting unrest IS the cycle's unrest — deterministic
+  // without having to also derive the term the accumulator would otherwise fold in.
+  const NO_RELAX = { slopeBase: 0, slopeShortage: 0, decay: 0 };
+
+  it("reports exactly the death gate's formula, matching the population actually lost", async () => {
+    // population 150, popCap 100 -> 50 overshoot; unrest 0.9 > gate 0.65; rate 0.1.
+    // death = 0.1 * 50 * 0.9 = 4.5.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 150, 100, 0.9)], markets: [] });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), {
+      unrest: NO_RELAX,
+      population: { growthRate: 0, declineRate: 0, overshootDeathRate: 0.1, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.overshootDeathBySystem?.get("a")).toBeCloseTo(4.5, 9);
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.population).toBeCloseTo(150 - 4.5, 9); // the reported amount is what actually left
+  });
+
+  it("omits a system entirely when the gate does not fire (unrest at or below the gate)", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 150, 100, 0.5)], markets: [] });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), {
+      unrest: NO_RELAX,
+      population: { growthRate: 0, declineRate: 0, overshootDeathRate: 0.1, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    // Empty map ⇒ the processor returns {} rather than an empty Map (kept sparse).
+    expect(result.overshootDeathBySystem).toBeUndefined();
+  });
+
+  it("scales with the run's catch-up factor, exactly like the delta it is isolated from", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 150, 100, 0.9)], markets: [] });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), {
+      unrest: NO_RELAX,
+      population: { growthRate: 0, declineRate: 0, overshootDeathRate: 0.1, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 48, // catchUpFactor(48) = 2 reference cycles
+    });
+    expect(result.overshootDeathBySystem?.get("a")).toBeCloseTo(9, 9); // 4.5 * 2
+  });
+
+  it("leaves growth and decline untouched — a system with both still isolates only the death share", async () => {
+    // growth = 0.05*100*crowdFactor(r=1)*(1-d=1) = 5; decline = 0 (unrest gate governs death, not
+    // decline here); death = 0.1*0 = 0 (population <= popCap, no overshoot). The instrument must
+    // read 0 death (omitted), not the net delta (+5), proving it isolates the death TERM and not
+    // just whatever moved the population.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 100, 1000, 0.9)], markets: [] });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.05, declineRate: 0, overshootDeathRate: 0.1, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.overshootDeathBySystem).toBeUndefined();
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.population).toBeCloseTo(105, 9);
+  });
+});

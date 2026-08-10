@@ -13,9 +13,10 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
 import type { World } from "@/lib/world/types";
 import type { DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
 import type { FoundingEraSummary, TreasurySnapshot, TreasurySummary } from "./treasury-analysis";
-import type { FounderCohortSummary, FoundingLifecycleSummary } from "./build-analysis";
+import type { FounderCohortSummary, FoundingLifecycleSummary, FoundingTrajectorySummary } from "./build-analysis";
 import type { DemandHuntingSummary } from "./market-analysis";
 import type { ConservationSummary } from "./conservation-analysis";
+import type { QuantileLevels } from "./population-analysis";
 
 // ── Market role classification ──────────────────────────────────
 
@@ -161,6 +162,78 @@ export interface WorldCohortEntry {
    * unmeasured, not a lying 0.
    */
   netGrowthPct: number | null;
+  /** Distribution of the stored adaptive-expectation memory over the cohort's NON-STALE systems
+   *  (see `staleExpectationCount`) — median/p10/p90/n printed alongside the galaxy-wide reading
+   *  (`SupplyRegimeSummary.expectationLevels`) so a cohort's memory can be read apart from the mean. */
+  expectationLevels: QuantileLevels;
+  /** Distribution of grievance (the same read the unrest fold makes) over the same non-stale
+   *  systems as `expectationLevels`. */
+  grievanceLevels: QuantileLevels;
+  /** Cohort systems excluded from `expectationLevels`/`grievanceLevels` because their basket was
+   *  empty at read time — see `SupplyRegimeSummary.staleExpectationCount` for why folding these in
+   *  would read stale memory as current. */
+  staleExpectationCount: number;
+}
+
+// ── Episode costs ────────────────────────────────────────────────
+//
+// A grievance episode's cost is real and irreversible (teardown, overshoot death) —
+// docs/planned/adaptive-expectation.md, promise 5. Accumulated per-cycle from `TickInstrumentation`
+// (`population-analysis.ts`'s `EpisodeCostTotals`), folded here by world cohort.
+
+/** One cohort's cumulative episode costs over the whole run. */
+export interface EpisodeCostCohortEntry {
+  cohort: WorldCohort;
+  /** Cohort systems — this row's own denominator (matches `WorldCohortEntry.n`). */
+  n: number;
+  /** Σ whole building levels torn down across the run, over the cohort's systems. */
+  teardownLevels: number;
+  /** Distinct cohort systems that lost at least one level — incidence, not magnitude. */
+  systemsWithTeardown: number;
+  /** Σ overshoot-death amount across the run, over the cohort's systems. */
+  overshootDeaths: number;
+  /** Distinct cohort systems that incurred any overshoot death. */
+  systemsWithOvershootDeath: number;
+}
+
+export interface EpisodeCostSummary {
+  /** Galaxy-wide totals — the sum over every system that ever recorded a cost during the run,
+   *  whatever cohort it falls in at run end (cohorts overlap, so this is NOT the sum of
+   *  `byCohort`'s rows). Unfiltered by end-of-run settlement — today nothing un-develops a
+   *  system, so in practice every recorded system is still settled, but the total does not
+   *  itself re-check that. */
+  totalTeardownLevels: number;
+  totalOvershootDeaths: number;
+  byCohort: EpisodeCostCohortEntry[];
+}
+
+// ── The ratchet check ───────────────────────────────────────────
+//
+// The memory's known hazard on a jittering input is a rectifier (docs/planned/adaptive-expectation.md,
+// "What the memory does to a jittering input"). This buckets settled systems by their trailing
+// Provision variance (`population-analysis.ts`'s `computeTrailingProvisionVariance`) and reads mean
+// grievance per bucket, per cohort: a positive slope (higher variance ⇒ higher mean grievance at
+// comparable Provision) is the rectifier firing.
+
+/** One (cohort, variance-quartile) cell. Bucket 0 is the cohort's calmest quartile by trailing
+ *  Provision variance, bucket 3 its jitteriest — quartiles are computed WITHIN the cohort, not
+ *  against a fixed variance scale, so the bucketing is comparable across arms whatever their
+ *  absolute variance level. */
+export interface RatchetBucketEntry {
+  cohort: WorldCohort;
+  /** 0 (calmest quartile) .. 3 (jitteriest). */
+  bucket: number;
+  /** Systems in this cell — only systems with enough trailing samples to carry a variance reading
+   *  are bucketed at all (see `RATCHET_MIN_SAMPLES`), so this can be smaller than a quartile's
+   *  nominal share. */
+  n: number;
+  meanVariance: number;
+  meanGrievance: number;
+}
+
+export interface RatchetCheckSummary {
+  window: number;
+  buckets: RatchetBucketEntry[];
 }
 
 export interface MarketHealthSummary {
@@ -378,6 +451,12 @@ export interface FoundingStockSummary {
    *  founding Provision" means the cohort's average or its worst decile — both exist so that choice
    *  can be made from real numbers. Null under the same rule as the mean. */
   p10OpeningProvision: number | null;
+  /** The literal minimum of the same per-colony Provision readings behind `meanOpeningProvision` —
+   *  NOT derived from `p10OpeningProvision` (a percentile bounds only 90% of the cohort; the tail
+   *  below it can sit arbitrarily far under the p10 mark). Promise 1's window promise is structural
+   *  down to p10, but the sub-p10 tail is bounded only by this measured minimum, which the gate
+   *  reads directly. Null under the same rule as the mean and p10. */
+  minOpeningProvision: number | null;
   /** Sampled colonies that opened below half satisfaction. Should read ~0. */
   openingDeprivedCount: number;
   /** Mean tonnage staged per colony founded — what founding costs a founder in goods. The
@@ -485,4 +564,13 @@ export interface HarnessResults {
   /** The four pass/fail conservation identities — the half of the acceptance bar that is checked
    *  rather than judged. */
   conservation: ConservationSummary;
+  /** Cumulative teardown + overshoot death over the whole run, galaxy-wide and by cohort — an
+   *  episode's cost is real and irreversible (promise 5). */
+  episodeCosts: EpisodeCostSummary;
+  /** Founding-cohort Provision and unrest trajectory over colony age (promise 1's window half) —
+   *  builds on `foundingStock`'s opening-only snapshot with repeated readings per colony. */
+  foundingTrajectory: FoundingTrajectorySummary;
+  /** The ratchet check: settled systems bucketed by trailing Provision variance, mean grievance per
+   *  bucket per cohort — a positive slope is the memory rectifying jitter into permanent grievance. */
+  provisionRatchet: RatchetCheckSummary;
 }

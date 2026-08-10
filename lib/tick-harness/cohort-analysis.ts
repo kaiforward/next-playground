@@ -13,11 +13,15 @@ import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
 import { marketRowsBySystem } from "@/lib/world/tick";
 import { median } from "@/lib/utils/math";
 import { nearBandFloor } from "./market-analysis";
-import { perSystemSupplyState, worstGoodSatisfaction } from "./population-analysis";
+import { perSystemSupplyState, quantileLevels, worstGoodSatisfaction } from "./population-analysis";
+import type { EpisodeCostTotals } from "./population-analysis";
 import type { GoodMarketState } from "@/lib/engine/directed-logistics";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldEvent, WorldMarket } from "@/lib/world/types";
-import type { MarketRole, RoleCoverEntry, StockedRole, WorldCohort, WorldCohortEntry } from "./types";
+import type {
+  EpisodeCostCohortEntry, EpisodeCostSummary, MarketRole, RatchetBucketEntry, RatchetCheckSummary,
+  RoleCoverEntry, StockedRole, WorldCohort, WorldCohortEntry,
+} from "./types";
 
 /**
  * A market's role, tested in a fixed order because one market can satisfy several
@@ -272,6 +276,7 @@ export function computeWorldCohorts(
     supplied: number; strained: number; rationing: number; shortage: number;
     provisionSum: number; worstGoodSats: number[];
     startPopSum: number; endPopSum: number;
+    expectations: number[]; grievances: number[]; staleExpectationCount: number;
   }>();
 
   for (const s of systems) {
@@ -285,6 +290,7 @@ export function computeWorldCohorts(
           n: 0, shortfallSum: 0, unrestSum: 0, striking: 0,
           supplied: 0, strained: 0, rationing: 0, shortage: 0,
           provisionSum: 0, worstGoodSats: [], startPopSum: 0, endPopSum: 0,
+          expectations: [], grievances: [], staleExpectationCount: 0,
         };
         acc.set(cohort, a);
       }
@@ -297,6 +303,15 @@ export function computeWorldCohorts(
       a.startPopSum += startPopulationBySystem.get(s.id) ?? 0;
       a.endPopSum += s.population;
       if (s.unrest >= strikeThreshold) a.striking += 1;
+      // A stale (emptyBasket) system's stored memory is a skipped-update artifact, not a current
+      // reading — excluded from the distributions and counted instead, exactly like the
+      // galaxy-wide fold in summarizeSupplyRegimes.
+      if (state.emptyBasket) {
+        a.staleExpectationCount++;
+      } else {
+        a.expectations.push(state.expectationStored);
+        a.grievances.push(state.grievance);
+      }
       // Exhaustive over the four members — see population-analysis.ts's summarizeSupplyRegimes,
       // which this fold must never diverge from (both read the same perSystemSupplyState map).
       switch (state.regime) {
@@ -333,7 +348,118 @@ export function computeWorldCohorts(
       // Summed before dividing, never per-system-then-averaged, so a founded colony's start-0
       // contributes fully to the numerator without individually dividing by zero.
       netGrowthPct: noSnapshot ? null : a.startPopSum > 0 ? ((a.endPopSum - a.startPopSum) / a.startPopSum) * 100 : 0,
+      expectationLevels: quantileLevels(a.expectations),
+      grievanceLevels: quantileLevels(a.grievances),
+      staleExpectationCount: a.staleExpectationCount,
     });
   }
   return result;
+}
+
+/**
+ * Fold the run's accumulated episode costs (`population-analysis.ts`'s `EpisodeCostTotals`) by
+ * world cohort — cumulative levels torn down and overshoot deaths are irreversible, and a
+ * galaxy-wide total hides which cohort actually pays for them (docs/planned/adaptive-expectation.md,
+ * promise 5 + the gate's episode-costs reading). Cohorts overlap (see `cohortsForSystem`), so
+ * `totalTeardownLevels`/`totalOvershootDeaths` are summed once over the settled galaxy, never as a
+ * sum of `byCohort`'s rows.
+ */
+export function summarizeEpisodeCostsByCohort(
+  totals: EpisodeCostTotals,
+  systems: TickSystem[],
+  homeworldIds: Set<string>,
+): EpisodeCostSummary {
+  const settled = systems.filter((s) => s.control === "developed");
+
+  let totalTeardownLevels = 0;
+  for (const levels of totals.teardownBySystem.values()) totalTeardownLevels += levels;
+  let totalOvershootDeaths = 0;
+  for (const amount of totals.overshootDeathBySystem.values()) totalOvershootDeaths += amount;
+
+  const acc = new Map<WorldCohort, {
+    n: number; teardownLevels: number; systemsWithTeardown: number;
+    overshootDeaths: number; systemsWithOvershootDeath: number;
+  }>();
+  for (const s of settled) {
+    const teardown = totals.teardownBySystem.get(s.id) ?? 0;
+    const overshoot = totals.overshootDeathBySystem.get(s.id) ?? 0;
+    for (const cohort of cohortsForSystem(s, homeworldIds)) {
+      let a = acc.get(cohort);
+      if (!a) {
+        a = { n: 0, teardownLevels: 0, systemsWithTeardown: 0, overshootDeaths: 0, systemsWithOvershootDeath: 0 };
+        acc.set(cohort, a);
+      }
+      a.n += 1;
+      a.teardownLevels += teardown;
+      if (teardown > 0) a.systemsWithTeardown += 1;
+      a.overshootDeaths += overshoot;
+      if (overshoot > 0) a.systemsWithOvershootDeath += 1;
+    }
+  }
+
+  const byCohort: EpisodeCostCohortEntry[] = [];
+  for (const cohort of COHORT_ORDER) {
+    const a = acc.get(cohort);
+    if (!a || a.n === 0) continue;
+    byCohort.push({ cohort, ...a });
+  }
+  return { totalTeardownLevels, totalOvershootDeaths, byCohort };
+}
+
+/** Quartile bucket (0..3) of `rank` among `n` ranked items — the run's OWN variance distribution,
+ *  not a fixed variance scale, so bucket membership stays comparable across arms whatever the
+ *  absolute variance level. */
+function quartileBucket(rank: number, n: number): number {
+  return Math.min(3, Math.floor((rank * 4) / n));
+}
+
+/**
+ * The ratchet check: bucket each cohort's systems into quartiles of trailing Provision variance
+ * (calmest to jitteriest, WITHIN the cohort) and read mean grievance per bucket — the spec's
+ * "positive slope = rectifier" test. `varianceBySystem` is
+ * `population-analysis.ts`'s `computeTrailingProvisionVariance` output; a system absent from it
+ * (too few trailing samples) is excluded from every bucket, not folded into bucket 0.
+ */
+export function summarizeRatchetCheck(
+  varianceBySystem: ReadonlyMap<string, number>,
+  window: number,
+  systems: TickSystem[],
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
+  homeworldIds: Set<string>,
+  events: ReadonlyArray<WorldEvent> = [],
+): RatchetCheckSummary {
+  const states = perSystemSupplyState(systems, markets, events);
+  const settled = systems.filter((s) => s.control === "developed");
+
+  const buckets: RatchetBucketEntry[] = [];
+  for (const cohort of COHORT_ORDER) {
+    // Rank this cohort's systems by variance ascending — quartiles are computed within the
+    // cohort's own membership, so a cohort with too few varianced systems just gets sparse buckets
+    // rather than nonsense boundaries.
+    const ranked = settled
+      .filter((s) => cohortsForSystem(s, homeworldIds).includes(cohort))
+      .map((s) => ({ systemId: s.id, variance: varianceBySystem.get(s.id) }))
+      .filter((r): r is { systemId: string; variance: number } => r.variance !== undefined)
+      .sort((a, b) => a.variance - b.variance);
+    if (ranked.length === 0) continue;
+
+    const cells = Array.from({ length: 4 }, () => ({ n: 0, varianceSum: 0, grievanceSum: 0 }));
+    ranked.forEach((r, i) => {
+      const state = states.get(r.systemId);
+      if (!state) return;
+      const cell = cells[quartileBucket(i, ranked.length)];
+      cell.n += 1;
+      cell.varianceSum += r.variance;
+      cell.grievanceSum += state.grievance;
+    });
+    cells.forEach((cell, bucket) => {
+      if (cell.n === 0) return; // sparse cohort — omit rather than a divide-by-zero row
+      buckets.push({
+        cohort, bucket, n: cell.n,
+        meanVariance: cell.varianceSum / cell.n,
+        meanGrievance: cell.grievanceSum / cell.n,
+      });
+    });
+  }
+  return { window, buckets };
 }

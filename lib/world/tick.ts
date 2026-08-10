@@ -869,6 +869,9 @@ export async function runWorldTick(
   }
 
   // ── infrastructure-decay ──
+  // Calibration-only: per-cycle whole building levels torn down, keyed by system (both decay
+  // channels combined). Declared here, read only by the final `instrumentation` return below.
+  let teardownLevelsBySystem: TickInstrumentation["teardownLevelsBySystem"];
   if (economySignals) {
     const logisticsFundingBoundBySystem = new Map<string, Set<string>>();
     for (const market of markets) {
@@ -878,7 +881,7 @@ export async function runWorldTick(
       logisticsFundingBoundBySystem.set(market.systemId, goods);
     }
     const decayWorld = new InMemoryInfrastructureWorld({ systems });
-    await runInfrastructureDecayProcessor(
+    const decayResult = await runInfrastructureDecayProcessor(
       decayWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
       {
@@ -889,13 +892,16 @@ export async function runWorldTick(
       },
     );
     systems = decayWorld.systems;
+    teardownLevelsBySystem = decayResult.teardownLevelsBySystem;
     processorsRun.push("infrastructure-decay");
   }
 
   // ── population ──
+  // Calibration-only: per-cycle overshoot-death amount, keyed by system. Same reason as above.
+  let overshootDeathBySystem: TickInstrumentation["overshootDeathBySystem"];
   if (economySignals) {
     const popWorld = new InMemoryPopulationWorld({ systems, markets });
-    await runPopulationProcessor(
+    const popResult = await runPopulationProcessor(
       popWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
       {
@@ -908,6 +914,7 @@ export async function runWorldTick(
     );
     systems = popWorld.systems;
     markets = popWorld.markets;
+    overshootDeathBySystem = popResult.overshootDeathBySystem;
     processorsRun.push("population");
   }
 
@@ -1360,7 +1367,7 @@ export async function runWorldTick(
     markets,
     instrumentation: {
       buildCommitmentsByGood, migrationMoved, foundingManifests, foundingStalls, logisticsBudget,
-      strikeSuppressedProposals,
+      strikeSuppressedProposals, overshootDeathBySystem, teardownLevelsBySystem,
     },
   };
 }
