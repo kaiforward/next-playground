@@ -520,7 +520,8 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
 }
 
 /**
- * Abandonment Rule 2 (the death line, docs/build-plans/abandonment.md): reset each system the
+ * Abandonment's death line (docs/active/gameplay/colonisation.md, "A colony is allowed to die"):
+ * reset each system the
  * population processor reported (famine AND post-delta population below `ABANDON_POP_FLOOR`) back
  * to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
  * collapse debt zero; the stored Provision memory is deleted (the same resettlement rule

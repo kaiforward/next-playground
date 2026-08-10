@@ -47,6 +47,11 @@ population** so the colony's cap grows as it fills. The whole galaxy starts from
 capital is stamped with an identical **self-sufficient home-system prefab**, and every other system begins an
 empty deposit field that expansion colonises into.
 
+A colony can also **end**. People do not move to famine worlds — a system in survival shortfall receives no
+population inflow that cycle, by either path — and a famine world whose population collapses below one pop
+(under a million people on a whole world) is **abandoned**: reset to unclaimed, factionless frontier,
+claimable and colonisable again (see [Abandonment](#a-colony-is-allowed-to-die--abandonment)).
+
 ---
 
 ## Colony lifecycle
@@ -64,6 +69,9 @@ controlled ─(planner scores it as a colony candidate: ROI(c) vs the faction's 
                               +  the staged manifest delivered onto the colony's own market rows
   ─(now a normal developed system)→ colonist delivery + migration populate it;
     demand-driven build-out fills its deposits/industry as ordinary opportunities
+
+developed ─(abandonment: famine AND population < ABANDON_POP_FLOOR, one pop)→ unclaimed again
+    (population/buildings/popCap cleared; warehouses keep their stock; ordinary frontier)
 ```
 
 **Claim** stays cheap and near-instant — it is just drawing the border, bounded by reach
@@ -545,6 +553,50 @@ migration cycle:
 Jobs shape **where** people go but do not hard-cap how many a colony absorbs — a hard open-jobs cap froze
 bootstrap (a tiny colony's jobs are too few for population to ever exceed them and create demand). Housing
 headroom stays the hard overshoot bound; the soft jobs term handles "don't overfill a jobless full colony".
+
+**The famine inflow gate.** People do not move to famine worlds. A system currently in survival shortfall
+(a demanded survival good below the famine line — the same bit that bands it Shortage) receives **no
+population inflow that cycle, by either path**: colonist delivery skips it as a sink (its water-fill
+headroom reads 0, index alignment untouched), and diffusion migration moves nothing toward it (its
+destination headroom reads 0, whichever edge endpoint it is). Outflow is unaffected — a famine world still
+donates idle spare above the source floor and its people still migrate away: exodus is wanted. The gate is
+stateless: the famine set is derived each cycle from the economy's own supply fold and recovery re-opens
+inflow the next cycle. Without the gate, delivery's emptiest-first fill systematically restocked famine
+worlds with fresh colonists as their people died (measured: famine strikers pinned at exactly `popCap` with
+a −0.00% trailing trend while their intrinsic decline was −0.75%/cycle), so a doomed world could never
+actually decline. Both this gate and abandonment below are deliberately minimal scaffolding: the durable
+design — one routed people-movement system for delivery and migration alike — is booked to the
+logistics-pillar depth pass.
+
+---
+
+## A colony is allowed to die — abandonment
+
+A famine world whose population has collapsed below **`ABANDON_POP_FLOOR` (1 pop — under a million people
+on a whole world)** is over. The population processor reports it (famine AND post-delta population below
+the floor, read from the same cycle's supply fold); the tick body — the sole owner of `control` writes —
+applies the reset in one application:
+
+- **System row:** population, unrest and collapse debt to 0; the stored Provision expectation deleted (a
+  dead world's memory must not survive into a resettlement); `factionId → null`, `control → "unclaimed"`.
+- **Buildings deleted, `popCap → 0`.** Infrastructure decay runs only on developed systems, so structures
+  left standing would freeze forever and hand any resettler a free, fully-built colony.
+- **Market rows survive with their stock** — a resettler inherits real warehouses — but the demand-derived
+  fields reset (`demandRate` to the pricing floor; use-rate/squeeze/funding-bound state cleared) so a
+  resettled colony is not priced and rationed as the dead world it replaced.
+- **Open `build` projects targeting the system are dropped** — the former owner stops funding construction
+  on a world it lost. (`colony_establish` projects cannot target a developed system, so they are out of
+  scope by construction.)
+
+The husk is ordinary claimable frontier again through the existing claim and colony-candidate paths — no
+special resettlement machinery. The famine conjunct is the founding guard: colonies seed at 2 pops, so a
+newborn only reaches the floor through ~90 consecutive cycles of unbroken famine with the inflow gate
+refusing it settlers throughout — a genuinely dead colony, not an unlucky opening. The floor is a
+**backstop, not a mercy kill**: decline is proportional to remaining population, so most declining worlds
+rebalance small and live (shrinking demand raises satisfaction — a tiny, stable, fed outpost is legitimate
+negative space, and a world that calms below one pop without famine simply persists). Constants:
+`ABANDON_POP_FLOOR` in `lib/constants/population.ts`; transition applied by `applyAbandonments` /
+`resetAbandonedMarkets` / `dropAbandonedBuildProjects` in `lib/world/tick.ts`.
 
 ---
 

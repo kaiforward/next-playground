@@ -34,19 +34,18 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 ## Queued — supply response, then PR6
 
 6. **[L] Supply response — the remaining arc** — [supply-response.md](./planned/supply-response.md).
-   Item 1 (Provision) and item 2 (the **adaptive expectation**) are **shipped**: unrest is judged
-   against a persisted per-world baseline of what that world has been getting, the interim
-   `slopeRationing`/founding invariant retired, all three gate decisions resolved (mechanism +
-   guarantee ladder: [economy.md](./active/gameplay/economy.md)). Two items remain, **in order,
-   measuring between** — (1) abandonment, (2) relief; each needs a primitive the game does not
-   have and is gated on it, and each consumes the shipped worsening-vs-recovering signal
-   (deviation from expectation).
-   *Next step:* the abandonment spec. Its prerequisite measurement is DONE (2026-08-10, evidence in
-   [build-plans/abandonment.md](./build-plans/abandonment.md)): strikers are starving but held at
-   popCap by conserved colonist inflow — a decline-keyed trigger never fires; the parked small
-   cohort is fed and crowd-held.
-   *Don't:* key the abandonment trigger on population decline, or reuse the three-way viability
-   test as the stuck-world identifier — measured: it marks 0 of the 51 actually-stuck worlds.
+   Items 1–3 (Provision, the **adaptive expectation**, **abandonment**) are **shipped** — the last
+   as a deliberately minimal stopgap: famine gates both population-inflow paths and famine + pop
+   < 1 resets a system to unclaimed frontier ([colonisation.md](./active/gameplay/colonisation.md),
+   "A colony is allowed to die"; abandonment awaits its PR into shared). One item remains:
+   **relief** — a player-funded intervention that buys a viable world out of the strike loop by
+   moving goods, never by deleting unrest. Its cohort is measured: large non-famine
+   rationing-regime strikers plus calmed-tiny worlds (supply-response.md, "The strike loop").
+   *Next step:* PR `feat/abandonment-framing` into shared, then the relief design pass (gated on
+   the treasury accounting decision, the targeted-transfer export, and a costing — see
+   supply-response.md "Relief").
+   *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
+   exception to the money-is-fuel invariant.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line. Two UI scopes:
    the §6 presentation contract (panels speak regimes) from

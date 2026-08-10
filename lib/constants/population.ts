@@ -131,7 +131,8 @@ export const POPULATION_PARAMS: PopulationParams = {
 };
 
 /**
- * Abandonment's death line (docs/build-plans/abandonment.md, Rule 2): famine + population below
+ * Abandonment's death line (docs/active/gameplay/colonisation.md, "A colony is allowed to
+ * die"): famine + population below
  * one pop — under a million people — means the colony is over. A backstop, deliberately un-tuned:
  * no window, no calibration sweep owns this number. The famine conjunct (survival shortfall) is
  * the newborn guard — a freshly-seeded colony can only cross this floor after a sustained,

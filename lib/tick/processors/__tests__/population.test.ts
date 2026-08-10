@@ -994,7 +994,7 @@ describe("population processor: overshoot-death instrumentation", () => {
 
 // ── Abandonment Rule 2 (the death line): the processor REPORTS a famine system whose post-delta
 // population has collapsed below ABANDON_POP_FLOOR — it never writes control itself, only names
-// the candidate for the tick body to reset (docs/build-plans/abandonment.md). ──
+// the candidate for the tick body to reset (docs/active/gameplay/colonisation.md, abandonment). ──
 
 describe("population processor: abandonment reporting (Rule 2)", () => {
   // FROZEN_POP (growth/decline/death all zero) makes the fixture's starting population the
