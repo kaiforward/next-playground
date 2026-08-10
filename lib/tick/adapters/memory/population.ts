@@ -43,6 +43,8 @@ export class InMemoryPopulationWorld implements PopulationWorld {
    * treats an absent update value (`undefined`) the same as a corrupt one, so this is also the
    * path the processor's legitimate empty-basket-on-a-never-seeded-system skip takes — the same
    * fallback, not a special case for it. A finite value is clamped into [0, 1] and written as-is.
+   * `provision` and `supplyBand` get the same never-write-a-lie guard, but their own (simpler,
+   * no-memory) fallback — see the inline comment at the write site below.
    */
   applyPopulationUpdates(updates: PopulationUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
@@ -61,6 +63,21 @@ export class InMemoryPopulationWorld implements PopulationWorld {
         next.provisionExpectation = s.provisionExpectation;
       } else {
         delete next.provisionExpectation;
+      }
+      // `provision` and `supplyBand` are this cycle's fresh reading, not a memory — unlike
+      // `provisionExpectation` just above, a corrupt or missing write drops straight to absent
+      // rather than falling back to the prior cycle's stale figure (that fallback is what a
+      // MEMORY needs; these two are a snapshot). Mirrors `honestUseRate`'s convention
+      // (`rewriteDemandRates` below), not `provisionExpectation`'s.
+      if (typeof u.provision === "number" && Number.isFinite(u.provision)) {
+        next.provision = clamp(u.provision, 0, 1);
+      } else {
+        delete next.provision;
+      }
+      if (u.supplyBand !== undefined) {
+        next.supplyBand = u.supplyBand;
+      } else {
+        delete next.supplyBand;
       }
       return next;
     });

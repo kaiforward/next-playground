@@ -280,6 +280,28 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
   });
 
+  it("round-trips the optional provision and supplyBand fields", () => {
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, provision: 0.73, supplyBand: "rationing" } : system),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].provision).toBe(0.73);
+    expect(result.world.systems[0].supplyBand).toBe("rationing");
+  });
+
+  it("accepts generated systems without provision or supplyBand (never assessed)", () => {
+    // A freshly generated world has never run an economy cycle — the absent-means-assessed-at-
+    // famine trap the provisionExpectation convention above also guards: reading a coerced 0
+    // here would render as "0% Provisioned" for a system nobody has ever measured.
+    expect(world.systems[0].provision).toBeUndefined();
+    expect(world.systems[0].supplyBand).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
   it("keeps new optional assessment values omitted in an old-shaped save", () => {
     const world = generateWorld({ systemCount: 60, seed: 7 });
     const oldShaped: World = {

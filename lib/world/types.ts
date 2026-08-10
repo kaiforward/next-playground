@@ -23,6 +23,7 @@ import type {
 } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
 import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
+import type { SupplyRegime } from "@/lib/engine/population";
 
 // ── Meta ────────────────────────────────────────────────────────
 
@@ -95,6 +96,25 @@ export interface WorldSystem {
    *  whenever the system transitions into `developed` (resettlement seeds fresh —
    *  `applyDevelopments`, `lib/world/tick.ts`). */
   provisionExpectation?: number;
+  /** This cycle's Provisioned — the necessity-weighted delivered share (`provision()`,
+   *  lib/engine/population.ts), the exact complement of the dissatisfaction the population
+   *  processor's unrest read consumed the same cycle. A read-side recompute cannot honestly
+   *  reach `consumptionMult` (an event-only demand modifier with no read-side path), so this is
+   *  persisted at the point of assessment instead — the same reason `satisfaction` is persisted
+   *  (`:270` below), so the display and the sim cannot diverge. Absent means never assessed —
+   *  deliberately NOT the `collapseDebt` "absent ⇒ 0" convention above (matches
+   *  `provisionExpectation` instead): coercing absence to 0 would read as "0% Provisioned", a
+   *  real and false reading, for a system that has never run an economy cycle. Unlike
+   *  `provisionExpectation`, this is a fresh per-cycle reading with no memory semantics — a
+   *  corrupt or missing write drops straight to absent rather than keeping the prior cycle's
+   *  figure. Written once per economy cycle, alongside `provisionExpectation`. */
+  provision?: number;
+  /** This cycle's supply band — `foldSupplyState`'s `regime` (lib/engine/population.ts),
+   *  carrying the survival punch-through (Shortage, whatever `provision` reads) through
+   *  persistence so a famine reading is not re-inferred from the number on the read side. Same
+   *  absence convention as `provision`: absent means never assessed, never "supplied". Written
+   *  once per economy cycle, alongside `provision`. */
+  supplyBand?: SupplyRegime;
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */

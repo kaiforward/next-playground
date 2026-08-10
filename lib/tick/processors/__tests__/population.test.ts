@@ -926,6 +926,81 @@ describe("population processor: adaptive expectation", () => {
   });
 });
 
+// ── Persisted Provisioned and its band: written once per economy cycle from the same
+// dissatisfactionBySystem / supplyStateBySystem signals the unrest read already consumed —
+// so the presentation layer can read the same value the sim used instead of re-deriving it. ──
+
+describe("population processor: persisted Provisioned and its band", () => {
+  it("persists Provisioned as the complement of this cycle's dissatisfaction, per system — not a re-derived mean", async () => {
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("a", 500, 1000, 0), sys("b", 500, 1000, 0)],
+      markets: [],
+    });
+    const regimes = new Map<string, SupplyRegime>([["a", "supplied"], ["b", "rationing"]]);
+    await runPopulationProcessor(
+      world, ctxWithD(new Map([["a", 0.2], ["b", 0.7]]), regimes), PARAMS,
+    );
+    const a = world.systems.find((s) => s.id === "a")!;
+    const b = world.systems.find((s) => s.id === "b")!;
+    expect(a.provision).toBeCloseTo(0.8, 9);
+    expect(b.provision).toBeCloseTo(0.3, 9);
+  });
+
+  it("persists band Shortage from a survival punch-through even while Provisioned reads high", async () => {
+    // d = 0.1 (Provisioned 0.9, well above SUPPLIED_PROVISION) but the supply fold's famine
+    // punch-through still classifies the system as Shortage — the whole reason the band rides
+    // alongside the number instead of being re-inferred from it on the read side.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [] });
+    const ctx: TickContext = {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["a", 0.1]]),
+          supplyStateBySystem: new Map([
+            ["a", { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realizedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+    await runPopulationProcessor(world, ctx, PARAMS);
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.provision).toBeCloseTo(0.9, 9); // Provisioned reads high...
+    expect(a.supplyBand).toBe("shortage"); // ...but the band still carries the famine punch-through
+  });
+
+  it("leaves the band absent — not the ctx-default 'supplied' — for a system the supply signal genuinely omits", async () => {
+    // ctxWithD's default regimes map is empty: "a" has a dissatisfaction entry but no matching
+    // supply state, the defensive-default path population.ts documents as unreachable in real
+    // play. Persisting the default's "supplied" label would record a classification the economy
+    // never actually made this cycle for this system.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [] });
+    await runPopulationProcessor(world, ctxWithD(new Map([["a", 0.3]])), PARAMS);
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.provision).toBeCloseTo(0.7, 9); // Provisioned itself is still assessed from real d...
+    expect(a.supplyBand).toBeUndefined(); // ...but the band is not
+    expect("supplyBand" in a).toBe(false);
+  });
+
+  it("leaves provision absent — never NaN — when the dissatisfaction signal is corrupt", async () => {
+    // Mirrors the honestUseRate corrupt-compute guard above: the poison must not land as a
+    // number at all (0 would read as a real, false 0% Provisioned assessment), and the stale
+    // prior figure must not survive either — this is a fresh per-cycle reading, not a memory.
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("a", 500, 1000, 0), provision: 0.5, supplyBand: "supplied" }],
+      markets: [],
+    });
+    await runPopulationProcessor(
+      world, ctxWithD(new Map([["a", Number.NaN]]), new Map([["a", "rationing"]])), PARAMS,
+    );
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.provision).toBeUndefined();
+    expect("provision" in a).toBe(false);
+  });
+});
+
 // ── Calibration instrumentation: the overshoot-death gate's magnitude, isolated per system —
 // the harness's episode-cost evidence (docs/active/gameplay/economy.md, unrest
 // promise 5). Observational: the amount reported must match what actually left `population`. ──
@@ -999,7 +1074,7 @@ describe("population processor: overshoot-death instrumentation", () => {
 describe("population processor: abandonment reporting (Rule 2)", () => {
   // FROZEN_POP (growth/decline/death all zero) makes the fixture's starting population the
   // post-delta population the gate reads — deterministic without deriving the delta formula.
-  function shortfallCtx(population: number, survivalShortfall: boolean): TickContext {
+  function shortfallCtx(survivalShortfall: boolean): TickContext {
     return {
       tick: 0,
       results: new Map([["economy", {
@@ -1018,7 +1093,7 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
 
   it("reports a system in famine whose (frozen) population sits below the floor", async () => {
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
-    const result = await runPopulationProcessor(world, shortfallCtx(0.5, true), {
+    const result = await runPopulationProcessor(world, shortfallCtx(true), {
       unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
       population: FROZEN_POP,
       expectation: EXPECTATION_PARAMS,
@@ -1029,7 +1104,7 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
 
   it("does not report a famine system whose population sits at or above the floor", async () => {
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 5, 1000, 0)], markets: [] });
-    const result = await runPopulationProcessor(world, shortfallCtx(5, true), {
+    const result = await runPopulationProcessor(world, shortfallCtx(true), {
       unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
       population: FROZEN_POP,
       expectation: EXPECTATION_PARAMS,
@@ -1040,7 +1115,7 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
 
   it("does not report a below-floor system that is NOT in survival shortfall (the famine conjunct)", async () => {
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
-    const result = await runPopulationProcessor(world, shortfallCtx(0.5, false), {
+    const result = await runPopulationProcessor(world, shortfallCtx(false), {
       unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
       population: FROZEN_POP,
       expectation: EXPECTATION_PARAMS,
