@@ -21,13 +21,14 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   the replacement skills.
 
 - **[L] Economy band reconciliation** — the `shared/band-reconciliation` integration branch
-  (sub-features ride `feat/*` branches PR'd into it; item 6 is on `feat/supply-response`). Design:
+  (sub-features ride `feat/*` branches PR'd into it). Design:
   [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md). PR1-5 shipped plus #202-#217
-  (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics).
+  (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics), the
+  adaptive expectation, and abandonment (#221).
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
-  *Next step:* merge `feat/supply-response` (item 6 step 1 — Provision — PR open into shared), then PR6.
+  *Next step:* relief (item 6's last piece, on `feat/relief`), then PR6.
 
 ---
 
