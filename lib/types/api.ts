@@ -18,6 +18,7 @@ import type {
   ResourceVector,
 } from "./game";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
+import type { SupplyRegime } from "@/lib/engine/population";
 import type { SaveInfo } from "@/lib/world/save-files";
 import type { WorldMeta } from "@/lib/world/types";
 
@@ -161,11 +162,26 @@ export interface PopNeedData {
   delivered: number;
   /** delivered ÷ want, in [0,1] — the consume gate at current stock; 1 = fully met. */
   satisfaction: number;
-  /** necessity-weighted demandShare × (1 − satisfaction)² — this good's contribution to the system's unrest. */
+  /** necessity-weighted demandShare × (1 − satisfaction) — this good's contribution to the system's unrest. */
   pressure: number;
   /** want's composition — base + technicians + engineers. */
   breakdown: ConsumptionBreakdown;
 }
+
+/**
+ * Provisioned + its band + the population's remembered level + the resulting grievance, shared
+ * between `SystemPopulationData` and `SystemVitalsData`. Resolved through the exact functions the
+ * tick uses (`readExpectation`, `grievanceShortfall`, both `lib/engine/`) so the panel and the sim
+ * cannot disagree. `WorldSystem.provision`/`.supplyBand` are independently optional and absent means
+ * never assessed, never zero — the `assessed: false` arm carries that absence rather than inventing
+ * a reading; it is also what a PARTIALLY-written system (one of the pair present, the other absent)
+ * renders as, since a half-written assessment is not a real one. `pct`/`expectationPct` are 0..100
+ * (matching `SystemVitalsStability.pct`); `grievance` is `grievanceShortfall`'s raw [0,1] fraction,
+ * not scaled to 100.
+ */
+export type SystemProvisionRead =
+  | { assessed: true; pct: number; band: SupplyRegime; expectationPct: number; grievance: number }
+  | { assessed: false };
 
 /** Dynamic population & social state for one system — discriminated on visibility. */
 export type SystemPopulationData =
@@ -178,6 +194,8 @@ export type SystemPopulationData =
       striking: boolean;
       /** Pop needs, pressure-sorted descending — the goods the population consumes and how met each want is. */
       needs: PopNeedData[];
+      /** Provisioned, its band, the remembered level, and grievance — see `SystemProvisionRead`. */
+      provision: SystemProvisionRead;
     }
   | { visibility: "unknown" };
 export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
@@ -215,6 +233,8 @@ export type SystemVitalsData =
       stability: SystemVitalsStability;
       development: SystemVitalsDevelopment;
       population: SystemVitalsPopulation;
+      /** Provisioned, its band, the remembered level, and grievance — see `SystemProvisionRead`. */
+      provision: SystemProvisionRead;
     }
   | { visibility: "unknown" };
 export type SystemVitalsResponse = ApiResponse<SystemVitalsData>;

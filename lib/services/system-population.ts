@@ -1,6 +1,7 @@
 import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
+import { resolveProvisionRead } from "@/lib/services/provision-read";
 import { STRIKE_PARAMS } from "@/lib/constants/population";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
@@ -8,10 +9,10 @@ import { isEconomicallyActive } from "@/lib/engine/control";
 import type { SystemPopulationData } from "@/lib/types/api";
 
 /**
- * Dynamic population & social state for one system — population, popCap, unrest,
- * a strike flag, and the pressure-sorted needs ledger. Unlike the substrate read,
- * these fields change every economy tick, so the hook (`useSystemPopulation`) is
- * tick-invalidated.
+ * Dynamic population & social state for one system — population, popCap, unrest, a strike flag,
+ * the pressure-sorted needs ledger, and the Provisioned/band/memory/grievance read
+ * (`SystemProvisionRead`). Unlike the substrate read, these fields change every economy tick, so
+ * the hook (`useSystemPopulation`) is tick-invalidated.
  */
 export function getSystemPopulation(systemId: string): SystemPopulationData {
   const world = getWorld();
@@ -30,5 +31,6 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
     unrest: system.unrest,
     striking: system.unrest >= STRIKE_PARAMS.threshold,
     needs,
+    provision: resolveProvisionRead(system),
   };
 }

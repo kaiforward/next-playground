@@ -3,6 +3,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemVitals } from "@/lib/services/system-vitals";
 import { ServiceError } from "@/lib/services/errors";
+import { EXPECTATION_PARAMS } from "@/lib/constants/population";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 let world: World;
@@ -112,5 +113,71 @@ describe("getSystemVitals", () => {
     } catch (error) {
       expect(error).toMatchObject({ status: 404 });
     }
+  });
+});
+
+describe("getSystemVitals — provision read", () => {
+  function withFields(overrides: Partial<WorldSystem>) {
+    setWorld({
+      ...world,
+      systems: world.systems.map((s) => (s.id === system.id ? { ...s, ...overrides } : s)),
+    });
+  }
+
+  it("renders the unassessed arm — never a fabricated 0% — for a system that has never run an economy cycle, and for a partially-written one", () => {
+    expect(system.provision).toBeUndefined();
+    expect(system.supplyBand).toBeUndefined();
+    let data = getSystemVitals(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.provision).toEqual({ assessed: false });
+
+    withFields({ provision: 0.8, supplyBand: undefined });
+    data = getSystemVitals(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.provision).toEqual({ assessed: false });
+
+    withFields({ provision: undefined, supplyBand: "shortage" });
+    data = getSystemVitals(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.provision).toEqual({ assessed: false });
+  });
+
+  it("seeds the remembered level from current Provisioned when the stored expectation is absent or out of range, rather than reading it as perfect memory", () => {
+    const expectedEffective = Math.max(0.72, EXPECTATION_PARAMS.floor) * 100;
+
+    withFields({ provision: 0.72, supplyBand: "supplied", provisionExpectation: undefined });
+    let data = getSystemVitals(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    if (!data.provision.assessed) throw new Error("expected assessed");
+    expect(data.provision.expectationPct).toBeCloseTo(expectedEffective, 6);
+
+    withFields({ provision: 0.72, supplyBand: "supplied", provisionExpectation: 5 });
+    data = getSystemVitals(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    if (!data.provision.assessed) throw new Error("expected assessed");
+    expect(data.provision.expectationPct).toBeCloseTo(expectedEffective, 6);
+  });
+
+  it("reports zero grievance whenever delivery meets or exceeds the remembered level, at any absolute level", () => {
+    withFields({ provision: 0.75, supplyBand: "supplied", provisionExpectation: 0.55 });
+    let data = getSystemVitals(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    if (!data.provision.assessed) throw new Error("expected assessed");
+    expect(data.provision.grievance).toBe(0);
+
+    withFields({ provision: 0.95, supplyBand: "supplied", provisionExpectation: 0.95 });
+    data = getSystemVitals(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    if (!data.provision.assessed) throw new Error("expected assessed");
+    expect(data.provision.grievance).toBe(0);
+  });
+
+  it("reports band Shortage while Provisioned reads high — the famine punch-through is never re-derived from the percentage", () => {
+    withFields({ provision: 0.92, supplyBand: "shortage", provisionExpectation: 0.9 });
+    const data = getSystemVitals(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    if (!data.provision.assessed) throw new Error("expected assessed");
+    expect(data.provision.band).toBe("shortage");
+    expect(data.provision.pct).toBeCloseTo(92, 6);
   });
 });
