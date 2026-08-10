@@ -122,6 +122,13 @@ does not have, listed with its prerequisites below.
 
 ### Which worlds are which — the prerequisite measurement
 
+**Answered 2026-08-10 — evidence in [build-plans/abandonment.md](../build-plans/abandonment.md).**
+Neither of the two answers below: the chronic strikers are starving but NOT shrinking (held at
+exactly popCap by conserved colonist inflow replacing their dead each cycle — a decline trigger
+never fires), the parked small cohort is fed and crowd-held, and the three-way test drafted below
+marks 0 of the 51 stuck worlds (all have deposits and space; all 51 lack arable). The section is
+kept as authored for the spec to re-cut against.
+
 One question comes before designing either fix: are the stuck worlds **starving and shrinking**
 (they need a death rule or a rescue) or **fed and fine, just small** (nothing is wrong with them)?
 **No instrument measures that.** The nearest cohort, `survival-short`, is keyed solely on
