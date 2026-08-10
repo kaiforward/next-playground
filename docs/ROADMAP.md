@@ -41,8 +41,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    measuring between** — (1) abandonment, (2) relief; each needs a primitive the game does not
    have and is gated on it, and each consumes the shipped worsening-vs-recovering signal
    (deviation from expectation).
-   *Next step:* abandonment's prerequisite measurement — which worlds actually cannot feed
-   themselves (supply-response.md, "Which worlds are which") — then its spec.
+   *Next step:* abandonment's prerequisite measurement — are the stuck worlds starving and
+   shrinking, or fed and just small? (supply-response.md, "Which worlds are which") — then its spec.
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line. Two UI scopes:
    the §6 presentation contract (panels speak regimes) from

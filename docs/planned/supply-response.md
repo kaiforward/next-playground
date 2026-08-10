@@ -10,8 +10,10 @@ calms a world while its level is still poor (both shipped; mechanism and guarant
 [economy.md](../active/gameplay/economy.md)). What remains of this arc is giving stuck worlds an
 exit:
 
-- **Abandonment.** A world that cannot sustain itself declines to empty and returns to the map as a
-  candidate for later resettlement, instead of parking half-dead forever.
+- **Abandonment.** Today a dying world can never actually die: population loss is a percentage of
+  what's left each cycle, so it shrinks forever without reaching zero and parks half-dead.
+  Abandonment is the missing rule that finishes the job — below a floor and still shrinking, the
+  colony is over; the system empties and returns to the map as claimable space.
 - **Relief.** A player-funded intervention buys a viable world out of the strike loop — spending to
   *move goods* through the logistics simulation, never spending to delete unrest.
 
@@ -102,15 +104,17 @@ it:
 
 ## Struck worlds resolve
 
-Worlds above the strike threshold suppress their own production, which reduces supply, which raises
-unrest. The loop is self-reinforcing and has no exit: growth carries `1 − shortfall` and decline
-carries unrest, so at high shortfall the two terms cancel and the world parks. Measured at the
-step-1 gate: 15 worlds (2.6% of 582 settled) sit in the strike regime and none of the galaxy is
-emptying (Emptied 0, Stranded 0, both horizons).
+A striking world makes less, which supplies it worse, which keeps it striking. And nothing ever
+ends it: population loss each cycle is a percentage of what's left, so a dying world shrinks
+forever without reaching zero — and as it shrinks, its smaller demand makes the same deliveries
+look better, which calms it down and props it up (the mechanics of that fixed point are in the
+abandonment section below). Measured at the step-1 gate: 15 worlds (2.6% of 582 settled) parked in
+the strike regime, and not one world in the galaxy emptying (Emptied 0, Stranded 0, both
+horizons).
 
-They need resolution for two reasons. As gameplay, a stuck world with no route out and no way to
-fail is dead content. As instrumentation, they are permanent outliers inside every galaxy-wide
-average.
+In short: the game has no way for a colony to fail. That hurts twice — a stuck world with no way
+out and no way to end is dead content for the player, and a permanent distortion inside every
+galaxy-wide average the harness reads.
 
 Both resolutions are sequenced after the adaptive expectation: each consumes the
 worsening-vs-recovering signal (deviation from baseline), and each consumes a primitive the game
@@ -118,8 +122,9 @@ does not have, listed with its prerequisites below.
 
 ### Which worlds are which — the prerequisite measurement
 
-The split the design wants is between worlds that can feed themselves and worlds that cannot. **No
-instrument measures that.** The nearest cohort, `survival-short`, is keyed solely on
+One question comes before designing either fix: are the stuck worlds **starving and shrinking**
+(they need a death rule or a rescue) or **fed and fine, just small** (nothing is wrong with them)?
+**No instrument measures that.** The nearest cohort, `survival-short`, is keyed solely on
 `slotCap.arable ≤ 0` (`lib/tick-harness/cohort-analysis.ts`) — not "no deposits, no arable land,
 nothing to build on".
 
@@ -142,8 +147,9 @@ yield multipliers (`:106-112`) — but nothing folds them into a judgement. It m
 
 ### Abandonment: a world is allowed to die
 
-A world that cannot sustain itself should decline until it empties and returns to the map as a
-candidate for later resettlement. **Four things stand between the current code and that outcome.**
+The rule to build: when a colony has shrunk below a floor and is still shrinking, it is dead —
+clear it, and let the system be claimed and resettled later. Simple to say; **four things stand
+between the current code and that outcome.**
 
 **There is no un-develop primitive.** `control` is written toward `developed` in exactly one place
 (`lib/world/tick.ts:491`) and never reversed; the ladder is documented one-way ("unclaimed frontier
