@@ -281,6 +281,23 @@ constant and so is named here rather than assumed.
 
 ---
 
+### Task 8 — Doc fold
+
+**Files:** as enumerated under Doc fold below — two `docs/planned/` promotions, one deletion, and
+the active-doc corrections.
+
+**Interface:** none — this task exposes no contract. It is in the order because it is the largest
+piece of writing in the PR and the branch convention puts it before the final review, not after.
+
+**Proves:** not a code task, so the detection list is replaced by the fold's own checks: every
+`docs/planned/` doc named here is either promoted or deleted with its deferrals booked; no promoted
+doc keeps a present-tense claim contradicted by `lib/`; each roadmap-alleged stale active doc is
+verified against code before editing rather than trusted.
+
+**Consumes:** Tasks 1-7 — the fold documents what they shipped, so it runs after them.
+
+---
+
 ## Verification
 
 - `npm run simulate`, **both horizons**, cohorted. The presentation layer changes no gameplay, so
@@ -298,22 +315,33 @@ constant and so is named here rather than assumed.
 
 ## Doc fold
 
-The fold this feature owes is small; the fold the *branch* owes is not, and the owner's decision is
-that the branch's fold rides its own `feat/doc-fold` PR into shared rather than PR6, keeping this
-diff to the presentation layer. Ordering unconfirmed.
+Owner decision: the whole fold — PR6's own and the branch's accumulated debt — lands in this PR, on
+this branch, before the final review. It is a task in the order (Task 8), not a closing chore, because
+it is the largest single piece of writing here and doing it last is how it gets skipped.
 
-**PR6's own fold**, on this branch before final review:
-- `docs/active/gameplay/economy.md` — document the persisted Provisioned/band fields and the
-  presentation contract that reads them.
+**Promote and delete** — two planned docs whose features shipped and which now describe live
+mechanics in the present tense as unbuilt:
+- `docs/planned/necessity-weighted-unrest.md` (448 lines) — its headline "every good … currently
+  hits unrest with the same instrument" is false; `GOOD_NECESSITY` and `slopeShortage` are live.
+- `docs/planned/economy-rationing-amendment.md` (89 lines) — `RATION_COVER` is live.
+- `docs/planned/economy-band-reconciliation.md` — deleted at the same point, its §6 having become
+  this feature.
+
+**Correct in place** — active docs the arc made stale:
+- `docs/active/gameplay/economy.md:117` — still documents unrest decay as a continuous proportional
+  shave (`count ← count − unrestRate · count · …`) when what shipped is whole-level teardown driven
+  by the `collapseDebt` accumulator. Its band section (`:256`) is already correct; the rest needs
+  reading rather than assuming.
+- `docs/active/gameplay/colonisation.md`, `docs/active/engineering/tick-engine.md`,
+  `docs/active/gameplay/economy-autonomic-agency.md` — named stale by the roadmap row. Verify each
+  against code before editing; the roadmap's claim is a lead, not evidence.
+- `docs/SPEC.md` — the presentation contract and the persisted Provisioned/band fields.
 - `docs/active/design-system/theme.md` — the `ContributorBars` primitive and the `▲` glyph.
-- This working file is deleted at ship.
 
-**The branch's fold, deferred to its own PR** (recorded here so it is not lost): the two planned
-docs describing shipped mechanics in the present tense — `necessity-weighted-unrest.md` (its
-headline claim is now false) and `economy-rationing-amendment.md` (`RATION_COVER` is live) — must be
-promoted and deleted; `economy-band-reconciliation.md` is deleted with them;
-`docs/active/gameplay/economy.md:117` still documents unrest decay as a continuous proportional
-shave when what shipped is whole-level teardown driven by `collapseDebt`.
+**Before deleting any doc, book what it defers** — grep each for deferred/follow-up work and confirm
+each was actually booked, per `AGENTS.md`.
+
+This working file is deleted at ship.
 
 ## Not covered
 
