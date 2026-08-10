@@ -182,21 +182,27 @@ and migration (needs a processor hook counting per-system inflow by path).
 
 ## Spec (owner-decided scope, 2026-08-10 — deliberately minimal)
 
-**Headline.** Two small rules, nothing else. (1) Colonist delivery stops topping up worlds that are
-currently in famine, which un-masks real decline on doomed worlds. (2) A world in famine whose
-population has collapsed below a floor is over: its remaining pops are removed and the system
-resets to unclaimed, factionless frontier — claimable and colonisable again through the existing
-paths. Everything in between — a world that shrinks, rebalances at a tiny size and stabilises — is
-left alone by design: the maths self-balances (shrinking demand raises satisfaction), a tiny stable
-outpost is legitimate negative space, and buying one out of its rut is the relief item's business.
-Both rules are explicitly temporary scaffolding until the logistics pass unifies people-movement.
+**Headline.** Two small rules, nothing else. (1) People stop moving **into** famine worlds — no
+colonist delivery, no inbound migration; leaving is unaffected. This un-masks real decline on
+doomed worlds. (2) A world in famine whose population has collapsed below one pop (under a
+million people on a whole world) is over: its remaining pops are removed, its buildings deleted,
+and the system resets to unclaimed, factionless frontier — claimable and colonisable again
+through the existing paths. Everything in between — a world that shrinks, rebalances at a tiny
+size and stabilises — is left alone by design: the maths self-balances (shrinking demand raises
+satisfaction), a tiny stable outpost is legitimate negative space, and buying one out of its rut
+is the relief item's business. Both rules are explicitly temporary scaffolding until the
+logistics pass unifies people-movement, and both are deliberately un-tuned: no windows, no new
+thresholds, one constant.
 
-### Rule 1 — the delivery famine gate
+### Rule 1 — the famine inflow gate (delivery AND migration)
 
 A system currently in survival shortfall (`SupplyState.survivalShortfall` — a demanded survival
-good below `SHORTAGE_SATISFACTION`, the same bit that bands a world Shortage) receives no colonist
-delivery that cycle. Recovery re-includes it automatically next cycle; no persisted state, no
-window, no threshold constant.
+good below `SHORTAGE_SATISFACTION`, the same bit that bands a world Shortage) receives no
+population inflow that cycle, by either path: it is skipped as a colonist-delivery sink, and
+diffusion migration moves nothing toward it (an edge whose more-attractive endpoint is a famine
+world moves nothing; outflow from a famine world is unaffected). Owner's rule, stated plainly:
+people do not move to famine worlds. Recovery re-includes the world automatically next cycle; no
+persisted state, no window, no threshold constant.
 
 - Wiring: economy runs at cycle start and produces `supplyStateBySystem` (economy block
   `lib/world/tick.ts:851-866`); migration (which owns the delivery pass) runs later in the same
@@ -208,16 +214,15 @@ window, no threshold constant.
   (`lib/engine/colonist-delivery.ts:120-134`), so famine systems are **not filtered out of the
   array** — they get an eligibility flag on `ColonistSystem` that forces `headroom: 0`.
   Conservation holds unchanged.
-- Donation is untouched: a famine world above `minSourcePopulation` still donates idle spare
-  (that outflow is exodus, which is wanted). Diffusion migration's code is untouched entirely.
-- **What actually protects famine worlds from a migration refill is an expectation the gate must
-  test, not a settled fact.** Migration's liveability score does NOT categorically avoid them —
-  an under-staffed famine world's jobs term is positive (`lib/engine/migration.ts:49-58`). What
-  stops refill today is `destHeadroom = 0` (they sit at cap) plus delivery running first and
-  consuming the headroom their deaths open (`lib/tick/processors/migration.ts:38-40`). Rule 1
-  hands that same freed headroom to diffusion on the same tick; the verification gate's
-  "strikers' trailing trend goes negative" line is specifically the test that diffusion does not
-  take over the refill.
+- Donation and outbound flow are untouched: a famine world above `minSourcePopulation` still
+  donates idle spare, and migration away from a famine world still runs (that outflow is exodus,
+  which is wanted).
+- Why migration needs the gate too (review finding): its liveability score does NOT categorically
+  avoid famine worlds — an under-staffed famine world's jobs term is positive
+  (`lib/engine/migration.ts:49-58`), and what stops refill today is only `destHeadroom = 0` plus
+  delivery drinking the freed headroom first (`lib/tick/processors/migration.ts:38-40`). Rule 1
+  on delivery alone would hand that headroom to diffusion on the same tick. Rather than testing
+  whether diffusion takes over, the owner closed it by rule: no inflow, either path.
 
 ### Rule 2 — the death line
 
@@ -278,21 +283,20 @@ measures the trigger's own definition.
   **never-developed** systems, distinguishable without new state: a never-developed system has no
   market rows by construction (`lib/world/tick.ts:520-527`). A constructed transition unit test
   (drive a famine world below the floor, assert the full reset end-state) is added beside it.
+- A declining world that still holds population stays `developed`, so it keeps decaying,
+  producing and being read normally — there is nothing to engineer for the in-between state
+  (owner call: "might or might not decay" is fine; no special handling).
 - The harness's settled denominator (`control === "developed"`) drops the world automatically at
-  the reset — the "emptied world reads Supplied forever" trap closes structurally. Two harness
-  additions ride the item: an **abandoned-this-run counter** and a **husk count** (unclaimed with
-  market rows) — without them the gate cannot distinguish a working death line from a no-op.
-  Known reads to keep honest: `summarizeInfrastructure` sums buildings over ALL systems (cleared
-  buildings make this self-consistent), and `build-analysis` counts any newly-developed system as
-  a founded colony, so a resettled husk (fresh rock + old warehouse stock) lands in the founding
-  cohort — acceptable at this scale, noted so the founding instruments aren't misread.
-- Verification gate (sim, seed 42, both horizons **plus the 12k checkpoint** — the floor is
-  reachable only near the 10k edge): strikers' decline un-masks after rule 1 AND diffusion does
-  not take over delivery's refill (their trailing trend goes negative — this is the test of the
-  migration expectation stated under Rule 1); the startup founding cohort does not collapse
-  (newborns skipped by the gate in a famine cycle are topped up on recovery — read the
-  opening-Provision and colony net-growth instruments); abandoned/husk counts reported; band
-  shares stay sane.
+  the reset — the "emptied world reads Supplied forever" trap closes structurally. Known reads
+  accepted as-is (owner call, no new harness surface): `build-analysis` will count a resettled
+  husk (fresh rock + old warehouse stock) as a founded colony; fine at this scale.
+- Verification, deliberately light (owner call — "resetting props when a value crosses a line
+  does not need exhaustive testing"): the constructed transition unit test (red-proofed, per
+  standing convention), the re-authored invariant test, and one rerun of the existing
+  `temp/stuck-worlds-diag.ts` to see the strikers' trailing trend go negative and the startup
+  founding cohort stay healthy. No new harness counters, no extra checkpoint ceremony; if the
+  death line takes thousands of cycles to first fire in the wild, that is accepted — the rule is
+  correct independent of how often it triggers.
 
 ### Design decision from the measurement review (owner call, 2026-08-10)
 
