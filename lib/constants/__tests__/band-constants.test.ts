@@ -411,6 +411,13 @@ describe("promise 5 — the escalation ladder is computed from the live constant
       const onset = (COLLAPSE - floor) / UNREST_PARAMS.slopeBase;
       expect(settledFromGrievance(onset - 0.01, floor), `floor=${floor}`).toBeLessThan(COLLAPSE);
       expect(settledFromGrievance(onset + 0.01, floor), `floor=${floor}`).toBeGreaterThanOrEqual(COLLAPSE);
+      if (floor === MAX_FLOOR) {
+        // Order pin across the promises, at the worst standing floor: teardown must not fire as
+        // early as promise 4's quarter-dip guarantee (0.25, which must stay safe) nor as late as
+        // promise 3's half-dip strike trigger (0.5) — it sits strictly between the two.
+        expect(onset).toBeGreaterThan(0.25);
+        expect(onset).toBeLessThan(0.5);
+      }
     }
   });
 

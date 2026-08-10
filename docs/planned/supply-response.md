@@ -61,11 +61,13 @@ reference being fixed at all is the problem, which is what the adaptive expectat
 equilibrium are colonies; their opening Provision is mean 0.74 / p10 0.62 (equilibrium cohort;
 mean 0.88 / p10 0.69 at startup). The pre-change arm (Gate 2 BASE) measured mean 0.73 / p10 0.41 at
 equilibrium — the provenance of the shipped guarantee suite's 0.59-shortfall p10, whose original
-citation target was folded away at the Gate 2 doc consolidation. The founding-strike guarantee holding today's `slopeRationing`
-at 0.95 is interim scaffolding for exactly this cohort — the expectation baseline dissolves it
-structurally (a newborn's settlers expect frontier hardship, so its expectation-relative shortfall
-is ~0 at any tax), after which the slopes are re-derived and only the durable constraints remain
-(broad shortage on an established world still strikes; famine's absolute floor).
+citation target was folded away at the Gate 2 doc consolidation. At the time of this measurement the
+founding-strike guarantee held the pre-expectation `slopeRationing` at 0.95 as interim scaffolding for
+exactly this cohort. That scaffolding has since dissolved structurally, as predicted: the expectation
+baseline shipped (a newborn's settlers expect frontier hardship, so its expectation-relative shortfall
+is ~0 at any tax), `slopeRationing` is retired, and the slopes were re-derived — the surviving one is
+`UNREST_PARAMS.slopeBase` (1.6) — leaving only the durable constraints (broad shortage on an
+established world still strikes; famine's absolute floor).
 
 **Strikes are a small-world story, not a landless-world story.** pop 10–100 strikes at 14.7%
 (n = 68) against 0.0% for pop ≥ 1K (n = 370); 91.5% of the survival-short cohort is *not* striking.

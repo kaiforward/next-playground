@@ -702,6 +702,34 @@ describe("computeWorldCohorts", () => {
       for (const e of entries) expect(e.netGrowthPct).toBeNull();
     });
   });
+
+  describe("adaptive-expectation distributions", () => {
+    it("excludes a stale (emptyBasket) system from expectation/grievance while counting it, and reads grievance — not 1-Provision — for the one that remains", () => {
+      // "stale" carries no market rows of its own, so its goods basket folds empty and
+      // perSystemSupplyState reads emptyBasket: true for it (the same convention
+      // goodSatisfactionsBySystem/foldSupplyState use for a system with no demanded goods).
+      const stale = sys("stale", { population: 5 });
+      const normal = { ...sys("normal", { population: 5 }), provisionExpectation: 0.7 };
+      const markets = [{ systemId: "normal", goodId: "water", satisfaction: 0.4 }];
+      const systems = [stale, normal];
+
+      // Premise: grievance and D genuinely differ for "normal" here, or a grievance/D swap in the
+      // cohort fold could pass by coincidence instead of by actually reading grievance.
+      const normalState = perSystemSupplyState(systems, markets).get("normal")!;
+      expect(normalState.grievance).not.toBeCloseTo(normalState.d, 6);
+
+      const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
+      const band = entries.find((e) => e.cohort === "pop <10")!;
+
+      expect(band.n).toBe(2);
+      expect(band.staleExpectationCount).toBe(1);
+      // Only "normal" contributes — its own stored value exactly, unmixed with the stale system's
+      // seeded-from-provision(1) reading.
+      expect(band.expectationLevels.median).toBeCloseTo(0.7, 9);
+      expect(band.grievanceLevels.median).toBeCloseTo(normalState.grievance, 9);
+      expect(band.grievanceLevels.median).not.toBeCloseTo(normalState.d, 6);
+    });
+  });
 });
 
 describe("summarizeEpisodeCostsByCohort", () => {

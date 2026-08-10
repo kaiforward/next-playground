@@ -53,8 +53,11 @@ export interface EconomySignals {
   /** Per-system necessity-weighted dissatisfaction D ∈ [0,1] — 1 minus Provision — for systems processed this tick. */
   dissatisfactionBySystem: Map<string, number>;
   /** Per-system Supplied/Strained/Rationing/Shortage reading of this cycle's consumption
-   *  satisfaction, with the survival-good shortfall bit and the critical-good override weight the
-   *  unrest slope reads. */
+   *  satisfaction, with the survival-good shortfall bit and the critical-good override weight
+   *  `supplyUnrestTerm` (lib/engine/population.ts) reads to compose the crisis term, plus the
+   *  `emptyBasket` bit the population processor reads separately — not for the unrest term at all —
+   *  to skip that cycle's adaptive-expectation update rather than normalise the stored memory toward
+   *  a denominator artifact. */
   supplyStateBySystem: Map<string, SupplyState>;
   /**
    * Per-system, per-produced-good isolated selling factor ∈ [0,1] (1 = selling

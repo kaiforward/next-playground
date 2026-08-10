@@ -308,10 +308,14 @@ export interface SystemSupplyState {
   /** The read-side floored value (`readExpectation`'s `effective`) — what the unrest fold actually
    *  reads. `grievance` below is computed from THIS, not from `expectationStored`. */
   expectationEffective: number;
-  /** `grievanceShortfall(expectationEffective, provision)` — the SAME read the population processor
-   *  makes (`lib/engine/population.ts`), imported and called here rather than re-derived as `1 -
+  /** `grievanceShortfall(expectationEffective, provision)` — the SAME FOLD the population processor
+   *  uses (`lib/engine/population.ts`), imported and called here rather than re-derived as `1 -
    *  provision`: a harness that re-derives grievance from D would silently diverge whenever a
-   *  system's stored expectation is below 1. */
+   *  system's stored expectation is below 1. Identity of the FOLD only, not of the TIMING: the
+   *  processor reads grievance from the CYCLE-START stored value against that cycle's Provision,
+   *  before advancing the store; this harness instead reads whatever is CURRENTLY persisted (the
+   *  row left by the last cycle the population processor ran) against the goods basket's CURRENT
+   *  satisfaction — one relaxation step ahead of what actually fed that cycle's own unrest number. */
   grievance: number;
   /** True when this basket's Σ goodWeight ≤ 0 (`foldSupplyState`'s own emptyBasket bit, recomputed
    *  from the SAME final-state goods basket the population processor's last cycle read) — the

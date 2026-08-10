@@ -77,6 +77,23 @@ function clampSatisfaction(satisfaction: number): number {
 }
 
 /**
+ * Provision computed against an ALREADY-KNOWN total basket weight — the shared core `provision()`
+ * below and `foldSupplyState()` both call, so a caller that needs both Provision and the
+ * empty-basket bit off the same goods array (foldSupplyState does) sums the basket exactly once,
+ * not twice. `totalWeight` is trusted as-is: the caller owns computing it (via `totalGoodWeight`),
+ * so this never re-derives it.
+ */
+function provisionFromWeight(goods: GoodSatisfaction[], totalWeight: number): number {
+  if (totalWeight <= 0) return 1;
+  let mean = 0;
+  for (const g of goods) {
+    const share = goodWeight(g) / totalWeight;
+    mean += share * clampSatisfaction(g.satisfaction);
+  }
+  return mean;
+}
+
+/**
  * Provision: the necessity-and-demand-weighted MEAN of per-good satisfaction, in [0,1]:
  *   weight_g = demanded_g × necessity_g,  share_g = weight_g / Σ weight
  *   Provision = Σ share_g × satisfaction_g
@@ -90,14 +107,7 @@ function clampSatisfaction(satisfaction: number): number {
  * load-bearing: it is what an emptying world reads on its way out.
  */
 export function provision(goods: GoodSatisfaction[]): number {
-  const totalWeight = totalGoodWeight(goods);
-  if (totalWeight <= 0) return 1;
-  let mean = 0;
-  for (const g of goods) {
-    const share = goodWeight(g) / totalWeight;
-    mean += share * clampSatisfaction(g.satisfaction);
-  }
-  return mean;
+  return provisionFromWeight(goods, totalGoodWeight(goods));
 }
 
 /**
@@ -227,20 +237,25 @@ function criticalGoodWeight(goods: GoodSatisfaction[]): number {
  *  - supplied  — Provision at or above SUPPLIED_PROVISION.
  *  - strained  — Provision at or above RATIONING_PROVISION, below SUPPLIED_PROVISION.
  *  - rationing — Provision below RATIONING_PROVISION.
- * Provision is computed here from `goods` directly (via `provision()`), not passed in, so the band
- * and the number it renders cannot drift apart — one implementation, not a re-derived mean.
- * `criticalWeight` rides on the returned state for `supplyUnrestTerm` to read; it never moves the
- * band. `emptyBasket` is Σ goodWeight ≤ 0 — the same sum provision() folds over — computed here
- * because only this fold sees the raw weights; the Provision-1 reading alone cannot distinguish an
- * empty basket from a genuinely well-fed one. This label is about the whole system; the per-good
- * chips read stock cover and are a different labelling entirely.
+ * Provision is computed here from `goods` directly (via `provisionFromWeight`, `provision()`'s own
+ * shared core), not passed in, so the band and the number it renders cannot drift apart — one
+ * implementation, not a re-derived mean. The total basket weight is computed once here and handed
+ * to `provisionFromWeight` rather than calling `provision(goods)` (which would re-sum it): this fold
+ * already needs the total for `emptyBasket`, so re-deriving it a second time inside `provision()`
+ * would sum the same basket twice for one call. `criticalWeight` rides on the returned state for
+ * `supplyUnrestTerm` to read; it never moves the band. `emptyBasket` is Σ goodWeight ≤ 0 — the same
+ * sum provision() folds over — computed here because only this fold sees the raw weights; the
+ * Provision-1 reading alone cannot distinguish an empty basket from a genuinely well-fed one. This
+ * label is about the whole system; the per-good chips read stock cover and are a different
+ * labelling entirely.
  */
 export function foldSupplyState(goods: GoodSatisfaction[]): SupplyState {
   const survivalShortfall = hasSurvivalShortfall(goods);
   const criticalWeight = criticalGoodWeight(goods);
-  const emptyBasket = totalGoodWeight(goods) <= 0;
+  const totalWeight = totalGoodWeight(goods);
+  const emptyBasket = totalWeight <= 0;
   if (survivalShortfall) return { regime: "shortage", survivalShortfall, criticalWeight, emptyBasket };
-  const p = provision(goods);
+  const p = provisionFromWeight(goods, totalWeight);
   const regime: SupplyRegime =
     p >= SUPPLIED_PROVISION ? "supplied" : p >= RATIONING_PROVISION ? "strained" : "rationing";
   return { regime, survivalShortfall, criticalWeight, emptyBasket };
@@ -251,8 +266,10 @@ export interface UnrestParams {
    *  escalation ramp. Window from the guarantees: ≥ 1.3 (a fully-accustomed world losing half of
    *  what it is used to must reach strike at any tax) and < 2.08 (a quarter-dip must never collapse
    *  or tear down, even at the max standing floor); no longer bounded by founding — the newborn's
-   *  memory seeds from its own opening state, so its grievance is ~0 by construction and the window
-   *  that once had to protect week-one colonies dissolves. */
+   *  memory seeds from its own opening state (not from perfection), but the read-side floor still
+   *  applies on top of that seed: grievance = max(0, floor − opening P), zero above a 0.5 opening
+   *  and up to 0.5 in the measured tail — well short of what founding used to need protecting from,
+   *  so that window dissolves. */
   slopeBase: number;
   /** …and for the absolute crisis term (famine, critical-good collapse). Strictly above slopeBase. */
   slopeShortage: number;

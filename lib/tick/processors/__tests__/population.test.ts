@@ -727,6 +727,38 @@ describe("population processor: adaptive expectation", () => {
     expect(a.unrest).toBeCloseTo(0.3, 9);
   });
 
+  it("leaves a never-seeded system's expectation absent when its opening cycle has an empty basket", async () => {
+    // No pre-seeded provisionExpectation — a founding/world-gen read exactly like the "ends a
+    // newborn's first cycle..." fixture above, but this cycle's basket is empty (nothing demanded
+    // yet). readExpectation(undefined, P=1, ...) seeds stored = 1 — provision()'s own
+    // empty-basket-artifact convention, not a real memory — and the emptyBasket skip must not
+    // persist that seed as if it were one: the field must stay absent, not become a false stored 1.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 100, 1000, 0)], markets: [] });
+    const ctx: TickContext = {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["a", 0]]),
+          supplyStateBySystem: new Map([
+            ["a", { regime: "supplied", survivalShortfall: false, criticalWeight: 0, emptyBasket: true }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realizedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+    await runPopulationProcessor(world, ctx, {
+      unrest: { slopeBase: 2, slopeShortage: 4, decay: 0.5 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.provisionExpectation).toBeUndefined();
+    expect("provisionExpectation" in a).toBe(false);
+  });
+
   it("sub-steps the expectation update at catchUpFactor(interval), not one scaled step", async () => {
     // interval 48 is two reference cycles (catchUpFactor = 2), so the write must equal
     // updateExpectation(stored, P, params, subSteps: 2) exactly — not subSteps: 1 (forgetting to
@@ -753,6 +785,93 @@ describe("population processor: adaptive expectation", () => {
     expect(subStepped).not.toBeCloseTo(oneStep, 3); // the fixture has power against this bug
     expect(subStepped).not.toBeCloseTo(scaled, 3); // and against this one
     expect(written).toBeCloseTo(subStepped, 9);
+  });
+
+  it("floors the sub-step count at 1 for a below-reference interval, never 0", async () => {
+    // interval 12 is half the reference cycle (catchUpFactor = 0.5). Math.round(0.5) already
+    // equals 1 in JS, so this pins that the derived count really is the whole integer 1 fed to
+    // updateExpectation — not the raw fractional 0.5 catch-up factor handed straight through,
+    // which updateExpectation's own `Math.floor(subSteps)` guard would then floor to 0 sub-steps
+    // and leave `stored` completely unmoved.
+    const stored0 = 0.3;
+    const P = 0.9; // stored !== P, so a 0-sub-step no-op is distinguishable from a 1-sub-step move
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("a", 100, 1000, 0), provisionExpectation: stored0 }],
+      markets: [],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map([["a", 1 - P]])), {
+      unrest: { slopeBase: 1, slopeShortage: 2, decay: 0.1 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 12,
+    });
+    const written = world.systems.find((s) => s.id === "a")!.provisionExpectation;
+    const oneSubStep = updateExpectation(stored0, P, EXPECTATION_PARAMS, 1);
+    expect(written).not.toBeCloseTo(stored0, 6); // the update really ran — not frozen at 0 sub-steps
+    expect(written).toBeCloseTo(oneSubStep, 9);
+  });
+
+  it("rounds the sub-step count to the nearest whole step for a non-integer catch-up, not the floor", async () => {
+    // interval 36 is 1.5 reference cycles (catchUpFactor = 1.5). Math.round(1.5) = 2, distinct
+    // from Math.floor(1.5) = 1 — a floor-based implementation would apply one fewer sub-step than
+    // the correct rounded count, separating "round" from "always floor to at least 1" (the
+    // fixture above).
+    const stored0 = 0.3;
+    const P = 0.9;
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("a", 100, 1000, 0), provisionExpectation: stored0 }],
+      markets: [],
+    });
+    await runPopulationProcessor(world, ctxWithD(new Map([["a", 1 - P]])), {
+      unrest: { slopeBase: 1, slopeShortage: 2, decay: 0.1 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 36,
+    });
+    const written = world.systems.find((s) => s.id === "a")!.provisionExpectation;
+    const twoSubSteps = updateExpectation(stored0, P, EXPECTATION_PARAMS, 2);
+    const oneSubStep = updateExpectation(stored0, P, EXPECTATION_PARAMS, 1); // floor(1.5) — wrong
+    expect(twoSubSteps).not.toBeCloseTo(oneSubStep, 6); // the fixture actually distinguishes them
+    expect(written).toBeCloseTo(twoSubSteps, 9);
+  });
+
+  it("wires survivalShortfall through to the crisis-term reading, not just the grievance reading", async () => {
+    // Pre-seeded stored === this cycle's P exactly: grievance is 0 by construction (P sits above
+    // the floor, so effective = P and G = clamp(effective - P, 0, 1) = 0), so the grievance term
+    // contributes nothing at all — whatever unrest reads above the floor can only have come from
+    // the crisis term, which fires ONLY if survivalShortfall actually reached supplyUnrestTerm. A
+    // benign-defaulted (false) flag on the way into the term would leave unrest pinned at 0.
+    const D = 0.1;
+    const P = 1 - D; // 0.9, above EXPECTATION_PARAMS.floor (0.5)
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("a", 100, 1000, 0), provisionExpectation: P }],
+      markets: [],
+    });
+    const unrest = { slopeBase: 1, slopeShortage: 4, decay: 0.5 };
+    const ctx: TickContext = {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["a", D]]),
+          supplyStateBySystem: new Map([
+            ["a", { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realizedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+    await runPopulationProcessor(world, ctx, {
+      unrest,
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    const a = world.systems.find((s) => s.id === "a")!;
+    // term = slopeShortage * D = 4 * 0.1 = 0.4; unrest = 0 + 0.5*(0-0) + 0.4*0.5 = 0.2.
+    expect(a.unrest).toBeCloseTo(unrest.slopeShortage * D * unrest.decay, 9);
+    expect(a.unrest).toBeGreaterThan(0); // non-vacuous: a benign-defaulted flag would read exactly 0
   });
 
   it("ends a newborn's first cycle with stored = its own P and unrest at the floor-only fixed point, at any tax level", async () => {

@@ -633,7 +633,7 @@ function formatTable(results: HarnessResults): string {
         );
       }
     }
-    // Founding trajectory — promise 1's window half (docs/planned/adaptive-expectation.md): does
+    // Founding trajectory — unrest promise 1's window half (docs/active/gameplay/economy.md): does
     // the colony stay calm through manifest exhaustion, not just at opening? Buckets by cycles since
     // FOUNDING, not absolute tick, so every colony's own age-60 window lands in the same six rows.
     const ft = results.foundingTrajectory;

@@ -215,7 +215,10 @@ export function hasColonyInTrajectoryWindow(
   const windowCycles = FOUNDING_TRAJECTORY_BUCKET_COUNT * FOUNDING_TRAJECTORY_BUCKET_CYCLES;
   for (const r of tracker.values()) {
     const ageTicks = tick - r.foundedTick;
-    if (ageTicks < 0) continue;
+    // Same tick as founding (or later, same tick): nothing is due yet — the first real reading is
+    // the first cycle STRICTLY after founding, matching `sampleFoundedColonies` and
+    // `sampleFoundingTrajectory` below.
+    if (ageTicks <= 0) continue;
     if (Math.floor(ageTicks / cycleLength) < windowCycles) return true;
   }
   return false;
@@ -385,8 +388,12 @@ export function newFoundingTrajectoryTotals(): FoundingTrajectoryTotals {
  * Sample every tracked colony still inside the trajectory window (age < the whole bucketed span) at
  * this cycle, bucketing by AGE SINCE FOUNDING (`tick - foundedTick`, in whole cycles) — never by
  * absolute tick, which would put a colony founded mid-run in the wrong bucket entirely and make two
- * colonies founded at different times incomparable. Call only on an economy cycle (Provision is
- * written by that cycle and unchanged between), same cadence as `sampleFoundedColonies`.
+ * colonies founded at different times incomparable. The first sample for a colony is the first cycle
+ * STRICTLY AFTER its founding tick — the founding tick itself carries the market-seeding placeholder
+ * satisfaction (1.0), not a lived reading, so it contributes nothing here, matching
+ * `sampleFoundedColonies`'s own "STRICTLY after the founding tick" rule. Call only on an economy
+ * cycle (Provision is written by that cycle and unchanged between), same cadence as
+ * `sampleFoundedColonies`.
  */
 export function sampleFoundingTrajectory(
   systems: ReadonlyArray<FoundingTrajectorySystem>,
@@ -398,15 +405,18 @@ export function sampleFoundingTrajectory(
 ): void {
   if (cycleLength <= 0) return;
   const windowCycles = FOUNDING_TRAJECTORY_BUCKET_COUNT * FOUNDING_TRAJECTORY_BUCKET_CYCLES;
+  const systemsById = new Map(systems.map((s) => [s.id, s]));
 
   const due = new Map<string, FoundingTrajectorySystem>();
   const bucketBySystem = new Map<string, number>();
   for (const r of tracker.values()) {
     const ageTicks = tick - r.foundedTick;
-    if (ageTicks < 0) continue; // founded later this same tick — nothing to read yet
+    // Founded this same tick (or later, same tick): the market-seeding placeholder, not a lived
+    // cycle — nothing to read yet. Matches sampleFoundedColonies.
+    if (ageTicks <= 0) continue;
     const ageCycles = Math.floor(ageTicks / cycleLength);
     if (ageCycles >= windowCycles) continue; // past promise 1's window — not this instrument's claim
-    const sys = systems.find((s) => s.id === r.systemId);
+    const sys = systemsById.get(r.systemId);
     if (!sys) continue;
     due.set(r.systemId, sys);
     bucketBySystem.set(r.systemId, Math.floor(ageCycles / FOUNDING_TRAJECTORY_BUCKET_CYCLES));

@@ -39,8 +39,10 @@ export class InMemoryPopulationWorld implements PopulationWorld {
    * `provisionExpectation`'s non-finite fallback, deliberately chosen: NOT 0 (0 reads as "resigned
    * to total collapse", a real and false memory, not a neutral default) and NOT dropping the write
    * silently into whatever the merge would do — the row's own prior stored value if one exists,
-   * else the key is left absent so a never-seeded system stays never-seeded. A finite value is
-   * clamped into [0, 1] and written as-is.
+   * else the key is left absent so a never-seeded system stays never-seeded. `Number.isFinite`
+   * treats an absent update value (`undefined`) the same as a corrupt one, so this is also the
+   * path the processor's legitimate empty-basket-on-a-never-seeded-system skip takes — the same
+   * fallback, not a special case for it. A finite value is clamped into [0, 1] and written as-is.
    */
   applyPopulationUpdates(updates: PopulationUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
@@ -53,7 +55,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
         population: Math.max(0, isFinite(u.population) ? u.population : 0),
         unrest: Math.max(0, Math.min(1, isFinite(u.unrest) ? u.unrest : 0)),
       };
-      if (Number.isFinite(u.provisionExpectation)) {
+      if (typeof u.provisionExpectation === "number" && Number.isFinite(u.provisionExpectation)) {
         next.provisionExpectation = clamp(u.provisionExpectation, 0, 1);
       } else if (s.provisionExpectation !== undefined) {
         next.provisionExpectation = s.provisionExpectation;

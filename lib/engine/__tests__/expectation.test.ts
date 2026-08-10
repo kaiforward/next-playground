@@ -85,6 +85,14 @@ describe("readExpectation (validity-guarded seed + floor-at-read)", () => {
     expect(effective).toBeCloseTo(0.5, 10); // The floor, since 0.5 > 0.3.
   });
 
+  it("seeds stored to 0 — never NaN/Infinity — when provision itself is non-finite and no stored value exists", () => {
+    for (const badProvision of [Number.NaN, Infinity, -Infinity]) {
+      const { stored, effective } = readExpectation(undefined, badProvision, PARAMS);
+      expect(stored).toBe(0);
+      expect(effective).toBe(PARAMS.floor);
+    }
+  });
+
   it("seeds an absent stored value to Provision, making the same-cycle update a no-op and the newborn's grievance exactly max(0, floor - P)", () => {
     const provision = 0.3; // below the floor, so the newborn still reads floor-pinned grievance.
     const { stored, effective } = readExpectation(undefined, provision, PARAMS);

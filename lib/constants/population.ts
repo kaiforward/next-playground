@@ -27,9 +27,14 @@ import type { ColonistDeliveryParams } from "@/lib/engine/colonist-delivery";
  * any tax) and < 2.08 (a quarter-dip must never collapse or tear down, even at the max standing
  * floor). It is no longer bounded by founding: the interim scaffolding this constant used to carry
  * — cut to [0.84, 1.07] so a newborn colony's opening state stayed below the strike threshold —
- * dissolves under the memory bar, because a newborn's grievance is ~0 by construction (its memory
- * seeds from its own opening state) whatever the slope is set to. 1.6 is the authored starting
- * point inside the derived window; the calibration sweep owns the final cut.
+ * dissolves under the memory bar, because a newborn's grievance seeds from its own opening state
+ * (readExpectation seeds stored = P on first read, so the same-cycle update is a no-op) rather than
+ * from perfection — but the read-side floor (EXPECTATION_PARAMS.floor, 0.5) still applies on top of
+ * that seed: seed grievance = max(0, floor − opening P), zero for the ~90% of openings above 0.5
+ * (post-change p10 0.62) and up to 0.5 in the measured tail (a 0.0 opener reads term slopeBase × 0.5
+ * = 0.8, above the strike threshold). That tail is bounded by measurement (the harness's
+ * `openingDeprivedCount`/`minOpeningProvision` instruments), not by construction. 1.6 is the
+ * authored starting point inside the derived window; the calibration sweep owns the final cut.
  *
  * `slopeShortage` is the durable rule: a total failure of EITHER survival good must be able to
  * collapse a world (unrest ≥ the 0.75 threshold) even at zero tax — not just the heavier of the two.
@@ -106,10 +111,16 @@ export const EXPECTATION_PARAMS: ExpectationParams = { floor: 0.5, riseRate: 0.2
  * (uniform gaps, growth factor falling from `1 − 0.033 = 0.967` toward `1 − 0.18 = 0.82`). The live
  * galaxy's per-good distribution is a cliff (goods delivered in full or not at all), where the squared and
  * linear folds nearly coincide: mean shortfall 0.034 against the old mean D 0.033, growth factor
- * 0.967 → 0.966. The feared re-scale is disconfirmed, so the values deliberately did not move; the
- * slope re-cut (`UNREST_PARAMS`, 1.8 → 0.95) actually eases decline pressure on top of that. The
- * overshoot-death sink fires only in the strike regime (`overshootDeathUnrestGate`), so a calm
- * over-capacity system displaces via migration, not death. Calibrated against the simulator.
+ * 0.967 → 0.966. The feared re-scale is disconfirmed, so the values deliberately did not move — that
+ * finding stands on its own regardless of the unrest slope in force. Decline itself scales with
+ * UNREST, not D, so what actually changed under the memory bar is `UNREST_PARAMS.slopeBase` (1.6,
+ * replacing the retired `slopeRationing` 0.95): above-floor unrest per unit of shortfall now reads
+ * higher than the 0.95 world for an ACCUSTOMED population (whose grievance tracks the shortfall
+ * directly, since memory has not resigned) and lower for a RESIGNED one (whose memory has already
+ * fallen to meet it, so grievance reads well under D) — decline pressure moves with which world a
+ * system is, not uniformly in either direction. The overshoot-death sink fires only in the strike
+ * regime (`overshootDeathUnrestGate`), so a calm over-capacity system displaces via migration, not
+ * death. Calibrated against the simulator.
  */
 export const POPULATION_PARAMS: PopulationParams = {
   growthRate: 0.015,

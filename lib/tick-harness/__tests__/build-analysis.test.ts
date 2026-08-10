@@ -880,16 +880,33 @@ describe("sampleFoundingTrajectory / summarizeFoundingTrajectory", () => {
   it("accumulates every sample a colony contributes as it ages through a bucket, not just the last", () => {
     const tracker = new Map([["c1", recordAt(0)]]);
     const totals = newFoundingTrajectoryTotals();
-    sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.4)], 0, 24, tracker, totals); // age 0
+    sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.4)], 24, 24, tracker, totals); // age 1 cycle
     sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.8)], 5 * 24, 24, tracker, totals); // age 5 cycles — still bucket 0
     const summary = summarizeFoundingTrajectory(totals);
     expect(summary.buckets[0].n).toBe(2);
     expect(summary.buckets[0].meanProvision).toBeCloseTo(0.6, 6);
   });
 
-  it("hasColonyInTrajectoryWindow: true only while a tracked colony is still inside the window", () => {
+  it("contributes no sample on the founding tick itself — the market-seeding placeholder, not a real reading — only from the first cycle strictly after it", () => {
     const tracker = new Map([["c1", recordAt(0)]]);
-    expect(hasColonyInTrajectoryWindow(tracker, 0, 24)).toBe(true);
+    const totals = newFoundingTrajectoryTotals();
+    // Same tick as founding: age 0. This is provision()'s market-seeding placeholder (1.0), not a
+    // lived cycle — must contribute nothing to bucket 0.
+    sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 1)], 0, 24, tracker, totals);
+    let summary = summarizeFoundingTrajectory(totals);
+    expect(summary.buckets[0].n).toBe(0);
+
+    // The very next cycle: a real reading, now counted.
+    sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.5)], 24, 24, tracker, totals);
+    summary = summarizeFoundingTrajectory(totals);
+    expect(summary.buckets[0].n).toBe(1);
+    expect(summary.buckets[0].meanProvision).toBeCloseTo(0.5, 6);
+  });
+
+  it("hasColonyInTrajectoryWindow: false on the founding tick itself, true once the first cycle begins, false once past the window", () => {
+    const tracker = new Map([["c1", recordAt(0)]]);
+    expect(hasColonyInTrajectoryWindow(tracker, 0, 24)).toBe(false); // founding tick itself — nothing due yet
+    expect(hasColonyInTrajectoryWindow(tracker, 24, 24)).toBe(true); // one cycle later — due
     const windowEdgeTick = FOUNDING_TRAJECTORY_BUCKET_COUNT * FOUNDING_TRAJECTORY_BUCKET_CYCLES * 24;
     expect(hasColonyInTrajectoryWindow(tracker, windowEdgeTick, 24)).toBe(false);
   });

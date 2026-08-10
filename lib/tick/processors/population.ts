@@ -56,6 +56,15 @@ export async function runPopulationProcessor(
   const overshootDeathBySystem = new Map<string, number>();
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
+    // Unreachable in real play: the economy processor writes dissatisfactionBySystem and
+    // supplyStateBySystem for the same system id in lockstep (lib/tick/processors/economy.ts), so
+    // a system present in one is always present in the other. When a test constructs a partial
+    // signal (dissatisfaction without a matching supply state), this default deliberately reads
+    // `emptyBasket: false` rather than mirroring `foldSupplyState([])`'s own `true` for a genuinely
+    // empty basket — "not yet classified" and "classified as empty" are different claims, and the
+    // newborn-calm guarantee (a never-seeded system's first cycle, see the "adaptive expectation"
+    // describe block below) depends on the expectation update actually running rather than
+    // freezing on an unclassified system.
     const supply = signals.supplyStateBySystem.get(s.systemId)
       ?? { regime: "supplied", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
     // Standing pressure: what a system settles at with nothing going wrong. Tax raises
@@ -99,9 +108,13 @@ export async function runPopulationProcessor(
     // The memory advances only now that this cycle's unrest has already been judged against it.
     // An emptying world's Provision-1 reading is a denominator artifact, not an experience to
     // normalise toward, so the update is skipped and the stored value (post-seed, pre-floor)
-    // carries unchanged into next cycle.
+    // carries unchanged into next cycle — UNLESS there was no stored value to carry: a
+    // never-seeded system reading an empty basket has nothing to hold onto, and `stored` here is
+    // only `readExpectation`'s seed from this cycle's own (denominator-artifact) P, never a real
+    // memory. Persisting that seed would fabricate a memory the population never had; the field
+    // stays absent instead, exactly as it was before this cycle.
     const provisionExpectation = supply.emptyBasket
-      ? stored
+      ? (s.provisionExpectation === undefined ? undefined : stored)
       : updateExpectation(stored, P, params.expectation, subSteps);
     popUpdates.push({ systemId: s.systemId, population, unrest, provisionExpectation });
     // The scalar the economy actually applied this cycle, not a recompute: the strike params and
