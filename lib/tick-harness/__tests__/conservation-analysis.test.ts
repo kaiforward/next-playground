@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   newCharterCensus, recordCharterCensus, checkCharterDebits, checkFoundingWithinBalance,
   newStagedLedgerCensus, recordStagedLedger, checkStagedLedger, checkNetReconciliation,
-  summarizeConservation, CONSERVATION_TOLERANCE, withinTolerance,
+  summarizeConservation, CONSERVATION_TOLERANCE, withinTolerance, conservationGateFailure,
 } from "../conservation-analysis";
-import type { CharterProjectRow, StagedProjectRow } from "../conservation-analysis";
+import type {
+  CharterProjectRow, StagedProjectRow, IdentityCheck, ConservationSummary,
+} from "../conservation-analysis";
 import type { FactionCycleRecord } from "../treasury-analysis";
 import type { FoundingStagingTotals } from "../build-analysis";
 
@@ -570,5 +572,65 @@ describe("summarizeConservation", () => {
     // becomes {} or null on the way out and reads as an absent identity.
     const summary = summarizeConservation(emptyInputs);
     expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
+  });
+});
+
+describe("conservationGateFailure", () => {
+  /** A summary carrying exactly the checks a case needs, without building the run behind them. */
+  const summaryOf = (...checks: IdentityCheck[]): ConservationSummary => ({
+    tolerance: CONSERVATION_TOLERANCE,
+    checks,
+    allPass: checks.every((c) => c.pass),
+  });
+
+  const check = (name: string, pass: boolean): IdentityCheck => ({
+    name, left: 5, right: 4, residual: pass ? 0 : 1, pass, note: `note for ${name}`,
+  });
+
+  it("returns null when every identity in every run held", () => {
+    expect(
+      conservationGateFailure([
+        { label: "startup", summary: summaryOf(check("a", true), check("b", true)) },
+        { label: "equilibrium", summary: summaryOf(check("a", true), check("b", true)) },
+      ]),
+    ).toBeNull();
+  });
+
+  it("returns null for a run that checked nothing — there is no failure to report", () => {
+    expect(conservationGateFailure([])).toBeNull();
+  });
+
+  it("names every failure across every horizon, not only the first", () => {
+    // One broken ledger usually breaks more than one identity, and which ones is the diagnosis.
+    // Stopping at the first would hand back the least informative half of the evidence.
+    const failure = conservationGateFailure([
+      { label: "startup", summary: summaryOf(check("charters", false), check("net", true)) },
+      { label: "equilibrium", summary: summaryOf(check("charters", false), check("net", false)) },
+    ]);
+    expect(failure).not.toBeNull();
+    expect(failure).toContain("3 of 4 identities");
+    expect(failure).toContain("[startup] charters");
+    expect(failure).toContain("[equilibrium] charters");
+    expect(failure).toContain("[equilibrium] net");
+    // The passing check must not appear — a gate that listed it would read as four failures.
+    expect(failure).not.toContain("[startup] net");
+  });
+
+  it("carries each failure's residual and note, so the message is diagnosable on its own", () => {
+    const failure = conservationGateFailure([
+      { label: "equilibrium", summary: summaryOf(check("charters", false)) },
+    ]);
+    expect(failure).toContain("1.00e+0");
+    expect(failure).toContain("note for charters");
+  });
+
+  it("shows a NaN residual as NaN rather than swallowing it", () => {
+    // A corrupt row is exactly what the identities exist to catch, so its residual has to reach the
+    // message intact — a formatter that rounded or zeroed it would report the failure without the
+    // one detail that says the arithmetic itself broke.
+    const nan: IdentityCheck = {
+      name: "net", left: 5, right: 0, residual: Number.NaN, pass: false, note: "corrupt",
+    };
+    expect(conservationGateFailure([{ label: "startup", summary: summaryOf(nan) }])).toContain("NaN");
   });
 });

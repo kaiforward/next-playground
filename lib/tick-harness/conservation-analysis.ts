@@ -413,6 +413,50 @@ export interface ConservationInputs {
   stagedLedger: StagedLedgerCensus;
 }
 
+/** One run's identities, labelled by the horizon or experiment that produced them. */
+export interface ConservationReport {
+  /** How the gate names this run — "startup", "equilibrium", or an experiment's label. */
+  label: string;
+  summary: ConservationSummary;
+}
+
+/**
+ * The failure message `npm run simulate` exits non-zero on, or `null` when every identity in every
+ * run held.
+ *
+ * Separate from the table because a failed identity has to reach someone who never reads the
+ * output: the report already printed FAIL and the run still exited 0, which is how a broken
+ * founding ledger once cleared a PR. Every failure across every horizon is listed, not just the
+ * first — one broken ledger usually breaks more than one identity, and the set is what says which.
+ */
+export function conservationGateFailure(
+  reports: ReadonlyArray<ConservationReport>,
+): string | null {
+  const failures = reports.flatMap(({ label, summary }) =>
+    summary.checks.filter((c) => !c.pass).map((c) => ({ label, check: c })),
+  );
+  if (failures.length === 0) return null;
+  const total = reports.reduce((n, r) => n + r.summary.checks.length, 0);
+  const lines = [
+    `CONSERVATION GATE FAILED — ${failures.length} of ${total} identities are out ` +
+      `across ${reports.length} run(s).`,
+  ];
+  for (const { label, check } of failures) {
+    // Exponential whatever the magnitude: a residual's interesting range is float dust at one end
+    // and a NaN from a corrupt row at the other, and rounding would print both as "0".
+    lines.push(
+      `  [${label}] ${check.name}: ${check.left} vs ${check.right} | ` +
+        `residual ${check.residual.toExponential(2)}`,
+    );
+    lines.push(`      ${check.note}`);
+  }
+  lines.push(
+    "The founding ledger is out, not merely mistuned — nothing measured in this run is evidence " +
+      "for anything downstream until it holds.",
+  );
+  return lines.join("\n");
+}
+
 /** Check all four identities, in the order the spec's acceptance section lists them. */
 export function summarizeConservation(inputs: ConservationInputs): ConservationSummary {
   const checks = [

@@ -40,6 +40,8 @@ import type { PinnedRolesDocument } from "../lib/tick-harness/experiment";
 import { summarizePopulation, detectPingPong, summarizeInfrastructure, summarizeSupplyRegimes } from "../lib/tick-harness/population-analysis";
 import { summarizeColonisation, summarizeConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
+import { conservationGateFailure } from "../lib/tick-harness/conservation-analysis";
+import type { ConservationReport } from "../lib/tick-harness/conservation-analysis";
 import { renderTable } from "../lib/tick-harness/table";
 import { STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
@@ -906,7 +908,7 @@ async function runExperiment(
   configPath: string,
   jsonOutput: boolean,
   pinned?: PinnedRolesDocument,
-): Promise<void> {
+): Promise<ConservationReport> {
   const resolved = path.resolve(configPath);
   if (!fs.existsSync(resolved)) {
     console.error(`Config file not found: ${resolved}`);
@@ -975,6 +977,8 @@ async function runExperiment(
   const result = buildExperimentResult(results);
   fs.writeFileSync(outFile, JSON.stringify(result, null, 2));
   console.error(`\nResult saved to ${path.relative(process.cwd(), outFile)}`);
+
+  return { label: label ?? slug, summary: results.conservation };
 }
 
 // ── Main ────────────────────────────────────────────────────────
@@ -1005,6 +1009,12 @@ Options:
                    "> script" banner lands inside the JSON.
   --help           Show this help
 
+Exit code:
+  0 if every conservation identity held, 1 if any failed — in either mode, and
+  after the run's own report is written. A failed identity means the founding
+  ledger is out rather than mistuned, so nothing the run measured is evidence
+  for anything until it holds.
+
 Quick Run:
   Running with no flags generates the default-scale world (${DEFAULT_SYSTEM_COUNT}
   systems, seed 42) and runs it over TWO horizons, reporting market/population/
@@ -1033,12 +1043,32 @@ Examples:
   process.exit(0);
 }
 
+/**
+ * Exit non-zero if any conservation identity failed, after the run's own output is written.
+ *
+ * `process.exitCode` rather than `process.exit()`: the JSON document on stdout is megabytes and its
+ * write is asynchronous through a pipe, so exiting outright truncates it — the caller would be told
+ * the run failed and handed an unparseable report of why.
+ */
+function failOnBrokenIdentities(reports: ReadonlyArray<ConservationReport>): void {
+  const failure = conservationGateFailure(reports);
+  if (failure === null) return;
+  console.error(`\n${failure}`);
+  process.exitCode = 1;
+}
+
 // Config mode vs quick-run mode
 async function main(): Promise<void> {
   const pinnedDocument = args.pin ? loadPinnedRoles(args.pin) : undefined;
 
+  // Every run this invocation performed, checked as one gate at the end. A failed identity is a
+  // broken ledger rather than a mistuned number, so it exits non-zero instead of only printing FAIL
+  // into a report someone has to read to the bottom of.
+  const conservation: ConservationReport[] = [];
+
   if (args.config) {
-    await runExperiment(args.config, args.json, pinnedDocument);
+    conservation.push(await runExperiment(args.config, args.json, pinnedDocument));
+    failOnBrokenIdentities(conservation);
     return;
   }
 
@@ -1086,11 +1116,18 @@ async function main(): Promise<void> {
       pinnedRoles: pinnedDocument ? pinnedRolesFor(pinnedDocument, h.label) : undefined,
     });
 
+    conservation.push({ label: h.label, summary: results.conservation });
+
     if (args.json) jsonOut[h.label] = toHorizonReport(results);
     else console.log(formatTable(results) + "\n");
   }
 
   if (args.json) console.log(JSON.stringify(jsonOut, null, 2));
+
+  // After BOTH horizons, never between them: the startup and equilibrium reads answer different
+  // questions, and a gate that aborted at the first failure would throw away the other one's
+  // evidence about the same broken ledger.
+  failOnBrokenIdentities(conservation);
 }
 
 main().catch((err) => {
