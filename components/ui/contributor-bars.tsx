@@ -63,30 +63,3 @@ export function ContributorBars({ segments, total, threshold }: ContributorBarsP
     </div>
   );
 }
-
-export interface ContributorBreakdownProps extends ContributorBarsProps {
-  /**
-   * The headline total these segments break down — on the exact same scale as `total`/`threshold`
-   * (e.g. the Stability block's actual unrest reading, not the settled sum the segments happen to
-   * add up to, and never its stability-flavoured inverse). Kept as a raw value rather than a
-   * pre-formatted string so it shares the identical clamp-and-round math the bars themselves use —
-   * the printed number and the bars can never disagree about how a value maps to a percentage.
-   */
-  value: number;
-}
-
-/**
- * A headline total rendered above its `ContributorBars` breakdown, bundled as one component so a
- * caller — the Stability block today, a future tooltip — gets the number and its breakdown
- * together and never reassembles or re-derives one without the other. Presentational only, same
- * no-hooks / no-`"use client"` contract as `ContributorBars`.
- */
-export function ContributorBreakdown({ value, ...bars }: ContributorBreakdownProps) {
-  const pct = bars.total > 0 ? clamp((value / bars.total) * 100, 0, 100) : 0;
-  return (
-    <div className="space-y-2">
-      <div className="font-mono text-2xl text-text-primary">{Math.round(pct)}%</div>
-      <ContributorBars {...bars} />
-    </div>
-  );
-}

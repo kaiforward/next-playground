@@ -52,9 +52,16 @@ undeveloped system).
   quiet 2-up context strip (faction · government · danger · astrography) and an events banner.
 - **Population** — three blocks, top to bottom (who lives here, whether they are angry, then why):
   **Population** (residents, capacity, an occupancy bar with an overshoot segment past the capacity
-  rule, a crowding chip, and a housed/over-capacity/capacity key); **Stability** (unrest chip, then a
-  `ContributorBars` breakdown — goods shortfall, tax pressure, crowding — over a "Strike at N%"
-  caption naming the mechanic's own threshold); **Provisioned** (band chip, the percentage, a band
+  rule, a crowding chip, and a housed/over-capacity/capacity key); **Stability** (stability chip and
+  headline with which way it is moving, then a track whose fill is stability *now*, a dashed rule
+  where it is *heading* — the settled value the accumulator is relaxing toward, so a calm world with
+  collapsing causes reads as one — and a red rule at the strike line, with a Now/Heading-for/Strike
+  key; then a `ContributorBars` breakdown — goods shortfall, tax pressure, crowding — on the raw
+  contributor scale, carrying no per-bar marker because the causes sum and the strike line governs
+  only the total. Every number is converted from unrest to stability in one place,
+  `components/system/stability-view.ts`. Before its first economy cycle a system withholds the goods
+  cause, so the heading-to rule and the direction word are omitted and the block says its causes are
+  incomplete rather than letting the missing bar read as calm); **Provisioned** (band chip, the percentage, a band
   track carrying a solid rule at today's level and a dashed rule at the remembered level with a
   Now/Used-to key, then the **needs ledger** directly beneath as its per-good decomposition: one row
   per consumed good, severity glyph ✓/⚠/▼ · % met · want · delivered, pressure-sorted with met needs

@@ -5,10 +5,17 @@ import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
-import { ContributorBreakdown, type ContributorSegment } from "@/components/ui/contributor-bars";
+import { ContributorBars } from "@/components/ui/contributor-bars";
+import { TrackRule } from "@/components/ui/track-rule";
 import { PopulationSummary } from "@/components/system/population-summary";
 import { ProvisionBlock } from "@/components/system/provision-block";
-import { fractionPct } from "@/lib/utils/format";
+import {
+  stabilityView,
+  DIRECTION_GLYPH,
+  DIRECTION_TEXT,
+  DIRECTION_WORD,
+  type StabilityView,
+} from "@/components/system/stability-view";
 import type { SystemUnrestRead } from "@/lib/types/api";
 
 /**
@@ -28,32 +35,46 @@ export function populationPanelView(pop: {
 }
 
 /**
- * Stability — the unrest chip, then a `ContributorBreakdown` (goods shortfall, tax pressure,
- * crowding, headed by the total) over the strike-threshold caption. The caption reads
- * `strikeThreshold` straight off the read (never a re-imported constant), so it and the badge's
- * own "Strike" label — bound to the same `STRIKE_PARAMS.threshold` — can never name different
- * numbers.
+ * The Stability track — the fill is stability now, a dashed rule marks where it is heading, and a
+ * solid red rule marks the strike line. Same visual vocabulary as the Provisioned track (a level
+ * plus rules that say "and here is the other number that matters"), built from the same
+ * `TrackRule`, so the two blocks read as one language rather than two inventions.
  *
- * The headline is **stability**, `1 - unrest` — the same quantity the faction page
- * (`vitals.stabilityPct`) and the map's stability mode already render, so this block stops being
- * the one surface in the app that prints unrest under a "Stability" heading. It is derived from
- * `unrest` — the same actual, current-tick value the badge label and `striking` are computed
- * from — never `unrestBreakdown.settled` (the contributors' capped sum, which is only where
- * unrest is *heading*; the accumulator lags behind it during a transient, so a headline built on
- * it could print a calm figure beside a striking badge).
+ * The heading-to and strike rules can land on the same position — a world whose causes have
+ * settled right at the strike line — so they overhang opposite edges: the projected rule sticks up
+ * out of the track, the strike rule down. At an identical position they still read as two marks,
+ * with dash-vs-solid and grey-vs-red separating them further.
  *
- * The contributor bars stay on the raw unrest scale on purpose: a bar's value already reads as
- * "how many stability points this cause is costing" (costing 30 points of stability IS
- * contributing 0.3 of unrest — same quantity, no separate inversion to get wrong), so they now
- * move the same way the eye reads "worse" as the headline does — bars grow, headline shrinks —
- * instead of the previous version where an unrest headline grew right alongside them.
+ * Nothing here computes: every number arrives from `stabilityView` already on the stability scale.
+ */
+function StabilityTrack({ view }: { view: StabilityView }) {
+  return (
+    <div className="relative my-2 h-2.5 bg-surface-active">
+      <span aria-hidden className="block h-full" style={{ width: `${view.pct}%`, background: view.color }} />
+      {view.outlook.known && (
+        <TrackRule pct={view.outlook.pct} color="var(--color-text-secondary)" dashed overhang="up" />
+      )}
+      <TrackRule pct={view.strikePct} color="var(--color-status-red)" overhang="down" />
+    </div>
+  );
+}
+
+/**
+ * Stability — the badge, the headline with which way it is moving, the track carrying now /
+ * heading-to / strike, their key, then the contributor bars naming the causes.
+ *
+ * Every quantity comes from `stabilityView` (`components/system/stability-view.ts`), the single
+ * place unrest becomes stability; this component performs no arithmetic of its own. The panel
+ * shows **two moments** — the fill is stability now, the dashed rule is where it is heading — and
+ * says so in its key, because the whole defect this layout replaces was a headline and a set of
+ * bars silently describing different moments as if they were one.
  *
  * **No per-bar strike marker.** The three causes sum (`settled = min(1, goods + tax + crowding)`,
  * `lib/services/system-population.ts`), so the strike line is a property of the total and of
  * nothing else: a system strikes at goods 0.3 + tax 0.2 + crowding 0.2 with no single cause near
  * the threshold. A tick drawn across each bar reads as a per-cause limit that does not exist, and
  * understates the risk on exactly the systems carrying three moderate pressures at once. The line
- * is carried in the caption, against the headline it actually governs.
+ * lives on the track, against the total it actually governs.
  */
 export function StabilityBlock({
   unrest,
@@ -64,20 +85,7 @@ export function StabilityBlock({
   striking: boolean;
   unrestBreakdown: SystemUnrestRead;
 }) {
-  // The goods contributor is withheld (not zero) pre-assessment — the segment list below already
-  // drops it rather than fabricating a bar. The headline stays honest regardless: it reads live
-  // `unrest`, never the visible segments' sum, so an unassessed system's missing goods bar cannot
-  // make it print calmer than the world actually is.
-  const segments: ContributorSegment[] = unrestBreakdown.assessed
-    ? [
-        { label: "Goods shortfall", value: unrestBreakdown.contributors.goods, color: "var(--color-status-amber)" },
-        { label: "Tax pressure", value: unrestBreakdown.contributors.tax, color: "var(--color-status-blue)" },
-        { label: "Crowding", value: unrestBreakdown.contributors.crowding, color: "var(--color-status-purple)" },
-      ]
-    : [
-        { label: "Tax pressure", value: unrestBreakdown.contributors.tax, color: "var(--color-status-blue)" },
-        { label: "Crowding", value: unrestBreakdown.contributors.crowding, color: "var(--color-status-purple)" },
-      ];
+  const view = stabilityView({ unrest, striking, read: unrestBreakdown });
 
   return (
     <Card variant="bordered" padding="md">
@@ -85,11 +93,45 @@ export function StabilityBlock({
         <SectionHeader as="h4">Stability</SectionHeader>
         <StabilityBadge unrest={unrest} />
       </div>
-      <ContributorBreakdown value={1 - unrest} segments={segments} total={1} />
-      <p className="mt-2 text-xs text-text-tertiary">
-        Strike below {fractionPct(1 - unrestBreakdown.strikeThreshold)}% stability.
-      </p>
-      {striking && (
+
+      <div className="flex items-baseline gap-2">
+        <span className="font-mono text-2xl text-text-primary">{view.pct}%</span>
+        {view.outlook.known && (
+          <span className={`text-xs ${DIRECTION_TEXT[view.outlook.direction]}`}>
+            <span aria-hidden className="font-mono">{DIRECTION_GLYPH[view.outlook.direction]}</span>{" "}
+            {DIRECTION_WORD[view.outlook.direction]}
+          </span>
+        )}
+      </div>
+
+      <StabilityTrack view={view} />
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-text-tertiary">
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="inline-block h-2.5 w-2" style={{ background: view.color }} />
+          Now {view.pct}%
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="inline-block h-2.5 w-0.5 border-l-2 border-dashed border-text-secondary" />
+          {view.outlook.known ? `Heading for ${view.outlook.pct}%` : "Heading for — not yet assessed"}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span aria-hidden className="inline-block h-2.5 w-0.5 bg-status-red" />
+          Strike below {view.strikePct}%
+        </span>
+      </div>
+
+      <div className="mt-3">
+        <ContributorBars segments={view.causes} total={1} />
+      </div>
+
+      {view.causesIncomplete && (
+        <p className="mt-2 text-xs text-text-tertiary">
+          Goods shortfall is not assessed yet — this system has not completed an economy cycle, so
+          these causes are incomplete and the real pressure may be higher.
+        </p>
+      )}
+      {view.striking && (
         <p className="mt-2 text-sm text-amber-300">Production suppressed — workers are striking.</p>
       )}
     </Card>

@@ -7,6 +7,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { Badge, BADGE_COLOR_VAR } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { TrackRule } from "@/components/ui/track-rule";
 import { bandLabel, bandTone, provisionScaleSegments, provisionTrackTone } from "@/components/system/provision-view";
 import type { SupplyRegime } from "@/lib/engine/population";
 import { needSeverity, splitNeedsLedger, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
@@ -110,17 +111,9 @@ function ProvisionTrack({ band, pct, expectationPct }: { band: SupplyRegime; pct
         ))}
       </div>
       {/* Solid rule — today's level. */}
-      <span
-        aria-hidden
-        className="absolute -top-0.5 -bottom-0.5 w-0.5 bg-text-primary"
-        style={{ left: `${pct}%` }}
-      />
-      {/* Dashed rule — the remembered level. Zero-width span; only its left border paints. */}
-      <span
-        aria-hidden
-        className="absolute -top-0.5 -bottom-0.5 border-l-2 border-dashed border-text-secondary"
-        style={{ left: `${expectationPct}%` }}
-      />
+      <TrackRule pct={pct} color="var(--color-text-primary)" />
+      {/* Dashed rule — the remembered level. */}
+      <TrackRule pct={expectationPct} color="var(--color-text-secondary)" dashed />
     </div>
   );
 }
