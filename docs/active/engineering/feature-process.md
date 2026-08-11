@@ -85,6 +85,16 @@ Two mechanisms upgrade rank-3 rules toward rank 2, and every skill carries them 
 4. **Mechanic-level proof**: `npm run simulate`, both horizons, per `AGENTS.md` → Verifying changes.
    Fixtures passing while the galaxy is broken is the anti-pattern the whole pipeline exists to stop.
 
+   Game logic here means a tick processor, engine economy behaviour, or a constant feeding one — not
+   UI, tooling or docs. The run is **quoted** in the PR, because a reviewer can read numbers and
+   cannot read a claim. A **failed conservation identity blocks the merge**: the harness exits
+   non-zero, and that failure says the founding ledger is out, not that a constant is mistuned.
+
+   Both horizons, always. The identity break that cost the band-reconciliation integration merge
+   passed cleanly at 1,000 ticks — nothing had been abandoned yet — and failed only at 10,000. A PR
+   reading one horizon would have shipped it green, and it then took a bisect across 108 commits to
+   find. Run per PR, it is one diff to search.
+
 ## The mutation sweep — a periodic batch, not an in-session gate
 
 A surviving mutant is a code change no test noticed, and the bar is unchanged: **every in-diff survivor is
