@@ -136,7 +136,7 @@ describe("getSystemVitals — provision read", () => {
     if (data.visibility !== "visible") throw new Error("expected visible");
     expect(data.provision).toEqual({ assessed: false });
 
-    withFields({ provision: undefined, supplyBand: "shortage" });
+    withFields({ provision: undefined, supplyBand: "famine" });
     data = getSystemVitals(system.id);
     if (data.visibility !== "visible") throw new Error("expected visible");
     expect(data.provision).toEqual({ assessed: false });
@@ -172,12 +172,12 @@ describe("getSystemVitals — provision read", () => {
     expect(data.provision.grievance).toBe(0);
   });
 
-  it("reports band Shortage while Provisioned reads high — the famine punch-through is never re-derived from the percentage", () => {
-    withFields({ provision: 0.92, supplyBand: "shortage", provisionExpectation: 0.9 });
+  it("reports band Famine while Provisioned reads high — the famine punch-through is never re-derived from the percentage", () => {
+    withFields({ provision: 0.92, supplyBand: "famine", provisionExpectation: 0.9 });
     const data = getSystemVitals(system.id);
     if (data.visibility !== "visible") throw new Error("expected visible");
     if (!data.provision.assessed) throw new Error("expected assessed");
-    expect(data.provision.band).toBe("shortage");
+    expect(data.provision.band).toBe("famine");
     expect(data.provision.pct).toBeCloseTo(92, 6);
   });
 });

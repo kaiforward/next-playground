@@ -844,7 +844,7 @@ const RESTIVE_UNREST = 0.5;
  * stored unrest, owned by a faction taxed at the heaviest band. Stripping the producers is what makes
  * the supply regime a property of the fixture rather than of the galaxy: with no local output, every
  * consumed good is served purely from the seeded stock, so ample stock reads Supplied and an emptied
- * market reads Shortage on every demanded good at once. Its faction owns no other developed system, so
+ * market reads famine-grade satisfaction on every demanded good at once. Its faction owns no other developed system, so
  * migration has no open edge and colonist delivery nets to zero — population moves only by growth.
  */
 function populationFixture(occupancy: number, unrest: number): { world: World; systemId: string } {
@@ -997,7 +997,7 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     const shortageCycle = await runTicks(drained, 1, POPULATION_CADENCE);
 
     // Premise: every demanded good delivered nothing, so D folds to exactly 1 and the supply state
-    // reads Shortage — both independent of the necessity weights.
+    // reads Famine — both independent of the necessity weights.
     expectDemandedSatisfaction(shortageCycle, systemId, 0);
     // The system entered on its floor, so the relaxation term is zero and the whole rise is the
     // shortage gain integrating D = 1. Gain is slope x relaxation rate, derived here rather than

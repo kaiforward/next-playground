@@ -133,14 +133,17 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 11 (founding ledger, charter flag and purse line)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(11);
+  it("is at save format version 12 (the supply-band vocabulary)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(12);
   });
 
-  it("rejects a prior-version (v10) save — saves break on the shape bump", () => {
-    // v10's in-flight colonies were committed under the free founding model; there is no
-    // field-defaulting path, and any default would be a lie about whether they were paid for.
-    const json = JSON.stringify({ formatVersion: 10, world });
+  it("rejects a prior-version (v11) save — saves break on the shape bump", () => {
+    // v11 systems carry `supplyBand: "shortage"`, a value `SupplyRegime` no longer has, and a
+    // `"rationing"` that meant `[0, 0.7)` rather than today's `[0.5, 0.7)`. `deserializeWorld` runs
+    // structural spot-checks, not per-field validation, so nothing below this gate would notice
+    // either — the version bump is the whole defence, and it must reject rather than load a band
+    // string the type system says cannot exist.
+    const json = JSON.stringify({ formatVersion: 11, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });

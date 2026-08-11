@@ -35,15 +35,15 @@ describe("getProvisionBySystem", () => {
   it("carries the persisted provision and band straight through, not re-derived", () => {
     const [a] = world.systems;
     const systems: WorldSystem[] = world.systems.map((s) =>
-      s.id === a.id ? { ...s, provision: 0.62, supplyBand: "shortage" } : s,
+      s.id === a.id ? { ...s, provision: 0.62, supplyBand: "famine" } : s,
     );
     setWorld({ ...world, systems });
 
     const entry = getProvisionBySystem().find((e) => e.systemId === a.id)!;
-    // Shortage while Provision reads mid — the survival punch-through — proves this is carried
+    // Famine while Provision reads mid — the survival punch-through — proves this is carried
     // through, not re-binned from the number (a re-derivation would band this "strained").
     expect(entry.provision).toBe(0.62);
-    expect(entry.band).toBe("shortage");
+    expect(entry.band).toBe("famine");
   });
 
   it("excludes a partially-written system — provision set but band absent still reads unassessed", () => {

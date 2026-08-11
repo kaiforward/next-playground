@@ -52,7 +52,7 @@ export interface TickContext {
 export interface EconomySignals {
   /** Per-system necessity-weighted dissatisfaction D ∈ [0,1] — 1 minus Provision — for systems processed this tick. */
   dissatisfactionBySystem: Map<string, number>;
-  /** Per-system Supplied/Strained/Rationing/Shortage reading of this cycle's consumption
+  /** Per-system Supplied/Strained/Rationing/Deprived/Famine reading of this cycle's consumption
    *  satisfaction, with the survival-good shortfall bit and the critical-good override weight
    *  `supplyUnrestTerm` (lib/engine/population.ts) reads to compose the crisis term, plus the
    *  `emptyBasket` bit the population processor reads separately — not for the unrest term at all —

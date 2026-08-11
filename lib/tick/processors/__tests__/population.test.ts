@@ -103,10 +103,10 @@ describe("population processor", () => {
   });
   it("raises unrest and rewrites demandRate for a starved system", async () => {
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [market("a", "food")] });
-    await runPopulationProcessor(world, ctxWithD(new Map([["a", 1]]), new Map([["a", "shortage"]])), PARAMS);
+    await runPopulationProcessor(world, ctxWithD(new Map([["a", 1]]), new Map([["a", "famine"]])), PARAMS);
     const a = world.systems.find((s) => s.id === "a")!;
     // Hand-derived from the start state (pop 500, cap 1000, unrest 0) under D=1, no survival or
-    // critical-good signal (ctxWithD's regime map carries neither — only the "shortage" display
+    // critical-good signal (ctxWithD's regime map carries neither — only the "famine" display
     // label), no tax/crowd — an independent oracle rather than the processor's own output read
     // back. The system carries no provisionExpectation, so this is a first-use read:
     // readExpectation seeds stored = P (this cycle's Provision) exactly, then floors the EFFECTIVE
@@ -393,7 +393,7 @@ describe("population processor", () => {
       ],
       markets: [],
     });
-    const regimes = new Map<string, SupplyRegime>([["served", "supplied"], ["short", "shortage"]]);
+    const regimes = new Map<string, SupplyRegime>([["served", "supplied"], ["short", "famine"]]);
     await runPopulationProcessor(
       world,
       ctxWithD(new Map([["unlisted", 0], ["served", 0], ["short", 0]]), regimes),
@@ -411,7 +411,7 @@ describe("population processor", () => {
     // rides along while the slope stays a dimensionless exchange rate. Gains are read from a zero
     // start (no relaxation term) and relaxation from a raised start (D = 0, so no gain term). The
     // slope is flat now (no D-ramp, no regime selection): neither gain fixture carries a survival or
-    // critical-good signal, so gain-rationing and gain-shortage differ only in their D value — both
+    // critical-good signal, so gain-rationing and gain-famine differ only in their D value — both
     // driven by the identical slopeBase. The two gain systems are pre-seeded with a valid stored
     // provisionExpectation of 1 (a fully-accustomed world), so the read-side effective value is
     // pinned at the ceiling regardless of D and grievance tracks D exactly (clamp(1 − P, 0, 1) = D)
@@ -427,7 +427,7 @@ describe("population processor", () => {
       const world = new InMemoryPopulationWorld({
         systems: [
           { ...sys("gain-rationing", 100, 1000, 0), provisionExpectation: 1 },
-          { ...sys("gain-shortage", 100, 1000, 0), provisionExpectation: 1 },
+          { ...sys("gain-famine", 100, 1000, 0), provisionExpectation: 1 },
           sys("relax-rationing", 100, 1000, start),
           sys("relax-supplied", 100, 1000, start),
         ],
@@ -435,12 +435,12 @@ describe("population processor", () => {
       });
       const regimes = new Map<string, SupplyRegime>([
         ["gain-rationing", "rationing"],
-        ["gain-shortage", "shortage"],
+        ["gain-famine", "famine"],
         ["relax-rationing", "rationing"],
         ["relax-supplied", "supplied"],
       ]);
       const dissatisfaction = new Map([
-        ["gain-rationing", D_LOW], ["gain-shortage", D_HIGH], ["relax-rationing", 0], ["relax-supplied", 0],
+        ["gain-rationing", D_LOW], ["gain-famine", D_HIGH], ["relax-rationing", 0], ["relax-supplied", 0],
       ]);
       await runPopulationProcessor(world, ctxWithD(dissatisfaction, regimes), {
         unrest: RATES, population: FROZEN_POP, expectation: EXPECTATION_PARAMS, interval,
@@ -451,11 +451,11 @@ describe("population processor", () => {
     const double = await runAt(48);
 
     const rationingGain = RATES.slopeBase * RATES.decay * D_LOW;
-    const shortageGain = RATES.slopeBase * RATES.decay * D_HIGH;
+    const famineGain = RATES.slopeBase * RATES.decay * D_HIGH;
     expect(unrestOf(ref, "gain-rationing")).toBeCloseTo(rationingGain, 9);
     expect(unrestOf(double, "gain-rationing")).toBeCloseTo(2 * rationingGain, 9);
-    expect(unrestOf(ref, "gain-shortage")).toBeCloseTo(shortageGain, 9);
-    expect(unrestOf(double, "gain-shortage")).toBeCloseTo(2 * shortageGain, 9);
+    expect(unrestOf(ref, "gain-famine")).toBeCloseTo(famineGain, 9);
+    expect(unrestOf(double, "gain-famine")).toBeCloseTo(2 * famineGain, 9);
     expect(unrestOf(ref, "relax-rationing")).toBeCloseTo(start * (1 - RATES.decay), 9);
     expect(unrestOf(double, "relax-rationing")).toBeCloseTo(start * (1 - 2 * RATES.decay), 9);
     expect(unrestOf(ref, "relax-supplied")).toBeCloseTo(start * (1 - RATES.decay), 9);
@@ -854,7 +854,7 @@ describe("population processor: adaptive expectation", () => {
         economySignals: {
           dissatisfactionBySystem: new Map([["a", D]]),
           supplyStateBySystem: new Map([
-            ["a", { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+            ["a", { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
           ]),
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: new Map(),
@@ -946,9 +946,9 @@ describe("population processor: persisted Provisioned and its band", () => {
     expect(b.provision).toBeCloseTo(0.3, 9);
   });
 
-  it("persists band Shortage from a survival punch-through even while Provisioned reads high", async () => {
+  it("persists band Famine from a survival punch-through even while Provisioned reads high", async () => {
     // d = 0.1 (Provisioned 0.9, well above SUPPLIED_PROVISION) but the supply fold's famine
-    // punch-through still classifies the system as Shortage — the whole reason the band rides
+    // punch-through still classifies the system as Famine — the whole reason the band rides
     // alongside the number instead of being re-inferred from it on the read side.
     const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [] });
     const ctx: TickContext = {
@@ -957,7 +957,7 @@ describe("population processor: persisted Provisioned and its band", () => {
         economySignals: {
           dissatisfactionBySystem: new Map([["a", 0.1]]),
           supplyStateBySystem: new Map([
-            ["a", { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+            ["a", { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
           ]),
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: new Map(),
@@ -968,7 +968,7 @@ describe("population processor: persisted Provisioned and its band", () => {
     await runPopulationProcessor(world, ctx, PARAMS);
     const a = world.systems.find((s) => s.id === "a")!;
     expect(a.provision).toBeCloseTo(0.9, 9); // Provisioned reads high...
-    expect(a.supplyBand).toBe("shortage"); // ...but the band still carries the famine punch-through
+    expect(a.supplyBand).toBe("famine"); // ...but the band still carries the famine punch-through
   });
 
   it("leaves the band absent — not the ctx-default 'supplied' — for a system the supply signal genuinely omits", async () => {
@@ -1138,7 +1138,7 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
         economySignals: {
           dissatisfactionBySystem: new Map([["a", 0.5]]),
           supplyStateBySystem: new Map([
-            ["a", { regime: "shortage", survivalShortfall, criticalWeight: 0, emptyBasket: false }],
+            ["a", { regime: "famine", survivalShortfall, criticalWeight: 0, emptyBasket: false }],
           ]),
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: new Map(),
@@ -1202,8 +1202,8 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
         economySignals: {
           dissatisfactionBySystem: new Map([["dying", 0.5], ["fine", 0.5]]),
           supplyStateBySystem: new Map([
-            ["dying", { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
-            ["fine", { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+            ["dying", { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+            ["fine", { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
           ]),
           sellingFactorBySystem: new Map(),
           realizedProductionBySystem: new Map(),

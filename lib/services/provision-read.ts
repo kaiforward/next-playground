@@ -12,7 +12,7 @@ import type { WorldSystem } from "@/lib/world/types";
  * Both persisted fields are independently optional and absent means never assessed — so either one
  * missing, including a partially-written system where only the other is set, renders the unassessed
  * arm rather than fabricating a reading. `band` is carried straight through and never re-derived
- * from `pct`: the survival punch-through puts a famine system at band Shortage while its Provisioned
+ * from `pct`: the survival punch-through puts a starving system at band Famine while its Provisioned
  * still reads high, and re-binning the number would erase exactly that.
  *
  * Shared by both per-system reads (`getSystemPopulation`, `getSystemVitals`), which must agree —

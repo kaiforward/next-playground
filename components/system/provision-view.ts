@@ -3,19 +3,21 @@
  * the occupancy bar's fill/overshoot/crowding read. No DOM, no React — the unit project has no
  * jsdom, so the logic that deserves tests lives here and the components stay thin.
  */
-import { SUPPLIED_PROVISION, RATIONING_PROVISION } from "@/lib/constants/economy";
+import { SUPPLIED_PROVISION, RATIONING_PROVISION, DEPRIVED_PROVISION } from "@/lib/constants/economy";
 import { POPULATION_PARAMS } from "@/lib/constants/population";
 import { crowdFactor, type SupplyRegime } from "@/lib/engine/population";
 import type { BadgeColor } from "@/components/ui/badge";
 
-/** Capitalised band label, the Settled vocabulary's four words (docs/build-plans/pr6-presentation.md
- *  "Settled vocabulary"). "Strained" is the shipped code's word and stays — it is NOT the spec's
- *  older "Low reserve", which belongs to the separate per-good stock ladder. */
+/** Capitalised band label, one word per band. "Strained" is the shipped code's word and stays — it
+ *  is NOT the older "Low reserve", which belongs to the separate per-good stock ladder. "Famine" is
+ *  the survival punch-through's word: the mechanic is water or food below the survival line, and a
+ *  milder word for it reads as a deeper shade of Rationing rather than the emergency it is. */
 export const BAND_LABEL: Record<SupplyRegime, string> = {
   supplied: "Supplied",
   strained: "Strained",
   rationing: "Rationing",
-  shortage: "Shortage",
+  deprived: "Deprived",
+  famine: "Famine",
 };
 
 export function bandLabel(band: SupplyRegime): string {
@@ -26,55 +28,75 @@ export function bandLabel(band: SupplyRegime): string {
  * Badge colour token per band (see `components/ui/badge.tsx`'s `BadgeColor`) — an identifier for the
  * component to apply, never a Tailwind class string or hex value.
  *
- * One tone per band, all four distinct. The chip is word-primary, so colour is a secondary cue —
+ * One tone per band, all five distinct. The chip is word-primary, so colour is a secondary cue —
  * but it cannot be a *collapsing* one: the Provisioned map mode is a stepped choropleth painting
  * each band its own colour, so a chip that rendered Strained and Rationing alike would disagree with
  * the map about how many states exist. Slate for Strained is the deliberate choice over a second
  * amber: Strained means "worth watching", and warning colour belongs to Rationing, where delivery is
- * actually short.
+ * actually short. Red is reserved for Famine — the emergency — which leaves purple for Deprived, the
+ * palette's remaining tone that reads as severity at all (blue and cyan both read informational, and
+ * would say "calm" about the worst state of the axis).
  */
 export const BAND_TONE: Record<SupplyRegime, BadgeColor> = {
   supplied: "green",
   strained: "slate",
   rationing: "amber",
-  shortage: "red",
+  deprived: "purple",
+  famine: "red",
 };
 
 export function bandTone(band: SupplyRegime): BadgeColor {
   return BAND_TONE[band];
 }
 
-/** A band that owns a span of the Provision axis. Shortage is excluded by construction — see
+/** A band that owns a span of the Provision axis. Famine is excluded by construction — see
  *  `provisionScaleSegments`. */
-export type ProvisionAxisBand = Exclude<SupplyRegime, "shortage">;
+export type ProvisionAxisBand = Exclude<SupplyRegime, "famine">;
 
 export interface ProvisionSegment {
   band: ProvisionAxisBand;
-  /** Percentage of the track's full width; the three entries sum to 100. */
+  /** Percentage of the track's full width; the four entries sum to 100. */
   width: number;
 }
 
 /**
  * The Provisioned track's segments, in left-to-right (ascending Provision) order — so a rule drawn
  * at a raw percentage position (today's level, the remembered level) lands inside the segment that
- * actually contains it. Widths are derived from `SUPPLIED_PROVISION`/`RATIONING_PROVISION`, never
- * authored: Rationing spans `[0, RATIONING_PROVISION)`, Strained spans `[RATIONING_PROVISION,
- * SUPPLIED_PROVISION)`, Supplied spans `[SUPPLIED_PROVISION, 1]` — moving either constant moves
- * exactly the two segments it borders, the same edges the classifier itself bins on.
+ * actually contains it. Widths are derived from `DEPRIVED_PROVISION`/`RATIONING_PROVISION`/
+ * `SUPPLIED_PROVISION`, never authored: Deprived spans `[0, DEPRIVED_PROVISION)`, Rationing spans
+ * `[DEPRIVED_PROVISION, RATIONING_PROVISION)`, Strained spans `[RATIONING_PROVISION,
+ * SUPPLIED_PROVISION)`, Supplied spans `[SUPPLIED_PROVISION, 1]` — moving any constant moves exactly
+ * the two segments it borders, the same edges the classifier itself bins on.
  *
- * **There are three, not four.** Shortage is the survival punch-through (`hasSurvivalShortfall`)
- * and can occur at ANY Provision value, so it owns no span of this axis — a world can read Shortage
+ * **There are four, not five.** Famine is the survival punch-through (`hasSurvivalShortfall`)
+ * and can occur at ANY Provision value, so it owns no span of this axis — a world can read Famine
  * at a high Provisioned. It is excluded from the type rather than returned at zero width: a
  * zero-width entry is a special case wearing a general case's clothes, and rendered as a flex child
- * with a divider it produces a one-pixel artifact at the track's edge. The band chip carries
- * Shortage; the track carries the axis.
+ * with a divider it produces a one-pixel artifact at the track's edge. What the track does about
+ * famine instead is recolour whole (`provisionTrackTone`), not carry a segment for it.
  */
 export function provisionScaleSegments(): ProvisionSegment[] {
   return [
-    { band: "rationing", width: RATIONING_PROVISION * 100 },
+    { band: "deprived", width: DEPRIVED_PROVISION * 100 },
+    { band: "rationing", width: (RATIONING_PROVISION - DEPRIVED_PROVISION) * 100 },
     { band: "strained", width: (SUPPLIED_PROVISION - RATIONING_PROVISION) * 100 },
     { band: "supplied", width: (1 - SUPPLIED_PROVISION) * 100 },
   ];
+}
+
+/**
+ * The tone one axis segment paints in, for a system currently reading `band`.
+ *
+ * Ordinarily each segment wears its own band's tone. When the system is in Famine the WHOLE track
+ * takes the famine tone instead. Famine owns no span of the axis, so a famine world's marker sits at
+ * its true Provision — which on a per-segment-coloured track can put a starving world's rule inside
+ * the green Supplied segment while the chip above it reads Famine, the track and the chip
+ * contradicting each other about the same system. Recolouring the track rather than moving the
+ * marker keeps the position honest (it is still where this world's delivery actually sits) and makes
+ * the severity unmissable: a track that has gone entirely red cannot be read as calm.
+ */
+export function provisionTrackTone(segment: ProvisionAxisBand, band: SupplyRegime): BadgeColor {
+  return band === "famine" ? BAND_TONE.famine : BAND_TONE[segment];
 }
 
 export type CrowdChip = "comfortable" | "crowding" | "braked";

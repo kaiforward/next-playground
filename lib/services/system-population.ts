@@ -32,9 +32,9 @@ export function resolveTaxPressure(system: WorldSystem, world: World): number {
  * assessment (`provision`, `supplyBand`, `criticalWeight`), so the panel cannot show causes that do
  * not sum to the effect.
  *
- * `survivalShortfall` is derived from the band being Shortage rather than persisted separately —
+ * `survivalShortfall` is derived from the band being Famine rather than persisted separately —
  * load-bearing and non-obvious, so stated here: `foldSupplyState` (`lib/engine/population.ts`) only
- * ever returns `regime: "shortage"` from the survival branch, never from binning Provision, so the
+ * ever returns `regime: "famine"` from the survival branch, never from binning Provision, so the
  * two are a strict biconditional and re-deriving one from the other is exact, not an approximation.
  * `criticalWeight` has no such biconditional — two systems banded identically can carry very
  * different critical-good weight (`SupplyState`'s own docstring) — which is why it needed its own
@@ -65,7 +65,7 @@ export function resolveUnrestBreakdown(
   // both `provision` and `supplyBand` are set, so no `??` fallback below would be reachable.
   const supply: SupplyState = {
     regime: provision.band,
-    survivalShortfall: provision.band === "shortage",
+    survivalShortfall: provision.band === "famine",
     criticalWeight: system.criticalWeight,
     emptyBasket: false, // never read by supplyUnrestTerm; deliberately not persisted either.
   };

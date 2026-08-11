@@ -141,7 +141,7 @@ export const GOOD_NECESSITY: Record<string, number> = {
 
 /**
  * The goods whose deprivation is famine rather than scarcity. Below SHORTAGE_SATISFACTION on either
- * one, a system reads Shortage whatever the rest of the basket looks like: dissatisfaction is a
+ * one, a system reads Famine whatever the rest of the basket looks like: dissatisfaction is a
  * linear necessity-and-demand-weighted mean now, so a shortfall only ever surfaces as its own
  * weighted SHARE of the basket's total gap. Water and food carry the largest such share of any good
  * (necessity 1.0, the table's ceiling, times the largest per-capita demand) — yet even so, water

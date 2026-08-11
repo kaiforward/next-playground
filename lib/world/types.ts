@@ -110,18 +110,18 @@ export interface WorldSystem {
    *  figure. Written once per economy cycle, alongside `provisionExpectation`. */
   provision?: number;
   /** This cycle's supply band — `foldSupplyState`'s `regime` (lib/engine/population.ts),
-   *  carrying the survival punch-through (Shortage, whatever `provision` reads) through
+   *  carrying the survival punch-through (Famine, whatever `provision` reads) through
    *  persistence so a famine reading is not re-inferred from the number on the read side. Same
    *  absence convention as `provision`: absent means never assessed, never "supplied". Written
    *  once per economy cycle, alongside `provision`. */
   supplyBand?: SupplyRegime;
   /** This cycle's critical-good override weight — `foldSupplyState`'s `criticalWeight`
    *  (lib/engine/population.ts), the crisis-term input `supplyUnrestTerm` reads whenever
-   *  `supplyBand` is not itself "shortage" (the survival branch already carries slopeShortage
+   *  `supplyBand` is not itself "famine" (the survival branch already carries slopeShortage
    *  outright; this covers the graduated override below it). Not inferable from `supplyBand`: two
    *  systems banded identically can carry very different critical-good weight (`SupplyState`'s own
    *  docstring), so — unlike `survivalShortfall`, which IS a strict biconditional with
-   *  `supplyBand === "shortage"` (`foldSupplyState` only ever returns that regime from the
+   *  `supplyBand === "famine"` (`foldSupplyState` only ever returns that regime from the
    *  survival branch) — this needs its own field rather than being re-derived from the band. Same
    *  absence convention as `provision`/`supplyBand`: absent means never assessed. Deliberately NOT
    *  clamped to [0, 1] the way `provision` is: `supplyUnrestTerm` only floors it at 0

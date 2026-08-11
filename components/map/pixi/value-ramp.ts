@@ -1,4 +1,4 @@
-import { SUPPLIED_PROVISION, RATIONING_PROVISION } from "@/lib/constants/economy";
+import { SUPPLIED_PROVISION, RATIONING_PROVISION, DEPRIVED_PROVISION } from "@/lib/constants/economy";
 
 export type ValueMode = "population" | "development" | "stability" | "migration" | "provision";
 
@@ -42,23 +42,29 @@ const RESERVES_ABSENT_ZERO: Record<ContinuousMode, boolean> = {
   migration: false,
 };
 
-// Provisioned steps FLAT at the two edges the band classifier itself uses (`RATIONING_PROVISION`,
-// `SUPPLIED_PROVISION`) instead of interpolating between them: a mature galaxy sits mostly at
-// ~92-96% Supplied, so a continuous ramp would paint almost everything one colour. Every value
-// within a band renders IDENTICALLY — this is what makes it "stepped" rather than "a ramp with
-// custom stop positions" (sample() below would still blend between these three points). Colours:
-// red (below RATIONING_PROVISION — the Rationing band), amber (the Strained band), green (at/above
-// SUPPLIED_PROVISION — Supplied) — Shortage (the survival punch-through) owns no span of this axis,
-// since it can occur at any Provision level and is a separate signal (`ProvisionEntry.band`), not a
-// third colour here. Absolute scale, never referenceMax-normalised: see valueRampColorPixi below.
+// Provisioned steps FLAT at the three edges the band classifier itself uses (`DEPRIVED_PROVISION`,
+// `RATIONING_PROVISION`, `SUPPLIED_PROVISION`) instead of interpolating between them: a mature
+// galaxy sits mostly at ~92-96% Supplied, so a continuous ramp would paint almost everything one
+// colour. Every value within a band renders IDENTICALLY — this is what makes it "stepped" rather
+// than "a ramp with custom stop positions" (sample() below would still blend between these four
+// points). Colours run as one heat scale down the axis — deep maroon (the Deprived band, below
+// DEPRIVED_PROVISION), red (Rationing), amber (Strained), green (at/above SUPPLIED_PROVISION —
+// Supplied). Maroon rather than the chip's purple: within the map's own language, darker-than-red
+// reads as off the bottom of a heat scale, where a bright violet would read as a different data
+// dimension entirely; each surface stays internally consistent, and what the two must agree on is
+// how many states exist, not which hue each wears. Famine (the survival punch-through) owns no span
+// of this axis, since it can occur at any Provision level and is a separate signal
+// (`ProvisionEntry.band`), not a fifth colour here. Absolute scale, never referenceMax-normalised:
+// see valueRampColorPixi below.
 const PROVISION_BANDS: readonly Stop[] = [
-  [0, [239, 68, 68]], // red — Rationing, Provision < RATIONING_PROVISION
+  [0, [127, 29, 29]], // deep maroon — Deprived, Provision < DEPRIVED_PROVISION
+  [DEPRIVED_PROVISION, [239, 68, 68]], // red — Rationing
   [RATIONING_PROVISION, [217, 119, 6]], // amber — Strained
   [SUPPLIED_PROVISION, [34, 197, 94]], // green — Supplied, Provision >= SUPPLIED_PROVISION
 ];
 
 /** Flat step lookup: the colour of the highest band edge at or below `t` (edges ascending, inclusive
- *  low side — matches `classifyRegime`'s `>=` boundaries). Unlike sample(), never blends. */
+ *  low side — matches `foldSupplyState`'s `>=` boundaries). Unlike sample(), never blends. */
 function sampleStepped(bands: readonly Stop[], t: number): number {
   const c = Math.max(0, Math.min(1, t));
   let color = bands[0][1];
@@ -163,8 +169,9 @@ export interface SteppedLegendStop {
 
 /**
  * Legend stops for the `provision` stepped fill, in the same order and at the same edges
- * (`RATIONING_PROVISION`, `SUPPLIED_PROVISION`) the cell fill itself steps at — so a legend built
- * from this can never drift from PROVISION_BANDS, the way `rampCssStops` can't drift from RAMPS.
+ * (`DEPRIVED_PROVISION`, `RATIONING_PROVISION`, `SUPPLIED_PROVISION`) the cell fill itself steps at —
+ * so a legend built from this can never drift from PROVISION_BANDS, the way `rampCssStops` can't
+ * drift from RAMPS.
  */
 export function provisionLegendStops(): SteppedLegendStop[] {
   return PROVISION_BANDS.map(([position, [r, g, b]]) => ({ position, css: `rgb(${r}, ${g}, ${b})` }));

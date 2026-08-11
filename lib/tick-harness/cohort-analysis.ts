@@ -273,7 +273,7 @@ export function computeWorldCohorts(
 
   const acc = new Map<WorldCohort, {
     n: number; shortfallSum: number; unrestSum: number; striking: number;
-    supplied: number; strained: number; rationing: number; shortage: number;
+    supplied: number; strained: number; rationing: number; deprived: number; famine: number;
     provisionSum: number; worstGoodSats: number[];
     startPopSum: number; endPopSum: number;
     expectations: number[]; grievances: number[]; staleExpectationCount: number;
@@ -288,7 +288,7 @@ export function computeWorldCohorts(
       if (!a) {
         a = {
           n: 0, shortfallSum: 0, unrestSum: 0, striking: 0,
-          supplied: 0, strained: 0, rationing: 0, shortage: 0,
+          supplied: 0, strained: 0, rationing: 0, deprived: 0, famine: 0,
           provisionSum: 0, worstGoodSats: [], startPopSum: 0, endPopSum: 0,
           expectations: [], grievances: [], staleExpectationCount: 0,
         };
@@ -312,13 +312,14 @@ export function computeWorldCohorts(
         a.expectations.push(state.expectationStored);
         a.grievances.push(state.grievance);
       }
-      // Exhaustive over the four members — see population-analysis.ts's summarizeSupplyRegimes,
+      // Exhaustive over every member — see population-analysis.ts's summarizeSupplyRegimes,
       // which this fold must never diverge from (both read the same perSystemSupplyState map).
       switch (state.regime) {
         case "supplied": a.supplied += 1; break;
         case "strained": a.strained += 1; break;
         case "rationing": a.rationing += 1; break;
-        case "shortage": a.shortage += 1; break;
+        case "deprived": a.deprived += 1; break;
+        case "famine": a.famine += 1; break;
         default: {
           const exhaustive: never = state.regime;
           throw new Error(`unhandled supply regime: ${exhaustive}`);
@@ -342,7 +343,8 @@ export function computeWorldCohorts(
       suppliedShare: a.supplied / a.n,
       strainedShare: a.strained / a.n,
       rationingShare: a.rationing / a.n,
-      shortageShare: a.shortage / a.n,
+      deprivedShare: a.deprived / a.n,
+      famineShare: a.famine / a.n,
       meanProvision: a.provisionSum / a.n,
       worstGoodMedian: median(a.worstGoodSats),
       // Summed before dividing, never per-system-then-averaged, so a founded colony's start-0

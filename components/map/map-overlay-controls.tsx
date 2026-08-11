@@ -251,7 +251,7 @@ function MigrationRampLegend() {
  * Stepped legend: unlike the other value modes' `rampGradient` (a smooth CSS gradient built from
  * `rampCssStops`, which discards stop positions), this renders one flat swatch per band, sized to
  * the real span between `provisionLegendStops` positions — so the legend's boundaries sit at the
- * band edges (RATIONING_PROVISION, SUPPLIED_PROVISION), not at even thirds.
+ * band edges (DEPRIVED_PROVISION, RATIONING_PROVISION, SUPPLIED_PROVISION), not at even quarters.
  */
 function ProvisionRampLegend() {
   const stops = provisionLegendStops();
@@ -268,12 +268,13 @@ function ProvisionRampLegend() {
         })}
       </div>
       <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
-        <span>Rationing</span>
+        <span>Deprived</span>
         <span>Supplied</span>
       </div>
       <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
-        Share of the civilian basket delivered — stepped at the Rationing / Strained / Supplied band
-        edges, not a smooth gradient. Black = never assessed.
+        Share of the civilian basket delivered — stepped at the Deprived / Rationing / Strained /
+        Supplied band edges, not a smooth gradient. Famine is a separate reading and paints no band
+        here. Black = never assessed.
       </p>
     </div>
   );

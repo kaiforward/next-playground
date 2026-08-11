@@ -7,7 +7,8 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { Badge, BADGE_COLOR_VAR } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { bandLabel, bandTone, provisionScaleSegments } from "@/components/system/provision-view";
+import { bandLabel, bandTone, provisionScaleSegments, provisionTrackTone } from "@/components/system/provision-view";
+import type { SupplyRegime } from "@/lib/engine/population";
 import { needSeverity, splitNeedsLedger, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
 
@@ -80,15 +81,22 @@ function NeedsLedger({ needs }: { needs: PopNeedData[] }) {
 }
 
 /**
- * The Provisioned track — the three axis segments from `provisionScaleSegments` (rationing /
- * strained / supplied, derived from the same constants the classifier bins on), a solid rule at
- * today's level and a dashed rule at the remembered level. Deliberate restraint from the design
- * pass, whose earlier over-laboured version was rejected: no band-name labels on the track (the
- * chip above already names the current band) and no inline captions on the two rules (the "Now
+ * The Provisioned track — the four axis segments from `provisionScaleSegments` (deprived /
+ * rationing / strained / supplied, derived from the same constants the classifier bins on), a solid
+ * rule at today's level and a dashed rule at the remembered level. Deliberate restraint from the
+ * design pass, whose earlier over-laboured version was rejected: no band-name labels on the track
+ * (the chip above already names the current band) and no inline captions on the two rules (the "Now
  * X% / Used to Y%" key underneath carries both numbers).
+ *
+ * Under Famine the whole track takes the famine tone (`provisionTrackTone`) and its segment dividers
+ * come off, so it reads as one unbroken emergency bar rather than four bands that happen to share a
+ * colour. The rules stay where they are: a famine world's delivery really can sit high on the axis,
+ * and the track saying so while the chip says Famine is exactly the contradiction the recolour
+ * removes.
  */
-function ProvisionTrack({ pct, expectationPct }: { pct: number; expectationPct: number }) {
+function ProvisionTrack({ band, pct, expectationPct }: { band: SupplyRegime; pct: number; expectationPct: number }) {
   const segments = provisionScaleSegments();
+  const famine = band === "famine";
   return (
     <div className="relative h-2.5">
       <div className="flex h-full overflow-hidden">
@@ -96,8 +104,8 @@ function ProvisionTrack({ pct, expectationPct }: { pct: number; expectationPct: 
           <span
             key={s.band}
             aria-hidden
-            className="block h-full border-r border-surface opacity-35 last:border-r-0"
-            style={{ width: `${s.width}%`, background: BADGE_COLOR_VAR[bandTone(s.band)] }}
+            className={`block h-full opacity-35 ${famine ? "" : "border-r border-surface last:border-r-0"}`}
+            style={{ width: `${s.width}%`, background: BADGE_COLOR_VAR[provisionTrackTone(s.band, band)] }}
           />
         ))}
       </div>
@@ -138,7 +146,7 @@ export function ProvisionBlock({ read, needs }: { read: SystemProvisionRead; nee
       {read.assessed ? (
         <>
           <div className="mb-2 font-mono text-2xl text-text-primary">{Math.round(read.pct)}%</div>
-          <ProvisionTrack pct={read.pct} expectationPct={read.expectationPct} />
+          <ProvisionTrack band={read.band} pct={read.pct} expectationPct={read.expectationPct} />
           <div className="mt-2.5 flex items-center gap-4 text-xs text-text-tertiary">
             <span className="inline-flex items-center gap-1.5">
               <span aria-hidden className="inline-block h-2.5 w-0.5 bg-text-primary" />

@@ -6,8 +6,8 @@
  *                necessity-and-demand-weighted MEAN of per-good satisfaction — so a partial
  *                shortfall reads its own size rather than a squared fraction of it.
  *                foldSupplyState() bins the same goods into four descriptive bands from
- *                provision() alone (Supplied/Strained/Rationing), plus a water/food survival
- *                floor that punches through to Shortage whatever Provision says. The band gates
+ *                provision() alone (Supplied/Strained/Rationing/Deprived), plus a water/food
+ *                survival floor that punches through to Famine whatever Provision says. The band gates
  *                no rate or effect (accumulateUnrest reads one relaxation rate for every label);
  *                the survival bit, the critical-good weight (goods deep below the criticality
  *                line) and the empty-basket bit ride alongside the label for supplyUnrestTerm to
@@ -38,6 +38,7 @@ import {
   SHORTAGE_SATISFACTION,
   SUPPLIED_PROVISION,
   RATIONING_PROVISION,
+  DEPRIVED_PROVISION,
   CRITICAL_SATISFACTION,
   BAND_MIN_DEMAND_SHARE,
 } from "@/lib/constants/economy";
@@ -170,13 +171,13 @@ export function worstDemandedGoods(goods: GoodSatisfaction[], count: number): De
 
 /** Descriptive supply band for a system this tick — binned from Provision, plus one survival
  *  punch-through. Gates no rate or effect (see foldSupplyState); a display quantity only. */
-export type SupplyRegime = "supplied" | "strained" | "rationing" | "shortage";
+export type SupplyRegime = "supplied" | "strained" | "rationing" | "deprived" | "famine";
 
 /**
  * The system's supply reading. `regime` is a coarse rendering of Provision for display — it drives
  * no rate or effect. `survivalShortfall`, `criticalWeight` and `emptyBasket` ride alongside it
- * because none is inferrable back from the label: a famine-driven Shortage carries the survival bit
- * that a low-Provision Rationing world does not, two systems banded identically (both Strained, say)
+ * because none is inferrable back from the label: a Famine carries the survival bit
+ * that a low-Provision Deprived world does not, two systems banded identically (both Strained, say)
  * can carry very different critical-good weight, and an emptying world's Provision-1 reading is
  * indistinguishable by value from a genuinely well-fed one. `supplyUnrestTerm` is the one place
  * `survivalShortfall` and `criticalWeight` compose into a severity; `emptyBasket` instead tells the
@@ -186,7 +187,7 @@ export type SupplyRegime = "supplied" | "strained" | "rationing" | "shortage";
 export interface SupplyState {
   regime: SupplyRegime;
   /** A demanded survival good (water/food) is below SHORTAGE_SATISFACTION. Promotes `regime` to
-   *  Shortage outright, whatever Provision says. */
+   *  Famine outright, whatever Provision says. */
   survivalShortfall: boolean;
   /** The critical-good override's weight: Σ necessity × demand share over demanded goods below
    *  CRITICAL_SATISFACTION and at or above BAND_MIN_DEMAND_SHARE (see `supplyUnrestTerm`). Never
@@ -201,7 +202,7 @@ export interface SupplyState {
 }
 
 /**
- * Is a demanded survival good below the shortage line? The one starvation test — the supply-regime
+ * Is a demanded survival good below the famine line? The one starvation test — the supply-regime
  * fold and the build planner's housing gate both read it, so "this world cannot feed its people"
  * means the same thing on both sides. A good nobody here demands is not scored.
  */
@@ -232,11 +233,15 @@ function criticalGoodWeight(goods: GoodSatisfaction[]): number {
 
 /**
  * The SYSTEM-level supply band:
- *  - shortage  — a demanded survival good below SHORTAGE_SATISFACTION, whatever Provision says. The
- *                one punch-through: famine is a step, not an average.
+ *  - famine    — a demanded survival good below SHORTAGE_SATISFACTION, whatever Provision says. The
+ *                one punch-through: famine is a step, not an average, so it owns no span of the
+ *                Provision axis and can read at any Provision value, high ones included.
  *  - supplied  — Provision at or above SUPPLIED_PROVISION.
  *  - strained  — Provision at or above RATIONING_PROVISION, below SUPPLIED_PROVISION.
- *  - rationing — Provision below RATIONING_PROVISION.
+ *  - rationing — Provision at or above DEPRIVED_PROVISION, below RATIONING_PROVISION.
+ *  - deprived  — Provision below DEPRIVED_PROVISION.
+ * Every Provision edge is inclusive on the low side of the HIGHER band, one convention across all
+ * three, so a value sitting exactly on an edge always reads the better word.
  * Provision is computed here from `goods` directly (via `provisionFromWeight`, `provision()`'s own
  * shared core), not passed in, so the band and the number it renders cannot drift apart — one
  * implementation, not a re-derived mean. The total basket weight is computed once here and handed
@@ -254,10 +259,13 @@ export function foldSupplyState(goods: GoodSatisfaction[]): SupplyState {
   const criticalWeight = criticalGoodWeight(goods);
   const totalWeight = totalGoodWeight(goods);
   const emptyBasket = totalWeight <= 0;
-  if (survivalShortfall) return { regime: "shortage", survivalShortfall, criticalWeight, emptyBasket };
+  if (survivalShortfall) return { regime: "famine", survivalShortfall, criticalWeight, emptyBasket };
   const p = provisionFromWeight(goods, totalWeight);
   const regime: SupplyRegime =
-    p >= SUPPLIED_PROVISION ? "supplied" : p >= RATIONING_PROVISION ? "strained" : "rationing";
+    p >= SUPPLIED_PROVISION ? "supplied"
+      : p >= RATIONING_PROVISION ? "strained"
+        : p >= DEPRIVED_PROVISION ? "rationing"
+          : "deprived";
   return { regime, survivalShortfall, criticalWeight, emptyBasket };
 }
 

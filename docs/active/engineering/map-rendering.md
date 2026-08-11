@@ -63,15 +63,17 @@ The **legend renders from the same ramp source** (`rampCssStops`), so a swatch c
 
 ### Provision — stepped, absolute, never re-scaled
 
-Provision breaks the pattern above on purpose, because its band edges (`SUPPLIED_PROVISION`, `RATIONING_PROVISION`
-— the same two the Population-tab band chip classifies on) are **fixed percentages of the civilian basket**, not
-relative magnitudes:
+Provision breaks the pattern above on purpose, because its band edges (`SUPPLIED_PROVISION`, `RATIONING_PROVISION`,
+`DEPRIVED_PROVISION` — the same three the Population-tab band chip classifies on) are **fixed percentages of the
+civilian basket**, not relative magnitudes:
 
-- **Stepped, not interpolated.** `valueRampColorPixi` samples a flat 3-band lookup (red below
-  `RATIONING_PROVISION`, amber the Strained band, green at/above `SUPPLIED_PROVISION`) instead of blending between
-  stops — a mature galaxy sits mostly at ~92-96% Supplied, so a continuous ramp would paint almost everything one
-  colour. Every value inside a band renders identically. Shortage (the survival punch-through) owns no span of
-  this axis — it's a separate signal (`ProvisionEntry.band`), not a fourth colour on the map.
+- **Stepped, not interpolated.** `valueRampColorPixi` samples a flat 4-band lookup (deep maroon below
+  `DEPRIVED_PROVISION`, red the Rationing band, amber the Strained band, green at/above `SUPPLIED_PROVISION`)
+  instead of blending between stops — a mature galaxy sits mostly at ~92-96% Supplied, so a continuous ramp would
+  paint almost everything one colour. Every value inside a band renders identically. Famine (the survival
+  punch-through) owns no span of this axis — it's a separate signal (`ProvisionEntry.band`), not a fifth colour on
+  the map. The map's four steps are one heat scale in its own hues; the band chip's five tones are the badge
+  palette's. The two surfaces must agree on how many states exist, not on which hue each wears.
 - **Absolute — `referenceMax` is ignored.** Every other value mode normalises to a reference max (global or
   faction-scoped); provision does not, because re-scaling would slide its colours out from under the fixed band
   edges. `RESCALES_TO_SCOPE.provision` is `false` for the same reason stability's is, but provision's invariance is

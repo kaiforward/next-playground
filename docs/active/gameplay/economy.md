@@ -244,14 +244,17 @@ The guarantee suite (`lib/constants/__tests__/band-constants.test.ts`) pins six 
 | 5 | The escalation ladder is pinned as formulas, not literals: teardown onset at max floor at `G = (0.75 − maxFloor)/slopeBase` ≈ 0.325 (≈ a third-dip), unrest ceiling reachable from `G` ≈ 0.48 (max floor) / 0.625 (zero tax). |
 | 6 | The critical-good backstop holds shipped strength independent of expectation — no `slopeBase` re-cut can silently weaken the channel. |
 
-The **band is description, not mechanism** — four labels binned from Provision, read by the sim harness today (the player-facing Provision surface is a separately booked roadmap row):
+The **band is description, not mechanism** — four labels binned from Provision, plus one survival punch-through that owns no span of the axis:
 
 | Band | Rule |
 | --- | --- |
 | **Supplied** | Provision ≥ `SUPPLIED_PROVISION` (0.90) |
 | **Strained** | Provision in [`RATIONING_PROVISION`, `SUPPLIED_PROVISION`) |
-| **Rationing** | Provision < `RATIONING_PROVISION` (0.70) |
-| **Shortage** | a *survival* good below 50%, whatever Provision says |
+| **Rationing** | Provision in [`DEPRIVED_PROVISION`, `RATIONING_PROVISION`) |
+| **Deprived** | Provision < `DEPRIVED_PROVISION` (0.50) — more of the basket missing than arriving |
+| **Famine** | a *survival* good below 50%, whatever Provision says |
+
+Every Provision edge is inclusive on the low side of the higher band, so a world sitting exactly on an edge reads the better word. Famine is orthogonal to the axis rather than its bottom rung: a world starving on water while everything else pours in reads Famine at a Supplied-grade Provision. The system panel therefore recolours the whole Provisioned track under Famine instead of moving the marker, and the Provisioned map mode paints only the four axis bands.
 
 No gameplay effect keys off the band — effects read Provision or the grievance, so the label can never disagree with what is happening to the world, and the bin edges are a legibility choice rather than a balance risk. There is no band-level collapse guarantee: collapse keys on dip depth (promise 4), famine (promise 2), and chronic critical failure (promise 6), never on the band label. Chronic delivery below the memory climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; a sustained episode crosses the thresholds, and only resignation (the slow rate) ends an episode the supply doesn't.
 

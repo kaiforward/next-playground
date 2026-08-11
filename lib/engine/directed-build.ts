@@ -138,9 +138,9 @@ export function hopRouteCost(
  * crowding is itself an unrest source, so refusing relief housing on a restive world would hold the
  * valve shut on exactly the world that needs it.
  *
- * A consequence worth stating outright: `foldSupplyState` now bands a system Shortage only through
+ * A consequence worth stating outright: `foldSupplyState` bands a system Famine only through
  * the survival floor above — a world short across the whole basket, or one carrying real
- * critical-good weight, still bands Rationing or Strained (never Shortage) while food and water
+ * critical-good weight, still bands somewhere on the Provision axis (never Famine) while food and water
  * arrive fine, and is deliberately still fed here. The gate answers "can these people eat?", not "is
  * this system comfortable?", so the two readings are allowed to disagree in exactly that case.
  */
