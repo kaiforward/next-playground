@@ -1,11 +1,10 @@
-import { clamp } from "@/lib/utils/math";
+import {
+  contributorBarWidths,
+  thresholdPosition,
+  type ContributorSegment,
+} from "@/components/ui/contributor-bars-helpers";
 
-/** One contributor's raw value plus its display label and paint colour. */
-export interface ContributorSegment {
-  label: string;
-  value: number;
-  color: string;
-}
+export type { ContributorSegment } from "@/components/ui/contributor-bars-helpers";
 
 export interface ContributorBarsProps {
   segments: ContributorSegment[];
@@ -37,34 +36,29 @@ export interface ContributorBarsProps {
  * state — so it carries no `"use client"` directive.
  */
 export function ContributorBars({ segments, total, threshold }: ContributorBarsProps) {
-  const thresholdPct =
-    threshold !== undefined && total > 0 ? clamp((threshold / total) * 100, 0, 100) : undefined;
+  const thresholdPct = thresholdPosition(threshold, total);
+  const widths = contributorBarWidths(segments, total);
 
   return (
     <div className="space-y-1.5">
-      {segments.map((segment) => {
-        // Two figures, deliberately: the track has a finite width, the reading does not.
-        const pct = total > 0 ? (segment.value / total) * 100 : 0;
-        const barPct = clamp(pct, 0, 100);
-        return (
-          <div key={segment.label} className="flex items-center gap-2">
-            <span className="w-24 shrink-0 text-xs text-text-tertiary">{segment.label}</span>
-            <div className="relative h-1.5 flex-1 overflow-hidden bg-surface-active">
-              <span className="block h-full" style={{ width: `${barPct}%`, background: segment.color }} />
-              {thresholdPct !== undefined && (
-                <span
-                  aria-hidden
-                  className="absolute inset-y-0 w-px bg-text-primary/60"
-                  style={{ left: `${thresholdPct}%` }}
-                />
-              )}
-            </div>
-            <span className="w-11 shrink-0 text-right font-mono text-xs text-text-secondary">
-              {Math.round(pct)}%
-            </span>
+      {widths.map(({ label, color, pct, barPct }) => (
+        <div key={label} className="flex items-center gap-2">
+          <span className="w-24 shrink-0 text-xs text-text-tertiary">{label}</span>
+          <div className="relative h-1.5 flex-1 overflow-hidden bg-surface-active">
+            <span className="block h-full" style={{ width: `${barPct}%`, background: color }} />
+            {thresholdPct !== undefined && (
+              <span
+                aria-hidden
+                className="absolute inset-y-0 w-px bg-text-primary/60"
+                style={{ left: `${thresholdPct}%` }}
+              />
+            )}
           </div>
-        );
-      })}
+          <span className="w-11 shrink-0 text-right font-mono text-xs text-text-secondary">
+            {Math.round(pct)}%
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
