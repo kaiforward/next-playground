@@ -253,7 +253,7 @@ describe("founding committed vs opening balance", () => {
 describe("staged goods vs founder draws", () => {
   /** One tick's sample, folded into a fresh census. */
   const sample = (
-    projects: StagedProjectRow[], staging: ReadonlyMap<string, FoundingStagingTotals>,
+    projects: StagedProjectRow[], staging: Map<string, FoundingStagingTotals>,
   ) => {
     const census = newStagedLedgerCensus();
     recordStagedLedger(projects, staging, census);
@@ -287,6 +287,29 @@ describe("staged goods vs founder draws", () => {
     expect(check.right).toBeCloseTo(100, 9);
   });
 
+  it("does not charge a re-founded system with the dead colony's draws", () => {
+    // Abandonment resets a dead colony to unclaimed frontier, so the same system can be founded
+    // again — and the draws are keyed by system, the only key available while the target is still
+    // unclaimed. Tick 1: the first founding stages 12 and completes. Tick 2: nothing open. Tick 3: a
+    // second establish on the SAME system stages 71 of its own. Without the prune, tick 3 compares
+    // 71 against 83 and reports the dead colony's spend as goods missing from its successor.
+    const staging = new Map<string, FoundingStagingTotals>();
+    const census = newStagedLedgerCensus();
+
+    staging.set("c1", totals(12));
+    recordStagedLedger([staged("c1", [12])], staging, census);
+
+    recordStagedLedger([], staging, census);            // the colony opened; the queue is empty
+    expect(staging.has("c1")).toBe(false);              // its total went with it
+
+    staging.set("c1", totals(71));                     // the successor's own draws
+    recordStagedLedger([staged("c1", [71])], staging, census);
+
+    const check = checkStagedLedger(census);
+    expect(check.pass).toBe(true);
+    expect(check.right).toBeCloseTo(71, 9);             // 71, not 83
+  });
+
   it("passes a run where nothing was ever staged", () => {
     expect(sample([], new Map())).toMatchObject({ left: 0, right: 0, pass: true });
   });
@@ -301,8 +324,11 @@ describe("staged goods vs founder draws", () => {
     // The run END is the one moment this check has nothing to look at — every establish has
     // completed and the queue is empty. Keeping the emptiest sample would pass vacuously.
     const census = newStagedLedgerCensus();
-    const staging = new Map([["c1", totals(100)], ["c2", totals(50)]]);
+    // Each colony's draws are seeded on the tick its establish is open, never before: a draw exists
+    // only if its project does, and the runner reads both from the same tick.
+    const staging = new Map([["c1", totals(100)]]);
     recordStagedLedger([staged("c1", [100])], staging, census);
+    staging.set("c2", totals(50));
     recordStagedLedger([staged("c1", [100]), staged("c2", [50])], staging, census);
     recordStagedLedger([], staging, census);      // every colony has landed
 
