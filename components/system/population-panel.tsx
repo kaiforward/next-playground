@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
-import { ContributorBars, type ContributorSegment } from "@/components/ui/contributor-bars";
+import { ContributorBreakdown, type ContributorSegment } from "@/components/ui/contributor-bars";
 import { PopulationSummary } from "@/components/system/population-summary";
 import { ProvisionBlock } from "@/components/system/provision-block";
 import { fractionPct } from "@/lib/utils/format";
@@ -28,10 +28,19 @@ export function populationPanelView(pop: {
 }
 
 /**
- * Stability — the unrest chip, then one `ContributorBars` (goods shortfall, tax pressure,
- * crowding) over the strike-threshold caption. The caption reads `strikeThreshold` straight off
- * the read (never a re-imported constant), so it and the badge's own "Strike" label — bound to the
- * same `STRIKE_PARAMS.threshold` — can never name different numbers.
+ * Stability — the unrest chip, then a `ContributorBreakdown` (goods shortfall, tax pressure,
+ * crowding, headed by the total) over the strike-threshold caption. The caption reads
+ * `strikeThreshold` straight off the read (never a re-imported constant), so it and the badge's
+ * own "Strike" label — bound to the same `STRIKE_PARAMS.threshold` — can never name different
+ * numbers.
+ *
+ * The headline total is `unrest` — the same actual, current-tick value the badge label and
+ * `striking` are computed from — not `unrestBreakdown.settled` (the contributors' capped sum,
+ * which is only where unrest is *heading*; the accumulator lags behind it) and not a
+ * stability-flavoured `1 - unrest` (which would move opposite to bars that are scaled on unrest,
+ * not stability). Sharing `unrest` with the badge means the number and the word beside it can
+ * never disagree; sharing the unrest scale with the bars means the number and their fill can never
+ * point in opposite directions.
  */
 export function StabilityBlock({
   unrest,
@@ -59,7 +68,7 @@ export function StabilityBlock({
         <SectionHeader as="h4">Stability</SectionHeader>
         <StabilityBadge unrest={unrest} />
       </div>
-      <ContributorBars segments={segments} total={1} threshold={unrestBreakdown.strikeThreshold} />
+      <ContributorBreakdown value={unrest} segments={segments} total={1} threshold={unrestBreakdown.strikeThreshold} />
       <p className="mt-2 text-xs text-text-tertiary">Strike at {fractionPct(unrestBreakdown.strikeThreshold)}%.</p>
       {striking && (
         <p className="mt-2 text-sm text-amber-300">Production suppressed — workers are striking.</p>

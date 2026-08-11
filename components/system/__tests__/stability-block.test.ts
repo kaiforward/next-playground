@@ -37,6 +37,24 @@ describe("StabilityBlock — the strike caption always names the read's own stri
     expect(html).toContain("Crowding");
   });
 
+  it("the headline total is `unrest` — the badge's own source value — never `settled` (the contributors' capped sum) or its stability-flavoured inverse", () => {
+    // All three candidate numbers are deliberately distinct: unrest 63%, settled (0.3+0.1+0.02) 42%,
+    // and 1-unrest 37%. A wrong implementation reaching for any of the other two is caught.
+    const unrestBreakdown: SystemUnrestRead = {
+      assessed: true,
+      contributors: { goods: 0.3, tax: 0.1, crowding: 0.02 },
+      settled: 0.42,
+      trend: "recovering",
+      strikeThreshold: 0.65,
+    };
+    const html = renderToStaticMarkup(
+      StabilityBlock({ unrest: 0.63, striking: false, unrestBreakdown }),
+    );
+    expect(html).toContain('text-2xl text-text-primary">63%<');
+    expect(html).not.toContain('text-2xl text-text-primary">42%<');
+    expect(html).not.toContain('text-2xl text-text-primary">37%<');
+  });
+
   it("striking renders the production-suppressed warning alongside the same caption", () => {
     const unrestBreakdown: SystemUnrestRead = {
       assessed: true,

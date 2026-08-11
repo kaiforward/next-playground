@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ContributorBars } from "@/components/ui/contributor-bars";
+import { ContributorBars, ContributorBreakdown } from "@/components/ui/contributor-bars";
 
 // No jsdom in the `unit` project — render to a static HTML string with react-dom/server
 // (pure node, no DOM) and assert on the real markup, same pattern as vital-tile.test.ts.
@@ -59,5 +59,47 @@ describe("ContributorBars — one scaled bar per contributor", () => {
       ContributorBars({ segments: [{ label: "A", value: 5, color: "red" }], total: 10 }),
     );
     expect(html).not.toContain("bg-text-primary/60");
+  });
+});
+
+describe("ContributorBreakdown — a headline total bundled with its ContributorBars", () => {
+  it("the headline is value/total, not the segments' own sum or any single segment's percentage", () => {
+    const html = renderToStaticMarkup(
+      ContributorBreakdown({
+        value: 0.63, // deliberately NOT the segments' sum (0.42) and NOT any one segment's own pct
+        segments: [
+          { label: "Goods shortfall", value: 0.3, color: "#f59e0b" },
+          { label: "Tax pressure", value: 0.1, color: "#3b82f6" },
+          { label: "Crowding", value: 0.02, color: "#a855f7" },
+        ],
+        total: 1,
+        threshold: 0.65,
+      }),
+    );
+    expect(html).toContain('text-2xl text-text-primary">63%<');
+    expect(html).not.toContain('text-2xl text-text-primary">42%<'); // the segments' own capped sum
+    expect(html).not.toContain('text-2xl text-text-primary">30%<'); // the largest segment alone
+    // The bars still render beneath, on the same scale, untouched by the headline.
+    expect(html).toContain("width:30%");
+    expect(html).toContain("width:10%");
+    expect(html).toContain("width:2%");
+    expect(html).toContain("left:65%");
+  });
+
+  it("a value above total clamps the headline to 100%, the same clamp a segment gets", () => {
+    const html = renderToStaticMarkup(
+      ContributorBreakdown({ value: 1.4, segments: [{ label: "A", value: 1.4, color: "red" }], total: 1 }),
+    );
+    expect(html).toContain('text-2xl text-text-primary">100%<');
+    expect(html).not.toContain("140%");
+  });
+
+  it("total <= 0 renders the headline at 0% rather than dividing by zero", () => {
+    const html = renderToStaticMarkup(
+      ContributorBreakdown({ value: 5, segments: [{ label: "A", value: 5, color: "red" }], total: 0 }),
+    );
+    expect(html).toContain('text-2xl text-text-primary">0%<');
+    expect(html).not.toContain("NaN");
+    expect(html).not.toContain("Infinity");
   });
 });
