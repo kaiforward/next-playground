@@ -98,7 +98,9 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` i
 - Determinism: use seeded `tickRng(seed, tick)`. Never `Date.now`/`Math.random`/`new Date()` inside a processor body (wall-clock is for pacing/autosave/logging only).
 
 **Testing**
-- The `unit` Vitest project runs `lib/**` and `components/**`. No jsdom — DOM-touching tests need an inline `globalThis` stub in `beforeAll`.
+- Two Vitest projects, split by **file extension**: `.test.tsx` renders in jsdom with Testing Library (`components/**`, `app/**`); `.test.ts` is pure logic in node (`lib/**`, `components/**`). A test that renders needs JSX anyway, so the extension already says which environment the file needs.
+- **A component test asserts roles, accessible names and text — never classes or styles**, which only restate a prop. Where a number's only observable is a style (a bar width, a rule position), move the maths to a helper tested in node and leave the DOM test what a reader actually sees.
+- Two ways such a test passes vacuously: an accessible name built from props rather than from the DOM cannot fail when the element stops rendering; and `toHaveTextContent` cannot see a `NaN` in a style attribute, so divide-by-zero guards assert on `container.innerHTML`.
 
 **Next.js 16 / React / TanStack Query**
 - `useSuspenseQuery` fires during SSR render, not in an effect — relative-URL `fetch()` crashes on the server. `QueryBoundary`'s mounted guard defers children past hydration.
