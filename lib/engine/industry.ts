@@ -847,7 +847,6 @@ export function buildIndustryReadout(
  * Storage capacity the system's built buildings provide for one good — the
  * infrastructure term of maxStock. Extractors/factories store what they handle;
  * population centres hold nominal retail stock (generous on consumer goods).
- * See docs/planned/economy-relative-stock-band.md.
  */
 export function facilityStorageForGood(buildings: Record<string, number>, goodId: string): number {
   let storage = 0;

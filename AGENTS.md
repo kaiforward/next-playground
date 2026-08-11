@@ -52,7 +52,9 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 - `docs/SPEC.md` — master functional spec + system interaction map.
 - `docs/active/` — shipped systems (`gameplay/`, `engineering/`, `design-system/`).
 - `docs/planned/` — designed, not built.
-- `docs/build-plans/` — transient build plans; **delete each when its feature ships**.
+- `docs/build-plans/` — transient implementation scaffolding; **delete a plan on the PR that finishes
+  its work**, never at a later integration merge. A plan describes how to build; a spec describes what
+  the game does — nothing in a plan is ever folded into `docs/active/`.
 - `docs/ROADMAP.md` — **the single ordered queue of work.** Nothing else keeps a second copy of it; memory tracks only where we are on it. Delete a row when it ships.
 
 Conventions:
@@ -153,6 +155,7 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 - **Never open a PR whose base is another open PR's branch.** Squash-merging the base rewrites its commits and deletes its branch, which *permanently* auto-closes the stacked PR — GitHub will not reopen or retarget it. Branch sequential work off `main`. If already stacked: capture the base head SHA before merging, then `git rebase --onto origin/main <old-base-SHA> <branch>`.
 - **Worktrees are for parallel workstreams, not sequential PRs.** Always `git worktree remove` after.
 - **Do the doc lifecycle on the branch before the final review** — promote spec to `docs/active/`, update `docs/SPEC.md`, delete the build plan. Post-merge docs force a pointless docs-only PR.
+- **On a multi-PR feature the doc lifecycle is per sub-PR, not deferred to the integration merge.** A plan left for the `shared`→`main` merge is never reviewed at all, because that merge gets only a light sanity pass by design. Each sub-PR deletes the plan whose work it completed.
 
 ### Review process
 - **Spec gate:** `/spec-review <doc>` on any spec with cross-mechanic surface (economy, tick processors, changed signals/primitives) BEFORE writing the implementation plan. Pure-UI and tooling skip it.

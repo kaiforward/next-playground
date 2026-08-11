@@ -161,8 +161,7 @@ export function developmentFloorShare(development: number, base: number, knee: n
 /**
  * Fund a front-first queue with a reserved development-scaled floor for eligible (young-colony) builds,
  * so a colony's valid-but-low-ROI first build isn't monopolised out of the pool by the homeworld's
- * larger builds (docs/planned/economy-colony-bootstrapping.md §3.4 / §7.9). Returns the same shape as
- * `fundQueue`; `reserved = 0` reproduces `fundQueue` exactly.
+ * larger builds. Returns the same shape as `fundQueue`; `reserved = 0` reproduces `fundQueue` exactly.
  *
  * Two passes over the one ROI-ordered queue:
  *  - Pass A funds only the floor-eligible builds, front-first, from `reserved` (the minimum slice).

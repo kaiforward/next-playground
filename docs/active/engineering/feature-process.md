@@ -108,5 +108,6 @@ hours.
 The review rules live in `AGENTS.md` → Git Workflow / Review process; the load-bearing ones for the
 pipeline's shape: each sub-feature is reviewed going *into* the shared branch while it is small; the
 doc lifecycle (promote spec, update `docs/SPEC.md`, delete the build plan) happens on the branch
-*before* the final review so the fold is part of the reviewed diff; and everything known about a PR
-goes on the table before the merge, which is always a human decision.
+*before* the final review so the fold is part of the reviewed diff — per sub-PR, since a plan carried
+to the integration merge is never reviewed; and everything known about a PR goes on the table before
+the merge, which is always a human decision.
