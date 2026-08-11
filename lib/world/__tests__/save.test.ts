@@ -133,14 +133,17 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 11 (founding ledger, charter flag and purse line)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(11);
+  it("is at save format version 12 (the supply-band vocabulary)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(12);
   });
 
-  it("rejects a prior-version (v10) save — saves break on the shape bump", () => {
-    // v10's in-flight colonies were committed under the free founding model; there is no
-    // field-defaulting path, and any default would be a lie about whether they were paid for.
-    const json = JSON.stringify({ formatVersion: 10, world });
+  it("rejects a prior-version (v11) save — saves break on the shape bump", () => {
+    // v11 systems carry `supplyBand: "shortage"`, a value `SupplyRegime` no longer has, and a
+    // `"rationing"` that meant `[0, 0.7)` rather than today's `[0.5, 0.7)`. `deserializeWorld` runs
+    // structural spot-checks, not per-field validation, so nothing below this gate would notice
+    // either — the version bump is the whole defence, and it must reject rather than load a band
+    // string the type system says cannot exist.
+    const json = JSON.stringify({ formatVersion: 11, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
@@ -277,6 +280,49 @@ describe("serializeWorld / deserializeWorld", () => {
 
   it("accepts generated systems without a provisionExpectation (never seeded)", () => {
     expect(world.systems[0].provisionExpectation).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
+  it("round-trips the optional provision and supplyBand fields", () => {
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, provision: 0.73, supplyBand: "rationing" } : system),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].provision).toBe(0.73);
+    expect(result.world.systems[0].supplyBand).toBe("rationing");
+  });
+
+  it("accepts generated systems without provision or supplyBand (never assessed)", () => {
+    // A freshly generated world has never run an economy cycle — the absent-means-assessed-at-
+    // famine trap the provisionExpectation convention above also guards: reading a coerced 0
+    // here would render as "0% Provisioned" for a system nobody has ever measured.
+    expect(world.systems[0].provision).toBeUndefined();
+    expect(world.systems[0].supplyBand).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
+  it("round-trips the optional criticalWeight field UN-CLAMPED — unlike provision, it carries no [0,1] ceiling", () => {
+    // 1.3 is deliberately above 1: criticalWeight has no upper bound of its own (supplyUnrestTerm
+    // floors it at 0 only; the min(slopeShortage, …) cap inside that function bounds its EFFECT,
+    // not the stored weight — lib/world/types.ts). A save round trip that silently clamped this to
+    // 1 would be indistinguishable from the provision-style bug this test exists to catch.
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, provision: 0.4, supplyBand: "rationing", criticalWeight: 1.3 } : system),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].criticalWeight).toBe(1.3);
+  });
+
+  it("accepts generated systems without criticalWeight (never assessed)", () => {
+    expect(world.systems[0].criticalWeight).toBeUndefined();
     expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
   });
 

@@ -204,8 +204,8 @@ describe("summarizePopulation — striking share and stranded population", () =>
     const systems = [
       popSys("calm-a", 100, 1000, 0.1),
       popSys("calm-b", 100, 1000, 0.1),
-      popSys("calm-c", 100, 1000, 0.64),  // just under the threshold
-      popSys("striking", 100, 1000, 0.65), // exactly at it — inclusive
+      popSys("calm-c", 100, 1000, 0.65),  // exactly at the threshold — still produces, so not striking
+      popSys("striking", 100, 1000, 0.66), // above it
     ];
     const summary = summarizePopulation(systems, 400, 0.65, BRAKE_END);
     expect(summary.strikingCount).toBe(1);
@@ -367,32 +367,34 @@ describe("summarizeSupplyRegimes", () => {
     ]);
     expect(summary.counted).toBe(2);
     expect(summary.supplied).toBe(1);
-    expect(summary.shortage).toBe(1);
+    expect(summary.famine).toBe(1);
     expect(
-      summary.suppliedShare + summary.strainedShare + summary.rationingShare + summary.shortageShare,
+      summary.suppliedShare + summary.strainedShare + summary.rationingShare
+        + summary.deprivedShare + summary.famineShare,
     ).toBeCloseTo(1, 10);
   });
 
-  it("counts a Strained world as Strained, not silently folded into Shortage", () => {
-    // The defect this widening exists to close: before the four-band fold, anything that wasn't
-    // Supplied or Rationing landed in a catch-all `else` that counted it as Shortage. Provision 0.8
-    // sits strictly between RATIONING_PROVISION (0.70) and SUPPLIED_PROVISION (0.90), and no survival
-    // good is touched, so this system must read Strained — a summarizer that dropped the fourth band
-    // back to a three-way catch-all would report it as Shortage instead.
+  it("counts a Strained world as Strained, not silently folded into a harsher bucket", () => {
+    // The defect this fold exists to close: a band that isn't given its own switch arm lands in a
+    // catch-all and is counted as something worse. Provision 0.8 sits strictly between
+    // RATIONING_PROVISION (0.70) and SUPPLIED_PROVISION (0.90), and no survival good is touched, so
+    // this system must read Strained — and every other bucket must read zero.
     const systems = [popSys("strained", 100, 1000)];
     const summary = summarizeSupplyRegimes(systems, [mkt("strained", "water", 0.8)]);
     expect(summary.strained).toBe(1);
     expect(summary.supplied).toBe(0);
     expect(summary.rationing).toBe(0);
-    expect(summary.shortage).toBe(0);
+    expect(summary.deprived).toBe(0);
+    expect(summary.famine).toBe(0);
   });
 
-  it("buckets a system below the Rationing bin edge as rationing, not supplied, strained or shortage", () => {
-    // Provision-based banding means Rationing is the LARGE-shortfall band now, not "any positive D"
-    // the way the old D-scale cut read it: both demanded goods at 0.6 gives Provision exactly 0.6
-    // (uniform satisfaction, so the weights cancel out) — below RATIONING_PROVISION (0.70), above the
-    // SHORTAGE_SATISFACTION survival floor (0.5), so this must read Rationing and nothing else.
-    // Without this, a summarizer that mis-routed the rationing branch would still pass the suite.
+  it("buckets a system below the Rationing bin edge as rationing, not deprived, strained or famine", () => {
+    // Provision-based banding means Rationing is the mid-shortfall band, not "any positive D" the way
+    // the old D-scale cut read it: both demanded goods at 0.6 gives Provision exactly 0.6 (uniform
+    // satisfaction, so the weights cancel out) — below RATIONING_PROVISION (0.70), above both
+    // DEPRIVED_PROVISION (0.50) and the SHORTAGE_SATISFACTION survival floor, so this must read
+    // Rationing and nothing else. Without this, a summarizer that mis-routed the rationing branch
+    // would still pass the suite.
     const systems = [popSys("peckish", 100, 1000)];
     const summary = summarizeSupplyRegimes(systems, [
       mkt("peckish", "water", 0.6), mkt("peckish", "food", 0.6),
@@ -400,31 +402,48 @@ describe("summarizeSupplyRegimes", () => {
     expect(summary.rationing).toBe(1);
     expect(summary.supplied).toBe(0);
     expect(summary.strained).toBe(0);
-    expect(summary.shortage).toBe(0);
+    expect(summary.deprived).toBe(0);
+    expect(summary.famine).toBe(0);
     expect(summary.meanShortfall).toBeGreaterThan(0);
     expect(summary.meanShortfall).toBeLessThan(LARGE_SHORTFALL_REFERENCE);
   });
 
-  it("stops at rationing for a near-total basket collapse that never crosses the survival floor", () => {
-    // Gate 1 dropped band promotion (docs/SPEC.md's "the critical-good override is slope-only"):
-    // foldSupplyState() has exactly one route to Shortage — hasSurvivalShortfall — and no
+  it("counts a Deprived world into deprived, not folded up into rationing or down into famine", () => {
+    // The new bottom band, and the counter a `switch` without its own arm silently zeroes. Every
+    // demanded good at 0.3 puts Provision at exactly 0.3 (uniform satisfaction cancels the weights)
+    // — below DEPRIVED_PROVISION (0.50) — while NO survival good is demanded at all, so the famine
+    // punch-through cannot fire. The deliberate contrast with the Rationing fixture above: same
+    // shape, one band lower, and it must not read as the same word.
+    const nonSurvival = GOOD_NAMES.filter((g) => !SURVIVAL_GOODS.includes(g));
+    const systems = [popSys("stripped", 100, 1000)];
+    const summary = summarizeSupplyRegimes(systems, nonSurvival.map((g) => mkt("stripped", g, 0.3)));
+    expect(summary.deprived).toBe(1);
+    expect(summary.deprivedShare).toBeCloseTo(1, 10);
+    expect(summary.supplied).toBe(0);
+    expect(summary.strained).toBe(0);
+    expect(summary.rationing).toBe(0);
+    expect(summary.famine).toBe(0);
+  });
+
+  it("stops at deprived for a near-total basket collapse that never crosses the survival floor", () => {
+    // foldSupplyState() has exactly one route to Famine — hasSurvivalShortfall — and no
     // Provision-level cut promotes the band on its own, however low Provision falls. This fixture is
     // the stress case for that: both survival goods sit exactly AT SHORTAGE_SATISFACTION (not below
     // it, so hasSurvivalShortfall stays false) while every other demanded good reads zero — a
     // near-total basket collapse. If a D/Provision cut ever again promoted the band directly, this is
-    // the fixture that would first read Shortage instead of Rationing. Built from the real tables
-    // (GOOD_NAMES, SURVIVAL_GOODS) so it re-verifies itself if any necessity or demand weight moves.
+    // the fixture that would first read Famine instead of the axis's own bottom band. Built from the
+    // real tables (GOOD_NAMES, SURVIVAL_GOODS) so it re-verifies itself if any weight moves.
     const nonSurvival = GOOD_NAMES.filter((g) => !SURVIVAL_GOODS.includes(g));
     const systems = [popSys("squeezed", 100, 1000)];
     const summary = summarizeSupplyRegimes(systems, [
       ...SURVIVAL_GOODS.map((g) => mkt("squeezed", g, SHORTAGE_SATISFACTION)),
       ...nonSurvival.map((g) => mkt("squeezed", g, 0)),
     ]);
-    expect(summary.rationing).toBe(1);
-    expect(summary.shortage).toBe(0);
+    expect(summary.deprived).toBe(1);
+    expect(summary.famine).toBe(0);
     // The shortfall is large — a near-total basket collapse, well past LARGE_SHORTFALL_REFERENCE —
-    // yet still reads Rationing: band promotion had to be dropped explicitly (see the comment above)
-    // rather than left to fall out of any Provision- or shortfall-level cut.
+    // yet still reads a Provision band: band promotion had to be dropped explicitly (see the comment
+    // above) rather than left to fall out of any Provision- or shortfall-level cut.
     expect(summary.meanShortfall).toBeGreaterThanOrEqual(LARGE_SHORTFALL_REFERENCE);
   });
 

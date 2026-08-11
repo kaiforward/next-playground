@@ -23,6 +23,7 @@ import type {
 } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
 import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
+import type { SupplyRegime } from "@/lib/engine/population";
 
 // ── Meta ────────────────────────────────────────────────────────
 
@@ -95,6 +96,41 @@ export interface WorldSystem {
    *  whenever the system transitions into `developed` (resettlement seeds fresh —
    *  `applyDevelopments`, `lib/world/tick.ts`). */
   provisionExpectation?: number;
+  /** This cycle's Provisioned — the necessity-weighted delivered share (`provision()`,
+   *  lib/engine/population.ts), the exact complement of the dissatisfaction the population
+   *  processor's unrest read consumed the same cycle. A read-side recompute cannot honestly
+   *  reach `consumptionMult` (an event-only demand modifier with no read-side path), so this is
+   *  persisted at the point of assessment instead — the same reason `satisfaction` is persisted
+   *  (`:270` below), so the display and the sim cannot diverge. Absent means never assessed —
+   *  deliberately NOT the `collapseDebt` "absent ⇒ 0" convention above (matches
+   *  `provisionExpectation` instead): coercing absence to 0 would read as "0% Provisioned", a
+   *  real and false reading, for a system that has never run an economy cycle. Unlike
+   *  `provisionExpectation`, this is a fresh per-cycle reading with no memory semantics — a
+   *  corrupt or missing write drops straight to absent rather than keeping the prior cycle's
+   *  figure. Written once per economy cycle, alongside `provisionExpectation`. */
+  provision?: number;
+  /** This cycle's supply band — `foldSupplyState`'s `regime` (lib/engine/population.ts),
+   *  carrying the survival punch-through (Famine, whatever `provision` reads) through
+   *  persistence so a famine reading is not re-inferred from the number on the read side. Same
+   *  absence convention as `provision`: absent means never assessed, never "supplied". Written
+   *  once per economy cycle, alongside `provision`. */
+  supplyBand?: SupplyRegime;
+  /** This cycle's critical-good override weight — `foldSupplyState`'s `criticalWeight`
+   *  (lib/engine/population.ts), the crisis-term input `supplyUnrestTerm` reads whenever
+   *  `supplyBand` is not itself "famine" (the survival branch already carries slopeShortage
+   *  outright; this covers the graduated override below it). Not inferable from `supplyBand`: two
+   *  systems banded identically can carry very different critical-good weight (`SupplyState`'s own
+   *  docstring), so — unlike `survivalShortfall`, which IS a strict biconditional with
+   *  `supplyBand === "famine"` (`foldSupplyState` only ever returns that regime from the
+   *  survival branch) — this needs its own field rather than being re-derived from the band. Same
+   *  absence convention as `provision`/`supplyBand`: absent means never assessed. Deliberately NOT
+   *  clamped to [0, 1] the way `provision` is: `supplyUnrestTerm` only floors it at 0
+   *  (`Math.max(0, supply.criticalWeight)`) and its effect is bounded separately by the
+   *  `min(slopeShortage, …)` cap inside that function, not by the weight itself — clamping the
+   *  stored value to 1 would silently cap a legitimate larger weight at the persistence layer
+   *  instead of where the engine already bounds it. Written once per economy cycle, alongside
+   *  `provision`/`supplyBand`. */
+  criticalWeight?: number;
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */

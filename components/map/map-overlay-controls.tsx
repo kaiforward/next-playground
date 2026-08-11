@@ -3,7 +3,9 @@
 import { TIER_COLOR, TIER_LABEL, pixiHexToCss } from "@/lib/constants/good-colors";
 import { MAP_MODES, type MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
-import { rampCssStops, ABSENT_CSS, type ValueMode } from "@/components/map/pixi/value-ramp";
+import {
+  rampCssStops, ABSENT_CSS, provisionLegendStops, type ContinuousMode,
+} from "@/components/map/pixi/value-ramp";
 import { RadioGroup } from "@/components/form/radio-group";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import {
@@ -19,6 +21,7 @@ const MODE_LABELS: Record<MapMode, string> = {
   population: "Population",
   development: "Development",
   migration: "Migration",
+  provision: "Provisioned",
   none: "None",
 };
 
@@ -57,6 +60,8 @@ const TERRITORY_OPTIONS = MAP_MODES.map((m) => ({
       <DevelopmentRampLegend />
     ) : m === "migration" ? (
       <MigrationRampLegend />
+    ) : m === "provision" ? (
+      <ProvisionRampLegend />
     ) : undefined,
 }));
 
@@ -150,7 +155,7 @@ function OverlayLegend({ kind }: { kind: LegendKind }) {
  * Rendered from the SAME `value-ramp` stops the Pixi cells are filled from, so
  * the legend swatch can never drift from the map (one source of truth).
  */
-function rampGradient(mode: ValueMode): string {
+function rampGradient(mode: ContinuousMode): string {
   return `linear-gradient(to right, ${[ABSENT_CSS, ...rampCssStops(mode)].join(", ")})`;
 }
 
@@ -237,6 +242,39 @@ function MigrationRampLegend() {
       </div>
       <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
         Where population is drawn — room, jobs and calm. Black = undeveloped or out of sensor range.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Stepped legend: unlike the other value modes' `rampGradient` (a smooth CSS gradient built from
+ * `rampCssStops`, which discards stop positions), this renders one flat swatch per band, sized to
+ * the real span between `provisionLegendStops` positions — so the legend's boundaries sit at the
+ * band edges (DEPRIVED_PROVISION, RATIONING_PROVISION, SUPPLIED_PROVISION), not at even quarters.
+ */
+function ProvisionRampLegend() {
+  const stops = provisionLegendStops();
+  return (
+    <div>
+      <h5 className="mb-1 text-[9px] font-display font-bold uppercase tracking-[0.18em] text-text-tertiary">
+        Provisioned
+      </h5>
+      <div className="flex h-2 w-full" aria-hidden>
+        {stops.map((stop, i) => {
+          const end = i + 1 < stops.length ? stops[i + 1].position : 1;
+          const width = (end - stop.position) * 100;
+          return <span key={stop.position} style={{ background: stop.css, width: `${width}%` }} />;
+        })}
+      </div>
+      <div className="mt-0.5 flex justify-between text-[9px] font-mono text-text-secondary">
+        <span>Deprived</span>
+        <span>Supplied</span>
+      </div>
+      <p className="mt-1 text-[10px] leading-relaxed text-text-secondary">
+        Share of the civilian basket delivered — stepped at the Deprived / Rationing / Strained /
+        Supplied band edges, not a smooth gradient. Famine is a separate reading and paints no band
+        here. Black = never assessed.
       </p>
     </div>
   );

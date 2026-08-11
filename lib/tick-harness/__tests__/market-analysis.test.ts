@@ -138,7 +138,7 @@ describe("computeMarketHealth — stock drift", () => {
 
 describe("computeMarketHealth — stock pins", () => {
   it("counts a market at (or within 2% of max of) zero stock as floor-pinned", () => {
-    // The true floor is stock ≈ 0 — the Shortage regime's resting point. A market
+    // The true floor is stock ≈ 0 — a starved market's resting point. A market
     // that is empty, or within BAND_PROXIMITY_FRAC (2%) of maxStock of empty, is
     // floor-pinned; one just past that buffer is not.
     const oreBand = marketBandForRow(market("sys-1", "ore", 0), GOODS.ore);

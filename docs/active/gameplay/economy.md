@@ -113,8 +113,8 @@ All `outputPerUnit` constants and per-capita needs are first-draft and **simulat
 `WorldBuilding.count` is no longer seed-frozen. A dedicated **infrastructure-decay** processor runs each economy shard (right after economy commits, before population) and mutates `count` **downward only**, toward what is actively *used* — the gap between *built* and *used* is what rots:
 
 - **"Used" per role.** Housing → occupancy `population / POP_CENTRE_DENSITY`; production/extraction → staffed *and* selling `count × min(labourFulfillment, sellingFactor)`. The selling factor is the production brake's own ceiling (`brakeKnee`/`productionCeiling`, `lib/engine/tick.ts`) at the cycle's start stock — 1 while stock is at or below the warehouse knee, → 0 as it fills toward the brake's ramp end (1.3 × the knee).
-- **Disuse decay (gentle).** `count ← count − disuseRate · max(0, count − used)`. A small `disuseRate` is itself the hysteresis — one idle shard sheds only a sliver; only a *sustained* gap compounds down.
-- **Unrest decay (catastrophic).** Above θ_decay, working capacity is torn down even while in use: `count ← count − unrestRate · count · max(0, unrest − θ_decay)` — the infrastructure mirror of the population-decline term, the snowball.
+- **Idle contraction (buffered, gentle).** Decay is a whole-level ratchet, not a continuous shave: a per-(system, building type) countdown accrues one reference-cycle each run while at least a whole level sits idle (`count > used`), and only once it crosses `idleBufferCycles` (12) does the marginal idle level tear down — the countdown resets the moment the level refills, so a brief dip costs nothing and only a sustained gap compounds down.
+- **Unrest teardown (catastrophic).** Above `unrestThreshold` (θ_decay = 0.75) one **system-wide** collapse-debt accumulator accrues each run at a severity ramped by how far unrest sits above θ (0 at θ, 1 at unrest 1); each time the debt crosses a whole integer, one whole level tears down — even while in use — from the system's least-used eligible building type (ties broken by type id). Below θ the debt resets to 0: collapse is a regime, not a ledger. One level is shed **per run for the whole system**, not per building type, so teardown speed doesn't scale with how many industries a system happens to run. Housing can only lose a level while occupancy leaves the level above resident need spare, so this channel can never strand a population at `popCap = 0` (`lib/engine/infrastructure-decay.ts`).
 
 `count` never rises here (growth is a deliberate, treasury-funded decision deferred to the faction-agency layer) and never drops below 0. Because housing `count` changes, **`popCap` recomputes live** each shard (`Σ housing.count × POP_CENTRE_DENSITY`), and the population processor reads that live value. When housing has rotted *below* its occupants (`population > popCap`, the unrest-snowball case), the overshoot is displaced as **unrest-weighted migration ⊕ death** (the non-conserved death term `overshootDeathRate · overshoot · unrest` in `populationDelta`; the conserved flee-half rides the migration processor, which already repels high-unrest systems). The full model and the Industry-panel surface (available · built · in-use, health-coloured) live in [economy-infrastructure-decay.md](./economy-infrastructure-decay.md).
 
@@ -130,6 +130,13 @@ The cascade runs **per system, each tick**, with goods processed in **recipe-top
 4. **Inputs drawn** from local stock in proportion to *actual* output (`inputs_g[i] × actualOutput`) — you only consume what you actually convert.
 
 **Shared ration ramp, no reserve floor.** A recipe input draws toward genuinely empty stock — there is no reserve it stops at. Below the input's emergency-ration stock (`RATION_COVER × demandRate`) every drawer of that good, civilian or industrial, slows together on the same `consumptionFactor` ramp (full above it, `sqrt(stock / rationStock)` below, 0 at empty), each at its own point in the recipe-topological draw order; above the ration stock the draw is unconstrained. `minStock` (the per-market price-floor level; see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) is a pricing concept only — it sets where price ceilings out, not where a recipe's draw stops.
+
+Within a tick, civilian consumption of a good is drawn in that good's own topological-order pass —
+immediately after its production, before any downstream recipe draws it as an input — so civilian
+demand is served ahead of the industries that depend on it, never pro-rata against them. The ration
+factor for that pass is read from the good's **opening** stock: a cycle that begins at or above
+`rationStock` records full satisfaction even if the draw that follows leaves closing stock below it,
+which is why satisfaction is a flow measurement (delivered ÷ demanded this cycle), not a stock gauge.
 
 Inputs come from *local* stock, which directed logistics refills from same-faction surplus systems. So a refinery world with no Ore deposits still runs its Smelters as long as Ore is hauled in — and **cutting that supply starts the downstream cascade**, grounded in the directed-logistics lever. The marquee emergent behaviours — need-cascade, lane-cut cascade, over-industrialise-a-garden-world-and-it-can-no-longer-feed-itself — all fall out of this loop composed with the population/unrest dynamics, with the industrial base **static** (seeded at world-gen; runtime construction is a later agency layer). The cascade engine is pure (`lib/engine/supply-chain.ts`).
 
@@ -199,7 +206,7 @@ The economy processor groups the shard's markets **by system** and runs the coup
 
 1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the pricing reference (`anchorMult`).
 2. **Input-gated, brake-limited production** — the building-capacity production rate is throttled by `inputGate` (recipe-input availability; 1 for tier-0), then by the production brake's ceiling: full rate while stock sits at or below the **warehouse knee** — the larger of `BRAKE_USE_COVER (40)` cycles of the system's use figure (× `anchorMult`) and `BRAKE_OUTPUT_COVER (8)` cycles of its own reference capacity — ramping linearly to zero at `BRAKE_RAMP (1.3) ×` the knee. No price-anchor quantity reaches the brake. Production is also scaled down by the **strike multiplier** — if the system's `unrest` is above the strike threshold, a smooth suppression factor reduces output. The recipe inputs are then drawn from local stock in proportion to actual output (see [Supply Chain & Input-Gating](#supply-chain--input-gating)).
-3. **Self-limiting consumption** — its population-scaled civilian consumption rate removes stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left). Consumption is **never suppressed** by strikes — people still need goods even when workers walk out.
+3. **Self-limiting consumption** — its population-scaled civilian consumption rate removes stock, ramped by the shared ration curve (`consumptionFactor`; see [Supply Chain & Input-Gating](#supply-chain--input-gating)): full delivery at or above `RATION_COVER` (2) cycles of demand, `sqrt(stock / rationStock)` below it, zero at empty. This is the same curve and the same threshold industrial input draws use — `minStock`/`maxStock` (the pricing band) never enter this ramp. Consumption is **never suppressed** by strikes — people still need goods even when workers walk out.
 4. **Clamp** — stock bounded to `[0, maxStock]`. `minStock` is a pricing-only reserve (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)); it does not gate or clamp the tick's draw.
 
 There is no mean-reversion step and no demand axis — both are gone from the single-stock model.
@@ -226,9 +233,32 @@ term        = max(slopeBase · grievance, crisisTerm)
 unrest     ← clamp(floor + (1 − decay)·(unrest − floor) + term·decay, 0, 1)
 ```
 
+`necessity_g` is an authored weight, not derived from tier, price band, or consumption volume — each
+of those gets the ranking wrong. `GOOD_CONSUMPTION` is a tier gradient (its own docstring: "higher
+tier → lower need — only their relative shape matters"), so reading it as a necessity ranking rates
+medicine below gas purely because medicine sits one tier higher; `priceFloor`/`priceCeiling` is a
+pure tier lookup with zero per-good variation; volatility is unread. Necessity is the one axis that
+says a good is *needed* rather than merely *bought*:
+
+| Necessity | Goods |
+| --- | --- |
+| 1.0 | water, food |
+| 0.8 | medicine |
+| 0.4 | gas, textiles |
+| 0.3 – 0.35 | fuel, consumer_goods |
+| 0.15 | biomass, chemicals, electronics |
+| 0.1 | ore, minerals, metals, polymers |
+| 0.05 | radioactives, alloys, components, machinery, luxuries |
+| 0.01 – 0.02 | munitions, hull_plating, weapons, weapons_systems, targeting_arrays, reactor_cores, ship_frames |
+
+(`GOOD_NECESSITY`, `lib/constants/physical-economy.ts`.) A luxuries drought therefore barely moves
+Provision even at zero delivery, while a water or food shortfall dominates it — necessity times demand
+share is why the guarantee suite (below) can assert that no non-survival good, alone, at any tax
+level, reaches the strike threshold.
+
 `floor` is the standing pressure every settled world carries regardless of supply (tax level + crowding, up to ~0.23). Relaxation is a single rate (`decay`) whatever the world's state, and because the gain is scaled by the same `decay`, the fixed point is `min(1, floor + term)` **independent of the relaxation rate** — the rate sets only how fast unrest travels there. `slopeBase` is one flat exchange rate on grievance — no escalation ramp — and severity lives in the crisis term rather than in the grievance curve's shape:
 
-- **Survival floor** — water or food below `SHORTAGE_SATISFACTION` (50%) reads `slopeShortage × (1 − Provision)` outright and bands the world Shortage, whatever the average or the memory says. Famine is never averaged away, and a population never gets "used to" it.
+- **Survival floor** — water or food below `SHORTAGE_SATISFACTION` (50%) reads `slopeShortage × (1 − Provision)` outright and bands the world Famine, whatever the average or the memory says. Famine is never averaged away, and a population never gets "used to" it.
 - **Critical-good override** — each demanded good below `CRITICAL_SATISFACTION` (0.25, a separate line from the famine one) holding at least `BAND_MIN_DEMAND_SHARE` (1%) of the basket reads `min(slopeShortage, slopeBase + criticalWeight × (slopeShortage − slopeBase)) × (1 − Provision)`, on the absolute scale — expectation-independent, so no re-cut of `slopeBase` can silently weaken it. Slope-only: it never moves the band, and a world that also has famine fires the survival step alone.
 
 **The memory** (`lib/engine/expectation.ts`; `EXPECTATION_PARAMS` in `lib/constants/population.ts`): each developed system persists `provisionExpectation`, an asymmetric per-cycle relaxation toward that cycle's Provision — rising fast (`riseRate` 0.25/cycle: standards climb within a few good cycles) and resigning slowly (`resignRate` 0.02/cycle, half-life ≈ 34 cycles: accepting less takes a political generation). The update runs as catch-up sub-steps of the unscaled rates, the rise/resign branch re-evaluated every sub-step, so changing the tick cadence cannot bend the rise:resign ratio. The unrest read uses `max(stored, 0.5)` — the floor is read-time policy only, never written back, so the effective standard never falls below half-provision while the stored memory stays honest. A stored value that is absent, non-finite, or outside [0, 1] reads as absent and seeds from that cycle's own Provision — one rule covering world-gen, colony founding, old saves, and corruption alike, and the reason a newborn colony opens calm: its memory starts at its own opening state, so opening grievance is `max(0, 0.5 − opening P)`. A system transitioning into `developed` clears any stored baseline (a resettled world's stale memory must not judge its new colonists), and a cycle with an empty consumption basket skips the update — nothing was measured, so nothing is learned.
@@ -244,22 +274,40 @@ The guarantee suite (`lib/constants/__tests__/band-constants.test.ts`) pins six 
 | 5 | The escalation ladder is pinned as formulas, not literals: teardown onset at max floor at `G = (0.75 − maxFloor)/slopeBase` ≈ 0.325 (≈ a third-dip), unrest ceiling reachable from `G` ≈ 0.48 (max floor) / 0.625 (zero tax). |
 | 6 | The critical-good backstop holds shipped strength independent of expectation — no `slopeBase` re-cut can silently weaken the channel. |
 
-The **band is description, not mechanism** — four labels binned from Provision, read by the sim harness today (the player-facing Provision surface is a separately booked roadmap row):
+The **band is description, not mechanism** — four labels binned from Provision, plus one survival punch-through that owns no span of the axis:
 
 | Band | Rule |
 | --- | --- |
 | **Supplied** | Provision ≥ `SUPPLIED_PROVISION` (0.90) |
 | **Strained** | Provision in [`RATIONING_PROVISION`, `SUPPLIED_PROVISION`) |
-| **Rationing** | Provision < `RATIONING_PROVISION` (0.70) |
-| **Shortage** | a *survival* good below 50%, whatever Provision says |
+| **Rationing** | Provision in [`DEPRIVED_PROVISION`, `RATIONING_PROVISION`) |
+| **Deprived** | Provision < `DEPRIVED_PROVISION` (0.50) — more of the basket missing than arriving |
+| **Famine** | a *survival* good below 50%, whatever Provision says |
 
-No gameplay effect keys off the band — effects read Provision or the grievance, so the label can never disagree with what is happening to the world, and the bin edges are a legibility choice rather than a balance risk. There is no band-level collapse guarantee: collapse keys on dip depth (promise 4), famine (promise 2), and chronic critical failure (promise 6), never on the band label. Chronic delivery below the memory climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; a sustained episode crosses the thresholds, and only resignation (the slow rate) ends an episode the supply doesn't.
+Every Provision edge is inclusive on the low side of the higher band, so a world sitting exactly on an edge reads the better word. Famine is orthogonal to the axis rather than its bottom rung: a world starving on water while everything else pours in reads Famine at a Supplied-grade Provision. The system panel therefore recolours the whole Provisioned track under Famine instead of moving the marker, and the Provisioned map mode paints only the four axis bands.
+
+This band describes the whole **system** (it is computed from Provision, a basket-wide mean). A
+separate, not-yet-built per-good ladder — Supplied / Low reserve / Rationing / Shortage / Glut,
+naming one good's own stock cover rather than the system's Provision — is scoped for the planned
+goods tab (`docs/ROADMAP.md`); "Strained" here is unrelated to "Low reserve" there.
+
+No gameplay effect keys off the band — effects read Provision or the grievance, so the label can never disagree with what is happening to the world, and the bin edges are a legibility choice rather than a balance risk. They do not track a mechanical discontinuity: the critical-good crisis channel's *trigger* is per-good and binary, and fires on worlds spread across nearly the whole axis (median Provision ≈ 0.97-0.98 among worlds where it fires, at both the founding and equilibrium horizons) — its *effect* on unrest scales continuously with the shortfall itself, so the trigger's position on the axis carries nothing for a band edge to track. The edges are instead spaced across where the consequence — settled unrest crossing the strike threshold — visibly changes character, roughly Provision 0.5-0.9, rather than left as 70% of the axis under one word. There is no band-level collapse guarantee: collapse keys on dip depth (promise 4), famine (promise 2), and chronic critical failure (promise 6), never on the band label. Chronic delivery below the memory climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; a sustained episode crosses the thresholds, and only resignation (the slow rate) ends an episode the supply doesn't.
 
 **Strikes** are derived each tick from `unrest` (no separate stored flag): above the strike threshold, a smooth suppression multiplier scales down production output only. People still consume — consumption is never suppressed. The strike state feeds back into the next economy tick's production.
 
 **Growth / decline** is logistic with **symmetric** growth/decline rates: population grows toward `popCap` when the system is well-fed and calm, and declines under high unrest. Seeding places systems below `popCap` (population is a **continuous magnitude** — a tiny outpost seeds at e.g. `pop 0.3`, never rounded to a false 0), so the live tick ramps each up toward its labour-staffing cap and then holds. Today growth is gated mainly by housing-headroom × satisfaction; making it track economic *viability* (can the world feed/employ its people) is the booked **SP4 phase** "Population ← economic viability" (see [available-space model](./economy-substrate-v2-available-space.md) and [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13).
 
-**Stability** is the public-facing readout of `unrest`, rendered as a choropleth map mode and a per-system badge. It is the SP2 replacement for the former prosperity choropleth — same pipeline, new source.
+**Stability** is the public-facing readout of `unrest`, rendered as a choropleth map mode and a per-system badge. It is the SP2 replacement for the former prosperity choropleth — same pipeline, new source. Unrest bins into five labels (`lib/utils/stability.ts`), cold to hot:
+
+| Label | Unrest |
+| --- | --- |
+| Stable | < 0.2 |
+| Calm | < 0.4 |
+| Tense | < 0.5 |
+| Unrest | < `STRIKE_PARAMS.threshold` (0.65) |
+| Strike | ≥ `STRIKE_PARAMS.threshold` |
+
+Only the Strike edge is load-bearing — it is pinned to the same threshold that gates production suppression, so the label can never contradict the mechanic it names. The other three edges are descriptive placement, not a contract.
 
 The system screen surfaces dynamic population and stability through two views, both tick-invalidated (separate from the static Astrography/substrate read, which is `staleTime: Infinity`):
 

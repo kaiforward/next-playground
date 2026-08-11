@@ -90,6 +90,34 @@ describe("VitalTile — the three concrete Overview tiles render their real outp
     );
     expect(html).toContain("grid-column:span 2");
   });
+
+  it("Provisioned: a markerPct draws a second tick on the meter, independent of the fill width", () => {
+    const html = renderToStaticMarkup(
+      VitalTile({
+        label: "Provisioned",
+        dotColor: "#64748b",
+        value: "68",
+        unit: "%",
+        meter: { pct: 68, color: "#64748b", markerPct: 84 },
+      }),
+    );
+    expect(html).toContain("width:68%"); // the fill, unaffected by the marker
+    expect(html).toContain("left:84%"); // the marker, at its own position
+  });
+
+  it("omitting markerPct draws no second tick — the four existing callers are unaffected", () => {
+    const html = renderToStaticMarkup(
+      VitalTile({
+        label: "Stability",
+        dotColor: "#06b6d4",
+        value: "82",
+        unit: "%",
+        meter: { pct: 82, color: "#06b6d4" },
+      }),
+    );
+    expect(html).toContain("width:82%");
+    expect(html).not.toContain("border-dashed");
+  });
 });
 
 describe("CompositionBar — width math and a11y in the rendered markup", () => {

@@ -1,6 +1,7 @@
 import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
+import { resolveProvisionRead, toProvisionRead } from "@/lib/services/provision-read";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { developmentPointsAndPotential } from "@/lib/services/system-development";
 import { computeLabourAllocation, labourParts } from "@/lib/engine/industry";
@@ -9,8 +10,9 @@ import type { SystemVitalsData } from "@/lib/types/api";
 
 /**
  * Dynamic vitals snapshot for one system's overview vital tiles — stability, development (vs the
- * system's OWN full-build-out potential, not a universe-wide reference), and population
- * composition. Changes every economy tick, so the hook (`useSystemVitals`) is tick-invalidated.
+ * system's OWN full-build-out potential, not a universe-wide reference), population composition,
+ * and the Provisioned/band/memory read (`SystemProvisionRead`). Changes every economy
+ * tick, so the hook (`useSystemVitals`) is tick-invalidated.
  */
 export function getSystemVitals(systemId: string): SystemVitalsData {
   const world = getWorld();
@@ -52,5 +54,6 @@ export function getSystemVitals(systemId: string): SystemVitalsData {
         unemployed: composition.unemployed,
       },
     },
+    provision: toProvisionRead(resolveProvisionRead(system)),
   };
 }

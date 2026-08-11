@@ -208,6 +208,12 @@ export function toTickSystems(world: World): TickSystem[] {
       // Coercing it here would make an old save — or any system never yet touched — read as
       // "remembers 0" (the floor) instead of "never measured", silently defeating the seed.
       provisionExpectation: s.provisionExpectation,
+      // Same pass-through-uncoerced treatment as provisionExpectation just above: a fresh
+      // per-cycle reading, so there is no "seed" concern, but absence must still mean "never
+      // assessed" rather than becoming a coerced 0/"supplied" default (lib/world/types.ts).
+      provision: s.provision,
+      supplyBand: s.supplyBand,
+      criticalWeight: s.criticalWeight,
       yields: resourceVectorFromColumns(
         {
           yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -256,6 +262,14 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     // collapseDebt precedent above for why that absence must stay a true absence).
     if (tickSystem.provisionExpectation === undefined) delete merged.provisionExpectation;
     else merged.provisionExpectation = tickSystem.provisionExpectation;
+    // Same delete/assign treatment, same reason: a true absence (never assessed) must not become
+    // a present key holding `undefined`.
+    if (tickSystem.provision === undefined) delete merged.provision;
+    else merged.provision = tickSystem.provision;
+    if (tickSystem.supplyBand === undefined) delete merged.supplyBand;
+    else merged.supplyBand = tickSystem.supplyBand;
+    if (tickSystem.criticalWeight === undefined) delete merged.criticalWeight;
+    else merged.criticalWeight = tickSystem.criticalWeight;
     return merged;
   });
 }
@@ -513,8 +527,15 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
       popCap: nowDeveloped ? Math.max(s.popCap, housingPopCap(buildings)) : s.popCap,
     };
     // The resettlement rule: a stored memory from a previous life must not survive into a system's
-    // new one — see the docstring above.
-    if (nowDeveloped) delete next.provisionExpectation;
+    // new one — see the docstring above. `provision`/`supplyBand` are not a memory, but a stale
+    // reading from a previous life is exactly as false as a stale expectation would be, so they
+    // clear the same way: absent reads as "not yet assessed in this life", never as a lie.
+    if (nowDeveloped) {
+      delete next.provisionExpectation;
+      delete next.provision;
+      delete next.supplyBand;
+      delete next.criticalWeight;
+    }
     return next;
   });
 }
@@ -524,9 +545,11 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
  * reset each system the
  * population processor reported (famine AND post-delta population below `ABANDON_POP_FLOOR`) back
  * to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
- * collapse debt zero; the stored Provision memory is deleted (the same resettlement rule
- * `applyDevelopments` observes above — a previous life's memory must not survive into the next
- * one); buildings and their idle-cycle state are cleared and popCap drops to 0 — infrastructure
+ * collapse debt zero; the stored Provision memory, this cycle's Provisioned reading, its band and
+ * its critical-good weight are all deleted (the same resettlement rule `applyDevelopments`
+ * observes above — a previous life's readings must not survive into the next one); buildings and
+ * their idle-cycle state are
+ * cleared and popCap drops to 0 — infrastructure
  * decay runs only on developed systems, so left standing they would freeze forever and hand any
  * resettler a free, fully-built colony. Ordinary claimable frontier again via the existing claim
  * (`applyClaims`) and colony-candidate (the directed-build `develop` provider) paths — no new
@@ -550,6 +573,9 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
       buildingIdleCycles: {},
     };
     delete next.provisionExpectation;
+    delete next.provision;
+    delete next.supplyBand;
+    delete next.criticalWeight;
     return next;
   });
 }

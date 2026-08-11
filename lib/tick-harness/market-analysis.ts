@@ -36,8 +36,8 @@ export const SNAPSHOT_INTERVAL = 50;
 const BAND_PROXIMITY_FRAC = 0.02;
 
 /**
- * True when a market's stock sits at the true floor — stock ≈ 0, the Shortage
- * regime's resting point. The price-saturation point (minStock) is a pricing
+ * True when a market's stock sits at the true floor — stock ≈ 0, a starved
+ * market's resting point. The price-saturation point (minStock) is a pricing
  * construct, not a clamp; nothing pins there, and deep draws below it are the
  * crisis zone working as designed.
  */

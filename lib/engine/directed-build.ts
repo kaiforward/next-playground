@@ -138,9 +138,9 @@ export function hopRouteCost(
  * crowding is itself an unrest source, so refusing relief housing on a restive world would hold the
  * valve shut on exactly the world that needs it.
  *
- * A consequence worth stating outright: `foldSupplyState` now bands a system Shortage only through
+ * A consequence worth stating outright: `foldSupplyState` bands a system Famine only through
  * the survival floor above — a world short across the whole basket, or one carrying real
- * critical-good weight, still bands Rationing or Strained (never Shortage) while food and water
+ * critical-good weight, still bands somewhere on the Provision axis (never Famine) while food and water
  * arrive fine, and is deliberately still fed here. The gate answers "can these people eat?", not "is
  * this system comfortable?", so the two readings are allowed to disagree in exactly that case.
  */
@@ -292,7 +292,9 @@ function effectiveBuildSystems(
  * and never suppresses the capacity gap, so a striking world can still be given the industry it has
  * none of.
  *
- * Cancellation is flow-aware (docs/planned/economy-colony-bootstrapping.md §3.1). An exporter's spare
+ * Cancellation is flow-aware: a deficit is cancelled only to the extent reachable exporters' spare
+ * surplus actually covers it, netted against other consumers already drawing on that surplus, rather
+ * than by the mere presence of any surplus anywhere reachable. An exporter's spare
  * is its sustainable export RATE (`production − demand`) measured on REALIZED output, so capacity
  * idled by a strike never cancels someone else's gap — it is not a stock pile either, so a neighbour
  * merely holding and draining stock never cancels a gap. Per good,
@@ -597,7 +599,8 @@ export interface ProposalItem {
  * housing item. ROI = `value` (served demand-rate the production covers) ÷ `work` (the WHOLE bundle's
  * level work), so an enabler — an academy/complex with no served demand of its own — raises the
  * denominator without touching the numerator: the bundle funds gate-first at the production's ROI and
- * the school never ranks below the factory it staffs. (PR3 adds a single-item ColonyProposal.)
+ * the school never ranks below the factory it staffs. A colony establish is instead the single-item
+ * `ColonyProposal` below.
  */
 export interface BuildProposal {
   kind: "build";
@@ -1080,9 +1083,9 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
  *  The containment holds against the seed as SIZED. `applyDevelopments` delivers
  *  `min(seedPop, source spare)`, so a short delivery leaves the colony emptier than this assumed —
  *  harmless while `housingLevels` is 1 (a single level is never a whole idle level under any
- *  positive population), which the shipped seed guarantees. Sizing the seed against the housing unit
- *  (see the deferred item in docs/planned/economy-band-reconciliation.md §5) would break that, and
- *  must revisit this.
+ *  positive population), which the shipped seed guarantees. Scaling the seed against the housing
+ *  unit is a parked idea (docs/ROADMAP.md, "Colony seed size scaled against the housing unit") that
+ *  would break that, and must revisit this.
  *
  *  The `maxHousingLevels` clamp is redundant with the seed clamp above it — `seedPop` is already
  *  capped to `maxHousingLevels × POP_CENTRE_DENSITY`, so the round-up can never exceed the land. It

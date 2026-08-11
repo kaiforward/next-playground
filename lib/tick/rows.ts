@@ -18,6 +18,7 @@
 import type { EventTypeId } from "@/lib/constants/events";
 import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
 import type { SystemControl } from "@/lib/world/types";
+import type { SupplyRegime } from "@/lib/engine/population";
 
 export interface TickSystem {
   id: string;
@@ -48,6 +49,16 @@ export interface TickSystem {
    *  coercing it to 0 would make every never-seeded system read as "remembers the floor" instead of
    *  "never measured". */
   provisionExpectation?: number;
+  /** This cycle's Provisioned, optional — the `toTickSystems` join passes `WorldSystem.provision`
+   *  through UNCOERCED, same absence convention as `provisionExpectation` above (see
+   *  `lib/world/types.ts` for the full rationale). A fresh per-cycle reading, not a memory. */
+  provision?: number;
+  /** This cycle's supply band, optional — passed through uncoerced alongside `provision`
+   *  (`lib/world/types.ts`). */
+  supplyBand?: SupplyRegime;
+  /** This cycle's critical-good override weight, optional — passed through uncoerced alongside
+   *  `provision`/`supplyBand`, un-clamped (see `lib/world/types.ts` for why). */
+  criticalWeight?: number;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

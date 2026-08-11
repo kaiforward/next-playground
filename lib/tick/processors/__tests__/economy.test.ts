@@ -381,24 +381,24 @@ describe("economy processor: supply regime signal", () => {
     expect(regimeOf(result.economySignals, "sys-short")).toBe("strained");
   });
 
-  it("reads shortage when one demanded good falls below the shortage line", async () => {
+  it("reads famine when one demanded good falls below the survival line", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("sys-starved", 0)],
       markets: [makeMarket("sys-starved", "food", SERVED_STOCK), makeMarket("sys-starved", "water", SHORT_STOCK)],
       modifiers: [],
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    // A deep water shortage drives Shortage through the survival floor alone — the next test
-    // isolates the floor from a milder depth; "reaches shortage through the D cut, not only the
-    // survival shortcut" (population-analysis.test.ts) is where a near-total, whole-basket collapse
-    // reaches Shortage on Provision alone rather than through the floor.
+    // A deep water shortage drives Famine through the survival floor alone — the next test
+    // isolates the floor from a milder depth; "stops at deprived for a near-total basket collapse"
+    // (population-analysis.test.ts) is the other side, where a whole-basket collapse that never
+    // crosses the survival line stays on the Provision axis rather than reaching Famine.
     expect(satOf(world, "water")).toBeCloseTo(0.25, 6);
     expect(dOf(result.economySignals, "sys-starved")).toBeLessThan(MILD_D_REFERENCE);
-    expect(regimeOf(result.economySignals, "sys-starved")).toBe("shortage");
+    expect(regimeOf(result.economySignals, "sys-starved")).toBe("famine");
   });
 
-  it("promotes to shortage from the survival floor alone, with D mild", async () => {
-    // The floor's whole reason to exist: water just under the shortage line is famine even though the
+  it("promotes to famine from the survival floor alone, with D mild", async () => {
+    // The floor's whole reason to exist: water just under the survival line is famine even though the
     // fold alone reads it as mild. Without hasSurvivalShortfall this fixture reads "rationing", so it
     // fails if the floor is removed — which the deep-shortage case above cannot detect.
     // Water and food alone (both necessity 1.0) already carry >50% of the necessity-weighted basket's
@@ -423,7 +423,7 @@ describe("economy processor: supply regime signal", () => {
     expect(satOf(world, "water")).toBeLessThan(SHORTAGE_SATISFACTION); // below the survival line
     expect(dOf(result.economySignals, "sys-thirsty")).toBeLessThan(MILD_D_REFERENCE); // but D is mild
     expect(stateOf(result.economySignals, "sys-thirsty")).toEqual({
-      regime: "shortage",
+      regime: "famine",
       survivalShortfall: true,
       criticalWeight: 0, // every demanded good here sits above CRITICAL_SATISFACTION
       emptyBasket: false, // multiple demanded goods carry real weight
@@ -432,8 +432,8 @@ describe("economy processor: supply regime signal", () => {
 
   it("reads supplied for a producer with no local consumption", async () => {
     // Population 0 → nothing is demanded locally, so even a market pinned below the
-    // shortage line rations nobody. Stock deep in the shortage zone is what makes this
-    // discriminating: were demand not suppressed, this system would read shortage.
+    // survival line rations nobody. Stock deep in the starvation zone is what makes this
+    // discriminating: were demand not suppressed, this system would read famine.
     const world = new InMemoryEconomyWorld({
       systems: [{ ...makeProducerSystem("sys-pureprod", 0), population: 0 }],
       markets: [makeMarket("sys-pureprod", "food", SHORT_STOCK)],

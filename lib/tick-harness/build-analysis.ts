@@ -825,7 +825,7 @@ export function summarizeColonisation(
   let colonyProgressSum = 0;
   const colonyByKind: Record<string, number> = {};
   for (const p of projects) {
-    if (p.kind !== "build") continue; // colony-establish reporting lands in PR4
+    if (p.kind !== "build") continue; // colony-establish has no buildingType/levels; its lifecycle is reported separately, by sampleOpenColonies/summarizeFoundingLifecycle
     const isHome = homeworldSet.has(p.systemId);
     if (isHome) { homeworldProjects++; homeworldLevels += p.levels; }
     else {

@@ -285,7 +285,7 @@ describe("summarizeColonisation — construction queue split", () => {
     expect(summary.queue.colonyByKind).toEqual({});
   });
 
-  it("excludes colony-establish projects from the queue split (reported in PR4, no NaN)", () => {
+  it("excludes colony-establish projects from the queue split (reported separately, no NaN)", () => {
     const colony: WorldConstructionProject = {
       kind: "colony_establish", id: "c1:establish", origin: "auto", factionId: "f1", systemId: "c1",
       sourceSystemId: "hw", seedPop: 50, housingLevels: 3, workTotal: 84, workDone: 40,

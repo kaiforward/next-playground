@@ -85,7 +85,7 @@ export interface MigrationFlowParams {
    * — a small always-on leak so a saturated core (spare labour ≈ 0) still feeds a strongly-attractive
    * (job-rich) colony a steady trickle. This is the mechanism that makes colonisation work once the
    * home worlds fill up: without it, migration to colonies stalls the moment the source has no idle
-   * labour. Small by design (the core keeps almost all its workers). PR4-calibrated.
+   * labour. Small by design (the core keeps almost all its workers). Simulator-calibrated.
    */
   employedLeakFraction: number;
 }

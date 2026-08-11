@@ -142,7 +142,8 @@ export interface WorldCohortEntry {
   suppliedShare: number;
   strainedShare: number;
   rationingShare: number;
-  shortageShare: number;
+  deprivedShare: number;
+  famineShare: number;
   /** Mean provision() over the cohort's systems. */
   meanProvision: number;
   /** Median of each system's single worst-demanded-good satisfaction (1 for a system with no

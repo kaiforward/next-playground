@@ -3,8 +3,7 @@
  * magnitudes of the economy (production, consumption, seeded stock) and the
  * absolute terms that ride them. Ratio/dimensionless terms (target-cover, price
  * exponent, thresholds, route cost) deliberately do NOT scale, so prices and
- * equilibrium are invariant under S — only magnitudes change. See
- * docs/planned/economy-scale-knob.md.
+ * equilibrium are invariant under S — only magnitudes change.
  *
  * This module imports NOTHING: it is the root of the constants-magnitude graph,
  * so any import would risk a circular dependency. Server-only — it is never read

@@ -33,8 +33,10 @@ describe("stabilityLabel", () => {
 
   it("labels Strike exactly where striking starts — the label stays in lockstep with STRIKE_PARAMS.threshold, not a literal", () => {
     // STRIKE_PARAMS.threshold is 0.65 today; a hardcoded 0.8 boundary would fail this at the live
-    // value, which is the point — the label may never contradict the mechanic it names.
-    expect(stabilityLabel(STRIKE_PARAMS.threshold)).toBe("Strike");
+    // value, which is the point — the label may never contradict the mechanic it names. `strikeMultiplier`
+    // suppresses production strictly above the threshold, so a world sitting on it is not yet striking.
+    expect(stabilityLabel(STRIKE_PARAMS.threshold)).toBe("Unrest");
+    expect(stabilityLabel(STRIKE_PARAMS.threshold + 1e-9)).toBe("Strike");
     expect(stabilityLabel(0.9)).toBe("Strike");
     expect(stabilityLabel(1.0)).toBe("Strike");
   });
@@ -61,8 +63,9 @@ describe("stabilityRampColor", () => {
     expect(stabilityRampColor(STRIKE_PARAMS.threshold - 0.01)).toBe(STABILITY_RAMP_STOPS.Unrest);
   });
 
-  it("returns the Strike colour at the strike threshold and at 1.0", () => {
-    expect(stabilityRampColor(STRIKE_PARAMS.threshold)).toBe(STABILITY_RAMP_STOPS.Strike);
+  it("returns the Strike colour above the strike threshold and at 1.0, but not on the threshold itself", () => {
+    expect(stabilityRampColor(STRIKE_PARAMS.threshold)).toBe(STABILITY_RAMP_STOPS.Unrest);
+    expect(stabilityRampColor(STRIKE_PARAMS.threshold + 1e-9)).toBe(STABILITY_RAMP_STOPS.Strike);
     expect(stabilityRampColor(1.0)).toBe(STABILITY_RAMP_STOPS.Strike);
   });
 });

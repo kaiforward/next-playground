@@ -98,7 +98,7 @@ describe("band constant dependencies", () => {
     // deceleration zone that absorbs shocks would not exist.
     expect(ECONOMY_CONSTANTS.BRAKE_RAMP).toBeGreaterThan(1);
   });
-  it("keeps the shortage line a proper interior satisfaction level", () => {
+  it("keeps the famine line a proper interior satisfaction level", () => {
     expect(SHORTAGE_SATISFACTION).toBeGreaterThan(0);
     expect(SHORTAGE_SATISFACTION).toBeLessThan(1);
   });
@@ -225,7 +225,7 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
    *  backstops, not a D-level cut. */
   const LARGE_SHORTFALL_REFERENCE = 0.65;
 
-  it("keeps the Shortage slope strictly above the Rationing one", () => {
+  it("keeps the famine slope strictly above the ordinary grievance one", () => {
     expect(UNREST_PARAMS.slopeShortage).toBeGreaterThan(UNREST_PARAMS.slopeBase);
   });
 
@@ -280,7 +280,7 @@ describe("unrest containment — the guarantees the two slopes carry", () => {
 
   it("refuses housing on exactly the systems the survival floor calls starving", () => {
     // The fed gate reads the survival floor itself, so the two cannot drift: a world below the
-    // shortage line on a staple never stands up new housing.
+    // famine line on a staple never stands up new housing.
     const starving = SURVIVAL_GOODS.map((goodId) => ({
       goodId, satisfaction: SHORTAGE_SATISFACTION - 0.01, demanded: 1,
     }));
@@ -325,7 +325,7 @@ describe("promise 4 — a quarter-dip against memory never collapses or tears do
     const grievance = 0.25;
     const worstCompatibleProvision = EXPECTATION_PARAMS.floor - grievance;
     const worstCompatibleD = 1 - worstCompatibleProvision;
-    const crisisAtCeiling: SupplyState = { regime: "shortage", survivalShortfall: false, criticalWeight: 1, emptyBasket: false };
+    const crisisAtCeiling: SupplyState = { regime: "famine", survivalShortfall: false, criticalWeight: 1, emptyBasket: false };
     const term = supplyUnrestTerm(grievance, worstCompatibleD, crisisAtCeiling, UNREST_PARAMS);
     expect(MAX_FLOOR + term).toBeGreaterThan(COLLAPSE);
   });
@@ -357,7 +357,7 @@ describe("transient event shocks — a shock's duration, not just its magnitude,
     const restedSupply: SupplyState = { regime: "supplied", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
     let unrest = floor + supplyUnrestTerm(grievanceShortfall(fullyAccustomed, 1), 0, restedSupply, UNREST_PARAMS);
 
-    const eventSupply: SupplyState = { regime: "shortage", survivalShortfall: eventSurvival, criticalWeight: 0, emptyBasket: false };
+    const eventSupply: SupplyState = { regime: "famine", survivalShortfall: eventSurvival, criticalWeight: 0, emptyBasket: false };
     const eventGrievance = grievanceShortfall(fullyAccustomed, 1 - eventD);
     const term = supplyUnrestTerm(eventGrievance, eventD, eventSupply, UNREST_PARAMS);
     // The crisis-term arithmetic itself, pinned directly: a survival shortfall reads slopeShortage × D
@@ -381,10 +381,13 @@ describe("transient event shocks — a shock's duration, not just its magnitude,
 describe("promise 3 — broad shortage on an established world strikes while its memory holds", () => {
   const benignSupply: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
 
-  it("reaches strike at zero tax when a fully-accustomed world loses half of what it is used to — single-constant guarantee slopeBase × 0.5 >= STRIKE_PARAMS.threshold", () => {
+  // Strictly greater, not ≥: striking is `unrest > threshold`, so a term landing exactly on the
+  // threshold would satisfy a ≥ assertion while failing to strike — the guarantee would read green
+  // and be false.
+  it("reaches strike at zero tax when a fully-accustomed world loses half of what it is used to — single-constant guarantee slopeBase × 0.5 > STRIKE_PARAMS.threshold", () => {
     const halfDipTerm = supplyUnrestTerm(0.5, 0, benignSupply, UNREST_PARAMS);
-    expect(halfDipTerm).toBeGreaterThanOrEqual(STRIKE_PARAMS.threshold); // zero tax: settled unrest is the term itself
-    expect(UNREST_PARAMS.slopeBase * 0.5).toBeGreaterThanOrEqual(STRIKE_PARAMS.threshold);
+    expect(halfDipTerm).toBeGreaterThan(STRIKE_PARAMS.threshold); // zero tax: settled unrest is the term itself
+    expect(UNREST_PARAMS.slopeBase * 0.5).toBeGreaterThan(STRIKE_PARAMS.threshold);
   });
 
   it("keeps the grievance slope flat across [0,1] — no reintroduced escalation ramp, read off the live UNREST_PARAMS", () => {
@@ -455,7 +458,7 @@ describe("validity + famine dominance — composed at the guarantee-suite level"
     // value must neither produce a non-finite/out-of-range unrest reading nor weaken famine.
     const d = 0.4;
     const provisionNow = 1 - d;
-    const survival: SupplyState = { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
+    const survival: SupplyState = { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
     for (const stored of [NaN, -1, 2]) {
       const { effective } = readExpectation(stored, provisionNow, EXPECTATION_PARAMS);
       expect(Number.isFinite(effective), `stored=${stored}`).toBe(true);

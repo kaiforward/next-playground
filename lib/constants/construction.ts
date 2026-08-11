@@ -8,7 +8,7 @@ import {
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 
 /**
- * Committed-construction tuning. First-draft, simulator-calibrated in PR4 — only the relative shape
+ * Committed-construction tuning. First-draft, simulator-calibrated — only the relative shape
  * matters here (build times span cycles; wealth buys parallel fronts, not instant builds).
  *
  * A per-faction throughput pool (`Σ pop × THROUGHPUT_PER_POP`) funds a queue of construction projects.
@@ -24,11 +24,11 @@ export const CONSTRUCTION = {
   /** Fallback per-level work cost for a building type with no explicit override (tier-derived below). */
   DEFAULT_WORK_PER_LEVEL: 20,
   /**
-   * Pool fairness floor (docs/planned/economy-colony-bootstrapping.md §3.4 / §7.9). The front-first pool
-   * otherwise lets a homeworld's larger builds monopolise it, so a young colony's valid first build never
-   * funds. Reserve a guaranteed minimum slice per young colony, self-weaning with development:
-   * POOL_FLOOR_BASE construction points at development 0, fading to nothing at FLOOR_DEV_KNEE. A minimum,
-   * never a max-spend cap — the homeworld still drains the remainder by value. Coarse first-cut; PR4 tunes.
+   * Pool fairness floor. The front-first pool otherwise lets a homeworld's larger builds monopolise
+   * it, so a young colony's valid first build never funds. Reserve a guaranteed minimum slice per
+   * young colony, self-weaning with development: POOL_FLOOR_BASE construction points at development
+   * 0, fading to nothing at FLOOR_DEV_KNEE. A minimum, never a max-spend cap — the homeworld still
+   * drains the remainder by value. Coarse first-cut, calibrated against the simulator.
    */
   POOL_FLOOR_BASE: 4,
   /** Development at which a colony has weaned fully off the pool floor (self-weaning training wheels). */
@@ -57,7 +57,7 @@ const WORK_PER_LEVEL_OVERRIDE: Record<string, number> = {
 /**
  * Construction work to build one whole level of `buildingType`. Housing is cheap; a specialisation
  * complex is the most work; production factories scale with their tier (a tier-2 line is more work
- * than a tier-0 extractor). Coarse first-cut — PR4 calibrates the magnitudes.
+ * than a tier-0 extractor). Coarse first-cut, calibrated against the simulator.
  */
 export function workCostPerLevel(buildingType: string): number {
   const override = WORK_PER_LEVEL_OVERRIDE[buildingType];

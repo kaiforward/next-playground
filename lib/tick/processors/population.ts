@@ -70,7 +70,12 @@ export async function runPopulationProcessor(
     // newborn-calm guarantee (a never-seeded system's first cycle, see the "adaptive expectation"
     // describe block below) depends on the expectation update actually running rather than
     // freezing on an unclassified system.
-    const supply = signals.supplyStateBySystem.get(s.systemId)
+    // rawSupply is kept alongside the defaulted `supply` below so the persisted band can tell the
+    // two cases apart: `supply` picks a display-safe default to keep the unrest math running,
+    // while a persisted `supplyBand` must stay absent rather than record that default's "supplied"
+    // label as if the economy had actually classified this system this cycle.
+    const rawSupply = signals.supplyStateBySystem.get(s.systemId);
+    const supply = rawSupply
       ?? { regime: "supplied", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
     // Standing pressure: what a system settles at with nothing going wrong. Tax raises
     // unrest, not hunger, and overcrowding adds a bounded share on top — so both hold
@@ -125,7 +130,19 @@ export async function runPopulationProcessor(
     const provisionExpectation = supply.emptyBasket
       ? (s.provisionExpectation === undefined ? undefined : stored)
       : updateExpectation(stored, P, params.expectation, subSteps);
-    popUpdates.push({ systemId: s.systemId, population, unrest, provisionExpectation });
+    popUpdates.push({
+      systemId: s.systemId,
+      population,
+      unrest,
+      provisionExpectation,
+      // This cycle's Provisioned — P computed above, the exact complement of the same d the
+      // unrest read just consumed, never a re-derived mean. `supplyBand`/`criticalWeight` both
+      // read rawSupply (not the defaulted `supply`), so an unclassified system persists absent
+      // rather than "supplied"/0 — 0 is a real, meaningful critical-good weight, not a safe default.
+      provision: P,
+      supplyBand: rawSupply?.regime,
+      criticalWeight: rawSupply?.criticalWeight,
+    });
     // The scalar the economy actually applied this cycle, not a recompute: the strike params and
     // the treasury-fed maintenance malus never reach this processor, and the unrest just written
     // above is the wrong half of the input anyway. A system the signal omits was unsuppressed.

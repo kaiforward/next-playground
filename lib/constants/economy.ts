@@ -80,22 +80,25 @@ export const ECONOMY_SIM_PARAMS: Readonly<EconomySimParams> = {
 };
 
 /**
- * Civilian satisfaction (delivered/demanded) below which a demanded good counts as a Shortage rather
- * than mere Rationing. Its live consumer is the survival-good floor (`foldSupplyState`): water or food
- * below this level selects Shortage for the whole system whatever the fold says. A strict `<`
- * boundary: exactly this level is still Rationing.
+ * Civilian satisfaction (delivered/demanded) below which a demanded good counts as famine rather
+ * than mere scarcity. Its live consumer is the survival-good floor (`foldSupplyState`): water or food
+ * below this level selects Famine for the whole system whatever the fold says. A strict `<`
+ * boundary: exactly this level is not famine. Named for the band's older label, kept because the
+ * build planner's housing gate (`fed`, lib/engine/directed-build.ts) reads the same line and the
+ * name is the shared one; the band it selects is Famine.
  */
 export const SHORTAGE_SATISFACTION = 0.5;
 
 /**
  * Provision at or above which a system bands Supplied — the healthiest of the four descriptive
- * bands (Supplied / Strained / Rationing / Shortage). A legibility line only: no gameplay effect
- * reads the band (effects that scale with supply read Provision or the shortfall directly instead),
- * so moving this edge is a display decision, not a balance one. Inclusive: Provision exactly at this
- * value still bands Supplied. Set from the measured distribution: the mature galaxy reads ~92-96%
- * Supplied at this edge (7.9% below it at 10k ticks, 4.0% at 12k), the young galaxy 80/8/12 across
- * the three Provision bands (19.8% below this edge, 11.9% below RATIONING_PROVISION at 1k ticks) —
- * healthy reads healthy, founding stress stays visible.
+ * Provision bands (Supplied / Strained / Rationing / Deprived, plus the Famine punch-through, which
+ * owns no span of the axis). A legibility line only: no gameplay effect reads the band (effects that
+ * scale with supply read Provision or the shortfall directly instead), so moving this edge is a
+ * display decision, not a balance one. Inclusive: Provision exactly at this value still bands
+ * Supplied. Set from the measured distribution: the mature galaxy reads ~92-96% Supplied at this
+ * edge (7.9% below it at 10k ticks, 4.0% at 12k), the young galaxy 80/8/12 across the three Provision
+ * bands it then had (19.8% below this edge, 11.9% below RATIONING_PROVISION at 1k ticks) — healthy
+ * reads healthy, founding stress stays visible.
  */
 export const SUPPLIED_PROVISION = 0.9;
 
@@ -106,6 +109,19 @@ export const SUPPLIED_PROVISION = 0.9;
  * Strained, the low edge of the Strained band rather than the high edge of Rationing.
  */
 export const RATIONING_PROVISION = 0.7;
+
+/**
+ * Provision below which a system bands Deprived rather than Rationing — the boundary between "going
+ * short" and "getting almost nothing". Splits what was one 70%-wide bin saying the same word about a
+ * world at 65% and a world at 5%: below this line the civilian basket is more than half undelivered,
+ * which is a different state of the world, not a deeper shade of the same one. Also a legibility line
+ * only, for the same reason as SUPPLIED_PROVISION — nothing but the classifier and the display read
+ * it. Exclusive on the low side, matching its two siblings: Provision exactly at this value still
+ * bands Rationing, the low edge of the Rationing band rather than the high edge of Deprived. Half the
+ * basket is the natural place for that split and needs no fit: it is the point where a world is
+ * getting less than it is missing.
+ */
+export const DEPRIVED_PROVISION = 0.5;
 
 /**
  * Civilian satisfaction below which a demanded good counts toward the critical-good override's
@@ -128,7 +144,7 @@ export const CRITICAL_SATISFACTION = 0.25;
  * Below 1% of a world's demand basket a good is a trace entry, not a real need: this excludes
  * exactly the epsilon skilled-basket goods (measured shares 0.005-0.010) while a good genuinely held
  * at 1-5% of the basket (e.g. medicine, necessity 0.8) still counts. Survival goods are immune to
- * this floor by construction — the survival step promotes the whole system to Shortage regardless of
+ * this floor by construction — the survival step promotes the whole system to Famine regardless of
  * demand share. Re-check this value if a high-necessity good is ever deliberately authored at a
  * trace demand share.
  */

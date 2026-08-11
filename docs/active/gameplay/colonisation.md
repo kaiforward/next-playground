@@ -555,7 +555,7 @@ bootstrap (a tiny colony's jobs are too few for population to ever exceed them a
 headroom stays the hard overshoot bound; the soft jobs term handles "don't overfill a jobless full colony".
 
 **The famine inflow gate.** People do not move to famine worlds. A system currently in survival shortfall
-(a demanded survival good below the famine line — the same bit that bands it Shortage) receives **no
+(a demanded survival good below the famine line — the same bit that bands it Famine) receives **no
 population inflow that cycle, by either path**: colonist delivery skips it as a sink (its water-fill
 headroom reads 0, index alignment untouched), and diffusion migration moves nothing toward it (its
 destination headroom reads 0, whichever edge endpoint it is). Outflow is unaffected — a famine world still
@@ -724,7 +724,7 @@ Read at both horizons, cohorted, from `npm run simulate`.
 - **Colonies open well stocked.** The staging target is `FOUNDING_STOCK_COVER` and the draw is spread over
   many cycles against a regrowing founder stock, so a thin endowment is a bug rather than a tradeoff. The
   endowment-responsive reads are the opened-deprived count, the colony cohort's opening Provision
-  (mean and p10), and its non-Supplied band share (Strained + Rationing + Shortage); strike% is read
+  (mean and p10), and its non-Supplied band share (Strained + Rationing + Deprived + Famine); strike% is read
   **split by pop cohort**, never galaxy-wide, because it varies by tens of times across cohorts and pricing
   changes exactly that mix by changing how many colonies exist and how well they open.
 - **The founder's cost is the real calibration question.** Mean manifest tonnage per colony and the founder's

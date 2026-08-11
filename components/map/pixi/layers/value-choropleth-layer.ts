@@ -37,22 +37,28 @@ const VALUE_FILL_ALPHA = 0.5;
 // Modes whose reference max re-normalises to the focused faction's members when a faction is in scope.
 // Stability stays globally normalised even under focus — 0..1 unrest reads the same regardless of who's
 // selected; pop/development/migration re-scale so the focused faction's own brightest/most-attractive
-// system reads as the top of the ramp.
+// system reads as the top of the ramp. provision is `false` for a stronger reason than stability: its
+// band edges are absolute percentages (SUPPLIED_PROVISION/RATIONING_PROVISION), so re-scaling would
+// slide the colours out from under the bands — the same colour would mean a different band depending
+// on who's focused. valueRampColorPixi ignores referenceMax for provision entirely regardless of what
+// this table says, so this entry documents the intent rather than being the only thing enforcing it.
 const RESCALES_TO_SCOPE: Record<ValueMode, boolean> = {
   population: true,
   development: true,
   stability: false,
   migration: true,
+  provision: false,
 };
 
 // Modes that show aggregated numbers over the choropleth fill. population/development/stability keep
-// their numbers; migration is a colour-first heatmap with no on-map numbers — a `false` entry
-// makes rebuildTiers/updateNumbers lease no Text and print nothing for that mode.
+// their numbers; migration and provision are colour-first heatmaps with no on-map numbers — a `false`
+// entry makes rebuildTiers/updateNumbers lease no Text and print nothing for that mode.
 const SHOWS_NUMBERS: Record<ValueMode, boolean> = {
   population: true,
   development: true,
   stability: true,
   migration: false,
+  provision: false,
 };
 
 /**

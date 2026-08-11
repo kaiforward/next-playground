@@ -21,10 +21,11 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   the replacement skills.
 
 - **[L] Economy band reconciliation** — the `shared/band-reconciliation` integration branch
-  (sub-features ride `feat/*` branches PR'd into it). Design:
-  [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md). PR1-5 shipped plus #202-#217
-  (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics), the
-  adaptive expectation, and abandonment (#221).
+  (sub-features ride `feat/*` branches PR'd into it). Design lived in
+  `docs/planned/economy-band-reconciliation.md`, deleted at PR6's doc fold below — its geometry and
+  constants are shipped and described in [economy.md](./active/gameplay/economy.md). PR1-5 shipped
+  plus #202-#217 (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation
+  economics), the adaptive expectation, and abandonment (#221).
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
@@ -35,8 +36,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 ## Queued — PR6, then player seat
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line. Two UI scopes:
-   the §6 presentation contract (panels speak regimes) from
-   [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md), **plus the Provision
+   the §6 presentation contract (panels speak regimes), formerly specced in the now-deleted
+   `docs/planned/economy-band-reconciliation.md`, **plus the Provision
    display** (folded in from the UI queue): a Provision row + band badge on the Population tab, a
    vitals-grid tile, a Provision choropleth alongside the existing map value modes, and the
    adaptive-expectation surface — what this world is accustomed to (`provisionExpectation`) and
@@ -47,14 +48,30 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    *Next step:* the collaborative design pass + HTML prototype (breadth-first wireframes, then
    refine the chosen one).
    **PR6 owns the doc fold**, which is bigger than it looks — do it on the branch, before the final review:
-   - Four **active** docs the arc made stale: `economy-autonomic-agency.md`, `colonisation.md`,
-     `tick-engine.md`, and `economy.md` (its decay section still documents the continuous
-     `count ← count − unrestRate · count` formula, stale since whole-level decay and severity ramping).
-   - Two **planned** docs whose features have already shipped and which must be promoted into
-     `docs/active/` and deleted: `necessity-weighted-unrest.md` (448 lines — `GOOD_NECESSITY` and
-     `slopeShortage` are live, and its headline "every good … currently hits unrest with the same
-     instrument" is now false) and `economy-rationing-amendment.md` (89 lines — `RATION_COVER` is live).
-   - `economy-band-reconciliation.md` itself is deleted at the same point.
+   - Four **active** docs the arc made stale: `economy-autonomic-agency.md` and `tick-engine.md`
+     still need verifying against code. `colonisation.md` was checked and is current.
+     `economy.md` was checked and fixed — its decay section wrongly documented a continuous
+     `count ← count − unrestRate · count` shave; it now describes the shipped whole-level
+     idle/collapse-debt teardown (`lib/engine/infrastructure-decay.ts`), and its band-edge
+     paragraph now records why the survival/critical-good crisis channel can't anchor a band edge
+     (the falsified `provision-band-edges.md` finding).
+   - Two **planned** docs whose features had already shipped — `necessity-weighted-unrest.md` and
+     `economy-rationing-amendment.md` — **promoted and deleted**. Both were nearly fully covered by
+     `economy.md` already; what wasn't, folded in: the verified `GOOD_NECESSITY` table and the
+     rationale for authoring it separately from `GOOD_CONSUMPTION`, the civilian-vs-industrial draw
+     ordering and opening-stock satisfaction rule, and a Stability label/threshold table. Fixed a
+     genuine staleness bug found while cross-checking: `economy.md`'s per-tick consumption step still
+     described the retired `sqrt((stock − MIN)/(MAX − MIN))` ramp instead of the shipped
+     `RATION_COVER`-based `consumptionFactor` curve. Both docs' own numbers had rotted too — the
+     necessity spec's first-cut unrest slopes (Rationing 1.8/Shortage 2.5) are not the shipped ones
+     (`slopeBase` 1.6/`slopeShortage` 2.4) — so nothing was promoted without checking it against
+     `lib/` first. The necessity spec's two follow-ons (`MarketCurve.k`, government layer revisit)
+     were already booked below and its five-band stability re-cut had already shipped, so neither
+     needed a fresh row; its "detailed unrest-history charts / recovery forecasts" backlog note was
+     the one unbooked deferral and is now the Unrest history / recovery forecast row under UI, below.
+   - `economy-band-reconciliation.md` itself — **deleted**, after confirming `RATION_EXIT_EPS`
+     survives (row 8, below) and the `provision-band-edges.md`/`pr6-presentation.md` findings
+     landed in `economy.md` and here.
 
 ---
 
@@ -63,6 +80,16 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 8. **[M] Phase 3 Slice 4 — alert feed** (faction situation log). Design:
    [player-seat-roadmap.md](./planned/player-seat-roadmap.md). Slices 1-3 shipped; active specs
    [player-seat.md](./active/gameplay/player-seat.md) + [player-seat-purse.md](./active/gameplay/player-seat-purse.md).
+   **Carries `RATION_EXIT_EPS`**, deferred here from PR6's gate: the band-transition hysteresis has no
+   surviving justification until this feed exists. Its other two rationales are dead — the per-good
+   regime chips it was authored for were dropped, and visual flapping does not occur (bands are
+   written once per 24-tick economy cycle, so the fastest a chip or map cell can change is every 4.8s
+   at speed 5, with SSE throttled to 4 emits/sec regardless). An alert per transition is different:
+   it accumulates in a log the player scrolls, so a system wobbling across an edge produces junk
+   entries at any speed. Calibrate the value against this feed's own spam, not against the chips.
+   **Open question to settle then:** whether the hysteresis applies to the persisted display band only
+   (presentational) or to the classifier itself (mechanical — the regime feeds the unrest term).
+   Unverified at deferral time; do not assume the first.
 
 9. **[M] WS2 P2 — flow visualisation** on the map. Keeps its approved HTML prototype. Design:
    [design-map-flow-overlays](../docs/planned/ui-ws2-map-modes.md), memory `project-ws2-map-modes`.
@@ -151,6 +178,13 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
   their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
   its reference); nothing breaks if it never lands.
+- **[S] Loose ends out of scope for band reconciliation, unpicked-up since** — noted but not designed:
+  a legible EU5-style reserve/stockpile mechanic (visible policy-set stockpile, crisis
+  release/requisition, war stores, rationed by access) — ties to purse Stage 2-3 monetisation and
+  the priced-logistics/military/industry-pricing cluster above; rent or housing-quality goods;
+  distance-weighting the autonomic-build spare pool (a possible refinement to the response-pacing
+  backstop, noted, not built). No design pass on any of the three; pull individually when its area
+  comes forward rather than as a group.
 
 **Tick performance**
 - **[M] `toTickSystems` is the whole mid-cycle tick outside events** — 2.5 ms/tick at 2,400 systems,
@@ -183,6 +217,14 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   correctness; worth one shared staffing-estimate helper.
 
 **UI**
+- **[M] Dedicated goods tab** — a per-system goods surface with more depth than the Population or
+  Industry tabs carry: per-good cycles of cover against the anchor, the regime (Supplied / Low
+  reserve / Rationing / Shortage / Glut), civilian versus industrial draw, local production against
+  local use, and what logistics is moving in or out. Replaces what the Market tab was for; the
+  market table is a trading-game leftover and PR6 deliberately left it alone rather than half-fixing
+  it. Needs an interaction design pass — this is the third goods-bearing surface, so it must earn
+  its place against the needs ledger and the industry roster rather than duplicating them.
+  *Don't:* rebuild it as a price table — cycles of cover is the unit, price is a secondary read.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a
@@ -214,6 +256,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   wherever pacing constants are authored.
 - **[S] Move the dev cheat-panel button to the header** — the map sidebar and other floating elements block it.
 - **[S] Standardise main content panel size** — system detail should be smaller than command center.
+- **[S] Unrest history / recovery forecast** — a per-system chart of unrest over time and a forecast
+  of recovery trajectory, beyond the Population tab's current expectation/grievance snapshot.
+  Backlog polish, not started.
 
 **Audits Kai has asked for**
 - **[M] Trader-hangover audit** — sweep the codebase for leftovers from the old browser space-trading
@@ -234,6 +279,18 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
+- **[M] Real component tests — a jsdom Vitest project with Testing Library.** The `unit` project has
+  no jsdom, so the six component test files assert substrings against `renderToStaticMarkup` output
+  (136 such assertions). That catches wiring and arithmetic but nothing visual, and it is brittle: an
+  assertion on `html).toContain('>Famine<')` breaks on a class rename and passes while the thing is
+  invisible. The pocket is small, but it sits on the panel components, which produced three shipped
+  inversion bugs in one branch — the weakest verification pointed at the worst record. A second
+  Vitest project with jsdom buys semantic queries (`getByRole`, `getByText`) that survive markup
+  churn, plus `user-event` for the interactions currently proven by nothing at all: the met-tail
+  expand, tooltip open state, keyboard navigation.
+  *Don't:* move logic back into components because they are now testable — the view-model-first
+  convention is what makes the logic properly tested; this covers the wiring and interaction left
+  over, not a licence to fatten components.
 - **[S] Per-category treasury spend attribution** — the tick merges charter fees and staged materials
   into one `foundingDebitsByFaction` figure, so the harness can neither check the charter conservation
   identity in money (it falls back to counting colonies) nor say what any faction spent on what in a

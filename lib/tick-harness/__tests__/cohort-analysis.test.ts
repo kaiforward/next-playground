@@ -417,7 +417,9 @@ describe("computeWorldCohorts", () => {
       expect(Number.isNaN(e.meanProvision)).toBe(false);
       expect(Number.isNaN(e.worstGoodMedian)).toBe(false);
       expect(Number.isNaN(e.strainedShare)).toBe(false);
-      expect(e.suppliedShare + e.strainedShare + e.rationingShare + e.shortageShare).toBeCloseTo(1, 10);
+      expect(
+        e.suppliedShare + e.strainedShare + e.rationingShare + e.deprivedShare + e.famineShare,
+      ).toBeCloseTo(1, 10);
     }
   });
 
@@ -442,12 +444,13 @@ describe("computeWorldCohorts", () => {
     expect(band?.meanShortfall).toBeLessThan(0.5);
   });
 
-  it("counts a system striking at exactly the threshold, and none below it", () => {
-    // The strike gate is inclusive: a world sitting on the threshold is striking. Two calm
-    // members either side of it keep the share from reading the same whichever way it points.
+  it("counts a system striking above the threshold, and none at or below it", () => {
+    // The strike gate is strict, matching `strikeMultiplier`: a world sitting exactly on the
+    // threshold still produces, so it is not striking. s2 sits exactly on it — the member that
+    // makes this fail if the comparison goes back to inclusive.
     const systems = [
-      sys("s1", { population: 5, unrest: 0.8 }),
-      sys("s2", { population: 5, unrest: 0.79 }),
+      sys("s1", { population: 5, unrest: 0.81 }),
+      sys("s2", { population: 5, unrest: 0.8 }),
       sys("s3", { population: 5, unrest: 0.1 }),
     ];
     const markets = [{ systemId: "s1", goodId: "water", satisfaction: 1 }];
@@ -457,24 +460,24 @@ describe("computeWorldCohorts", () => {
     expect(band?.strikingShare).toBeCloseTo(1 / 3, 9);
   });
 
-  it("keeps rationing and shortage in their own buckets, at their own sizes", () => {
-    // Adjacent arms of the regime switch: a rationing world that fell through into shortage,
+  it("keeps rationing and famine in their own buckets, at their own sizes", () => {
+    // Adjacent arms of the regime switch: a rationing world that fell through into famine,
     // or a bucket counted downward, reads as a harsher galaxy than the one measured. The two
     // buckets are deliberately different sizes so a swap cannot reproduce the same shares.
-    // Rationing is a Provision band; Shortage has exactly one route, a survival-good famine. Both
-    // rationing worlds sit at 0.6 on water and food — under RATIONING_PROVISION (0.7) but above the
-    // survival floor (0.5) — while the shortage world's water is genuinely below it.
+    // Rationing is a Provision band; Famine has exactly one route, a survival good below its line.
+    // Both rationing worlds sit at 0.6 on water and food — under RATIONING_PROVISION (0.7) but above
+    // the survival floor (0.5) — while the famine world's water is genuinely below it.
     const systems = [
       sys("r1", { population: 5 }),
       sys("r2", { population: 5 }),
-      sys("sh", { population: 5 }),
+      sys("fm", { population: 5 }),
     ];
     const markets = [
       { systemId: "r1", goodId: "water", satisfaction: 0.6 },
       { systemId: "r1", goodId: "food", satisfaction: 0.6 },
       { systemId: "r2", goodId: "water", satisfaction: 0.6 },
       { systemId: "r2", goodId: "food", satisfaction: 0.6 },
-      { systemId: "sh", goodId: "water", satisfaction: 0.2 },
+      { systemId: "fm", goodId: "water", satisfaction: 0.2 },
     ];
 
     const band = computeWorldCohorts(systems, markets, new Set(), 0.8, [])
@@ -482,8 +485,9 @@ describe("computeWorldCohorts", () => {
 
     expect(band?.n).toBe(3);
     expect(band?.rationingShare).toBeCloseTo(2 / 3, 9);
-    expect(band?.shortageShare).toBeCloseTo(1 / 3, 9);
-    expect((band?.rationingShare ?? 0) + (band?.shortageShare ?? 0)).toBeCloseTo(1, 9);
+    expect(band?.famineShare).toBeCloseTo(1 / 3, 9);
+    expect((band?.rationingShare ?? 0) + (band?.famineShare ?? 0)).toBeCloseTo(1, 9);
+    expect(band?.deprivedShare).toBe(0);
   });
 
   it("reports 0 net growth, never a division by a cohort that started at nobody", () => {
@@ -500,11 +504,11 @@ describe("computeWorldCohorts", () => {
     expect(Number.isFinite(band?.netGrowthPct ?? 0)).toBe(true);
   });
 
-  it("counts a Strained world into its cohort's strainedShare, not folded into shortageShare", () => {
+  it("counts a Strained world into its cohort's strainedShare, not folded into a harsher bucket", () => {
     // The same defect population-analysis.test.ts's "counted as Strained" test pins, at the cohort
     // layer: water at 0.8 sits strictly between RATIONING_PROVISION and SUPPLIED_PROVISION with no
-    // survival good touched, so this system must read Strained. A cohort fold that kept the old
-    // three-way catch-all would silently count it as Shortage instead.
+    // survival good touched, so this system must read Strained. A cohort fold with a catch-all arm
+    // would silently count it as something worse instead.
     const systems = [sys("s1", { population: 5 })];
     const markets = [{ systemId: "s1", goodId: "water", satisfaction: 0.8 }];
 
@@ -514,13 +518,52 @@ describe("computeWorldCohorts", () => {
     expect(band?.strainedShare).toBe(1);
     expect(band?.suppliedShare).toBe(0);
     expect(band?.rationingShare).toBe(0);
-    expect(band?.shortageShare).toBe(0);
+    expect(band?.deprivedShare).toBe(0);
+    expect(band?.famineShare).toBe(0);
+  });
+
+  it("counts a Deprived world into its cohort's deprivedShare, not into rationingShare or famineShare", () => {
+    // The bottom of the Provision axis at the cohort layer. Medicine alone at 0.3 puts Provision at
+    // exactly 0.3 (a single-good basket's Provision IS its satisfaction) — below DEPRIVED_PROVISION
+    // — with no survival good in the basket at all, so the famine punch-through cannot fire. A
+    // cohort fold missing the deprived arm counts this into a neighbour and reads zero here.
+    const systems = [sys("s1", { population: 5 })];
+    const markets = [{ systemId: "s1", goodId: "medicine", satisfaction: 0.3 }];
+
+    const band = computeWorldCohorts(systems, markets, new Set(), 0.8, [])
+      .find((e) => e.cohort === "pop <10");
+
+    expect(band?.deprivedShare).toBe(1);
+    expect(band?.rationingShare).toBe(0);
+    expect(band?.famineShare).toBe(0);
+    expect(band?.strainedShare).toBe(0);
+    expect(band?.suppliedShare).toBe(0);
+  });
+
+  it("agrees with the galaxy-wide Deprived and Famine counts when the cohort is the whole settled population", () => {
+    // The two folds read the same perSystemSupplyState map, so the two NEW buckets must agree the
+    // same way the Strained one below does — this is what catches one of the two switches being
+    // widened and the other left with a stale arm.
+    const systems = [sys("s1", { population: 5 }), sys("s2", { population: 5 })];
+    const markets = [
+      { systemId: "s1", goodId: "medicine", satisfaction: 0.3 }, // Deprived, no survival good
+      { systemId: "s2", goodId: "water", satisfaction: 0.2 }, // Famine
+    ];
+
+    const summary = summarizeSupplyRegimes(systems, markets);
+    const band = computeWorldCohorts(systems, markets, new Set(), 0.8, [])
+      .find((e) => e.cohort === "pop <10");
+
+    expect(summary.deprived).toBe(1);
+    expect(summary.famine).toBe(1);
+    expect(band?.deprivedShare).toBeCloseTo(summary.deprivedShare, 10);
+    expect(band?.famineShare).toBeCloseTo(summary.famineShare, 10);
   });
 
   it("agrees with the galaxy-wide Strained count when the cohort is the whole settled population", () => {
     // Both tables fold the SAME perSystemSupplyState map (see population-analysis.ts). A Strained
     // count that differs between the galaxy-wide summary and the cohorted split means one of the two
-    // folds was missed when the union widened to four members.
+    // folds was missed when the union last widened.
     const systems = [sys("s1", { population: 5 }), sys("s2", { population: 5 })];
     const markets = [
       { systemId: "s1", goodId: "water", satisfaction: 0.8 },

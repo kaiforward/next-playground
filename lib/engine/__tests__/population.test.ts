@@ -19,6 +19,7 @@ import {
   SHORTAGE_SATISFACTION,
   SUPPLIED_PROVISION,
   RATIONING_PROVISION,
+  DEPRIVED_PROVISION,
   CRITICAL_SATISFACTION,
   BAND_MIN_DEMAND_SHARE,
 } from "@/lib/constants/economy";
@@ -298,9 +299,12 @@ describe("worstDemandedGoods (ascending tail with demand share)", () => {
 describe("foldSupplyState (four bands binned from Provision, survival punch-through)", () => {
   const full = (goodId: string, demanded: number) => ({ goodId, satisfaction: 1, demanded });
   const bandFor = (p: number) =>
-    p >= SUPPLIED_PROVISION ? "supplied" : p >= RATIONING_PROVISION ? "strained" : "rationing";
+    p >= SUPPLIED_PROVISION ? "supplied"
+      : p >= RATIONING_PROVISION ? "strained"
+        : p >= DEPRIVED_PROVISION ? "rationing"
+          : "deprived";
 
-  it("bins from provision() itself, in each of the three Provision bands — the one implementation a re-implemented mean would drift from", () => {
+  it("bins from provision() itself, in each of the four Provision bands — the one implementation a re-implemented mean would drift from", () => {
     // Two goods of sharply different necessity, so an unweighted mean of the raw satisfactions would
     // land in a different band than the necessity-and-demand-weighted provision() does. If
     // foldSupplyState ever re-implemented its own mean instead of calling provision(), a fixture like
@@ -313,22 +317,37 @@ describe("foldSupplyState (four bands binned from Provision, survival punch-thro
       { goodId: "ore", satisfaction: 0.82, demanded: 10 },
       { goodId: "medicine", satisfaction: 0.7, demanded: 5 },
     ];
+    // The two low fixtures are the discriminating ones: ore's weight is 10 × 0.1 = 1 against
+    // medicine's 5 × 0.8 = 4, so the weighted fold lands a whole band BELOW the plain mean of the
+    // two satisfactions (0.63 vs 0.75, and 0.46 vs 0.625). An unweighted re-implementation reads
+    // Strained and Rationing here instead of Rationing and Deprived.
     const rationingGoods = [
-      { goodId: "ore", satisfaction: 0.4, demanded: 10 },
-      { goodId: "medicine", satisfaction: 0.3, demanded: 5 },
+      { goodId: "ore", satisfaction: 0.95, demanded: 10 },
+      { goodId: "medicine", satisfaction: 0.55, demanded: 5 },
     ];
-    const fixtures = [suppliedGoods, strainedGoods, rationingGoods];
+    const deprivedGoods = [
+      { goodId: "ore", satisfaction: 0.9, demanded: 10 },
+      { goodId: "medicine", satisfaction: 0.35, demanded: 5 },
+    ];
+    const fixtures = [suppliedGoods, strainedGoods, rationingGoods, deprivedGoods];
     for (const goods of fixtures) {
       expect(foldSupplyState(goods).regime).toBe(bandFor(provision(goods)));
     }
     // Guard against every fixture accidentally landing in the same band, which would let the loop
-    // above pass without actually exercising all three.
-    expect(new Set(fixtures.map((g) => foldSupplyState(g).regime)).size).toBe(3);
+    // above pass without actually exercising all four.
+    expect(new Set(fixtures.map((g) => foldSupplyState(g).regime)).size).toBe(4);
+    // …and name them, so a fixture that drifted into the wrong band fails here rather than quietly
+    // re-testing a band already covered (bandFor above would still agree with the fold).
+    expect(fixtures.map((g) => foldSupplyState(g).regime))
+      .toEqual(["supplied", "strained", "rationing", "deprived"]);
   });
 
-  it("both bin edges are inclusive on the side their docstrings state", () => {
+  it("all three bin edges are inclusive on the side their docstrings state", () => {
     // A single demanded good's provision() equals its own satisfaction exactly, whatever its
-    // necessity — share is 1 either way — so these fixtures land precisely on the edges.
+    // necessity — share is 1 either way — so these fixtures land precisely on the edges. `ore` is
+    // used at the Deprived edge rather than `food`: the DEPRIVED_PROVISION edge (0.5) is exactly
+    // SHORTAGE_SATISFACTION, so a survival good sitting a hair under it would trip the famine
+    // punch-through and this would be testing that instead of the bin.
     const atSupplied = [{ goodId: "food", satisfaction: SUPPLIED_PROVISION, demanded: 10 }];
     expect(provision(atSupplied)).toBeCloseTo(SUPPLIED_PROVISION, 10);
     expect(foldSupplyState(atSupplied).regime).toBe("supplied"); // at-or-above: still Supplied
@@ -341,22 +360,56 @@ describe("foldSupplyState (four bands binned from Provision, survival punch-thro
 
     const justBelowRationing = [{ goodId: "food", satisfaction: RATIONING_PROVISION - 1e-9, demanded: 10 }];
     expect(foldSupplyState(justBelowRationing).regime).toBe("rationing");
+
+    const atDeprived = [{ goodId: "ore", satisfaction: DEPRIVED_PROVISION, demanded: 10 }];
+    expect(provision(atDeprived)).toBeCloseTo(DEPRIVED_PROVISION, 10);
+    expect(foldSupplyState(atDeprived).regime).toBe("rationing"); // at-or-above: still Rationing
+    expect(foldSupplyState(atDeprived).survivalShortfall).toBe(false); // the bin, not the punch-through
+
+    const justBelowDeprived = [{ goodId: "ore", satisfaction: DEPRIVED_PROVISION - 1e-9, demanded: 10 }];
+    expect(foldSupplyState(justBelowDeprived).regime).toBe("deprived");
+    expect(foldSupplyState(justBelowDeprived).survivalShortfall).toBe(false);
   });
 
-  it("a survival good below the survival line bands Shortage whatever Provision says; a non-survival good at the identical satisfaction does not", () => {
+  it("famine can read at ANY Provision — it owns no span of the axis, so it is never a fifth bin", () => {
+    // The property the whole design rests on: the survival punch-through is orthogonal to the axis.
+    // A world starving on water while everything else pours in reads Famine at a Supplied-grade
+    // Provision; a world starving on water with nothing else either reads Famine at a Deprived-grade
+    // one. An implementation that binned famine as "the band below Deprived" would fail the first.
+    const famineHigh = [
+      { goodId: "water", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 1 },
+      full("medicine", 10000),
+    ];
+    expect(provision(famineHigh)).toBeGreaterThanOrEqual(SUPPLIED_PROVISION);
+    expect(foldSupplyState(famineHigh).regime).toBe("famine");
+
+    const famineLow = [{ goodId: "water", satisfaction: 0.01, demanded: 10 }];
+    expect(provision(famineLow)).toBeLessThan(DEPRIVED_PROVISION);
+    expect(foldSupplyState(famineLow).regime).toBe("famine");
+
+    // …and the axis's own bottom band is NOT famine: the same near-zero Provision, reached without
+    // touching a survival good, still reads Deprived. Without this pair, a fold that promoted every
+    // Deprived world to Famine would pass the two assertions above.
+    const deprivedNotFamine = [{ goodId: "medicine", satisfaction: 0.01, demanded: 10 }];
+    expect(provision(deprivedNotFamine)).toBeLessThan(DEPRIVED_PROVISION);
+    expect(foldSupplyState(deprivedNotFamine).regime).toBe("deprived");
+    expect(foldSupplyState(deprivedNotFamine).survivalShortfall).toBe(false);
+  });
+
+  it("a survival good below the survival line bands Famine whatever Provision says; a non-survival good at the identical satisfaction does not", () => {
     const survivalShort = [
       { goodId: "water", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 1 },
       full("ore", 1000),
     ];
     expect(provision(survivalShort)).toBeGreaterThan(SUPPLIED_PROVISION); // Provision alone reads healthy
-    expect(foldSupplyState(survivalShort).regime).toBe("shortage");
+    expect(foldSupplyState(survivalShort).regime).toBe("famine");
     expect(foldSupplyState(survivalShort).survivalShortfall).toBe(true);
 
     const nonSurvivalSameSat = [
       { goodId: "luxuries", satisfaction: SHORTAGE_SATISFACTION - 1e-9, demanded: 1 },
       full("ore", 1000),
     ];
-    expect(foldSupplyState(nonSurvivalSameSat).regime).not.toBe("shortage");
+    expect(foldSupplyState(nonSurvivalSameSat).regime).not.toBe("famine");
     expect(foldSupplyState(nonSurvivalSameSat).survivalShortfall).toBe(false);
   });
 
@@ -450,7 +503,7 @@ describe("supplyUnrestTerm (max of a memory-relative grievance reading and an ab
   const params: UnrestParams = { slopeBase: 1.6, slopeShortage: 2.4, decay: 0.06 };
   const benign: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
   const survival = (criticalWeight = 0): SupplyState =>
-    ({ regime: "shortage", survivalShortfall: true, criticalWeight, emptyBasket: false });
+    ({ regime: "famine", survivalShortfall: true, criticalWeight, emptyBasket: false });
   const critical = (criticalWeight: number): SupplyState =>
     ({ regime: "rationing", survivalShortfall: false, criticalWeight, emptyBasket: false });
 
@@ -524,7 +577,7 @@ describe("supplyUnrestTerm (max of a memory-relative grievance reading and an ab
   it("ignores `regime` entirely — only survivalShortfall and criticalWeight feed the term", () => {
     const g = 0.3;
     const d = 0.2;
-    for (const regime of ["supplied", "strained", "rationing", "shortage"] as const) {
+    for (const regime of ["supplied", "strained", "rationing", "deprived", "famine"] as const) {
       const supply: SupplyState = { regime, survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
       expect(supplyUnrestTerm(g, d, supply, params)).toBeCloseTo(params.slopeBase * g, 10);
     }
@@ -674,7 +727,7 @@ describe("accumulateUnrest (floor-relaxation integrator over a caller-supplied t
     const d = 0.1;
     const grievance = 0;
     const benign: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
-    const famine: SupplyState = { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
+    const famine: SupplyState = { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
     const ordinary = accumulateUnrest(0.2, supplyUnrestTerm(grievance, d, benign, params), 0.2, params);
     const famineUnrest = accumulateUnrest(0.2, supplyUnrestTerm(grievance, d, famine, params), 0.2, params);
     expect(famineUnrest).toBeGreaterThan(ordinary);
@@ -683,7 +736,7 @@ describe("accumulateUnrest (floor-relaxation integrator over a caller-supplied t
   it("keeps one full-shortage cycle from floor 0.23 below the 0.65 strike threshold", () => {
     // catchUpFactor = 2 is applied by the processor; the engine receives a pre-scaled relaxation rate.
     const scaled: UnrestParams = { ...params, decay: 0.06 * 2 };
-    const famine: SupplyState = { regime: "shortage", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
+    const famine: SupplyState = { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false };
     const term = supplyUnrestTerm(1, 1, famine, scaled);
     const next = accumulateUnrest(0.23, term, 0.23, scaled);
     expect(next).toBeGreaterThan(0.23); // it rose

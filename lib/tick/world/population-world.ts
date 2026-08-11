@@ -5,7 +5,7 @@
  * economy shard), reading the dissatisfaction and supply regime the economy recorded
  * for them. The adapter in `lib/tick/adapters/memory/population.ts` implements this.
  */
-import type { UnrestParams, PopulationParams } from "@/lib/engine/population";
+import type { UnrestParams, PopulationParams, SupplyRegime } from "@/lib/engine/population";
 import type { ExpectationParams } from "@/lib/engine/expectation";
 export interface PopulationStateView {
   systemId: string;
@@ -31,6 +31,22 @@ export interface PopulationUpdate {
    *  update. The adapter (`lib/tick/adapters/memory/population.ts`) treats an absent write here
    *  the same as a non-finite one — keep the row's prior value if it has one, else stay absent. */
   provisionExpectation?: number;
+  /** This cycle's Provisioned (P = 1 − d), read from the same `dissatisfactionBySystem` entry the
+   *  unrest read already consumed for this system — never a re-derived mean. Unlike
+   *  `provisionExpectation` above, this carries no memory across cycles: the adapter drops a
+   *  non-finite write straight to absent rather than keeping the prior cycle's figure (see
+   *  `lib/world/types.ts` for the full absence convention). */
+  provision?: number;
+  /** This cycle's supply band (`SupplyState.regime`), read from the matching
+   *  `supplyStateBySystem` entry — absent (not the processor's defensive "supplied" default) when
+   *  the economy genuinely left this system unclassified this cycle. Same no-memory write
+   *  convention as `provision`. */
+  supplyBand?: SupplyRegime;
+  /** This cycle's critical-good override weight (`SupplyState.criticalWeight`), read from the
+   *  matching `supplyStateBySystem` entry, same no-memory write convention and same
+   *  never-classified-this-cycle absence as `supplyBand`. Un-clamped: the adapter guards only
+   *  finiteness and non-negativity (`lib/world/types.ts`). */
+  criticalWeight?: number;
 }
 
 export interface PopulationWorld {

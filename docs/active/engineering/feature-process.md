@@ -65,6 +65,19 @@ Two mechanisms upgrade rank-3 rules toward rank 2, and every skill carries them 
    recurring review finding is fixtures that coincide with the old behaviour, thresholds sitting
    exactly on a boundary, or assertions comparing a function to itself — all of which pass on first
    write.
+
+   **A red-proof starts from green, fully-implemented code and ends in an assertion.** Break the
+   named behaviour, watch the named test fail on a real "expected X to be Y", restore. A
+   `Cannot find module`, a "not a function", or any other import/reference error is **not** a
+   red-proof — it proves a file or symbol was absent, never that the test detects what it claims.
+   Record the assertion message, not just the fact of failure: a record naming the break and the
+   message is mechanically reproducible by a reviewer, and reproducing one is what turns a claim
+   into evidence. An implementer that writes its tests first and reports their initial import
+   failures has recorded nothing; that whole record is rejected and the gate has not run.
+
+   Watch for the fixture that sits where the bug would not bind — a saturation cap tested only
+   below saturation, a boundary tested only at its interior. Such a test passes against the broken
+   code *and* the fixed code, which is the same vacuity as never seeing it red.
 3. **Doc-sync grep**: when a change alters a symbol's *meaning or shape* — not just its value — grep
    that identifier across `lib/` and `docs/active/` for stale docstrings, module headers and doc
    claims. `npm run impact` finds the code readers; this finds the prose readers. The recurring
@@ -95,5 +108,6 @@ hours.
 The review rules live in `AGENTS.md` → Git Workflow / Review process; the load-bearing ones for the
 pipeline's shape: each sub-feature is reviewed going *into* the shared branch while it is small; the
 doc lifecycle (promote spec, update `docs/SPEC.md`, delete the build plan) happens on the branch
-*before* the final review so the fold is part of the reviewed diff; and everything known about a PR
-goes on the table before the merge, which is always a human decision.
+*before* the final review so the fold is part of the reviewed diff — per sub-PR, since a plan carried
+to the integration merge is never reviewed; and everything known about a PR goes on the table before
+the merge, which is always a human decision.

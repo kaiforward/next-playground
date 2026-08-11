@@ -110,7 +110,7 @@ export interface PopulationSummary {
   meanOccupancy: number;
   /** Systems with population ≤ 1 (ghost-town watch). */
   emptiedCount: number;
-  /** Systems with unrest ≥ strikeThreshold (striking). */
+  /** Systems with unrest > strikeThreshold (striking) — the engine's own strict comparison. */
   strikingCount: number;
   /** Striking systems as a share of those counted, in [0,1]. The count alone reads differently as
    *  the galaxy grows — 300 striking of 400 and 300 of 3000 are not the same galaxy. */
@@ -167,7 +167,7 @@ export function summarizePopulation(
       occupancyCount++;
     }
     if (s.population <= 1) emptiedCount++;
-    if (s.unrest >= strikeThreshold) strikingCount++;
+    if (s.unrest > strikeThreshold) strikingCount++;
   }
 
   const n = Math.max(1, settled.length);
@@ -254,11 +254,13 @@ export interface SupplyRegimeSummary {
   supplied: number;
   strained: number;
   rationing: number;
-  shortage: number;
+  deprived: number;
+  famine: number;
   suppliedShare: number;
   strainedShare: number;
   rationingShare: number;
-  shortageShare: number;
+  deprivedShare: number;
+  famineShare: number;
   /** Mean shortfall (1 − Provision, dissatisfaction()'s linear scale) over counted systems — the
    *  magnitude behind the labels. */
   meanShortfall: number;
@@ -384,7 +386,8 @@ export function summarizeSupplyRegimes(
 ): SupplyRegimeSummary {
   const states = perSystemSupplyState(systems, markets, events);
 
-  let supplied = 0, strained = 0, rationing = 0, shortage = 0, shortfallSum = 0, staleExpectationCount = 0;
+  let supplied = 0, strained = 0, rationing = 0, deprived = 0, famine = 0;
+  let shortfallSum = 0, staleExpectationCount = 0;
   const provisions: number[] = [];
   const worstGoodSats: number[] = [];
   const expectations: number[] = [];
@@ -399,13 +402,15 @@ export function summarizeSupplyRegimes(
       expectations.push(state.expectationStored);
       grievances.push(state.grievance);
     }
-    // Exhaustive over the four members — a fifth regime added to the union fails to compile here
-    // instead of silently folding into Shortage, the very defect this widening exists to close.
+    // Exhaustive over every member — a further regime added to the union fails to compile here
+    // instead of silently folding into a neighbouring bucket, the very defect this fold exists to
+    // close.
     switch (state.regime) {
       case "supplied": supplied++; break;
       case "strained": strained++; break;
       case "rationing": rationing++; break;
-      case "shortage": shortage++; break;
+      case "deprived": deprived++; break;
+      case "famine": famine++; break;
       default: {
         const exhaustive: never = state.regime;
         throw new Error(`unhandled supply regime: ${exhaustive}`);
@@ -415,11 +420,12 @@ export function summarizeSupplyRegimes(
   const counted = states.size;
   const share = (n: number) => (counted > 0 ? n / counted : 0);
   return {
-    counted, supplied, strained, rationing, shortage,
+    counted, supplied, strained, rationing, deprived, famine,
     suppliedShare: share(supplied),
     strainedShare: share(strained),
     rationingShare: share(rationing),
-    shortageShare: share(shortage),
+    deprivedShare: share(deprived),
+    famineShare: share(famine),
     meanShortfall: counted > 0 ? shortfallSum / counted : 0,
     provisionLevels: quantileLevels(provisions),
     worstGoodLevels: quantileLevels(worstGoodSats),

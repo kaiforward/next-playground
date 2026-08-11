@@ -397,7 +397,8 @@ function formatTable(results: HarnessResults): string {
       ["Supplied", regimes.supplied, regimes.suppliedShare],
       ["Strained", regimes.strained, regimes.strainedShare],
       ["Rationing", regimes.rationing, regimes.rationingShare],
-      ["Shortage", regimes.shortage, regimes.shortageShare],
+      ["Deprived", regimes.deprived, regimes.deprivedShare],
+      ["Famine", regimes.famine, regimes.famineShare],
     ];
     lines.push(...renderTable(
       ["Regime", "Systems", "Share"],
@@ -435,8 +436,8 @@ function formatTable(results: HarnessResults): string {
     lines.push("Supply & unrest by world cohort (end of simulation):");
 
     lines.push(...renderTable(
-      ["Cohort", "n", "shortfall", "Provision", "worst-good", "unrest", "strike%", "Sup/Str/Rat/Sho %", "net growth%"],
-      [16, 6, 9, 10, 11, 8, 9, 26, 12],
+      ["Cohort", "n", "shortfall", "Provision", "worst-good", "unrest", "strike%", "Sup/Str/Rat/Dep/Fam %", "net growth%"],
+      [16, 6, 9, 10, 11, 8, 9, 30, 12],
       worldCohorts.map((c) => [
         c.cohort,
         String(c.n),
@@ -448,7 +449,8 @@ function formatTable(results: HarnessResults): string {
         `${(c.suppliedShare * 100).toFixed(0)} / ` +
           `${(c.strainedShare * 100).toFixed(0)} / ` +
           `${(c.rationingShare * 100).toFixed(0)} / ` +
-          `${(c.shortageShare * 100).toFixed(0)}`,
+          `${(c.deprivedShare * 100).toFixed(0)} / ` +
+          `${(c.famineShare * 100).toFixed(0)}`,
         c.netGrowthPct === null ? "n/a" : `${c.netGrowthPct.toFixed(1)}%`,
       ]),
     ));

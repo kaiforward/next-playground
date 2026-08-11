@@ -40,6 +40,45 @@ describe("runWorldTick: cycle start", () => {
     expect(moved).toBe(true);
   });
 
+  it("changes provision and supplyBand only on the cycle boundary tick", async () => {
+    let world = generateWorld({ systemCount: 40, seed: 7 });
+
+    // Never assessed before the first boundary: absent on every system.
+    for (const s of world.systems) expect(s.provision).toBeUndefined();
+
+    for (let t = 1; t < CYCLE_LENGTH; t++) {
+      world = (await runWorldTick(world)).world;
+      for (const s of world.systems) expect(s.provision).toBeUndefined();
+    }
+
+    // Tick CYCLE_LENGTH is the first boundary: every system with a market row (the economy
+    // processor's shard, `lib/tick/processors/economy.ts`) is now assessed — a bare frontier
+    // system with no markets yet is legitimately still absent, so this checks non-vacuity (at
+    // least one system moved) rather than universal coverage.
+    world = (await runWorldTick(world)).world;
+    expect(world.meta.currentTick).toBe(CYCLE_LENGTH);
+    expect(world.systems.some((s) => s.provision !== undefined)).toBe(true);
+    const assessed = new Map(world.systems.map((s) => [s.id, { provision: s.provision, supplyBand: s.supplyBand }]));
+
+    // Off-boundary ticks through the whole next cycle leave both fields byte-identical.
+    for (let t = CYCLE_LENGTH + 1; t < 2 * CYCLE_LENGTH; t++) {
+      world = (await runWorldTick(world)).world;
+      for (const s of world.systems) {
+        expect(s.provision).toBe(assessed.get(s.id)?.provision);
+        expect(s.supplyBand).toBe(assessed.get(s.id)?.supplyBand);
+      }
+    }
+
+    // The second boundary reassesses: at least one system's reading actually moves — a per-system
+    // check (not an aggregate) so the assertion above can't be vacuously satisfied by a frozen sim.
+    world = (await runWorldTick(world)).world;
+    expect(world.meta.currentTick).toBe(2 * CYCLE_LENGTH);
+    const moved = world.systems.some((s) =>
+      s.provision !== assessed.get(s.id)?.provision || s.supplyBand !== assessed.get(s.id)?.supplyBand,
+    );
+    expect(moved).toBe(true);
+  });
+
   it("broadcasts economyTick on every tick, cycle or not, with the resolving tick the only one reporting systems", async () => {
     // The cycle-start gate skips the economy stage mid-cycle, so runWorldTick emits the
     // mid-cycle payload in its place. That signal must not go missing: the client

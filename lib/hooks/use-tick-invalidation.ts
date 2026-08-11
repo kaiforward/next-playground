@@ -27,6 +27,9 @@ export function useTickInvalidation() {
         // Migration attractiveness is a function of unrest/population/popCap/labour — all rewritten by
         // the economy processor this tick — so it goes stale on the same cycle as its sibling value modes.
         queryClient.invalidateQueries({ queryKey: queryKeys.migrationMap });
+        // Provisioned + band are written once per economy cycle (Task 1), the same cycle as the rest
+        // of this handler's signals — refresh the choropleth on the same cadence.
+        queryClient.invalidateQueries({ queryKey: queryKeys.provisionMap });
         // Ownership moves on the same cycle start (claim/develop) — refresh the political
         // territory + filled/hollow markers so the map paints expansion live.
         queryClient.invalidateQueries({ queryKey: queryKeys.ownership });

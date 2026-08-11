@@ -3,12 +3,12 @@
 /** Single-select tint applied to the territory polygons. `none` hides both. */
 export type MapMode =
   | "political" | "regions" | "stability" | "population" | "development"
-  | "migration"
+  | "migration" | "provision"
   | "none";
 
 /** Iteration order also defines the UI render order in the Mode toggle group. */
 export const MAP_MODES: readonly MapMode[] = [
-  "political", "regions", "stability", "population", "development", "migration", "none",
+  "political", "regions", "stability", "population", "development", "migration", "provision", "none",
 ];
 
 const MAP_MODE_SET: ReadonlySet<string> = new Set<MapMode>(MAP_MODES);
@@ -18,11 +18,11 @@ export function isMapMode(value: unknown): value is MapMode {
   return typeof value === "string" && MAP_MODE_SET.has(value);
 }
 
-/** True for the modes that drive the value choropleth (population/stability/development/migration). */
+/** True for the modes that drive the value choropleth (population/stability/development/migration/provision). */
 export function isValueMapMode(mode: MapMode): boolean {
   return (
     mode === "population" || mode === "stability" || mode === "development" ||
-    mode === "migration"
+    mode === "migration" || mode === "provision"
   );
 }
 
