@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo } from "react";
+import { tv } from "tailwind-variants";
 import { useSystemIndustry } from "@/lib/hooks/use-system-industry";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useSystemConstruction } from "@/lib/hooks/use-system-construction";
@@ -39,10 +40,28 @@ import { depositRows, depositRowProblems, depositTypeProblems, generalLand, staf
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { buildProblems, needSeverity, problemGlyph, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
+import { NeedTooltipContent } from "@/components/system/need-tooltip-content";
 import { QuickAddButton } from "@/components/construction/quick-add-button";
 import { BuildDialog } from "@/components/construction/build-dialog";
 
 const THRESHOLD = INFRASTRUCTURE_DECAY_PARAMS.unrestThreshold;
+
+const problemRowVariants = tv({
+  slots: {
+    row: "",
+    cell: "px-1.5 pt-1 text-[12px]",
+  },
+  variants: {
+    hasProblems: {
+      true: { cell: "pb-0.5" },
+      false: { row: "border-b border-border/40", cell: "pb-1" },
+    },
+    trimLastBorder: {
+      true: { row: "last:border-b-0" },
+      false: {},
+    },
+  },
+});
 
 /**
  * Health → label / badge colour / text colour / glyph, in one place so the badge, tally, row
@@ -290,15 +309,17 @@ function GhostNameCell({
         {ghost.label} <span className="font-mono">+{ghost.levels}</span>
         {ghost.origin === "player" && <Badge color="amber">ORDERED</Badge>}
         {ghost.origin === "player" && canCancel && (
-          <button
+          <Button
             type="button"
+            variant="dismiss"
+            size="compact"
             aria-label={`Cancel ${ghost.label} order`}
             disabled={cancelPending}
             onClick={() => onCancel(ghost.projectId)}
-            className="px-1 text-[11px] text-status-red-light transition-colors hover:text-status-red disabled:cursor-not-allowed disabled:opacity-35"
+            className="border-transparent px-1 transition-colors hover:border-transparent hover:bg-transparent hover:text-status-red disabled:opacity-35"
           >
             ✕
-          </button>
+          </Button>
         )}
       </span>
       <span className="mt-0.5 block h-1 max-w-[180px] bg-surface-active">
@@ -359,9 +380,11 @@ function DepositTypeSubRow({
 }) {
   const items = depositTypeProblems(t, popNeed, label);
   const hasProblems = items.length > 0;
+  const styles = problemRowVariants({ hasProblems, trimLastBorder: true });
+
   return (
-    <tr className={hasProblems ? "" : "border-b border-border/40 last:border-b-0"}>
-      <td className={`px-1.5 pt-1 text-[12px] text-text-secondary ${hasProblems ? "pb-0.5" : "pb-1"}`}>
+    <tr className={styles.row()}>
+      <td className={styles.cell({ className: "text-text-secondary" })}>
         <span className="flex items-center gap-1.5 pl-3">
           <span aria-hidden className="font-mono text-[10px] text-text-tertiary">└</span>
           {label(t.buildingType)}
@@ -422,10 +445,11 @@ function DepositTable({
           const rowPopNeed = soleType?.outputGood ? popNeedByGood.get(soleType.outputGood) : undefined;
           const items = depositRowProblems(row, rowPopNeed, label);
           const hasProblems = items.length > 0;
+          const styles = problemRowVariants({ hasProblems, trimLastBorder: true });
           return (
             <Fragment key={row.resource}>
-              <tr className={hasProblems ? "" : "border-b border-border/40 last:border-b-0"}>
-                <td className={`px-1.5 pt-1 text-[12px] text-text-primary ${hasProblems ? "pb-0.5" : "pb-1"}`}>
+              <tr className={styles.row()}>
+                <td className={styles.cell({ className: "text-text-primary" })}>
                   <span className="flex items-center gap-1.5">
                     <HealthGlyph health={row.health} className="text-[9px]" />
                     <Tooltip>
@@ -450,7 +474,13 @@ function DepositTable({
               ))}
               {multi && row.types.map((t) => (
                 <Fragment key={t.buildingType}>
-                  <DepositTypeSubRow t={t} popNeed={t.outputGood ? popNeedByGood.get(t.outputGood) : undefined} systemId={systemId} canOrder={canOrder} option={optionByType.get(t.buildingType)} />
+                  <DepositTypeSubRow
+                    t={t}
+                    popNeed={t.outputGood ? popNeedByGood.get(t.outputGood) : undefined}
+                    systemId={systemId}
+                    canOrder={canOrder}
+                    option={optionByType.get(t.buildingType)}
+                  />
                   {ghosts.filter((g) => g.buildingType === t.buildingType).map((g) => (
                     <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
                   ))}
@@ -461,24 +491,6 @@ function DepositTable({
         })}
       </tbody>
     </table>
-  );
-}
-
-/** Pop-short tooltip body for a problem-line item: header · figures · the standard sentence. */
-function PopShortTooltipBody({ n }: { n: PopNeedData }) {
-  const sev = needSeverity(n.satisfaction);
-  const gap = n.want - n.delivered;
-  return (
-    <div className="space-y-1 text-xs">
-      <div className="flex items-baseline justify-between gap-3 border-b border-border/60 pb-1">
-        <span className="font-display text-text-primary">{n.goodName}</span>
-        <span className={`font-mono ${SEVERITY_TEXT[sev]}`}>{SEVERITY_GLYPH[sev]} {Math.round(n.satisfaction * 100)}% met</span>
-      </div>
-      <p className="font-mono text-text-secondary">
-        want {n.want.toFixed(1)}/cyc · delivered {n.delivered.toFixed(1)}/cyc · gap {gap.toFixed(1)}/cyc · pressure {n.pressure.toFixed(2)}
-      </p>
-      <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
-    </div>
   );
 }
 
@@ -499,7 +511,7 @@ function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNe
             {item.kind === "pops" && popNeed ? (
               <Tooltip>
                 <TooltipTriggerLabel>{chip}</TooltipTriggerLabel>
-                <TooltipContent className="w-56"><PopShortTooltipBody n={popNeed} /></TooltipContent>
+                <TooltipContent className="w-64"><NeedTooltipContent need={popNeed} /></TooltipContent>
               </Tooltip>
             ) : (
               chip
@@ -535,9 +547,10 @@ function BuildingRow({
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
   const items = buildProblems({ staffedFraction: b.staffedFraction, idleReason: b.idleReason }, supply, popNeed, label);
   const hasProblems = items.length > 0;
+  const styles = problemRowVariants({ hasProblems });
   return (
-    <tr className={hasProblems ? "" : "border-b border-border/40"}>
-      <td className={`px-1.5 pt-1 text-[12px] text-text-primary ${hasProblems ? "pb-0.5" : "pb-1"}`}>
+    <tr className={styles.row()}>
+      <td className={styles.cell({ className: "text-text-primary" })}>
         <span className="flex items-center gap-1.5">
           <HealthGlyph health={health} className="text-[9px]" />
           <Tooltip>

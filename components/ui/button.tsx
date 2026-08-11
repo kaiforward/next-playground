@@ -27,6 +27,8 @@ const buttonVariants = tv({
       cyan: "",
     },
     size: {
+      compact: "p-0 text-[11px]",
+      iconXs: "h-5 w-5 p-0 text-[13px] leading-none",
       xs: "py-1 px-2.5 text-xs",
       sm: "py-1.5 px-3 text-xs",
       md: "py-2 px-4 text-sm",
