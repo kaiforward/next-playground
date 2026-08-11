@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { depositRows, generalLand, staffedLevels } from "../industry-rows";
-import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace } from "@/lib/engine/industry";
+import { depositRows, depositRowProblems, depositTypeProblems, generalLand, staffedLevels } from "../industry-rows";
+import type { DepositTypeRow } from "../industry-rows";
+import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IdleReason } from "@/lib/engine/industry";
 
 const T = 0.75;
+/** `buildProblems`'s `inputLabel` — identity is enough for these fixtures. */
+const label = (id: string) => id;
 
 const deposit = (resource: SystemDepositSummary["resource"], slotCap: number): SystemDepositSummary => ({
   resource,
@@ -17,6 +20,7 @@ const extractor = (
   used: number,
   output: number,
   staffedFraction: number = count > 0 ? used / count : 0,
+  idleReason?: IdleReason,
 ): SystemIndustryReadout["buildings"][number] => ({
   buildingType,
   outputGood: buildingType,
@@ -25,6 +29,7 @@ const extractor = (
   used,
   staffedFraction,
   output,
+  idleReason,
 });
 
 describe("depositRows", () => {
@@ -62,14 +67,14 @@ describe("depositRows", () => {
     // textiles should still get a zeroed, stable entry so the player can see it and quick-add it.
     const rows = depositRows([deposit("arable", 5)], [extractor("food", 2, 1.5, 6)], 0, T);
     expect(rows[0].types.map((t) => t.buildingType)).toEqual(["food", "textiles"]);
-    expect(rows[0].types[0]).toEqual({ buildingType: "food", built: 2, staffed: 1.5, output: 6, health: "stable" });
-    expect(rows[0].types[1]).toEqual({ buildingType: "textiles", built: 0, staffed: 0, output: 0, health: "stable" });
+    expect(rows[0].types[0]).toEqual({ buildingType: "food", built: 2, staffed: 1.5, output: 6, health: "stable", staffedFraction: 0.75, idleReason: undefined });
+    expect(rows[0].types[1]).toEqual({ buildingType: "textiles", built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
   });
 
   it("carries exactly one type entry for a resource worked by a single catalog extractor", () => {
     const rows = depositRows([deposit("water", 3)], [extractor("water", 1, 1, 4)], 0, T);
     expect(rows[0].types).toHaveLength(1);
-    expect(rows[0].types[0]).toEqual({ buildingType: "water", built: 1, staffed: 1, output: 4, health: "stable" });
+    expect(rows[0].types[0]).toEqual({ buildingType: "water", built: 1, staffed: 1, output: 4, health: "stable", staffedFraction: 1, idleReason: undefined });
   });
 
   it("staffed is staffed capacity (staffedFraction × count), not the staffed-and-selling `used` figure — a glutting extractor still shows its full labour", () => {
@@ -87,6 +92,58 @@ describe("depositRows", () => {
     const rows = depositRows([deposit("water", 3)], [extractor("water", 2, 1, 3, 1)], 0, T);
     expect(rows[0].staffed).toBe(2);
     expect(rows[0].health).toBe("contracting");
+  });
+});
+
+describe("depositTypeProblems", () => {
+  it("a fully staffed but selling-throttled extractor surfaces Glut — the load-bearing case DepositTable must not stay silent on", () => {
+    // Full end-to-end pipeline: depositRows threads staffedFraction/idleReason off the BuildingEntry
+    // onto DepositTypeRow, and depositTypeProblems turns that into the same chip BuildingRow would show.
+    const rows = depositRows([deposit("water", 3)], [extractor("water", 2, 1, 3, 1, "selling")], 0, T);
+    expect(depositTypeProblems(rows[0].types[0], undefined, label)).toEqual([{ kind: "selling", label: "Glut", severity: "short" }]);
+  });
+
+  it("an understaffed extractor names Unskilled — extractors carry no skilled labour, so 'labour' is the only understaffed idleReason", () => {
+    const rows = depositRows([deposit("ore", 5)], [extractor("ore", 3, 1.2, 1, 0.4, "labour")], 0, T);
+    expect(depositTypeProblems(rows[0].types[0], undefined, label)).toEqual([{ kind: "staffing", label: "Unskilled understaffed 40%", severity: "critical" }]);
+  });
+
+  it("a built extractor's own pop shortage surfaces — tier-0 goods are directly consumed, same as any producer's output", () => {
+    const rows = depositRows([deposit("water", 3)], [extractor("water", 2, 2, 3, 1)], 0, T);
+    expect(depositTypeProblems(rows[0].types[0], { satisfaction: 0.5 }, label)).toEqual([{ kind: "pops", label: "pops short 50%", severity: "short" }]);
+  });
+
+  it("an unbuilt catalog entry (built 0) never surfaces a chip, even when its staffing figures alone would read as a problem", () => {
+    // Adversarial fixture: depositRows' own zero-default always pairs built:0 with idleReason
+    // undefined, so this fixture sets idleReason explicitly to exercise the `built <= 0` guard
+    // itself, not rely on idleReason being absent to suppress the chip.
+    const t: DepositTypeRow = { buildingType: "ore", built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 1, idleReason: "selling" };
+    expect(depositTypeProblems(t, undefined, label)).toEqual([]);
+  });
+});
+
+describe("depositRowProblems", () => {
+  it("a single-type deposit's parent row carries that type's own chip verbatim", () => {
+    const rows = depositRows([deposit("water", 3)], [extractor("water", 2, 1, 3, 1, "selling")], 0, T);
+    expect(depositRowProblems(rows[0], undefined, label)).toEqual([{ kind: "selling", label: "Glut", severity: "short" }]);
+  });
+
+  it("a multi-type deposit's parent row shows nothing even when the FIRST catalog type is glutting — misattributing food's Glut to the shared arable row would be the lie this rule avoids", () => {
+    // food is glutting, textiles is healthy, and food sorts first in catalog order (the existing
+    // "surfaces one type entry... in catalog order" test pins ["food", "textiles"]) — deliberately so
+    // that a rule which fell through to `row.types[0]` on a multi-type row (instead of returning [])
+    // would surface food's own Glut chip here and fail this assertion, not stay accidentally green.
+    const rows = depositRows(
+      [deposit("arable", 5)],
+      [extractor("food", 2, 1, 3, 1, "selling"), extractor("textiles", 1, 1, 4, 1, undefined)],
+      0,
+      T,
+    );
+    expect(rows[0].types.map((t) => t.buildingType)).toEqual(["food", "textiles"]);
+    expect(depositRowProblems(rows[0], undefined, label)).toEqual([]);
+    // The food sub-row still carries its own, correctly-attributed chip; the healthy textiles sub-row carries none.
+    expect(depositTypeProblems(rows[0].types[0], undefined, label)).toEqual([{ kind: "selling", label: "Glut", severity: "short" }]);
+    expect(depositTypeProblems(rows[0].types[1], undefined, label)).toEqual([]);
   });
 });
 

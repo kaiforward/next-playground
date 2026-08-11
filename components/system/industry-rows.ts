@@ -6,7 +6,8 @@
 import type { ResourceType, QualityBandId } from "@/lib/types/game";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
 import { buildingHealth } from "@/lib/engine/industry";
-import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IndustryHealth } from "@/lib/engine/industry";
+import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IndustryHealth, IdleReason } from "@/lib/engine/industry";
+import { buildProblems, type ProblemItem } from "@/components/system/needs-view";
 
 /** Severity ordering for the worst-of-contributors aggregation (collapsing is worst). */
 const SEVERITY: Record<IndustryHealth, number> = { stable: 0, contracting: 1, collapsing: 2 };
@@ -38,6 +39,17 @@ export interface DepositTypeRow {
   staffed: number;
   output: number;
   health: IndustryHealth;
+  /**
+   * This type's own staffing ratio and binding idle reason, carried straight off its `BuildingEntry`
+   * (`staffed` above is `staffedFraction × built`, so this is the same ratio, not a second figure) —
+   * exactly the shape `buildProblems` (`needs-view.ts`) needs for its `staffing` argument. `idleReason`
+   * is `undefined` for the zeroed catalog entry `depositRows` emits when nothing of this type is built
+   * (see below) — there is nothing to explain for a building that doesn't exist. Tier-0 extractors
+   * carry no skilled labour, so this only ever names "labour" (unskilled short) or "selling" (glut),
+   * never skill1/skill2.
+   */
+  staffedFraction: number;
+  idleReason?: IdleReason;
 }
 
 export interface DepositRow {
@@ -88,6 +100,8 @@ export function depositRows(
 ): DepositRow[] {
   type DepositResourceAgg = { built: number; staffed: number; output: number; health: IndustryHealth };
   const byResource = new Map<ResourceType, DepositResourceAgg>();
+  // Keyed by buildingType: buildIndustryReadout emits at most one BuildingEntry per buildingType
+  // (one push per `Object.entries(buildings)` key), so a type can never overwrite another's entry here.
   const byType = new Map<string, DepositTypeRow>();
   for (const b of extractors) {
     const resource = BUILDING_TYPES[b.buildingType]?.resource;
@@ -100,7 +114,15 @@ export function depositRows(
     acc.output += b.output ?? 0;
     if (SEVERITY[h] > SEVERITY[acc.health]) acc.health = h;
     byResource.set(resource, acc);
-    byType.set(b.buildingType, { buildingType: b.buildingType, built: b.count, staffed, output: b.output ?? 0, health: h });
+    byType.set(b.buildingType, {
+      buildingType: b.buildingType,
+      built: b.count,
+      staffed,
+      output: b.output ?? 0,
+      health: h,
+      staffedFraction: b.staffedFraction,
+      idleReason: b.idleReason,
+    });
   }
   return deposits
     .filter((d) => d.slotCap > 0)
@@ -108,9 +130,64 @@ export function depositRows(
       const agg: DepositResourceAgg = byResource.get(d.resource) ?? { built: 0, staffed: 0, output: 0, health: "stable" };
       const types = Object.keys(BUILDING_TYPES)
         .filter((t) => BUILDING_TYPES[t].resource === d.resource)
-        .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, built: 0, staffed: 0, output: 0, health: "stable" });
+        .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
       return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, slotCap: d.slotCap, ...agg, types };
     });
+}
+
+/**
+ * One extractor type's problem chips — the deposit-table analogue of `BuildingRow`'s
+ * `buildProblems({ staffedFraction: b.staffedFraction, idleReason: b.idleReason }, supply, popNeed, label)`
+ * call. Two of `buildProblems`'s three data arguments are meaningful here and one is not:
+ *
+ * - `supply` (input-gate throttle) is never meaningful for a tier-0 extractor: `buildIndustryReadout`
+ *   only emits a `supplyChain` entry for a good with a recipe (`GOOD_RECIPES[goodId]`), and extractors
+ *   have none — "tier-0 — always gated at 1, no signal" (industry.ts:817). Passed as `undefined`
+ *   outright rather than looked up, so the always-empty lookup isn't mistaken for a real check.
+ * - `popNeed` IS meaningful: every tier-0 good (food, water, ore, minerals, biomass, gas, textiles)
+ *   carries a `GOOD_CONSUMPTION` rate, so pops draw on extracted goods directly, same as any producer's
+ *   output.
+ *
+ * An unbuilt type (`built === 0` — the zeroed catalog entry `depositRows` emits for a not-yet-built
+ * extractor type) never produces a chip: there is nothing to explain for a building that doesn't
+ * exist, and `idleReason` is already `undefined` for it, but `staffedFraction` reads 0 (`needSeverity`
+ * would call that "critical") — the explicit `built <= 0` guard, not a reliance on `idleReason` alone,
+ * is what keeps an unbuilt row silent.
+ */
+export function depositTypeProblems(
+  t: DepositTypeRow,
+  popNeed: { satisfaction: number } | undefined,
+  inputLabel: (goodId: string) => string,
+): ProblemItem[] {
+  if (t.built <= 0) return [];
+  return buildProblems({ staffedFraction: t.staffedFraction, idleReason: t.idleReason }, undefined, popNeed, inputLabel);
+}
+
+/**
+ * Parent-row problem chips for a deposit row. A resource worked by a single catalog type (the common
+ * case) IS that type — its parent row carries that type's own chips verbatim (`row.types[0]`).
+ *
+ * A resource shared by several types (e.g. arable → food + textiles) is different: `health` already
+ * aggregates that case with a worst-of-contributors reduction (`SEVERITY`, above) — the obvious
+ * candidate to mirror here too. Rejected: health's worst-of picks a bare enum with no borrowed
+ * magnitude or attribution, so "collapsing" is truthfully a property of the whole deposit regardless
+ * of which contributor is collapsing. A problem chip is not that — its label carries a percentage and
+ * sometimes a grade/good name that belongs to exactly one contributing type (`t.staffedFraction`,
+ * `t.idleReason`, and its `popNeed` are all per-type). Reusing one type's figures on the parent row
+ * would present that type's own shortfall as if it explained the whole shared deposit — the
+ * misattribution this task calls out as a lie worth avoiding. Blending them instead (e.g. one type's
+ * `idleReason` paired with the row's aggregate `staffed ÷ built`) is not a fix: the two are causally
+ * linked per building, so pairing figures from different types produces a claim neither type actually
+ * supports. So a multi-type deposit's parent row shows no chip; each type's own, correctly-attributed
+ * chip renders on its own sub-row (`depositTypeProblems`) instead.
+ */
+export function depositRowProblems(
+  row: DepositRow,
+  popNeed: { satisfaction: number } | undefined,
+  inputLabel: (goodId: string) => string,
+): ProblemItem[] {
+  if (row.types.length !== 1) return [];
+  return depositTypeProblems(row.types[0], popNeed, inputLabel);
 }
 
 /** The general-land partition, with the habitable subset broken out so housing headroom reads in units. */

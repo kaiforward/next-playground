@@ -35,7 +35,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { useDialog } from "@/components/ui/dialog";
-import { depositRows, generalLand, staffedLevels, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
+import { depositRows, depositRowProblems, depositTypeProblems, generalLand, staffedLevels, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { buildProblems, needSeverity, problemGlyph, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
@@ -128,9 +128,9 @@ function YieldTag({ mult, band }: { mult: number; band: DepositRow["band"] }) {
  * figure is the signal); the capacity reads as a whole count of slots / built levels. The fill is
  * `staffedLevels` — pure labour for producers/extractors, occupancy for housing, licence/family draw
  * for academies/complexes/support (see that helper's docstring). Health is driven separately by
- * `used` (staffed AND selling for producers), so a producer row can read fully staffed while still
- * contracting or collapsing from a stalled sell-through; the state sub-row (`ProblemLine`) names
- * that condition.
+ * `used` (staffed AND selling for producers/extractors), so a producer or extractor row can read
+ * fully staffed while still contracting or collapsing from a stalled sell-through; the state sub-row
+ * (`ProblemLine`) names that condition, on both the general-land and deposit tables.
  */
 function Staffed({ staffed, total, health }: { staffed: number; total: number; health: IndustryHealth }) {
   return (
@@ -345,29 +345,35 @@ function BuildingGhostRow({
  * "└" glyph ties it to the parent's aggregate above. Slots and Yield stay blank — the parent row above
  * owns those (they're the shared pool a build of either type draws down) — only Staffed and Out/cyc are
  * this type's own numbers, so quick-add here restores the one-click add the ambiguous parent row lost.
+ * This is also the one place a shared deposit's per-type problem chip renders — the parent row
+ * deliberately shows none for a multi-type deposit (`depositRowProblems`'s docstring).
  */
 function DepositTypeSubRow({
-  t, systemId, canOrder, option,
+  t, popNeed, systemId, canOrder, option,
 }: {
   t: DepositTypeRow;
+  popNeed?: PopNeedData;
   systemId: string;
   canOrder: boolean;
   option?: BuildOptionData;
 }) {
+  const items = depositTypeProblems(t, popNeed, label);
+  const hasProblems = items.length > 0;
   return (
-    <tr className="border-b border-border/40 last:border-b-0">
-      <td className="px-1.5 py-1 text-[12px] text-text-secondary">
+    <tr className={hasProblems ? "" : "border-b border-border/40 last:border-b-0"}>
+      <td className={`px-1.5 pt-1 text-[12px] text-text-secondary ${hasProblems ? "pb-0.5" : "pb-1"}`}>
         <span className="flex items-center gap-1.5 pl-3">
           <span aria-hidden className="font-mono text-[10px] text-text-tertiary">└</span>
           {label(t.buildingType)}
         </span>
+        <ProblemLine items={items} popNeed={popNeed} />
       </td>
-      <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={t.staffed} total={t.built} health={t.health} /></td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={t.staffed} total={t.built} health={t.health} /></td>
       <td />
       <td />
-      <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary">{t.output > 0 ? formatUnitsShort(t.output) : "—"}</td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{t.output > 0 ? formatUnitsShort(t.output) : "—"}</td>
       {canOrder && (
-        <td className="px-1.5 py-1 text-right">
+        <td className="px-1.5 py-1 align-top text-right">
           {option && <QuickAddButton systemId={systemId} option={option} />}
         </td>
       )}
@@ -378,17 +384,21 @@ function DepositTypeSubRow({
 /**
  * Deposit table: per-resource slot fill — health glyph · resource · staffed/built · built/slots · yield ·
  * output. A resource worked by exactly one catalog extractor type renders as today: a single row, with a
- * trailing quick-add column on the player's own systems. A resource shared by several types (e.g. arable →
- * food + textiles) renders the parent row as the shared/aggregate picture — Slots is the shared pool,
- * built either type draws it down — with no quick-add of its own, and one sub-row per type below carrying
- * that type's own Staffed/Out and its own quick-add. In-flight extractor orders render as ghost rows under
- * their matching row: the single row for a one-type resource, the matching sub-row for a shared one.
+ * trailing quick-add column on the player's own systems, and — same mechanism as the general-land table's
+ * `BuildingRow` — an exception-only problem sub-row (`ProblemLine`) naming why it's idle. A resource shared
+ * by several types (e.g. arable → food + textiles) renders the parent row as the shared/aggregate picture —
+ * Slots is the shared pool, built either type draws it down — with no quick-add and no problem chip of its
+ * own (a shared row has no single staffing/idle figure to name honestly; see `depositRowProblems`), and one
+ * sub-row per type below carrying that type's own Staffed/Out, its own quick-add, and its own problem chip.
+ * In-flight extractor orders render as ghost rows under their matching row: the single row for a one-type
+ * resource, the matching sub-row for a shared one.
  */
 function DepositTable({
-  rows, contributorsFor, systemId, canOrder, optionByType, ghosts, onCancel, cancelPending,
+  rows, contributorsFor, popNeedByGood, systemId, canOrder, optionByType, ghosts, onCancel, cancelPending,
 }: {
   rows: DepositRow[];
   contributorsFor: (r: DepositRow["resource"]) => BuildingEntry[];
+  popNeedByGood: Map<string, PopNeedData>;
   systemId: string;
   canOrder: boolean;
   optionByType: Map<string, BuildOptionData>;
@@ -408,10 +418,13 @@ function DepositTable({
         {rows.map((row) => {
           const multi = row.types.length > 1;
           const quickAddOption = canOrder && row.types.length === 1 ? optionByType.get(row.types[0].buildingType) : undefined;
+          const rowPopNeed = !multi ? popNeedByGood.get(row.types[0].buildingType) : undefined;
+          const items = depositRowProblems(row, rowPopNeed, label);
+          const hasProblems = items.length > 0;
           return (
             <Fragment key={row.resource}>
-              <tr className="border-b border-border/40 last:border-b-0">
-                <td className="px-1.5 py-1 text-[12px] text-text-primary">
+              <tr className={hasProblems ? "" : "border-b border-border/40 last:border-b-0"}>
+                <td className={`px-1.5 pt-1 text-[12px] text-text-primary ${hasProblems ? "pb-0.5" : "pb-1"}`}>
                   <span className="flex items-center gap-1.5">
                     <HealthGlyph health={row.health} className="text-[9px]" />
                     <Tooltip>
@@ -419,13 +432,14 @@ function DepositTable({
                       <TooltipContent className="w-56"><DepositTooltipBody row={row} contributors={contributorsFor(row.resource)} /></TooltipContent>
                     </Tooltip>
                   </span>
+                  <ProblemLine items={items} popNeed={rowPopNeed} />
                 </td>
-                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
-                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.slotCap)}</td>
-                <td className="px-1.5 py-1 text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
-                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
+                <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
+                <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.slotCap)}</td>
+                <td className="px-1.5 py-1 align-top text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
+                <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
                 {canOrder && (
-                  <td className="px-1.5 py-1 text-right">
+                  <td className="px-1.5 py-1 align-top text-right">
                     {quickAddOption && <QuickAddButton systemId={systemId} option={quickAddOption} />}
                   </td>
                 )}
@@ -435,7 +449,7 @@ function DepositTable({
               ))}
               {multi && row.types.map((t) => (
                 <Fragment key={t.buildingType}>
-                  <DepositTypeSubRow t={t} systemId={systemId} canOrder={canOrder} option={optionByType.get(t.buildingType)} />
+                  <DepositTypeSubRow t={t} popNeed={popNeedByGood.get(t.buildingType)} systemId={systemId} canOrder={canOrder} option={optionByType.get(t.buildingType)} />
                   {ghosts.filter((g) => g.buildingType === t.buildingType).map((g) => (
                     <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
                   ))}
@@ -669,7 +683,7 @@ function LegendTooltip() {
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
-          <p className="text-[11px] text-text-secondary"><span className="font-mono">staffed/built</span> is staffed labour on the built extractor levels — a row can read fully staffed and still show a state chip below it (understaffed, input-short, or glut-idling) when it isn&apos;t selling everything it makes; <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates. The general-land table&apos;s Staffed column means occupancy for housing and licence/family draw for academies and complexes — captioned inline where it isn&apos;t staffing.</p>
+          <p className="text-[11px] text-text-secondary"><span className="font-mono">staffed/built</span> is staffed labour on the built extractor levels — a row can read fully staffed and still show a state chip below it (understaffed, pop-short, or glut-idling — extractors have no recipe inputs, so never input-short) when it isn&apos;t selling everything it makes; <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates. A deposit shared by more than one extractor type shows its state chip on each type&apos;s own sub-row rather than the shared parent row. The general-land table&apos;s Staffed column means occupancy for housing and licence/family draw for academies and complexes — captioned inline where it isn&apos;t staffing.</p>
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
@@ -982,6 +996,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <DepositTable
             rows={depRows}
             contributorsFor={contributorsFor}
+            popNeedByGood={popNeedByGood}
             systemId={systemId}
             canOrder={canOrder}
             optionByType={optionByType}
