@@ -11,12 +11,31 @@ import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, Indus
 /** Severity ordering for the worst-of-contributors aggregation (collapsing is worst). */
 const SEVERITY: Record<IndustryHealth, number> = { stable: 0, contracting: 1, collapsing: 2 };
 
+/**
+ * The Staffed-column figure for one building entry — the single definition shared by the deposit
+ * table (`depositRows`, below) and the general-land table (`BuildingRow` in industry-panel.tsx), so
+ * the two feeds can't drift back apart the way the old `used`-column rename did.
+ *
+ * Housing (`tier === -1`, the readout's own housing sentinel — see `industry.ts:569-570`, also used
+ * this way at `industry-panel.tsx`'s buildingGroups filter) is the one row type that must NOT read
+ * `staffedFraction × count`: housing's `staffedFraction` is deliberately uncapped bare occupancy
+ * (`industry.ts:745-749`), so it can read past `count` on an overcrowded system, while `used` is the
+ * vacancy-protected figure (`capacityUsed`, `industry.ts:406-415`) that belongs on screen. Every
+ * other row type keeps `staffedFraction × count`: for academies/complexes/support `staffedFraction`
+ * is already defined as `used / count`, so this is a no-op there; for producers/extractors it is
+ * pure staffed labour, not gated by selling — the intended change.
+ */
+export function staffedLevels(b: Pick<SystemIndustryReadout["buildings"][number], "tier" | "used" | "staffedFraction" | "count">): number {
+  return b.tier === -1 ? b.used : b.staffedFraction * b.count;
+}
+
 /** One catalog extractor type's contribution to a shared deposit — the per-type breakdown under a
  *  resource worked by more than one building type. Zeroed with health "stable" when nothing's built. */
 export interface DepositTypeRow {
   buildingType: string;
   built: number;
-  worked: number;
+  /** Staffed capacity for this type (`staffedLevels`) — pure labour, not gated by selling. */
+  staffed: number;
   output: number;
   health: IndustryHealth;
 }
@@ -29,8 +48,13 @@ export interface DepositRow {
   slotCap: number;
   /** Extractor levels built on this resource's slots. */
   built: number;
-  /** In-use working across the built levels (Σ extractor `used` — the decay-relevant amount). */
-  worked: number;
+  /**
+   * Staffed capacity across the built levels (Σ `staffedLevels` — pure labour, not gated by
+   * selling). NOT the decay-relevant amount — that stays `used` (health below is grounded in it),
+   * so a row can read fully staffed while its health chip still shows contracting/collapsing from a
+   * stalled sell-through.
+   */
+  staffed: number;
   /** Real output this cycle across the resource's extractors. */
   output: number;
   /** Worst health across the resource's extractors — drives the row indicator. */
@@ -46,11 +70,15 @@ export interface DepositRow {
 
 /**
  * Per-resource deposit rows, joining the per-resource deposit summary (slots, yield) to the
- * per-building extractor readout (built count, in-use, output, health). A resource shared by
- * several goods (food + textiles → arable) sums their levels/working/output for the aggregate
+ * per-building extractor readout (built count, staffed capacity, output, health). A resource shared
+ * by several goods (food + textiles → arable) sums their levels/working/output for the aggregate
  * fields and takes the worst contributor's health, while `types` keeps each contributing type's
  * own numbers so the shared pool doesn't hide how much of each good exists. Deposits arrive
  * richest-cap-first (summariseDeposits).
+ *
+ * `staffed` is `staffedLevels` (pure labour), not the staffed-and-selling `used` — a glutting
+ * extractor still reads its full labour here; `used` remains the input to `buildingHealth` so the
+ * row's health indicator never disagrees with what actually decays.
  */
 export function depositRows(
   deposits: SystemDepositSummary[],
@@ -58,28 +86,29 @@ export function depositRows(
   unrest: number,
   unrestThreshold: number,
 ): DepositRow[] {
-  type DepositResourceAgg = { built: number; worked: number; output: number; health: IndustryHealth };
+  type DepositResourceAgg = { built: number; staffed: number; output: number; health: IndustryHealth };
   const byResource = new Map<ResourceType, DepositResourceAgg>();
   const byType = new Map<string, DepositTypeRow>();
   for (const b of extractors) {
     const resource = BUILDING_TYPES[b.buildingType]?.resource;
     if (!resource) continue;
     const h = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: unrestThreshold });
-    const acc: DepositResourceAgg = byResource.get(resource) ?? { built: 0, worked: 0, output: 0, health: "stable" };
+    const staffed = staffedLevels(b);
+    const acc: DepositResourceAgg = byResource.get(resource) ?? { built: 0, staffed: 0, output: 0, health: "stable" };
     acc.built += b.count;
-    acc.worked += b.used;
+    acc.staffed += staffed;
     acc.output += b.output ?? 0;
     if (SEVERITY[h] > SEVERITY[acc.health]) acc.health = h;
     byResource.set(resource, acc);
-    byType.set(b.buildingType, { buildingType: b.buildingType, built: b.count, worked: b.used, output: b.output ?? 0, health: h });
+    byType.set(b.buildingType, { buildingType: b.buildingType, built: b.count, staffed, output: b.output ?? 0, health: h });
   }
   return deposits
     .filter((d) => d.slotCap > 0)
     .map((d) => {
-      const agg: DepositResourceAgg = byResource.get(d.resource) ?? { built: 0, worked: 0, output: 0, health: "stable" };
+      const agg: DepositResourceAgg = byResource.get(d.resource) ?? { built: 0, staffed: 0, output: 0, health: "stable" };
       const types = Object.keys(BUILDING_TYPES)
         .filter((t) => BUILDING_TYPES[t].resource === d.resource)
-        .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, built: 0, worked: 0, output: 0, health: "stable" });
+        .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, built: 0, staffed: 0, output: 0, health: "stable" });
       return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, slotCap: d.slotCap, ...agg, types };
     });
 }

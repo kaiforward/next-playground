@@ -35,9 +35,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { useDialog } from "@/components/ui/dialog";
-import { depositRows, generalLand, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
+import { depositRows, generalLand, staffedLevels, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
-import { buildProblems, needSeverity, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
+import { buildProblems, needSeverity, problemGlyph, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
 import { QuickAddButton } from "@/components/construction/quick-add-button";
 import { BuildDialog } from "@/components/construction/build-dialog";
@@ -125,12 +125,17 @@ function YieldTag({ mult, band }: { mult: number; band: DepositRow["band"] }) {
 
 /**
  * `fill/capacity`, coloured by health when not stable. The fill keeps one decimal (the fractional
- * working level is the signal); the capacity reads as a whole count of slots / built levels.
+ * figure is the signal); the capacity reads as a whole count of slots / built levels. The fill is
+ * `staffedLevels` — pure labour for producers/extractors, occupancy for housing, licence/family draw
+ * for academies/complexes/support (see that helper's docstring). Health is driven separately by
+ * `used` (staffed AND selling for producers), so a producer row can read fully staffed while still
+ * contracting or collapsing from a stalled sell-through; the state sub-row (`ProblemLine`) names
+ * that condition.
  */
-function Worked({ worked, total, health }: { worked: number; total: number; health: IndustryHealth }) {
+function Staffed({ staffed, total, health }: { staffed: number; total: number; health: IndustryHealth }) {
   return (
     <>
-      <span className={health === "stable" ? "text-text-primary" : HEALTH[health].text}>{worked.toFixed(1)}</span>/{Math.round(total)}
+      <span className={health === "stable" ? "text-text-primary" : HEALTH[health].text}>{staffed.toFixed(1)}</span>/{Math.round(total)}
     </>
   );
 }
@@ -146,13 +151,13 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
 
 // ── Tooltips ─────────────────────────────────────────────────────────────────
 
-/** Deposit tooltip: resource · yield band · built/slots · worked · the goods extracted from it. */
+/** Deposit tooltip: resource · yield band · built/slots · staffed · the goods extracted from it. */
 function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributors: BuildingEntry[] }) {
   return (
     <div className="space-y-1">
       <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
       <p className="font-mono text-[10px] text-text-tertiary">
-        yield ×{row.yieldMult.toFixed(2)} · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.slotCap} slots built · {row.worked.toFixed(1)} worked
+        yield ×{row.yieldMult.toFixed(2)} · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.slotCap} slots built · {row.staffed.toFixed(1)} staffed
       </p>
       {contributors.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
@@ -303,7 +308,7 @@ function GhostNameCell({
   );
 }
 
-/** In-flight extractor in the deposit ledger: name cell, then progress% / — / — / ETA under Worked / Slots / Yield / Out-cyc. */
+/** In-flight extractor in the deposit ledger: name cell, then progress% / — / — / ETA under Staffed / Slots / Yield / Out-cyc. */
 function DepositGhostRow({
   ghost, canCancel, onCancel, cancelPending, showActionColumn,
 }: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean; showActionColumn: boolean }) {
@@ -319,7 +324,7 @@ function DepositGhostRow({
   );
 }
 
-/** In-flight building in the general-land ledger: name cell, then progress% / ETA under Worked / Out-cyc. */
+/** In-flight building in the general-land ledger: name cell, then progress% / ETA under Staffed / Out-cyc. */
 function BuildingGhostRow({
   ghost, canCancel, onCancel, cancelPending, showActionColumn,
 }: { ghost: GhostRow; canCancel: boolean; onCancel: (projectId: string) => void; cancelPending: boolean; showActionColumn: boolean }) {
@@ -338,7 +343,7 @@ function BuildingGhostRow({
 /**
  * One extractor type's sub-row under a shared multi-type deposit (e.g. arable → food + textiles): the
  * "└" glyph ties it to the parent's aggregate above. Slots and Yield stay blank — the parent row above
- * owns those (they're the shared pool a build of either type draws down) — only Worked and Out/cyc are
+ * owns those (they're the shared pool a build of either type draws down) — only Staffed and Out/cyc are
  * this type's own numbers, so quick-add here restores the one-click add the ambiguous parent row lost.
  */
 function DepositTypeSubRow({
@@ -357,7 +362,7 @@ function DepositTypeSubRow({
           {label(t.buildingType)}
         </span>
       </td>
-      <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={t.worked} total={t.built} health={t.health} /></td>
+      <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={t.staffed} total={t.built} health={t.health} /></td>
       <td />
       <td />
       <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary">{t.output > 0 ? formatUnitsShort(t.output) : "—"}</td>
@@ -371,12 +376,12 @@ function DepositTypeSubRow({
 }
 
 /**
- * Deposit table: per-resource slot fill — health glyph · resource · worked/built · built/slots · yield ·
+ * Deposit table: per-resource slot fill — health glyph · resource · staffed/built · built/slots · yield ·
  * output. A resource worked by exactly one catalog extractor type renders as today: a single row, with a
  * trailing quick-add column on the player's own systems. A resource shared by several types (e.g. arable →
  * food + textiles) renders the parent row as the shared/aggregate picture — Slots is the shared pool,
  * built either type draws it down — with no quick-add of its own, and one sub-row per type below carrying
- * that type's own Worked/Out and its own quick-add. In-flight extractor orders render as ghost rows under
+ * that type's own Staffed/Out and its own quick-add. In-flight extractor orders render as ghost rows under
  * their matching row: the single row for a one-type resource, the matching sub-row for a shared one.
  */
 function DepositTable({
@@ -395,7 +400,7 @@ function DepositTable({
     <table className="w-full border-collapse">
       <thead>
         <tr>
-          <Th>Deposit</Th><Th right>Worked</Th><Th right>Slots</Th><Th right>Yield</Th><Th right>Out/cyc</Th>
+          <Th>Deposit</Th><Th right>Staffed</Th><Th right>Slots</Th><Th right>Yield</Th><Th right>Out/cyc</Th>
           {canOrder && <Th right> </Th>}
         </tr>
       </thead>
@@ -415,7 +420,7 @@ function DepositTable({
                     </Tooltip>
                   </span>
                 </td>
-                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Worked worked={row.worked} total={row.built} health={row.health} /></td>
+                <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
                 <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.slotCap)}</td>
                 <td className="px-1.5 py-1 text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
                 <td className="px-1.5 py-1 text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
@@ -470,7 +475,7 @@ function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNe
       {items.map((item, i) => {
         const chip = (
           <span className={`font-mono ${SEVERITY_TEXT[item.severity]}`}>
-            {SEVERITY_GLYPH[item.severity]} {item.label}
+            {problemGlyph(item)} {item.label}
           </span>
         );
         return (
@@ -491,7 +496,7 @@ function ProblemLine({ items, popNeed }: { items: ProblemItem[]; popNeed?: PopNe
   );
 }
 
-/** One general-land building row — health glyph · name (tooltip) · worked/built · output, with an exception-only problem sub-row.
+/** One general-land building row — health glyph · name (tooltip) · staffed/built · output, with an exception-only problem sub-row.
  *  On the player's own systems, a trailing quick-add column offers +1 level when a feasibility option exists. */
 function BuildingRow({
   b,
@@ -513,7 +518,7 @@ function BuildingRow({
   option?: BuildOptionData;
 }) {
   const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
-  const items = buildProblems(supply, popNeed, label);
+  const items = buildProblems({ staffedFraction: b.staffedFraction, idleReason: b.idleReason }, supply, popNeed, label);
   const hasProblems = items.length > 0;
   return (
     <tr className={hasProblems ? "" : "border-b border-border/40"}>
@@ -527,7 +532,7 @@ function BuildingRow({
         </span>
         <ProblemLine items={items} popNeed={popNeed} />
       </td>
-      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Worked worked={b.used} total={b.count} health={health} /></td>
+      <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={staffedLevels(b)} total={b.count} health={health} /></td>
       <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{b.output !== undefined ? formatUnitsShort(b.output) : "—"}</td>
       {canOrder && (
         <td className="px-1.5 py-1 align-top text-right">
@@ -539,9 +544,24 @@ function BuildingRow({
 }
 
 /**
+ * The Staffed column means something different in each group — producers/support are staffing,
+ * housing is occupancy, academies/complexes are licence/family draw (`capacityUsed`/`complexUsed`,
+ * `industry.ts:406-415` — "drawn" because both are how much of a capacity the rest of the system is
+ * pulling on, neither staffing nor occupancy). Only the groups where "Staffed" reads wrong get a
+ * caption under the column; Production and Support are genuinely staffing, so they get none.
+ */
+const GROUP_STAFFED_CAPTION: Partial<Record<BuildingGroupTitle, string>> = {
+  Housing: "occupied",
+  Academies: "drawn",
+  Specialisation: "drawn",
+};
+
+/**
  * General-land buildings, grouped under Housing / Production / Specialisation / Support subheadings. A group
  * with no built rows but in-flight ghosts still renders its heading — that's the only content telling the
- * player something is coming. Player systems get a trailing quick-add column.
+ * player something is coming. The heading row doubles as a caption for the Staffed column where that word
+ * means something other than staffing for the group below it (see `GROUP_STAFFED_CAPTION`). Player systems
+ * get a trailing quick-add column.
  */
 function BuildingsTable({
   groups,
@@ -570,12 +590,11 @@ function BuildingsTable({
 }) {
   const active = groups.filter((g) => g.buildings.length > 0 || (ghostsByGroup.get(g.title)?.length ?? 0) > 0);
   if (active.length === 0) return null;
-  const columns = canOrder ? 4 : 3;
   return (
     <table className="mt-3 w-full border-collapse">
       <thead>
         <tr>
-          <Th>Building</Th><Th right>Worked</Th><Th right>Out/cyc</Th>
+          <Th>Building</Th><Th right>Staffed</Th><Th right>Out/cyc</Th>
           {canOrder && <Th right> </Th>}
         </tr>
       </thead>
@@ -583,9 +602,14 @@ function BuildingsTable({
         {active.map((group) => (
           <Fragment key={group.title}>
             <tr>
-              <td colSpan={columns} className="px-1.5 pb-0.5 pt-2.5 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
+              <td className="px-1.5 pb-0.5 pt-2.5 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">
                 {group.title}
               </td>
+              <td className="px-1.5 pb-0.5 pt-2.5 text-right font-mono text-[10px] text-text-tertiary">
+                {GROUP_STAFFED_CAPTION[group.title] ?? ""}
+              </td>
+              <td />
+              {canOrder && <td />}
             </tr>
             {group.buildings.map((b) => (
               <BuildingRow
@@ -645,7 +669,7 @@ function LegendTooltip() {
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Columns</p>
-          <p className="text-[11px] text-text-secondary"><span className="font-mono">worked/built</span> is units in use of the built extractor levels (staffed &amp; selling); <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates.</p>
+          <p className="text-[11px] text-text-secondary"><span className="font-mono">staffed/built</span> is staffed labour on the built extractor levels — a row can read fully staffed and still show a state chip below it (understaffed, input-short, or glut-idling) when it isn&apos;t selling everything it makes; <span className="font-mono">slots</span> is built levels against the deposit&apos;s max; <span className="font-mono">out/cyc</span> is real output after input gates. The general-land table&apos;s Staffed column means occupancy for housing and licence/family draw for academies and complexes — captioned inline where it isn&apos;t staffing.</p>
         </div>
         <div>
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Labour grades</p>
@@ -877,7 +901,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   const contributorsFor = (resource: DepositRow["resource"]) =>
     extractors.filter((b) => BUILDING_TYPES[b.buildingType]?.resource === resource);
 
-  const depWorked = depRows.reduce((s, r) => s + r.worked, 0);
+  const depStaffed = depRows.reduce((s, r) => s + r.staffed, 0);
   const depSlots = depRows.reduce((s, r) => s + r.slotCap, 0);
   const land = generalLand(space);
   const generalUsed = land.housing + land.factory;
@@ -953,7 +977,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           <PoolHead
             title="Deposit land"
             sub="extractors"
-            right={<><span className="text-text-primary">{depWorked.toFixed(1)}</span>/{Math.round(depSlots)} worked</>}
+            right={<><span className="text-text-primary">{depStaffed.toFixed(1)}</span>/{Math.round(depSlots)} staffed</>}
           />
           <DepositTable
             rows={depRows}

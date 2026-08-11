@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { depositRows, generalLand } from "../industry-rows";
+import { depositRows, generalLand, staffedLevels } from "../industry-rows";
 import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace } from "@/lib/engine/industry";
 
 const T = 0.75;
@@ -11,13 +11,19 @@ const deposit = (resource: SystemDepositSummary["resource"], slotCap: number): S
   yieldMult: 1,
   band: "average",
 });
-const extractor = (buildingType: string, count: number, used: number, output: number): SystemIndustryReadout["buildings"][number] => ({
+const extractor = (
+  buildingType: string,
+  count: number,
+  used: number,
+  output: number,
+  staffedFraction: number = count > 0 ? used / count : 0,
+): SystemIndustryReadout["buildings"][number] => ({
   buildingType,
   outputGood: buildingType,
   tier: 0,
   count,
   used,
-  staffedFraction: count > 0 ? used / count : 0,
+  staffedFraction,
   output,
 });
 
@@ -32,7 +38,7 @@ describe("depositRows", () => {
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].built).toBe(3);
-    expect(rows[0].worked).toBeCloseTo(1.9);
+    expect(rows[0].staffed).toBeCloseTo(1.9);
     expect(rows[0].output).toBeCloseTo(7);
     expect(rows[0].health).toBe("contracting");
   });
@@ -47,7 +53,7 @@ describe("depositRows", () => {
     const rows = depositRows([deposit("ore", 0), deposit("water", 3)], [], 0, T);
     expect(rows.map((r) => r.resource)).toEqual(["water"]);
     expect(rows[0].built).toBe(0);
-    expect(rows[0].worked).toBe(0);
+    expect(rows[0].staffed).toBe(0);
     expect(rows[0].health).toBe("stable");
   });
 
@@ -56,14 +62,47 @@ describe("depositRows", () => {
     // textiles should still get a zeroed, stable entry so the player can see it and quick-add it.
     const rows = depositRows([deposit("arable", 5)], [extractor("food", 2, 1.5, 6)], 0, T);
     expect(rows[0].types.map((t) => t.buildingType)).toEqual(["food", "textiles"]);
-    expect(rows[0].types[0]).toEqual({ buildingType: "food", built: 2, worked: 1.5, output: 6, health: "stable" });
-    expect(rows[0].types[1]).toEqual({ buildingType: "textiles", built: 0, worked: 0, output: 0, health: "stable" });
+    expect(rows[0].types[0]).toEqual({ buildingType: "food", built: 2, staffed: 1.5, output: 6, health: "stable" });
+    expect(rows[0].types[1]).toEqual({ buildingType: "textiles", built: 0, staffed: 0, output: 0, health: "stable" });
   });
 
   it("carries exactly one type entry for a resource worked by a single catalog extractor", () => {
     const rows = depositRows([deposit("water", 3)], [extractor("water", 1, 1, 4)], 0, T);
     expect(rows[0].types).toHaveLength(1);
-    expect(rows[0].types[0]).toEqual({ buildingType: "water", built: 1, worked: 1, output: 4, health: "stable" });
+    expect(rows[0].types[0]).toEqual({ buildingType: "water", built: 1, staffed: 1, output: 4, health: "stable" });
+  });
+
+  it("staffed is staffed capacity (staffedFraction × count), not the staffed-and-selling `used` figure — a glutting extractor still shows its full labour", () => {
+    // Fully staffed (staffedFraction 1, ×2 count → 2.0) but only half `used` because the good can't
+    // sell (glut). staffed must read 2.0 — reading `used` here would give 1.0, the pre-rename value.
+    const rows = depositRows([deposit("water", 3)], [extractor("water", 2, 1, 3, 1)], 0, T);
+    expect(rows[0].staffed).toBe(2);
+    expect(rows[0].types[0].staffed).toBe(2);
+  });
+
+  it("health still tracks `used`, not the new `staffed` figure — a glutting extractor with a whole idle level still contracts", () => {
+    // staffedFraction 1 (fully staffed, ×2 → staffed 2.0) but used 1.0 → a whole idle level
+    // (floor(2 - 1) = 1) sheds under the decay engine's own rule — health must reflect that, not the
+    // fully-staffed `staffed` figure.
+    const rows = depositRows([deposit("water", 3)], [extractor("water", 2, 1, 3, 1)], 0, T);
+    expect(rows[0].staffed).toBe(2);
+    expect(rows[0].health).toBe("contracting");
+  });
+});
+
+describe("staffedLevels", () => {
+  it("housing (tier -1) reads `used` — the vacancy-protected figure — not staffedFraction × count, which is bare occupancy and can overshoot count", () => {
+    // Overcrowded system: bare occupancy (staffedFraction 1.24) sits above 1, so staffedFraction ×
+    // count (6.2) would overshoot `count` (5); `used` (4.8, vacancy-capped) is what belongs on screen.
+    const housing: Parameters<typeof staffedLevels>[0] = { tier: -1, used: 4.8, staffedFraction: 1.24, count: 5 };
+    expect(staffedLevels(housing)).toBe(4.8);
+  });
+
+  it("a producer/extractor (tier >= 0) reads staffedFraction × count — pure labour, not the staffed-and-selling `used`", () => {
+    // Fully staffed (staffedFraction 1) but glutting: `used` (1) is throttled by the selling
+    // ceiling; staffedFraction × count (2) is the labour figure that belongs on screen.
+    const producer: Parameters<typeof staffedLevels>[0] = { tier: 0, used: 1, staffedFraction: 1, count: 2 };
+    expect(staffedLevels(producer)).toBe(2);
   });
 });
 
