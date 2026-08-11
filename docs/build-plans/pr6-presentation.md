@@ -206,7 +206,11 @@ unit project has no jsdom, so the logic that deserves tests lives here and the c
 
 **Files:** `components/system/population-panel.tsx`, `components/system/population-summary.tsx`,
 `components/ui/contributor-bars.tsx` (new), `components/system/provision-block.tsx` (new),
-`app/(game)/@panel/system/[systemId]/page.tsx`
+`components/ui/vital-tile.tsx`, `app/(game)/@panel/system/[systemId]/page.tsx`
+
+`vital-tile.tsx` is on the list because `VitalMeter` is `{ pct, color }` today, with no way to draw
+the remembered-level tick the Provisioned tile needs. Adding an optional marker to the shared
+primitive beats a bespoke tile.
 
 **Interface:** `ContributorBars({ segments, total, threshold? })` in `components/ui/` — a shared
 primitive, not inline, because the owner asked for it wherever a number has several contributors

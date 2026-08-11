@@ -1,83 +1,70 @@
 "use client";
 
-import { useState } from "react";
 import { useSystemPopulation } from "@/lib/hooks/use-system-population";
-import type { PopNeedData } from "@/lib/types/api";
 import { Card } from "@/components/ui/card";
 import { SectionHeader } from "@/components/ui/section-header";
-import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { ContributorBars, type ContributorSegment } from "@/components/ui/contributor-bars";
 import { PopulationSummary } from "@/components/system/population-summary";
-import { needSeverity, splitNeedsLedger, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
-import { NeedCells, NeedsTable } from "@/components/system/needs-table";
+import { ProvisionBlock } from "@/components/system/provision-block";
+import { fractionPct } from "@/lib/utils/format";
+import type { SystemUnrestRead } from "@/lib/types/api";
 
-// Tier swatch colours match the dataviz-validated categorical set (base copper /
-// technician deep-cyan / engineer purple) used elsewhere for consumer tiers.
-const TIER_META = [
-  { key: "base", label: "Base population", color: "#d06a42" },
-  { key: "technicians", label: "Technicians", color: "#0891b2" },
-  { key: "engineers", label: "Engineers", color: "#a855f7" },
-] as const;
-
-function NeedTooltip({ n }: { n: PopNeedData }) {
-  const sev = needSeverity(n.satisfaction);
-  return (
-    <div className="space-y-1 text-xs">
-      <div className="flex items-baseline justify-between gap-3 border-b border-border/60 pb-1">
-        <span className="font-display text-text-primary">{n.goodName}</span>
-        <span className={`font-mono ${SEVERITY_TEXT[sev]}`}>{SEVERITY_GLYPH[sev]} {Math.round(n.satisfaction * 100)}% met</span>
-      </div>
-      <p className="font-mono text-text-secondary">
-        want {n.want.toFixed(2)}/cyc · delivered {n.delivered.toFixed(2)}/cyc · pressure {n.pressure.toFixed(2)}
-      </p>
-      <div className="space-y-0.5 border-t border-border/60 pt-1">
-        {TIER_META.map((t) => (
-          <div key={t.key} className="flex items-center justify-between gap-3">
-            <span className="flex items-center gap-1.5 text-text-secondary">
-              <span aria-hidden className="inline-block h-2 w-2" style={{ backgroundColor: t.color }} /> {t.label}
-            </span>
-            <span className="font-mono text-text-primary">{n.breakdown[t.key].toFixed(2)}/cyc</span>
-          </div>
-        ))}
-      </div>
-      <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this population is used to breeds unrest — famine and critical shortages always do.</p>
-    </div>
-  );
+/**
+ * Which state the Population tab renders for a given population/housing/unrest reading — the pure
+ * seam so the "is this system genuinely uninhabited" decision has a red-proofable assertion, not
+ * just a rendered snapshot. A `popCap <= 0` system is a real, renderable state (collapsed housing
+ * stranding its residents, per §6) whenever it still has residents or standing unrest; only a
+ * system with neither is the true empty case.
+ */
+export function populationPanelView(pop: {
+  population: number;
+  popCap: number;
+  unrest: number;
+}): "uninhabited" | "populated" {
+  if (pop.popCap <= 0 && pop.population <= 0 && pop.unrest <= 0) return "uninhabited";
+  return "populated";
 }
 
-function NeedRow({ n }: { n: PopNeedData }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <tr tabIndex={0} className="border-b border-border/40 outline-none last:border-b-0 focus-visible:ring-1 focus-visible:ring-accent">
-          <NeedCells n={n} density="panel" />
-        </tr>
-      </TooltipTrigger>
-      <TooltipContent className="w-64"><NeedTooltip n={n} /></TooltipContent>
-    </Tooltip>
-  );
-}
+/**
+ * Stability — the unrest chip, then one `ContributorBars` (goods shortfall, tax pressure,
+ * crowding) over the strike-threshold caption. The caption reads `strikeThreshold` straight off
+ * the read (never a re-imported constant), so it and the badge's own "Strike" label — bound to the
+ * same `STRIKE_PARAMS.threshold` — can never name different numbers.
+ */
+export function StabilityBlock({
+  unrest,
+  striking,
+  unrestBreakdown,
+}: {
+  unrest: number;
+  striking: boolean;
+  unrestBreakdown: SystemUnrestRead;
+}) {
+  const segments: ContributorSegment[] = unrestBreakdown.assessed
+    ? [
+        { label: "Goods shortfall", value: unrestBreakdown.contributors.goods, color: "var(--color-status-amber)" },
+        { label: "Tax pressure", value: unrestBreakdown.contributors.tax, color: "var(--color-status-blue)" },
+        { label: "Crowding", value: unrestBreakdown.contributors.crowding, color: "var(--color-status-purple)" },
+      ]
+    : [
+        { label: "Tax pressure", value: unrestBreakdown.contributors.tax, color: "var(--color-status-blue)" },
+        { label: "Crowding", value: unrestBreakdown.contributors.crowding, color: "var(--color-status-purple)" },
+      ];
 
-function NeedsLedger({ needs }: { needs: PopNeedData[] }) {
-  const [expanded, setExpanded] = useState(false);
-  const { problems, met } = splitNeedsLedger(needs);
   return (
-    <NeedsTable density="panel">
-      {problems.map((n) => <NeedRow key={n.goodId} n={n} />)}
-      {met.length > 0 && !expanded && (
-        <tr>
-          <td colSpan={4} className="px-1.5 py-1.5 text-xs text-text-tertiary">
-            <button type="button" onClick={() => setExpanded(true)} className="inline-flex items-center gap-1.5 hover:text-text-secondary">
-              <span aria-hidden className="font-mono text-[10px] text-status-green-light">✓</span>
-              {met.length} needs met <span className="font-mono text-[10px]">▸ expand</span>
-            </button>
-          </td>
-        </tr>
+    <Card variant="bordered" padding="md">
+      <div className="mb-3 flex items-center justify-between">
+        <SectionHeader as="h4">Stability</SectionHeader>
+        <StabilityBadge unrest={unrest} />
+      </div>
+      <ContributorBars segments={segments} total={1} threshold={unrestBreakdown.strikeThreshold} />
+      <p className="mt-2 text-xs text-text-tertiary">Strike at {fractionPct(unrestBreakdown.strikeThreshold)}%.</p>
+      {striking && (
+        <p className="mt-2 text-sm text-amber-300">Production suppressed — workers are striking.</p>
       )}
-      {expanded && met.map((n) => <NeedRow key={n.goodId} n={n} />)}
-    </NeedsTable>
+    </Card>
   );
 }
 
@@ -90,11 +77,12 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
     );
   }
 
-  const { population, popCap, unrest, striking, needs } = pop;
+  const { population, popCap, unrest, striking, needs, provision, unrestBreakdown } = pop;
 
-  // Uninhabited: no housing capacity → no population, no needs. The deposits are
-  // still charted on the Astrography tab (the colonisation hook).
-  if (popCap <= 0) {
+  // A genuinely uninhabited system (no residents, no standing unrest) stays on the empty state.
+  // A popCap <= 0 system that still has residents or unrest — collapsed housing stranding a
+  // population — must render Population/Stability/Provisioned like any other system; see §6.
+  if (populationPanelView({ population, popCap, unrest }) === "uninhabited") {
     return (
       <EmptyState message="Uninhabited — no population is established here. This system's deposits are charted on the Astrography tab." />
     );
@@ -106,34 +94,9 @@ export function PopulationPanel({ systemId }: { systemId: string }) {
         <PopulationSummary population={population} popCap={popCap} />
       </Card>
 
-      <Card variant="bordered" padding="md">
-        <div className="mb-3 flex items-center justify-between">
-          <SectionHeader as="h4">Stability</SectionHeader>
-          <StabilityBadge unrest={unrest} />
-        </div>
-        <ProgressBar
-          label="Stability"
-          value={1 - unrest}
-          max={1}
-          color="copper"
-          formatValue={(n) => n.toFixed(2)}
-        />
-        {striking && (
-          <p className="mt-2 text-sm text-amber-300">Production suppressed — workers are striking.</p>
-        )}
-      </Card>
+      <StabilityBlock unrest={unrest} striking={striking} unrestBreakdown={unrestBreakdown} />
 
-      <Card variant="bordered" padding="md">
-        <SectionHeader as="h4" className="mb-1">Needs</SectionHeader>
-        <p className="mb-3 text-xs text-text-tertiary">
-          What the population consumes and how well each want is met — unrest tracks doing worse than this world is used to, not the raw shortfall.
-        </p>
-        {needs.length === 0 ? (
-          <EmptyState message="No needs." />
-        ) : (
-          <NeedsLedger needs={needs} />
-        )}
-      </Card>
+      <ProvisionBlock read={provision} needs={needs} />
     </div>
   );
 }

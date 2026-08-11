@@ -94,8 +94,10 @@ export interface OccupancyBar {
 }
 
 /** The overshoot scale's ceiling — the growth brake's own excess span, never negative even if a
- *  malformed `crowdBrakeEnd <= 1` were ever configured. */
-const OVERSHOOT_SPAN_PCT = Math.max(0, (POPULATION_PARAMS.crowdBrakeEnd - 1) * 100);
+ *  malformed `crowdBrakeEnd <= 1` were ever configured. Exported so the occupancy track can size
+ *  its total axis (housed + overshoot) to the same ceiling `overshootPct` is bounded by, rather
+ *  than re-deriving the formula at the call site. */
+export const OVERSHOOT_SPAN_PCT = Math.max(0, (POPULATION_PARAMS.crowdBrakeEnd - 1) * 100);
 
 function crowdChipFromFactor(factor: number): CrowdChip {
   if (factor >= 1) return "comfortable";

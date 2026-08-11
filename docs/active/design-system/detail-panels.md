@@ -45,15 +45,25 @@ undeveloped system).
 
 - **Overview** — a loud vitals band (**Stability** = `1 − unrest`%; **Development** = % of the system's
   *own* build-out potential + raw points; **Population** = headcount + an unskilled/technician/engineer
-  composition sub-bar; **Construction** = open-project count, linking to Industry), then, on a
-  controlled-but-undeveloped player system, the colonisation founding entry (establish verb + preview,
-  forming, or the disabled verb with its blocking reason); then a quiet 2-up context strip (faction ·
-  government · danger · astrography) and an events banner.
-- **Population** — magnitude, `popCap` utilisation, unrest/stability, strike state, and a
-  **needs ledger**: one row per consumed good (severity glyph ✓/⚠/▼ · % met · want · delivered),
-  pressure-sorted with met needs collapsed behind an expandable row; each row's tooltip carries the
-  want/delivered/pressure figures and the base / technician / engineer tier breakdown. Want is the
-  unfloored civilian consumption rate (the `MIN_DEMAND` pricing floor stays engine-side, unrendered).
+  composition sub-bar; **Construction** = open-project count, linking to Industry; **Provisioned** =
+  necessity-weighted delivery this cycle, its meter carrying a dashed tick at the population's
+  remembered level), then, on a controlled-but-undeveloped player system, the colonisation founding
+  entry (establish verb + preview, forming, or the disabled verb with its blocking reason); then a
+  quiet 2-up context strip (faction · government · danger · astrography) and an events banner.
+- **Population** — three blocks, top to bottom (who lives here, whether they are angry, then why):
+  **Population** (residents, capacity, an occupancy bar with an overshoot segment past the capacity
+  rule, a crowding chip, and a housed/over-capacity/capacity key); **Stability** (unrest chip, then a
+  `ContributorBars` breakdown — goods shortfall, tax pressure, crowding — over a "Strike at N%"
+  caption naming the mechanic's own threshold); **Provisioned** (band chip, the percentage, a band
+  track carrying a solid rule at today's level and a dashed rule at the remembered level with a
+  Now/Used-to key, then the **needs ledger** directly beneath as its per-good decomposition: one row
+  per consumed good, severity glyph ✓/⚠/▼ · % met · want · delivered, pressure-sorted with met needs
+  collapsed behind an expandable row; each row's tooltip carries the want/delivered/pressure figures
+  and the base / technician / engineer tier breakdown). Want is the unfloored civilian consumption
+  rate (the `MIN_DEMAND` pricing floor stays engine-side, unrendered). A `popCap ≤ 0` system with
+  residents or standing unrest still renders all three blocks — collapsed housing strands a
+  population rather than un-rendering it; only a system with neither residents nor unrest reads as
+  the Uninhabited empty state.
 - **Industry** — the deposit/space breakdown as compact tables: a per-deposit row (health glyph ·
   resource · `worked/slots` · yield · output, multi-type deposits carrying per-type sub-rows under a
   shared slot pool) and a general-land magnitude bar + a buildings table grouped **Housing · Academies ·

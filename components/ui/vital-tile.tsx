@@ -10,6 +10,12 @@ export type { CompositionSegment } from "@/components/ui/vital-tile-helpers";
 export interface VitalMeter {
   pct: number;
   color: string;
+  /**
+   * Optional secondary marker on the SAME 0-100 meter scale as `pct` — a vertical tick drawn over
+   * the track independent of the fill (e.g. the Provisioned tile's remembered-level tick). Omitted
+   * by every existing caller; adding it here beats a bespoke meter for the one tile that needs it.
+   */
+  markerPct?: number;
 }
 
 export interface VitalTileProps {
@@ -61,9 +67,16 @@ export function VitalTile({ label, dotColor, value, unit, meter, hint, children,
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label={`${label}: ${value}${unit ?? ""}`}
-          className="mt-[9px] h-[5px] overflow-hidden bg-surface-active"
+          className="relative mt-[9px] h-[5px] overflow-hidden bg-surface-active"
         >
           <span className="block h-full" style={{ width: `${meter.pct}%`, background: meter.color }} />
+          {meter.markerPct !== undefined && (
+            <span
+              aria-hidden
+              className="absolute -top-px -bottom-px border-l-2 border-dashed border-text-primary/70"
+              style={{ left: `${meter.markerPct}%` }}
+            />
+          )}
         </div>
       )}
       {children}
