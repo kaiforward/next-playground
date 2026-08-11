@@ -136,10 +136,12 @@ export async function runPopulationProcessor(
       unrest,
       provisionExpectation,
       // This cycle's Provisioned — P computed above, the exact complement of the same d the
-      // unrest read just consumed, never a re-derived mean. `supplyBand` reads rawSupply (not the
-      // defaulted `supply`), so an unclassified system persists absent rather than "supplied".
+      // unrest read just consumed, never a re-derived mean. `supplyBand`/`criticalWeight` both
+      // read rawSupply (not the defaulted `supply`), so an unclassified system persists absent
+      // rather than "supplied"/0 — 0 is a real, meaningful critical-good weight, not a safe default.
       provision: P,
       supplyBand: rawSupply?.regime,
+      criticalWeight: rawSupply?.criticalWeight,
     });
     // The scalar the economy actually applied this cycle, not a recompute: the strike params and
     // the treasury-fed maintenance malus never reach this processor, and the unrest just written

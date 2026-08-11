@@ -42,6 +42,11 @@ export interface PopulationUpdate {
    *  the economy genuinely left this system unclassified this cycle. Same no-memory write
    *  convention as `provision`. */
   supplyBand?: SupplyRegime;
+  /** This cycle's critical-good override weight (`SupplyState.criticalWeight`), read from the
+   *  matching `supplyStateBySystem` entry, same no-memory write convention and same
+   *  never-classified-this-cycle absence as `supplyBand`. Un-clamped: the adapter guards only
+   *  finiteness and non-negativity (`lib/world/types.ts`). */
+  criticalWeight?: number;
 }
 
 export interface PopulationWorld {

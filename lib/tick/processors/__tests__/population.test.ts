@@ -999,6 +999,63 @@ describe("population processor: persisted Provisioned and its band", () => {
     expect(a.provision).toBeUndefined();
     expect("provision" in a).toBe(false);
   });
+
+  it("persists criticalWeight exactly, UN-CLAMPED above 1 — supplyUnrestTerm bounds its EFFECT, not the stored weight", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [] });
+    const ctx: TickContext = {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["a", 0.4]]),
+          supplyStateBySystem: new Map([
+            ["a", { regime: "rationing", survivalShortfall: false, criticalWeight: 1.3, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realizedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+    await runPopulationProcessor(world, ctx, PARAMS);
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.criticalWeight).toBe(1.3); // not clamped to 1, unlike provision
+  });
+
+  it("leaves criticalWeight absent — reading rawSupply, not the defensive-default 'supply' — for a system the supply signal genuinely omits", async () => {
+    // Mirrors the supplyBand absence test above: ctxWithD's default regimes map is empty, so "a"
+    // hits the processor's unreachable-in-real-play default (criticalWeight 0). Persisting that
+    // default would fabricate a real, meaningful "assessed at 0" reading the economy never made.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 500, 1000, 0)], markets: [] });
+    await runPopulationProcessor(world, ctxWithD(new Map([["a", 0.3]])), PARAMS);
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.criticalWeight).toBeUndefined();
+    expect("criticalWeight" in a).toBe(false);
+  });
+
+  it("leaves criticalWeight absent — never a stale prior figure — when the supply signal is corrupt", async () => {
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("a", 500, 1000, 0), criticalWeight: 0.6 }],
+      markets: [],
+    });
+    const ctx: TickContext = {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["a", 0.4]]),
+          supplyStateBySystem: new Map([
+            ["a", { regime: "rationing", survivalShortfall: false, criticalWeight: Number.NaN, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realizedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+    await runPopulationProcessor(world, ctx, PARAMS);
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.criticalWeight).toBeUndefined();
+    expect("criticalWeight" in a).toBe(false);
+  });
 });
 
 // ── Calibration instrumentation: the overshoot-death gate's magnitude, isolated per system —

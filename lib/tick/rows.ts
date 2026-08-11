@@ -56,6 +56,9 @@ export interface TickSystem {
   /** This cycle's supply band, optional — passed through uncoerced alongside `provision`
    *  (`lib/world/types.ts`). */
   supplyBand?: SupplyRegime;
+  /** This cycle's critical-good override weight, optional — passed through uncoerced alongside
+   *  `provision`/`supplyBand`, un-clamped (see `lib/world/types.ts` for why). */
+  criticalWeight?: number;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

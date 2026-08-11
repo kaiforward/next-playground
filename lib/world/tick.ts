@@ -213,6 +213,7 @@ export function toTickSystems(world: World): TickSystem[] {
       // assessed" rather than becoming a coerced 0/"supplied" default (lib/world/types.ts).
       provision: s.provision,
       supplyBand: s.supplyBand,
+      criticalWeight: s.criticalWeight,
       yields: resourceVectorFromColumns(
         {
           yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -267,6 +268,8 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     else merged.provision = tickSystem.provision;
     if (tickSystem.supplyBand === undefined) delete merged.supplyBand;
     else merged.supplyBand = tickSystem.supplyBand;
+    if (tickSystem.criticalWeight === undefined) delete merged.criticalWeight;
+    else merged.criticalWeight = tickSystem.criticalWeight;
     return merged;
   });
 }
@@ -531,6 +534,7 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
       delete next.provisionExpectation;
       delete next.provision;
       delete next.supplyBand;
+      delete next.criticalWeight;
     }
     return next;
   });
@@ -541,9 +545,10 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
  * reset each system the
  * population processor reported (famine AND post-delta population below `ABANDON_POP_FLOOR`) back
  * to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
- * collapse debt zero; the stored Provision memory, this cycle's Provisioned reading and its band
- * are all deleted (the same resettlement rule `applyDevelopments` observes above — a previous
- * life's readings must not survive into the next one); buildings and their idle-cycle state are
+ * collapse debt zero; the stored Provision memory, this cycle's Provisioned reading, its band and
+ * its critical-good weight are all deleted (the same resettlement rule `applyDevelopments`
+ * observes above — a previous life's readings must not survive into the next one); buildings and
+ * their idle-cycle state are
  * cleared and popCap drops to 0 — infrastructure
  * decay runs only on developed systems, so left standing they would freeze forever and hand any
  * resettler a free, fully-built colony. Ordinary claimable frontier again via the existing claim
@@ -570,6 +575,7 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
     delete next.provisionExpectation;
     delete next.provision;
     delete next.supplyBand;
+    delete next.criticalWeight;
     return next;
   });
 }

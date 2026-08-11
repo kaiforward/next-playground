@@ -302,6 +302,27 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
   });
 
+  it("round-trips the optional criticalWeight field UN-CLAMPED — unlike provision, it carries no [0,1] ceiling", () => {
+    // 1.3 is deliberately above 1: criticalWeight has no upper bound of its own (supplyUnrestTerm
+    // floors it at 0 only; the min(slopeShortage, …) cap inside that function bounds its EFFECT,
+    // not the stored weight — lib/world/types.ts). A save round trip that silently clamped this to
+    // 1 would be indistinguishable from the provision-style bug this test exists to catch.
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, provision: 0.4, supplyBand: "rationing", criticalWeight: 1.3 } : system),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].criticalWeight).toBe(1.3);
+  });
+
+  it("accepts generated systems without criticalWeight (never assessed)", () => {
+    expect(world.systems[0].criticalWeight).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
   it("keeps new optional assessment values omitted in an old-shaped save", () => {
     const world = generateWorld({ systemCount: 60, seed: 7 });
     const oldShaped: World = {

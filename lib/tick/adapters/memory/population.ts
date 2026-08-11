@@ -43,8 +43,8 @@ export class InMemoryPopulationWorld implements PopulationWorld {
    * treats an absent update value (`undefined`) the same as a corrupt one, so this is also the
    * path the processor's legitimate empty-basket-on-a-never-seeded-system skip takes — the same
    * fallback, not a special case for it. A finite value is clamped into [0, 1] and written as-is.
-   * `provision` and `supplyBand` get the same never-write-a-lie guard, but their own (simpler,
-   * no-memory) fallback — see the inline comment at the write site below.
+   * `provision`, `supplyBand` and `criticalWeight` get the same never-write-a-lie guard, but their
+   * own (simpler, no-memory) fallback — see the inline comments at the write sites below.
    */
   applyPopulationUpdates(updates: PopulationUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
@@ -78,6 +78,16 @@ export class InMemoryPopulationWorld implements PopulationWorld {
         next.supplyBand = u.supplyBand;
       } else {
         delete next.supplyBand;
+      }
+      // Same snapshot (never-write-a-lie) treatment as `provision`/`supplyBand` just above, but
+      // NOT clamped into [0, 1] — `criticalWeight` has no upper bound of its own (`supplyUnrestTerm`
+      // floors it at 0 only; the `min(slopeShortage, …)` cap inside that function is what bounds
+      // its EFFECT, not the stored weight — lib/world/types.ts). Guards finiteness and
+      // non-negativity instead.
+      if (typeof u.criticalWeight === "number" && Number.isFinite(u.criticalWeight)) {
+        next.criticalWeight = Math.max(0, u.criticalWeight);
+      } else {
+        delete next.criticalWeight;
       }
       return next;
     });

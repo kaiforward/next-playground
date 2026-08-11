@@ -115,6 +115,22 @@ export interface WorldSystem {
    *  absence convention as `provision`: absent means never assessed, never "supplied". Written
    *  once per economy cycle, alongside `provision`. */
   supplyBand?: SupplyRegime;
+  /** This cycle's critical-good override weight — `foldSupplyState`'s `criticalWeight`
+   *  (lib/engine/population.ts), the crisis-term input `supplyUnrestTerm` reads whenever
+   *  `supplyBand` is not itself "shortage" (the survival branch already carries slopeShortage
+   *  outright; this covers the graduated override below it). Not inferable from `supplyBand`: two
+   *  systems banded identically can carry very different critical-good weight (`SupplyState`'s own
+   *  docstring), so — unlike `survivalShortfall`, which IS a strict biconditional with
+   *  `supplyBand === "shortage"` (`foldSupplyState` only ever returns that regime from the
+   *  survival branch) — this needs its own field rather than being re-derived from the band. Same
+   *  absence convention as `provision`/`supplyBand`: absent means never assessed. Deliberately NOT
+   *  clamped to [0, 1] the way `provision` is: `supplyUnrestTerm` only floors it at 0
+   *  (`Math.max(0, supply.criticalWeight)`) and its effect is bounded separately by the
+   *  `min(slopeShortage, …)` cap inside that function, not by the weight itself — clamping the
+   *  stored value to 1 would silently cap a legitimate larger weight at the persistence layer
+   *  instead of where the engine already bounds it. Written once per economy cycle, alongside
+   *  `provision`/`supplyBand`. */
+  criticalWeight?: number;
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */

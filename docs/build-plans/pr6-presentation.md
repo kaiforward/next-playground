@@ -92,9 +92,21 @@ one optional field pair and a save-format addition.
 `lib/tick/world/population-world.ts`, `lib/tick/adapters/memory/population.ts`,
 `lib/world/__tests__/save.test.ts`
 
-**Interface:** `StarSystem.provision?: number` and `StarSystem.supplyBand?: SupplyRegime`, written
-once per economy cycle from the same `dissatisfactionBySystem` / `supplyStateBySystem` signals the
-unrest read already consumes in the same loop. Absent means never assessed — deliberately not
+**Interface:** `StarSystem.provision?: number`, `StarSystem.supplyBand?: SupplyRegime` and
+`StarSystem.criticalWeight?: number`, written once per economy cycle from the same
+`dissatisfactionBySystem` / `supplyStateBySystem` signals the unrest read already consumes in the
+same loop.
+
+`criticalWeight` was added after Task 3 hit the gap: `supplyUnrestTerm` reads it, and `SupplyState`'s
+own docstring states that none of `survivalShortfall`, `criticalWeight` or `emptyBasket` is
+inferrable back from the band label — two systems banded identically can carry very different
+critical weight. Without it the goods contributor is silently wrong for any system carrying critical
+weight without a survival shortfall, which is a real and reachable cohort. The other two are fine:
+`regime === "shortage"` is a strict biconditional with `survivalShortfall` (the Provision bins never
+produce Shortage), and `emptyBasket` is never read by `supplyUnrestTerm`. Unlike `provision`,
+`criticalWeight` is **not** bounded above by 1 — it is a Σ of necessity × demand share, bounded in
+effect only by the `min(slopeShortage, …)` cap — so it is guarded for finiteness and
+non-negativity, never clamped into [0,1]. Absent means never assessed — deliberately not
 coerced to 0, matching the `provisionExpectation` convention rather than the `collapseDebt` one.
 The population world interface gains the write alongside the existing `provisionExpectation` write.
 

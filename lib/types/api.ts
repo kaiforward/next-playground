@@ -183,6 +183,54 @@ export type SystemProvisionRead =
   | { assessed: true; pct: number; band: SupplyRegime; expectationPct: number; grievance: number }
   | { assessed: false };
 
+/**
+ * The unrest floor's three-way breakdown (goods shortfall, tax, crowding) plus the trend it is
+ * heading — so the Stability block can answer "why is this world angry" instead of showing one
+ * opaque number. `contributors` are `unrestContributors`'s output (`lib/engine/unrest-readout.ts`)
+ * — resolved so they sum to exactly the settled value the tick's own relaxation targets for this
+ * system, never an estimate that can drift from the effect. `trend` is `unrestTrend(unrest,
+ * settled)` — where `settled` is that same contributor sum — comparing where unrest stands now
+ * against where it is heading, with no stored history required. No separate "unassessed" arm the
+ * way `SystemProvisionRead` has: a system the economy has not yet classified reads the same
+ * zero-shortfall defaults the population processor itself falls back to for an unclassified system
+ * (`lib/tick/processors/population.ts`), which is an honest "no shortfall recorded yet", not a
+ * fabricated reading.
+ */
+export type SystemUnrestRead =
+  | {
+      assessed: true;
+      /** The three causes, uncapped — they are the relative sizes of what is driving unrest, and
+       *  flattening them at the ceiling would hide which one dominates. */
+      contributors: { goods: number; tax: number; crowding: number };
+      /** Where unrest is heading: `min(1, goods + tax + crowding)`, the fixed point
+       *  `accumulateUnrest` relaxes toward (`UnrestParams`, lib/engine/population.ts). The cap is
+       *  load-bearing rather than cosmetic — `slopeShortage` is 2.4, so a famine world's goods term
+       *  alone clears 1 at a shortfall of ~0.42 while unrest itself is clamped to 1. Summing raw
+       *  would report a world pinned at maximum unrest as still rising, forever, on exactly the
+       *  worlds this panel most needs to read correctly. */
+      settled: number;
+      trend: "rising" | "stable" | "recovering";
+      /** STRIKE_PARAMS.threshold — carried alongside so the panel's strike caption and the badge
+       *  that names Strike can never disagree on the number. */
+      strikeThreshold: number;
+    }
+  | {
+      /** The economy has not assessed this system yet, so the goods cause is unknown — not zero.
+       *  Fires for every system before its first economy cycle, which is a routine state (a freshly
+       *  founded colony), not a defensive one. Deliberately NOT the population processor's own
+       *  "unclassified" fallback, which its comment documents as unreachable in real play and which
+       *  guards a different case entirely: an intra-cycle signal inconsistency the economy processor
+       *  cannot actually produce. Reusing that fallback's defaults here would render a confident
+       *  "no goods problem" bar for a world nobody has measured. */
+      assessed: false;
+      /** Standing pressure is knowable without an economy assessment — tax comes from the owning
+       *  faction's level and crowding from occupancy — so it is carried rather than withheld. There
+       *  is no `settled` or `trend`: both need the goods term, and inventing one from these two
+       *  alone would describe a world as calm or worsening on a third of the evidence. */
+      contributors: { tax: number; crowding: number };
+      strikeThreshold: number;
+    };
+
 /** Dynamic population & social state for one system — discriminated on visibility. */
 export type SystemPopulationData =
   | {
@@ -196,6 +244,8 @@ export type SystemPopulationData =
       needs: PopNeedData[];
       /** Provisioned, its band, the remembered level, and grievance — see `SystemProvisionRead`. */
       provision: SystemProvisionRead;
+      /** The unrest floor's contributor breakdown and trend — see `SystemUnrestRead`. */
+      unrestBreakdown: SystemUnrestRead;
     }
   | { visibility: "unknown" };
 export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
