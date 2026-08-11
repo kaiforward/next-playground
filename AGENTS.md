@@ -154,6 +154,7 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
   shared skips the only review it will ever get. Enforced mechanically: a PreToolUse hook
   (`.claude/hooks/guard-commit-branch.sh`) blocks `git commit` on any non-`feat/*` branch.
 - **Merge as squash or fast-forward, never a merge commit** — squash when commit subjects carry build noise (`PR3`, `Phase B`), else fast-forward.
+- **Never let `main` diverge from an open `shared/*` branch.** One developer, one line of work: finish the shared branch before landing independent work on main. Merging main *into* a long-running branch is a workaround for a state that should not exist — if something does land there, **rebase the branch onto main**, which resolves each conflict once. A UI refactor landing on main mid-flight is what forced a 3-file conflict resolution across the band-reconciliation branch.
 - **Never open a PR whose base is another open PR's branch.** Squash-merging the base rewrites its commits and deletes its branch, which *permanently* auto-closes the stacked PR — GitHub will not reopen or retarget it. Branch sequential work off `main`. If already stacked: capture the base head SHA before merging, then `git rebase --onto origin/main <old-base-SHA> <branch>`.
 - **Worktrees are for parallel workstreams, not sequential PRs.** Always `git worktree remove` after.
 - **Do the doc lifecycle on the branch before the final review** — promote spec to `docs/active/`, update `docs/SPEC.md`, delete the build plan. Post-merge docs force a pointless docs-only PR.
@@ -168,6 +169,7 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 - **PR-mode `/uber-review`: check out the PR head first**, else agents review stale base-branch code.
 - **Scale the review to substantive surface, not file count.** Deletion-heavy PRs: strip pure-deletion files (`--diff-filter=d`, pass the deleted list as context), bump `--chunk-size`, prune `--only` reviewers whose domain was deleted.
 - **Wait for the go-ahead** when the manual/visual smoke is being run by hand.
+- **A game-logic PR quotes its `npm run simulate` run, both horizons.** The review checks the quote is there and that its numbers answer the PR's own question — never that someone said it passed. **A failed conservation identity blocks the merge.** Why, and what counts as game logic: `docs/active/engineering/feature-process.md` → gate 4.
 - **Never merge over red CI.** Confirm an unrelated flake passes in isolation and fix it — don't merge past it.
 
 ## Working Practices
