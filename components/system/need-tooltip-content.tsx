@@ -1,6 +1,8 @@
 import type { PopNeedData } from "@/lib/types/api";
 import { needSeverity, SEVERITY_GLYPH, SEVERITY_TEXT } from "@/components/system/needs-view";
 
+// Tier swatch colours match the dataviz-validated categorical set (base copper /
+// technician deep-cyan / engineer purple) used elsewhere for consumer tiers.
 const TIER_META = [
   { key: "base", label: "Base population", color: "#d06a42" },
   { key: "technicians", label: "Technicians", color: "#0891b2" },
@@ -37,7 +39,7 @@ export function NeedTooltipContent({
           </div>
         ))}
       </div>
-      <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
+      <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this population is used to breeds unrest — famine and critical shortages always do.</p>
     </div>
   );
 }

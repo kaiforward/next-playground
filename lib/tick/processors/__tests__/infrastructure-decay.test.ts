@@ -12,7 +12,7 @@ function sys(id: string, over: Partial<TickSystem>): TickSystem {
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 100, popCap: 200,
-    unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, buildingIdleMonths: {}, buildingCollapseDebt: {}, yields: unitResourceVector(),
+    unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, buildingIdleCycles: {}, collapseDebt: 0, yields: unitResourceVector(),
     slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     ...over,
   };
@@ -23,7 +23,7 @@ function ctxWith(signals: EconomySignals): TickContext {
 }
 
 // Buffer 1 → a level idle for a single run sheds immediately, which keeps these unit assertions crisp.
-const DECAY = { idleBufferMonths: 1, unrestThreshold: 0.75 };
+const DECAY = { idleBufferCycles: 1, unrestThreshold: 0.75 };
 
 describe("infrastructure-decay processor", () => {
   it("no-ops when there are no economy signals", async () => {
@@ -39,8 +39,10 @@ describe("infrastructure-decay processor", () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { population })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     const s = world.systems[0];
@@ -53,43 +55,78 @@ describe("infrastructure-decay processor", () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", {}), sys("s2", {})] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
     expect(world.systems.find((x) => x.id === "s2")!.buildings).toEqual({ [HOUSING_TYPE]: 10, ore: 10 });
   });
 
-  it("defaults missing uptake to 1 and stacks the idle + unrest teardowns (two levels shed)", async () => {
+  it("defaults a missing selling factor to 1 and runs both channels in one pass", async () => {
     const world = new InMemoryInfrastructureWorld({ systems: [sys("s1", { unrest: 1, population: 4 * ORE_LABOUR })] });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      outputUptakeBySystem: new Map(), // no uptake recorded for s1 → defaults to 1
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map(), // no selling factor recorded for s1 → defaults to 1
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
-    // ore has ≥1 idle level (staffed 4 of 10) → sheds 1 at the buffer; unrest 1 > 0.75 → sheds 1 more.
-    expect(world.systems[0].buildings.ore).toBe(8);
+    const s = world.systems[0];
+    // Both ore and housing carry an idle level at this population, so the buffer prunes one of
+    // each. The catastrophic channel then spends its single level on the LEAST-used type —
+    // housing sits near a fifth of capacity against ore's staffed two fifths — so housing loses
+    // a second level and ore keeps the rest. Three levels total, not one per type per channel.
+    expect(s.buildings.ore).toBe(9);
+    expect(s.buildings[HOUSING_TYPE]).toBe(8);
   });
 
-  it("accrues collapse debt fractionally at a sub-reference interval (interval 12)", async () => {
-    // Above θ_decay, fully staffed (no idle level) → only the unrest channel acts. At interval 12
-    // (catchUp 0.5) the collapse debt builds 0.5 → 1.0: nothing torn down the first run, one level the second.
+  it("accrues collapse debt at severity × catch-up across runs (interval 12)", async () => {
+    // Above θ_decay, fully staffed (no idle level) → only the unrest channel acts. Severity at
+    // unrest 0.9 is (0.9 − 0.75) / 0.25 = 0.6, and interval 12 halves the run, so the debt builds
+    // 0.3 a run and only buys a whole level on the fourth. Both scalings compose here: a severity
+    // change and an interval change must each move this number.
     const world = new InMemoryInfrastructureWorld({
       systems: [sys("s1", { buildings: { ore: 3 }, unrest: 0.9, population: 3 * ORE_LABOUR })],
     });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s1", 0]]),
-      outputUptakeBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
-    await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
-    expect(world.systems[0].buildings.ore).toBe(3); // nothing torn down yet
-    expect(world.systems[0].buildingCollapseDebt.ore).toBeCloseTo(0.5, 6); // debt persisted
+    for (const expected of [0.3, 0.6, 0.9]) {
+      await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
+      expect(world.systems[0].buildings.ore).toBe(3); // nothing torn down yet
+      expect(world.systems[0].collapseDebt).toBeCloseTo(expected, 6); // debt persisted per system
+    }
 
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 12 });
-    expect(world.systems[0].buildings.ore).toBe(2); // second run crosses 1.0 → one level shed
-    expect(world.systems[0].buildingCollapseDebt.ore).toBeCloseTo(0, 6);
+    expect(world.systems[0].buildings.ore).toBe(2); // fourth run crosses 1.0 → one level shed
+    expect(world.systems[0].collapseDebt).toBeCloseTo(0.2, 6); // remainder carries forward
+  });
+
+  it("clears a persisted collapse debt once unrest falls back below the threshold", async () => {
+    const world = new InMemoryInfrastructureWorld({
+      systems: [sys("s1", { buildings: { ore: 3 }, unrest: 0.9, population: 3 * ORE_LABOUR, collapseDebt: 0.2 })],
+    });
+    const signals: EconomySignals = {
+      dissatisfactionBySystem: new Map([["s1", 0]]),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
+      realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
+    };
+    await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
+    expect(world.systems[0].collapseDebt).toBeGreaterThan(0); // still in the regime
+
+    world.systems[0] = { ...world.systems[0], unrest: 0.5 };
+    await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
+    expect(world.systems[0].collapseDebt).toBe(0); // regime lapsed → debt erased, not frozen
+    expect(world.systems[0].buildings.ore).toBe(3);
   });
 
   it("scales the idle buffer by per-system maintenance funding", async () => {
@@ -104,15 +141,109 @@ describe("infrastructure-decay processor", () => {
     });
     const signals: EconomySignals = {
       dissatisfactionBySystem: new Map([["s-starved", 0], ["s-funded", 0]]),
-      outputUptakeBySystem: new Map(),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map(),
       realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), {
-      decay: { idleBufferMonths: 2, unrestThreshold: 0.75 },
+      decay: { idleBufferCycles: 2, unrestThreshold: 0.75 },
       interval: 24,
       bufferScaleBySystem: new Map([["s-starved", 0.5]]),
     });
     expect(world.systems.find((x) => x.id === "s-starved")!.buildings.ore).toBe(9);
     expect(world.systems.find((x) => x.id === "s-funded")!.buildings.ore).toBe(10);
+  });
+
+  it("protects a glutted funding-bound producer but contracts it without the marker", async () => {
+    const population = 10 * ORE_LABOUR;
+    const world = new InMemoryInfrastructureWorld({
+      systems: [
+        sys("protected", { population, buildings: { ore: 10 } }),
+        sys("ordinary", { population, buildings: { ore: 10 } }),
+      ],
+    });
+    const signals: EconomySignals = {
+      dissatisfactionBySystem: new Map([["protected", 0], ["ordinary", 0]]),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map([
+        ["protected", new Map([["ore", 0]])],
+        ["ordinary", new Map([["ore", 0]])],
+      ]),
+      realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
+    };
+    await runInfrastructureDecayProcessor(world, ctxWith(signals), {
+      decay: DECAY,
+      interval: 24,
+      logisticsFundingBoundBySystem: new Map([["protected", new Set(["ore"])]]),
+    });
+    expect(world.systems.find((system) => system.id === "protected")!.buildings.ore).toBe(10);
+    expect(world.systems.find((system) => system.id === "ordinary")!.buildings.ore).toBe(9);
+  });
+});
+
+// ── Calibration instrumentation: whole levels torn down per system, combining both decay
+// channels — the harness's episode-cost evidence
+// (docs/active/gameplay/economy.md, unrest promise 5). ──
+
+describe("infrastructure-decay processor: teardown instrumentation", () => {
+  it("reports no entry (undefined map) when nothing decays", async () => {
+    // Hugely overstaffed relative to its one level, and unrest 0 — neither channel fires.
+    const world = new InMemoryInfrastructureWorld({
+      systems: [sys("s1", { population: 1000 * ORE_LABOUR, buildings: { ore: 1 } })],
+    });
+    const signals: EconomySignals = {
+      dissatisfactionBySystem: new Map([["s1", 0]]),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map(),
+      realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
+    };
+    const result = await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
+    expect(result.teardownLevelsBySystem).toBeUndefined();
+  });
+
+  it("sums BOTH decay channels into one per-system total, matching the actual count drop", async () => {
+    // Same fixture as "defaults a missing selling factor..." above: ore sheds one idle level
+    // (10 -> 9, idle channel only); housing sheds one idle level PLUS one catastrophic level
+    // (10 -> 8, both channels) — the reported total must be the SUM across types and channels,
+    // not just whichever channel happened to run last.
+    const world = new InMemoryInfrastructureWorld({
+      systems: [sys("s1", { unrest: 1, population: 4 * ORE_LABOUR })],
+    });
+    const signals: EconomySignals = {
+      dissatisfactionBySystem: new Map([["s1", 0]]),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map(),
+      realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
+    };
+    const result = await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
+    const s = world.systems[0];
+    expect(s.buildings.ore).toBe(9);
+    expect(s.buildings[HOUSING_TYPE]).toBe(8);
+    // Exactly what left: (10-9) ore + (10-8) housing = 3, cross-checked against the count drop.
+    expect(result.teardownLevelsBySystem?.get("s1")).toBe(3);
+  });
+
+  it("keys per system, omitting one that lost nothing while another decays", async () => {
+    const population = 4 * ORE_LABOUR;
+    const world = new InMemoryInfrastructureWorld({
+      systems: [
+        sys("decaying", { population, buildings: { ore: 10 } }),
+        sys("steady", { population: 1000 * ORE_LABOUR, buildings: { ore: 1 } }),
+      ],
+    });
+    const signals: EconomySignals = {
+      dissatisfactionBySystem: new Map([["decaying", 0], ["steady", 0]]),
+      supplyStateBySystem: new Map(),
+      sellingFactorBySystem: new Map(),
+      realizedProductionBySystem: new Map(),
+      productionSuppressBySystem: new Map(),
+    };
+    const result = await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
+    expect(result.teardownLevelsBySystem?.get("decaying")).toBe(1);
+    expect(result.teardownLevelsBySystem?.has("steady")).toBe(false);
   });
 });

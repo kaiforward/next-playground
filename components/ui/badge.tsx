@@ -51,6 +51,22 @@ type BadgeVariants = VariantProps<typeof badgeVariants>;
 
 export type BadgeColor = NonNullable<BadgeVariants["color"]>;
 
+/**
+ * `BadgeColor` → the underlying CSS custom property, for callers that need the tone as a raw
+ * paint value rather than Tailwind classes on a `<span>` — a status-coloured track fill, a vital
+ * tile's dot/meter, a map legend swatch. One map so a new tone (or a changed hex) only needs
+ * updating in `globals.css`, never re-authored per caller.
+ */
+export const BADGE_COLOR_VAR: Record<BadgeColor, string> = {
+  green: "var(--color-status-green)",
+  amber: "var(--color-status-amber)",
+  blue: "var(--color-status-blue)",
+  purple: "var(--color-status-purple)",
+  slate: "var(--color-status-slate)",
+  red: "var(--color-status-red)",
+  cyan: "var(--color-status-cyan)",
+};
+
 interface BadgeProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, "color">, BadgeVariants {}
 
 export function Badge({ color, variant, className, children, ...props }: BadgeProps) {

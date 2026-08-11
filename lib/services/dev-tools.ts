@@ -158,6 +158,14 @@ export function getEconomySnapshot(): ServiceResult<{ systems: EconomySnapshotSy
 
 // ── Reset economy ───────────────────────────────────────────────
 
+/**
+ * Reset every market to its fresh-world state and clear all events/modifiers. Each row returns to its
+ * capacity-driven seed stock with a neutral anchor, and the tick-persisted flow-state fields are returned
+ * to their world-gen seed: satisfaction 1, the squeeze/proposal persistence counters 0, and the realized
+ * rate, suppression and logistics-binding flags dropped (so the row reads exactly as a freshly generated
+ * market). anchorMult resets to 1 alongside stock: all events (and their anchor_shift modifiers) are being
+ * cleared, so the neutral anchor is the correct clean-slate value.
+ */
 export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsCleared: number }> {
   if (!hasWorld()) {
     return { ok: false, error: "No world loaded." };
@@ -173,9 +181,6 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
   }
   const systemById = new Map(world.systems.map((s) => [s.id, s]));
 
-  // Reset every market to its capacity-driven seed stock. anchorMult resets to
-  // 1 alongside stock: all events (and their anchor_shift modifiers) are being
-  // cleared, so the neutral anchor is the correct clean-slate value.
   const markets = world.markets.map((m) => {
     const sys = systemById.get(m.systemId);
     if (!sys) return m;
@@ -189,9 +194,15 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
     );
     const buildings = buildingsBySystem.get(sys.id) ?? {};
     return {
-      ...m,
+      systemId: m.systemId,
+      goodId: m.goodId,
       stock: getInitialStock(buildings, yields, sys.population, m.goodId),
       anchorMult: 1,
+      demandRate: m.demandRate,
+      storageCapacity: m.storageCapacity,
+      satisfaction: 1,
+      squeezeCycles: 0,
+      proposalCycles: 0,
     };
   });
 

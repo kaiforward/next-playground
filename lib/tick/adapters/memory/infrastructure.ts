@@ -2,7 +2,7 @@ import type {
   InfrastructureWorld,
   InfrastructureStateView,
   BuildingCountUpdate,
-  IdleMonthsUpdate,
+  IdleCyclesUpdate,
   CollapseDebtUpdate,
   PopCapUpdate,
 } from "@/lib/tick/world/infrastructure-world";
@@ -20,8 +20,7 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
     this.systems = initial.systems.map((s) => ({
       ...s,
       buildings: { ...s.buildings },
-      buildingIdleMonths: { ...s.buildingIdleMonths },
-      buildingCollapseDebt: { ...s.buildingCollapseDebt },
+      buildingIdleCycles: { ...s.buildingIdleCycles },
     }));
   }
 
@@ -35,8 +34,8 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
           population: s.population,
           unrest: s.unrest,
           buildings: { ...s.buildings },
-          buildingIdleMonths: { ...s.buildingIdleMonths },
-          buildingCollapseDebt: { ...s.buildingCollapseDebt },
+          buildingIdleCycles: { ...s.buildingIdleCycles },
+          collapseDebt: s.collapseDebt,
         })),
     );
   }
@@ -62,38 +61,30 @@ export class InMemoryInfrastructureWorld implements InfrastructureWorld {
     return Promise.resolve();
   }
 
-  applyIdleMonths(updates: IdleMonthsUpdate[]): Promise<void> {
+  applyIdleCycles(updates: IdleCyclesUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
     const bySystem = new Map<string, Map<string, number>>();
     for (const u of updates) {
       const m = bySystem.get(u.systemId) ?? new Map<string, number>();
-      m.set(u.buildingType, u.idleMonths);
+      m.set(u.buildingType, u.idleCycles);
       bySystem.set(u.systemId, m);
     }
     this.systems = this.systems.map((s) => {
       const m = bySystem.get(s.id);
       if (!m) return s;
-      const buildingIdleMonths = { ...s.buildingIdleMonths };
-      for (const [type, idle] of m) buildingIdleMonths[type] = idle;
-      return { ...s, buildingIdleMonths };
+      const buildingIdleCycles = { ...s.buildingIdleCycles };
+      for (const [type, idle] of m) buildingIdleCycles[type] = idle;
+      return { ...s, buildingIdleCycles };
     });
     return Promise.resolve();
   }
 
   applyCollapseDebts(updates: CollapseDebtUpdate[]): Promise<void> {
     if (updates.length === 0) return Promise.resolve();
-    const bySystem = new Map<string, Map<string, number>>();
-    for (const u of updates) {
-      const m = bySystem.get(u.systemId) ?? new Map<string, number>();
-      m.set(u.buildingType, u.collapseDebt);
-      bySystem.set(u.systemId, m);
-    }
+    const byId = new Map(updates.map((u) => [u.systemId, Math.max(0, u.collapseDebt)]));
     this.systems = this.systems.map((s) => {
-      const m = bySystem.get(s.id);
-      if (!m) return s;
-      const buildingCollapseDebt = { ...s.buildingCollapseDebt };
-      for (const [type, debt] of m) buildingCollapseDebt[type] = debt;
-      return { ...s, buildingCollapseDebt };
+      const debt = byId.get(s.id);
+      return debt === undefined ? s : { ...s, collapseDebt: debt };
     });
     return Promise.resolve();
   }

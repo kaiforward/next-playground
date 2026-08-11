@@ -14,10 +14,12 @@ import type {
   PopulationEntry,
   DevelopmentEntry,
   MigrationEntry,
+  ProvisionEntry,
   OwnershipEntry,
   ResourceVector,
 } from "./game";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
+import type { SupplyRegime } from "@/lib/engine/population";
 import type { SaveInfo } from "@/lib/world/save-files";
 import type { WorldMeta } from "@/lib/world/types";
 
@@ -57,6 +59,7 @@ export type StabilityResponse = ApiResponse<{ systems: StabilityEntry[] }>;
 export type PopulationResponse = ApiResponse<{ systems: PopulationEntry[] }>;
 export type DevelopmentResponse = ApiResponse<{ systems: DevelopmentEntry[] }>;
 export type MigrationResponse = ApiResponse<{ systems: MigrationEntry[] }>;
+export type ProvisionResponse = ApiResponse<{ systems: ProvisionEntry[] }>;
 export type OwnershipResponse = ApiResponse<{ systems: OwnershipEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
@@ -81,10 +84,13 @@ export interface LogisticsGoodRow {
   goodId: string;
   goodName: string;
   tier: GoodTier;
+  /** Staffed production capacity scaled by the strike/maintenance suppression the economy
+   *  applied — the operating rate, on the same basis as `inputDemand`. */
   production: number;
-  /** Civilian consumption (per-capita baseline + skilled baskets). */
+  /** Civilian consumption (per-capita baseline + skilled baskets). Not strike-gated: pops eat. */
   consumption: number;
-  /** Manufacturing input demand — recipe draw from local factories. Also local consumption. */
+  /** Manufacturing input demand — recipe draw from local factories at their operating rate
+   *  (strike-gated, same basis as `production`). Also local consumption. */
   inputDemand: number;
   /** production − (consumption + inputDemand). */
   internalNet: number;
@@ -119,14 +125,14 @@ export type SystemLogisticsData =
 // ── System cadence (header "next update" countdown) ──────────────────────────
 /**
  * The system's single "next update" cadence group for the header countdown.
- * Under the monthly resolution pulse the whole galaxy resolves together on
- * `tick % MONTH_LENGTH === 0`, so this is uniformly 0; the value never changes
+ * Under the cycle resolution the whole galaxy resolves together on
+ * `tick % CYCLE_LENGTH === 0`, so this is uniformly 0; the value never changes
  * for a given universe, so the client fetches once (staleTime Infinity) and
  * counts down off the live tick.
  */
 export interface SystemCadence {
-  /** Group in [0, MONTH_LENGTH): when the whole galaxy resolves. Always 0 under the monthly pulse; kept so the client counts down with ticksUntilShard(pulseGroup, tick, MONTH_LENGTH). */
-  pulseGroup: number;
+  /** Group in [0, CYCLE_LENGTH): when the whole galaxy resolves. Always 0 under the cycle resolution; kept so the client counts down with ticksUntilShard(resolutionGroup, tick, CYCLE_LENGTH). */
+  resolutionGroup: number;
 }
 export type SystemCadenceResponse = ApiResponse<SystemCadence>;
 export type SystemLogisticsResponse = ApiResponse<SystemLogisticsData>;
@@ -158,11 +164,77 @@ export interface PopNeedData {
   delivered: number;
   /** delivered ÷ want, in [0,1] — the consume gate at current stock; 1 = fully met. */
   satisfaction: number;
-  /** demandShare × (1 − satisfaction)² — this good's contribution to the system's dissatisfaction/unrest. */
+  /** necessity-weighted demandShare × (1 − satisfaction) — this good's contribution to the system's unrest. */
   pressure: number;
   /** want's composition — base + technicians + engineers. */
   breakdown: ConsumptionBreakdown;
 }
+
+/**
+ * Provisioned + its band + the population's remembered level, shared between `SystemPopulationData`
+ * and `SystemVitalsData`. Resolved through the exact functions the tick uses (`readExpectation`,
+ * both `lib/engine/`) so the panel and the sim cannot disagree. `WorldSystem.provision`/`.supplyBand`
+ * are independently optional and absent means never assessed, never zero — the `assessed: false` arm
+ * carries that absence rather than inventing a reading; it is also what a PARTIALLY-written system
+ * (one of the pair present, the other absent) renders as, since a half-written assessment is not a
+ * real one. `pct`/`expectationPct` are 0..100 (matching `SystemVitalsStability.pct`).
+ *
+ * The grievance the resolver derives from these two is deliberately NOT here: it is an input to the
+ * unrest floor's goods term, and the client is shown that effect (`SystemUnrestRead.contributors`),
+ * never the intermediate. It stays on the server-side `ResolvedProvision`
+ * (`lib/services/provision-read.ts`).
+ */
+export type SystemProvisionRead =
+  | { assessed: true; pct: number; band: SupplyRegime; expectationPct: number }
+  | { assessed: false };
+
+/**
+ * The unrest floor's three-way breakdown (goods shortfall, tax, crowding) plus the trend it is
+ * heading — so the Stability block can answer "why is this world angry" instead of showing one
+ * opaque number. `contributors` are `unrestContributors`'s output (`lib/engine/unrest-readout.ts`)
+ * — resolved so they sum to exactly the settled value the tick's own relaxation targets for this
+ * system, never an estimate that can drift from the effect. `trend` is `unrestTrend(unrest,
+ * settled)` — where `settled` is that same contributor sum — comparing where unrest stands now
+ * against where it is heading, with no stored history required. No separate "unassessed" arm the
+ * way `SystemProvisionRead` has: a system the economy has not yet classified reads the same
+ * zero-shortfall defaults the population processor itself falls back to for an unclassified system
+ * (`lib/tick/processors/population.ts`), which is an honest "no shortfall recorded yet", not a
+ * fabricated reading.
+ */
+export type SystemUnrestRead =
+  | {
+      assessed: true;
+      /** The three causes, uncapped — they are the relative sizes of what is driving unrest, and
+       *  flattening them at the ceiling would hide which one dominates. */
+      contributors: { goods: number; tax: number; crowding: number };
+      /** Where unrest is heading: `min(1, goods + tax + crowding)`, the fixed point
+       *  `accumulateUnrest` relaxes toward (`UnrestParams`, lib/engine/population.ts). The cap is
+       *  load-bearing rather than cosmetic — `slopeShortage` is 2.4, so a famine world's goods term
+       *  alone clears 1 at a shortfall of ~0.42 while unrest itself is clamped to 1. Summing raw
+       *  would report a world pinned at maximum unrest as still rising, forever, on exactly the
+       *  worlds this panel most needs to read correctly. */
+      settled: number;
+      trend: "rising" | "stable" | "recovering";
+      /** STRIKE_PARAMS.threshold — carried alongside so the panel's strike caption and the badge
+       *  that names Strike can never disagree on the number. */
+      strikeThreshold: number;
+    }
+  | {
+      /** The economy has not assessed this system yet, so the goods cause is unknown — not zero.
+       *  Fires for every system before its first economy cycle, which is a routine state (a freshly
+       *  founded colony), not a defensive one. Deliberately NOT the population processor's own
+       *  "unclassified" fallback, which its comment documents as unreachable in real play and which
+       *  guards a different case entirely: an intra-cycle signal inconsistency the economy processor
+       *  cannot actually produce. Reusing that fallback's defaults here would render a confident
+       *  "no goods problem" bar for a world nobody has measured. */
+      assessed: false;
+      /** Standing pressure is knowable without an economy assessment — tax comes from the owning
+       *  faction's level and crowding from occupancy — so it is carried rather than withheld. There
+       *  is no `settled` or `trend`: both need the goods term, and inventing one from these two
+       *  alone would describe a world as calm or worsening on a third of the evidence. */
+      contributors: { tax: number; crowding: number };
+      strikeThreshold: number;
+    };
 
 /** Dynamic population & social state for one system — discriminated on visibility. */
 export type SystemPopulationData =
@@ -171,10 +243,14 @@ export type SystemPopulationData =
       population: number;
       popCap: number;
       unrest: number;
-      /** True when unrest ≥ STRIKE_PARAMS.threshold. */
+      /** True when unrest > STRIKE_PARAMS.threshold — the engine's own strict comparison. */
       striking: boolean;
       /** Pop needs, pressure-sorted descending — the goods the population consumes and how met each want is. */
       needs: PopNeedData[];
+      /** Provisioned, its band and the remembered level — see `SystemProvisionRead`. */
+      provision: SystemProvisionRead;
+      /** The unrest floor's contributor breakdown and trend — see `SystemUnrestRead`. */
+      unrestBreakdown: SystemUnrestRead;
     }
   | { visibility: "unknown" };
 export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
@@ -212,6 +288,8 @@ export type SystemVitalsData =
       stability: SystemVitalsStability;
       development: SystemVitalsDevelopment;
       population: SystemVitalsPopulation;
+      /** Provisioned, its band and the remembered level — see `SystemProvisionRead`. */
+      provision: SystemProvisionRead;
     }
   | { visibility: "unknown" };
 export type SystemVitalsResponse = ApiResponse<SystemVitalsData>;
@@ -312,8 +390,8 @@ import type { ColonyBlockReason } from "@/lib/types/colonisation";
 /** One dialog/quick-add option: engine feasibility + display label + queue-aware ETA. */
 export interface BuildOptionData extends BuildOption {
   label: string;
-  /** ≈pulses until a 1-level order placed NOW would land (player queue position); null = stalled pool. */
-  etaPulses: number | null;
+  /** ≈cycles until a 1-level order placed NOW would land (player queue position); null = stalled pool. */
+  etaCycles: number | null;
 }
 /** Per-system verb surface: which construction verb applies here and its feasibility. */
 export type SystemBuildOptionsData =
@@ -329,6 +407,10 @@ export type SystemBuildOptionsData =
               seedPop: number;
               housingLevels: number;
               work: number;
+              /** One-off fee charged when the establish first draws funding. */
+              charter: number;
+              /** Upper bound on the materials bill — the uncapped want, hence "up to" in the UI. */
+              projectedBill: number;
             };
           }
         | { state: "ineligible"; reason: ColonyBlockReason };

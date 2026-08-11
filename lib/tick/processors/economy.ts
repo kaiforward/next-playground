@@ -5,32 +5,38 @@ import type {
   GlobalEventMap,
 } from "../types";
 import {
-  selfLimitingFactor,
-  outputUptake,
+  brakeKnee,
+  productionCeiling,
   type MarketTickEntry,
 } from "@/lib/engine/tick";
 import { simulateCoupledEconomyTick } from "@/lib/engine/supply-chain";
 import type { ModifierRow } from "@/lib/engine/events";
-import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { resolveMarketTickEntry } from "@/lib/engine/market-tick-builder";
 import type {
   EconomyProcessorParams,
   EconomyWorld,
   MarketUpdate,
+  MarketView,
 } from "@/lib/tick/world/economy-world";
-import { dissatisfaction, strikeMultiplier, type GoodSatisfaction } from "@/lib/engine/population";
-import { pulseShard, isPulseTick, catchUpFactor } from "@/lib/tick/shard";
+import {
+  dissatisfaction,
+  strikeMultiplier,
+  foldSupplyState,
+  type GoodSatisfaction,
+  type SupplyState,
+} from "@/lib/engine/population";
+import { cycleStartShard, isCycleStart, catchUpFactor } from "@/lib/tick/shard";
 
 const DEBUG = process.env.DEBUG_ECONOMY === "1";
 
 /**
  * The broadcast this processor emits on a tick where it resolves nothing.
  *
- * Exported because `runWorldTick` gates this stage's setup off-pulse and so never
+ * Exported because `runWorldTick` gates this stage's setup mid-cycle and so never
  * calls the body — it emits this instead, keeping the per-tick signal identical to
  * an ungated run. One definition so the gated and ungated paths can't diverge.
  */
-export function economyOffPulsePayload(tick: number, interval: number): Partial<GlobalEventMap> {
+export function economyMidCyclePayload(tick: number, interval: number): Partial<GlobalEventMap> {
   const iv = Math.max(1, Math.floor(interval));
   return { economyTick: [{ systemCount: 0, shardIndex: ((tick % iv) + iv) % iv, shardCount: iv }] };
 }
@@ -40,8 +46,8 @@ export function economyOffPulsePayload(tick: number, interval: number): Partial<
  * Per-run knobs the body must not hard-code (the production cover, modifier
  * caps, the strike regime) come in via `params`.
  *
- * Monthly resolution pulse: on the boundary tick (`tick % interval === 0`) the
- * whole system list resolves at once via `pulseShard`; every other tick is a
+ * Cycle resolution: on the boundary tick (`tick % interval === 0`) the
+ * whole system list resolves at once via `cycleStartShard`; every other tick is a
  * no-op (empty window → no `economySignals`, so infrastructure-decay and
  * population skip too). Per-resolution production/consumption are scaled by
  * `catchUpFactor(interval)` so the wall-clock rate is constant and the
@@ -54,20 +60,20 @@ export async function runEconomyProcessor(
 ): Promise<TickProcessorResult> {
   const { interval, simParams, modifierCaps, strikeParams, maintenanceMalusBySystem } = params;
 
-  // Normalize the interval the same way pulseShard does so the reported shard
-  // index/count can't diverge from the actual pulse boundary for a non-integer interval.
+  // Normalize the interval the same way cycleStartShard does so the reported shard
+  // index/count can't diverge from the actual cycle boundary for a non-integer interval.
   const iv = Math.max(1, Math.floor(interval));
   const shardIndex = ((ctx.tick % iv) + iv) % iv;
-  const emptyPayload = economyOffPulsePayload(ctx.tick, interval);
-  // Off-pulse before reading the world: the system list is fetched only for its
-  // length, which pulseShard uses solely to distinguish "empty galaxy" — so off-pulse
+  const emptyPayload = economyMidCyclePayload(ctx.tick, interval);
+  // Mid-cycle before reading the world: the system list is fetched only for its
+  // length, which cycleStartShard uses solely to distinguish "empty galaxy" — so mid-cycle
   // it cost a filter and a sort over every system to reach a foregone conclusion.
-  if (!isPulseTick(ctx.tick, interval)) {
+  if (!isCycleStart(ctx.tick, interval)) {
     return { globalEvents: emptyPayload };
   }
 
   const allSystemIds = await world.getSystemIds();
-  const { start, end } = pulseShard(allSystemIds.length, ctx.tick, interval);
+  const { start, end } = cycleStartShard(allSystemIds.length, ctx.tick, interval);
   if (start >= end) {
     return { globalEvents: emptyPayload };
   }
@@ -108,6 +114,21 @@ export async function runEconomyProcessor(
 
   // Read stored unrest from the previous tick to derive per-system strike multipliers.
   const unrestBySystem = await world.getUnrest(systemIds);
+  const productionSuppressBySystem = new Map<string, number>();
+  for (const systemId of systemIds) {
+    const productionSuppress =
+      strikeMultiplier(unrestBySystem.get(systemId) ?? 0, strikeParams) *
+      (maintenanceMalusBySystem?.get(systemId) ?? 1);
+    productionSuppressBySystem.set(systemId, productionSuppress);
+  }
+  // The multiplier is a property of the SYSTEM (its unrest and maintenance funding), but the flag it
+  // raises is a property of the MARKET: a good with no output of its own has nothing to suppress, so
+  // the malus reduces it by definition zero. Recording the flag per system instead marked every good
+  // at a striking world as suppressed, including ones it has never produced — which the build planner
+  // reads as "a strike explains this shortfall" and so refuses to propose the capacity that would end
+  // it. A striking world may be a bad exporter; it is not thereby well supplied.
+  const marketSuppressed = (m: MarketView): boolean =>
+    (productionSuppressBySystem.get(m.systemId) ?? 1) < 1 && (m.baseProductionRate ?? 0) > 0;
 
   // Build tick entries via the shared market-tick builder. Government modifiers
   // are resolved per-market (a shard slice contains systems owned by different
@@ -121,13 +142,14 @@ export async function runEconomyProcessor(
       goodId: m.goodId,
       stock: m.stock,
       demandRate: m.demandRate,
+      honestUseRate: m.honestUseRate,
+      // The knee's output denominator is the reference-cycle rate — deliberately NOT the
+      // catch-up-scaled, strike-suppressed productionRate the entry carries for flow.
+      capacityProduction: m.baseProductionRate ?? 0,
       storageCapacity: m.storageCapacity,
       baseProductionRate: m.baseProductionRate != null ? m.baseProductionRate * catchUp : undefined,
       baseConsumptionRate: m.baseConsumptionRate != null ? m.baseConsumptionRate * catchUp : undefined,
-      govDef: GOVERNMENT_TYPES[m.governmentType] ?? undefined,
-      productionSuppress:
-        strikeMultiplier(unrestBySystem.get(m.systemId) ?? 0, strikeParams) *
-        (maintenanceMalusBySystem?.get(m.systemId) ?? 1),
+      productionSuppress: productionSuppressBySystem.get(m.systemId),
       modifiers: modifiersBySystem.get(m.systemId) ?? [],
       modifierCaps,
     }),
@@ -137,41 +159,76 @@ export async function runEconomyProcessor(
   const entrySystemIds = markets.map((m) => m.systemId);
   const simulated = simulateCoupledEconomyTick(tickEntries, entrySystemIds, simParams);
 
+  // Satisfaction is the FLOW actually applied this cycle (delivered ÷ demanded),
+  // never a post-tick stock recompute — a cycle that starts above the comfort
+  // knee delivers in full even when it ends just below it. Non-consumers read 1.
+  const satisfactionByIndex = markets.map((_, i) => {
+    const consumptionRate = tickEntries[i].consumptionRate;
+    if (consumptionRate == null || consumptionRate <= 0) return 1;
+    const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
+    return demanded > 0 ? Math.max(0, Math.min(1, simulated[i].delivered / demanded)) : 1;
+  });
+
   // anchorMult comes straight off the resolved tick — the builder already
   // aggregated the system's modifiers, so there's no second aggregation pass.
-  const marketUpdates: MarketUpdate[] = markets.map((m, i) => ({
-    id: m.id,
-    stock: simulated[i].stock,
-    anchorMult: resolved[i].anchorMult,
-  }));
+  const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
+    const realizedProductionRate = simulated[i].realized / catchUp;
+    const productionSuppressRate = productionSuppressBySystem.get(m.systemId) ?? 1;
+    const productionMult = resolved[i].entry.productionMult ?? 1;
+    // Advance by this cycle's reference-time (catchUpFactor), not a flat +1, so "two reference cycles
+    // rationed" is the same wall-clock latency at any economy cadence. Fractional, finite, clamped [0,2].
+    const squeezeCycles = satisfactionByIndex[i] < 1
+      ? Math.min(2, Math.max(0, m.squeezeCycles ?? 0) + catchUp)
+      : 0;
+    return {
+      id: m.id,
+      stock: simulated[i].stock,
+      anchorMult: resolved[i].anchorMult,
+      satisfaction: satisfactionByIndex[i],
+      realizedProductionRate: Number.isFinite(realizedProductionRate) && realizedProductionRate >= 0
+        ? realizedProductionRate
+        : 0,
+      productionSuppressed: marketSuppressed(m),
+      // Both are draw-figure inputs the logistics read derives urgency from, so they carry the same
+      // finite guard as the realized rate above; a non-finite scalar reads as "no gate", never 0.
+      productionSuppressRate: Number.isFinite(productionSuppressRate) && productionSuppressRate >= 0
+        ? productionSuppressRate
+        : 1,
+      productionMult: Number.isFinite(productionMult) && productionMult >= 0 ? productionMult : 1,
+      squeezeCycles,
+    };
+  });
 
   await world.applyMarketUpdates(marketUpdates);
 
-  // Measure per-system convex demand-weighted dissatisfaction D (consume side) and
-  // per-produced-good output uptake (produce side) from post-tick stock.
+  // The producer signal is the isolated start-stock ceiling term. It deliberately
+  // excludes labour, recipe gates, strikes, maintenance, events, and realized flow.
   const goodsBySystem = new Map<string, GoodSatisfaction[]>();
-  const uptakeBySystem = new Map<string, Map<string, number>>();
+  const sellingFactorBySystem = new Map<string, Map<string, number>>();
   const realizedProductionBySystem = new Map<string, Map<string, number>>();
   markets.forEach((m, i) => {
     const consumptionRate = tickEntries[i].consumptionRate;
     if (consumptionRate != null && consumptionRate > 0) {
       const demanded = consumptionRate * (tickEntries[i].consumptionMult ?? 1);
-      const satisfaction = selfLimitingFactor(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].targetStock, "consume");
       const arr = goodsBySystem.get(m.systemId) ?? [];
-      arr.push({ satisfaction, demanded });
+      arr.push({ goodId: m.goodId, satisfaction: satisfactionByIndex[i], demanded });
       goodsBySystem.set(m.systemId, arr);
     }
-    // outputUptake stays on the FULL [minStock, maxStock] storage band — NOT the
-    // operating ceiling. It is decay's "is output stuck against the physical wall?"
-    // signal; a healthy exporter resting at the operating ceiling must read as selling,
-    // or infrastructure-decay would tear it down. The throttle and this signal are
-    // deliberately separate calls (see docs/planned/economy-equilibrium-rework.md).
-    const productionRate = tickEntries[i].productionRate;
-    if (productionRate != null && productionRate > 0) {
-      const uptake = outputUptake(simulated[i].stock, tickEntries[i].minStock, tickEntries[i].maxStock);
-      const map = uptakeBySystem.get(m.systemId) ?? new Map<string, number>();
-      map.set(m.goodId, uptake);
-      uptakeBySystem.set(m.systemId, map);
+    if (m.baseProductionRate !== undefined) {
+      const factor = productionCeiling(
+        tickEntries[i].stock,
+        brakeKnee(
+          {
+            useRate: tickEntries[i].honestUseRate,
+            capacityProduction: tickEntries[i].capacityProduction,
+            anchorMult: tickEntries[i].anchorMult,
+          },
+          simParams,
+        ),
+      );
+      const map = sellingFactorBySystem.get(m.systemId) ?? new Map<string, number>();
+      map.set(m.goodId, factor);
+      sellingFactorBySystem.set(m.systemId, map);
     }
     const realized = simulated[i].realized;
     if (realized > 0) {
@@ -180,14 +237,22 @@ export async function runEconomyProcessor(
       realizedProductionBySystem.set(m.systemId, bySystem);
     }
   });
+  // Two folds of the same per-good satisfactions: D is the magnitude of the shortfall, the supply
+  // state is its class. A system with no consuming markets reads supplied.
   const dissatisfactionBySystem = new Map<string, number>();
+  const supplyStateBySystem = new Map<string, SupplyState>();
   for (const sysId of systemIds) {
-    dissatisfactionBySystem.set(sysId, dissatisfaction(goodsBySystem.get(sysId) ?? []));
+    const goods = goodsBySystem.get(sysId) ?? [];
+    const d = dissatisfaction(goods);
+    dissatisfactionBySystem.set(sysId, d);
+    supplyStateBySystem.set(sysId, foldSupplyState(goods));
   }
   const economySignals: EconomySignals = {
     dissatisfactionBySystem,
-    outputUptakeBySystem: uptakeBySystem,
+    supplyStateBySystem,
+    sellingFactorBySystem,
     realizedProductionBySystem,
+    productionSuppressBySystem,
   };
 
   const modCount = rawModifiers.length;

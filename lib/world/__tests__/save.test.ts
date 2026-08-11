@@ -2,6 +2,13 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { serializeWorld, deserializeWorld, sanitizeSaveName, SAVE_FORMAT_VERSION } from "../save";
 import type { World } from "../types";
+import { runWorldTick } from "../tick";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import { provision } from "@/lib/engine/population";
+import { EXPECTATION_PARAMS } from "@/lib/constants/population";
 
 describe("sanitizeSaveName", () => {
   it("lowercases and strips everything but [a-z0-9-_]", () => {
@@ -51,23 +58,97 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
+  /**
+   * The structural spot-checks, each reached on its own. Every case below carries the CURRENT
+   * formatVersion deliberately: a stale version short-circuits at the version check, so a
+   * wrong-version fixture proves nothing about the shape guards that run after it.
+   */
+  describe("structural spot-checks (each guard reached on its own)", () => {
+    type MalformedValue = object | number | null;
+    function badWorld(worldValue: MalformedValue): string {
+      return JSON.stringify({ formatVersion: SAVE_FORMAT_VERSION, world: worldValue });
+    }
+    function badMeta(meta: MalformedValue): string {
+      return badWorld({ ...world, meta });
+    }
+    function expectRejected(json: string, error: string) {
+      const result = deserializeWorld(json);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toBe(error);
+    }
+
+    const NOT_OBJECT = "Save file is not a JSON object";
+    const BAD_META = "Save file's world is missing required meta fields";
+
+    it("rejects a top-level JSON scalar", () => {
+      expectRejected("5", NOT_OBJECT);
+    });
+
+    it("rejects a top-level JSON null (typeof null is 'object' — the null arm is load-bearing)", () => {
+      expectRejected("null", NOT_OBJECT);
+    });
+
+    it("rejects a current-version save with no world key at all", () => {
+      expectRejected(JSON.stringify({ formatVersion: SAVE_FORMAT_VERSION }), BAD_META);
+    });
+
+    it("rejects a current-version save whose world is not an object", () => {
+      expectRejected(badWorld(5), BAD_META);
+    });
+
+    it("rejects a current-version save whose world is null", () => {
+      expectRejected(badWorld(null), BAD_META);
+    });
+
+    it("rejects a current-version save whose world has no meta", () => {
+      expectRejected(badWorld({ systems: [] }), BAD_META);
+    });
+
+    it("rejects a world whose meta is not an object", () => {
+      expectRejected(badMeta(5), BAD_META);
+    });
+
+    it("rejects a world whose meta is null", () => {
+      expectRejected(badMeta(null), BAD_META);
+    });
+
+    // One case per numeric meta field: each is checked separately, so a guard that stopped
+    // covering one field would pass every other case here.
+    const NUMERIC_META_FIELDS = ["currentTick", "seed", "mapSize", "systemCount"] as const;
+    for (const field of NUMERIC_META_FIELDS) {
+      it(`rejects a world whose meta.${field} is present but not a number`, () => {
+        expectRejected(badMeta({ ...world.meta, [field]: "not-a-number" }), BAD_META);
+      });
+    }
+
+    it("accepts a meta carrying all four numeric fields (the guards are not rejecting everything)", () => {
+      expect(deserializeWorld(badMeta({ ...world.meta })).ok).toBe(true);
+    });
+  });
+
   it("rejects a save with an unsupported formatVersion", () => {
     const json = JSON.stringify({ formatVersion: 99, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 8 (faction treasuries)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(8);
+  it("is at save format version 12 (the supply-band vocabulary)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(12);
   });
 
-  it("rejects a prior-version (v7) save — saves break on the shape bump", () => {
-    const json = JSON.stringify({ formatVersion: 7, world });
+  it("rejects a prior-version (v11) save — saves break on the shape bump", () => {
+    // v11 systems carry `supplyBand: "shortage"`, a value `SupplyRegime` no longer has, and a
+    // `"rationing"` that meant `[0, 0.7)` rather than today's `[0.5, 0.7)`. `deserializeWorld` runs
+    // structural spot-checks, not per-field validation, so nothing below this gate would notice
+    // either — the version bump is the whole defence, and it must reject rather than load a band
+    // string the type system says cannot exist.
+    const json = JSON.stringify({ formatVersion: 11, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
 
-  it("round-trips construction projects + building idleMonths unchanged", () => {
+  it("round-trips construction projects + building idleCycles unchanged", () => {
     const withConstruction: World = {
       ...world,
       constructionProjects: [
@@ -83,7 +164,7 @@ describe("serializeWorld / deserializeWorld", () => {
           workDone: 12,
         },
       ],
-      buildings: world.buildings.map((b, i) => ({ ...b, idleMonths: i === 0 ? 3 : 0 })),
+      buildings: world.buildings.map((b, i) => ({ ...b, idleCycles: i === 0 ? 3 : 0 })),
     };
     const result = deserializeWorld(serializeWorld(withConstruction));
     expect(result.ok).toBe(true);
@@ -91,7 +172,27 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.world).toStrictEqual(withConstruction);
   });
 
+  it("round-trips the optional logistics funding-bound marker", () => {
+    const marked: World = {
+      ...world,
+      markets: world.markets.map((market, index) =>
+        index === 0 ? { ...market, logisticsFundingBound: true } : market,
+      ),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.markets[0].logisticsFundingBound).toBe(true);
+  });
+
+  it("accepts generated rows without a logistics funding marker", () => {
+    expect(world.markets[0].logisticsFundingBound).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
   it("round-trips a colony-establish project unchanged (serializable, no lost fields)", () => {
+    // The staged manifest is real in-transit inventory sitting in no market row at either end —
+    // lose it on save and the founder is debited for goods the colony never receives.
     const withColony: World = {
       ...world,
       constructionProjects: [
@@ -106,6 +207,12 @@ describe("serializeWorld / deserializeWorld", () => {
           housingLevels: 3,
           workTotal: 84,
           workDone: 40,
+          stagedManifest: [
+            { goodId: "water", quantity: 42 },
+            { goodId: "food", quantity: 17.5 },
+          ],
+          charterPaid: true,
+          stalledCycles: 3,
         },
       ],
     };
@@ -114,8 +221,127 @@ describe("serializeWorld / deserializeWorld", () => {
     if (!result.ok) return;
     expect(result.world).toStrictEqual(withColony);
   });
-});
 
+
+  it("round-trips optional planner assessment fields without a save bump", () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const assessed: World = {
+      ...world,
+      markets: world.markets.map((market, index) =>
+        index === 0
+          ? {
+              ...market,
+              realizedProductionRate: 0,
+              productionSuppressed: true,
+              squeezeCycles: 2,
+              proposalCycles: 1,
+            }
+          : market,
+      ),
+    };
+    const result = deserializeWorld(serializeWorld(assessed));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.markets[0]).toMatchObject({
+      realizedProductionRate: 0,
+      productionSuppressed: true,
+      squeezeCycles: 2,
+      proposalCycles: 1,
+    });
+  });
+
+  it("round-trips fractional persistence counters (reference-time, not integers)", () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const fractional: World = {
+      ...world,
+      markets: world.markets.map((market, index) =>
+        index === 0 ? { ...market, squeezeCycles: 1.5, proposalCycles: 0.5 } : market,
+      ),
+    };
+    const result = deserializeWorld(serializeWorld(fractional));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.markets[0].squeezeCycles).toBe(1.5);
+    expect(result.world.markets[0].proposalCycles).toBe(0.5);
+  });
+
+  it("round-trips the optional provisionExpectation field", () => {
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, provisionExpectation: 0.42 } : system,
+      ),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].provisionExpectation).toBe(0.42);
+  });
+
+  it("accepts generated systems without a provisionExpectation (never seeded)", () => {
+    expect(world.systems[0].provisionExpectation).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
+  it("round-trips the optional provision and supplyBand fields", () => {
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, provision: 0.73, supplyBand: "rationing" } : system),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].provision).toBe(0.73);
+    expect(result.world.systems[0].supplyBand).toBe("rationing");
+  });
+
+  it("accepts generated systems without provision or supplyBand (never assessed)", () => {
+    // A freshly generated world has never run an economy cycle — the absent-means-assessed-at-
+    // famine trap the provisionExpectation convention above also guards: reading a coerced 0
+    // here would render as "0% Provisioned" for a system nobody has ever measured.
+    expect(world.systems[0].provision).toBeUndefined();
+    expect(world.systems[0].supplyBand).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
+  it("round-trips the optional criticalWeight field UN-CLAMPED — unlike provision, it carries no [0,1] ceiling", () => {
+    // 1.3 is deliberately above 1: criticalWeight has no upper bound of its own (supplyUnrestTerm
+    // floors it at 0 only; the min(slopeShortage, …) cap inside that function bounds its EFFECT,
+    // not the stored weight — lib/world/types.ts). A save round trip that silently clamped this to
+    // 1 would be indistinguishable from the provision-style bug this test exists to catch.
+    const marked: World = {
+      ...world,
+      systems: world.systems.map((system, index) =>
+        index === 0 ? { ...system, provision: 0.4, supplyBand: "rationing", criticalWeight: 1.3 } : system),
+    };
+    const result = deserializeWorld(serializeWorld(marked));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.systems[0].criticalWeight).toBe(1.3);
+  });
+
+  it("accepts generated systems without criticalWeight (never assessed)", () => {
+    expect(world.systems[0].criticalWeight).toBeUndefined();
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+
+  it("keeps new optional assessment values omitted in an old-shaped save", () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const oldShaped: World = {
+      ...world,
+      markets: world.markets.map(({ realizedProductionRate, productionSuppressed, squeezeCycles, proposalCycles, ...market }) => market),
+    };
+    const result = deserializeWorld(serializeWorld(oldShaped));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.markets[0].realizedProductionRate).toBeUndefined();
+    expect(result.world.markets[0].productionSuppressed).toBeUndefined();
+    expect(result.world.markets[0].squeezeCycles).toBeUndefined();
+    expect(result.world.markets[0].proposalCycles).toBeUndefined();
+  });
+
+});
 describe("save format — player seat", () => {
   it("round-trips world.player", () => {
     const world = generateWorld({
@@ -133,4 +359,132 @@ describe("save format — player seat", () => {
     const result = deserializeWorld(stale);
     expect(result.ok).toBe(false);
   });
+});
+
+describe("save compatibility — collapseDebt moved from building rows to system rows", () => {
+  /**
+   * A save written before the unrest-collapse debt became per-system: every system row lacks
+   * `collapseDebt`, and every building row still carries the retired per-type one. The format
+   * version was deliberately NOT bumped, because the debt is transient regime state that resets
+   * whenever unrest falls back below the decay threshold — never a balance anything is owed. This
+   * pins that the decision is safe rather than merely asserted.
+   */
+  function preMigrationSave(): string {
+    const world = generateWorld({ systemCount: 40, seed: 11 });
+    const legacy = {
+      formatVersion: SAVE_FORMAT_VERSION,
+      world: {
+        ...world,
+        systems: world.systems.map((s) => {
+          const { collapseDebt: _dropped, ...withoutDebt } = s;
+          return withoutDebt;
+        }),
+        buildings: world.buildings.map((b) => ({ ...b, collapseDebt: 0.4 })),
+      },
+    };
+    return JSON.stringify(legacy);
+  }
+
+  it("loads, and every system's missing collapseDebt reads 0", () => {
+    const result = deserializeWorld(preMigrationSave());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const s of result.world.systems) expect(s.collapseDebt ?? 0).toBe(0);
+  });
+
+  it("runs a tick without NaN or Infinity entering world state, and drops the stale field", async () => {
+    const result = deserializeWorld(preMigrationSave());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Past a cycle boundary, so the economy/population/decay cycle actually resolves.
+    let world: World = result.world;
+    for (let tick = 1; tick <= CYCLE_LENGTH + 1; tick++) {
+      world = (await runWorldTick(world)).world;
+    }
+
+    // The retired per-building field is rebuilt away by the first tick's row flatten…
+    for (const b of world.buildings) expect("collapseDebt" in b).toBe(false);
+    // …and the per-system one is a finite, non-negative number everywhere.
+    for (const s of world.systems) {
+      const debt = s.collapseDebt ?? 0;
+      expect(Number.isFinite(debt)).toBe(true);
+      expect(debt).toBeGreaterThanOrEqual(0);
+      expect(Number.isFinite(s.population)).toBe(true);
+      expect(Number.isFinite(s.popCap)).toBe(true);
+      expect(Number.isFinite(s.unrest)).toBe(true);
+    }
+    for (const m of world.markets) expect(Number.isFinite(m.stock)).toBe(true);
+    // And it still survives a full serialize round-trip after the migration.
+    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+  });
+});
+
+describe("save compatibility — provisionExpectation seeds from Provision, not a coerced 0", () => {
+  /**
+   * A save predating the field loads and its first economy cycle seeds the stored memory from
+   * THAT cycle's Provision — never from a `?? 0` coercion (which would read stored 0, effective =
+   * the expectation floor) and never from a floor-write bug (persisting the read-side `effective`
+   * instead of the raw `stored`, which would read the floor 0.5). The fixture starves both
+   * survival goods on an otherwise-ample homeworld so this cycle's Provision lands well UNDER
+   * EXPECTATION_PARAMS.floor (0.5) — Provision strictly between 0 and the floor is the only
+   * reading that discriminates both failure modes at once.
+   */
+  it("loads and the first cycle seeds stored expectation from that cycle's Provision, not 0 or the floor", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const systemId = base.factions[0].homeworldId;
+    const prepared: World = {
+      ...base,
+      // Strip every producer but housing — the fixture's only output is population, so an emptied
+      // survival good's stock cannot refill and stays a structural deficit for the whole cycle.
+      buildings: [
+        ...base.buildings.filter((b) => b.systemId !== systemId),
+        { systemId, buildingType: HOUSING_TYPE, count: 250, idleCycles: 0 },
+      ],
+      markets: base.markets.map((m) =>
+        m.systemId === systemId
+          ? { ...m, stock: m.goodId === "food" || m.goodId === "water" ? 0 : 1e7, satisfaction: 1 }
+          : m,
+      ),
+    };
+    // Premise: this save predates the field on every system.
+    for (const s of prepared.systems) expect(s.provisionExpectation).toBeUndefined();
+
+    const legacy = JSON.stringify({ formatVersion: SAVE_FORMAT_VERSION, world: prepared });
+    const loaded = deserializeWorld(legacy);
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+
+    // One full cycle so the economy actually assesses and the population processor's bridge seeds
+    // the memory. Construction/logistics parked — noise from those stages is not this test's concern.
+    let ticked: World = loaded.world;
+    const cadence = { cycle: CYCLE_LENGTH, construction: 999_999, logistics: 999_999 };
+    for (let t = 0; t < CYCLE_LENGTH; t++) {
+      ticked = (await runWorldTick(ticked, { cadence })).world;
+    }
+    const system = ticked.systems.find((s) => s.id === systemId)!;
+
+    // Independent oracle: the SAME provision() fold the economy applied, fed the tick's OWN
+    // persisted satisfaction figures and this basis's own demand rates — not a hand-guessed number.
+    const buildingsBySystem: Record<string, number> = {};
+    for (const b of ticked.buildings) if (b.systemId === systemId) buildingsBySystem[b.buildingType] = b.count;
+    const { basis } = computeSystemLabourSnapshot(buildingsBySystem, system.population);
+    const goods = ticked.markets
+      .filter((m) => m.systemId === systemId && consumptionRate(m.goodId, basis) > 0)
+      .map((m) => ({
+        goodId: m.goodId,
+        satisfaction: m.satisfaction ?? 1,
+        demanded: consumptionRate(m.goodId, basis),
+      }));
+    const expectedProvision = provision(goods);
+
+    // Non-vacuity: the fixture actually lands where it needs to for the test to discriminate.
+    expect(expectedProvision).toBeGreaterThan(0);
+    expect(expectedProvision).toBeLessThan(EXPECTATION_PARAMS.floor);
+
+    expect(system.provisionExpectation).toBeCloseTo(expectedProvision, 6);
+    // Falsifies both named failure modes explicitly, not just via the closeness check above.
+    expect(system.provisionExpectation).not.toBeCloseTo(0, 3);
+    expect(system.provisionExpectation).not.toBeCloseTo(EXPECTATION_PARAMS.floor, 3);
+  }, 60_000);
 });

@@ -1,4 +1,4 @@
-// Shared game types — no Prisma dependency, importable everywhere
+// Shared game types — importable everywhere
 
 import type { ShipSize, ShipRole } from "@/lib/constants/ships";
 import type { EventTypeId } from "@/lib/constants/events";
@@ -211,8 +211,23 @@ export interface MigrationEntry {
   attraction: number;
 }
 
+/** Per-system Provisioned (0..1, the necessity-weighted delivered share) for the Provisioned
+ *  choropleth overlay — the same persisted `StarSystem.provision` the per-system panel reads. The
+ *  number alone: the map's fill steps at the band edges itself (`value-ramp.ts`), so a band label
+ *  would be a second copy of a classification the overlay already derives, and the band as a
+ *  *signal* (the famine punch-through) belongs to the per-system read, not the map.
+ *
+ *  A system is carried only when its assessment is complete — the service gates out one that has
+ *  never run an economy cycle, and one where only half the assessment landed, rather than returning
+ *  a hollow reading; absence renders through the existing "missing from the map = black" convention
+ *  every value mode already uses. */
+export interface ProvisionEntry {
+  systemId: string;
+  provision: number;
+}
+
 /** Per-system ownership reading for the political territory + system markers. Tick-scoped: ownership
- *  changes on the monthly claim/develop pulse, so this rides a tick-invalidated path (not the static atlas). */
+ *  changes on the claim/develop cycle start, so this rides a tick-invalidated path (not the static atlas). */
 export interface OwnershipEntry {
   systemId: string;
   factionId: string | null;

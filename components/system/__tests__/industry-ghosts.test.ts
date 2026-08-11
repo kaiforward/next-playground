@@ -11,7 +11,7 @@ function buildRow(buildingType: string, origin: "auto" | "player" = "auto"): Con
   return {
     kind: "build", id: `p-${buildingType}`, systemId: "s1", systemName: "Alpha", origin,
     buildingType, buildingLabel: buildingType, levels: 2, detail: "", progress: 0.25,
-    workDone: 5, workTotal: 20, etaPulses: 3, nextPulseGain: 2,
+    workDone: 5, workTotal: 20, etaCycles: 3, nextCycleGain: 2,
   };
 }
 
@@ -47,7 +47,8 @@ describe("classifyGhosts", () => {
     const colony: ConstructionProjectRow = {
       kind: "colony_establish", id: "c1", systemId: "s1", systemName: "Alpha", origin: "player",
       sourceSystemId: "s0", sourceSystemName: "Home", seedPop: 100, housingLevels: 1,
-      progress: 0.5, workDone: 10, workTotal: 20, etaPulses: 2, nextPulseGain: 2,
+      progress: 0.5, workDone: 10, workTotal: 20, etaCycles: 2, nextCycleGain: 2,
+      stalledReason: null, stagedFraction: 0.5,
     };
     expect(classifyGhosts([colony]).size).toBe(0);
   });

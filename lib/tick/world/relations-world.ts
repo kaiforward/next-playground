@@ -9,21 +9,17 @@
  * canonical ordering everywhere.
  */
 
-import type { Doctrine, FactionStatus, GovernmentType } from "@/lib/types/game";
+import type { Doctrine, GovernmentType } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
 
 // ── Views ────────────────────────────────────────────────────────
 
-/** Faction + derived territory size, used by the drift drivers. */
+/** Faction identity + the drift drivers' inputs (doctrine, government). */
 export interface FactionView {
   id: string;
   name: string;
   governmentType: GovernmentType;
   doctrine: Doctrine;
-  /** System count (drives status and dominance heuristics). */
-  territorySize: number;
-  /** Status derived from territorySize via `deriveFactionStatus`. */
-  status: FactionStatus;
 }
 
 /** One row from FactionRelation, with canonical pair ordering. */
@@ -119,7 +115,7 @@ export function pairKey(a: string, b: string): FactionPairKey {
 // ── The world interface ─────────────────────────────────────────
 
 export interface RelationsWorld {
-  /** All factions with derived territorySize and status. */
+  /** All factions. */
   getFactions(): Promise<FactionView[]>;
 
   /** All unordered relation rows (one per pair). */

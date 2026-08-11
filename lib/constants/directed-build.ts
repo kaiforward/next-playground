@@ -11,19 +11,27 @@ export const DIRECTED_BUILD = {
   /** Per-unit route cost of a system serving ITSELF — the cheapest positive route, so self-supply
    *  outranks export in the planner's served ÷ cost scoring. Must be 0 < SELF_COST < HOP_WEIGHT. */
   SELF_COST: 0.5,
-  /** "Fed" gate: grow housing only where supply-dissatisfaction D ≤ this (0…1). */
-  D_SETTLE: 0.15,
-  /** "Calm" gate: grow housing only where stored unrest ≤ this (0…1). */
-  UNREST_SETTLE: 0.2,
-  /** Housing is paced to keep popCap at most this fraction ahead of current population. */
-  SETTLE_MARGIN: 0.25,
+  /** Relief trigger: autonomic housing builds once occupancy r = pop/popCap rises past this. */
+  RELIEF_TRIGGER: 0.95,
+  /** Relief sizing: build enough whole levels to return r to ≈ this. Multi-level relief must land
+   *  inside the housing decay allowance — RELIEF_TARGET × (1 + VACANCY_SLACK) ≥ 1 — so the levels it
+   *  commits still read as used. Whole-level round-up drops a small site well below the target (a
+   *  1-level seed lands at r = 0.5), so that containment is a multi-level property, not a per-site one. */
+  RELIEF_TARGET: 0.92,
   /**
    * Speculative self-supply floor (§3.2): the largest fraction of a basic's LOCAL demand an
    * undeveloped system stands up locally even when imports already cover it. The live floor is
    * this × (1 − systemDevelopment), so it is strongest on a raw colony and fades to nothing as the
-   * system matures — a bounded floor, not autarky, so specialisation survives. Calibrated in PR4.
+   * system matures — a bounded floor, not autarky, so specialisation survives. Calibrated against
+   * the simulator.
    */
   SPECULATIVE_FLOOR: 0.5,
+  /** Capacity is deliberately held 10% above measured demand before it is structurally complete. */
+  PROVISION_MARGIN: 0.10,
+  /** Consecutive post-net construction assessments required before a structural build may emit. */
+  PERSISTENCE_CYCLES: 2,
+  /** Fraction of a persistent structural residual that one assessment may commit. */
+  BUILD_RATE_CAP: 0.40,
 } as const;
 
 /**

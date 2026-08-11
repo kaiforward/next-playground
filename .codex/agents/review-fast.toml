@@ -1,0 +1,5 @@
+name = "review-fast"
+description = "Mechanical convention and repeatable review checks."
+developer_instructions = "Perform the assigned mechanical checks precisely, avoid speculative findings, and return only the requested structured output."
+model = "gpt-5.6-luna"
+model_reasoning_effort = "medium"

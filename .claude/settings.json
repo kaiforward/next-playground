@@ -10,12 +10,13 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "node .claude/hooks/pre-commit-check.mjs",
-            "timeout": 300000
+            "command": "bash .claude/hooks/guard-commit-branch.sh",
+            "timeout": 10,
+            "statusMessage": "Checking commit branch"
           }
         ]
       }

@@ -10,7 +10,6 @@
  */
 
 import type { ModifierRow, ModifierCaps } from "@/lib/engine/events";
-import type { GovernmentType } from "@/lib/types/game";
 import type { EconomySimParams } from "@/lib/engine/tick";
 import type { StrikeParams } from "@/lib/engine/population";
 
@@ -28,17 +27,21 @@ export interface MarketView {
   regionId: string;
   goodId: string;
   stock: number;
-  /** Government of the system's owning faction — read per-market. */
-  governmentType: GovernmentType;
-  /** Base production rate for this good, if any. */
+  /** Base production rate for this good. `undefined` means no built producer;
+   *  `0` means built capacity is currently unable to produce due to staffing/skills. */
   baseProductionRate?: number;
   /** Base consumption rate for this good, if any. */
   baseConsumptionRate?: number;
   /** Stored local demand rate, read from `WorldMarket.demandRate`: civilian + industrial draw, the
-   *  days-of-supply pricing denominator (see that field's doc — not the civilian-only footprint). */
+   *  cycles-of-supply pricing denominator (see that field's doc — not the civilian-only footprint). */
   demandRate: number;
+  /** THE USE FIGURE — the brake knee's warehousing denominator. The adapter resolves it from the
+   *  persisted `WorldMarket.honestUseRate`, live-recomputing (never 0) where a legacy row lacks it. */
+  honestUseRate: number;
   /** Built infrastructure storage capacity from the station market row. */
   storageCapacity: number;
+  /** Reference-cycles the previous rationed economy streak had persisted (finite, [0,2]); missing reads as 0. */
+  squeezeCycles?: number;
 }
 
 /** Result of one market simulation step — written back via applyMarketUpdates. */
@@ -47,6 +50,20 @@ export interface MarketUpdate {
   stock: number;
   /** Active pricing-anchor multiplier from event modifiers (1 = none). */
   anchorMult: number;
+  /** Consumption satisfaction actually applied this cycle (delivered ÷ demanded; 1 for non-consumers). */
+  satisfaction: number;
+  /** Realized output normalized to the reference economy interval. */
+  realizedProductionRate: number;
+  /** Whether strike or maintenance reduced production during this assessment. */
+  productionSuppressed: boolean;
+  /** The system's strike × maintenance production scalar this assessment, ∈ (0,1] — the same value on
+   *  every row the system owns, unlike the per-market `productionSuppressed` bool above. */
+  productionSuppressRate: number;
+  /** Aggregated event production multiplier applied this assessment (1 = none). */
+  productionMult: number;
+  /** Reference-cycles a rationed economy assessment has persisted — a finite value in [0,2] advanced per
+   *  assessment by the economy interval's catchUpFactor (2 = two reference cycles). */
+  squeezeCycles: number;
 }
 
 export interface EconomyWorld {
@@ -74,7 +91,7 @@ export interface EconomyWorld {
 export interface EconomyProcessorParams {
   /** Ticks for the shard to refresh every system once (fixed gameplay cadence). */
   interval: number;
-  /** Economy simulation params (production operating-ceiling cover). */
+  /** Economy simulation params (brake-knee covers + ration cover). */
   simParams: EconomySimParams;
   /** Caps applied when aggregating event modifiers per market. */
   modifierCaps: ModifierCaps;

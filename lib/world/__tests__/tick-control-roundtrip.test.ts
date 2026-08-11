@@ -8,7 +8,7 @@ describe("runWorldTick: control round-trips", () => {
     const before = new Map(world.systems.map((s) => [s.id, `${s.control}:${s.factionId ?? "-"}`]));
     const next = (await runWorldTick(world)).world;
     for (const s of next.systems) {
-      // Nothing claims on tick 1 (off the monthly pulse); ownership is unchanged.
+      // Nothing claims on tick 1 (mid-cycle); ownership is unchanged.
       expect(`${s.control}:${s.factionId ?? "-"}`).toBe(before.get(s.id));
     }
   });

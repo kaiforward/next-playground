@@ -16,7 +16,7 @@ scaled by a five-step **tax level** whose cost is unrest. It drains through thre
 **construction**. Money is *fuel*, not capacity: the physical pools (eligible heads + Construction
 Centres, the logistics work-budget) remain the ceilings, and a band's funding level sets what
 fraction of that physical throughput actually runs. Wealth can never buy past the physical ceiling
-— only up to it. The treasury settles **once per month** (collect, then pay in a fixed priority
+— only up to it. The treasury settles **once per cycle** (collect, then pay in a fixed priority
 ladder: maintenance → logistics → construction); when income falls short, growth stalls before
 stock rots, and there is no debt.
 
@@ -33,7 +33,7 @@ everything else activates or starves mechanics that already existed.
   JSON-serializable throughout — the funded-fraction math guards against 0-bills (see
   Settlement).
 - Income and expenses are **itemised line items** from day one (income: heads tax, production tax;
-  expenses: maintenance by building type, logistics, construction), with the last settlement's
+  expenses: maintenance by building type, logistics, construction, founding), with the last settlement's
   itemised snapshot persisted so UI reads don't recompute transients. Itemisation is the extension
   mechanism: every later money mechanic (spot-price tax line, wages, claim costs) is a new line,
   never a redesign.
@@ -61,8 +61,8 @@ Responsive and industrial: an input-starved factory produces less and taxes less
 tracks what the economy actually *does* — richer than heads alone.
 
 - **The slice's one real economy touch:** the economy sim exports realized output per
-  (system, good) per pulse, and the treasury persists the last settlement's snapshot (the
-  itemised UI line needs it between pulses anyway). Realized — not *capacity* (no input gate) —
+  (system, good) per cycle, and the treasury persists the last settlement's snapshot (the
+  itemised UI line needs it between cycles anyway). Realized — not *capacity* (no input gate) —
   because capacity would not sag under starvation and would re-create the famine-windfall
   perversity this design exists to avoid.
 - **Reference-value calibration must be value-added-aware**: taxing every good at full reference
@@ -109,10 +109,10 @@ Laffer curve using existing machinery. AI factions get **government**-flavoured 
 
 ## Budget bands (spending)
 
-Three bands, each an EU5-style 0–100% funding slider against that band's *bill* — the monthly
+Three bands, each an EU5-style 0–100% funding slider against that band's *bill* — the per-cycle
 price tag of running that band's activity at 100%. **Bills charge work performed, not standing
 capacity**: construction's bill scales with the pool actually absorbed by the build queue (an
-empty queue costs nothing that month — the pool primitive is essentially the whole non-skilled
+empty queue costs nothing that cycle — the pool primitive is essentially the whole non-skilled
 population, so billing standing capacity would charge near-population wages for idle potential);
 logistics' bill scales with the work-budget actually consumed by transfers. The standing-cost job
 belongs to maintenance, which scales with built stock. Bills accrue catchUp-scaled (interval
@@ -158,21 +158,21 @@ which is what makes the slider a *usable* budget lever rather than a self-harm d
 
 ## Settlement (cadence, ladder, deficit)
 
-The month pulse (`MONTH_LENGTH`), the construction pulse (`CONSTRUCTION_INTERVAL`), and the
-logistics pulse (`LOGISTICS_INTERVAL`) are three independent knobs (all 24 ticks today). The
-treasury does not follow the bands' pulses: it settles **once per month**, in one resolution —
-otherwise an off-cycle band pulse could drain the treasury out of ladder order under a future
-cadence retune.
+The economy cycle (`CYCLE_LENGTH`), the construction cycle (`CONSTRUCTION_INTERVAL`), and the
+logistics cycle (`LOGISTICS_INTERVAL`) are three independent knobs (all 24 ticks today). The
+treasury does not follow the bands' cycles: it settles **once per economy cycle**, in one
+resolution — otherwise a band resolving mid-cycle could drain the treasury out of ladder order
+under a future cadence retune.
 
-- **Collect, then spend, within the same settlement.** Income (both lines, from the month just
+- **Collect, then spend, within the same settlement.** Income (both lines, from the cycle just
   produced) enters first; bills are then paid in the fixed priority ladder **maintenance →
   logistics → construction**. Flow-vs-stock decides the order: construction stalling is fully
   recoverable (the queue waits), unpaid maintenance compounds. The ladder is fixed, not
   player-orderable — sliders set priorities in normal times; the ladder is only the emergency
   order, and it gives AI factions sane crisis behaviour for free.
-- **Funded fractions latch for the following month.** Each band's paid-fraction from this
-  settlement is what its pulse(s) use next month. This is a deliberate one-month lag (the malus
-  applied during a month uses last settlement's funding) — the same funding-off-month-start shape
+- **Funded fractions latch for the following cycle.** Each band's paid-fraction from this
+  settlement is what its cycle(s) use next cycle. This is a deliberate one-cycle lag (the malus
+  applied during a cycle uses last settlement's funding) — the same funding-off-cycle-start shape
   already analysed and accepted for construction; the lever for responsiveness, if ever needed, is
   a finer economy cadence, not settlement reordering.
 - **The paid fraction is the effective funding level** — a band shorted by the ladder behaves
@@ -181,6 +181,12 @@ cadence retune.
   insolvency only, never by nudging a slider. **Zero-bill guard:** when a band's bill is 0 (empty
   construction queue, no transfers), effective funding = the slider value — never 0/0 (NaN is a
   save-corrupting hazard).
+- **Founding is taken off the top, outside the bands.** Colony charter fees and staged founding materials
+  accrue into `pendingFounding` during the cycle and leave the balance **before** the ladder runs, so
+  committing to a colony competes with paying the bills rather than claiming the remainder. They settle as
+  their own `foundingExpense` field — deliberately not a fourth band, which would corrupt the three-field
+  type the sliders, the bills and the latched funded fractions all share. Directed build commits against
+  `balance − pendingFounding`, so the subtraction cannot legitimately go negative.
 - **No debt.** Balance clamps at ≥ 0.
 - **Queue staleness (accepted, noted):** a long-starved construction band's auto-build rows
   persist unfunded; when funding returns the queue thaws in stale ROI order. Broadly "the queue
@@ -189,7 +195,7 @@ cadence retune.
 ## Initial state
 
 Treasuries start at **zero** — no seeded windfall (no magic numbers). Collect-then-spend means
-month one's income pays month one's bills, so a solvent start is a *calibration outcome* (tax
+cycle one's income pays cycle one's bills, so a solvent start is a *calibration outcome* (tax
 rates vs bill rates), not a handout. The harness watches early-game solvency explicitly — the
 opening eras (including the pre-logistics warm-up) must not stall by bookkeeping accident; if they
 do, tune rates. If calibration shows minimal starting help is genuinely warranted, the balance is
@@ -227,11 +233,13 @@ calibration harness, across the full faction roster (majors + minors). Per-facti
 ## UI surfaces
 
 - **Faction panel — treasury card** (`components/factions/treasury-card.tsx`): single-column
-  ledger — balance + net/month at top, itemised income (heads line, production line), itemised
-  expenses with a **collapsible maintenance by-type breakdown (default collapsed)**, then the
+  ledger — balance + net/cycle at top, itemised income (heads line, production line), itemised
+  expenses with a **collapsible maintenance by-type breakdown (default collapsed)** and a **Founding**
+  row for the settlement's colony charters and staged materials, then the
   three band-funding rows and the 5-segment tax-level stepper. Ledger expense amounts are money
   actually **paid** last settlement; the maintenance breakdown itemises the **bill's** composition
-  by building type. Each band row shows **set vs runs**: the slider thumb is the player's set
+  by building type. `net` subtracts founding alongside the three paid bands — it is a real expense that
+  never passes through a band, and a `net` that ignored it would be wrong, not merely incomplete. Each band row shows **set vs runs**: the slider thumb is the player's set
   fraction; the copper fill is last settlement's latched paid fraction ("runs"), with an explicit
   "— shorted" tag when the ladder diverges them and a hatched zone marking maintenance's
   un-slidable 50% floor (drags into it pin at the floor). The card renders on **every** faction's

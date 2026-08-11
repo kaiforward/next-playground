@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   valueRampColorPixi, rampFloorPixi, rampTopPixi, ABSENT_COLOR, rampCssStops, ABSENT_CSS, deEmphasize,
+  provisionLegendStops,
 } from "@/components/map/pixi/value-ramp";
+import { SUPPLIED_PROVISION, RATIONING_PROVISION, DEPRIVED_PROVISION } from "@/lib/constants/economy";
 
 function channels(color: number): [number, number, number] {
   return [(color >> 16) & 0xff, (color >> 8) & 0xff, color & 0xff];
@@ -84,6 +86,89 @@ describe("rampCssStops / ABSENT_CSS — the legend's single source", () => {
   });
   it("exposes the reserved absent colour as a hex string", () => {
     expect(ABSENT_CSS).toBe("#08090c");
+  });
+});
+
+describe("provision — stepped fill at the band edges, not a continuous ramp", () => {
+  it("two values well inside one band render the same colour", () => {
+    // Supplied (>= 0.9) is the one band where stepped and continuous agree by construction: it sits
+    // at/above the top stop, where sample() clamps. So this pair documents the property but cannot
+    // discriminate — the two below are what actually fail if the stepping is lost.
+    expect(valueRampColorPixi(0.92, 1, "provision")).toBe(valueRampColorPixi(0.99, 1, "provision"));
+    // Far apart WITHIN the Strained band [0.7, 0.9).
+    expect(valueRampColorPixi(0.72, 1, "provision")).toBe(valueRampColorPixi(0.88, 1, "provision"));
+    // Far apart WITHIN the Rationing band [0.5, 0.7).
+    expect(valueRampColorPixi(0.52, 1, "provision")).toBe(valueRampColorPixi(0.68, 1, "provision"));
+    // Far apart WITHIN the Deprived band [0, 0.5).
+    expect(valueRampColorPixi(0.02, 1, "provision")).toBe(valueRampColorPixi(0.45, 1, "provision"));
+  });
+  it("two values either side of a band edge render different colours", () => {
+    expect(valueRampColorPixi(DEPRIVED_PROVISION - 0.01, 1, "provision"))
+      .not.toBe(valueRampColorPixi(DEPRIVED_PROVISION + 0.01, 1, "provision"));
+    expect(valueRampColorPixi(RATIONING_PROVISION - 0.01, 1, "provision"))
+      .not.toBe(valueRampColorPixi(RATIONING_PROVISION + 0.01, 1, "provision"));
+    expect(valueRampColorPixi(SUPPLIED_PROVISION - 0.01, 1, "provision"))
+      .not.toBe(valueRampColorPixi(SUPPLIED_PROVISION + 0.01, 1, "provision"));
+  });
+  it("an edge value itself belongs to the higher band (inclusive low edge, matching the classifier)", () => {
+    expect(valueRampColorPixi(DEPRIVED_PROVISION, 1, "provision")).toBe(valueRampColorPixi(0.68, 1, "provision"));
+    expect(valueRampColorPixi(RATIONING_PROVISION, 1, "provision")).toBe(valueRampColorPixi(0.88, 1, "provision"));
+    // Same caveat as above — the Supplied pair documents inclusivity but clamps under either path;
+    // the two edge assertions on the lines above are the ones that fail if an edge moves.
+    expect(valueRampColorPixi(SUPPLIED_PROVISION, 1, "provision")).toBe(valueRampColorPixi(0.99, 1, "provision"));
+  });
+  it("paints the Deprived band its own colour, distinct from every band above it", () => {
+    // The point of the split: one 70%-wide bin painted a world at 65% and a world at 5% identically.
+    // A ramp that dropped the fourth step would read the same colour at 0.05 as at 0.65.
+    const deprived = valueRampColorPixi(0.05, 1, "provision");
+    const rationing = valueRampColorPixi(0.65, 1, "provision");
+    const strained = valueRampColorPixi(0.8, 1, "provision");
+    const supplied = valueRampColorPixi(0.95, 1, "provision");
+    expect(new Set([deprived, rationing, strained, supplied]).size).toBe(4);
+  });
+  it("a literal 0% Provisioned still rides the low band, never ABSENT_COLOR — absence is a missing field here, not a zero value", () => {
+    expect(valueRampColorPixi(0, 1, "provision")).not.toBe(ABSENT_COLOR);
+  });
+  it("ignores referenceMax entirely — band edges are absolute percentages, never re-scaled to a scope max", () => {
+    // 0.95 sits in the Supplied band raw. A referenceMax of 2 would normalise it to 0.475 — the
+    // Rationing band, a DIFFERENT colour — if provision were re-scaling like the continuous modes.
+    // Picking a referenceMax that actually crosses a band edge is the point: a referenceMax that
+    // stays inside the same post-division band (e.g. 1 vs 1000 on a low value) would pass this
+    // assertion even with re-scaling left in, by coincidence.
+    const atSmallScope = valueRampColorPixi(0.95, 1, "provision");
+    const atLargeScope = valueRampColorPixi(0.95, 2, "provision");
+    expect(atSmallScope).toBe(atLargeScope);
+    // Contrast: a continuous mode's colour DOES move the same way — this is the exemption
+    // provision is being pinned against, not a universal property of valueRampColorPixi.
+    expect(valueRampColorPixi(0.95, 1, "population")).not.toBe(valueRampColorPixi(0.95, 2, "population"));
+  });
+});
+
+describe("provisionLegendStops — stepped legend carries stop POSITIONS, not evenly spaced", () => {
+  it("positions sit at the real band edges (0, DEPRIVED_, RATIONING_, SUPPLIED_PROVISION), not even quarters", () => {
+    const stops = provisionLegendStops();
+    expect(stops.map((s) => s.position))
+      .toEqual([0, DEPRIVED_PROVISION, RATIONING_PROVISION, SUPPLIED_PROVISION]);
+    // The failure a position-discarding helper would produce: even spacing at 0, 1/4, 1/2, 3/4.
+    expect(stops.map((s) => s.position)).not.toEqual([0, 0.25, 0.5, 0.75]);
+  });
+  it("returns one rgb() css colour per band, low to high, and no two bands share one", () => {
+    const stops = provisionLegendStops();
+    expect(stops).toHaveLength(4);
+    for (const s of stops) expect(s.css).toMatch(/^rgb\(/);
+    // The legend must show as many states as the fill paints — a duplicated swatch would read as
+    // three bands on a four-band choropleth.
+    expect(new Set(stops.map((s) => s.css)).size).toBe(4);
+  });
+  it("every legend swatch is the colour the fill paints inside that band — the legend cannot drift from the cells", () => {
+    // provisionLegendStops and valueRampColorPixi read the same PROVISION_BANDS table today; this is
+    // what fails if either grows its own copy. Sampled strictly inside each band, not on the edges.
+    const insideEachBand = [0.05, 0.6, 0.8, 0.95];
+    const stops = provisionLegendStops();
+    for (const [i, value] of insideEachBand.entries()) {
+      const [r, g, b] = [16, 8, 0].map((shift) => (valueRampColorPixi(value, 1, "provision") >> shift) & 0xff);
+      expect(stops[i].css, `band ${i} @ ${value}`).toBe(`rgb(${r}, ${g}, ${b})`);
+    }
   });
 });
 

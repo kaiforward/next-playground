@@ -8,10 +8,11 @@ import { getWorld, hasWorld } from "@/lib/world/store";
 import { ServiceError } from "@/lib/services/errors";
 import { computeBuildOptions } from "@/lib/engine/build-options";
 import {
-  factionConstructionPool, forecastIndependentEtaPulses, orderOpenProjects,
+  factionConstructionPool, forecastIndependentEtaCycles, orderOpenProjects,
 } from "@/lib/engine/construction";
-import { buildingLabel } from "@/lib/engine/construction-readout";
+import { buildingLabel, foundingCeilings } from "@/lib/engine/construction-readout";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
+import { foundingReadoutInputs } from "@/lib/services/construction";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
@@ -43,6 +44,7 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
         preview: {
           sourceSystemId: check.sourceSystemId, sourceSystemName: sourceName,
           seedPop: sizing.seedPop, housingLevels: sizing.housingLevels, work: sizing.work,
+          charter: check.charter, projectedBill: check.projectedBill,
         },
       },
     };
@@ -86,7 +88,7 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
   // Queue-aware ETA: a 1-level order placed NOW joins the queue behind everything committed (it is
   // a fresh player row). Each open option's hypothetical is independent of the others (it answers
   // "what if I ordered just this one"), but they all share the same committed prefix, so one
-  // `forecastIndependentEtaPulses` call simulates that prefix once instead of once per option —
+  // `forecastIndependentEtaCycles` call simulates that prefix once instead of once per option —
   // see the function's own doc comment for why the hypotheticals don't compete with each other.
   const pool = factionConstructionPool(
     world.systems
@@ -106,13 +108,28 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
       buildingType: o.buildingType, levels: 1, workTotal: o.workPerLevel, workDone: 0,
     });
   });
-  const etas = hypotheticals.length > 0
-    ? forecastIndependentEtaPulses(factionProjects, hypotheticals, pool, cap)
-    : [];
+  // The committed prefix drains under the same per-project ceilings the tick funds it with: a colony
+  // whose materials the treasury cannot buy absorbs less than the cap, and what it leaves reaches the
+  // order the player is pricing. Forecasting it at the scalar cap would have a gated colony eat pool
+  // it was never going to take, and every ETA quoted here would read late. Derived only when there
+  // is an option to price: the inputs walk the faction's treasury and every source's markets, and
+  // this is a per-page-view read path.
+  const etas = (() => {
+    if (hypotheticals.length === 0) return [];
+    const ceilings = foundingCeilings(
+      factionProjects,
+      foundingReadoutInputs(world, factionId, factionProjects, buildings),
+      cap,
+    );
+    return forecastIndependentEtaCycles(
+      factionProjects, hypotheticals, pool, cap, undefined,
+      (p) => ceilings.get(p.id) ?? cap,
+    );
+  })();
   const etaByOptionIndex = new Map(openIndices.map((optionIndex, k) => [optionIndex, etas[k]]));
 
   const decorated: BuildOptionData[] = options.map((o, i) => ({
-    ...o, label: buildingLabel(o.buildingType), etaPulses: etaByOptionIndex.get(i) ?? null,
+    ...o, label: buildingLabel(o.buildingType), etaCycles: etaByOptionIndex.get(i) ?? null,
   }));
 
   return { mode: "build", options: decorated };

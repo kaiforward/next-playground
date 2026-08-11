@@ -20,16 +20,22 @@ export interface TreasuryWorld {
 
 /** Per-tick params sourced by `runWorldTick`. */
 export interface TreasuryProcessorParams {
-  /** Settlement cadence — the month pulse. */
+  /** Settlement cadence — the economy cycle length in ticks (settles on its cycle start). */
   interval: number;
   /** ECONOMY_SCALE, for normalising S-scaled tax bases at collection. */
   economyScale: number;
-  /** Construction points absorbed per faction this tick (directed-build's export). Empty map off-pulse. */
+  /** Construction points absorbed per faction this tick (directed-build's export). Empty map mid-cycle. */
   constructionWorkByFaction: ReadonlyMap<string, number>;
-  /** Logistics work-budget consumed per faction this tick (raw, S-scaled). Empty map off-pulse. */
+  /** Logistics work-budget consumed per faction this tick (raw, S-scaled). Empty map mid-cycle. */
   logisticsWorkByFaction: ReadonlyMap<string, number>;
+  /**
+   * Founding money committed per faction this tick — charter fees and staged materials, already
+   * valued in money (directed-build's export). A settlement input, not instrumentation: it is
+   * charged off the top at the next settlement, ahead of the funding ladder.
+   */
+  foundingDebitsByFaction: ReadonlyMap<string, number>;
   rates: {
-    headsTaxPerMonth: number;
+    headsTaxPerCycle: number;
     headsWeights: { unskilled: number; technicians: number; engineers: number };
     productionTaxRate: number;
     referenceValues: Record<string, number>;

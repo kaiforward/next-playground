@@ -81,7 +81,8 @@ describe("spawnEvent", () => {
 
 describe("resetEconomy", () => {
   it("reseeds market stock to getInitialStock and resets anchorMult, clearing events/modifiers", () => {
-    const system = world.systems[0];
+    // A settled system — only those have market rows to reseed.
+    const system = world.systems.find((s) => s.control === "developed")!;
 
     // Mutate one market row for this system away from its seeded values.
     const targetGoodId = world.markets.find((m) => m.systemId === system.id)!.goodId;

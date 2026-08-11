@@ -1,9 +1,15 @@
 /**
- * Runtime type guards for Prisma boundary values.
+ * Runtime type guards for untrusted boundary values.
  *
- * Prisma stores union-typed fields as plain strings. These guards validate
- * at the DB boundary so downstream code can use the proper union types
- * without unsafe `as` casts.
+ * API `JSON.parse` hands back union-typed fields as plain strings; these guards narrow them
+ * once at that boundary so downstream code can use the proper union types without unsafe `as`
+ * casts (see `lib/services/dev-tools.ts` and the Zod enums in `lib/schemas/game-setup.ts`).
+ *
+ * Save-file loads deliberately do NOT come through here: `deserializeWorld`
+ * (`lib/world/save.ts`) runs its own `isWorldShaped` spot-check over `formatVersion` and the
+ * numeric `meta` fields, and trusts the rest — pre-1.0 saves are local files, not untrusted
+ * network input. A loaded save's union-typed fields are therefore compile-time assertions, not
+ * runtime-checked; if that ever needs to change, it is these guards that would do it.
  */
 
 import type {

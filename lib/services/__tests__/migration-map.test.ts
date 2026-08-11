@@ -70,7 +70,7 @@ describe("getMigrationBySystem", () => {
     });
     const buildings: WorldBuilding[] = [
       ...world.buildings.filter((b) => b.systemId !== attractiveId && b.systemId !== repulsiveId),
-      { systemId: attractiveId, buildingType: "vocational_school", count: 5, idleMonths: 0 },
+      { systemId: attractiveId, buildingType: "vocational_school", count: 5, idleCycles: 0 },
     ];
     setWorld({ ...world, systems, buildings });
 

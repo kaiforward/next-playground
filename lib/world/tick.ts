@@ -14,10 +14,10 @@
  * directed-logistics and directed-build each performed this tick.
  *
  * Only ship-arrivals and events run every tick. Everything from economy to
- * directed-build resolves on the monthly pulse (`isPulseTick`), and its setup is
+ * directed-build resolves on the cycle start (`isCycleStart`), and its setup is
  * gated on that same predicate rather than built and discarded — the bodies bail
  * internally too, so the gate is an optimisation, not the rule. Treasury settles
- * on the same monthly pulse but also runs off-pulse to accrue work performed by
+ * on the same cycle start but also runs mid-cycle to accrue work performed by
  * directed-logistics/directed-build's own (finer) cadences. Relations keeps its
  * own `RELATIONS_FREQUENCY` cadence.
  *
@@ -38,11 +38,12 @@
 
 import { mulberry32, type RNG } from "@/lib/engine/universe-gen";
 import { scaleEventCaps, EVENT_SPAWN_INTERVAL, RELATIONS_EVENT_TYPES } from "@/lib/constants/events";
-import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
+import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
-import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
+import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, EXPECTATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
+import { MIN_DEMAND } from "@/lib/constants/market-economy";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
-import { MONTH_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
+import { CYCLE_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
@@ -62,19 +63,21 @@ import { TREASURY, REFERENCE_VALUE, TAX_LEVEL_UNREST_PRESSURE } from "@/lib/cons
 import { maintenanceOutputMalus, maintenanceBufferScale } from "@/lib/engine/treasury";
 import { buildOpenEdges } from "@/lib/tick/world/trade-flow-topology";
 import type { EdgeView } from "@/lib/tick/world/trade-flow-topology";
-import type { RouteCost } from "@/lib/engine/directed-logistics";
+import type { ReachableSystemIds, RouteCost } from "@/lib/engine/directed-logistics";
 import type { EventDefinition, EventPhaseDefinition, EventTypeId } from "@/lib/constants/events";
 import { buildModifiersForPhase } from "@/lib/engine/events";
 import type { GovernmentType } from "@/lib/types/game";
 
 import { runShipArrivalsProcessor } from "@/lib/tick/processors/ship-arrivals";
 import { runEventsProcessor } from "@/lib/tick/processors/events";
-import { runEconomyProcessor, economyOffPulsePayload } from "@/lib/tick/processors/economy";
+import { runEconomyProcessor, economyMidCyclePayload } from "@/lib/tick/processors/economy";
 import { runInfrastructureDecayProcessor } from "@/lib/tick/processors/infrastructure-decay";
 import { runPopulationProcessor } from "@/lib/tick/processors/population";
 import { runMigrationProcessor } from "@/lib/tick/processors/migration";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
+import type { DrawBrakeCeiling } from "@/lib/tick/processors/good-market-state";
 import { runDirectedBuildProcessor } from "@/lib/tick/processors/directed-build";
+import { createSystemMarkets } from "@/lib/world/markets";
 import { runRelationsProcessor } from "@/lib/tick/processors/relations";
 import { runTreasuryProcessor } from "@/lib/tick/processors/treasury";
 
@@ -90,12 +93,14 @@ import { InMemoryRelationsWorld } from "@/lib/tick/adapters/memory/relations";
 import { InMemoryTreasuryWorld } from "@/lib/tick/adapters/memory/treasury";
 
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
-import { isPulseTick } from "@/lib/tick/shard";
+import { referenceMaintenanceBill } from "@/lib/engine/founding-cost";
+import { isCycleStart } from "@/lib/tick/shard";
 import type {
   TickContext,
   TickBroadcastRaw,
   GlobalEventMap,
   EconomySignals,
+  TickInstrumentation,
 } from "@/lib/tick/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
@@ -104,6 +109,7 @@ import type {
   BuildBuildingUpdate,
   SystemClaim,
   SystemDevelopment,
+  FoundingStagingDraw,
 } from "@/lib/tick/world/directed-build-world";
 
 import type {
@@ -113,6 +119,7 @@ import type {
 import type {
   World,
   WorldBuilding,
+  WorldConstructionProject,
   WorldEvent,
   WorldEventMetadata,
   WorldEventModifier,
@@ -159,22 +166,21 @@ export function toTickSystems(world: World): TickSystem[] {
     world.factions.map((f) => [f.id, f.governmentType]),
   );
 
-  // One pass over the flat building rows builds each system's roster: the count plus the two
-  // decay-counter records (idle countdown, unrest-collapse debt), keyed together so a system is
-  // resolved with a single map lookup.
+  // One pass over the flat building rows builds each system's roster: the count plus the per-type
+  // idle countdown, keyed together so a system is resolved with a single map lookup. The
+  // unrest-collapse debt is per system, not per type, and rides the system row instead.
   const rosterBySystem = new Map<
     string,
-    { counts: Record<string, number>; idleMonths: Record<string, number>; collapseDebt: Record<string, number> }
+    { counts: Record<string, number>; idleCycles: Record<string, number> }
   >();
   for (const b of world.buildings) {
     let roster = rosterBySystem.get(b.systemId);
     if (!roster) {
-      roster = { counts: {}, idleMonths: {}, collapseDebt: {} };
+      roster = { counts: {}, idleCycles: {} };
       rosterBySystem.set(b.systemId, roster);
     }
     roster.counts[b.buildingType] = b.count;
-    roster.idleMonths[b.buildingType] = b.idleMonths;
-    roster.collapseDebt[b.buildingType] = b.collapseDebt ?? 0;
+    roster.idleCycles[b.buildingType] = b.idleCycles;
   }
 
   return world.systems.map((s) => {
@@ -195,8 +201,19 @@ export function toTickSystems(world: World): TickSystem[] {
       popCap: s.popCap,
       unrest: s.unrest,
       buildings: roster?.counts ?? {},
-      buildingIdleMonths: roster?.idleMonths ?? {},
-      buildingCollapseDebt: roster?.collapseDebt ?? {},
+      buildingIdleCycles: roster?.idleCycles ?? {},
+      collapseDebt: s.collapseDebt ?? 0,
+      // Deliberately NOT `?? 0` (contrast collapseDebt just above): absence is the lazy-seed marker
+      // `readExpectation` (lib/engine/expectation.ts) relies on to seed from this cycle's Provision.
+      // Coercing it here would make an old save — or any system never yet touched — read as
+      // "remembers 0" (the floor) instead of "never measured", silently defeating the seed.
+      provisionExpectation: s.provisionExpectation,
+      // Same pass-through-uncoerced treatment as provisionExpectation just above: a fresh
+      // per-cycle reading, so there is no "seed" concern, but absence must still mean "never
+      // assessed" rather than becoming a coerced 0/"supplied" default (lib/world/types.ts).
+      provision: s.provision,
+      supplyBand: s.supplyBand,
+      criticalWeight: s.criticalWeight,
       yields: resourceVectorFromColumns(
         {
           yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -229,14 +246,31 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     if (!tickSystem) return s;
     // factionId + control propagate so the claim/develop expansion steps persist; for every
     // unchanged system they equal the original.
-    return {
+    const merged: WorldSystem = {
       ...s,
       factionId: tickSystem.factionId,
       control: tickSystem.control,
       population: tickSystem.population,
       popCap: tickSystem.popCap,
       unrest: tickSystem.unrest,
+      collapseDebt: tickSystem.collapseDebt,
     };
+    // Written via delete/assign rather than `provisionExpectation: tickSystem.provisionExpectation`
+    // in the object literal above: the latter would leave the KEY present with value `undefined`
+    // for a never-seeded system (JSON.stringify drops it either way, but the in-memory row would
+    // then differ from a system that never had the key at all — see the join's departure from the
+    // collapseDebt precedent above for why that absence must stay a true absence).
+    if (tickSystem.provisionExpectation === undefined) delete merged.provisionExpectation;
+    else merged.provisionExpectation = tickSystem.provisionExpectation;
+    // Same delete/assign treatment, same reason: a true absence (never assessed) must not become
+    // a present key holding `undefined`.
+    if (tickSystem.provision === undefined) delete merged.provision;
+    else merged.provision = tickSystem.provision;
+    if (tickSystem.supplyBand === undefined) delete merged.supplyBand;
+    else merged.supplyBand = tickSystem.supplyBand;
+    if (tickSystem.criticalWeight === undefined) delete merged.criticalWeight;
+    else merged.criticalWeight = tickSystem.criticalWeight;
+    return merged;
   });
 }
 
@@ -250,8 +284,7 @@ function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
           systemId: s.id,
           buildingType,
           count,
-          idleMonths: s.buildingIdleMonths[buildingType] ?? 0,
-          collapseDebt: s.buildingCollapseDebt[buildingType] ?? 0,
+          idleCycles: s.buildingIdleCycles[buildingType] ?? 0,
         });
       }
     }
@@ -262,7 +295,7 @@ function flattenBuildings(tickSystems: TickSystem[]): WorldBuilding[] {
 // ── Directed-logistics / directed-build row builders (per-system rows the
 // two planners share) ───────────────────────────────────────────
 
-function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLogistics[]> {
+export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLogistics[]> {
   const bySystem = new Map<string, MarketRowForLogistics[]>();
   for (const m of markets) {
     const row: MarketRowForLogistics = {
@@ -271,7 +304,16 @@ function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRowForLog
       stock: m.stock,
       anchorMult: m.anchorMult,
       demandRate: m.demandRate,
+      honestUseRate: m.honestUseRate,
       storageCapacity: m.storageCapacity,
+      satisfaction: m.satisfaction,
+      realizedProductionRate: m.realizedProductionRate,
+      productionSuppressed: m.productionSuppressed,
+      productionSuppressRate: m.productionSuppressRate,
+      productionMult: m.productionMult,
+      squeezeCycles: m.squeezeCycles,
+      proposalCycles: m.proposalCycles,
+      logisticsFundingBound: m.logisticsFundingBound,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -303,7 +345,6 @@ function buildBuildRows(
     factionId: s.factionId,
     control: s.control,
     population: s.population,
-    unrest: s.unrest,
     buildings: s.buildings,
     yields: s.yields,
     slotCap: s.slotCap,
@@ -313,11 +354,22 @@ function buildBuildRows(
   }));
 }
 
-function applyStockUpdates(markets: WorldMarket[], updates: Map<string, number>): WorldMarket[] {
-  if (updates.size === 0) return markets;
+function applyLogisticsMarketUpdates(
+  markets: WorldMarket[],
+  stockUpdates: Map<string, number>,
+  fundingBoundUpdates: Map<string, boolean>,
+): WorldMarket[] {
+  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0) return markets;
   return markets.map((m) => {
-    const newStock = updates.get(`${m.systemId}|${m.goodId}`);
-    return newStock !== undefined ? { ...m, stock: newStock } : m;
+    const id = `${m.systemId}|${m.goodId}`;
+    const newStock = stockUpdates.get(id);
+    const logisticsFundingBound = fundingBoundUpdates.get(id);
+    if (newStock === undefined && logisticsFundingBound === undefined) return m;
+    return {
+      ...m,
+      stock: newStock ?? m.stock,
+      logisticsFundingBound: logisticsFundingBound ?? m.logisticsFundingBound,
+    };
   });
 }
 
@@ -328,13 +380,17 @@ function applyStockUpdates(markets: WorldMarket[], updates: Map<string, number>)
  * row's `id`); only the handful of touched systems get a new row array —
  * every other system's array is reused by reference.
  */
-function patchMarketRowStocks(
+function patchLogisticsMarketRows(
   bySystem: Map<string, MarketRowForLogistics[]>,
-  updates: Map<string, number>,
+  stockUpdates: Map<string, number>,
+  fundingBoundUpdates: Map<string, boolean>,
 ): Map<string, MarketRowForLogistics[]> {
-  if (updates.size === 0) return bySystem;
+  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0) return bySystem;
   const touchedSystems = new Set<string>();
-  for (const key of updates.keys()) {
+  for (const key of stockUpdates.keys()) {
+    touchedSystems.add(key.slice(0, key.indexOf("|")));
+  }
+  for (const key of fundingBoundUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   const patched = new Map(bySystem);
@@ -344,12 +400,39 @@ function patchMarketRowStocks(
     patched.set(
       systemId,
       rows.map((r) => {
-        const newStock = updates.get(r.id);
-        return newStock !== undefined ? { ...r, stock: newStock } : r;
+        const newStock = stockUpdates.get(r.id);
+        const logisticsFundingBound = fundingBoundUpdates.get(r.id);
+        if (newStock === undefined && logisticsFundingBound === undefined) return r;
+        return {
+          ...r,
+          stock: newStock ?? r.stock,
+          logisticsFundingBound: logisticsFundingBound ?? r.logisticsFundingBound,
+        };
       }),
     );
   }
   return patched;
+}
+
+/**
+ * Fold directed-build's proposal-pressure counters back into the world market rows. Changes ONLY
+ * `proposalCycles` (spread preserves every field the same-tick economy and logistics stages already
+ * wrote — satisfaction, squeeze, realized rate, stock, funding-bound). `updates` keys are
+ * `${systemId}|${goodId}`, the same composite key the market row groups are built by. The counter is
+ * fractional reference-time, so it is clamped to a finite [0,2] on the way into world state (NaN/Infinity
+ * guarded like every other persisted numeric field). No-op writes (the clamped value already equals what
+ * the row carries, treating a missing counter as 0) are skipped so an unchanged market keeps its identity
+ * and a construction resolution only touches the rows it moved.
+ */
+function applyBuildMarketUpdates(markets: WorldMarket[], proposalCycleUpdates: Map<string, number>): WorldMarket[] {
+  if (proposalCycleUpdates.size === 0) return markets;
+  return markets.map((m) => {
+    const raw = proposalCycleUpdates.get(`${m.systemId}|${m.goodId}`);
+    if (raw === undefined) return m;
+    const next = Number.isFinite(raw) ? Math.max(0, Math.min(2, raw)) : 0;
+    if (next === (m.proposalCycles ?? 0)) return m;
+    return { ...m, proposalCycles: next };
+  });
 }
 
 export function applyBuildingIncreases(systems: TickSystem[], updates: BuildBuildingUpdate[]): TickSystem[] {
@@ -397,13 +480,18 @@ function applyClaims(systems: TickSystem[], claims: SystemClaim[]): TickSystem[]
 /**
  * Apply completed colony establishments: the target flips `developed`, receives the conserved seed
  * population (capped by what its stored source can spare), and lands its bundled housing so `popCap ≥
- * seedPop` on arrival (viable by construction — docs/planned/economy-colonisation-cost.md §2). The `:
+ * seedPop` on arrival (viable by construction — docs/active/gameplay/colonisation.md). The `:
  * TickSystem` annotation narrows the `"developed"` literal. `available` tracks each source's remaining
  * spendable population across the loop so two establishments sharing a source draw from the same
  * (shrinking) balance rather than both reading the original snapshot — otherwise a shared source would
  * mint population that was never conserved. popCap is raised to the placed housing's capacity (never
  * lowered) — the same figure infrastructure-decay recomputes next tick, set here so the colony is viable
- * the instant it exists.
+ * the instant it exists. Also clears any stored `provisionExpectation` on a system flipping to
+ * `developed` — the resettlement rule: a system re-founded after a previous life (today only a
+ * fresh colony, but the same rule covers a future un-develop/re-develop) seeds its memory from its
+ * own opening state exactly as a first-time colony does, rather than carrying in a drifted-to-1
+ * baseline from before — the mirror image of `addMarketsForSettledSystems`'s "keeps its warehouses"
+ * below: the market rows survive redevelopment, the expectation memory deliberately does not.
  */
 export function applyDevelopments(systems: TickSystem[], developments: SystemDevelopment[]): TickSystem[] {
   if (developments.length === 0) return systems;
@@ -431,13 +519,227 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
     const buildings = nowDeveloped
       ? { ...s.buildings, [HOUSING_TYPE]: (s.buildings[HOUSING_TYPE] ?? 0) + (housingBySystem.get(s.id) ?? 0) }
       : s.buildings;
-    return {
+    const next: TickSystem = {
       ...s,
       population: Math.max(0, s.population + delta),
       control: nowDeveloped ? "developed" : s.control,
       buildings,
       popCap: nowDeveloped ? Math.max(s.popCap, housingPopCap(buildings)) : s.popCap,
     };
+    // The resettlement rule: a stored memory from a previous life must not survive into a system's
+    // new one — see the docstring above. `provision`/`supplyBand` are not a memory, but a stale
+    // reading from a previous life is exactly as false as a stale expectation would be, so they
+    // clear the same way: absent reads as "not yet assessed in this life", never as a lie.
+    if (nowDeveloped) {
+      delete next.provisionExpectation;
+      delete next.provision;
+      delete next.supplyBand;
+      delete next.criticalWeight;
+    }
+    return next;
+  });
+}
+
+/**
+ * Abandonment's death line (docs/active/gameplay/colonisation.md, "A colony is allowed to die"):
+ * reset each system the
+ * population processor reported (famine AND post-delta population below `ABANDON_POP_FLOOR`) back
+ * to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
+ * collapse debt zero; the stored Provision memory, this cycle's Provisioned reading, its band and
+ * its critical-good weight are all deleted (the same resettlement rule `applyDevelopments`
+ * observes above — a previous life's readings must not survive into the next one); buildings and
+ * their idle-cycle state are
+ * cleared and popCap drops to 0 — infrastructure
+ * decay runs only on developed systems, so left standing they would freeze forever and hand any
+ * resettler a free, fully-built colony. Ordinary claimable frontier again via the existing claim
+ * (`applyClaims`) and colony-candidate (the directed-build `develop` provider) paths — no new
+ * resettlement machinery. Market rows and construction-project drops are separate applications
+ * (`resetAbandonedMarkets`, `dropAbandonedBuildProjects`) — this function owns the system row only.
+ */
+export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: string[]): TickSystem[] {
+  if (abandonedSystemIds.length === 0) return systems;
+  const abandoned = new Set(abandonedSystemIds);
+  return systems.map((s): TickSystem => {
+    if (!abandoned.has(s.id)) return s;
+    const next: TickSystem = {
+      ...s,
+      population: 0,
+      popCap: 0,
+      unrest: 0,
+      collapseDebt: 0,
+      factionId: null,
+      control: "unclaimed",
+      buildings: {},
+      buildingIdleCycles: {},
+    };
+    delete next.provisionExpectation;
+    delete next.provision;
+    delete next.supplyBand;
+    delete next.criticalWeight;
+    return next;
+  });
+}
+
+/**
+ * Abandonment Rule 2's market-side application: an abandoned system keeps its market rows (the
+ * warehouses affordance is real — a resettler inherits real stock), but the demand-derived fields
+ * reset with the system, so a resettled colony does not spend its first cycle priced and rationed
+ * as the dead world it replaced. Stock is left untouched. `honestUseRate`, `squeezeCycles` and
+ * `logisticsFundingBound` are all optional fields whose absence already reads as "not yet
+ * assessed" — cleared (deleted) rather than zeroed, exactly as a freshly-created market row would
+ * be. `productionSuppressed` has no such absent-reads-as-fresh convention, so it is explicitly set
+ * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above.
+ */
+export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
+  if (abandonedSystemIds.length === 0) return markets;
+  const abandoned = new Set(abandonedSystemIds);
+  return markets.map((m): WorldMarket => {
+    if (!abandoned.has(m.systemId)) return m;
+    const next: WorldMarket = { ...m, demandRate: MIN_DEMAND, productionSuppressed: false };
+    delete next.honestUseRate;
+    delete next.squeezeCycles;
+    delete next.logisticsFundingBound;
+    return next;
+  });
+}
+
+/**
+ * Abandonment Rule 2's construction-side application: an open `build` project targeting a system
+ * that just died would otherwise keep funding invisible construction on a world its former owner
+ * lost — the UI hides it the moment `factionId` is null, but the pool would keep absorbing work
+ * into it regardless. Scoped to `kind: "build"` only: a `colony_establish` project never targets an
+ * already-developed system (its target is still `controlled`, which is never in survival shortfall
+ * — the economy only classifies developed systems), so it is out of scope by construction.
+ */
+export function dropAbandonedBuildProjects(
+  projects: WorldConstructionProject[], abandonedSystemIds: string[],
+): WorldConstructionProject[] {
+  if (abandonedSystemIds.length === 0) return projects;
+  const abandoned = new Set(abandonedSystemIds);
+  return projects.filter((p) => !(p.kind === "build" && abandoned.has(p.systemId)));
+}
+
+/**
+ * Give each newly settled system its market rows, opening EMPTY. World-gen builds markets only for
+ * systems that are already developed — an unclaimed rock holds nothing — so a colony has no market at
+ * all until this runs, and the founder's endowment is the first stock it ever holds. Must therefore
+ * run before `applyStagedManifestDelivery`, whose credits land on these rows.
+ *
+ * Goods the system already has a row for are left alone, so redeveloping a system that was settled
+ * before keeps its warehouses rather than resetting them.
+ */
+export function addMarketsForSettledSystems(
+  markets: WorldMarket[],
+  systems: TickSystem[],
+  developments: SystemDevelopment[],
+): WorldMarket[] {
+  if (developments.length === 0) return markets;
+  const bySystem = new Map(systems.map((s) => [s.id, s]));
+  const existing = new Set(markets.map((m) => `${m.systemId}|${m.goodId}`));
+  const added: WorldMarket[] = [];
+  for (const d of developments) {
+    const sys = bySystem.get(d.systemId);
+    if (!sys) continue;
+    const rows = createSystemMarkets({
+      systemId: sys.id,
+      buildings: sys.buildings,
+      yields: sys.yields,
+      population: sys.population,
+      seedStock: false,
+    });
+    for (const row of rows) {
+      const key = `${row.systemId}|${row.goodId}`;
+      if (existing.has(key)) continue;
+      existing.add(key);
+      added.push(row);
+    }
+  }
+  return added.length > 0 ? [...markets, ...added] : markets;
+}
+
+/**
+ * Land each new colony's staged manifest on its own market rows — a delivery, not a transfer.
+ *
+ * The goods left their founder cycle by cycle as the establish was built and paid for
+ * (`applyFoundingStagingDraws`), and have been in-transit inventory in the project's ledger ever
+ * since, in no market row at either end. This is where they arrive, so the pass is CREDIT-ONLY:
+ * touching the source again would take the same goods a second time and hand the colony only what
+ * the founder still happened to hold — possibly nothing.
+ *
+ * Conservation is therefore a property of the pair, not of this function alone: every quantity
+ * credited here was debited when it was staged. The staging plan is bounded by the same live market
+ * row the debit reads (`planStagingDraw`, lib/tick/processors/directed-build.ts), and
+ * `applyFoundingStagingDraws` throws rather than shorten a draw — so a ledger line that was never
+ * paid for cannot reach this function to be minted.
+ *
+ * Credits land only on rows the colony already has — `addMarketsForSettledSystems` must run first, or
+ * a colony has no row to receive anything. Non-finite or non-positive lines are skipped rather than
+ * trusted: stock is world state, and `JSON.stringify` turns a NaN into null.
+ */
+export function applyStagedManifestDelivery(
+  markets: WorldMarket[],
+  developments: SystemDevelopment[],
+): WorldMarket[] {
+  if (developments.length === 0) return markets;
+  const credit = new Map<string, number>();
+  for (const d of developments) {
+    for (const line of d.stockManifest) {
+      if (!Number.isFinite(line.quantity) || line.quantity <= 0) continue;
+      const key = `${d.systemId}|${line.goodId}`;
+      credit.set(key, (credit.get(key) ?? 0) + line.quantity);
+    }
+  }
+  if (credit.size === 0) return markets;
+  return markets.map((m) => {
+    const change = credit.get(`${m.systemId}|${m.goodId}`);
+    if (change === undefined) return m;
+    return { ...m, stock: m.stock + change };
+  });
+}
+
+/**
+ * Debit this cycle's colony staging draws from their founding sources' market rows.
+ *
+ * A debit with no matching credit: materials leave the founder the cycle they are paid for and sit in
+ * the establish project's ledger — in-transit inventory, in no market row at either end — until the
+ * colony opens and receives them. The founder is therefore drawn down over the life of an establish
+ * instead of in one raid at completion.
+ *
+ * Every draw is moved in FULL or the tick fails. A draw the source cannot cover is not a cap doing
+ * its job — the planner already bounds each draw by this same live market row (`planStagingDraw`)
+ * and by a running per-(source, good) balance, so a short draw means the ledger recorded goods that
+ * never left the founder, and `applyStagedManifestDelivery` would mint them onto the colony when it
+ * opens. Clamping silently would make that a world-state corruption no test could see; throwing
+ * makes it a hard pause with no broken world committed, which is what the store's tick atomicity is
+ * for. Non-finite or non-positive lines are skipped rather than trusted: stock is world state, and
+ * `JSON.stringify` turns a NaN into null.
+ */
+export function applyFoundingStagingDraws(
+  markets: WorldMarket[],
+  draws: FoundingStagingDraw[],
+): WorldMarket[] {
+  if (draws.length === 0) return markets;
+  const available = new Map(markets.map((m) => [`${m.systemId}|${m.goodId}`, m.stock]));
+  const delta = new Map<string, number>();
+  for (const draw of draws) {
+    if (!Number.isFinite(draw.quantity) || draw.quantity <= 0) continue;
+    const key = `${draw.sourceSystemId}|${draw.goodId}`;
+    const stock = available.get(key) ?? 0;
+    if (draw.quantity > stock) {
+      throw new Error(
+        `Founding staging draw exceeds live stock at ${key}: drawing ${draw.quantity}, holding ${stock}`,
+      );
+    }
+    available.set(key, stock - draw.quantity);
+    delta.set(key, (delta.get(key) ?? 0) - draw.quantity);
+  }
+  if (delta.size === 0) return markets;
+  // No `Math.max(0, …)` floor on the write, deliberately: every debit is bounded above by what its
+  // own row held, so a floor here could only ever hide a draw that had escaped that bound.
+  return markets.map((m) => {
+    const change = delta.get(`${m.systemId}|${m.goodId}`);
+    if (change === undefined || change === 0) return m;
+    return { ...m, stock: m.stock + change };
   });
 }
 
@@ -504,10 +806,21 @@ let hopsCache: { key: World["connections"]; hops: Map<string, Map<string, number
 
 export async function runWorldTick(
   world: World,
-  opts?: { cadence?: TickCadence },
-): Promise<{ world: World; events: TickBroadcastRaw; markets: WorldMarket[] }> {
+  opts?: {
+    cadence?: TickCadence;
+    /** Harness-only third-arm pin for the draw figure's brake — the second per-run override
+     *  channel after `cadence`. The live game never sets it (absent ⇒ "live"). */
+    drawBrakeCeiling?: DrawBrakeCeiling;
+  },
+): Promise<{
+  world: World;
+  events: TickBroadcastRaw;
+  markets: WorldMarket[];
+  /** Calibration-only signals — never broadcast, never persisted. See `TickInstrumentation`. */
+  instrumentation: TickInstrumentation;
+}> {
   const cadence: TickCadence = opts?.cadence ?? {
-    month: MONTH_LENGTH,
+    cycle: CYCLE_LENGTH,
     construction: CONSTRUCTION_INTERVAL,
     logistics: LOGISTICS_INTERVAL,
   };
@@ -542,24 +855,24 @@ export async function runWorldTick(
   const newTickCtx = (): TickContext => ({ tick, results: new Map() });
 
   // ── latched treasury funding (read at tick START = last settlement's latch;
-  // the treasury stage settles LAST, so every consumer below runs one month
+  // the treasury stage settles LAST, so every consumer below runs one cycle
   // behind — the accepted funding lag, same shape as construction's). Built
   // only when a consuming stage resolves this tick (the same gating convention
-  // as the pulse setup below); absent it reads as fully funded downstream. ──
+  // as the cycle-start setup below); absent it reads as fully funded downstream. ──
   const fundedByFaction =
     treasuries.length > 0 &&
-    (isPulseTick(tick, cadence.month) ||
-      isPulseTick(tick, cadence.logistics) ||
-      isPulseTick(tick, cadence.construction))
+    (isCycleStart(tick, cadence.cycle) ||
+      isCycleStart(tick, cadence.logistics) ||
+      isCycleStart(tick, cadence.construction))
       ? new Map(treasuries.map((t) => [t.factionId, t.funded]))
       : undefined;
 
-  // Per-system effect maps for the monthly-pulse stages (economy malus, decay
+  // Per-system effect maps for the cycle-start stages (economy malus, decay
   // buffer, unrest tax pressure). Only built when those stages resolve.
   let maintenanceMalusBySystem: Map<string, number> | undefined;
   let maintenanceBufferScaleBySystem: Map<string, number> | undefined;
   let taxPressureBySystem: Map<string, number> | undefined;
-  if (isPulseTick(tick, cadence.month) && treasuries.length > 0) {
+  if (isCycleStart(tick, cadence.cycle) && treasuries.length > 0) {
     const taxPressureByFaction = new Map(
       treasuries.map((t) => [t.factionId, TAX_LEVEL_UNREST_PRESSURE[t.taxLevel]]),
     );
@@ -631,17 +944,17 @@ export async function runWorldTick(
     processorsRun.push("events");
   }
 
-  // ── economy (pulse-gated) ──
-  // Off-pulse this stage resolves nothing, so building its adapter — which copies
+  // ── economy (cycle-start-gated) ──
+  // Mid-cycle this stage resolves nothing, so building its adapter — which copies
   // every system row and every market row in the galaxy — only to have the body bail
-  // is pure waste. The gate emits the same off-pulse broadcast the body would have,
+  // is pure waste. The gate emits the same mid-cycle broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
-  if (isPulseTick(tick, cadence.month)) {
+  if (isCycleStart(tick, cadence.cycle)) {
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
-      interval: cadence.month,
-      simParams: { holdCover: ECONOMY_CONSTANTS.HOLD_COVER },
+      interval: cadence.cycle,
+      simParams: ECONOMY_SIM_PARAMS,
       modifierCaps: MODIFIER_CAPS,
       strikeParams: STRIKE_PARAMS,
       maintenanceMalusBySystem,
@@ -653,47 +966,100 @@ export async function runWorldTick(
     processorsRun.push("economy");
   } else {
     mergeGlobalEvents(globalEvents, {
-      globalEvents: economyOffPulsePayload(tick, cadence.month),
+      globalEvents: economyMidCyclePayload(tick, cadence.cycle),
     });
   }
 
-  // ── infrastructure-decay ──
+  // ── famine inflow gate (abandonment Rule 1) ──
+  // Systems currently in survival shortfall — no population inflow this cycle, either path
+  // (colonist delivery or diffusion migration; see the migration call below). Empty when the
+  // economy signal is absent (no cycle to gate on): delivery and economy are gated by the same
+  // cycle-start predicate, so delivery can never run on a tick where this signal would be absent.
+  const famineSystemIds = new Set<string>();
   if (economySignals) {
+    for (const [systemId, supply] of economySignals.supplyStateBySystem) {
+      if (supply.survivalShortfall) famineSystemIds.add(systemId);
+    }
+  }
+
+  // ── infrastructure-decay ──
+  // Calibration-only: per-cycle whole building levels torn down, keyed by system (both decay
+  // channels combined). Declared here, read only by the final `instrumentation` return below.
+  let teardownLevelsBySystem: TickInstrumentation["teardownLevelsBySystem"];
+  if (economySignals) {
+    const logisticsFundingBoundBySystem = new Map<string, Set<string>>();
+    for (const market of markets) {
+      if (!market.logisticsFundingBound) continue;
+      const goods = logisticsFundingBoundBySystem.get(market.systemId) ?? new Set<string>();
+      goods.add(market.goodId);
+      logisticsFundingBoundBySystem.set(market.systemId, goods);
+    }
     const decayWorld = new InMemoryInfrastructureWorld({ systems });
-    await runInfrastructureDecayProcessor(
+    const decayResult = await runInfrastructureDecayProcessor(
       decayWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { decay: INFRASTRUCTURE_DECAY_PARAMS, interval: cadence.month, bufferScaleBySystem: maintenanceBufferScaleBySystem },
+      {
+        decay: INFRASTRUCTURE_DECAY_PARAMS,
+        interval: cadence.cycle,
+        bufferScaleBySystem: maintenanceBufferScaleBySystem,
+        logisticsFundingBoundBySystem,
+      },
     );
     systems = decayWorld.systems;
+    teardownLevelsBySystem = decayResult.teardownLevelsBySystem;
     processorsRun.push("infrastructure-decay");
   }
 
   // ── population ──
+  // Calibration-only: per-cycle overshoot-death amount, keyed by system. Same reason as above.
+  let overshootDeathBySystem: TickInstrumentation["overshootDeathBySystem"];
+  // Abandonment Rule 2 (the death line): systems the population processor found in famine with
+  // post-delta population below ABANDON_POP_FLOOR this cycle. Applied just below, outside the
+  // gate — the tick body is the sole owner of the control-flip/reset the processor only reports.
+  let abandonedSystemIds: string[] = [];
   if (economySignals) {
     const popWorld = new InMemoryPopulationWorld({ systems, markets });
-    await runPopulationProcessor(
+    const popResult = await runPopulationProcessor(
       popWorld,
       { tick, results: new Map([["economy", { economySignals }]]) },
-      { unrest: UNREST_PARAMS, population: POPULATION_PARAMS, interval: cadence.month, taxPressureBySystem },
+      {
+        unrest: UNREST_PARAMS,
+        population: POPULATION_PARAMS,
+        expectation: EXPECTATION_PARAMS,
+        interval: cadence.cycle,
+        taxPressureBySystem,
+      },
     );
     systems = popWorld.systems;
     markets = popWorld.markets;
+    overshootDeathBySystem = popResult.overshootDeathBySystem;
+    abandonedSystemIds = popResult.abandonedSystems ?? [];
     processorsRun.push("population");
   }
 
-  // ── monthly pulse: migration, directed-logistics, directed-build (pulse-gated) ──
-  // Each stage below resolves on the monthly pulse and bails internally otherwise, but
+  // ── abandonment (Rule 2 — the death line) ──
+  // Applied in one pass across the three touched state slices, before the cycle-start block below
+  // reads `systems`/`constructionProjects` — so a resettable frontier and a dropped project are
+  // both visible to this SAME tick's claim/develop paths (same-tick re-claim is possible and
+  // accepted as harmless — spec review finding 9).
+  if (abandonedSystemIds.length > 0) {
+    systems = applyAbandonments(systems, abandonedSystemIds);
+    markets = resetAbandonedMarkets(markets, abandonedSystemIds);
+    constructionProjects = dropAbandonedBuildProjects(constructionProjects, abandonedSystemIds);
+  }
+
+  // ── cycle start: migration, directed-logistics, directed-build (cycle-start-gated) ──
+  // Each stage below resolves on the cycle start and bails internally otherwise, but
   // its setup — the participation set, the open-edge graph, the per-system market row
-  // groups, the ownership maps — is read by nothing else, so off-pulse it was all built
+  // groups, the ownership maps — is read by nothing else, so mid-cycle it was all built
   // and thrown away. The gate stops building those inputs; the bodies are untouched.
   //
-  // The condition is the disjunction of the stages' OWN pulse predicates, each built
+  // The condition is the disjunction of the stages' OWN cycle-start predicates, each built
   // from the interval that stage's body is handed below, because the setup is shared
   // and any one stage resolving is reason to build it. The three intervals are three
-  // independent knobs (migration rides the month; build and logistics have their own):
+  // independent knobs (migration rides the cycle; build and logistics have their own):
   // gating on just one of them would let a retune of another silently skip that stage's
-  // pulses — a performance mechanism quietly deciding a gameplay cadence. A disjunction
+  // resolutions — a performance mechanism quietly deciding a gameplay cadence. A disjunction
   // fails the safe way, building setup nobody reads rather than dropping work. (Gating
   // on the shortest interval would NOT be safe: it only covers the others when it
   // divides them.)
@@ -704,10 +1070,26 @@ export async function runWorldTick(
   // The two work maps are declared here (outside the block) rather than as locals inside
   // it, because the treasury stage below reads them after the block closes.
   let constructionWorkByFaction: Map<string, number> | undefined;
+  let foundingDebitsByFaction: Map<string, number> | undefined;
   let logisticsWorkByFaction: Map<string, number> | undefined;
-  const migrationResolves = isPulseTick(tick, cadence.month);
-  const logisticsResolves = isPulseTick(tick, cadence.logistics);
-  const buildResolves = isPulseTick(tick, cadence.construction);
+  // Calibration-only: directed-build's per-cycle new autonomic production-good levels, by good.
+  // Declared here (not a local inside the block) purely to survive past the block's close, mirroring
+  // the two work maps above — read only by the final `instrumentation` return, never by treasury.
+  let buildCommitmentsByGood: Map<string, number> | undefined;
+  // Calibration-only: migration's per-cycle people-moved totals (colonist delivery + edge
+  // diffusion). Declared here for the same reason as buildCommitmentsByGood above.
+  let migrationMoved: TickInstrumentation["migrationMoved"];
+  // Calibration-only: what each founding-stock manifest cost its founder. Same reason.
+  let foundingManifests: TickInstrumentation["foundingManifests"];
+  // Calibration-only: what held each in-flight colony back this cycle. Same reason.
+  let foundingStalls: TickInstrumentation["foundingStalls"];
+  // Calibration-only: directed-logistics' per-faction haul-budget ledger. Same reason.
+  let logisticsBudget: TickInstrumentation["logisticsBudget"];
+  // Calibration-only: directed-build's per-cycle strikeExplains-suppressed proposal resolution. Same reason.
+  let strikeSuppressedProposals: TickInstrumentation["strikeSuppressedProposals"];
+  const migrationResolves = isCycleStart(tick, cadence.cycle);
+  const logisticsResolves = isCycleStart(tick, cadence.logistics);
+  const buildResolves = isCycleStart(tick, cadence.construction);
   if (migrationResolves || logisticsResolves || buildResolves) {
     // ── economy-participation gate (developed only) ──
     // The three economy selection paths gate through isEconomicallyActive: the economy
@@ -729,12 +1111,14 @@ export async function runWorldTick(
     // ── migration ──
     {
       const migWorld = new InMemoryMigrationWorld({ systems }, connections, migrationEdges);
-      await runMigrationProcessor(migWorld, newTickCtx(), {
-        interval: cadence.month,
+      const migResult = await runMigrationProcessor(migWorld, newTickCtx(), {
+        interval: cadence.cycle,
         flow: MIGRATION_PARAMS,
         delivery: COLONY_DELIVERY_PARAMS,
+        inflowBlockedSystemIds: famineSystemIds,
       });
       systems = migWorld.systems;
+      migrationMoved = migResult.migrationMoved;
       processorsRun.push("migration");
     }
 
@@ -758,6 +1142,7 @@ export async function runWorldTick(
     // remapping every market row a second time (see patchMarketRowStocks).
     const logisticsMarketRows = marketRowsBySystem(markets);
     let dlStockUpdates: Map<string, number> = new Map();
+    let dlFundingBoundUpdates: Map<string, boolean> = new Map();
 
     // ── directed-logistics ──
     {
@@ -765,6 +1150,8 @@ export async function runWorldTick(
         const h = hops.get(f)?.get(t);
         return h === undefined || h > DIRECTED_LOGISTICS.MAX_HOPS ? null : h * DIRECTED_LOGISTICS.HOP_WEIGHT;
       };
+      const reachableSystemIds: ReachableSystemIds = (systemId) =>
+        hops.get(systemId)?.keys() ?? [];
       // Directed-logistics moves goods only between developed systems.
       const rows = buildLogisticsRows(
         systems.filter((s) => developedSystemIds.has(s.id)),
@@ -774,22 +1161,30 @@ export async function runWorldTick(
       const dlResult = await runDirectedLogisticsProcessor(dlWorld, { tick }, {
         interval: cadence.logistics,
         routeCost,
+        reachableSystemIds,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.logistics])),
+        drawBrakeCeiling: opts?.drawBrakeCeiling,
       });
-      markets = applyStockUpdates(markets, dlWorld.stockUpdates);
+      markets = applyLogisticsMarketUpdates(
+        markets,
+        dlWorld.stockUpdates,
+        dlWorld.fundingBoundUpdates,
+      );
       dlStockUpdates = dlWorld.stockUpdates;
+      dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
       const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
       flowEvents = [...flowEvents, ...newLogisticsFlows];
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
+      logisticsBudget = dlResult.logisticsBudget;
       processorsRun.push("directed-logistics");
     }
 
     // ── directed-build ──
     // ⚠ Splitting construction's decision cadence from its execution cadence lands
-    // inside this gate: work would accrue every tick while planning stays monthly, so
-    // the per-tick funding step has to be carved back out of the pulse block above.
-    // Planning inputs only move on the pulse, so the gate is correct as it stands.
+    // inside this gate: work would accrue every tick while planning stays per-cycle, so
+    // the per-tick funding step has to be carved back out of the cycle-start block above.
+    // Planning inputs only move on the cycle start, so the gate is correct as it stands.
     {
       const routeCost = hopRouteCost(hops, DIRECTED_BUILD.MAX_HOPS, DIRECTED_BUILD.HOP_WEIGHT, DIRECTED_BUILD.SELF_COST);
 
@@ -828,6 +1223,10 @@ export async function runWorldTick(
       // Colony-candidate provider: a faction's CONTROLLED systems that have a reachable developed
       // same-faction seed source, tagged with their substrate + that source. The colony planner scores
       // them via colonyValue and funds establish projects from the shared pool.
+      // Ties on hop count keep the first system this iteration reaches (strict `<` below), whereas
+      // the player's own verb (`findSeedSource`, lib/services/colony-eligibility.ts) breaks ties to
+      // the smallest id — so on an exact tie the two can name different sources. Both are
+      // deterministic and a tie is rare; see that function for why they are left unaligned.
       const developProvider = (factionId: string): ColonyEstablishCandidate[] => {
         const candidates: ColonyEstablishCandidate[] = [];
         for (const s of systems) {
@@ -855,7 +1254,14 @@ export async function runWorldTick(
         return candidates;
       };
 
-      const rows = buildBuildRows(systems, patchMarketRowStocks(logisticsMarketRows, dlStockUpdates));
+      const rows = buildBuildRows(
+        systems,
+        patchLogisticsMarketRows(
+          logisticsMarketRows,
+          dlStockUpdates,
+          dlFundingBoundUpdates,
+        ),
+      );
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
       const dbResult = await runDirectedBuildProcessor(dbWorld, { tick }, {
         interval: cadence.construction,
@@ -873,7 +1279,7 @@ export async function runWorldTick(
         },
         claim: {
           reachProvider, rng,
-          params: { maxClaimsPerPulse: EXPANSION.MAX_CLAIMS_PER_PULSE, scoreFloor: EXPANSION.SCORE_FLOOR, weights: EXPANSION.SCORE_WEIGHTS },
+          params: { maxClaimsPerCycle: EXPANSION.MAX_CLAIMS_PER_CYCLE, scoreFloor: EXPANSION.SCORE_FLOOR, weights: EXPANSION.SCORE_WEIGHTS },
         },
         develop: {
           candidateProvider: developProvider,
@@ -888,6 +1294,11 @@ export async function runWorldTick(
             popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
             minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
             employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,
+            charterMult: COLONISATION.CHARTER_FEE_SPEND_MULT,
+            charterMin: COLONISATION.CHARTER_FEE_MIN,
+            gateHeadroom: COLONISATION.FOUNDING_GATE_HEADROOM,
+            foundingStockCover: COLONISATION.FOUNDING_STOCK_COVER,
+            economyScale: ECONOMY_SCALE,
           },
         },
         player: world.player
@@ -895,25 +1306,70 @@ export async function runWorldTick(
           : undefined,
         fundingByFaction:
           fundedByFaction && new Map([...fundedByFaction].map(([id, f]) => [id, f.construction])),
+        // The purse founding is committed against. Read at tick start like the funding latch, so a
+        // faction commits against the balance its last settlement left it, minus what it has already
+        // committed since. No maintenance bill yet (pre-first-settlement) reads as 0 — the charter
+        // floor is what prices a colony then.
+        //
+        // The bill is de-scaled back to a REFERENCE cycle (see `referenceMaintenanceBill`), the same
+        // way the player's colony verb quotes it.
+        treasuryByFaction:
+          treasuries.length > 0
+            ? new Map(
+                treasuries.map((t) => [
+                  t.factionId,
+                  {
+                    balance: t.balance,
+                    pendingFounding: t.pendingFounding,
+                    maintenanceBill: referenceMaintenanceBill(
+                      t.lastSettlement?.maintenanceBill, cadence.cycle,
+                    ),
+                  },
+                ]),
+              )
+            : undefined,
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
       systems = applyClaims(systems, dbWorld.claims);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
+      // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —
+      // the same-tick economy/logistics writes on these rows are preserved by the spread inside).
+      markets = applyBuildMarketUpdates(markets, dbWorld.proposalCycleUpdates);
+      // This cycle's staged materials leave their founders before anything else touches the markets:
+      // they are paid for and out of the world's markets from the moment they are drawn.
+      markets = applyFoundingStagingDraws(markets, dbWorld.foundingStagingDraws);
+      // Each new colony gets its (empty) market rows, then the manifest it staged over the whole
+      // establish is delivered onto them — the first goods the system has ever held, and already out
+      // of the founder's markets. Order matters: the delivery lands on these rows.
+      markets = addMarketsForSettledSystems(markets, systems, dbWorld.developments);
+      markets = applyStagedManifestDelivery(markets, dbWorld.developments);
       constructionWorkByFaction = dbResult.workPerformedByFaction;
+      foundingDebitsByFaction = dbResult.foundingDebitsByFaction;
+      buildCommitmentsByGood = dbResult.buildCommitmentsByGood;
+      foundingManifests = dbResult.foundingManifests;
+      foundingStalls = dbResult.foundingStalls;
+      strikeSuppressedProposals = dbResult.strikeSuppressedProposals;
       processorsRun.push("directed-build");
     }
 
-  } // ── end monthly pulse ──
+  } // ── end cycle start ──
 
-  // ── treasury (monthly settlement; off-pulse it only accrues band-pulse work) ──
+  // ── treasury (cycle settlement; mid-cycle it only accrues the bands' own work) ──
   {
-    const treasuryResolves = isPulseTick(tick, cadence.month);
+    const treasuryResolves = isCycleStart(tick, cadence.cycle);
+    // Founding debits belong in this guard alongside the two work bands: this guard decides whether
+    // the processor runs AT ALL, so its own accrual guard never sees a tick this one refuses. A cycle
+    // where every colony in the queue is waiting on its charter absorbs no work anywhere, which is
+    // exactly the tick that commits charter money — and off a settlement tick that debit would be
+    // silently dropped.
     const hasWork =
-      (constructionWorkByFaction?.size ?? 0) > 0 || (logisticsWorkByFaction?.size ?? 0) > 0;
+      (constructionWorkByFaction?.size ?? 0) > 0 ||
+      (logisticsWorkByFaction?.size ?? 0) > 0 ||
+      (foundingDebitsByFaction?.size ?? 0) > 0;
     if (treasuries.length > 0 && (treasuryResolves || hasWork)) {
-      // The processor reads systems only when settling — an off-pulse accrual
-      // tick (band work without a month boundary) skips the O(systems) build.
+      // The processor reads systems only when settling — a mid-cycle accrual
+      // tick (band work without a cycle boundary) skips the O(systems) build.
       const treasuryWorld = new InMemoryTreasuryWorld({
         treasuries,
         systems: treasuryResolves
@@ -934,12 +1390,13 @@ export async function runWorldTick(
           results: economySignals ? new Map([["economy", { economySignals }]]) : new Map(),
         },
         {
-          interval: cadence.month,
+          interval: cadence.cycle,
           economyScale: ECONOMY_SCALE,
           constructionWorkByFaction: constructionWorkByFaction ?? new Map(),
           logisticsWorkByFaction: logisticsWorkByFaction ?? new Map(),
+          foundingDebitsByFaction: foundingDebitsByFaction ?? new Map(),
           rates: {
-            headsTaxPerMonth: TREASURY.HEADS_TAX_PER_MONTH,
+            headsTaxPerCycle: TREASURY.HEADS_TAX_PER_CYCLE,
             headsWeights: { ...TREASURY.HEADS_WEIGHTS },
             productionTaxRate: TREASURY.PRODUCTION_TAX_RATE,
             referenceValues: REFERENCE_VALUE,
@@ -955,30 +1412,21 @@ export async function runWorldTick(
   }
 
   // Directed-logistics is the only writer of flowEvents, and it only appends on the
-  // pulse — but the prune stays every-tick, outside the gate above, so the retention
-  // window is enforced on the tick it expires rather than up to a month late. It is a
-  // filter over an already-bounded log; the pulse gate is not worth the drift.
+  // cycle start — but the prune stays every-tick, outside the gate above, so the retention
+  // window is enforced on the tick it expires rather than up to a cycle late. It is a
+  // filter over an already-bounded log; the cycle-start gate is not worth the drift.
   const flowRetentionFloor = tick - TRADE_SIMULATION.FLOW_HISTORY_TICKS;
   flowEvents = flowEvents.filter((f) => f.tick >= flowRetentionFloor);
 
   // ── relations (gated by RELATIONS_FREQUENCY, offset 0 — the one stage on its
-  // own cadence rather than the monthly pulse the block above rides) ──
+  // own cadence rather than the cycle start the block above rides) ──
   if (world.factions.length >= 2 && tick % RELATIONS_FREQUENCY === 0) {
-    const territoryByFaction = new Map<string, Set<string>>();
-    for (const s of world.systems) {
-      if (!s.factionId) continue;
-      const set = territoryByFaction.get(s.factionId);
-      if (set) set.add(s.id);
-      else territoryByFaction.set(s.factionId, new Set([s.id]));
-    }
-
     const relationsWorld = new InMemoryRelationsWorld({
       factions: world.factions.map((f) => ({
         id: f.id,
         name: f.name,
         governmentType: f.governmentType,
         doctrine: f.doctrine,
-        territory: territoryByFaction.get(f.id) ?? new Set<string>(),
       })),
       relations,
       alliances: alliancePacts,
@@ -1041,5 +1489,16 @@ export async function runWorldTick(
   // `markets` is the same array folded into nextWorld above — returned so
   // callers that want this tick's market rows (the calibration harness) can
   // take them without reaching back into the world.
-  return { world: nextWorld, events: tickEvents, markets };
+  //
+  // `instrumentation` is calibration-only: never folded into `nextWorld`, `tickEvents`, or any
+  // broadcast/SSE payload — the calibration harness is its only reader.
+  return {
+    world: nextWorld,
+    events: tickEvents,
+    markets,
+    instrumentation: {
+      buildCommitmentsByGood, migrationMoved, foundingManifests, foundingStalls, logisticsBudget,
+      strikeSuppressedProposals, overshootDeathBySystem, teardownLevelsBySystem,
+    },
+  };
 }

@@ -19,10 +19,12 @@ export function getFactionTreasury(factionId: string): FactionTreasuryData {
     throw new ServiceError(`Faction ${factionId} not found.`, 404);
   }
   const s = treasury.lastSettlement;
+  // Founding is a real expense that never passes through a band, so it has to be subtracted
+  // explicitly — a `net` that ignores it reports a surplus the faction did not have.
   const net = s
     ? s.headsIncome +
       s.productionIncome -
-      (s.paid.maintenance + s.paid.logistics + s.paid.construction)
+      (s.paid.maintenance + s.paid.logistics + s.paid.construction + s.foundingExpense)
     : 0;
   return {
     factionId,

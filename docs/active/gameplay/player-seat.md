@@ -82,7 +82,7 @@ Two entry points, both served by one feasibility computation (`computeBuildOptio
   housing, support, charted deposits including unworked ones). One click queues +1 level; a **second**
   click on the same row extends the same open player project rather than opening a second row
   (`levels += 1`, `workTotal += workPerLevel` on the standing `(system, buildingType)` row) — orders
-  batch into one ledger entry. A hover tooltip carries the quick numbers (work · ≈pulses at the current
+  batch into one ledger entry. A hover tooltip carries the quick numbers (work · ≈cycles at the current
   pool); a hard-blocked row renders the `+` disabled with its reason.
 - **New-industry dialog** — for types with no ledger row yet (including academies): building + levels +
   a live feasibility readout (space, deposit slots, labour added, estimated staffing, work, ETA). Hard
@@ -98,20 +98,31 @@ A controlled, not-yet-developed player system's founding entry (rendered on its 
 Industry tab — see UI). Eligibility mirrors the autonomic planner's own colony-candidate gate exactly,
 via one shared function (`colonyEligibility`, `lib/services/colony-eligibility.ts`, consumed by both the
 mutation service and the read service so neither drifts from the other): not already forming, above the
-habitable floor, and a reachable developed same-faction seed source within the tick's hop radius
-(`COLONY_REACH_HOPS = max(logistics, build, expansion reach)`). Sizing (`seedPop`, bundled
-`housingLevels`, total `work`) comes from `sizeColonyEstablish` — the exact function the autonomic
-planner calls, extracted so both order the same shape of project. An eligible system shows the verb plus
-a preview line (source system, seed pop, bundled housing, work) that **is** the confirmation surface — no
-dialog; clicking it orders directly. An ineligible controlled system shows the verb disabled with the
+habitable floor, a reachable developed same-faction seed source within the tick's hop radius
+(`COLONY_REACH_HOPS = max(logistics, build, expansion reach)`), and — last — a treasury that can commit.
+Sizing (`seedPop`, bundled `housingLevels`, total `work`) comes from `sizeColonyEstablish` — the exact
+function the autonomic planner calls, extracted so both order the same shape of project.
+
+The money gate prices the colony through `lib/engine/founding-cost` — the charter fee plus
+`FOUNDING_GATE_HEADROOM` cycles of the projected material bill — against the faction's working balance
+(`balance − pendingFounding`), using the same functions and the same comparison the autonomic planner's
+affordability gate uses, so a colony costs one number whoever founds it. It is a **hard** block: with
+colonisation automation off the planner never runs for the player's faction, so without it the player
+would be the one faction that founds for free. An eligible system shows the verb plus a preview line
+(source system, seed pop, bundled housing, work, charter, and the material bill labelled "up to" because
+the projection is the uncapped want) that **is** the confirmation surface — no dialog; clicking it orders
+directly. An ineligible controlled system shows the verb disabled with the
 blocking reason, teaching the planner's own rules. The seed-source tie-break (nearest developed
-same-faction system) differs in one respect from the autonomic planner's — see
-[BACKLOG.md](../../BACKLOG.md) for the recorded (accepted) divergence.
+same-faction system) differs in one respect from the autonomic planner's — an accepted divergence,
+recorded where it lives (`lib/services/colony-eligibility.ts`, the tie-break docstring).
 
 ### Cancel
 
 An inline ✕ on player-originated rows (ghost rows on the Industry tab, the forming-colony hero row on
-Overview). Cancelling drops the row outright — **work spent is lost**, by design. Add + cancel are the
+Overview). Cancelling drops the row outright — **work spent is lost**, by design, as is a colony's charter.
+A cancelled colony's **staged materials are returned** to its founder's market rows, uncapped: they are real
+inventory, drawn from those very rows and paid for cycle by cycle, so destroying them would destroy stock the
+faction owns, and stock coming home can never breach a reserve. Add + cancel are the
 whole verb set for this slice; reorder/pause are not built.
 
 ---
@@ -122,13 +133,13 @@ Funding order across the whole faction queue reads: **in-flight committed work �
 new autonomic proposals**, implemented as a stable partition of the *stored* open set
 (`orderOpenProjects`, `lib/engine/construction.ts`): everything already committed (any origin, any
 `workDone`) keeps its stored front-first order; fresh player rows (`origin: "player"` with `workDone ≤
-0`) move to the back of that, preserving their own insertion order. The caller appends this pulse's new
+0`) move to the back of that, preserving their own insertion order. The caller appends this cycle's new
 autonomic proposals after. The function is an **identity on any queue with no fresh player rows** — an
 AI-only queue is untouched bit-for-bit, so the calibration harness needs no gate beyond its existing
 one.
 
 Persist-if-funded (autonomic colonies and Construction Centres are dropped when they receive no work this
-pulse, so their price stays live rather than queue-jumping later) is **auto-only**: a player order has no
+cycle, so their price stays live rather than queue-jumping later) is **auto-only**: a player order has no
 re-emitter, so it always persists until funded or cancelled, never silently dropped.
 
 ---
@@ -150,7 +161,7 @@ validation — the UI never learns a different truth than what the mutation will
   past spare labour); the player is allowed to make it.
 
 ETAs are **queue-aware**: a hypothetical order joins the queue behind everything already committed
-(exactly like a real fresh player row would), so the reported pulse count reflects where it would
+(exactly like a real fresh player row would), so the reported cycle count reflects where it would
 actually land, not an isolated forecast.
 
 ---
@@ -193,7 +204,7 @@ actually land, not an isolated forecast.
 `runWorldTick` awaits only in-memory adapters (already-resolved promises resolve as microtasks), so the
 event loop never reaches an HTTP handler mid-tick. Player-order mutation services therefore need no
 mutex: they read and replace the in-memory world synchronously between ticks, and the open-project rows
-they append are exactly what the next directed-build pulse funds. See the header comment in
+they append are exactly what the next directed-build cycle funds. See the header comment in
 `lib/services/construction-orders.ts`.
 
 ---

@@ -17,14 +17,12 @@ function makeWorld(score: number, opts: { alliance?: boolean; events?: { id: str
         name: "Alpha",
         governmentType: "federation",
         doctrine: "mercantile",
-        territory: new Set(["s1"]),
       },
       {
         id: "fb",
         name: "Beta",
         governmentType: "federation",
         doctrine: "opportunistic",
-        territory: new Set(["s2"]),
       },
     ],
     relations: [

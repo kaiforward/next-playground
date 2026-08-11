@@ -10,8 +10,10 @@
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "simulate": "tsx scripts/simulate.ts",
+    "mutation": "stryker run stryker.config.mjs",
     "validate:gen": "tsx --tsconfig tsconfig.json scripts/validate-distributions.ts",
-    "report:coherence": "tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts"
+    "report:coherence": "tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts",
+    "impact": "tsx --tsconfig tsconfig.json scripts/impact.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -40,6 +42,8 @@
   },
   "devDependencies": {
     "@axe-core/react": "^4.11.1",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@tailwindcss/postcss": "^4",
     "@types/d3-delaunay": "^6.0.4",
     "@types/node": "^20",

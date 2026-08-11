@@ -3,6 +3,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemIndustry } from "@/lib/services/universe";
 import { ServiceError } from "@/lib/services/errors";
+import { BUILDING_TYPES } from "@/lib/constants/industry";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 const VALID_BANDS = ["poor", "average", "good", "rich"];
@@ -74,6 +75,102 @@ describe("getSystemIndustry", () => {
     }
     const water = data.popNeeds.find((n) => n.goodId === "water");
     expect(water?.goodName).toBe("Water");
+  });
+
+  it("keeps industry capacity and population needs on the same civilian demand", () => {
+    // The Industry readout's per-good consumption and the needs ledger's want are two projections of
+    // one consumptionRate call — they must not drift apart.
+    const data = getSystemIndustry(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible industry");
+    expect(data.popNeeds.length).toBeGreaterThan(0);
+    for (const need of data.popNeeds) {
+      const rate = data.goods.find((good) => good.goodId === need.goodId)!;
+      expect(rate.consumption, need.goodId).toBeCloseTo(need.want, 10);
+    }
+  });
+
+  it("treats a funding-bound glutted producer as demand-backed", () => {
+    const producer = world.buildings.find((building) => {
+      const definition = BUILDING_TYPES[building.buildingType];
+      const owner = world.systems.find((candidate) => candidate.id === building.systemId);
+      return building.count > 0 && definition?.resource !== undefined && owner?.control === "developed";
+    })!;
+    const definition = BUILDING_TYPES[producer.buildingType];
+    if (definition?.outputGood === undefined) throw new Error("expected an extractor fixture");
+    const goodId = definition.outputGood;
+    const count = 10;
+    const prepared: World = {
+      ...world,
+      systems: world.systems.map((candidate) =>
+        candidate.id === producer.systemId ? { ...candidate, population: 1_000_000_000 } : candidate,
+      ),
+      buildings: [
+        ...world.buildings.filter((building) => building.systemId !== producer.systemId),
+        { ...producer, count },
+      ],
+      markets: world.markets.map((market) =>
+        market.systemId === producer.systemId && market.goodId === goodId
+          ? { ...market, stock: 1_000_000_000, logisticsFundingBound: false }
+          : market,
+      ),
+    };
+    setWorld(prepared);
+    const ordinary = getSystemIndustry(producer.systemId);
+    if (ordinary.visibility !== "visible") throw new Error("expected visible industry");
+    const ordinaryProducer = ordinary.buildings.find((building) => building.buildingType === producer.buildingType)!;
+    expect(ordinaryProducer.used).toBeCloseTo(count * 0.15);
+    expect(ordinaryProducer.idleReason).toBe("selling");
+
+    setWorld({
+      ...prepared,
+      markets: prepared.markets.map((market) =>
+        market.systemId === producer.systemId && market.goodId === goodId
+          ? { ...market, logisticsFundingBound: true }
+          : market,
+      ),
+    });
+    const protectedIndustry = getSystemIndustry(producer.systemId);
+    if (protectedIndustry.visibility !== "visible") throw new Error("expected visible industry");
+    const protectedProducer = protectedIndustry.buildings.find(
+      (building) => building.buildingType === producer.buildingType,
+    )!;
+    expect(protectedProducer.used).toBe(count);
+    expect(protectedProducer.idleReason).toBeUndefined();
+  });
+
+  it("recomputes a producer's selling factor live when its market row carries no persisted use figure", () => {
+    // A legacy-save fallback: generateWorld always persists honestUseRate (lib/world/markets.ts),
+    // so this simulates the one case that field can be missing. The live recompute must reproduce
+    // the SAME value the persisted field holds here — never fall to 0, which would weld the
+    // producer's brake knee shut and read it as idle for the wrong reason.
+    const producer = world.buildings.find((building) => {
+      const definition = BUILDING_TYPES[building.buildingType];
+      const owner = world.systems.find((candidate) => candidate.id === building.systemId);
+      return building.count > 0 && definition?.resource !== undefined && owner?.control === "developed";
+    })!;
+    const definition = BUILDING_TYPES[producer.buildingType];
+    if (definition?.outputGood === undefined) throw new Error("expected an extractor fixture");
+    const goodId = definition.outputGood;
+
+    const baseline = getSystemIndustry(producer.systemId);
+    if (baseline.visibility !== "visible") throw new Error("expected visible industry");
+    const baselineBuilding = baseline.buildings.find((b) => b.buildingType === producer.buildingType)!;
+
+    const stripped: World = {
+      ...world,
+      markets: world.markets.map((market) =>
+        market.systemId === producer.systemId && market.goodId === goodId
+          ? { ...market, honestUseRate: undefined }
+          : market,
+      ),
+    };
+    setWorld(stripped);
+    const strippedData = getSystemIndustry(producer.systemId);
+    if (strippedData.visibility !== "visible") throw new Error("expected visible industry");
+    const strippedBuilding = strippedData.buildings.find((b) => b.buildingType === producer.buildingType)!;
+
+    expect(strippedBuilding.used).toBeCloseTo(baselineBuilding.used, 9);
+    expect(strippedBuilding.idleReason).toBe(baselineBuilding.idleReason);
   });
 
   it("throws ServiceError(404) for an unknown system", () => {

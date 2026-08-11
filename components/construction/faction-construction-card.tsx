@@ -30,7 +30,7 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
         title="Construction"
         subtitle={
           <>
-            pool <span className="font-mono text-text-secondary">{formatMagnitude(data.pool)}</span>/pulse ·{" "}
+            pool <span className="font-mono text-text-secondary">{formatMagnitude(data.pool)}</span>/cyc ·{" "}
             <span className="font-mono text-text-secondary">{formatMagnitude(data.poolBase)}</span> base +{" "}
             <span className="font-mono text-text-secondary">{formatMagnitude(data.poolCentres)}</span> centres
             {" "}· funded{" "}

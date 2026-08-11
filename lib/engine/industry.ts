@@ -40,8 +40,10 @@ import {
 } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
-import { inputGate } from "@/lib/engine/supply-chain";
-import { outputUptake } from "@/lib/engine/tick";
+import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
+import { inputGate, inputDrawRatio } from "@/lib/engine/supply-chain";
+import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
+import { USED_SLACK, VACANCY_SLACK } from "@/lib/constants/infrastructure";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
@@ -377,7 +379,7 @@ export function complexUsed(count: number, throughput: number, rated: number): n
   return Math.min(count, rated > 0 ? throughput / rated : 0);
 }
 
-/** Housing the current population fills, in building units. May exceed the housing count (overshoot). */
+/** Housing the current population fills, in building units. May exceed the built housing count. */
 export function housingUsed(population: number): number {
   return Math.max(0, population) / POP_CENTRE_DENSITY;
 }
@@ -385,7 +387,7 @@ export function housingUsed(population: number): number {
 /**
  * Everything a per-`output.kind` utilization needs, computed once per system by the caller. Both the
  * decay engine and the industry read service already have every field in hand (a single labourParts
- * pass + the population + a seller-side uptake signal), so this just names the bundle.
+ * pass + the population + a seller-side selling signal), so this just names the bundle.
  */
 export interface UtilizationContext {
   /** The whole built base — needed for a modifier's family throughput. */
@@ -395,15 +397,16 @@ export interface UtilizationContext {
   parts: LabourParts;
   /** The three fulfilment ratios. */
   state: LabourState;
-  /** Seller-side output uptake ∈ [0,1] for a produced good; missing ⇒ 1 (sells freely). */
-  outputUptake: (goodId: string) => number;
+  /** Isolated selling factor ∈ [0,1] for a produced good; missing ⇒ 1 (sells freely). */
+  sellingFactor: (goodId: string) => number;
+  logisticsFundingBound?: (goodId: string) => boolean;
 }
 
 /** An abstract-capacity building's licence draw ÷ licence supply, in building units. */
 function capacityUsed(kind: CapacityKind, count: number, ctx: UtilizationContext): number {
   switch (kind) {
     case "pop_cap":
-      return housingUsed(ctx.population);
+      return Math.min(count, housingUsed(ctx.population) * (1 + VACANCY_SLACK));
     case "skill1_licence":
       return count * (ctx.parts.skill1Cap > 0 ? Math.min(1, ctx.parts.skill1Demand / ctx.parts.skill1Cap) : 0);
     case "skill2_licence":
@@ -415,8 +418,8 @@ function capacityUsed(kind: CapacityKind, count: number, ctx: UtilizationContext
  * Absolute in-use amount for one building, dispatched on its typed output — the single source of the
  * "used" quantity the decay engine and the industry readout both consume, replacing the per-type
  * branches each carried:
- *  - market_good → staffed AND selling: count × min(effectiveFulfilment(tier), uptake).
- *  - capacity/pop_cap → occupancy: population / POP_CENTRE_DENSITY (may exceed count → overshoot).
+ *  - market_good → staffed AND selling: count × min(effectiveFulfilment(tier), selling allowance).
+ *  - capacity/pop_cap → occupancy plus healthy vacancy allowance, capped at count.
  *  - capacity/skill{1,2}_licence → licence draw: count × min(1, skillDemand / skillCap).
  *  - modifier → family coverage the built factories draw: complexUsed(count, familyThroughput, rated).
  *  - none → staffing only (no current type; employment/holding fallback).
@@ -426,7 +429,10 @@ export function buildingUsed(buildingType: string, count: number, ctx: Utilizati
   switch (output.kind) {
     case "market_good": {
       const tier = GOOD_TIER_BY_KEY[output.goodId] ?? 0;
-      return count * Math.min(effectiveFulfilment(ctx.state, tier), ctx.outputUptake(output.goodId));
+      const canSell = ctx.logisticsFundingBound?.(output.goodId)
+        ? 1
+        : Math.min(1, ctx.sellingFactor(output.goodId) + USED_SLACK);
+      return count * Math.min(effectiveFulfilment(ctx.state, tier), canSell);
     }
     case "capacity":
       return capacityUsed(output.capacity, count, ctx);
@@ -440,8 +446,8 @@ export function buildingUsed(buildingType: string, count: number, ctx: Utilizati
 }
 
 /**
- * Utilization u ∈ [0,1] = min(1, buildingUsed / count); 0 at non-positive count. The clamped ratio
- * PR3's whole-level decay reads (an over-occupied housing level reads as fully utilised, not >1).
+ * Utilization u ∈ [0,1] = min(1, buildingUsed / count); 0 at non-positive count. An
+ * over-occupied housing level reads as fully utilised, not greater than one.
  */
 export function computeUtilization(buildingType: string, count: number, ctx: UtilizationContext): number {
   if (count <= 0) return 0;
@@ -553,8 +559,9 @@ export interface SystemIndustryReadout {
   labourAllocation: LabourAllocation;
   /**
    * One entry per building type with count > 0, sorted by tier ascending then buildingType.
-   * `used` is the decay-relevant "in use" amount — occupancy for housing, staffed-and-selling
-   * for producers (≤ count, except housing overshoot). `idleReason` names the binding constraint.
+   * `used` is the decay-relevant "in use" amount — vacancy-protected occupancy for housing,
+   * staffed-and-selling capacity for producers (always ≤ count). `idleReason` names the binding
+   * constraint.
    */
   buildings: Array<{
     buildingType: string;
@@ -563,7 +570,7 @@ export interface SystemIndustryReadout {
     tier: GoodTier | -1;
     count: number;
     used: number;
-    /** Pure-staffing ratio the panel bar shows: effectiveFulfilment(tier) for producers, occupancy for housing. */
+    /** Panel ratio: effectiveFulfilment(tier) for producers, literal occupancy for housing. */
     staffedFraction: number;
     /** Real production rate this cycle (buildingProduction × inputGate). Producers/extractors only. */
     output?: number;
@@ -645,6 +652,18 @@ const TECHNICIAN_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL1_CONSUMPT
 const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTION);
 
 /**
+ * The four per-good accessors `buildIndustryReadout` reads its callers' market/event state
+ * through — named rather than positional, so a permutation of three structurally identical
+ * `(goodId) => number` functions cannot compile clean and silently re-denominate the brake.
+ */
+export interface IndustryReadoutAccessors {
+  demandRateOf: (goodId: string) => number;
+  honestUseRateOf: (goodId: string) => number;
+  anchorMultOf: (goodId: string) => number;
+  logisticsFundingBoundOf?: (goodId: string) => boolean;
+}
+
+/**
  * Builds an industry readout for one system from its current industrial base and
  * market stock. Pure — no DB dependency. Reuses the existing helpers for all
  * derived quantities. (Space-partition headroom is assembled separately via
@@ -655,12 +674,16 @@ const ENGINEER_BASKET: SkillBasketEntry[] = skillBasketEntries(SKILL2_CONSUMPTIO
  * - buildings: one entry per building type with count > 0 (housing gets tier -1).
  * - supplyChain: tier-1+ produced goods whose recipe inputs may be short.
  *   inputGate < 1 means the good is throttled by at least one short input.
- *   throttledBy lists the inputs where drawable stock < desired draw.
+ *   throttledBy lists the inputs whose draw rations on the scarcity ramp.
  *
- * `marketStock` and `minStockOf` are keyed by good KEY (not the DB good id);
- * the caller maps the market rows through GOOD_NAME_TO_KEY. `minStockOf` returns
- * each good's per-market reserve floor — only stock above it is drawable, so the
- * throttle reflects the real per-market band (not a flat global floor).
+ * `marketStock` and the accessors are keyed by good KEY (world market rows use
+ * good keys as goodId). Input draws ration on the shared scarcity ramp below
+ * each input's emergency stock (RATION_COVER × demandRate) — there is no reserve
+ * floor, so a starved input draws toward empty rather than gating hard at a floor.
+ * The seller-side factor reads the same brake knee as the economy tick
+ * (`brakeKnee` at ECONOMY_SIM_PARAMS: `honestUseRateOf`/`anchorMultOf` feed the
+ * use term, `buildingProduction` the output term), so the panel and the
+ * simulation cannot disagree about which producers are idle.
  *
  * `yields` threads through to `buildingProduction` but is inert for this readout:
  * supplyChain covers only tier-1+ goods, whose production is yield-independent.
@@ -669,10 +692,10 @@ export function buildIndustryReadout(
   buildings: Record<string, number>,
   population: number,
   marketStock: Record<string, number>,
-  minStockOf: (goodId: string) => number,
   yields: ResourceVector,
-  maxStockOf?: (goodId: string) => number | undefined,
+  accessors: IndustryReadoutAccessors,
 ): SystemIndustryReadout {
+  const { demandRateOf, honestUseRateOf, anchorMultOf, logisticsFundingBoundOf } = accessors;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
   const pop = Math.max(0, population);
@@ -681,15 +704,31 @@ export function buildIndustryReadout(
     skill1: { have: parts.skill1Cap, need: parts.skill1Demand, fulfil: state.skill1Fulfil },
     skill2: { have: parts.skill2Cap, need: parts.skill2Demand, fulfil: state.skill2Fulfil },
   };
-  const stockOf = (g: string): number => marketStock[g] ?? minStockOf(g);
-  // Seller-side uptake for a produced good ∈ [0,1]; a good with no market band (no row, or a legacy
-  // caller without maxStockOf) sells freely (1). Shared by buildingUsed and the producer idleReason.
-  const uptakeOf = (g: string): number => {
-    if (maxStockOf === undefined) return 1;
-    const maxStock = maxStockOf(g);
-    return maxStock !== undefined ? outputUptake(stockOf(g), minStockOf(g), maxStock) : 1;
+  const stockOf = (g: string): number => marketStock[g] ?? 0;
+  // The caller provides the authoritative aggregate draw rate — the ration threshold is
+  // demand-denominated, never recovered from the pricing band.
+  const rationStockOf = (g: string): number => ECONOMY_CONSTANTS.RATION_COVER * demandRateOf(g);
+  // Isolated selling factor for a produced good ∈ [0,1] — the tick's own brake knee at this
+  // system's use figure and capacity. Shared by buildingUsed and the producer idleReason.
+  const sellingFactorOf = (g: string): number => {
+    const knee = brakeKnee(
+      {
+        useRate: honestUseRateOf(g),
+        capacityProduction: buildingProduction(buildings, g, state, yields),
+        anchorMult: anchorMultOf(g),
+      },
+      ECONOMY_SIM_PARAMS,
+    );
+    return productionCeiling(stockOf(g), knee);
   };
-  const ctx: UtilizationContext = { buildings, population, parts, state, outputUptake: uptakeOf };
+  const ctx: UtilizationContext = {
+    buildings,
+    population,
+    parts,
+    state,
+    sellingFactor: sellingFactorOf,
+    logisticsFundingBound: logisticsFundingBoundOf,
+  };
 
   // Per-building "in use" — the decay-relevant quantity, resolved by the one shared buildingUsed
   // dispatch (the same values computeSystemDecay sees): housing occupancy, an academy's licence draw,
@@ -703,7 +742,10 @@ export function buildIndustryReadout(
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
       const used = buildingUsed(HOUSING_TYPE, count, ctx);
-      const staffedFraction = count > 0 ? used / count : 0;
+      // Housing deliberately carries two utilization readings. `used` includes the healthy-vacancy
+      // allowance because decay and the row's health must agree about protected capacity;
+      // `staffedFraction` remains literal occupancy so the player never sees empty homes as residents.
+      const staffedFraction = count > 0 ? housingUsed(population) / count : 0;
       buildingEntries.push({ buildingType, tier: -1, count, used, staffedFraction, idleReason: used < count ? "occupancy" : undefined });
       continue;
     }
@@ -737,20 +779,22 @@ export function buildIndustryReadout(
     const tier: GoodTier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
     const fulfil = effectiveFulfilment(state, tier);
     const used = buildingUsed(buildingType, count, ctx);
-    // output = the real production rate this cycle: buildingProduction × inputGate (uptake is a
+    // output = the real production rate this cycle: buildingProduction × inputGate (selling is a
     // selling/decay signal, not a production multiplier — see lib/tick/processors/economy.ts).
     let output: number | undefined;
     if (outputGood !== undefined) {
       const production = buildingProduction(buildings, outputGood, state, yields);
-      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, minStockOf) : 1;
+      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, rationStockOf) : 1;
       output = production * gate;
     }
     let idleReason: IdleReason | undefined;
     if (used < count) {
-      // uptake is only read here to name the binding constraint; derive it lazily so a fully-used
+      // The selling factor is only read here to name the binding constraint; derive it lazily so a fully-used
       // producer skips the lookup buildingUsed already made for `used`.
-      const uptake = outputGood !== undefined ? uptakeOf(outputGood) : 1;
-      if (uptake < fulfil) idleReason = "selling";
+      const canSell = outputGood !== undefined && logisticsFundingBoundOf?.(outputGood)
+        ? 1
+        : Math.min(1, (outputGood !== undefined ? sellingFactorOf(outputGood) : 1) + USED_SLACK);
+      if (canSell < fulfil) idleReason = "selling";
       else if (fulfil < state.labourFulfil) {
         // A skill ceiling binds. Name the pool that is actually the min the tier draws on;
         // on a tier-2 tie (neither academy) the lower grade (skill1) wins — it is the prerequisite.
@@ -773,14 +817,13 @@ export function buildIndustryReadout(
     if (!recipe) continue; // tier-0 — always gated at 1, no signal
 
     const effectiveProduction = buildingProduction(buildings, goodId, state, yields);
-    const gate = inputGate(goodId, effectiveProduction, stockOf, minStockOf);
+    const gate = inputGate(goodId, effectiveProduction, stockOf, rationStockOf);
 
     const throttledBy: string[] = [];
     for (const [input, perOutput] of Object.entries(recipe)) {
       const desired = effectiveProduction * perOutput;
       if (desired <= 0) continue;
-      const drawable = Math.max(0, stockOf(input) - minStockOf(input));
-      if (drawable < desired) throttledBy.push(input);
+      if (inputDrawRatio(stockOf(input), rationStockOf(input), desired) < 1) throttledBy.push(input);
     }
 
     supplyChainEntries.push({ goodId, inputGate: gate, throttledBy });
@@ -804,7 +847,6 @@ export function buildIndustryReadout(
  * Storage capacity the system's built buildings provide for one good — the
  * infrastructure term of maxStock. Extractors/factories store what they handle;
  * population centres hold nominal retail stock (generous on consumer goods).
- * See docs/planned/economy-relative-stock-band.md.
  */
 export function facilityStorageForGood(buildings: Record<string, number>, goodId: string): number {
   let storage = 0;

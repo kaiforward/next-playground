@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { buildingProduction, computeLabourState } from "@/lib/engine/industry";
+import { useRatesByGood } from "@/lib/engine/honest-demand";
 import { makeResourceVector, unitResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
@@ -8,9 +9,9 @@ import type { WorldMarket } from "@/lib/world/types";
 function sys(overrides: Partial<TickSystem>): TickSystem {
   return {
     id: "s1", name: "S1", economyType: "extraction", regionId: "r1",
-    factionId: "f1", control: "developed", governmentType: "frontier",
+    factionId: "f1", control: "developed", governmentType: "federation",
     population: 1000, popCap: 1200,
-    unrest: 0, buildings: { ore: 5 }, buildingIdleMonths: {}, buildingCollapseDebt: {},
+    unrest: 0, buildings: { ore: 5 }, buildingIdleCycles: {}, collapseDebt: 0,
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
     ...overrides,
   };
@@ -94,5 +95,86 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
     const rich = (await richYield.getMarketsForSystems(["s1"]))[0].baseProductionRate ?? 0;
     expect(baseline).toBeGreaterThan(0);
     expect(rich).toBeCloseTo(baseline, 6);
+  });
+  it("clamps persisted planner assessment fields at the adapter boundary", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [sys({})],
+      markets: [market("ore")],
+      modifiers: [],
+    });
+    await world.applyMarketUpdates([{
+      id: "s1|ore",
+      stock: 1,
+      anchorMult: 1,
+      satisfaction: 1,
+      realizedProductionRate: Number.NaN,
+      productionSuppressed: false,
+      productionSuppressRate: Number.NaN,
+      productionMult: Number.NaN,
+      squeezeCycles: 4.8,
+    }]);
+    expect(world.markets[0].realizedProductionRate).toBe(0);
+    // Opposite polarities, both deliberate: a corrupt realized rate reads as "produced nothing",
+    // but a corrupt gate reads as "no gate" — a NaN scalar must never stop a factory's draw.
+    expect(world.markets[0].productionSuppressRate).toBe(1);
+    expect(world.markets[0].productionMult).toBe(1);
+    expect(world.markets[0].productionSuppressed).toBe(false);
+    expect(world.markets[0].squeezeCycles).toBe(2);
+    world.markets[0] = { ...world.markets[0], squeezeCycles: -1 };
+    const views = await world.getMarketsForSystems(["s1"]);
+    expect(views[0].squeezeCycles).toBe(0);
+  });
+
+  // The absent-field fallback must never read as 0 — a 0 knee would weld the market's brake shut
+  // AND make it fully drawable at the same time. Both a genuinely-missing field (a legacy save)
+  // and a corrupt one (NaN) route through the same live recompute.
+  it("recomputes honestUseRate live when the row carries no persisted field", async () => {
+    const world = new InMemoryEconomyWorld(
+      { systems: [sys({})], markets: [market("ore")], modifiers: [] },
+    );
+    const views = await world.getMarketsForSystems(["s1"]);
+    const ore = views.find((v) => v.goodId === "ore")!;
+    const expected = useRatesByGood({
+      buildings: { ore: 5 }, population: 1000, yields: unitResourceVector(), productionSuppress: 1,
+    }).get("ore")?.total ?? 0;
+    expect(ore.honestUseRate).toBeCloseTo(expected, 9);
+    expect(ore.honestUseRate).toBeGreaterThan(0);
+  });
+
+  it("recomputes honestUseRate live when the persisted field is NaN", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [sys({})],
+      markets: [{ ...market("ore"), honestUseRate: Number.NaN }],
+      modifiers: [],
+    });
+    const views = await world.getMarketsForSystems(["s1"]);
+    const ore = views.find((v) => v.goodId === "ore")!;
+    const expected = useRatesByGood({
+      buildings: { ore: 5 }, population: 1000, yields: unitResourceVector(), productionSuppress: 1,
+    }).get("ore")?.total ?? 0;
+    expect(ore.honestUseRate).toBeCloseTo(expected, 9);
+    expect(ore.honestUseRate).toBeGreaterThan(0);
+  });
+
+  it("preserves a fractional squeeze counter (reference-time, not an integer assessment count)", async () => {
+    const world = new InMemoryEconomyWorld({
+      systems: [sys({})],
+      markets: [market("ore")],
+      modifiers: [],
+    });
+    await world.applyMarketUpdates([{
+      id: "s1|ore",
+      stock: 1,
+      anchorMult: 1,
+      satisfaction: 1,
+      realizedProductionRate: 0,
+      productionSuppressed: false,
+      productionSuppressRate: 1,
+      productionMult: 1,
+      squeezeCycles: 1.5,
+    }]);
+    expect(world.markets[0].squeezeCycles).toBe(1.5); // not floored to 1
+    const views = await world.getMarketsForSystems(["s1"]);
+    expect(views[0].squeezeCycles).toBe(1.5); // survives the read path too
   });
 });

@@ -1,11 +1,11 @@
 /**
  * Pure aggregation helpers for the per-system trade-flow detail surface.
- * The service in `lib/services/trade-flow.ts` loads raw `TradeFlow` rows
- * from Prisma and feeds them through these helpers to produce the
+ * The service in `lib/services/trade-flow.ts` reads raw trade-flow rows from
+ * the in-memory world and feeds them through these helpers to produce the
  * panel-facing shape.
  *
- * Pure: no Prisma, no I/O. Safe to import from anywhere and unit-test
- * directly against an in-memory array of rows.
+ * Pure: no I/O. Safe to import from anywhere and unit-test directly against
+ * an in-memory array of rows.
  */
 
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";

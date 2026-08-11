@@ -59,6 +59,11 @@ export const flowEventsBySystem = versionCached((world) => {
   return map;
 });
 
+/** Owning government by faction id. */
+export const governmentByFactionId = versionCached(
+  (world) => new Map(world.factions.map((f) => [f.id, f.governmentType])),
+);
+
 /** System display names by id. */
 export const systemNameById = versionCached(
   (world) => new Map(world.systems.map((s) => [s.id, s.name])),

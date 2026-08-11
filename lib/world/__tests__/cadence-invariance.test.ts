@@ -1,25 +1,31 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { runWorldTick } from "@/lib/world/tick";
+import { goodSatisfactionsBySystem } from "@/lib/tick-harness/good-satisfaction";
+import type { DemandBasisSystem } from "@/lib/tick-harness/good-satisfaction";
+import { grievanceShortfall, provision } from "@/lib/engine/population";
+import { readExpectation } from "@/lib/engine/expectation";
+import { EXPECTATION_PARAMS } from "@/lib/constants/population";
 import type { TickCadence } from "@/lib/constants/tick-cadence";
+import type { World } from "@/lib/world/types";
 
 /**
  * Interval invariance — the whole tick, not just one processor.
  *
- * The three cadence knobs (month / construction / logistics) change granularity,
- * never wall-clock rate: every pulse rider scales its per-run flows and per-pulse
+ * The three cadence knobs (cycle / construction / logistics) change granularity,
+ * never wall-clock rate: every cycle rider scales its per-run flows and per-cycle
  * incomes by `catchUpFactor`, so running the same seed for the same tick span at
  * interval 12 reproduces the interval-24 baseline's rates — population growth and
  * buildings landed.
  *
- * The comparison is statistical, not exact: halving an interval lands the pulses on
+ * The comparison is statistical, not exact: halving an interval lands the cycles on
  * different ticks, so the two runs draw different RNG streams and `fundQueue`'s
  * non-homogeneous `remaining` term distributes construction differently. With a fixed
  * seed each run is still deterministic (no flake — always passes or always fails on
  * given code), so TOL is a real bar, not a noise band: the honest run-to-run rate
  * difference is ~1.8e-3 (dominated by that fundQueue redistribution), while dropping a
  * processor's `catchUp` diverges an order of magnitude past it — verified by removing
- * the population delta's scaling (month12 population 6e-4 → 1.7e-2) and construction's
+ * the population delta's scaling (cycle12 population 6e-4 → 1.7e-2) and construction's
  * (build12 buildings 1.8e-3 → 8.2e-2). TOL sits between: it catches either break with
  * >3x margin and clears the honest baseline with >2.5x headroom.
  *
@@ -32,30 +38,117 @@ import type { TickCadence } from "@/lib/constants/tick-cadence";
  * Treasury balance gets its own, looser tolerance: it inherits the same fundQueue
  * redistribution noise as buildings (construction bills are billed off pendingWork,
  * which forks on the divergent RNG stream), plus its own settlement-boundary rounding
- * as pulses land on different ticks — the honest month12 baseline is ~2.2e-2, an order
+ * as cycles land on different ticks — the honest cycle12 baseline is ~2.2e-2, an order
  * of magnitude above the shared TOL. TREASURY_TOL sits between: dropping `catchUp`
  * from a single income term (heads tax) diverges to ~2.0e-1 — still ~3.3x past
  * TREASURY_TOL — while TREASURY_TOL itself clears the honest baseline with >2.5x
  * headroom.
  */
 
-const SEED = 745878428; // colonies + monthly pulses in-window (shared with the ECONOMY_SCALE invariance test)
+const SEED = 745878428; // colonies + cycle starts in-window (shared with the ECONOMY_SCALE invariance test)
 const SYSTEM_COUNT = 60;
-const TICKS = 480; // 20 reference-months — long enough for growth and construction rates to accumulate
+const TICKS = 480; // 20 reference-cycles — long enough for growth and construction rates to accumulate
 const TOL = 5e-3;
 const TREASURY_TOL = 6e-2; // measured honest baseline ~2.24e-2 — see header note
+// Adaptive-expectation guard: the memory update sub-steps at catchUpFactor(cadence.cycle) rather
+// than rate-scaling (lib/engine/expectation.ts), specifically BECAUSE it is nonlinear
+// (branch-switching) and therefore NOT invariant under the relaxation-rate's own scaling trick.
+// EXPECTATION_TOL (relative, mirrors TOL's shape) covers mean effective expectation, which sits
+// bounded well away from 0 (~0.94-0.95 on this fixture) — measured honest diffs are ~4.7e-3
+// (cycle12) / ~6.2e-3 (build12), so 1.5e-2 clears both with ~2.4-3.2x margin. Mean GRIEVANCE is a
+// different shape: on this short (20-cycle) fixture nearly every system is newborn or calm, so the
+// mean sits near 0 (~1.7e-3 baseline) and a RELATIVE tolerance is unusable — a few-thousandths
+// absolute divergence (the same shared-RNG-stream noise every other figure in this file carries)
+// reads as an 80%+ relative jump. GRIEVANCE_ABS_TOL is therefore absolute: measured honest diffs are
+// ~8.4e-3 (cycle12) / ~1.6e-3 (build12); 0.03 clears both with ≥3.5x margin.
+//
+// LIMITATION, disclosed rather than silently accepted: this whole-galaxy mean is a CADENCE
+// invariance check, not a correctness oracle — like every other figure in this file, it only has
+// power against a bug that behaves DIFFERENTLY at different cadences, and only if that difference is
+// large relative to this fixture's own cross-arm noise floor. Measured directly (temporarily patching
+// the processor to a one-step rate-scaled update — exactly the bug the sub-step rule forbids): at
+// this fixture's scale (60 systems, 480 ticks, dominated by newborn colonies whose grievance is ~0 by
+// construction) the mutation's effect on these two means was SMALLER than the arms' own honest noise,
+// so it would NOT have failed this test. The tight, authoritative guard for the sub-step rule is the
+// dedicated single-system fixtures in lib/engine/__tests__/expectation.test.ts ("Sub-stepping is not
+// rate-scaling") and lib/tick/processors/__tests__/population.test.ts ("sub-steps the expectation
+// update at catchUpFactor(interval), not one scaled step") — both compare against a computed oracle,
+// not a cross-arm statistic, and both DO fail on this exact mutation. What this file's extension adds
+// on top: a coarse health check that the new distributions stay finite and bounded, and move by a
+// comparable amount across every cadence knob, the same bar every other figure here is held to.
+const EXPECTATION_TOL = 1.5e-2;
+const GRIEVANCE_ABS_TOL = 0.03;
 
 interface RunTotals {
   population: number;
   buildings: number;
   treasuryBalance: number;
+  /** Founding money settled over the WHOLE run — a flow, so it must be accumulated, not read off
+   *  the last settlement. The settlement clock is not the construction clock, so this is the total
+   *  the `build12` arm (construction 12, cycle 24) actually tests for interval invariance. */
+  foundingExpense: number;
+  /** Mean effective adaptive-expectation memory over settled systems at run end — the sub-step
+   *  rule's guard: cycle12 doubles the sub-step count at half the interval, which must reproduce
+   *  the baseline's cadence-24 mean, not diverge the way a rate-scaled (non-sub-stepped) update
+   *  would. */
+  meanExpectation: number;
+  /** Mean grievance (`grievanceShortfall`, the same read the unrest fold makes) over settled
+   *  systems at run end — reported alongside `meanExpectation` because the sub-step rule's whole
+   *  point is what the memory does to the unrest term, not the stored number in isolation. */
+  meanGrievance: number;
+}
+
+/** Per-settled-system civilian demand basis, folded from the flat `world.buildings` rows the same
+ *  way `toTickSystems` does — built here rather than importing the tick-row layer, so this stays a
+ *  read of `World` directly, matching the rest of the file. */
+function demandBasisBySystem(world: World): Map<string, DemandBasisSystem> {
+  const out = new Map<string, DemandBasisSystem>();
+  for (const s of world.systems) {
+    if (s.control !== "developed") continue;
+    out.set(s.id, { buildings: {}, population: s.population });
+  }
+  for (const b of world.buildings) {
+    const entry = out.get(b.systemId);
+    if (entry) entry.buildings[b.buildingType] = b.count;
+  }
+  return out;
+}
+
+/** Mean effective expectation and mean grievance over settled systems — computed via the SAME read
+ *  the population processor makes (`readExpectation`/`grievanceShortfall`, `lib/engine/`), never
+ *  re-derived, so this guard cannot pass by measuring a different quantity than the one the
+ *  sub-step rule actually governs. */
+function meanExpectationAndGrievance(world: World): { meanExpectation: number; meanGrievance: number } {
+  const basis = demandBasisBySystem(world);
+  if (basis.size === 0) return { meanExpectation: 0, meanGrievance: 0 };
+  const goodsBySystem = goodSatisfactionsBySystem(basis, world.markets);
+  let expSum = 0;
+  let grvSum = 0;
+  let n = 0;
+  for (const s of world.systems) {
+    if (!basis.has(s.id)) continue;
+    const p = provision(goodsBySystem.get(s.id) ?? []);
+    const { effective } = readExpectation(s.provisionExpectation, p, EXPECTATION_PARAMS);
+    expSum += effective;
+    grvSum += grievanceShortfall(effective, p);
+    n++;
+  }
+  return { meanExpectation: expSum / n, meanGrievance: grvSum / n };
 }
 
 async function runAtCadence(cadence?: TickCadence): Promise<RunTotals> {
   let world = generateWorld({ systemCount: SYSTEM_COUNT, seed: SEED });
+  let foundingExpense = 0;
+  const countedSettlement = new Map<string, number>();
   for (let t = 0; t < TICKS; t++) {
     const result = await runWorldTick(world, cadence ? { cadence } : undefined);
     world = result.world;
+    for (const treasury of world.treasuries) {
+      const s = treasury.lastSettlement;
+      if (s === null || countedSettlement.get(treasury.factionId) === s.tick) continue;
+      countedSettlement.set(treasury.factionId, s.tick);
+      foundingExpense += s.foundingExpense;
+    }
   }
   let population = 0;
   for (const s of world.systems) population += s.population;
@@ -63,7 +156,8 @@ async function runAtCadence(cadence?: TickCadence): Promise<RunTotals> {
   for (const b of world.buildings) buildings += Math.max(0, b.count);
   let treasuryBalance = 0;
   for (const t of world.treasuries) treasuryBalance += t.balance;
-  return { population, buildings, treasuryBalance };
+  const { meanExpectation, meanGrievance } = meanExpectationAndGrievance(world);
+  return { population, buildings, treasuryBalance, foundingExpense, meanExpectation, meanGrievance };
 }
 
 function relDiff(a: number, b: number): number {
@@ -75,17 +169,26 @@ describe("cadence interval invariance", () => {
     "wall-clock rates match across intervals (each knob turned in isolation)",
     async () => {
       const base = await runAtCadence(undefined); // all 24
-      const month12 = await runAtCadence({ month: 12, construction: 24, logistics: 24 });
-      const build12 = await runAtCadence({ month: 24, construction: 12, logistics: 24 });
+      const cycle12 = await runAtCadence({ cycle: 12, construction: 24, logistics: 24 });
+      const build12 = await runAtCadence({ cycle: 24, construction: 12, logistics: 24 });
 
+      // The premise of the founding arm below: the base run actually founds something. relDiff(0,0)
+      // is 0, so a gate that froze founding galaxy-wide (a missing /economyScale in the valuation
+      // seam is exactly that) would sail through the invariance test it exists to catch.
+      expect(base.foundingExpense, "base run charged nothing for founding").toBeGreaterThan(0);
       for (const [name, v] of [
-        ["month12", month12],
+        ["cycle12", cycle12],
         ["build12", build12],
       ] as const) {
         const dPop = relDiff(base.population, v.population);
         const dBld = relDiff(base.buildings, v.buildings);
         expect(
-          Number.isFinite(v.population) && Number.isFinite(v.buildings) && Number.isFinite(v.treasuryBalance),
+          Number.isFinite(v.population) &&
+            Number.isFinite(v.buildings) &&
+            Number.isFinite(v.treasuryBalance) &&
+            Number.isFinite(v.foundingExpense) &&
+            Number.isFinite(v.meanExpectation) &&
+            Number.isFinite(v.meanGrievance),
           `${name} totals finite`,
         ).toBe(true);
         expect(
@@ -101,6 +204,26 @@ describe("cadence interval invariance", () => {
           dTre,
           `${name}: treasury balance rate diverges — base ${base.treasuryBalance.toFixed(1)} vs ${v.treasuryBalance.toFixed(1)} (rel ${dTre.toExponential(2)})`,
         ).toBeLessThan(TREASURY_TOL);
+        const dFnd = relDiff(base.foundingExpense, v.foundingExpense);
+        expect(
+          dFnd,
+          `${name}: founding expense rate diverges — base ${base.foundingExpense.toFixed(1)} vs ${v.foundingExpense.toFixed(1)} (rel ${dFnd.toExponential(2)})`,
+        ).toBeLessThan(TREASURY_TOL);
+        // The sub-step rule's guard: cycle12 doubles catchUpFactor(cadence.cycle), so the memory
+        // update sub-steps twice as often over half the interval — reproducing the baseline's mean,
+        // not diverging the way a rate-scaled (non-sub-stepped) update would. build12 does not touch
+        // the cycle cadence at all, so it is a near-zero-diff control on the same assertion.
+        const dExp = relDiff(base.meanExpectation, v.meanExpectation);
+        expect(
+          dExp,
+          `${name}: mean expectation diverges — base ${base.meanExpectation.toFixed(4)} vs ${v.meanExpectation.toFixed(4)} (rel ${dExp.toExponential(2)})`,
+        ).toBeLessThan(EXPECTATION_TOL);
+        // Absolute, not relative — see GRIEVANCE_ABS_TOL's header note.
+        const dGrvAbs = Math.abs(base.meanGrievance - v.meanGrievance);
+        expect(
+          dGrvAbs,
+          `${name}: mean grievance diverges — base ${base.meanGrievance.toFixed(4)} vs ${v.meanGrievance.toFixed(4)} (abs diff ${dGrvAbs.toExponential(2)})`,
+        ).toBeLessThan(GRIEVANCE_ABS_TOL);
       }
     },
     120_000,

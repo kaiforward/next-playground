@@ -22,10 +22,7 @@ The negative space may **grow** deliberately. Candidate future moves to raise ch
 
 The standing temptation is to "fix" a baseline inefficiency by tuning a base mechanic until it works well. **Don't.** If the base mechanics work too well on their own, the gameplay levers have nothing left to improve, and the reason to build a transport lane / arcology / specialised factory evaporates.
 
-Distinguish two kinds of change — only the first is allowed at the base layer:
-
-- **Remove artifact / noise — OK.** e.g. the seed staffing-self-consistency fix: it deleted *phantom* industry (buildings that produced nothing and were already decaying away) and left the freed deposit/general space as honest unbuilt headroom. It made the baseline *honest*, not *efficient* — it created design space rather than consuming it.
-- **Make the base efficient — NOT OK.** e.g. tuning market trade-flow to reliably feed the under-supplied middle. That does the factions' future job for them and deletes the negative space.
+The kind of change that is allowed at the base layer: **remove artifact / noise.** e.g. the seed staffing-self-consistency fix: it deleted *phantom* industry (buildings that produced nothing and were already decaying away) and left the freed deposit/general space as honest unbuilt headroom. It made the baseline *honest*, not *efficient* — it created design space rather than consuming it. The negative space itself comes from real constraints — budget, infrastructure, scarcity — never from designed algorithmic inefficiency.
 
 Calibration of base mechanics targets only a healthy *shape* — no NaN / runaway / pinning, a stable self-sufficient floor, and a large improvable middle — never "make every system thrive." (This is the coarse-health-bar calibration stance, applied to the baseline.)
 

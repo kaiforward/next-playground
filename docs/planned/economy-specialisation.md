@@ -14,9 +14,10 @@
 
 ## Headline
 
-The matured economy is **flat** — every developed system can make everything, so there's nothing to
-trade and no price spread to arbitrage. This track makes the *baseline* economy structurally specialise
-so that durable trade gradients exist **before** any agency or events are added. The principle:
+This track's problem statement — a **flat** matured economy where every developed system can make
+everything, so no durable trade gradient exists — was addressed by S1-S3, which shipped; the mature
+galaxy now holds a spread. What survives here is S4, the guardrails and joint calibration that keep
+that spread durable. The principle the whole track is built on:
 
 > A system's labour, space, and development must be **insufficient to build the full goods basket at the
 > scale its population demands**, so it specialises in a few goods and imports the rest.
@@ -278,7 +279,7 @@ stage is **last** so we tune diffusion/decay against the *real* gradient the str
 > descriptions** for buildings, especially academies. Reuses the existing `Tooltip`. The ambitious
 > **Paradox-style nested/pinnable deep-tooltip system** (rich-tooltip infra + a cross-linking concept
 > glossary) is a SEPARATE, larger project deferred until after the full sX economy track. Both get a
-> collaborative HTML-prototype design pass before build. Tracked in `docs/BACKLOG.md`.
+> collaborative HTML-prototype design pass before build. Tracked in `docs/ROADMAP.md`.
 
 > **S1 absorbs the old standalone "skilled labour" stage** (was S3). Per-good labour, per-good space, and
 > skilled labour are the same factor equation and must be calibrated jointly — see

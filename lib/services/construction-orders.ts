@@ -5,10 +5,10 @@
  *
  * Concurrency: `runWorldTick` awaits only in-memory adapters, so the event loop never reaches an
  * HTTP handler mid-tick — these synchronous mutations are strictly ordered between ticks and the
- * open set they append to is exactly what the next directed-build pulse funds.
+ * open set they append to is exactly what the next directed-build cycle funds.
  */
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
-import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject } from "@/lib/world/types";
+import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldMarket } from "@/lib/world/types";
 import { computeBuildOptions } from "@/lib/engine/build-options";
 import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
@@ -161,6 +161,9 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
     housingLevels: sizing.housingLevels,
     workTotal: sizing.work,
     workDone: 0,
+    stagedManifest: [],
+    charterPaid: false,
+    stalledCycles: 0,
   };
   setWorld({
     ...seat.world,
@@ -174,6 +177,34 @@ export type CancelOrderResult =
   | { ok: true; data: { projectId: string } }
   | { ok: false; error: string };
 
+/**
+ * Put a cancelled colony's staged goods back on its founder's shelves. They are real inventory —
+ * drawn from those very rows and paid for cycle by cycle, and sitting in the project ledger ever
+ * since — so cancelling without returning them would destroy stock the faction owns.
+ *
+ * Uncapped: stock coming home can never breach a reserve, and there is no storage ceiling to respect
+ * that the goods did not already sit under before they left. Lines are credited only onto rows the
+ * source still has (it holds a row for every good it ever staged, because each draw was sized off
+ * that row), and a non-finite or non-positive line is dropped rather than written into world state.
+ */
+function returnStagedManifest(
+  markets: WorldMarket[],
+  project: WorldColonyEstablishProject,
+): WorldMarket[] {
+  const credit = new Map<string, number>();
+  for (const line of project.stagedManifest) {
+    if (!Number.isFinite(line.quantity) || line.quantity <= 0) continue;
+    credit.set(line.goodId, (credit.get(line.goodId) ?? 0) + line.quantity);
+  }
+  if (credit.size === 0) return markets;
+  return markets.map((m) => {
+    if (m.systemId !== project.sourceSystemId) return m;
+    const change = credit.get(m.goodId);
+    if (change === undefined) return m;
+    return { ...m, stock: m.stock + change };
+  });
+}
+
 export function cancelOrder(input: { projectId: string }): CancelOrderResult {
   const seat = requireSeat();
   if ("error" in seat) return { ok: false, error: seat.error };
@@ -181,9 +212,15 @@ export function cancelOrder(input: { projectId: string }): CancelOrderResult {
   if (!project || project.factionId !== seat.factionId || project.origin !== "player") {
     return { ok: false, error: "No cancellable order with that id." };
   }
-  // Work spent is lost — by design.
+  // Work spent is lost — by design, as is a colony's charter. Its staged materials are not: they
+  // exist, so they go home to the founder.
+  const markets =
+    project.kind === "colony_establish"
+      ? returnStagedManifest(seat.world.markets, project)
+      : seat.world.markets;
   setWorld({
     ...seat.world,
+    markets,
     constructionProjects: seat.world.constructionProjects.filter((p) => p.id !== input.projectId),
   });
   return { ok: true, data: { projectId: input.projectId } };

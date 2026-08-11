@@ -1,38 +1,40 @@
 /**
- * Read-side per-good pop-needs snapshot — the display projection of the signal
- * the unrest spine integrates. Satisfaction is the consume-direction
- * self-limiting factor on the market band (what the economy pulse applies as
- * the consumption gate); pressure mirrors the demand-share × gap² shape of the
- * `dissatisfaction()` sum, weighted by unfloored civilian want (the pulse's own
- * shares fold in demand floors and modifiers, so magnitudes can differ
- * slightly). Pure — callers pass market rows and a demand basis.
+ * Read-side per-good pop-needs snapshot — the display projection of Provision, the economy fold's
+ * absolute [0,1] delivery measure. It reads the economy cycle's persisted per-good satisfaction
+ * (delivered ÷ demanded) instead of recomputing a stock position — the display and the sim cannot
+ * diverge, and the post-tick boundary bias is gone. The stored measure is taken against total
+ * civilian demand; rationing is pro-rata, so the delivered fraction is identical for every civilian
+ * drawer.
+ * Pressure mirrors the necessity-weighted share × gap shape of the `dissatisfaction()` sum — one
+ * implementation each, in lockstep with the Provision fold, weighted by unfloored civilian want ×
+ * GOOD_NECESSITY (the cycle's own shares fold in demand floors and modifiers, so magnitudes can
+ * differ slightly). Pressure stays absolute on purpose: correct for growth and for reading the
+ * world as it is, not for what the unrest spine integrates — that reads grievance against a
+ * persisted memory of Provision (`lib/engine/population.ts`'s `grievanceShortfall`/`accumulateUnrest`),
+ * not this per-good reading. Pure — callers pass market rows and a demand basis.
  */
 import { consumptionBreakdown, consumptionRate, type CivilianDemandBasis, type ConsumptionBreakdown } from "@/lib/engine/physical-economy";
-import { marketBandForRow } from "@/lib/engine/market-pricing";
-import { selfLimitingFactor } from "@/lib/engine/tick";
-import { GOOD_CONSUMPTION, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { GOOD_CONSUMPTION, GOOD_NECESSITY, SKILL1_CONSUMPTION, SKILL2_CONSUMPTION } from "@/lib/constants/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
 
 export interface PopNeed {
   goodId: string;
   /** Civilian want (unfloored consumptionRate — NOT the MIN_DEMAND-floored pricing figure). */
   want: number;
-  /** [0,1] — the consume gate at current stock; 1 = fully met. */
+  /** [0,1] — the delivered fraction the last economy cycle applied; 1 = fully met. */
   satisfaction: number;
   /** want × satisfaction. */
   delivered: number;
-  /** demandShare × (1 − satisfaction)² — this good's term in the system's dissatisfaction sum. */
+  /** necessityWeightedShare × (1 − satisfaction) — this good's term in the system's dissatisfaction sum. */
   pressure: number;
   breakdown: ConsumptionBreakdown;
 }
 
-/** The market-row fields needed to place stock on its band. */
+/** The market-row fields the needs read consumes. */
 export interface PopNeedsMarketRow {
   goodId: string;
-  stock: number;
-  demandRate: number;
-  storageCapacity: number;
-  anchorMult: number;
+  /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1). */
+  satisfaction?: number;
 }
 
 /** Every good either tier of the basis consumes (union of the three basket catalogues). */
@@ -56,22 +58,20 @@ export function computePopNeeds(basis: CivilianDemandBasis, markets: PopNeedsMar
     .filter((g) => g.want > 0);
   const totalWant = wanted.reduce((s, g) => s + g.want, 0);
   if (totalWant <= 0) return [];
+  const totalWeight = wanted.reduce((s, g) => s + g.want * (GOOD_NECESSITY[g.goodId] ?? 0), 0);
 
   return wanted
     .map(({ goodId, want }) => {
       const row = rowByGood.get(goodId);
-      let satisfaction = 0;
-      if (row) {
-        const band = marketBandForRow(row, GOODS[goodId]);
-        satisfaction = selfLimitingFactor(row.stock, band.minStock, band.targetStock, "consume");
-      }
+      const satisfaction = row ? Math.max(0, Math.min(1, row.satisfaction ?? 1)) : 0;
       const gap = 1 - satisfaction;
+      const weight = want * (GOOD_NECESSITY[goodId] ?? 0);
       return {
         goodId,
         want,
         satisfaction,
         delivered: want * satisfaction,
-        pressure: (want / totalWant) * gap * gap,
+        pressure: totalWeight > 0 ? (weight / totalWeight) * gap : 0,
         breakdown: consumptionBreakdown(goodId, basis),
       };
     })

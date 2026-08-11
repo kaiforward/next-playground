@@ -3,7 +3,7 @@
  *
  * Edge diffusion is a LOCAL gradient flow: it balances neighbours but is mathematically incapable of
  * reaching a colony several hops from any population (the pop puddles near the cores and never travels).
- * Colonist delivery is the fix: each pulse every sufficiently-populated developed system contributes a
+ * Colonist delivery is the fix: each cycle every sufficiently-populated developed system contributes a
  * capped slice of its DRAWABLE SPARE (idle pop above its job needs + a small staffed leak — never its
  * working population, so cores don't crater) into a faction pool, and that pool is WATER-FILLED across
  * the faction's developed systems — raising the emptiest colonies first toward a common level, capped by
@@ -14,7 +14,7 @@
  * Conserved (Σ deltas = 0 per faction): what the sinks receive is exactly what the sources give.
  * Distance-agnostic within a faction for now (all territory is reachable); a topology/blockade-aware
  * routing layer — which system feeds which — layers on later without changing the allocation shape, and
- * the per-pulse {from, to} pairing it needs is the same data a migration-flow overlay would render.
+ * the per-cycle {from, to} pairing it needs is the same data a migration-flow overlay would render.
  */
 import type { MigrationDelta } from "@/lib/engine/migration";
 
@@ -27,17 +27,23 @@ export interface ColonistSystem {
   popCap: number;
   /** Heads the built base wants (Σ labour); pop above this is idle spare, the primary donatable pool. */
   labourDemand: number;
+  /**
+   * Famine inflow gate (abandonment Rule 1): true forces this system's sink headroom to 0 for this
+   * cycle — it receives no colonist delivery. Does NOT affect its eligibility as a source; a flagged
+   * system above `minSourcePopulation` still donates its idle spare. Absent/false ⇒ normal headroom.
+   */
+  inflowBlocked?: boolean;
 }
 
 export interface ColonistDeliveryParams {
-  /** Max fraction of its population a source contributes to the pool per pulse (paces the drain — well above the diffusion rate). */
+  /** Max fraction of its population a source contributes to the pool per cycle (paces the drain — well above the diffusion rate). */
   sourceOutflowCap: number;
   /** A system contributes/receives only once it holds at least this many people (skips freshly-seeded stubs as sources). */
   minSourcePopulation: number;
 }
 
 /**
- * Surplus a source may contribute this pulse: its IDLE SPARE — population above the jobs its built base
+ * Surplus a source may contribute this cycle: its IDLE SPARE — population above the jobs its built base
  * wants — rate-capped. Donating only idle spare floors a source at its labour demand, so it keeps its
  * workers and can never be drained into a death spiral; its own growth then re-donates, so reinforcement
  * is sustained rather than a one-time dump.
@@ -121,7 +127,13 @@ export function allocateColonists(
     const pool = contributions.reduce((a, b) => a + b, 0);
     if (pool <= 0) continue;
 
-    const sinks = group.map((s) => ({ pop: s.population, headroom: Math.max(0, s.popCap - s.population) }));
+    // A famine (inflow-blocked) system keeps its place in the group — sinks/contributions/added stay
+    // index-aligned with it — but its headroom is forced to 0, so water-fill gives it nothing while it
+    // may still donate above (drawableContribution does not read inflowBlocked).
+    const sinks = group.map((s) => ({
+      pop: s.population,
+      headroom: s.inflowBlocked ? 0 : Math.max(0, s.popCap - s.population),
+    }));
     const added = waterFill(sinks, pool);
     const placed = added.reduce((a, b) => a + b, 0);
     if (placed <= 0) continue;

@@ -55,7 +55,9 @@ export interface PixiMapCanvasProps {
   developmentBySystem?: Map<string, number>;
   /** Per-system migration attractiveness (developed systems only) for the migration choropleth, or empty when mode is off. */
   migrationBySystem?: Map<string, number>;
-  /** The focused faction (from the /factions/[id] route), or null. Value modes re-normalise pop/development to it and de-emphasise the rest; stability dims but does not rescale. */
+  /** Per-system Provisioned (0..1, assessed systems only) for the provision choropleth, or empty when mode is off. */
+  provisionBySystem?: Map<string, number>;
+  /** The focused faction (from the /factions/[id] route), or null. Value modes re-normalise pop/development to it and de-emphasise the rest; stability and provision dim but do not rescale. */
   selectedFactionId?: string | null;
 }
 
@@ -95,6 +97,7 @@ export function PixiMapCanvas({
   populationBySystem,
   developmentBySystem,
   migrationBySystem,
+  provisionBySystem,
   selectedFactionId = null,
 }: PixiMapCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -405,11 +408,11 @@ export function PixiMapCanvas({
   }, [atlasData.systems, atlasData.factions, atlasData.meta.mapSize, pixiReady, regionInfos]);
 
   // ── Toggle which territory layer is visible ────────────────────────
-  // Six modes: "political" shows the faction layer, "regions" shows the neutral
-  // region border layer, "stability" shows the unrest choropleth, "population"
-  // shows the population choropleth, "development" shows the development
-  // choropleth, "none" hides all. Per-frame LOD logic still runs on the hidden
-  // layers (cheap) so swapping is instant.
+  // "political" shows the faction layer, "regions" shows the neutral region
+  // border layer, the value modes (stability/population/development/
+  // migration/provision) share the value-choropleth layer, "none" hides all.
+  // Per-frame LOD logic still runs on the hidden layers (cheap) so swapping
+  // is instant.
   useEffect(() => {
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
@@ -427,7 +430,7 @@ export function PixiMapCanvas({
   }, [selectedSystem, pixiReady]);
 
   // ── Value choropleth fills (lightweight redraw on data change) ──────
-  // One setter for all three value modes — the layer's ramp + aggregation
+  // One setter for every value mode — the layer's ramp + aggregation
   // tiers are keyed off the `ValueMode` passed alongside the value map.
   // Reference == value map for every mode: population and development both
   // colour by value ÷ scope-max (no "vs potential" or "vs own ceiling" reference).
@@ -452,8 +455,12 @@ export function PixiMapCanvas({
       p.valueChoroplethLayer.setValues(developmentBySystem ?? EMPTY, developmentBySystem ?? EMPTY, "development");
     } else if (mapMode === "migration") {
       p.valueChoroplethLayer.setValues(migrationBySystem ?? EMPTY, migrationBySystem ?? EMPTY, "migration", populationBySystem ?? EMPTY);
+    } else if (mapMode === "provision") {
+      // Reference is passed for shape-consistency with the other setValues calls, but the ramp ignores
+      // it entirely for this mode (see valueRampColorPixi) — provision's band edges are absolute.
+      p.valueChoroplethLayer.setValues(provisionBySystem ?? EMPTY, provisionBySystem ?? EMPTY, "provision", populationBySystem ?? EMPTY);
     }
-  }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, migrationBySystem, pixiReady]);
+  }, [mapMode, stabilityBySystem, populationBySystem, developmentBySystem, migrationBySystem, provisionBySystem, pixiReady]);
 
   // ── Value-mode faction focus (scope) — driven by the /factions/[id] route ──
   // Separate from the per-tick value effect: scope changes only on mode/faction change, not every tick.

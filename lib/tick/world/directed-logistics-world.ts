@@ -17,7 +17,25 @@ export interface MarketRowForLogistics {
   stock: number;
   anchorMult: number;
   demandRate: number;
+  /** Persisted use figure — what this system's population and industry draw when running.
+   *  Missing ⇒ recompute live; never read a missing field as 0. */
+  honestUseRate?: number;
   storageCapacity: number;
+  /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1). */
+  satisfaction?: number;
+  /** Reference-cycle realized output; missing falls back to current capacity for old saves only. */
+  realizedProductionRate?: number;
+  /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
+  productionSuppressed?: boolean;
+  /** The owning system's strike × maintenance production scalar, ∈ (0,1]; missing ⇒ 1. */
+  productionSuppressRate?: number;
+  /** Aggregated event production multiplier applied last cycle; missing ⇒ 1. */
+  productionMult?: number;
+  /** Rationed-economy persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
+  squeezeCycles?: number;
+  /** Structural-deficit persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
+  proposalCycles?: number;
+  logisticsFundingBound?: boolean;
 }
 
 /** One system's logistics-relevant state. */
@@ -36,6 +54,11 @@ export interface LogisticsMarketUpdate {
   stock: number;
 }
 
+export interface LogisticsFundingBoundUpdate {
+  id: string;
+  logisticsFundingBound: boolean;
+}
+
 export interface LogisticsFlowInsert {
   tick: number;
   fromSystemId: string;
@@ -51,6 +74,8 @@ export interface DirectedLogisticsWorld {
   getSystemsForFactions(factionKeys: Array<string | null>): Promise<SystemLogisticsRow[]>;
   /** Bulk absolute stock writes (already clamped). */
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
+  /** Apply changed wanted-but-unfunded assessments without rewriting stock. */
+  applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;
   /** Append directed-logistics flow rows to the world flow log. */
   appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;
 }

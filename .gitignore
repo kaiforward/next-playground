@@ -57,11 +57,21 @@ next-env.d.ts
 .claude/worktrees/
 .claude/reviews/
 
-# superpowers brainstorm scratch
+# local cross-harness agent review output
+.agent-reviews/
+
+# superpowers brainstorm scratch (folder retires with the plugin)
 .superpowers/
+
+# project scratch: diag runners, gate reports, SDD ledgers (temp/sdd/<feature>/)
+temp/
 
 # cocoindex code search index
 .cocoindex_code/
+
+# stryker mutation-testing scratch + reports
+.stryker-tmp/
+/reports
 
 # MCP server config (local tooling)
 .mcp.json

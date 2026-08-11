@@ -25,6 +25,8 @@ import {
   GhostVitalTile,
   CompositionBar,
 } from "@/components/ui/vital-tile";
+import { BADGE_COLOR_VAR } from "@/components/ui/badge";
+import { bandLabel, bandTone } from "@/components/system/provision-view";
 import type { GovernmentType } from "@/lib/types/game";
 
 // ── Quiet context strip — a tight 2-up key/value row, deliberately smaller
@@ -75,7 +77,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
   const vitalsSection: ReactNode =
     vitals.visibility === "visible" ? (
       (() => {
-        const { stability, development, population } = vitals;
+        const { stability, development, population, provision } = vitals;
         const pop = splitMagnitude(formatPeople(population.headcount));
         return (
           <VitalGrid columns={4}>
@@ -124,9 +126,30 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
                 </Link>
               }
             />
+            {provision.assessed ? (
+              <VitalTile
+                label="Provisioned"
+                dotColor={BADGE_COLOR_VAR[bandTone(provision.band)]}
+                value={String(Math.round(provision.pct))}
+                unit="%"
+                meter={{
+                  pct: provision.pct,
+                  color: BADGE_COLOR_VAR[bandTone(provision.band)],
+                  markerPct: provision.expectationPct,
+                }}
+                hint={bandLabel(provision.band)}
+              />
+            ) : (
+              <VitalTile
+                label="Provisioned"
+                dotColor="var(--color-text-tertiary)"
+                value="—"
+                hint="Not yet assessed"
+              />
+            )}
             <GhostVitalTile
               label="Future vitals"
-              colSpan={3}
+              colSpan={2}
               future={
                 <>
                   control · treasury

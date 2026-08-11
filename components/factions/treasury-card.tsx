@@ -61,13 +61,13 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
         <div className="mb-3 flex items-baseline justify-between">
           <span className="font-mono text-[22px] leading-none text-text-primary">{money(data.balance)}</span>
           <span className={`font-mono text-xs ${data.net < 0 ? "text-status-red-light" : "text-status-green-light"}`}>
-            net {signedMoney(data.net)} / month
+            net {signedMoney(data.net)} / cycle
           </span>
         </div>
         {!s ? (
           <EmptyState
             className="mb-4"
-            message="No settlement yet — the first collection lands on the next month pulse."
+            message="No settlement yet — the first collection lands on the next cycle start."
           />
         ) : (
           <>
@@ -100,6 +100,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
               ))}
             <LedgerRow label="Logistics" amount={signedMoney(-s.paid.logistics)} />
             <LedgerRow label="Construction" amount={signedMoney(-s.paid.construction)} />
+            <LedgerRow label="Founding" amount={signedMoney(-s.foundingExpense)} />
           </>
         )}
 

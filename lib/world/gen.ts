@@ -1,13 +1,11 @@
 /**
- * Pure world generation — composes `generateUniverse` with the
- * post-generation derivations `prisma/seed.ts` writes to Postgres, producing
- * a fully-populated in-memory `World` directly. No DB dependency; every
- * synthetic id is minted from a monotonic counter rather than a cuid.
+ * Pure world generation — composes `generateUniverse` with the post-generation
+ * derivations (markets, factions, relations, ships), producing a fully-populated
+ * in-memory `World` directly. Every synthetic id is minted from a monotonic counter,
+ * so a given seed yields a byte-identical world.
  */
 
-import { GOODS } from "@/lib/constants/goods";
-import { getInitialStock, civilianDemandRateForGood } from "@/lib/constants/market-economy";
-import { computeSystemLabourSnapshot, facilityStorageForGood } from "@/lib/engine/industry";
+import { createSystemMarkets } from "@/lib/world/markets";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
 import { slotColumns, qualColumns, yieldColumns } from "@/lib/engine/resources";
@@ -49,10 +47,8 @@ function mintId(minter: IdMinter, prefix: string): string {
 
 /**
  * Build `generateUniverse`'s params from a fully-interpolated universe-gen
- * config (Task 2's `genConfigForSystemCount`). Mirrors `prisma/seed.ts`'s
- * `GenParams` construction field-for-field, except `seed` comes from the
- * caller (the config's own `SEED` stays pinned at the `BASE_CONFIG` default
- * and is not the per-world seed).
+ * config (`genConfigForSystemCount`). `seed` comes from the caller — the config's
+ * own `SEED` stays pinned at the `BASE_CONFIG` default and is not the per-world seed.
  */
 export function buildGenParams(
   seed: number,
@@ -169,8 +165,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
         systemId: systemIds[i],
         buildingType,
         count,
-        idleMonths: 0,
-        collapseDebt: 0,
+        idleCycles: 0,
       })),
   );
 
@@ -181,24 +176,19 @@ export function generateWorld(options: GenerateWorldOptions): World {
     fuelCost: c.fuelCost,
   }));
 
-  // ── Markets (every system × every good) ──
-  const goodIds = Object.keys(GOODS);
+  // ── Markets (developed systems only) ──
+  // An unclaimed system has no market: no one there produces, consumes, or stores anything. Rows are
+  // created when a system is settled (`lib/world/tick.ts`), opening empty. Seeding every rock would
+  // hand each future colony a full anchor's worth of goods nobody grew, and would swamp every
+  // galaxy-wide market reading with rows that can never move.
   const markets: WorldMarket[] = universe.systems.flatMap((s, i) => {
-    const demandBasis = computeSystemLabourSnapshot(s.buildings, s.population).basis;
-    return goodIds.map((goodId) => {
-      const storageCapacity = facilityStorageForGood(s.buildings, goodId);
-      const stock = getInitialStock(s.buildings, s.yieldMult, s.population, goodId);
-      // Guard: JSON.stringify silently turns NaN/Infinity into null, which would
-      // break the save/load round-trip — clamp defensively (mirrors seed.ts's
-      // Postgres NaN/Infinity guard, which exists for the same underlying reason).
-      return {
-        systemId: systemIds[i],
-        goodId,
-        stock: Number.isFinite(stock) ? stock : 0,
-        anchorMult: 1,
-        demandRate: civilianDemandRateForGood(goodId, demandBasis),
-        storageCapacity: Number.isFinite(storageCapacity) ? storageCapacity : 0,
-      };
+    if (systems[i].control !== "developed") return [];
+    return createSystemMarkets({
+      systemId: systemIds[i],
+      buildings: s.buildings,
+      yields: s.yieldMult,
+      population: s.population,
+      seedStock: true,
     });
   });
 
@@ -221,6 +211,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
     bands: { maintenance: 1, logistics: 1, construction: 1 },
     funded: { maintenance: 1, logistics: 1, construction: 1 },
     pendingWork: { logistics: 0, construction: 0 },
+    pendingFounding: 0,
     lastSettlement: null,
     updatedAtTick: 0,
   }));

@@ -8,8 +8,6 @@
  */
 
 import { GOODS } from "@/lib/constants/goods";
-import { scaleValue } from "@/lib/constants/economy-scale";
-import { type GovernmentDefinition } from "@/lib/constants/government";
 import { aggregateModifiers, type ModifierRow, type ModifierCaps } from "@/lib/engine/events";
 import { buildMarketTickEntry, type MarketTickEntry } from "@/lib/engine/tick";
 import { marketBand } from "@/lib/engine/market-pricing";
@@ -30,14 +28,16 @@ export interface MarketTickInput {
   stock: number;
   /** Stored local demand rate (civilian demand — per-capita baseline + skilled baskets — floored at seed). */
   demandRate: number;
+  /** THE USE FIGURE — the brake knee's warehousing denominator (see MarketTickEntry.honestUseRate). */
+  honestUseRate: number;
+  /** Reference-cycle production rate: pre-catchUp, pre-suppress, pre-event — the knee's output denominator. */
+  capacityProduction: number;
   /** Built infrastructure storage capacity from StationMarket.storageCapacity. */
   storageCapacity: number;
   /** Base production rate for this good (undefined = not a producer). */
   baseProductionRate?: number;
   /** Base consumption rate for this good (undefined = not a consumer). */
   baseConsumptionRate?: number;
-  /** Government definition for the system's owning faction (undefined if none). */
-  govDef?: GovernmentDefinition;
   /** Active economy modifiers for this system (already filtered). */
   modifiers: ModifierRow[];
   /** Modifier caps from constants. */
@@ -86,14 +86,13 @@ export function resolveMarketTickEntry(input: MarketTickInput): ResolvedMarketTi
   const entry = buildMarketTickEntry({
     goodId: input.goodId,
     stock: input.stock,
-    minStock: band.minStock,
-    targetStock: band.targetStock,
+    honestUseRate: input.honestUseRate,
+    capacityProduction: input.capacityProduction,
+    anchorMult,
+    demandRate: input.demandRate,
     maxStock: band.maxStock,
     baseProductionRate: input.baseProductionRate,
     baseConsumptionRate: input.baseConsumptionRate,
-    // Goods-magnitude consumption term — rides ECONOMY_SCALE like every other consumption
-    // rate, else it's an unscaled absolute that dominates consumption at low scale.
-    govConsumptionBoost: scaleValue(input.govDef?.consumptionBoosts[input.goodId] ?? 0),
     productionSuppress: input.productionSuppress,
   });
 

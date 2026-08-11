@@ -41,32 +41,34 @@ describe("HOME_SYSTEM_PREFAB", () => {
   });
 
   it("is self-sufficient — production meets the full tick-model consumption for every good it manufactures", () => {
-    // Consumption must match the live per-tick model (consumptionRate): the per-capita baseline PLUS the
-    // technician/engineer skilled baskets. A fully-staffed capital works exactly its licensed skilled demand,
-    // so its basis is the labour allocation over its own buildings.
-    const alloc = computeLabourAllocation(labourParts(b), HOME_SYSTEM_POP);
+    // Consumption must match the live per-tick model (consumptionRate): the per-capita baseline plus the
+    // technician/engineer skilled baskets. A fully-staffed capital works exactly its licensed skilled
+    // demand, so its basis is the labour allocation over its own base.
+    const buildings = computeHomeworldBuildings(HOME_SYSTEM_POP);
+    const alloc = computeLabourAllocation(labourParts(buildings), HOME_SYSTEM_POP);
     const basis = { population: HOME_SYSTEM_POP, technicians: alloc.technicians, engineers: alloc.engineers };
 
     // Recipe draw of the base's own factories, added onto civilian consumption.
     const recipeDraw: Record<string, number> = {};
-    for (const [g, c] of Object.entries(b)) {
+    for (const [g, c] of Object.entries(buildings)) {
       const out = OUTPUT_PER_UNIT[g];
       if (out === undefined) continue;
       for (const [inp, per] of Object.entries(GOOD_RECIPES[g] ?? {})) {
         recipeDraw[inp] = (recipeDraw[inp] ?? 0) + per * c * out;
       }
     }
+
     const fullStaff: LabourState = { labourFulfil: 1, skill1Fulfil: 1, skill2Fulfil: 1 };
     const yields = unitResourceVector();
     for (const g of Object.keys(OUTPUT_PER_UNIT)) {
       if (!isCovered(g)) continue; // uncovered (military tier-2) is imported, not made here — from source
-      const production = buildingProduction(b, g, fullStaff, yields);
+      const production = buildingProduction(buildings, g, fullStaff, yields);
       const consumption = consumptionRate(g, basis) + (recipeDraw[g] ?? 0);
       expect(production, g).toBeGreaterThanOrEqual(consumption - 1e-6);
     }
   });
 
-  it("is deterministic — recomputing yields an identical stamp (same for every faction)", () => {
+  it("is deterministic — recomputing yields an identical stamp", () => {
     expect(computeHomeworldBuildings(HOME_SYSTEM_POP)).toEqual(b);
   });
 });

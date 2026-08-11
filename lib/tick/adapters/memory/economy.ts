@@ -7,10 +7,13 @@ import type { ModifierRow } from "@/lib/engine/events";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { computeSystemLabourSnapshot, buildingProduction } from "@/lib/engine/industry";
 import type { SystemLabourSnapshot } from "@/lib/engine/industry";
+import { useRatesByGood } from "@/lib/engine/honest-demand";
+import type { UseRate } from "@/lib/engine/honest-demand";
 import { economyShardOrder } from "@/lib/engine/shard-order";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { WorldMarket } from "@/lib/world/types";
+import { BUILDING_TYPES } from "@/lib/constants/industry";
 
 /**
  * In-memory adapter for the economy processor.
@@ -53,6 +56,41 @@ export class InMemoryEconomyWorld implements EconomyWorld {
     const sysById = new Map(this.systems.map((s) => [s.id, s]));
     const wanted = new Set(systemIds);
     const labourBySystem = new Map<string, SystemLabourSnapshot>();
+    const producedGoodsBySystem = new Map<string, Set<string>>();
+    // Lazy per-system recompute for rows written before the use figure existed — the
+    // absent-field fallback is a live recompute, never 0 (a 0 knee would weld the brake
+    // shut on the exact markets the fallback exists to keep honest). Cold path: every
+    // row the population processor or the market seeder has touched carries the field.
+    const recomputedUseBySystem = new Map<string, Map<string, UseRate>>();
+    // Built once, on first use, in a single pass over `this.markets` — replaces a `.find()` that
+    // rescanned the whole galaxy's markets per system needing the live recompute. First-writer-wins
+    // per system, matching the `.find()`'s array-order semantics.
+    let suppressRateBySystem: Map<string, number> | undefined;
+    const suppressRateFor = (systemId: string): number => {
+      if (suppressRateBySystem === undefined) {
+        suppressRateBySystem = new Map<string, number>();
+        for (const m of this.markets) {
+          if (suppressRateBySystem.has(m.systemId)) continue;
+          if (typeof m.productionSuppressRate === "number") {
+            suppressRateBySystem.set(m.systemId, m.productionSuppressRate);
+          }
+        }
+      }
+      return suppressRateBySystem.get(systemId) ?? 1;
+    };
+    const recomputedUseRate = (sys: TickSystem, goodId: string): number => {
+      let bySystem = recomputedUseBySystem.get(sys.id);
+      if (bySystem === undefined) {
+        bySystem = useRatesByGood({
+          buildings: sys.buildings,
+          population: sys.population,
+          yields: sys.yields,
+          productionSuppress: suppressRateFor(sys.id),
+        });
+        recomputedUseBySystem.set(sys.id, bySystem);
+      }
+      return bySystem.get(goodId)?.total ?? 0;
+    };
     const views: MarketView[] = [];
     for (const m of this.markets) {
       if (!wanted.has(m.systemId)) continue;
@@ -63,19 +101,36 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         snap = computeSystemLabourSnapshot(sys.buildings, sys.population);
         labourBySystem.set(sys.id, snap);
       }
+      let producedGoods = producedGoodsBySystem.get(sys.id);
+      if (producedGoods === undefined) {
+        producedGoods = new Set<string>();
+        for (const [buildingType, count] of Object.entries(sys.buildings)) {
+          if (count <= 0) continue;
+          const goodId = BUILDING_TYPES[buildingType]?.outputGood;
+          if (goodId !== undefined) producedGoods.add(goodId);
+        }
+        producedGoodsBySystem.set(sys.id, producedGoods);
+      }
       const production = buildingProduction(sys.buildings, m.goodId, snap.state, sys.yields);
       const consumption = consumptionRate(m.goodId, snap.basis);
+      const squeezeCycles = typeof m.squeezeCycles === "number" && Number.isFinite(m.squeezeCycles)
+        ? Math.max(0, Math.min(2, m.squeezeCycles))
+        : 0;
       views.push({
         id: `${m.systemId}|${m.goodId}`,
         systemId: m.systemId,
         regionId: sys.regionId,
         goodId: m.goodId,
         stock: m.stock,
-        governmentType: sys.governmentType,
-        baseProductionRate: production > 0 ? production : undefined,
+        baseProductionRate: producedGoods.has(m.goodId) ? production : undefined,
         baseConsumptionRate: consumption > 0 ? consumption : undefined,
         demandRate: m.demandRate,
+        honestUseRate:
+          typeof m.honestUseRate === "number" && Number.isFinite(m.honestUseRate)
+            ? m.honestUseRate
+            : recomputedUseRate(sys, m.goodId),
         storageCapacity: m.storageCapacity,
+        squeezeCycles,
       });
     }
     return Promise.resolve(views);
@@ -122,6 +177,13 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         ...m,
         stock: isFinite(u.stock) ? u.stock : 0,
         anchorMult: isFinite(u.anchorMult) ? u.anchorMult : 1,
+        satisfaction: isFinite(u.satisfaction) ? Math.max(0, Math.min(1, u.satisfaction)) : 1,
+        realizedProductionRate: isFinite(u.realizedProductionRate) ? Math.max(0, u.realizedProductionRate) : 0,
+        productionSuppressed: u.productionSuppressed,
+        // A non-finite gate reads as no gate (the absent-field behaviour), not as a stop.
+        productionSuppressRate: isFinite(u.productionSuppressRate) ? Math.max(0, u.productionSuppressRate) : 1,
+        productionMult: isFinite(u.productionMult) ? Math.max(0, u.productionMult) : 1,
+        squeezeCycles: isFinite(u.squeezeCycles) ? Math.max(0, Math.min(2, u.squeezeCycles)) : 0,
       };
     });
     return Promise.resolve();

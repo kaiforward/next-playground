@@ -10,7 +10,7 @@ const PARAMS = { pointsPerLevel: 5, paybackHorizon: 12, backlogWindow: 6 };
 
 function system(systemId: string, population: number, generalSpace = 50): BuildSystemState {
   return {
-    systemId, factionId: "f1", control: "developed", population, unrest: 0,
+    systemId, factionId: "f1", control: "developed", population,
     buildings: {}, slotCap: emptyResourceVector(), generalSpace, habitableSpace: 10, goods: [],
   };
 }

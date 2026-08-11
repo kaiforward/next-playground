@@ -178,3 +178,13 @@ describe("colonyValue", () => {
     expect(colonyValue(c, unblocked, 1.5, PARAMS)).toBeCloseTo(14.3, 5);
   });
 });
+
+describe("factionSaturation — the potential is a pop-cap, not a land area", () => {
+  it("converts habitable land into pop-cap at POP_CENTRE_DENSITY per whole level", () => {
+    // 100 habitable ÷ housing footprint 1 = 100 levels = 2000 potential pop-cap; 50 levels built
+    // = 1000 built pop-cap ⇒ σ = 0.5. Dividing by the density instead would read a saturated faction.
+    expect(
+      factionSaturation([sys({ habitableSpace: 100, buildings: { [HOUSING_TYPE]: 50 } })]),
+    ).toBeCloseTo(0.5, 5);
+  });
+});

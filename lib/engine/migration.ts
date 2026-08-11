@@ -15,6 +15,12 @@ export interface MigrationNode {
   popCap: number;
   /** Heads the built base wants (Σ labour totals; housing demands none). Open jobs = labourDemand − population. */
   labourDemand: number;
+  /**
+   * Famine inflow gate (abandonment Rule 1): true forces this node's destination headroom to 0 for
+   * this run — no one moves toward it, from either endpoint. Outflow FROM a flagged node is
+   * unaffected (exodus is wanted). Absent/false ⇒ normal headroom.
+   */
+  inflowBlocked?: boolean;
 }
 
 /** Signed population change for one system (Σ over a run = 0 — conserved). */
@@ -79,7 +85,7 @@ export interface MigrationFlowParams {
    * — a small always-on leak so a saturated core (spare labour ≈ 0) still feeds a strongly-attractive
    * (job-rich) colony a steady trickle. This is the mechanism that makes colonisation work once the
    * home worlds fill up: without it, migration to colonies stalls the moment the source has no idle
-   * labour. Small by design (the core keeps almost all its workers). PR4-calibrated.
+   * labour. Small by design (the core keeps almost all its workers). Simulator-calibrated.
    */
   employedLeakFraction: number;
 }
@@ -110,7 +116,9 @@ export function migrationFlow(
 
   const distanceFactor = 1 / (1 + params.distanceDecay * fuelCost);
   const outflow = source.population * params.maxOutflowFraction * Math.abs(gradient) * distanceFactor;
-  const destHeadroom = Math.max(0, dest.popCap - dest.population);
+  // A famine destination (Rule 1) absorbs no one, whichever endpoint it is — the same hard bound an
+  // overshot destination already gets, forced rather than derived from population/popCap.
+  const destHeadroom = dest.inflowBlocked ? 0 : Math.max(0, dest.popCap - dest.population);
 
   // Source draw: idle labour is always fully drawable; a small always-on fraction of STAFFED workers
   // (employedLeakFraction) also leaks toward a strongly-attractive destination, so a saturated core

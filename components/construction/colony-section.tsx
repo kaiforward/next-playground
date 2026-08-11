@@ -6,7 +6,7 @@ import { useOrderColony, useCancelOrder } from "@/lib/hooks/use-construction-ord
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConstructionRow } from "@/components/construction/construction-row";
-import { formatMagnitude } from "@/lib/utils/format";
+import { formatCredits, formatMagnitude } from "@/lib/utils/format";
 import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
 
 /**
@@ -57,6 +57,19 @@ export function ColonySection({ systemId }: { systemId: string }) {
               from <span className="text-text-accent">{colony.preview.sourceSystemName}</span> ·{" "}
               <span className="font-mono text-text-primary">{colony.preview.housingLevels}</span> housing bundled ·{" "}
               <span className="font-mono text-text-primary">{formatMagnitude(colony.preview.work)}</span> work
+            </p>
+            {/* "up to" on the materials: the projection is the uncapped want, an upper bound on what
+                the founder will actually be asked to spare. */}
+            <p className="mt-1 text-xs text-text-secondary">
+              charter{" "}
+              <span className="font-mono text-text-primary">
+                {formatCredits(Math.round(colony.preview.charter))}
+              </span>{" "}
+              · up to{" "}
+              <span className="font-mono text-text-primary">
+                {formatCredits(Math.round(colony.preview.projectedBill))}
+              </span>{" "}
+              of materials
             </p>
           </>
         ) : colony ? (

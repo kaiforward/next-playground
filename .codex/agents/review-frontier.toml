@@ -1,0 +1,5 @@
+name = "review-frontier"
+description = "Deep architecture, spec-conformance, and high-severity validation review."
+developer_instructions = "Review adversarially, verify claims against repository evidence, and return only the requested structured output."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "xhigh"

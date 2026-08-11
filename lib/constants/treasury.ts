@@ -12,15 +12,15 @@ import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import type { GovernmentType, TaxLevel } from "@/lib/types/game";
 
 export const TREASURY = {
-  /** Money collected per weighted employed head per reference month, before the tax-level multiplier. */
-  HEADS_TAX_PER_MONTH: 0.01,
+  /** Money collected per weighted employed head per reference cycle, before the tax-level multiplier. */
+  HEADS_TAX_PER_CYCLE: 0.01,
   /** Per-head weights by labour grade — skilled cores out-earn frontier headcount. */
   HEADS_WEIGHTS: { unskilled: 1, technicians: 3, engineers: 9 },
   /** Share of reference value collected per realized unit (at S=1), before the tax-level multiplier. */
   PRODUCTION_TAX_RATE: 0.05,
   /** A processed good's reference value never falls below this share of its own base price. */
   REFERENCE_VALUE_FLOOR_SHARE: 0.25,
-  /** Monthly upkeep per unit of build-work embodied in standing building levels. */
+  /** Per-cycle upkeep per unit of build-work embodied in standing building levels. */
   MAINTENANCE_RATE_PER_WORK: 0.016,
   /** Money per construction point actually absorbed by the queue. */
   CONSTRUCTION_RATE_PER_WORK: 4,
@@ -43,7 +43,9 @@ export const TAX_LEVEL_RATE_MULT: Record<TaxLevel, number> = {
   very_high: 1.6,
 };
 
-/** Proportional pressure fed into the per-system unrest integrator (consumed by the population processor). */
+/** Additive standing unrest floor carried by every system the faction owns — the level a
+ *  calm, well-supplied population settles at under this tax stance (consumed by the
+ *  population processor, which adds crowding pressure on top). */
 export const TAX_LEVEL_UNREST_PRESSURE: Record<TaxLevel, number> = {
   very_low: 0,
   low: 0.02,

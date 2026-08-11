@@ -1,23 +1,19 @@
 /**
- * Home-system prefab — the identical, self-sufficient industrial base every faction capital starts with.
+ * Home-system prefab — the self-sufficient industrial base a faction capital starts with.
  *
  * A faction homeworld is not seeded by the fractional substrate allocator (whose scale-down + whole-level
  * floor wiped small manufacturing counts, leaving the galaxy extraction-only). Instead it is stamped with
  * this deterministic prefab: whole-integer building counts sized so local production meets its residents'
- * full civilian consumption (per-capita baseline plus the technician/engineer skilled baskets) plus the
- * recipe draw of its own factories — a real tier-0 → tier-2 economy, the same for every faction, computed
- * once from the economy constants (no per-system rounding, no guessing).
+ * full civilian consumption — the per-capita baseline plus the technician/engineer skilled baskets — plus
+ * the recipe draw of its own factories: a real tier-0 → tier-2 economy, computed from the economy
+ * constants (no per-system rounding, no guessing). Civilian demand is population-proportional, so one
+ * prefab serves every government.
  *
- * Counts are ECONOMY_SCALE-invariant: OUTPUT_PER_UNIT and GOOD_CONSUMPTION carry the same scale factor, so
- * the production ≥ consumption balance holds at any scale. The prefab is stamped onto a guaranteed garden
- * body sized to fit it (see world-gen), so nothing is ever floored or scaled down.
+ * Counts are ECONOMY_SCALE-invariant: OUTPUT_PER_UNIT and GOOD_CONSUMPTION carry the same scale factor,
+ * so the production ≥ consumption balance holds at any scale. The prefab is stamped onto a guaranteed
+ * garden body sized to fit it (see world-gen), so nothing is ever floored or scaled down.
  */
-import {
-  GOOD_CONSUMPTION,
-  GOOD_PRODUCTION,
-  SKILL1_CONSUMPTION,
-  SKILL2_CONSUMPTION,
-} from "@/lib/constants/physical-economy";
+import { GOOD_PRODUCTION } from "@/lib/constants/physical-economy";
 import {
   OUTPUT_PER_UNIT,
   POP_CENTRE_DENSITY,
@@ -31,6 +27,7 @@ import {
 import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER } from "@/lib/constants/recipes";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { labourDemand, skill1Demand, skill2Demand } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import type { GeneratedBody } from "@/lib/engine/body-gen";
@@ -52,7 +49,7 @@ export function isCovered(goodId: string): boolean {
 /**
  * Whole-integer building counts for a capital of `pop` residents. Each covered good is sized to meet its
  * full civilian consumption — the per-capita baseline PLUS the skilled-worker baskets that technicians and
- * engineers consume on top of it (matching the live `consumptionRate`) — plus the recipe draw of its
+ * engineers consume on top of it (the exact live `consumptionRate`) — plus the recipe draw of its
  * downstream producers (walked in reverse topological order so a producer's input demand is counted before
  * its inputs are sized), academies to license the skilled work the factories draw, and housing to hold the
  * population.
@@ -87,12 +84,10 @@ function sizeCapitalBuildings(
   technicians: number,
   engineers: number,
 ): Record<string, number> {
+  const basis = { population: pop, technicians, engineers };
   const demand: Record<string, number> = {};
   for (const g of Object.keys(OUTPUT_PER_UNIT)) {
-    demand[g] =
-      (GOOD_CONSUMPTION[g] ?? 0) * pop +
-      (SKILL1_CONSUMPTION[g] ?? 0) * technicians +
-      (SKILL2_CONSUMPTION[g] ?? 0) * engineers;
+    demand[g] = consumptionRate(g, basis);
   }
 
   const buildings: Record<string, number> = {};
@@ -126,7 +121,7 @@ function sameBuildings(a: Record<string, number>, b: Record<string, number>): bo
   return true;
 }
 
-/** The stamp: identical building counts + resident population for every faction capital. */
+/** The stamp every faction capital receives: the baseline building counts + resident population. */
 export const HOME_SYSTEM_PREFAB: { buildings: Record<string, number>; population: number } = {
   buildings: computeHomeworldBuildings(HOME_SYSTEM_POP),
   population: HOME_SYSTEM_POP,
@@ -138,13 +133,13 @@ const GARDEN_MARGIN = 1.5;
 const GARDEN_QUALITY = 1.3;
 
 /**
- * The guaranteed garden world every faction capital sits on: one deterministic body with a habitable
- * span, general space, and a spread of deposit slots all sized `GARDEN_MARGIN`× the prefab's footprint,
- * so the whole prefab (housing + factories + extractors) always fits with headroom — no flooring, ever.
+ * The guaranteed garden world a faction capital sits on: one deterministic body with a habitable span,
+ * general space, and a spread of deposit slots all sized `GARDEN_MARGIN`× the prefab's footprint, so the
+ * whole prefab (housing + factories + extractors) always fits with headroom — no flooring, ever.
  * Prepended to the homeworld's procedural bodies (which stay as varied scenery + extra deposits).
  */
 export function homeworldGardenBody(): GeneratedBody {
-  const b = HOME_SYSTEM_PREFAB.buildings;
+  const b = computeHomeworldBuildings(HOME_SYSTEM_POP);
   const slots = emptyResourceVector();
   let housingHabitable = 0;
   let factoryGeneral = 0;

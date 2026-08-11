@@ -26,3 +26,22 @@ export function weightedMean(values: number[], weights: number[]): number {
   }
   return weightedSum / totalWeight;
 }
+
+/**
+ * Middle value of `xs`, averaging the two middle entries for an even-length list.
+ * Empty input is 0 rather than NaN — harness cohorts can legitimately be empty, and
+ * NaN must never reach serialized output.
+ */
+export function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+}
+
+/** Value at quantile `q` of `xs`. Empty input is 0, for the same reason as `median`. */
+export function quantile(xs: number[], q: number): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.min(s.length - 1, Math.floor(q * s.length))];
+}

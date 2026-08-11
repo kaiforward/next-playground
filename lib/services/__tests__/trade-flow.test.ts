@@ -3,13 +3,29 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
-import { LOGISTICS_INTERVAL } from "@/lib/constants/tick-cadence";
+import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
+import { capacityGoodRates, computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
+import { consumptionRate } from "@/lib/engine/physical-economy";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
 
-// Imports/exports are summed over the flow window then normalised to a per-logistics-cycle
-// rate (so they share units with production/consumption). Expected values follow suit.
-const cyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / LOGISTICS_INTERVAL;
-const perCycle = (windowTotal: number): number => windowTotal / cyclesInWindow;
+/** The system's per-resource yield vector, assembled exactly as the read service assembles it. */
+const yieldsOf = (s: WorldSystem) =>
+  resourceVectorFromColumns(
+    {
+      yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
+      yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
+      yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
+    },
+    "yield",
+  );
+
+// Imports/exports are summed over the flow window then normalised to a
+// per-REFERENCE_INTERVAL rate (so they share units with production/consumption, which are
+// reference-denominated). Deriving the divisor from a cadence knob instead would agree only
+// while that knob equals REFERENCE_INTERVAL — see buildLogisticsRows' docstring.
+const referenceCyclesInWindow = TRADE_SIMULATION.FLOW_HISTORY_TICKS / REFERENCE_INTERVAL;
+const perCycle = (windowTotal: number): number => windowTotal / referenceCyclesInWindow;
 
 let world: World;
 let system: WorldSystem; // focal
@@ -87,6 +103,66 @@ describe("getSystemLogistics", () => {
   it("returns { visibility: 'unknown' } for a nonexistent system", () => {
     const data = getSystemLogistics("does-not-exist");
     expect(data).toEqual({ visibility: "unknown" });
+  });
+
+  it("carries the system's own civilian consumption onto every logistics row", () => {
+    // The row's `consumption` is the service's capacityGoodRates pass; derive it independently from
+    // the system's building-derived labour basis so the wiring stays pinned to a real value.
+    const data = getSystemLogistics(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+
+    const buildings: Record<string, number> = {};
+    for (const b of world.buildings) {
+      if (b.systemId === system.id) buildings[b.buildingType] = b.count;
+    }
+    const { basis } = computeSystemLabourSnapshot(buildings, system.population);
+
+    expect(data.rows.length).toBeGreaterThan(0);
+    for (const row of data.rows) {
+      expect(row.consumption, row.goodId).toBeCloseTo(consumptionRate(row.goodId, basis), 10);
+    }
+    // Non-vacuous: a populated system genuinely draws at least one good.
+    expect(data.rows.some((r) => r.consumption > 0)).toBe(true);
+  });
+
+  it("reads the industrial column off the shared use figure, gated by the row's strike scalar", () => {
+    // The panel must show the same standing draw the matcher and the planner size against; a second
+    // capacity computation living in the service is exactly how the two drift apart. Under a strike
+    // the column falls with the industry, and equals the persisted use figure minus civilian want.
+    const suppress = 0.4;
+    setWorld({
+      ...world,
+      markets: world.markets.map((m) =>
+        m.systemId === system.id ? { ...m, productionSuppressRate: suppress } : m,
+      ),
+    });
+
+    const data = getSystemLogistics(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+
+    const buildings: Record<string, number> = {};
+    for (const b of world.buildings) {
+      if (b.systemId === system.id) buildings[b.buildingType] = b.count;
+    }
+    const snap = computeSystemLabourSnapshot(buildings, system.population);
+
+    for (const row of data.rows) {
+      const expected = inputDemandForGood(buildings, row.goodId, snap.state, yieldsOf(system)) * suppress;
+      expect(row.inputDemand, row.goodId).toBeCloseTo(expected, 9);
+    }
+    // Non-vacuous: this world genuinely has industry drawing recipe inputs.
+    expect(data.rows.some((r) => r.inputDemand > 0)).toBe(true);
+
+    // Production carries the same suppress scalar, so both halves of internalNet describe the
+    // same operating state — a striking world must not show full output beside a gated draw.
+    const capacity = new Map(
+      capacityGoodRates(buildings, system.population, yieldsOf(system))
+        .map((r) => [r.goodId, r.production]),
+    );
+    for (const row of data.rows) {
+      expect(row.production, row.goodId).toBeCloseTo((capacity.get(row.goodId) ?? 0) * suppress, 9);
+    }
+    expect(data.rows.some((r) => r.production > 0)).toBe(true);
   });
 
   it("excludes flows older than the history window", () => {

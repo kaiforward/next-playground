@@ -92,7 +92,7 @@ Audited against current code. `file:line` are the definition sites.
 | `PRODUCTION_STORAGE_PER_UNIT` (15) | `lib/constants/industry.ts` | Additive in `maxStock`. |
 | `POP_CENTRE_STORAGE_DEFAULT` (2) | `lib/constants/industry.ts` | Per pop-centre default storage. |
 | `POP_CENTRE_STORAGE` (**every entry**) | `lib/constants/industry.ts` | Absolute per-good overrides, **not** ratios — each entry scales. |
-| `DIRECTED_LOGISTICS.GENERATION_PER_POP` (0.5) | `lib/constants/directed-logistics.ts` | Goods-denominated work budget: `affordable = floor(budget / perUnit)`. ×S deficits need ×S budget to heal the same fraction. |
+| `DIRECTED_LOGISTICS.GENERATION_PER_POP` (5) | `lib/constants/directed-logistics.ts` | Goods-denominated work budget: `affordable = budget / perUnit`. ×S deficits need ×S budget to heal the same fraction. |
 
 Seeded stock and industrial input-demand scale automatically (derived from the above) — no edit.
 

@@ -32,19 +32,18 @@ it **builds viable systems up toward their potential**. Two mechanisms, one slow
 **Two rules:**
 
 > **Directed logistics:** a faction moves its own surplus to its own deficits — the sole goods-mover
-> between systems — on a slow clock, silently, within a capacity budget set *below* total need.
+> between systems — on a slow clock, silently, within a finite capacity budget.
 >
 > **Autonomic build:** a faction builds its systems up toward viable potential — housing leads,
 > population fills it, industry follows the resident workforce.
 
 Both are **needs-driven and capacity-bounded**, treasury-funded on top: the owning faction's latched
-funded fraction scales what share of each pool's throughput runs, never past the physical ceiling. The
-physical budget is deliberately smaller than total need, so a permanent residual remains — the
-**negative space**, and the standing player opportunity the later scaling/bounty rework turns into
-contestable trade.
+funded fraction scales what share of each pool's throughput runs, never past the physical ceiling.
+Whatever the pools cannot serve remains as a permanent residual — the **negative space**, and the
+standing player opportunity the later scaling/bounty rework turns into contestable trade.
 
 The two halves reinforce each other and are why **logistics-first** was the correct sequencing: logistics
-delivers supply → a system becomes *fed and calm* → a fed, calm system is what the build planner grows.
+delivers supply → a system passes `fed()` (survival satisfaction only, no unrest input) → a fed system is what the build planner grows.
 Supply makes a system viable; a viable system builds.
 
 ---
@@ -62,33 +61,87 @@ diffusion. It shares the intra-faction edge substrate with population migration 
 Both act only on **developed** systems: migration's open edges are gated to developed-both endpoints and
 directed logistics only routes between developed participants, so an unclaimed or controlled system neither
 sends nor receives goods or population (its seeded market is frozen). Logistics draws only from
-market stock **above** a donor's own days-of-supply anchor, so a donor is never pulled below its comfort
-target and locals keep their supply (the v1 form of civilian crowd-out — emergent, target-protected).
+market stock **above** a donor's own retained cover — cycles of its real demand for an ordinary
+holder, its export reserve for a structural producer — so locals keep their supply (the v1 form of
+civilian crowd-out — emergent, target-protected).
 
 ---
 
 ## The shared reading: market state per good
 
-Both halves read the same per-system, per-good numbers — stock, `production`, `demand` (civilian
-consumption + industrial input draw), and the **days-of-supply price anchor** (`targetStock = TARGET_COVER
-× demandRate`, the same number the supply/demand UI shows) — but they ask **different questions of them**,
-because they do different jobs. **Logistics moves the running-balance stock**, so it classifies against the
-stock anchor; **build sizes sustainable capacity**, so it reads the per-tick flow (`production` vs
-`demand`). The anchor drives pricing, satisfaction, and logistics; it no longer sizes builds.
+Both halves read the same per-system, per-good numbers — stock, `production`, the two honest demand
+figures, and the **warehousing target** (`logisticsTarget = WAREHOUSE_COVER × demand`) — but they ask
+**different questions of them**, because they do different jobs. **Logistics moves the running-balance
+stock**, so it classifies against a stock target; **build sizes sustainable capacity**, so it reads the
+per-tick flow (`production` vs `demand`). The price anchor (`targetStock = TARGET_COVER × demandRate`,
+the number the supply/demand UI shows) drives pricing and satisfaction; it sizes nothing here.
+
+**Demand is two figures with two jobs** (`lib/engine/honest-demand.ts`, one producer so no reader can
+diverge). The **use figure** (`demand`, persisted as `honestUseRate`) is what this world draws *when it
+runs*: civilian want at full rate plus each local factory's staffing- and strike-gated input draw. It
+moves only as buildings, population and strike state move, which is what every *warehousing* quantity
+requires — targets, donor floors, consumer/producer classification must not twitch with the momentary
+state of the yard they stock. The **draw figure** (`drawDemand`, derived live at the matcher's read
+point) is the same want further gated by each consuming factory's own output brake and live event
+production multipliers — *how urgently does this world need a delivery right now* — and its only reader
+is the matcher's severity weight. Neither figure applies an input gate: a scarce input must not deflate
+its own demand signal, or rationing spirals into starvation. Civilian want counts at full rate in both —
+a starving town must never read as a low-demand town.
+
+The two figures share a shape and differ in their denominator, which is the whole point. The price
+anchor divides by `demandRate`, floored at `MIN_DEMAND` so a near-empty market still yields a finite
+price — a pricing guard. The warehousing target divides by real `demand`, unfloored, and is what the
+**deficit** test measures against. They are equal
+wherever demand clears the floor and the warehousing target is smaller below it, so **only markets whose
+real demand sits under the pricing floor are affected**: without the split, a colony wanting a third
+of the ship frames the floor assumes asked for 133 cycles of cover rather than 40. That is a founding-era cost — a new
+colony opens holding nothing on all 26 goods, so it opens as a full-anchor deficit on all 26 — and it is
+invisible at equilibrium: over the first 42 cycles it took **24.7%** of delivered haul volume and over 90%
+of the haul of the scarce advanced goods, against 0.3% by 417 cycles. A target of zero means nobody there
+wants the good at all, and the market leaves the match entirely.
+
+`WAREHOUSE_COVER` is held equal to `TARGET_COVER` (40) but is free to move: how much a warehouse holds is
+a different question from where a good prices at par. It is the sibling of `EXPORT_RESERVE_COVER` — both
+are warehouse policy stated in cycles of real demand.
+
+`DONOR_RESERVE_COVER` (40) is the same policy on the giving side: cycles of its own real demand an
+ordinary donor keeps before it parts with anything. It is authored separately from `WAREHOUSE_COVER`
+and the two are free to diverge, subject to one invariant — `DONOR_RESERVE_COVER ≥ WAREHOUSE_COVER ×
+DEFICIT_FRACTION`, since a donor drained below the deficit line would read as a sink and be refilled
+on the next cycle. Both ride `anchorMult`, so an anchor-shifting event moves the floor a donor stops
+at and the target a sink fills to together.
 
 **Logistics classification** (stock-based):
 
-- **Deficit** — `stock < targetStock × DEFICIT_FRACTION` (below the anchor, with a dead-band). Severity =
-  shortfall × demand.
-- **Surplus** — a source of drawable stock by either path, always donating only `stock − targetStock`
-  (never below the anchor): **(a)** `stock ≥ targetStock × SURPLUS_MARGIN` — any holder of excess
-  inventory (margin > 1 leaves the deliberate residual); or **(b)** a **structural producer**
-  (`production > demand`) holding stock above its anchor. Path (b) mirrors the deficit-side self-supply
-  gate and is required because the economy's production throttle caps a producer at
-  `HOLD_COVER × targetStock` (~1.3×), *below* the 1.4× margin — without it a structural exporter could
-  never form a surplus, and directed logistics went dead for every good its producers also consume
-  (food, water, biomass).
-- **Balanced** — the dead-band between, and anything with no demand anchor.
+- **Deficit** — `stock < logisticsTarget × DEFICIT_FRACTION` (below the warehousing target, with a
+  dead-band). Severity = shortfall × the **draw figure** — a factory stopped by its own full yard does
+  not head the import queue, while its warehousing target stands unchanged.
+- **Surplus** — a source of drawable stock by either path, and the two paths stop at different
+  floors: **(a)** `stock ≥ donorReserve × SURPLUS_MARGIN` — any holder of excess inventory (margin > 1
+  leaves the deliberate residual) — donating only `stock − donorReserve`, never below the reserve it
+  keeps for itself; or **(b)** a **structural producer** (`production > demand`) shipping down to
+  `EXPORT_RESERVE_COVER` cycles of its own demand, which sits far *below* the reserve and is where
+  96.5% of hauls come from — an exporter is drained to its reserve, not to par. Path (b)
+  mirrors the deficit-side self-supply gate and is required because the production brake rests a
+  producer's stock at its warehouse knee, and the knee is not one fixed number: at most `BRAKE_RAMP ×
+  BRAKE_USE_COVER` = 52 cycles of the use figure *where the use term binds the knee* — below the
+  56-cycle donation line (`SURPLUS_MARGIN × DONOR_RESERVE_COVER`) — but an output-bound exporter's
+  knee is sized off its own capacity instead (`BRAKE_OUTPUT_COVER × capacityProduction`) and can sit
+  *above* the donation line. That is the intended outcome of path (b), not a gap in it: a dedicated
+  exporter with negligible local use rests above the line on capacity alone, and (b) is what still lets
+  it form a surplus there. Without path (b) at all, a structural exporter could never form a surplus,
+  and directed logistics went dead for every good its producers also consume (food, water, biomass).
+  Both ends of the match are denominated in real demand, and no price-anchor quantity reaches
+  logistics or the brake: a producer idles against its **warehouse knee** — the larger of 40 cycles
+  of its use figure and 8 cycles of its own capacity (see
+  [economy-equilibrium-rework](./economy-equilibrium-rework.md)). Moving the donor side was measured
+  end to end first: equilibrium is unchanged on every tracked good, galaxy production −0.3%, and the
+  accepted cost is transient — stock the anchor used to over-shelter on small markets now feeds the
+  front of the severity queue, so mid-game consumer shelves fill ~1,000–2,000 ticks later.
+  At demand 0 the reserve is 0 and the whole pile is drawable: nobody there consumes the good, so
+  there is nothing to hold it for.
+- **Balanced** — the dead-band between, and anything with no demand at all (a zero warehousing target
+  is never a sink).
 
 **Build classification** (rate-based): a **rate deficit** is `production < demand` (magnitude `demand −
 production`), and a system is a build target for it unless a reachable **rate exporter** (`production >
@@ -118,18 +171,31 @@ cycle, no carry-over.
 **Work = quantity × route cost**, where route cost combines hop count and total fuel cost along the path.
 This one choice does triple duty:
 
-1. **Limiter** — match until the pool is spent, then stop. Pool < total need ⇒ residual ⇒ negative space.
+1. **Limiter** — match until the pool is spent, then stop; the pool is a hard capacity ceiling on hauling.
 2. **Logistics unit** — population-scaled, treasury-funded (`funded.logistics`).
 3. **Distance-as-cost** — near deficits are cheap, distant ones expensive, so the matcher feeds nearby
    suppliable systems and leaves the stranded few unfed, exactly as designed, with no money model.
 
 ### The matching engine
 
-Per faction, per cycle: rank deficits worst-first (shortfall × demand), and for each, find the nearest
-same-faction surplus of that good within a hop budget. Allocate
-`transfer = min(deficit shortfall, surplus drawable, remaining pool / route cost)`, spend the pool, advance,
-and stop when it's exhausted. The donor never drops below its own anchor, so moving goods never creates a
-new deficit. Deficits left unserved — pool spent, or no surplus in reach — are the residual.
+Per faction, per cycle: rank deficits worst-first (shortfall × the draw figure), and for each, collect
+the reachable same-faction donors of that good with drawable stock within the hop budget and draw from
+them in **per-unit route-cost order** — `min(remaining shortfall, donor drawable, remaining pool /
+route cost)` from each in turn — until the shortfall is met, the donors are exhausted, or the pool is
+spent. One flow row per donor→deficit draw. The donor never drops below its own retained cover — the
+demand reserve for an ordinary holder, the export reserve for a structural producer — so moving goods
+never creates a new deficit. Deficits left unserved — pool spent, or no drawable stock in reach — are
+the residual. A deficit is recorded **funding-bound** only when the budget stopped a draw *and* the
+shortfall still standing exceeds 10% of the original (`FUNDING_BOUND_RESIDUAL_FRACTION`): the flag
+suppresses the build planner's capacity proposals and exempts producers from idle decay, so it must
+keep meaning "short because of money", never "the last donor attempted was unaffordable".
+
+Who carries the residual is not uniform: severity ranks by shortfall × draw, so mid-size pure
+consumers of the highest-floor goods (ship_frames above all) are served last from the thinnest
+margins, and at some seeds a persistently larger share of them sits empty than under the old
+price-anchor donor rule (~9 points at one measured seed, cover medians and every aggregate at
+parity) — an accepted cost, on the record with its measurements in #212. The structural answer
+belongs to colonisation pacing and globally-aware production planning, not to the donor rule.
 
 ### Silent application
 
@@ -162,8 +228,8 @@ land, so the planner can never place capacity nobody can staff. A system already
 nothing left to build, so the build loop is **idle at potential** — visible only where a system is actually
 growing. Three mechanisms, in causal order:
 
-1. **Proactive housing.** Where a system is *fed and calm* (`dissatisfaction ≤ D_settle` and
-   `unrest ≤ unrest_settle`) and has habitable land not yet built out, build housing **ahead** of
+1. **Proactive housing.** Where a system is *fed* (`fed()` — the survival-good test alone; neither
+   the whole-basket Provision fold nor unrest gates housing) and has habitable land not yet built out, build housing **ahead** of
    population, toward the habitable cap — creating the headroom population needs to grow. Housing is paced
    to keep `popCap` only a small margin (`settleMargin`) ahead of current population, so population fills the
    new levels before their idle buffer could expire and shed them. A system short on food
@@ -175,7 +241,7 @@ growing. Three mechanisms, in causal order:
    (`population − labourDemand`) *and* a **structural rate deficit** — a good whose local `production <
    demand` (the per-tick flow) with no reachable **rate exporter** (a system producing more than it
    consumes) to serve it, inputs available. Capacity is sized to **close the rate**, not to fill a
-   days-of-supply stock target: the planner builds enough to meet the flow, and extraction grows
+   cycles-of-supply stock target: the planner builds enough to meet the flow, and extraction grows
    tier-by-tier as each new factory's input draw appears as the tier below's rate deficit. A full stock
    buffer does not cancel the shortfall — the buffer is a passive shock-absorber (it emerges from lumpy
    capacity overshoot), never a build goal; a neighbour merely *holding* stock is not a reason to forgo a
@@ -197,7 +263,7 @@ flight, so it never double-commits — and the **per-faction construction pool**
 as a full staffable level; build duration is therefore *emergent* (`work ÷ absorbed`, a floor wealth cannot
 buy past) and a larger pool spreads across more parallel fronts rather than finishing any one build faster.
 The gates sequence the work on their own: a system with no spare labour queues only housing (and only if
-fed and calm), and industry is queued only where spare labour already exists.
+`fed()` passes — survival satisfaction only, no unrest input), and industry is queued only where spare labour already exists.
 
 ### The pool — eligible heads, substituted by Construction Centres
 
@@ -211,19 +277,20 @@ skilled employment exists.
 A **Construction Centre** (`CONSTRUCTION_CENTRE_TYPE`) is a non-producing building — normal general-space
 footprint, a tier-1-factory-like labour draw (mostly unskilled + a technician draw) — that substitutes
 capital for the labour a skilled economy has absorbed: each staffed level adds
-`CONSTRUCTION.POINTS_PER_LEVEL × min(labourFulfil, skill1Fulfil)` to the faction pool per pulse, gated by
+`CONSTRUCTION.POINTS_PER_LEVEL × min(labourFulfil, skill1Fulfil)` to the faction pool per cycle, gated by
 its own staffing (an unstaffable centre sheds levels via ordinary idle-decay like any building). A centre
 serves no market demand, so it carries no invented value — instead **a construction point is worth the
-best work the pool can't yet fund**: per faction per pulse, `planCentreProposal`
-(`lib/engine/construction-centre.ts`) walks the backlog (in-flight projects + this pulse's ordered
-proposals) against what the pool drains within `CONSTRUCTION.BACKLOG_WINDOW` reference months; the best
+best work the pool can't yet fund**: per faction per cycle, `planCentreProposal`
+(`lib/engine/construction-centre.ts`) walks the backlog (in-flight projects + this cycle's ordered
+proposals) against what the pool drains within `CONSTRUCTION.BACKLOG_WINDOW` reference cycles; the best
 ROI beyond that frontier prices at most one centre proposal (`value = POINTS_PER_LEVEL × r ×
 PAYBACK_HORIZON`), sited at the developed system with the most spare labour and space. It then competes
 in the ordinary ROI ordering like any other proposal. Emergent and self-limiting: a deep backlog of
 *valuable* work prices a centre in; a draining backlog or a backlog of junk never does; a landed centre
 grows the pool, pushing the frontier out and depressing the next centre's value. A centre project is
-**persist-if-funded** — like a colony, an unfunded centre is dropped and re-priced next pulse rather than
-queue-jumping later work with a stale commitment.
+**persist-if-funded** — like an unpaid colony, an unfunded centre is dropped and re-priced next cycle rather
+than queue-jumping later work with a stale commitment. (A colony whose **charter is paid** is exempt: the
+faction has already bought it, and dropping it would charge a second charter on re-emission.)
 
 ---
 
@@ -241,26 +308,28 @@ by this slice.
 
 ## Cadence
 
-Both halves run on a slow **resolution pulse** — `LOGISTICS_INTERVAL` and `CONSTRUCTION_INTERVAL` (24 ticks
-each, independently tunable from the economy's `MONTH_LENGTH`) — a big, predictable current, per the
-"nothing vanishes while you watch" legibility requirement. `pulseShard` resolves **every faction together**
-on the boundary tick (`tick % interval === 0`); each processor scales its per-pulse budget by
+Both halves run on their own slow **cycle** — `LOGISTICS_INTERVAL` and `CONSTRUCTION_INTERVAL` (24 ticks
+each, independently tunable from the economy's `CYCLE_LENGTH`) — a big, predictable current, per the
+"nothing vanishes while you watch" legibility requirement. `cycleStartShard` resolves **every faction together**
+on the boundary tick (`tick % interval === 0`); each processor scales its per-cycle budget by
 `catchUpFactor(interval)`, so the wall-clock rate is invariant to the interval at any universe scale. Two
 processors join the tick pipeline:
 
 - **`directedLogistics`** (`dependsOn: economy`) — classify markets, match surplus→deficit, apply silent
   stock deltas + `logistics` flow rows.
-- **`directedBuild`** (`dependsOn: directed-logistics`) — on the same monthly pulse, before its build
+- **`directedBuild`** (`dependsOn: directed-logistics`) — on the same cycle start, before its build
   step, each faction runs one **claim** and one **develop** step to grow its territory (see the
   [faction-system](./faction-system.md#territorial-expansion-claim-and-develop) control-flag model):
   claim scores in-reach unclaimed systems (substrate × proximity, absolute so factions compare
   directly) and proposes one per faction, with cross-faction conflicts resolved deterministically
   (highest score, seeded-RNG tiebreak); develop scores a faction's own controlled systems as colony
-  candidates (by ROI, on the same demand-rate axis as a build) and funds a **pool-funded, timed
-  colony-establish** for those that win pool priority, which on completion flips the system to
-  `developed` with a tiny conserved seed population and the housing to hold it (see
-  [colonisation](./colonisation.md)). Only after these two steps does the build step run — the develop-gate
-  everywhere is `system.control === "developed"`, so a system claimed this pulse is build-eligible only
+  candidates (by ROI, on the same demand-rate axis as a build), **prices** each one against a running
+  per-faction working balance — a candidate is proposed only while that balance still covers its charter fee
+  plus headroom for the materials it will owe, and the first it cannot cover ends the list — and funds a
+  **priced, pool-funded, timed colony-establish** for those that win pool priority, which on completion flips
+  the system to `developed` with a tiny conserved seed population, the housing to hold it and its staged
+  manifest (see [colonisation](./colonisation.md)). Only after these two steps does the build step run — the develop-gate
+  everywhere is `system.control === "developed"`, so a system claimed this cycle is build-eligible only
   once it has also been developed. Builds are applied as upward `WorldBuilding.count` increments
   (continuous Float; removal stays decay's job).
 
@@ -284,8 +353,8 @@ galaxy**: pop decline arrested rather than trending down, striking-system count 
 climbing, fed systems climbing toward potential (housing → population → industry) and asymptoting there,
 barren/low-habitable worlds staying small — while the self-sufficient core and the stranded fringe are
 untouched. Coarse health-bar, not precision (per the calibrate-to-shape stance): no NaN / runaway / pinning;
-logistics never draws a donor below its anchor; build never exceeds habitable land or staffable labour;
-budget < need leaves a visible residual. Validated in the simulator first, then live observation.
+logistics never draws a donor below its own reserve; build never exceeds habitable land or staffable labour;
+a visible residual of unserved deficits remains. Validated in the simulator first, then live observation.
 
 ---
 
@@ -296,7 +365,7 @@ shared deficit/surplus/self-supply classification; greedy surplus→deficit matc
 + `logistics` flow rows; proactive housing (fed-and-calm, paced ahead of population, capped at habitable
 land); rate-deficit-driven, labour-gated industry builds (whole-level spare-labour gate; the planner
 proposes toward the physical ceilings, and the per-faction construction throughput pool alone paces the
-committed queue); both processors on their monthly resolution pulse.
+committed queue); both processors on their own cycle start.
 
 **Deferred (explicitly out):**
 - **Player trade layer** — the ditched claimable-Contract design; **retired entirely by the grand-strategy
@@ -310,7 +379,7 @@ committed queue); both processors on their monthly resolution pulse.
 - **Strategic bottleneck-relief weighting** — faction-wide chokepoint targeting + doctrine bias (the
   demand *term* is in v1; the prioritisation strategy on top is deferred).
 - **Full "Population ← economic viability"** (food + jobs carrying capacity as the dominant growth lever)
-  → SP4; the "fed and calm" gate is a deliberately narrow slice of it.
+  → SP4; the `fed()` survival-satisfaction gate is a deliberately narrow slice of it.
 - **Habitat / terraforming** that *raises* a world's habitable ceiling → later.
 - **Faction `factionId` mutation** (capture/rebellion) and the `topology.ts getOpenEdges()` cache-
   invalidation it would force → SP5-full / war.
@@ -321,8 +390,8 @@ committed queue); both processors on their monthly resolution pulse.
 
 - Logistics: the budget generation rate; surplus/deficit margins; hop budget / max logistics distance; the
   hop-vs-fuel blend in route cost.
-- Build: `settleMargin` (housing headroom ahead of population); `D_settle` / `unrest_settle` (the
-  fed-and-calm gate); `CONSTRUCTION.THROUGHPUT_PER_POP` and the per-build absorption cap (construction
+- Build: `settleMargin` (housing headroom ahead of population); the `fed()` survival gate
+  (`SHORTAGE_SATISFACTION`); `CONSTRUCTION.THROUGHPUT_PER_POP` and the per-build absorption cap (construction
   pace); `CONSTRUCTION.POINTS_PER_LEVEL` / `PAYBACK_HORIZON` / `BACKLOG_WINDOW` (Construction Centre
   output and valuation).
 
@@ -338,6 +407,6 @@ until SP4 / SP5-full land.
   one moving substrate.
 - **Builds on** substrate-v2 available-space and the SP3 input-gating cascade (both unchanged).
 - **Vision §13:** the autonomic (item 5) half, logistics-first, with a narrow slice of item 4
-  (pop-viability) as the "fed and calm" build gate. Full SP4 (events + the dominant-lever pop-viability
+  (pop-viability) as the `fed()` survival-satisfaction build gate. Full SP4 (events + the dominant-lever pop-viability
   rework), the player-facing scaling/bounty rework, full faction agency (treasury, military ceiling), and
   the war capstone follow on top of this substrate.

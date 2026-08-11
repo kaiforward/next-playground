@@ -38,8 +38,6 @@ function fac(
     name: id.toUpperCase(),
     governmentType: "federation",
     doctrine: "mercantile",
-    territorySize: 50,
-    status: "major",
     ...overrides,
   };
 }

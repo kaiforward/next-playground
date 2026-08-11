@@ -94,7 +94,7 @@ export function industryPotential(depositSlots: number, generalSpace: number): n
 /**
  * Reduce the whole galaxy to its biggest pop and industry potential — the shared reference every
  * `systemDevelopment` call soft-saturates against. Pure over static substrate, so callers compute it
- * once (per map read / per build pulse) from the full system set. An empty galaxy yields zero refs, and
+ * once (per map read / per build cycle) from the full system set. An empty galaxy yields zero refs, and
  * `softSaturate` reads 0 against a zero ref.
  */
 export function developmentRefs(systems: DevelopmentRefSystem[]): DevelopmentRefs {

@@ -171,4 +171,4 @@ deferred *alternative* endpoint — not a worse version of this — see the plan
   structural specialisation track. Its contract-model rework is retired by the grand-strategy pivot; the
   spread survives as an economy-health concern.
 - **Next:** the S1→S2 **Economy UI legibility** interstitial (surface skilled-labour pools + per-factory
-  binding constraint + building descriptions — tracked in `docs/BACKLOG.md`), then S2 anchors.
+  binding constraint + building descriptions — tracked in `docs/ROADMAP.md`), then S2 anchors.

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionConstructionPool, proposalRoi, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
+import { fundQueue, fundQueueWithFloor, developmentFloorShare, factionConstructionPool, proposalRoi, orderProposals, orderOpenProjects, forecastEtaCycles, forecastIndependentEtaCycles } from "@/lib/engine/construction";
 import type { Proposal, ColonyProposal } from "@/lib/engine/directed-build";
 import { workCostPerLevel, CONSTRUCTION } from "@/lib/constants/construction";
 import { HOUSING_TYPE, CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE } from "@/lib/constants/industry";
@@ -92,20 +92,20 @@ describe("factionConstructionPool", () => {
 });
 
 describe("fundQueue", () => {
-  it("advances a single build by min(cap, remaining, pool) each pulse — duration emerges as work ÷ cap", () => {
+  it("advances a single build by min(cap, remaining, pool) each cycle — duration emerges as work ÷ cap", () => {
     const cap = 10;
-    // workTotal = 8 × cap, pool = cap → the build absorbs exactly `cap` per pulse and lands on pulse 8.
+    // workTotal = 8 × cap, pool = cap → the build absorbs exactly `cap` per cycle and lands on cycle 8.
     let projects = [project("p", HOUSING_TYPE, 1, 0, 8 * cap)];
-    let landedPulse = 0;
-    for (let pulse = 1; pulse <= 8; pulse++) {
+    let landedCycle = 0;
+    for (let cycle = 1; cycle <= 8; cycle++) {
       const r = fundQueue(projects, cap, cap);
       projects = r.projects;
       if (r.landed.length > 0) {
-        landedPulse = pulse;
+        landedCycle = cycle;
         break;
       }
     }
-    expect(landedPulse).toBe(8);
+    expect(landedCycle).toBe(8);
   });
 
   it("does not land before the work is complete", () => {
@@ -118,7 +118,7 @@ describe("fundQueue", () => {
 
   it("lands a project's whole levels at workDone ≥ workTotal and removes it from the open set", () => {
     const cap = 10;
-    // One pulse from completion: remaining work = 5 ≤ cap → lands this pulse.
+    // One cycle from completion: remaining work = 5 ≤ cap → lands this cycle.
     const r = fundQueue([project("p", HOUSING_TYPE, 3, 25, 30)], cap, cap);
     expect(r.projects).toHaveLength(0);
     expect(r.landed).toHaveLength(1);
@@ -134,7 +134,7 @@ describe("fundQueue", () => {
     expect(r.projects.map((p) => p.workDone)).toEqual([cap, cap, cap, cap, 0]);
   });
 
-  it("cascades leftover from a near-complete front to the next build in one pulse", () => {
+  it("cascades leftover from a near-complete front to the next build in one cycle", () => {
     const cap = 10;
     // First build needs only 3 more (< cap): it takes 3, the remaining 7 of its cap-share… no — cap is
     // per-build, so leftover POOL (not cap) cascades. pool = 12: p1 takes min(cap,3,12)=3 → lands;
@@ -223,7 +223,7 @@ describe("fundQueueWithFloor", () => {
 
   it("returns unspent reserve to the general pool rather than wasting it", () => {
     const cap = 10;
-    // Reserve (100) far exceeds what the one eligible build can absorb this pulse (cap = 10); the surplus
+    // Reserve (100) far exceeds what the one eligible build can absorb this cycle (cap = 10); the surplus
     // must fund the non-eligible homeworld build, not vanish.
     const col = projectAt("c", "colony", "food", 1, 0, 1000);
     const home = projectAt("h", "home", "food", 1, 0, 1000);
@@ -252,6 +252,102 @@ describe("fundQueueWithFloor", () => {
       ordered.reduce((acc, p) => acc + p.workDone, 0);
     expect(r.absorbed).toBeCloseTo(workDelta);
     expect(r.absorbed).toBeLessThanOrEqual(10);
+  });
+
+  it("holds a project at a per-project ceiling of 0 — through the reserve pass too", () => {
+    // The regression this guards: pass A funds the floor-eligible slice on the SCALAR cap, so a
+    // ceiling that only binds in pass B lets a reserved project absorb work it cannot pay for.
+    const cap = 10;
+    const blocked = projectAt("c", "colony", "food", 1, 0, 1000);
+    const neighbour = projectAt("h", "home", "food", 1, 0, 1000);
+    const r = fundQueueWithFloor(
+      [blocked, neighbour],
+      100,
+      cap,
+      50, // a reserve big enough to fund the blocked project several times over
+      (p) => p.id === "c", // …and it is the only project the reserve is for
+      (p) => (p.id === "c" ? 0 : cap),
+    );
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(0);
+    expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(cap);
+    expect(r.absorbed).toBe(cap);
+  });
+
+  it("resolves each project's ceiling once, so both passes see one figure", () => {
+    // The callback reads market and treasury state the caller re-derives per cycle; nothing here
+    // promises it is pure. Resolving it per pass would let a floor-eligible project absorb its
+    // reserved slice under one ceiling and the general pool under another — a build-time floor no
+    // caller could reason about, and a per-project call count that grows with the queue.
+    const cap = 10;
+    const calls: string[] = [];
+    let handed = 0;
+    const r = fundQueueWithFloor(
+      [projectAt("c", "colony", "food", 1, 0, 1000), projectAt("h", "home", "food", 1, 0, 1000)],
+      100, cap, 50,
+      (p) => p.id === "c",
+      (p) => { calls.push(p.id); handed += cap; return handed; }, // 10 first, 20 second, …
+    );
+    expect(calls).toEqual(["c", "h"]); // one resolution each, not one per pass
+    // Both ceilings clamp back to the scalar cap, so each project absorbs exactly a cap's worth —
+    // a second call for "c" would have handed it 30 and the clamp would hide the extra call.
+    expect(r.projects.find((p) => p.id === "c")!.workDone).toBe(cap);
+    expect(r.projects.find((p) => p.id === "h")!.workDone).toBe(cap);
+  });
+
+  it("spares nothing for a project whose ceiling is unreadable", () => {
+    // A ceiling is derived from market and money state; a NaN reaching workDone would land in World
+    // state, and `JSON.stringify` turns it into null on save.
+    const cap = 10;
+    for (const unreadable of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const r = fundQueueWithFloor(
+        [projectAt("c", "colony", "food", 1, 0, 1000)],
+        100, cap, 50, () => true, () => unreadable,
+      );
+      expect(r.projects[0].workDone).toBe(0);
+      expect(r.absorbed).toBe(0);
+    }
+  });
+
+  it("makes a project at half its ceiling take twice the cycles", () => {
+    const cap = 10;
+    let full = projectAt("f", "s", "food", 1, 0, 40);
+    let half = projectAt("g", "s", "food", 1, 0, 40);
+    let fullCycles = 0;
+    let halfCycles = 0;
+    while (fullCycles < 20) {
+      const r = fundQueueWithFloor([full], 100, cap, 0, () => false);
+      fullCycles++;
+      if (r.landed.length > 0) break;
+      full = r.projects[0];
+    }
+    while (halfCycles < 20) {
+      const r = fundQueueWithFloor([half], 100, cap, 0, () => false, () => cap / 2);
+      halfCycles++;
+      if (r.landed.length > 0) break;
+      half = r.projects[0];
+    }
+    expect(fullCycles).toBe(4);
+    expect(halfCycles).toBe(8);
+  });
+
+  it("is identical to the scalar cap when capFor returns it", () => {
+    const cap = 10;
+    const ordered = [
+      projectAt("h", "home", "food", 1, 0, 1000),
+      projectAt("c", "colony", "food", 1, 0, 1000),
+    ];
+    expect(fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony", () => cap)).toEqual(
+      fundQueueWithFloor(ordered, 15, cap, 4, (p) => p.systemId === "colony"),
+    );
+  });
+
+  it("only ever lowers: a ceiling above the scalar cap is clamped back to it", () => {
+    // The per-build cap is the minimum-build-time floor (workTotal ÷ cap cycles). A caller that
+    // could raise its own ceiling would buy past that floor — so a raise reads as the plain cap.
+    const cap = 10;
+    const ordered = [projectAt("c", "colony", "food", 1, 0, 1000)];
+    const raised = fundQueueWithFloor(ordered, 500, cap, 0, () => false, () => cap * 5);
+    expect(raised.projects[0].workDone).toBe(cap);
   });
 });
 
@@ -397,5 +493,105 @@ describe("construction constants", () => {
     expect(CONSTRUCTION.POINTS_PER_LEVEL).toBeGreaterThan(0);
     expect(CONSTRUCTION.PAYBACK_HORIZON).toBeGreaterThan(0);
     expect(CONSTRUCTION.BACKLOG_WINDOW).toBeGreaterThan(0);
+  });
+});
+
+// ── Boundaries and arithmetic the cases above leave unpinned ──
+
+describe("fundQueueWithFloor — the reserve never over-funds", () => {
+  const eligible = () => true;
+
+  it("caps the reserved pass at the work a project has left, not its whole total", () => {
+    // 90 of 100 done: however deep the reserve, only the last 10 points can be absorbed.
+    const result = fundQueueWithFloor([project("p1", HOUSING_TYPE, 1, 90, 100)], 1000, 1000, 1000, eligible);
+    expect(result.absorbed).toBeCloseTo(10);
+    expect(result.landed.map((p) => p.workDone)).toEqual([100]);
+  });
+
+  it("nets the reserved pass's absorption off the general pass's remaining work", () => {
+    // The reserve funds 30 of the 100 remaining; the general pass may only fund the other 70, so the
+    // project lands at exactly its total rather than absorbing the work twice over.
+    const result = fundQueueWithFloor([project("p1", HOUSING_TYPE, 1, 0, 100)], 1000, 1000, 30, eligible);
+    expect(result.absorbed).toBeCloseTo(100);
+    expect(result.landed.map((p) => p.workDone)).toEqual([100]);
+  });
+
+  it("nets a partly-built project's standing work off the general pass too", () => {
+    const result = fundQueueWithFloor([project("p1", HOUSING_TYPE, 1, 60, 100)], 1000, 1000, 10, eligible);
+    expect(result.absorbed).toBeCloseTo(40);
+    expect(result.landed.map((p) => p.workDone)).toEqual([100]);
+  });
+});
+
+describe("orderProposals — the deterministic tiebreak", () => {
+  const build = (systemId: string, buildingType: string, value: number, work: number): Proposal => ({
+    kind: "build", factionId: "f1", systemId, role: "industry",
+    items: [{ buildingType, levels: 1 }], value, work,
+  });
+  const colony = (systemId: string, value: number, work: number): ColonyProposal => ({
+    kind: "colony_establish", factionId: "f1", systemId, sourceSystemId: "home",
+    seedPop: 2, housingLevels: 1, value, work,
+  });
+
+  it("labels a build by its first item's type, so it sorts against a colony at the same system", () => {
+    // Equal ROI at one system: the total order is by label, and "alloys" sorts ahead of "colony".
+    const ordered = orderProposals([colony("s1", 10, 10), build("s1", "alloys", 10, 10)]);
+    expect(ordered.map((p) => p.kind)).toEqual(["build", "colony_establish"]);
+  });
+
+  it("orders two equal-ROI builds at one system by their first item's type", () => {
+    const ordered = orderProposals([build("s1", "zzz_late", 10, 10), build("s1", "alloys", 10, 10)]);
+    expect(ordered.map((p) => (p.kind === "build" ? p.items[0]?.buildingType : "colony")))
+      .toEqual(["alloys", "zzz_late"]);
+  });
+
+  it("labels an item-less build proposal without throwing", () => {
+    // `items[0]` is optional on the type, so the label has to survive an empty bundle.
+    const empty: Proposal = {
+      kind: "build", factionId: "f1", systemId: "s1", role: "industry", items: [], value: 10, work: 10,
+    };
+    const ordered = orderProposals([build("s1", "alloys", 10, 10), empty]);
+    expect(ordered).toHaveLength(2);
+    expect(ordered[0]).toBe(empty); // the empty label "s1|" sorts ahead of "s1|alloys"
+  });
+});
+
+describe("forecastEtaCycles — the stall guard and the cycle horizon", () => {
+  it("stalls everything on a zero pool or a zero cap, including a project already at its total", () => {
+    const done = project("done", HOUSING_TYPE, 1, 100, 100);
+    const open = project("open", HOUSING_TYPE, 1, 0, 100);
+    expect(forecastEtaCycles([done, open], 0, 50)).toEqual([null, null]);
+    expect(forecastEtaCycles([done, open], 50, 0)).toEqual([null, null]);
+    expect(forecastEtaCycles([done, open], Number.NaN, 50)).toEqual([null, null]);
+  });
+
+  it("still reports a project that lands on the very last cycle of the horizon", () => {
+    // 30 points of work at cap 10 lands on cycle 3 — the horizon must include its own last cycle.
+    expect(forecastEtaCycles([project("p", HOUSING_TYPE, 1, 0, 30)], 10, 10, 3)).toEqual([3]);
+    expect(forecastEtaCycles([project("p", HOUSING_TYPE, 1, 0, 40)], 10, 10, 3)).toEqual([null]);
+  });
+});
+
+describe("forecastIndependentEtaCycles — the stall guard, remaining work and the horizon", () => {
+  it("stalls every hypothetical on a zero pool or a zero cap, including one already at its total", () => {
+    const done = project("h-done", HOUSING_TYPE, 1, 100, 100);
+    const open = project("h-open", HOUSING_TYPE, 1, 0, 100);
+    expect(forecastIndependentEtaCycles([], [done, open], 0, 50)).toEqual([null, null]);
+    expect(forecastIndependentEtaCycles([], [done, open], 50, 0)).toEqual([null, null]);
+    expect(forecastIndependentEtaCycles([], [done, open], Number.NaN, 50)).toEqual([null, null]);
+  });
+
+  it("counts a hypothetical's REMAINING work, not its whole total", () => {
+    // 80 of 100 done, cap 10 ⇒ two cycles left, not ten (and certainly not eighteen).
+    expect(forecastIndependentEtaCycles([], [project("h", HOUSING_TYPE, 1, 80, 100)], 100, 10)).toEqual([2]);
+  });
+
+  it("reports null for a hypothetical the horizon cannot finish", () => {
+    // 100 points at cap 10 needs ten cycles; the horizon stops at three.
+    expect(forecastIndependentEtaCycles([], [project("h", HOUSING_TYPE, 1, 0, 100)], 100, 10, 3)).toEqual([null]);
+  });
+
+  it("still reports a hypothetical that lands on the very last cycle of the horizon", () => {
+    expect(forecastIndependentEtaCycles([], [project("h", HOUSING_TYPE, 1, 0, 30)], 100, 10, 3)).toEqual([3]);
   });
 });

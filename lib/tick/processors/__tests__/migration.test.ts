@@ -14,9 +14,10 @@ const PARAMS = {
   interval: REFERENCE_INTERVAL, // catch-up factor 1 → calibrated per-edge magnitudes
   flow: { weights: { contentment: 1, headroom: 1, jobs: 1 }, maxOutflowFraction: 0.1, gradientThreshold: 0.01, distanceDecay: 0.1, employedGradientThreshold: OFF, employedLeakFraction: 0 },
   delivery: NO_DELIVERY,
+  inflowBlockedSystemIds: new Set<string>(),
 };
 
-// Migration is now a monthly pulse: all edges process on ticks where tick % interval === 0.
+// Migration is now a cycle start: all edges process on ticks where tick % interval === 0.
 const EDGE_TICK = 0;
 
 // A tier-0 production building demands 10 heads/unit (labourTotal), so `{ food: 100 }` opens
@@ -27,7 +28,7 @@ function sys(id: string, factionId: string | null, population: number, popCap: n
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId,
     control: factionId ? "developed" : "unclaimed", governmentType: "federation",
-    population, popCap, unrest, buildings, buildingIdleMonths: {}, buildingCollapseDebt: {},
+    population, popCap, unrest, buildings, buildingIdleCycles: {}, collapseDebt: 0,
     yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
@@ -81,7 +82,7 @@ describe("migration processor", () => {
     expect(moved2).toBeCloseTo(2 * moved1, 5);
   });
 
-  it("moves nothing on an off-boundary tick (monthly pulse)", async () => {
+  it("moves nothing on an off-boundary tick (cycle start)", async () => {
     const world = new InMemoryMigrationWorld(
       { systems: [sys("a", "f1", 1000, 2000, 0.5), sys("b", "f1", 100, 2000, 0)] },
       [conn("a", "b")],
@@ -108,15 +109,105 @@ describe("migration processor", () => {
     expect(world.systems.reduce((s, x) => s + x.population, 0)).toBeCloseTo(before, 5);   // conserved
   });
 
-  it("skips colonist delivery on an off-boundary tick (delivery is monthly-gated)", async () => {
-    // Same source + empty colony and the real delivery params that DO move people on a pulse boundary (the
-    // case above), but run on an off-boundary tick: the monthly-pulse gate must skip the whole processor,
-    // so delivery moves nobody. Guards the delivery pass from drifting above the pulse guard (a 24× rate).
+  it("skips colonist delivery on an off-boundary tick (delivery is cycle-gated)", async () => {
+    // Same source + empty colony and the real delivery params that DO move people on a cycle boundary (the
+    // case above), but run on an off-boundary tick: the cycle-start gate must skip the whole processor,
+    // so delivery moves nobody. Guards the delivery pass from drifting above the cycle-start guard (a 24× rate).
     const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
     const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
     const params = { ...PARAMS, delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 } };
-    await runMigrationProcessor(world, ctx(1), params); // tick 1 % 24 ≠ 0 → off-boundary, whole pulse skipped
+    await runMigrationProcessor(world, ctx(1), params); // tick 1 % 24 ≠ 0 → off-boundary, whole cycle skipped
     expect(world.systems.find((s) => s.id === "core")!.population).toBe(1000);
     expect(world.systems.find((s) => s.id === "colony")!.population).toBe(10);
+  });
+});
+
+describe("migration processor: famine inflow gate (abandonment Rule 1)", () => {
+  it("blocks colonist delivery into a famine sink while diffusion stays off (isolates delivery)", async () => {
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const params = {
+      ...PARAMS,
+      flow: { ...PARAMS.flow, maxOutflowFraction: 0 },
+      delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 },
+      inflowBlockedSystemIds: new Set(["colony"]),
+    };
+    await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(world.systems.find((s) => s.id === "colony")!.population).toBe(10); // no inflow received
+  });
+
+  it("blocks diffusion into a famine destination while its outflow (donation) is untouched", async () => {
+    // The famine system ("a") is also the more attractive endpoint were it not blocked — flip the
+    // roles from the ordinary diffusion case: a calm famine world would otherwise pull in "b"'s spare.
+    const systems = [sys("a", "f1", 100, 1000, 0, JOBS), sys("b", "f1", 1000, 1000, 0.9)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
+    const params = { ...PARAMS, inflowBlockedSystemIds: new Set(["a"]) };
+    await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(world.systems.find((s) => s.id === "a")!.population).toBe(100); // blocked as a destination
+  });
+
+  it("still lets a famine system's outflow (donation/exodus) run — the gate blocks inflow only", async () => {
+    // "a" is overshot and calm — migration drains it toward "b" regardless of "a" being famine-flagged,
+    // since the flag only zeroes DESTINATION headroom, never a source's outflow.
+    const systems = [sys("a", "f1", 1500, 1000, 0), sys("b", "f1", 100, 1000, 0, JOBS)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
+    const before = world.systems.reduce((s, x) => s + x.population, 0);
+    const params = { ...PARAMS, inflowBlockedSystemIds: new Set(["a"]) };
+    await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(world.systems.find((s) => s.id === "a")!.population).toBeLessThan(1500); // still donates/exodus
+    expect(world.systems.reduce((s, x) => s + x.population, 0)).toBeCloseTo(before, 5); // conserved
+  });
+});
+
+describe("migration throughput instrumentation (migrationMoved)", () => {
+  it("sums colonist deliveries and edge diffusion into separate migrationMoved fields when both occur", async () => {
+    const systems = [
+      sys("core", "f1", 1000, 1000, 0),   // delivery source
+      sys("colony", "f1", 10, 1000, 0),   // delivery sink
+      sys("a", "f1", 1000, 1000, 0.9),    // diffusion source
+      sys("b", "f1", 100, 1000, 0, JOBS), // diffusion sink
+    ];
+    const world = new InMemoryMigrationWorld(
+      { systems },
+      [conn("core", "colony"), conn("a", "b")],
+    );
+    const params = { ...PARAMS, delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 } };
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    expect(result.migrationMoved?.colonists).toBeGreaterThan(0);
+    expect(result.migrationMoved?.diffusion).toBeGreaterThan(0);
+  });
+
+  it("reports no migrationMoved on an off-boundary tick", async () => {
+    const world = new InMemoryMigrationWorld(
+      { systems: [sys("a", "f1", 1000, 2000, 0.5), sys("b", "f1", 100, 2000, 0)] },
+      [conn("a", "b")],
+    );
+    const result = await runMigrationProcessor(world, ctx(1), { ...PARAMS, interval: REFERENCE_INTERVAL });
+    expect(result.migrationMoved).toBeUndefined();
+  });
+
+  it("migrationMoved.diffusion equals exactly the population edge diffusion displaced — conserved, no growth/death padding", async () => {
+    const systems = [sys("a", "f1", 1000, 1000, 0.9), sys("b", "f1", 100, 1000, 0, JOBS)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("a", "b")]);
+    const before = world.systems.find((s) => s.id === "a")!.population;
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), PARAMS); // PARAMS uses NO_DELIVERY → colonists 0
+    const after = world.systems.find((s) => s.id === "a")!.population;
+    expect(result.migrationMoved?.colonists).toBe(0);
+    expect(result.migrationMoved?.diffusion).toBeCloseTo(before - after, 5);
+  });
+
+  it("migrationMoved.colonists equals exactly the population colonist delivery moved — conserved, no growth/death padding", async () => {
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const params = {
+      ...PARAMS,
+      flow: { ...PARAMS.flow, maxOutflowFraction: 0 }, // isolates delivery — diffusion contributes nothing
+      delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 },
+    };
+    const before = world.systems.find((s) => s.id === "colony")!.population;
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    const after = world.systems.find((s) => s.id === "colony")!.population;
+    expect(result.migrationMoved?.diffusion).toBe(0);
+    expect(result.migrationMoved?.colonists).toBeCloseTo(after - before, 5);
   });
 });

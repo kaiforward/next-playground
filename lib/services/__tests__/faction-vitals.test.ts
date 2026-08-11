@@ -9,7 +9,7 @@ let world: World;
 
 /**
  * Give `factionId` EXACTLY the listed systems (developed, with the given population/unrest) and strip
- * that faction from every other system — a fresh world hasn't run the claim/develop pulse, so a
+ * that faction from every other system — a fresh world hasn't run the claim/develop cycle, so a
  * faction owns ~1 system; this seeds a deterministic multi-system faction to aggregate over.
  */
 function seedFaction(

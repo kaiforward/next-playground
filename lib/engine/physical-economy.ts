@@ -45,6 +45,8 @@ export function consumptionBreakdown(goodId: string, basis: CivilianDemandBasis)
 
 /**
  * Civilian consumption rate: per-capita baseline + additive per-grade baskets.
+ * Population-proportional throughout — there is no flat per-system term, so the
+ * basket's SHAPE is the same at a 2-pop seed and a 5000-pop capital.
  * Sums the same terms as consumptionBreakdown but stays allocation-free — it
  * runs per (good, system) on the tick hot path; the breakdown object is for
  * the display read path only.

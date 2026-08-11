@@ -12,7 +12,7 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 ### Tier 0 — Raw Materials (8)
 
-Deep, liquid markets, thin per-unit margin. High population-driven demand gives them the deepest days-of-supply cover, so large trades barely move price. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these. Each tier-0 good is **extracted** from a body resource deposit (no recipe) — Water/Gas/Ore/Minerals/Biomass/Radioactives map 1:1 to their resource; Food and Textiles both come from the `arable` resource.
+Deep, liquid markets, thin per-unit margin. High population-driven demand gives them the deepest cycles-of-supply cover, so large trades barely move price. Cheap per unit, always available. A shuttle pilot with 500cr fills cargo with these. Each tier-0 good is **extracted** from a body resource deposit (no recipe) — Water/Gas/Ore/Minerals/Biomass/Radioactives map 1:1 to their resource; Food and Textiles both come from the `arable` resource.
 
 | Good | Base Price | Volatility | Price Range |
 |---|---|---|---|
@@ -59,7 +59,7 @@ Thin, scarce markets, high per-unit price swing. Lowest per-capita demand → sh
 
 \* **Military-tagged** dual-use goods. They trade on the open market with ordinary civilian demand today; a strategic war-demand channel (and the tier-3 non-market military *assets* they feed) is planned for the faction-agency and war layers. **Bottleneck goods** — Components (5 downstream recipes), Metals (near-universal), Alloys, and Electronics — sit on the most chains, so a shortage in one cascades widest.
 
-### Per-System Pricing Reference (Days of Supply)
+### Per-System Pricing Reference (Cycles of Supply)
 
 There is no per-good anchor table. The stock level at which a good's mid price equals its base price — its **reference** — is computed per `(station, good)` from local demand:
 
@@ -68,7 +68,7 @@ demandRate = max( perCapitaNeed(good) × population  +  Σ production-input draw
 reference  = TARGET_COVER × demandRate × anchorMult
 ```
 
-`TARGET_COVER` (40) is the **days of supply** — how many ticks of local demand a market holds when it prices exactly at base. `demandRate` is the system's **total** physical demand rate for the good — civilian consumption (`perCapitaNeed × population`) **plus** the production-input draw of every local building that consumes the good as a recipe input (see [Supply Chain & Input-Gating](#supply-chain--input-gating)) — floored at `MIN_DEMAND` so a near-empty system still yields a finite reference. Including the input term is what makes an input-heavy good price honestly: a refinery world's Ore reads *scarce* when its Smelters' draw outruns supply (pulling Ore in via trade), rather than cheap just because the world burns a lot of it. `anchorMult` (default 1) carries active event anchor shifts (see [Event-Driven Anchor Shifts](#event-driven-anchor-shifts)). Stock above the reference reads cheap (surplus); below reads expensive (shortage).
+`TARGET_COVER` (40) is the **cycles of supply** — how many cycles of local demand a market holds when it prices exactly at base. `demandRate` is the system's **total** physical demand rate for the good — civilian consumption (`perCapitaNeed × population`) **plus** the production-input draw of every local building that consumes the good as a recipe input (see [Supply Chain & Input-Gating](#supply-chain--input-gating)) — floored at `MIN_DEMAND` so a near-empty system still yields a finite reference. Including the input term is what makes an input-heavy good price honestly: a refinery world's Ore reads *scarce* when its Smelters' draw outruns supply (pulling Ore in via trade), rather than cheap just because the world burns a lot of it. `anchorMult` (default 1) carries active event anchor shifts (see [Event-Driven Anchor Shifts](#event-driven-anchor-shifts)). Stock above the reference reads cheap (surplus); below reads expensive (shortage).
 
 The reference's *magnitude* sets the market's **depth**, and that depth now emerges from each system's own demand rather than a hand-tuned per-good number: high-demand staples get a high reference (deep, liquid market — large trades barely move price), low-demand advanced goods get a low reference (thin market — a small trade swings price hard). This is why the same price formula gives staples flat prices and advanced goods volatile ones.
 
@@ -106,15 +106,15 @@ A system runs a positive **net balance** for a good when its production exceeds 
 
 **Emergent geography:** raw goods flow from deposit-rich frontier worlds toward populous cores; manufactured goods follow wherever build space and labour concentrate. Economy-type labels now reflect the build-space allocation at world-gen — a system seeded with more extractor capacity reads as `extraction`, one with heavier manufacturing allocation reads as `industrial` — rather than a coarse labour-only heuristic.
 
-All `outputPerUnit` constants and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller output and smaller need). The government `consumptionBoost` layers on top of consumption; strike suppression scales production down when `unrest` exceeds the strike threshold.
+All `outputPerUnit` constants and per-capita needs are first-draft and **simulator-calibrated** — only their relative shape matters (higher tier → smaller output and smaller need). Civilian demand is population-proportional throughout — there is no flat per-system term, so the basket's shape is the same at a 2-pop seed and a 5000-pop capital. Strike suppression scales production down when `unrest` exceeds the strike threshold.
 
 ### Infrastructure Decay
 
 `WorldBuilding.count` is no longer seed-frozen. A dedicated **infrastructure-decay** processor runs each economy shard (right after economy commits, before population) and mutates `count` **downward only**, toward what is actively *used* — the gap between *built* and *used* is what rots:
 
-- **"Used" per role.** Housing → occupancy `population / POP_CENTRE_DENSITY`; production/extraction → staffed *and* selling `count × min(labourFulfillment, outputUptake)`. `outputUptake(stock, minStock, maxStock)` (in `lib/engine/tick.ts`) is the seller-side mirror of satisfaction — ~1 when output sells freely at the floor, → 0 as it piles against the storage ceiling.
-- **Disuse decay (gentle).** `count ← count − disuseRate · max(0, count − used)`. A small `disuseRate` is itself the hysteresis — one idle shard sheds only a sliver; only a *sustained* gap compounds down.
-- **Unrest decay (catastrophic).** Above θ_decay, working capacity is torn down even while in use: `count ← count − unrestRate · count · max(0, unrest − θ_decay)` — the infrastructure mirror of the population-decline term, the snowball.
+- **"Used" per role.** Housing → occupancy `population / POP_CENTRE_DENSITY`; production/extraction → staffed *and* selling `count × min(labourFulfillment, sellingFactor)`. The selling factor is the production brake's own ceiling (`brakeKnee`/`productionCeiling`, `lib/engine/tick.ts`) at the cycle's start stock — 1 while stock is at or below the warehouse knee, → 0 as it fills toward the brake's ramp end (1.3 × the knee).
+- **Idle contraction (buffered, gentle).** Decay is a whole-level ratchet, not a continuous shave: a per-(system, building type) countdown accrues one reference-cycle each run while at least a whole level sits idle (`count > used`), and only once it crosses `idleBufferCycles` (12) does the marginal idle level tear down — the countdown resets the moment the level refills, so a brief dip costs nothing and only a sustained gap compounds down.
+- **Unrest teardown (catastrophic).** Above `unrestThreshold` (θ_decay = 0.75) one **system-wide** collapse-debt accumulator accrues each run at a severity ramped by how far unrest sits above θ (0 at θ, 1 at unrest 1); each time the debt crosses a whole integer, one whole level tears down — even while in use — from the system's least-used eligible building type (ties broken by type id). Below θ the debt resets to 0: collapse is a regime, not a ledger. One level is shed **per run for the whole system**, not per building type, so teardown speed doesn't scale with how many industries a system happens to run. Housing can only lose a level while occupancy leaves the level above resident need spare, so this channel can never strand a population at `popCap = 0` (`lib/engine/infrastructure-decay.ts`).
 
 `count` never rises here (growth is a deliberate, treasury-funded decision deferred to the faction-agency layer) and never drops below 0. Because housing `count` changes, **`popCap` recomputes live** each shard (`Σ housing.count × POP_CENTRE_DENSITY`), and the population processor reads that live value. When housing has rotted *below* its occupants (`population > popCap`, the unrest-snowball case), the overshoot is displaced as **unrest-weighted migration ⊕ death** (the non-conserved death term `overshootDeathRate · overshoot · unrest` in `populationDelta`; the conserved flee-half rides the migration processor, which already repels high-unrest systems). The full model and the Industry-panel surface (available · built · in-use, health-coloured) live in [economy-infrastructure-decay.md](./economy-infrastructure-decay.md).
 
@@ -126,16 +126,23 @@ The cascade runs **per system, each tick**, with goods processed in **recipe-top
 
 1. **Desired draw** of each input `i` = `effectiveProduction_g × inputs_g[i]`.
 2. **`inputGate_g` = min over inputs of `drawable_i / desired_i`**, clamped to `[0, 1]`. The scarcest input sets the throttle: a Smelter with only half the Ore it wants produces at half capacity.
-3. **Output added** to local stock = `effectiveProduction_g × inputGate_g × ceiling`, where `ceiling` is the existing self-limiting `sqrt` factor (warehouses-full damping).
+3. **Output added** to local stock = `effectiveProduction_g × inputGate_g × ceiling`, where `ceiling` is the production brake — full rate at and below the warehouse knee (the larger of 40 cycles of the system's use figure and 8 cycles of its own capacity), ramping linearly to zero at 1.3 × the knee.
 4. **Inputs drawn** from local stock in proportion to *actual* output (`inputs_g[i] × actualOutput`) — you only consume what you actually convert.
 
-**Drawable-above-floor rule.** "Drawable" stock is `max(0, stock − minStock)` — only stock above the market's own scarcity reserve (`minStock`, the per-market price-floor level; see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) can be drawn down by a recipe. Because the gate is computed against drawable stock and inputs drain in proportion to it, every input stays at or above its reserve *by construction* — no re-clamp is needed, and a consumer can never mine its input below the reserve and pin that input's own price to the ceiling.
+**Shared ration ramp, no reserve floor.** A recipe input draws toward genuinely empty stock — there is no reserve it stops at. Below the input's emergency-ration stock (`RATION_COVER × demandRate`) every drawer of that good, civilian or industrial, slows together on the same `consumptionFactor` ramp (full above it, `sqrt(stock / rationStock)` below, 0 at empty), each at its own point in the recipe-topological draw order; above the ration stock the draw is unconstrained. `minStock` (the per-market price-floor level; see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) is a pricing concept only — it sets where price ceilings out, not where a recipe's draw stops.
+
+Within a tick, civilian consumption of a good is drawn in that good's own topological-order pass —
+immediately after its production, before any downstream recipe draws it as an input — so civilian
+demand is served ahead of the industries that depend on it, never pro-rata against them. The ration
+factor for that pass is read from the good's **opening** stock: a cycle that begins at or above
+`rationStock` records full satisfaction even if the draw that follows leaves closing stock below it,
+which is why satisfaction is a flow measurement (delivered ÷ demanded this cycle), not a stock gauge.
 
 Inputs come from *local* stock, which directed logistics refills from same-faction surplus systems. So a refinery world with no Ore deposits still runs its Smelters as long as Ore is hauled in — and **cutting that supply starts the downstream cascade**, grounded in the directed-logistics lever. The marquee emergent behaviours — need-cascade, lane-cut cascade, over-industrialise-a-garden-world-and-it-can-no-longer-feed-itself — all fall out of this loop composed with the population/unrest dynamics, with the industrial base **static** (seeded at world-gen; runtime construction is a later agency layer). The cascade engine is pure (`lib/engine/supply-chain.ts`).
 
 ### Market Seeding
 
-At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's days-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. Net balance is computed from the capacity-driven production rates above and population-scaled consumption. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the market's own **per-market band** (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) — so a heavy producer with deep storage seeds genuinely deep and cheap. Import dependence falls directly out of the substrate and the seeded industrial base.
+At seed/reset time each market's starting stock is **cover-based** (`getInitialStock`, `lib/constants/market-economy.ts`): it places stock around the system's cycles-of-supply reference (`TARGET_COVER × demandRate`), scaled by a cover multiplier set by the good's net balance. Net balance is computed from the capacity-driven production rates above and population-scaled consumption. A net producer seeds with deeper cover (toward `SEED_COVER_MAX` → reads cheap), a net consumer with shallower cover (toward `SEED_COVER_MIN` → reads dear), and a balanced or inert market seeds at the reference (reads at base price). The producer share — `production / (production + consumption)` — blends continuously between the two, and the result is clamped to the market's own **per-market band** (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) — so a heavy producer with deep storage seeds genuinely deep and cheap. Import dependence falls directly out of the substrate and the seeded industrial base.
 
 ---
 
@@ -143,20 +150,24 @@ At seed/reset time each market's starting stock is **cover-based** (`getInitialS
 
 All 8 government types are implemented. Every type has trade-offs — buffs balanced by debuffs. Source of truth: `lib/constants/government.ts`. For faction and identity framing see [faction-system.md](./faction-system.md).
 
-| Government | Danger | Consumption boosts |
-|---|---|---|
-| Federation | 0.00 | medicine |
-| Corporate | 0.02 | luxuries |
-| Authoritarian | 0.00 | weapons, fuel |
-| Frontier | 0.10 | — |
-| Cooperative | 0.00 | food, medicine |
-| Technocratic | 0.01 | electronics |
-| Militarist | 0.05 | weapons, fuel, machinery |
-| Theocratic | 0.03 | food, medicine, textiles |
+Government type carries **no economic modifier** — it is an event-weight and danger axis. Civilian
+demand is identical under all eight types; a replacement economic axis is a planned government-layer
+revisit ([grand-strategy-vision.md](../../planned/grand-strategy-vision.md)).
+
+| Government | Danger |
+|---|---|
+| Federation | 0.00 |
+| Corporate | 0.02 |
+| Authoritarian | 0.00 |
+| Frontier | 0.10 |
+| Cooperative | 0.00 |
+| Technocratic | 0.01 |
+| Militarist | 0.05 |
+| Theocratic | 0.03 |
 
 ### Government Effects on Gameplay
 - **Danger baseline**: Feeds the system danger readout (world attribute — nothing mechanical consumes it since the arrival pipeline was cut). Frontier is the highest at 10%.
-- **Consumption boosts**: Extra consumption per tick for specific goods (e.g., authoritarian +1 weapons consumption) — drains stock faster, raising price.
+- **Event weights**: Per-type adjustments to event-type likelihood (see `lib/constants/government.ts`).
 
 ---
 
@@ -168,7 +179,7 @@ reference = TARGET_COVER × demandRate × anchorMult
 mid       = clamp( basePrice × (reference / stock) ^ k ,  floor, ceiling )
 ```
 `mid` is the price — a derived spot readout of the current stock, not a trading engine.
-- `reference` — the per-system days-of-supply level where mid = base (see [Per-System Pricing Reference](#per-system-pricing-reference-days-of-supply)).
+- `reference` — the per-system cycles-of-supply level where mid = base (see [Per-System Pricing Reference](#per-system-pricing-reference-cycles-of-supply)).
 - `stock = reference` → mid = basePrice. Above → cheaper, below → more expensive. If stock ≤ 0, price hits the ceiling.
 - `k` — elasticity exponent (steepness of the curve). Default **1** (reproduces the legacy hyperbola); higher `k` makes price react more sharply to the same stock gap.
 - `floor` / `ceiling` — per-good price multipliers on base price.
@@ -188,15 +199,15 @@ maxStock    = targetStock / priceFloor ^ (1/k)              // demand headroom �
 - **Demand-derived floor & anchor.** `minStock` is a *reserve*, not zero — the scarcity floor below which price ceilings out; directed logistics treats stock above the reserve (`stock − minStock`) as movable surplus. As stock falls toward the reserve, price climbs to the ceiling and the market holds its last reserve. Both `minStock` and `targetStock` scale with population, so the price point and the scarcity threshold track local demand.
 - **Infrastructure-derived ceiling.** `maxStock` is a demand-headroom term (which alone guarantees every market spans its *entire* price curve, so pricing never runs clipped) **plus the sum of storage its buildings provide** (`facilityStorageForGood`, `lib/engine/industry.ts`): extractors and factories store what they handle, population centres hold nominal retail stock (generous on consumer-facing goods). This is what makes a low-population **mega-mine cheap *and* liquid** — huge ore storage lets ore pile high (→ price floors → cheap) against a tiny demand reserve (→ nearly all of it buyable). The storage sum is denormalised onto `WorldMarket.storageCapacity` at seed (recomputed on build-out in SP5), so the band derives from the market row alone.
 
-This restores the cover model's intended invariant — **same days-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 days of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term.
+This restores the cover model's intended invariant — **same cycles-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 cycles of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term.
 
 ### Per-Tick Simulation (runs once per economy-shard update)
 The economy processor groups the shard's markets **by system** and runs the coupled cascade on each (`simulateCoupledEconomyTick`). Within a system goods are processed in recipe-topological order so a fresh input feeds its consumer the same tick; each good's stock is updated:
 
 1. **Apply event modifiers** — active events apply one-time stock shocks, multiply production/consumption rates, or shift the pricing reference (`anchorMult`).
-2. **Input-gated, self-limiting production** — the building-capacity production rate is throttled by `inputGate` (recipe-input availability; 1 for tier-0), then by the self-limiting `sqrt((MAX − stock) / (MAX − MIN))` ceiling. Near the ceiling, production approaches zero (warehouses full). Production is also scaled down by the **strike multiplier** — if the system's `unrest` is above the strike threshold, a smooth suppression factor reduces output. The recipe inputs are then drawn from local stock in proportion to actual output (drawable-above-floor; see [Supply Chain & Input-Gating](#supply-chain--input-gating)).
-3. **Self-limiting consumption** — its population-scaled civilian consumption rate removes stock, scaled by `sqrt((stock − MIN) / (MAX − MIN))`. Near the floor, consumption approaches zero (nothing left). Consumption is **never suppressed** by strikes — people still need goods even when workers walk out.
-4. **Clamp** — stock bounded to the market's per-market `[minStock, maxStock]` band.
+2. **Input-gated, brake-limited production** — the building-capacity production rate is throttled by `inputGate` (recipe-input availability; 1 for tier-0), then by the production brake's ceiling: full rate while stock sits at or below the **warehouse knee** — the larger of `BRAKE_USE_COVER (40)` cycles of the system's use figure (× `anchorMult`) and `BRAKE_OUTPUT_COVER (8)` cycles of its own reference capacity — ramping linearly to zero at `BRAKE_RAMP (1.3) ×` the knee. No price-anchor quantity reaches the brake. Production is also scaled down by the **strike multiplier** — if the system's `unrest` is above the strike threshold, a smooth suppression factor reduces output. The recipe inputs are then drawn from local stock in proportion to actual output (see [Supply Chain & Input-Gating](#supply-chain--input-gating)).
+3. **Self-limiting consumption** — its population-scaled civilian consumption rate removes stock, ramped by the shared ration curve (`consumptionFactor`; see [Supply Chain & Input-Gating](#supply-chain--input-gating)): full delivery at or above `RATION_COVER` (2) cycles of demand, `sqrt(stock / rationStock)` below it, zero at empty. This is the same curve and the same threshold industrial input draws use — `minStock`/`maxStock` (the pricing band) never enter this ramp. Consumption is **never suppressed** by strikes — people still need goods even when workers walk out.
+4. **Clamp** — stock bounded to `[0, maxStock]`. `minStock` is a pricing-only reserve (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)); it does not gate or clamp the tick's draw.
 
 There is no mean-reversion step and no demand axis — both are gone from the single-stock model.
 
@@ -213,20 +224,90 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 
 Each system has a **`population`** (a Float magnitude) that is now dynamic — it grows, declines, and migrates. Population drives the system-wide `labourFulfillment` ratio (labour pool for the seeded industrial base) and consumption demand (`perCapitaNeed × population`). As population moves, the stored `demandRate` per market is rewritten each tick to reflect the new level.
 
-**Unrest (`unrest`, 0…1)** accumulates from unmet need. Each economy tick the processor records per-good satisfaction (`delivered / demanded`) for each system it processes. The population processor then computes a convex, demand-weighted dissatisfaction value `D` — where a deep food shortage dominates many shallow ones because food's demand weight is ~8× a luxury's — and integrates it:
+**Unrest (`unrest`, 0…1)** accumulates from a population's grievance against what it has grown accustomed to, not from the absolute shortfall. Each economy tick the processor records per-good satisfaction (`delivered / demanded`) for each system it processes. The population processor folds these into **Provision** — the necessity-and-demand-weighted mean satisfaction, each demanded good weighted by its demand share × its authored necessity (`GOOD_NECESSITY`, the suffering weight). Provision reads as *"the share of what this world needs, weighted by how badly it needs it"* — never "the share of its goods that arrived": a world receiving no war matériel and no luxuries still reads ≈ 0.97, because those carry almost no suffering weight. Each system also carries a persisted memory of the Provision it is accustomed to; the unrest integral consumes whichever reads larger of a **grievance** term (how far today's Provision has fallen below that memory) and an absolute **crisis** term:
 
 ```
-D       = Σ_g  demandShare_g · (1 − satisfaction_g)²
-unrest ← clamp(unrest + k·D − decay·unrest, 0, 1)
+Provision   = Σ_g weight_g · satisfaction_g / Σ_g weight_g     where weight_g = demandShare_g · necessity_g
+grievance   = clamp(expectation − Provision, 0, 1)
+term        = max(slopeBase · grievance, crisisTerm)
+unrest     ← clamp(floor + (1 − decay)·(unrest − floor) + term·decay, 0, 1)
 ```
 
-Chronic unmet demand climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; sustained shortage crosses the thresholds.
+`necessity_g` is an authored weight, not derived from tier, price band, or consumption volume — each
+of those gets the ranking wrong. `GOOD_CONSUMPTION` is a tier gradient (its own docstring: "higher
+tier → lower need — only their relative shape matters"), so reading it as a necessity ranking rates
+medicine below gas purely because medicine sits one tier higher; `priceFloor`/`priceCeiling` is a
+pure tier lookup with zero per-good variation; volatility is unread. Necessity is the one axis that
+says a good is *needed* rather than merely *bought*:
+
+| Necessity | Goods |
+| --- | --- |
+| 1.0 | water, food |
+| 0.8 | medicine |
+| 0.4 | gas, textiles |
+| 0.3 – 0.35 | fuel, consumer_goods |
+| 0.15 | biomass, chemicals, electronics |
+| 0.1 | ore, minerals, metals, polymers |
+| 0.05 | radioactives, alloys, components, machinery, luxuries |
+| 0.01 – 0.02 | munitions, hull_plating, weapons, weapons_systems, targeting_arrays, reactor_cores, ship_frames |
+
+(`GOOD_NECESSITY`, `lib/constants/physical-economy.ts`.) A luxuries drought therefore barely moves
+Provision even at zero delivery, while a water or food shortfall dominates it — necessity times demand
+share is why the guarantee suite (below) can assert that no non-survival good, alone, at any tax
+level, reaches the strike threshold.
+
+`floor` is the standing pressure every settled world carries regardless of supply (tax level + crowding, up to ~0.23). Relaxation is a single rate (`decay`) whatever the world's state, and because the gain is scaled by the same `decay`, the fixed point is `min(1, floor + term)` **independent of the relaxation rate** — the rate sets only how fast unrest travels there. `slopeBase` is one flat exchange rate on grievance — no escalation ramp — and severity lives in the crisis term rather than in the grievance curve's shape:
+
+- **Survival floor** — water or food below `SHORTAGE_SATISFACTION` (50%) reads `slopeShortage × (1 − Provision)` outright and bands the world Famine, whatever the average or the memory says. Famine is never averaged away, and a population never gets "used to" it.
+- **Critical-good override** — each demanded good below `CRITICAL_SATISFACTION` (0.25, a separate line from the famine one) holding at least `BAND_MIN_DEMAND_SHARE` (1%) of the basket reads `min(slopeShortage, slopeBase + criticalWeight × (slopeShortage − slopeBase)) × (1 − Provision)`, on the absolute scale — expectation-independent, so no re-cut of `slopeBase` can silently weaken it. Slope-only: it never moves the band, and a world that also has famine fires the survival step alone.
+
+**The memory** (`lib/engine/expectation.ts`; `EXPECTATION_PARAMS` in `lib/constants/population.ts`): each developed system persists `provisionExpectation`, an asymmetric per-cycle relaxation toward that cycle's Provision — rising fast (`riseRate` 0.25/cycle: standards climb within a few good cycles) and resigning slowly (`resignRate` 0.02/cycle, half-life ≈ 34 cycles: accepting less takes a political generation). The update runs as catch-up sub-steps of the unscaled rates, the rise/resign branch re-evaluated every sub-step, so changing the tick cadence cannot bend the rise:resign ratio. The unrest read uses `max(stored, 0.5)` — the floor is read-time policy only, never written back, so the effective standard never falls below half-provision while the stored memory stays honest. A stored value that is absent, non-finite, or outside [0, 1] reads as absent and seeds from that cycle's own Provision — one rule covering world-gen, colony founding, old saves, and corruption alike, and the reason a newborn colony opens calm: its memory starts at its own opening state, so opening grievance is `max(0, 0.5 − opening P)`. A system transitioning into `developed` clears any stored baseline (a resettled world's stale memory must not judge its new colonists), and a cycle with an empty consumption basket skips the update — nothing was measured, so nothing is learned.
+
+The guarantee suite (`lib/constants/__tests__/band-constants.test.ts`) pins six promises, computed from the constants (`slopeBase` 1.6 flat — window [1.3, 2.08) from promises 3 and 4 — `slopeShortage` 2.4, strike 0.65, collapse/teardown 0.75, max standing floor 0.23) so a re-cut moves the numbers and fails pins rather than drifting silently:
+
+| # | Promise |
+| --- | --- |
+| 1 | A newborn colony opens calm at any tax — structural: the memory seeds at the colony's own opening state. The manifest-exhaustion window is measured, not promised: the harness reads founding trajectories over colony age plus the opening-Provision tail (`openedDeprived`, run minimum). |
+| 2 | Total failure of either survival good collapses an untaxed world — the crisis term reads the absolute scale. |
+| 3 | An accustomed world that loses half of what it is used to strikes at any tax: `slopeBase × 0.5 ≥ 0.65` ⇒ `slopeBase` ≥ 1.3. |
+| 4 | A quarter-dip never collapses or tears down at any tax: `slopeBase × 0.25 + maxFloor < 0.75` ⇒ `slopeBase` < 2.08. |
+| 5 | The escalation ladder is pinned as formulas, not literals: teardown onset at max floor at `G = (0.75 − maxFloor)/slopeBase` ≈ 0.325 (≈ a third-dip), unrest ceiling reachable from `G` ≈ 0.48 (max floor) / 0.625 (zero tax). |
+| 6 | The critical-good backstop holds shipped strength independent of expectation — no `slopeBase` re-cut can silently weaken the channel. |
+
+The **band is description, not mechanism** — four labels binned from Provision, plus one survival punch-through that owns no span of the axis:
+
+| Band | Rule |
+| --- | --- |
+| **Supplied** | Provision ≥ `SUPPLIED_PROVISION` (0.90) |
+| **Strained** | Provision in [`RATIONING_PROVISION`, `SUPPLIED_PROVISION`) |
+| **Rationing** | Provision in [`DEPRIVED_PROVISION`, `RATIONING_PROVISION`) |
+| **Deprived** | Provision < `DEPRIVED_PROVISION` (0.50) — more of the basket missing than arriving |
+| **Famine** | a *survival* good below 50%, whatever Provision says |
+
+Every Provision edge is inclusive on the low side of the higher band, so a world sitting exactly on an edge reads the better word. Famine is orthogonal to the axis rather than its bottom rung: a world starving on water while everything else pours in reads Famine at a Supplied-grade Provision. The system panel therefore recolours the whole Provisioned track under Famine instead of moving the marker, and the Provisioned map mode paints only the four axis bands.
+
+This band describes the whole **system** (it is computed from Provision, a basket-wide mean). A
+separate, not-yet-built per-good ladder — Supplied / Low reserve / Rationing / Shortage / Glut,
+naming one good's own stock cover rather than the system's Provision — is scoped for the planned
+goods tab (`docs/ROADMAP.md`); "Strained" here is unrelated to "Low reserve" there.
+
+No gameplay effect keys off the band — effects read Provision or the grievance, so the label can never disagree with what is happening to the world, and the bin edges are a legibility choice rather than a balance risk. They do not track a mechanical discontinuity: the critical-good crisis channel's *trigger* is per-good and binary, and fires on worlds spread across nearly the whole axis (median Provision ≈ 0.97-0.98 among worlds where it fires, at both the founding and equilibrium horizons) — its *effect* on unrest scales continuously with the shortfall itself, so the trigger's position on the axis carries nothing for a band edge to track. The edges are instead spaced across where the consequence — settled unrest crossing the strike threshold — visibly changes character, roughly Provision 0.5-0.9, rather than left as 70% of the axis under one word. There is no band-level collapse guarantee: collapse keys on dip depth (promise 4), famine (promise 2), and chronic critical failure (promise 6), never on the band label. Chronic delivery below the memory climbs unrest; relief decays it. This is an integral over time — one bad tick is harmless; a sustained episode crosses the thresholds, and only resignation (the slow rate) ends an episode the supply doesn't.
 
 **Strikes** are derived each tick from `unrest` (no separate stored flag): above the strike threshold, a smooth suppression multiplier scales down production output only. People still consume — consumption is never suppressed. The strike state feeds back into the next economy tick's production.
 
 **Growth / decline** is logistic with **symmetric** growth/decline rates: population grows toward `popCap` when the system is well-fed and calm, and declines under high unrest. Seeding places systems below `popCap` (population is a **continuous magnitude** — a tiny outpost seeds at e.g. `pop 0.3`, never rounded to a false 0), so the live tick ramps each up toward its labour-staffing cap and then holds. Today growth is gated mainly by housing-headroom × satisfaction; making it track economic *viability* (can the world feed/employ its people) is the booked **SP4 phase** "Population ← economic viability" (see [available-space model](./economy-substrate-v2-available-space.md) and [economy-simulation-vision.md](../../planned/economy-simulation-vision.md) §13).
 
-**Stability** is the public-facing readout of `unrest`, rendered as a choropleth map mode and a per-system badge. It is the SP2 replacement for the former prosperity choropleth — same pipeline, new source.
+**Stability** is the public-facing readout of `unrest`, rendered as a choropleth map mode and a per-system badge. It is the SP2 replacement for the former prosperity choropleth — same pipeline, new source. Unrest bins into five labels (`lib/utils/stability.ts`), cold to hot:
+
+| Label | Unrest |
+| --- | --- |
+| Stable | < 0.2 |
+| Calm | < 0.4 |
+| Tense | < 0.5 |
+| Unrest | < `STRIKE_PARAMS.threshold` (0.65) |
+| Strike | ≥ `STRIKE_PARAMS.threshold` |
+
+Only the Strike edge is load-bearing — it is pinned to the same threshold that gates production suppression, so the label can never contradict the mechanic it names. The other three edges are descriptive placement, not a contract.
 
 The system screen surfaces dynamic population and stability through two views, both tick-invalidated (separate from the static Astrography/substrate read, which is `staleTime: Infinity`):
 
@@ -303,10 +384,9 @@ Viewed another way, the simulation stacks four layers from static to real-time:
                                recipes) -> per-good production rates
                                (capacity-driven, input-gated, tier-0 × yield);
                                civilian + production-input consumption rates;
-                               demand rate -> days-of-supply pricing reference;
+                               demand rate -> cycles-of-supply pricing reference;
                                net balance + facility storage -> per-market band
-                               -> seed stock + import dependence;
-                               government -> consumption boosts
+                               -> seed stock + import dependence
 2  Tick evolution (each tick)  input-gated self-limiting production (the
                                supply-chain cascade) + civilian consumption,
                                strike suppression (from unrest),

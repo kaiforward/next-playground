@@ -424,7 +424,7 @@ describe("generateConnections", () => {
 // ── Emergent starting condition (home-system prefab) ────────────
 
 describe("stampHomeworldPrefabs", () => {
-  it("stamps the identical home-system prefab onto a garden body for each homeworld, leaves the rest bare", () => {
+  it("stamps the home-system prefab onto a garden body for each homeworld, leaves the rest bare", () => {
     const systems = [
       mkSys({ index: 0, population: 0, buildings: {} }),
       mkSys({ index: 1, population: 0, buildings: {} }),

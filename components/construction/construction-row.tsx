@@ -5,8 +5,9 @@ import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatMagnitude } from "@/lib/utils/format";
+import { formatMagnitude, fractionPct } from "@/lib/utils/format";
 import { formatEta } from "@/lib/utils/construction-format";
+import { COLONY_STALL_COPY, COLONY_STALL_DETAIL } from "@/lib/types/colonisation";
 
 /**
  * One stat-block construction row (the locked style B): title · detail line · exact full-width
@@ -14,6 +15,10 @@ import { formatEta } from "@/lib/utils/construction-format";
  * roll-up (where rows span systems); the per-system section omits it (the system is the page).
  * Player-ordered rows carry an ORDERED badge; `onCancel` (also player-origin gated) adds a cancel
  * button to the detail line.
+ *
+ * A founding also reports what it is waiting on: money and materials gate its work, so a colony can
+ * sit at a standstill while the construction pool is perfectly healthy, and a progress bar alone
+ * would read as steady progress.
  */
 export function ConstructionRow({
   row,
@@ -24,12 +29,12 @@ export function ConstructionRow({
   showSystem: boolean;
   onCancel?: (projectId: string) => void;
 }) {
-  const stalled = row.etaPulses === null;
+  const stalled = row.etaCycles === null;
   const baseTitle =
     row.kind === "colony_establish" ? "Establish Colony" : `${row.buildingLabel} ×${row.levels}`;
   const titleText = showSystem ? `${baseTitle} — ${row.systemName}` : baseTitle; // plain, for aria
-  const rate = Math.round(row.nextPulseGain * 10) / 10; // 1-dp; avoids "+0/pulse" noise
-  const rateText = rate > 0 ? `+${rate}/pulse` : "waiting";
+  const rate = Math.round(row.nextCycleGain * 10) / 10; // 1-dp; avoids "+0/cyc" noise
+  const rateText = rate > 0 ? `+${rate}/cyc` : "waiting";
 
   return (
     <div className="border-b border-border/40 py-2 last:border-b-0">
@@ -49,10 +54,17 @@ export function ConstructionRow({
           )}
         </span>
         {row.origin === "player" && <Badge color="amber">ORDERED</Badge>}
+        {/* Amber only where the wait actually halts the work (which `stalled` already reads off the
+            suppressed ETA); a founding merely short on stores keeps building, so it stays neutral. */}
+        {row.kind === "colony_establish" && row.stalledReason !== null && (
+          <Badge color={stalled ? "amber" : "slate"}>
+            {COLONY_STALL_COPY[row.stalledReason].toUpperCase()}
+          </Badge>
+        )}
         <span
           className={`ml-auto font-mono text-[11px] ${stalled ? "text-status-amber-light" : "text-text-secondary"}`}
         >
-          {formatEta(row.etaPulses)}
+          {formatEta(row.etaCycles)}
         </span>
       </div>
 
@@ -70,6 +82,9 @@ export function ConstructionRow({
                 >
                   {row.sourceSystemName}
                 </Link>
+                {" · "}
+                <span className="font-mono text-text-primary">{fractionPct(row.stagedFraction)}%</span>
+                <span className="text-text-tertiary"> of stores staged</span>
               </>
             ) : (
               row.detail
@@ -91,8 +106,12 @@ export function ConstructionRow({
       </p>
 
       {row.kind === "colony_establish" && (
-        <p className="mb-1.5 text-[11px] text-text-tertiary">
-          On completion: develops, receives seed pop, lands bundled housing.
+        <p
+          className={`mb-1.5 text-[11px] ${stalled ? "text-status-amber-light" : "text-text-tertiary"}`}
+        >
+          {row.stalledReason !== null
+            ? COLONY_STALL_DETAIL[row.stalledReason]
+            : "On completion: develops, receives seed pop, lands bundled housing."}
         </p>
       )}
 
@@ -101,7 +120,7 @@ export function ConstructionRow({
         value={row.workDone}
         max={row.workTotal}
         valueText={`${Math.round(row.progress * 100)}%`}
-        projected={row.nextPulseGain}
+        projected={row.nextCycleGain}
         color={stalled ? "amber" : "copper"}
         ariaLabel={`${titleText}: ${Math.round(row.progress * 100)}% complete, ${rateText}`}
       />

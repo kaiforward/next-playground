@@ -20,11 +20,11 @@ export interface ConstructionPoolSystem {
   buildings: Record<string, number>;
 }
 
-/** Per-pulse point rates. Callers scale both by catchUp when funding (they are pulse incomes). */
+/** Per-cycle point rates. Callers scale both by catchUp when funding (they are cycle incomes). */
 export interface ConstructionPoolRates {
-  /** Construction points per eligible head per pulse. */
+  /** Construction points per eligible head per cycle. */
   throughputPerPop: number;
-  /** Construction points one fully-staffed Construction Centre level adds per pulse. */
+  /** Construction points one fully-staffed Construction Centre level adds per cycle. */
   pointsPerLevel: number;
 }
 
@@ -36,7 +36,7 @@ export interface ConstructionPool {
 }
 
 /**
- * A faction's per-pulse construction pool over its economically-active (developed) systems.
+ * A faction's per-cycle construction pool over its economically-active (developed) systems.
  *
  * The base is ELIGIBLE heads, not raw headcount: population minus the heads actually employed in
  * technician/engineer jobs (`computeLabourAllocation` — employment-bounded, so a licensed head with
@@ -71,22 +71,22 @@ export interface FundQueueResult {
   /** Still-open projects with advanced workDone (landed projects removed). Same order as the input. */
   projects: WorldConstructionProject[];
   /**
-   * Projects that COMPLETED this pulse (workDone reached workTotal), in the order they landed — full
+   * Projects that COMPLETED this cycle (workDone reached workTotal), in the order they landed — full
    * discriminated rows, so the caller applies each by its `kind` (a build increments counts; a
    * colony-establish develops + seeds + houses). fundQueue stays decision-free: it moves rows between
    * open and landed by work alone, never interpreting the kind.
    */
   landed: WorldConstructionProject[];
-  /** Total construction points actually consumed this pulse (Σ per-project take). */
+  /** Total construction points actually consumed this cycle (Σ per-project take). */
   absorbed: number;
 }
 
 /**
- * Fund a front-first construction queue for one pulse.
+ * Fund a front-first construction queue for one cycle.
  *
  * `pool` construction points are handed to projects in order; each active build absorbs
  * `min(cap, its remaining work, pool left)` — the per-build cap sets a minimum build time
- * (`workTotal ÷ cap` pulses) that extra pool cannot bypass, and leftover pool cascades to the next
+ * (`workTotal ÷ cap` cycles) that extra pool cannot bypass, and leftover pool cascades to the next
  * build so a large pool spreads across parallel fronts. A project whose accumulated work reaches its
  * total lands its whole `levels` and drops out of the returned queue.
  *
@@ -124,6 +124,30 @@ export function fundQueue(
 }
 
 /**
+ * A per-project absorption ceiling: the seam through which a caller that knows something the queue
+ * cannot (whether a colony's materials can be bought this cycle) tightens ONE project's cap. It can
+ * only ever lower — a ceiling above `cap` clamps back to it.
+ */
+export type ProjectCap = (p: WorldConstructionProject) => number;
+
+/**
+ * One cycle of front-first funding under an optional per-project ceiling — the funding step both
+ * forecasts run, so a forecast drains the queue exactly the way the tick's own
+ * `fundQueueWithFloor` does. No floor is reserved: a forecast is a rate estimate, and the reserve is
+ * a within-cycle reordering that never changes how much the pool funds in total.
+ */
+export function fundCycle(
+  projects: WorldConstructionProject[],
+  pool: number,
+  cap: number,
+  capFor?: ProjectCap,
+): FundQueueResult {
+  return capFor === undefined
+    ? fundQueue(projects, pool, cap)
+    : fundQueueWithFloor(projects, pool, cap, 0, () => false, capFor);
+}
+
+/**
  * A young colony's guaranteed construction-point floor, self-weaning with development: the full `base`
  * at development 0, fading linearly to 0 once development reaches `knee`. Development is the galaxy-wide
  * magnitude (`systemDevelopment`), so the most-developed systems (homeworlds) reserve nothing and a
@@ -137,17 +161,24 @@ export function developmentFloorShare(development: number, base: number, knee: n
 /**
  * Fund a front-first queue with a reserved development-scaled floor for eligible (young-colony) builds,
  * so a colony's valid-but-low-ROI first build isn't monopolised out of the pool by the homeworld's
- * larger builds (docs/planned/economy-colony-bootstrapping.md §3.4 / §7.9). Returns the same shape as
- * `fundQueue`; `reserved = 0` reproduces `fundQueue` exactly.
+ * larger builds. Returns the same shape as `fundQueue`; `reserved = 0` reproduces `fundQueue` exactly.
  *
  * Two passes over the one ROI-ordered queue:
  *  - Pass A funds only the floor-eligible builds, front-first, from `reserved` (the minimum slice).
  *  - Pass B funds the WHOLE queue in ROI order from the general pool — `pool` minus what the reserve
  *    actually spent, so unspent reserve flows back here (no wasted budget) — with each build capped at
- *    `cap` minus its pass-A absorption, so total absorption this pulse never exceeds the per-build cap
+ *    `cap` minus its pass-A absorption, so total absorption this cycle never exceeds the per-build cap
  *    (the build-time floor is preserved across both passes).
  * A reserve is a *minimum* slice, never a max-spend cap: an eligible build can still win more from the
  * general pool on ROI, and the homeworld's builds drain whatever the reserve leaves.
+ *
+ * `capFor` lowers the scalar `cap` for one project — the seam through which a caller that knows
+ * something this function cannot (whether a colony's materials can be bought this cycle) tightens a
+ * single project's ceiling without giving the queue market or treasury access. It binds in BOTH
+ * passes, so a ceiling of 0 cannot be routed around by the reserved floor, and it can only ever
+ * lower: a callback returning more than `cap` is clamped back to it, so the minimum build time
+ * (`workTotal ÷ cap` cycles) stays a property no caller can buy its way past. Omitted → every
+ * project takes the scalar `cap`, exactly today's behaviour.
  */
 export function fundQueueWithFloor(
   ordered: WorldConstructionProject[],
@@ -155,10 +186,22 @@ export function fundQueueWithFloor(
   cap: number,
   reserved: number,
   isFloorEligible: (p: WorldConstructionProject) => boolean,
+  capFor?: ProjectCap,
 ): FundQueueResult {
   const safeCap = Number.isFinite(cap) ? Math.max(0, cap) : 0;
   const safePool = Number.isFinite(pool) ? Math.max(0, pool) : 0;
   const cappedReserve = clamp(Number.isFinite(reserved) ? reserved : 0, 0, safePool);
+
+  // Resolved once per project so both passes see one ceiling even if the callback is not pure.
+  const ceilings = new Map<string, number>();
+  const ceilingFor = (p: WorldConstructionProject): number => {
+    const cached = ceilings.get(p.id);
+    if (cached !== undefined) return cached;
+    const raw = capFor === undefined ? safeCap : capFor(p);
+    const resolved = Number.isFinite(raw) ? clamp(raw, 0, safeCap) : 0;
+    ceilings.set(p.id, resolved);
+    return resolved;
+  };
 
   // Pass A: eligible builds absorb the reserved slice, front-first.
   const absorbed = new Map<string, number>();
@@ -168,7 +211,7 @@ export function fundQueueWithFloor(
     if (reserveLeft <= 0) break;
     if (!isFloorEligible(p)) continue;
     const remaining = Math.max(0, p.workTotal - p.workDone);
-    const take = Math.min(safeCap, remaining, reserveLeft);
+    const take = Math.min(ceilingFor(p), remaining, reserveLeft);
     if (take > 0) {
       absorbed.set(p.id, take);
       reserveLeft -= take;
@@ -177,14 +220,14 @@ export function fundQueueWithFloor(
   }
 
   // Pass B: the whole queue drains the general pool (unspent reserve folded back in), each build capped
-  // at its remaining per-pulse absorption.
+  // at its remaining per-cycle absorption.
   let generalLeft = safePool - (cappedReserve - reserveLeft);
   const open: WorldConstructionProject[] = [];
   const landed: WorldConstructionProject[] = [];
   for (const p of ordered) {
     const already = absorbed.get(p.id) ?? 0;
     const remaining = Math.max(0, p.workTotal - p.workDone - already);
-    const take = Math.min(Math.max(0, safeCap - already), remaining, generalLeft);
+    const take = Math.min(Math.max(0, ceilingFor(p) - already), remaining, generalLeft);
     generalLeft -= take;
     absorbedTotal += take;
     const workDone = p.workDone + already + take;
@@ -198,7 +241,7 @@ export function fundQueueWithFloor(
  * Funding order over a faction's STORED open set: everything already committed keeps its stored
  * order (front-first — including unfunded auto rows and floor-funded rows the stored order
  * interleaves); fresh player orders (origin "player" with no work yet) move to the back of it,
- * preserving their own insertion (FIFO) order. The caller appends this pulse's new proposals after,
+ * preserving their own insertion (FIFO) order. The caller appends this cycle's new proposals after,
  * so the full priority reads: committed work → player orders → new autonomic proposals. Pure;
  * identity for queues with no fresh player rows.
  */
@@ -223,8 +266,8 @@ function isHousing(p: Proposal): boolean {
 }
 
 /**
- * Order this pulse's new proposals into funding priority (front = funded first) — the reorder of
- * `fundQueue`'s input the value-order model prescribes (docs/planned/economy-colonisation-cost.md §4):
+ * Order this cycle's new proposals into funding priority (front = funded first) — the reorder of
+ * `fundQueue`'s input the value-order model prescribes (docs/active/gameplay/colonisation.md):
  *   1. housing — the proactive population substrate leads (no served-demand ROI of its own);
  *   2. everything else by descending ROI (value ÷ whole-bundle work).
  * Ties break by systemId then first-item type, a total order independent of input order (determinism).
@@ -261,30 +304,31 @@ export function orderProposals(proposals: Proposal[]): Proposal[] {
 }
 
 /**
- * Forward-simulate `fundQueue` at a CONSTANT pool + cap to find the pulse each project lands on.
- * Returns an array aligned to `projects` by index: the 1-based pulse count until that project
+ * Forward-simulate `fundQueue` at a CONSTANT pool + cap to find the cycle each project lands on.
+ * Returns an array aligned to `projects` by index: the 1-based cycle count until that project
  * completes, or `null` when it never will at this rate ("stalled" — a zero/invalid pool, or the
  * guard cap hit). Coarse by design: the real pool grows with population and is shared across the
  * queue, so this is an estimate at the current rate, not a countdown. The progress bar
  * (`workDone/workTotal`) is exact; only the ETA is approximate.
  */
-export function forecastEtaPulses(
+export function forecastEtaCycles(
   projects: WorldConstructionProject[],
   pool: number,
   cap: number,
-  maxPulses = 999,
+  maxCycles = 999,
+  capFor?: ProjectCap,
 ): (number | null)[] {
-  // A zero/invalid pool funds nothing — everything is stalled (also avoids a maxPulses spin).
+  // A zero/invalid pool funds nothing — everything is stalled (also avoids a maxCycles spin).
   if (!Number.isFinite(pool) || pool <= 0 || !Number.isFinite(cap) || cap <= 0) {
     return projects.map(() => null);
   }
   // Keyed by project id — unique per queue (minted from the world's nextId counter), so each
-  // project's landing pulse is recorded once; a duplicate id would overwrite an earlier landing.
+  // project's landing cycle is recorded once; a duplicate id would overwrite an earlier landing.
   const landedAt = new Map<string, number>();
   let queue = projects.map((p) => ({ ...p }));
-  for (let pulse = 1; pulse <= maxPulses && queue.length > 0; pulse++) {
-    const { projects: open, landed } = fundQueue(queue, pool, cap);
-    for (const l of landed) landedAt.set(l.id, pulse);
+  for (let cycle = 1; cycle <= maxCycles && queue.length > 0; cycle++) {
+    const { projects: open, landed } = fundCycle(queue, pool, cap, capFor);
+    for (const l of landed) landedAt.set(l.id, cycle);
     queue = open;
   }
   return projects.map((p) => landedAt.get(p.id) ?? null);
@@ -292,43 +336,46 @@ export function forecastEtaPulses(
 
 /**
  * ETA for several INDEPENDENT single-project hypotheticals that all share one committed queue —
- * as if each were forecast on its own via `forecastEtaPulses([...committed, hypothetical], …)`,
+ * as if each were forecast on its own via `forecastEtaCycles([...committed, hypothetical], …)`,
  * without the other hypotheticals competing for the same trailing pool-share (they never actually
  * queue behind one another — each represents its own "what if I ordered just this one" probe).
  *
  * Front-first funding means the committed prefix's own landing schedule never depends on what
  * trails it, so committed funding is simulated ONCE; each hypothetical then draws independently off
- * that shared "pool left after committed" series. This is O(pulses × (committed + hypotheticals))
- * instead of O(hypotheticals × pulses × committed) for calling `forecastEtaPulses` once per
+ * that shared "pool left after committed" series. This is O(cycles × (committed + hypotheticals))
+ * instead of O(hypotheticals × cycles × committed) for calling `forecastEtaCycles` once per
  * hypothetical, and returns identical numbers to that per-call approach.
  */
-export function forecastIndependentEtaPulses(
+export function forecastIndependentEtaCycles(
   committed: WorldConstructionProject[],
   hypotheticals: WorldConstructionProject[],
   pool: number,
   cap: number,
-  maxPulses = 999,
+  maxCycles = 999,
+  capFor?: ProjectCap,
 ): (number | null)[] {
   if (!Number.isFinite(pool) || pool <= 0 || !Number.isFinite(cap) || cap <= 0) {
     return hypotheticals.map(() => null);
   }
   let queue = committed.map((p) => ({ ...p }));
   const remaining = hypotheticals.map((h) => Math.max(0, h.workTotal - h.workDone));
-  // A hypothetical with no remaining work at all lands on the very first pulse it's considered —
-  // matching forecastEtaPulses, which would find it already at workTotal on pulse 1 regardless of
+  // A hypothetical with no remaining work at all lands on the very first cycle it's considered —
+  // matching forecastEtaCycles, which would find it already at workTotal on cycle 1 regardless of
   // how much the committed prefix absorbs first.
   const landedAt: (number | null)[] = remaining.map((r) => (r <= 0 ? 1 : null));
 
-  for (let pulse = 1; pulse <= maxPulses; pulse++) {
-    const allHypDone = remaining.every((r) => r <= 0);
-    if (queue.length === 0 && allHypDone) break;
+  for (let cycle = 1; cycle <= maxCycles; cycle++) {
+    // The committed prefix is simulated only to produce the leftover each hypothetical draws on, so
+    // once every hypothetical has landed there is nothing further to compute — including when a
+    // ceilinged committed row (a colony whose materials it cannot buy) would never land at all.
+    if (remaining.every((r) => r <= 0)) break;
 
     let leftover = pool;
     if (queue.length > 0) {
       // fundQueue doesn't expose its internal leftover pool, so derive it from the work each
-      // committed project actually absorbed this pulse (new workDone − old workDone).
+      // committed project actually absorbed this cycle (new workDone − old workDone).
       const before = new Map(queue.map((p) => [p.id, p.workDone]));
-      const { projects: open, landed } = fundQueue(queue, pool, cap);
+      const { projects: open, landed } = fundCycle(queue, pool, cap, capFor);
       let absorbedByCommitted = 0;
       for (const p of [...open, ...landed]) absorbedByCommitted += p.workDone - (before.get(p.id) ?? p.workDone);
       leftover = pool - absorbedByCommitted;
@@ -339,7 +386,7 @@ export function forecastIndependentEtaPulses(
       if (remaining[i] <= 0) continue;
       const take = Math.min(cap, remaining[i], leftover);
       remaining[i] -= take;
-      if (remaining[i] <= 0) landedAt[i] = pulse;
+      if (remaining[i] <= 0) landedAt[i] = cycle;
     }
   }
   return landedAt;

@@ -4,6 +4,8 @@ import type {
   BuildBuildingUpdate,
   SystemClaim,
   SystemDevelopment,
+  FoundingStagingDraw,
+  ProposalPersistenceUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { developmentRefs, type DevelopmentRefs } from "@/lib/engine/development";
@@ -17,6 +19,10 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   readonly claims: SystemClaim[] = [];
   /** Developments resolved this run (developed tier + colony seed). */
   readonly developments: SystemDevelopment[] = [];
+  /** Materials drawn from founding sources this run (per-cycle colony staging). */
+  readonly foundingStagingDraws: FoundingStagingDraw[] = [];
+  /** Proposal-pressure counters written this run, keyed by composite market id, clamped to a finite [0,2]. */
+  readonly proposalCycleUpdates = new Map<string, number>();
   /** The live open-project set — updated in place by applyConstructionUpdates; read back by the tick body. */
   constructionProjects: WorldConstructionProject[];
 
@@ -70,11 +76,26 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
     ];
   }
 
+  async applyProposalPersistenceUpdates(updates: ProposalPersistenceUpdate[]): Promise<void> {
+    // Clamp to a finite [0,2] at the boundary (the counter is fractional reference-time, not an
+    // assessment count), mirroring how the economy adapter narrows squeezeCycles.
+    for (const u of updates) {
+      const clamped = Number.isFinite(u.proposalCycles)
+        ? Math.max(0, Math.min(2, u.proposalCycles))
+        : 0;
+      this.proposalCycleUpdates.set(u.id, clamped);
+    }
+  }
+
   async applyClaims(claims: SystemClaim[]): Promise<void> {
     this.claims.push(...claims);
   }
 
   async applyDevelopments(developments: SystemDevelopment[]): Promise<void> {
     this.developments.push(...developments);
+  }
+
+  async applyFoundingStagingDraws(draws: FoundingStagingDraw[]): Promise<void> {
+    this.foundingStagingDraws.push(...draws);
   }
 }

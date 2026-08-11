@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import { GOODS } from "@/lib/constants/goods";
 import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
+import { civilianDemandRateForGood, getInitialStock } from "@/lib/constants/market-economy";
+import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
+import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { toTickSystems } from "../tick";
 
 describe("generateWorld", () => {
   const world = generateWorld({ systemCount: 120, seed: 42 });
@@ -12,8 +16,14 @@ describe("generateWorld", () => {
     expect(world.systems.length).toBeLessThanOrEqual(120);
   });
 
-  it("gives every system exactly one market row per good, with no duplicates", () => {
-    expect(world.markets.length).toBe(world.systems.length * goodIds.length);
+  it("gives every DEVELOPED system one market row per good, and unsettled systems none", () => {
+    // An unclaimed rock holds no goods — nobody there grew, shipped, or stored anything. Its rows are
+    // created when it is settled, so seeding them here would hand every future colony a full anchor's
+    // worth of stock nobody produced (and drown every galaxy-wide market reading in rows that cannot move).
+    const developed = world.systems.filter((s) => s.control === "developed");
+    expect(developed.length).toBeGreaterThan(0);       // sanity: the split is real, not an empty galaxy
+    expect(developed.length).toBeLessThan(world.systems.length);
+    expect(world.markets.length).toBe(developed.length * goodIds.length);
 
     const seen = new Set<string>();
     for (const m of world.markets) {
@@ -22,13 +32,14 @@ describe("generateWorld", () => {
       seen.add(key);
     }
 
-    const systemIds = new Set(world.systems.map((s) => s.id));
+    const developedIds = new Set(developed.map((s) => s.id));
     for (const sys of world.systems) {
       for (const goodId of goodIds) {
-        expect(seen.has(`${sys.id}|${goodId}`)).toBe(true);
+        expect(seen.has(`${sys.id}|${goodId}`)).toBe(developedIds.has(sys.id));
       }
     }
     // Every market row references a real system.
+    const systemIds = new Set(world.systems.map((s) => s.id));
     for (const m of world.markets) {
       expect(systemIds.has(m.systemId)).toBe(true);
     }
@@ -40,6 +51,10 @@ describe("generateWorld", () => {
       expect(Number.isFinite(m.storageCapacity)).toBe(true);
       expect(Number.isFinite(m.demandRate)).toBe(true);
       expect(m.anchorMult).toBe(1);
+      expect(m.squeezeCycles).toBe(0);
+      expect(m.proposalCycles).toBe(0);
+      expect(m.realizedProductionRate).toBeUndefined();
+      expect(m.productionSuppressed).toBeUndefined();
     }
   });
 
@@ -118,6 +133,30 @@ describe("generateWorld", () => {
     }
   });
 
+  it("canonicalises a pair whose mint order runs the wrong way lexicographically", () => {
+    // Faction ids are minted after every region and system, so their numeric suffixes can straddle a
+    // digit-width boundary ("faction-99" > "faction-100" as strings). At 80 systems they do — which is
+    // the only shape that exercises the swap branch of the canonical ordering. The pair-count assertion
+    // is the premise guard: if id minting ever stops straddling, this test says so instead of quietly
+    // testing the same ascending case as the 120-system world above.
+    const swapWorld = generateWorld({ systemCount: 80, seed: 42 });
+    const mintOrder = swapWorld.factions.map((f) => f.id);
+    let descendingPairs = 0;
+    for (let i = 0; i < mintOrder.length; i++) {
+      for (let j = i + 1; j < mintOrder.length; j++) {
+        if (mintOrder[i] > mintOrder[j]) descendingPairs++;
+      }
+    }
+    expect(descendingPairs).toBeGreaterThan(0);
+
+    for (const r of swapWorld.relations) {
+      expect(typeof r.factionAId).toBe("string");
+      expect(typeof r.factionBId).toBe("string");
+      expect(r.factionAId < r.factionBId).toBe(true);
+    }
+    expect(swapWorld.relations.length).toBe((mintOrder.length * (mintOrder.length - 1)) / 2);
+  });
+
   it("seeds no ships, events, modifiers, alliance pacts, or flow events", () => {
     expect(world.ships).toEqual([]);
     expect(world.events).toEqual([]);
@@ -147,6 +186,34 @@ describe("generateWorld", () => {
     const worldA = generateWorld({ systemCount: 120, seed: 1 });
     const worldB = generateWorld({ systemCount: 120, seed: 2 });
     expect(worldA).not.toEqual(worldB);
+  });
+});
+
+describe("generateWorld: market seeding", () => {
+  it("seeds owned markets from the shared civilian basket and unowned tick rows as frontier", () => {
+    const world = generateWorld({
+      systemCount: 60,
+      seed: 8,
+      playerFaction: { name: "Marshalate", governmentType: "militarist", doctrine: "hegemonic" },
+    });
+    const player = world.factions.find((faction) => faction.name === "Marshalate")!;
+    const home = world.systems.find((system) => system.id === player.homeworldId)!;
+    const buildings: Record<string, number> = {};
+    for (const building of world.buildings) {
+      if (building.systemId === home.id) buildings[building.buildingType] = building.count;
+    }
+    const yields = resourceVectorFromColumns({
+      yieldGas: home.yieldGas, yieldMinerals: home.yieldMinerals, yieldOre: home.yieldOre,
+      yieldBiomass: home.yieldBiomass, yieldArable: home.yieldArable, yieldWater: home.yieldWater,
+      yieldRadioactive: home.yieldRadioactive,
+    }, "yield");
+    const basis = computeSystemLabourSnapshot(buildings, home.population).basis;
+    const weapons = world.markets.find((market) => market.systemId === home.id && market.goodId === "weapons")!;
+    expect(weapons.demandRate).toBeCloseTo(civilianDemandRateForGood("weapons", basis), 10);
+    expect(weapons.stock).toBe(getInitialStock(buildings, yields, home.population, "weapons"));
+
+    const unowned = world.systems.find((system) => system.factionId === null)!;
+    expect(toTickSystems(world).find((system) => system.id === unowned.id)?.governmentType).toBe("frontier");
   });
 });
 

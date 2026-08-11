@@ -1,5 +1,12 @@
 # Economy Specialisation S4 — Guardrails & Joint S1–S4 Calibration
 
+> ⚠ **Every number in this doc is unverifiable.** The findings below were measured against a live
+> Postgres dev world at tick 8874 via `npm run audit:economy`. There is no database any more, and that
+> script is not in `package.json` — so none of these readings can be reproduced or checked, and the
+> economy has been substantially rewritten since (band reconciliation) in ways that invalidate them.
+> Treat the *questions* as possibly still live and every *figure* as historical. Anything resumed from
+> here must be re-measured with `npm run simulate` first.
+
 > **Status: PAUSED by the grand-strategy pivot** ([grand-strategy-vision.md](./grand-strategy-vision.md),
 > 2026-07-06). Was: working spec / discussion scaffold for per-item discussion. S4's calibration
 > resumes inside pivot **Phase 4** (pops/ideology/control + goods re-pointing) as part of that

@@ -58,13 +58,13 @@ function makeTickSystem(id: string, factionId: string | null): TickSystem {
     regionId: "region-1",
     factionId,
     control: factionId ? "developed" : "unclaimed",
-    governmentType: "federation",
+    governmentType: factionId ? "federation" : "frontier",
     population: 100,
     popCap: 200,
     unrest: 0,
     buildings: {},
-    buildingIdleMonths: {},
-    buildingCollapseDebt: {},
+    buildingIdleCycles: {},
+    collapseDebt: 0,
     yields: emptyResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 100,
@@ -87,14 +87,14 @@ afterEach(() => {
   clearWorld();
 });
 
-describe("getSystemCadence — monthly pulse", () => {
-  it("returns pulseGroup 0 for every system (all resolve on the monthly boundary)", () => {
+describe("getSystemCadence — cycle start", () => {
+  it("returns resolutionGroup 0 for every system (all resolve on the cycle boundary)", () => {
     const ids = ["zulu", "alpha", "mike", "bravo", "yankee"];
     const systems = ids.map((id) => makeSystem(id, null));
     setWorld(buildWorld(systems));
 
     for (const s of systems) {
-      expect(getSystemCadence(s.id)).toEqual({ pulseGroup: 0 });
+      expect(getSystemCadence(s.id)).toEqual({ resolutionGroup: 0 });
     }
   });
 });

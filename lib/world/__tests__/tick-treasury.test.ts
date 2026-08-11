@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { runWorldTick } from "@/lib/world/tick";
-import { MONTH_LENGTH } from "@/lib/constants/tick-cadence";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { TARGET_COVER } from "@/lib/constants/market-economy";
 import type { World } from "@/lib/world/types";
+import { createSystemMarkets } from "@/lib/world/markets";
+import { unitResourceVector } from "@/lib/engine/resources";
 
 /**
  * Rig a faction with a guaranteed intra-faction haul: promote an unclaimed
@@ -20,12 +22,22 @@ function rigLogisticsPair(world: World, factionId: string): World {
     return world.systems.find((s) => s.id === otherId)!.factionId === null;
   })!;
   const neighbourId = conn.fromId === home ? conn.toId : conn.fromId;
+  // Settling the neighbour by hand has to include its markets — an unsettled system has none, and the
+  // live develop path creates them the same way (`addMarketsForSettledSystems`). It has no buildings,
+  // and the food row the rig cares about is overwritten below regardless.
+  const neighbourMarkets = createSystemMarkets({
+    systemId: neighbourId,
+    buildings: {},
+    yields: unitResourceVector(),
+    population: 200,
+    seedStock: false,
+  });
   return {
     ...world,
     systems: world.systems.map((s) =>
       s.id === neighbourId ? { ...s, factionId, control: "developed", population: 200 } : s,
     ),
-    markets: world.markets.map((m) => {
+    markets: [...world.markets, ...neighbourMarkets].map((m) => {
       if (m.systemId === neighbourId && m.goodId === "food")
         return { ...m, stock: 0, demandRate: 10 }; // anchor 400 → deep deficit
       if (m.systemId === home && m.goodId === "food")
@@ -38,10 +50,10 @@ function rigLogisticsPair(world: World, factionId: string): World {
 }
 
 describe("treasury over the live tick", () => {
-  it("settles every faction on the month pulse with finite, non-negative state", async () => {
+  it("settles every faction on the cycle start with finite, non-negative state", async () => {
     let world = generateWorld({ systemCount: 40, seed: 11 });
     let sawTreasuryRun = false;
-    for (let i = 0; i < MONTH_LENGTH; i++) {
+    for (let i = 0; i < CYCLE_LENGTH; i++) {
       const result = await runWorldTick(world);
       world = result.world;
       if (result.events.processors?.includes("treasury")) sawTreasuryRun = true;
@@ -65,28 +77,28 @@ describe("treasury over the live tick", () => {
     expect(totalIncome).toBeGreaterThan(0);
   });
 
-  it("accrues band-pulse work off the month pulse without settling, then bills it at the boundary", async () => {
-    // Divergent cadences: construction/logistics pulse at 24 while the month is 48,
-    // so the treasury gate's hasWork-only branch fires mid-month.
-    const cadence = { month: 48, construction: 24, logistics: 24 };
+  it("accrues the bands' work mid-cycle without settling, then bills it at the boundary", async () => {
+    // Divergent cadences: construction/logistics cycle at 24 while the economy cycle is 48,
+    // so the treasury gate's hasWork-only branch fires mid-cycle.
+    const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
-    let sawOffPulseAccrual = false;
+    let sawMidCycleAccrual = false;
     for (let tick = 1; tick <= 47; tick++) {
       const result = await runWorldTick(world, { cadence });
       world = result.world;
       if (result.events.processors?.includes("treasury")) {
-        sawOffPulseAccrual = true;
-        // Accrual must never settle ahead of the month boundary.
+        sawMidCycleAccrual = true;
+        // Accrual must never settle ahead of the cycle boundary.
         for (const t of world.treasuries) expect(t.lastSettlement, t.factionId).toBeNull();
       }
     }
-    expect(sawOffPulseAccrual).toBe(true);
+    expect(sawMidCycleAccrual).toBe(true);
     const accrued = world.treasuries.reduce(
       (acc, t) => acc + t.pendingWork.construction + t.pendingWork.logistics, 0);
     expect(accrued).toBeGreaterThan(0);
     expect(Number.isFinite(accrued)).toBe(true);
 
-    const boundary = await runWorldTick(world, { cadence }); // tick 48 — the month pulse
+    const boundary = await runWorldTick(world, { cadence }); // tick 48 — the cycle start
     world = boundary.world;
     expect(boundary.events.processors).toContain("treasury");
     for (const t of world.treasuries) {
@@ -96,9 +108,9 @@ describe("treasury over the live tick", () => {
   });
 
   it("a zero-funded construction band performs no construction work (the queue waits)", async () => {
-    // Divergent cadences so construction pulses mid-month and its work lands in
+    // Divergent cadences so construction resolves mid-cycle and its work lands in
     // pendingWork (observable before settlement clears it).
-    const cadence = { month: 48, construction: 24, logistics: 24 };
+    const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
     const starvedId = world.factions[0].id;
     world = {
@@ -113,15 +125,56 @@ describe("treasury over the live tick", () => {
     }
     const starved = world.treasuries.find((t) => t.factionId === starvedId)!;
     expect(starved.pendingWork.construction).toBe(0);
-    // The gate is per-faction: fully-funded factions still worked this pulse.
+    // The gate is per-faction: fully-funded factions still worked this cycle.
     const others = world.treasuries.filter((t) => t.factionId !== starvedId);
     expect(others.reduce((acc, t) => acc + t.pendingWork.construction, 0)).toBeGreaterThan(0);
   });
 
+  it("carries a charter debit committed on a workless mid-cycle tick through to the treasury", async () => {
+    // The tick body's own guard decides whether the treasury processor runs at all, so a founding
+    // debit on a tick that produced no band work anywhere would never reach an accumulator. Rigged to
+    // be exactly that tick: every faction's construction band is unfunded (pool 0 ⇒ nothing absorbs
+    // work), the economy cycle and logistics both sit at 48 so neither resolves, and one faction has
+    // a controlled neighbour it can commit a colony to and the money to pay the charter.
+    const cadence = { cycle: 48, construction: 24, logistics: 48 };
+    let world = generateWorld({ systemCount: 40, seed: 11 });
+    const settlerId = world.factions[0].id;
+    const home = world.factions[0].homeworldId;
+    const conn = world.connections.find((c) => {
+      if (c.fromId !== home && c.toId !== home) return false;
+      const otherId = c.fromId === home ? c.toId : c.fromId;
+      return world.systems.find((s) => s.id === otherId)!.factionId === null;
+    })!;
+    const neighbourId = conn.fromId === home ? conn.toId : conn.fromId;
+    world = {
+      ...world,
+      systems: world.systems.map((s) =>
+        s.id === neighbourId
+          ? { ...s, factionId: settlerId, control: "controlled", habitableSpace: Math.max(s.habitableSpace, 200) }
+          : s,
+      ),
+      treasuries: world.treasuries.map((t) => ({
+        ...t,
+        balance: 100_000,
+        funded: { ...t.funded, construction: 0 },
+      })),
+    };
+    for (let tick = 1; tick <= 24; tick++) {
+      const result = await runWorldTick(world, { cadence });
+      world = result.world;
+    }
+    const work = world.treasuries.reduce(
+      (acc, t) => acc + t.pendingWork.construction + t.pendingWork.logistics, 0);
+    const founding = world.treasuries.reduce((acc, t) => acc + t.pendingFounding, 0);
+    expect(work).toBe(0);            // the premise: nothing about this tick is band work
+    expect(founding).toBeGreaterThan(0); // yet a colony was bought, and the treasury knows
+    for (const t of world.treasuries) expect(t.lastSettlement, t.factionId).toBeNull(); // not a settlement tick
+  });
+
   it("a zero-funded logistics band hauls nothing while a funded twin hauls", async () => {
-    // Same divergent cadences: logistics pulses at 24, mid-month, so its work
+    // Same divergent cadences: logistics resolves at 24, mid-cycle, so its work
     // lands in pendingWork (observable before settlement clears it).
-    const cadence = { month: 48, construction: 24, logistics: 24 };
+    const cadence = { cycle: 48, construction: 24, logistics: 24 };
     let world = generateWorld({ systemCount: 40, seed: 11 });
     const starvedId = world.factions[0].id;
     const fundedId = world.factions[1].id;
@@ -137,7 +190,7 @@ describe("treasury over the live tick", () => {
       const result = await runWorldTick(world, { cadence });
       world = result.world;
     }
-    // The rig works: the identically-rigged funded faction hauled this pulse...
+    // The rig works: the identically-rigged funded faction hauled this cycle...
     const funded = world.treasuries.find((t) => t.factionId === fundedId)!;
     expect(funded.pendingWork.logistics).toBeGreaterThan(0);
     // ...so the starved faction's zero is the funding gate, not a dead rig.
@@ -154,7 +207,7 @@ describe("treasury over the live tick", () => {
           t.factionId === starvedId ? { ...t, funded: { ...t.funded, maintenance: 0 } } : t,
         ),
       };
-      for (let tick = 1; tick <= MONTH_LENGTH; tick++) {
+      for (let tick = 1; tick <= CYCLE_LENGTH; tick++) {
         world = (await runWorldTick(world)).world;
       }
       return world;
@@ -166,7 +219,7 @@ describe("treasury over the live tick", () => {
     const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
     const control = await run(null);
     const starved = await run(control.factions[0].id);
-    // The malus reached the economy pulse: the starved homeworld produced less...
+    // The malus reached the economy cycle: the starved homeworld produced less...
     expect(sum(homeStocks(starved, 0))).toBeLessThan(sum(homeStocks(control, 0)));
     // ...while an unstarved faction's homeworld is bit-identical (per-system map).
     expect(homeStocks(starved, 1)).toEqual(homeStocks(control, 1));
@@ -184,7 +237,7 @@ describe("treasury over the live tick", () => {
         return t;
       }),
     };
-    for (let tick = 1; tick <= MONTH_LENGTH * 2; tick++) {
+    for (let tick = 1; tick <= CYCLE_LENGTH * 2; tick++) {
       world = (await runWorldTick(world)).world;
     }
     const homeUnrest = (factionId: string) => {

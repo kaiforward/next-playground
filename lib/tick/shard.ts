@@ -54,28 +54,31 @@ export function catchUpFactor(interval: number): number {
 }
 
 /**
- * Whether `tick` is a resolution-pulse tick for `interval` — the predicate behind
- * {@link pulseShard}'s all-or-nothing window.
+ * Whether `tick` is the first tick of a cycle of length `interval` — the tick on
+ * which that cadence resolves, and the predicate behind {@link cycleStartShard}'s
+ * all-or-nothing window. Generic over the three cadences: pass `CYCLE_LENGTH` for
+ * the economy cycle, `LOGISTICS_INTERVAL` for the logistics cycle,
+ * `CONSTRUCTION_INTERVAL` for the construction cycle.
  *
- * Exported so `runWorldTick` can gate a pulse stage's *setup* on the same condition
- * the processor bails on internally. The two must stay one definition: a gate that
- * disagreed with the processor would either build setup nothing reads, or skip
- * setup a running processor needs.
+ * Exported so `runWorldTick` can gate a cycle-start stage's *setup* on the same
+ * condition the processor bails on internally. The two must stay one definition: a
+ * gate that disagreed with the processor would either build setup nothing reads, or
+ * skip setup a running processor needs.
  */
-export function isPulseTick(tick: number, interval: number): boolean {
+export function isCycleStart(tick: number, interval: number): boolean {
   const iv = Math.max(1, Math.floor(interval));
   return ((tick % iv) + iv) % iv === 0;
 }
 
 /**
- * Pulse coverage: the whole item list on the resolution-pulse tick
- * (`tick % interval === 0`), empty on every other tick — the monthly-pulse
- * counterpart to {@link shardRange}'s rolling slice. Processors that resolve the
- * entire galaxy at once on the month boundary (economy, migration,
- * directed-logistics, directed-build) use this; trade-flow keeps `shardRange`
- * for daily diffusion. Half-open [start, end).
+ * Cycle-start coverage: the whole item list on the cycle's first tick
+ * (`tick % interval === 0`), empty mid-cycle — the all-or-nothing counterpart to
+ * {@link shardRange}'s rolling slice. Processors that resolve the entire galaxy at
+ * once on the cycle boundary (economy, migration, directed-logistics,
+ * directed-build) use this; trade-flow keeps `shardRange` for per-tick diffusion.
+ * Half-open [start, end).
  */
-export function pulseShard(total: number, tick: number, interval: number): ShardWindow {
+export function cycleStartShard(total: number, tick: number, interval: number): ShardWindow {
   if (total <= 0) return { start: 0, end: 0 };
-  return isPulseTick(tick, interval) ? { start: 0, end: total } : { start: 0, end: 0 };
+  return isCycleStart(tick, interval) ? { start: 0, end: total } : { start: 0, end: 0 };
 }
