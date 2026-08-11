@@ -84,6 +84,14 @@ Minutes, by the author, before committing the plan. No agent dispatch.
   against a threshold that did not exist. A `file:line` citation is verified by **reading the
   range** — grep proves the name exists somewhere, not that the line is where the plan says (two
   same-named engine/processor files have already produced wrong-directory citations).
+- **Files lists are walked against a sibling, not imagined.** For any task adding to a shape that
+  already has members — a persisted field, a map mode, a response type, a processor signal — find
+  the nearest existing member and grep every file *it* touches; that set is the floor. Verifying the
+  named files exist is not the same check and will not catch the omission. Three tasks in one plan
+  were short this way: a persisted field needs the tick joins and the resettlement clears, not just
+  the type and the writer; a value map mode needs the zoomed-out aggregation, formatting, layer,
+  canvas, shell and tick invalidation, not just a ramp and a service. Each omission surfaces
+  mid-build, where the implementer either expands scope unreviewed or stops and costs a round trip.
 - **Nothing dropped between spec and plan.** Every interaction row and accepted amendment in the spec
   lands in some task. The difference between spec scope and plan scope is either empty or listed in
   **Not covered**.
