@@ -1,8 +1,9 @@
 # Economy Rationing — Current Access vs Strategic Reserve
 
-Small functional amendment to
-[Economy Band Reconciliation](./economy-band-reconciliation.md). It changes the PR1 consumption
-knee without adding UI in PR1.
+Small functional amendment to the band-reconciliation pass, now shipped and described in
+[economy.md](../active/gameplay/economy.md#supply-chain--input-gating). It changes the consumption
+knee; this doc predates the presentation layer, so its own UI section below is superseded by
+[economy.md](../active/gameplay/economy.md#population-unrest-and-strikes)'s shipped band table.
 
 ## Headline
 

@@ -21,10 +21,11 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   the replacement skills.
 
 - **[L] Economy band reconciliation** — the `shared/band-reconciliation` integration branch
-  (sub-features ride `feat/*` branches PR'd into it). Design:
-  [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md). PR1-5 shipped plus #202-#217
-  (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation economics), the
-  adaptive expectation, and abandonment (#221).
+  (sub-features ride `feat/*` branches PR'd into it). Design lived in
+  `docs/planned/economy-band-reconciliation.md`, deleted at PR6's doc fold below — its geometry and
+  constants are shipped and described in [economy.md](./active/gameplay/economy.md). PR1-5 shipped
+  plus #202-#217 (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation
+  economics), the adaptive expectation, and abandonment (#221).
   Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
   because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
   UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
@@ -35,8 +36,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 ## Queued — PR6, then player seat
 
 7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line. Two UI scopes:
-   the §6 presentation contract (panels speak regimes) from
-   [economy-band-reconciliation.md](./planned/economy-band-reconciliation.md), **plus the Provision
+   the §6 presentation contract (panels speak regimes), formerly specced in the now-deleted
+   `docs/planned/economy-band-reconciliation.md`, **plus the Provision
    display** (folded in from the UI queue): a Provision row + band badge on the Population tab, a
    vitals-grid tile, a Provision choropleth alongside the existing map value modes, and the
    adaptive-expectation surface — what this world is accustomed to (`provisionExpectation`) and
@@ -47,14 +48,21 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    *Next step:* the collaborative design pass + HTML prototype (breadth-first wireframes, then
    refine the chosen one).
    **PR6 owns the doc fold**, which is bigger than it looks — do it on the branch, before the final review:
-   - Four **active** docs the arc made stale: `economy-autonomic-agency.md`, `colonisation.md`,
-     `tick-engine.md`, and `economy.md` (its decay section still documents the continuous
-     `count ← count − unrestRate · count` formula, stale since whole-level decay and severity ramping).
-   - Two **planned** docs whose features have already shipped and which must be promoted into
-     `docs/active/` and deleted: `necessity-weighted-unrest.md` (448 lines — `GOOD_NECESSITY` and
+   - Four **active** docs the arc made stale: `economy-autonomic-agency.md` and `tick-engine.md`
+     still need verifying against code. `colonisation.md` was checked and is current.
+     `economy.md` was checked and fixed — its decay section wrongly documented a continuous
+     `count ← count − unrestRate · count` shave; it now describes the shipped whole-level
+     idle/collapse-debt teardown (`lib/engine/infrastructure-decay.ts`), and its band-edge
+     paragraph now records why the survival/critical-good crisis channel can't anchor a band edge
+     (the falsified `provision-band-edges.md` finding).
+   - Two **planned** docs whose features have already shipped and still need promoting into
+     `docs/active/` and deleting: `necessity-weighted-unrest.md` (448 lines — `GOOD_NECESSITY` and
      `slopeShortage` are live, and its headline "every good … currently hits unrest with the same
-     instrument" is now false) and `economy-rationing-amendment.md` (89 lines — `RATION_COVER` is live).
-   - `economy-band-reconciliation.md` itself is deleted at the same point.
+     instrument" is now false) and `economy-rationing-amendment.md` (89 lines — `RATION_COVER` is
+     live; its dangling link to the now-deleted band-reconciliation spec was patched, not promoted).
+   - `economy-band-reconciliation.md` itself — **deleted**, after confirming `RATION_EXIT_EPS`
+     survives (row 8, below) and the `provision-band-edges.md`/`pr6-presentation.md` findings
+     landed in `economy.md` and here.
 
 ---
 
@@ -161,6 +169,13 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
   their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
   its reference); nothing breaks if it never lands.
+- **[S] Loose ends out of scope for band reconciliation, unpicked-up since** — noted but not designed:
+  a legible EU5-style reserve/stockpile mechanic (visible policy-set stockpile, crisis
+  release/requisition, war stores, rationed by access) — ties to purse Stage 2-3 monetisation and
+  the priced-logistics/military/industry-pricing cluster above; rent or housing-quality goods;
+  distance-weighting the autonomic-build spare pool (a possible refinement to the response-pacing
+  backstop, noted, not built). No design pass on any of the three; pull individually when its area
+  comes forward rather than as a group.
 
 **Tick performance**
 - **[M] `toTickSystems` is the whole mid-cycle tick outside events** — 2.5 ms/tick at 2,400 systems,
