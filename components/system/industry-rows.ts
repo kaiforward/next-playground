@@ -34,6 +34,15 @@ export function staffedLevels(b: Pick<SystemIndustryReadout["buildings"][number]
  *  resource worked by more than one building type. Zeroed with health "stable" when nothing's built. */
 export interface DepositTypeRow {
   buildingType: string;
+  /**
+   * The good this type extracts (`BUILDING_TYPES[buildingType].outputGood`) — carried rather than
+   * left for the caller to assume it equals `buildingType`. `buildingType → outputGood` is
+   * deliberately many-to-one (`lib/constants/industry.ts`) so a denser `*_mk2` type can be a pure
+   * data addition, and the moment one exists, keying a per-good lookup (pop needs, supply chain) by
+   * the building type would silently miss. `undefined` only for a type that produces no good, which
+   * no extractor is — the optionality mirrors the catalog field's own.
+   */
+  outputGood?: string;
   built: number;
   /** Staffed capacity for this type (`staffedLevels`) — pure labour, not gated by selling. */
   staffed: number;
@@ -104,7 +113,8 @@ export function depositRows(
   // (one push per `Object.entries(buildings)` key), so a type can never overwrite another's entry here.
   const byType = new Map<string, DepositTypeRow>();
   for (const b of extractors) {
-    const resource = BUILDING_TYPES[b.buildingType]?.resource;
+    const def = BUILDING_TYPES[b.buildingType];
+    const resource = def?.resource;
     if (!resource) continue;
     const h = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: unrestThreshold });
     const staffed = staffedLevels(b);
@@ -116,6 +126,7 @@ export function depositRows(
     byResource.set(resource, acc);
     byType.set(b.buildingType, {
       buildingType: b.buildingType,
+      outputGood: def.outputGood,
       built: b.count,
       staffed,
       output: b.output ?? 0,
@@ -130,7 +141,7 @@ export function depositRows(
       const agg: DepositResourceAgg = byResource.get(d.resource) ?? { built: 0, staffed: 0, output: 0, health: "stable" };
       const types = Object.keys(BUILDING_TYPES)
         .filter((t) => BUILDING_TYPES[t].resource === d.resource)
-        .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
+        .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, outputGood: BUILDING_TYPES[t].outputGood, built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
       return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, slotCap: d.slotCap, ...agg, types };
     });
 }

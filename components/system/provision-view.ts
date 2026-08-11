@@ -29,9 +29,9 @@ export function bandLabel(band: SupplyRegime): string {
  * component to apply, never a Tailwind class string or hex value.
  *
  * One tone per band, all five distinct. The chip is word-primary, so colour is a secondary cue —
- * but it cannot be a *collapsing* one: the Provisioned map mode is a stepped choropleth painting
- * each band its own colour, so a chip that rendered Strained and Rationing alike would disagree with
- * the map about how many states exist. Slate for Strained is the deliberate choice over a second
+ * but it cannot be a *collapsing* one: this chip is the surface that names all five states, so two
+ * bands sharing a tone would read as one state seen twice, and a player scanning colour would count
+ * four. Slate for Strained is the deliberate choice over a second
  * amber: Strained means "worth watching", and warning colour belongs to Rationing, where delivery is
  * actually short. Red is reserved for Famine — the emergency — which leaves purple for Deprived, the
  * palette's remaining tone that reads as severity at all (blue and cyan both read informational, and

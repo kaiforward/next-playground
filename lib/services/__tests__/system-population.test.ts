@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
 import { getSystemPopulation, resolveTaxPressure } from "@/lib/services/system-population";
+import { resolveProvisionRead } from "@/lib/services/provision-read";
 import { ServiceError } from "@/lib/services/errors";
 import { STRIKE_PARAMS, EXPECTATION_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, CROWDING } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
@@ -143,20 +144,42 @@ describe("getSystemPopulation — provision read", () => {
     expect(data.provision.expectationPct).toBeCloseTo(expectedEffective, 6);
   });
 
-  it("reports zero grievance whenever delivery meets or exceeds the remembered level, at any absolute level", () => {
+  it("resolves zero grievance whenever delivery meets or exceeds the remembered level, at any absolute level", () => {
+    // Grievance never reaches the client — it is an input to the unrest floor's goods term, so it
+    // lives on the server-side `ResolvedProvision` and this reads the resolver the breakdown
+    // consumes, not the payload.
+    const resolved = (): ReturnType<typeof resolveProvisionRead> =>
+      resolveProvisionRead(getWorld().systems.find((s) => s.id === system.id)!);
+
     // Low absolute level, right at the read-side floor.
     withFields({ provision: 0.75, supplyBand: "supplied", provisionExpectation: 0.55 });
-    let data = getSystemPopulation(system.id);
-    if (data.visibility !== "visible") throw new Error("expected visible");
-    if (!data.provision.assessed) throw new Error("expected assessed");
-    expect(data.provision.grievance).toBe(0);
+    let read = resolved();
+    if (!read.assessed) throw new Error("expected assessed");
+    expect(read.grievance).toBe(0);
 
     // High absolute level, delivery exactly matches memory.
     withFields({ provision: 0.95, supplyBand: "supplied", provisionExpectation: 0.95 });
-    data = getSystemPopulation(system.id);
+    read = resolved();
+    if (!read.assessed) throw new Error("expected assessed");
+    expect(read.grievance).toBe(0);
+  });
+
+  it("serialises Provisioned, its band and the remembered level only — grievance stops at the service", () => {
+    // An exact-shape assertion: grievance is resolved for this very system (its expectation sits
+    // above delivery, so it is non-zero) and still must not appear on the payload.
+    withFields({ provision: 0.625, supplyBand: "strained", provisionExpectation: 0.875 });
+    const resolved = resolveProvisionRead(getWorld().systems.find((s) => s.id === system.id)!);
+    if (!resolved.assessed) throw new Error("expected assessed");
+    expect(resolved.grievance).toBeGreaterThan(0);
+
+    const data = getSystemPopulation(system.id);
     if (data.visibility !== "visible") throw new Error("expected visible");
-    if (!data.provision.assessed) throw new Error("expected assessed");
-    expect(data.provision.grievance).toBe(0);
+    expect(data.provision).toEqual({
+      assessed: true,
+      pct: 62.5,
+      band: "strained",
+      expectationPct: Math.max(0.875, EXPECTATION_PARAMS.floor) * 100,
+    });
   });
 
   it("reports band Famine while Provisioned reads high — the famine punch-through is never re-derived from the percentage", () => {

@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { depositRows, depositRowProblems, depositTypeProblems, generalLand, staffedLevels } from "../industry-rows";
 import type { DepositTypeRow } from "../industry-rows";
+import { BUILDING_TYPES } from "@/lib/constants/industry";
 import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IdleReason } from "@/lib/engine/industry";
 
 const T = 0.75;
@@ -67,14 +68,14 @@ describe("depositRows", () => {
     // textiles should still get a zeroed, stable entry so the player can see it and quick-add it.
     const rows = depositRows([deposit("arable", 5)], [extractor("food", 2, 1.5, 6)], 0, T);
     expect(rows[0].types.map((t) => t.buildingType)).toEqual(["food", "textiles"]);
-    expect(rows[0].types[0]).toEqual({ buildingType: "food", built: 2, staffed: 1.5, output: 6, health: "stable", staffedFraction: 0.75, idleReason: undefined });
-    expect(rows[0].types[1]).toEqual({ buildingType: "textiles", built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
+    expect(rows[0].types[0]).toEqual({ buildingType: "food", outputGood: "food", built: 2, staffed: 1.5, output: 6, health: "stable", staffedFraction: 0.75, idleReason: undefined });
+    expect(rows[0].types[1]).toEqual({ buildingType: "textiles", outputGood: "textiles", built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
   });
 
   it("carries exactly one type entry for a resource worked by a single catalog extractor", () => {
     const rows = depositRows([deposit("water", 3)], [extractor("water", 1, 1, 4)], 0, T);
     expect(rows[0].types).toHaveLength(1);
-    expect(rows[0].types[0]).toEqual({ buildingType: "water", built: 1, staffed: 1, output: 4, health: "stable", staffedFraction: 1, idleReason: undefined });
+    expect(rows[0].types[0]).toEqual({ buildingType: "water", outputGood: "water", built: 1, staffed: 1, output: 4, health: "stable", staffedFraction: 1, idleReason: undefined });
   });
 
   it("staffed is staffed capacity (staffedFraction × count), not the staffed-and-selling `used` figure — a glutting extractor still shows its full labour", () => {
@@ -92,6 +93,36 @@ describe("depositRows", () => {
     const rows = depositRows([deposit("water", 3)], [extractor("water", 2, 1, 3, 1)], 0, T);
     expect(rows[0].staffed).toBe(2);
     expect(rows[0].health).toBe("contracting");
+  });
+});
+
+/**
+ * Every catalog type today has `id === outputGood`, so no shipped fixture can tell a row keyed by
+ * building type from one keyed by output good — the `*_mk2` case the catalog is explicitly designed
+ * for (`lib/constants/industry.ts`: "`buildingType → outputGood` is many-to-one so `*_mk2` types are
+ * a pure data addition") is the only fixture that separates them, so it is registered here.
+ */
+describe("depositRows — outputGood on a many-to-one catalog", () => {
+  beforeAll(() => {
+    BUILDING_TYPES.food_mk2 = { ...BUILDING_TYPES.food, outputGood: "food" };
+  });
+  afterAll(() => {
+    delete BUILDING_TYPES.food_mk2;
+  });
+
+  it("a built type carries the good it produces, not its own type id", () => {
+    // The BuildingEntry fixture deliberately claims outputGood "food_mk2" (see `extractor`), so a row
+    // that echoed the readout entry — or the type id — would read "food_mk2" and fail here.
+    const rows = depositRows([deposit("arable", 5)], [extractor("food_mk2", 2, 2, 9)], 0, T);
+    const mk2 = rows[0].types.find((t) => t.buildingType === "food_mk2")!;
+    expect(mk2.outputGood).toBe("food");
+  });
+
+  it("an unbuilt type carries it too — the zeroed catalog entry is the row a player quick-adds from", () => {
+    const rows = depositRows([deposit("arable", 5)], [extractor("food", 1, 1, 4)], 0, T);
+    const mk2 = rows[0].types.find((t) => t.buildingType === "food_mk2")!;
+    expect(mk2.built).toBe(0);
+    expect(mk2.outputGood).toBe("food");
   });
 });
 

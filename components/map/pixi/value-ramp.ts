@@ -52,10 +52,11 @@ const RESERVES_ABSENT_ZERO: Record<ContinuousMode, boolean> = {
 // Supplied). Maroon rather than the chip's purple: within the map's own language, darker-than-red
 // reads as off the bottom of a heat scale, where a bright violet would read as a different data
 // dimension entirely; each surface stays internally consistent, and what the two must agree on is
-// how many states exist, not which hue each wears. Famine (the survival punch-through) owns no span
-// of this axis, since it can occur at any Provision level and is a separate signal
-// (`ProvisionEntry.band`), not a fifth colour here. Absolute scale, never referenceMax-normalised:
-// see valueRampColorPixi below.
+// how many states exist, not which hue each wears. The map paints the Provision axis and only that:
+// Famine (the survival punch-through) owns no span of the axis, since it can occur at any Provision
+// level, so it is not a fifth colour here — it is a per-system signal, carried by the per-system
+// read's band (`SystemProvisionRead.band`) and shown on the Population tab's chip and track.
+// Absolute scale, never referenceMax-normalised: see valueRampColorPixi below.
 const PROVISION_BANDS: readonly Stop[] = [
   [0, [127, 29, 29]], // deep maroon — Deprived, Provision < DEPRIVED_PROVISION
   [DEPRIVED_PROVISION, [239, 68, 68]], // red — Rationing

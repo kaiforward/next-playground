@@ -14,7 +14,10 @@ export interface ContributorBarsProps {
    * (the Stability block's unrest floor), or a category's budget ceiling for a funding/labour-pool
    * caller. A segment's width is `value / total`, clamped to [0,100]% so a segment reading above
    * `total` (an uncapped contributor) still renders a full bar rather than overflowing the track.
-   * `total <= 0` renders every bar at 0% rather than dividing by zero.
+   * The clamp is the TRACK's limit, not the reading's: the printed label carries the true
+   * percentage, so a contributor at 2.4× the scale reads 240% beside its full bar and cannot be
+   * mistaken for one sitting exactly at the ceiling. `total <= 0` renders every bar at 0% rather
+   * than dividing by zero.
    */
   total: number;
   /**
@@ -40,12 +43,14 @@ export function ContributorBars({ segments, total, threshold }: ContributorBarsP
   return (
     <div className="space-y-1.5">
       {segments.map((segment) => {
-        const pct = total > 0 ? clamp((segment.value / total) * 100, 0, 100) : 0;
+        // Two figures, deliberately: the track has a finite width, the reading does not.
+        const pct = total > 0 ? (segment.value / total) * 100 : 0;
+        const barPct = clamp(pct, 0, 100);
         return (
           <div key={segment.label} className="flex items-center gap-2">
             <span className="w-24 shrink-0 text-xs text-text-tertiary">{segment.label}</span>
             <div className="relative h-1.5 flex-1 overflow-hidden bg-surface-active">
-              <span className="block h-full" style={{ width: `${pct}%`, background: segment.color }} />
+              <span className="block h-full" style={{ width: `${barPct}%`, background: segment.color }} />
               {thresholdPct !== undefined && (
                 <span
                   aria-hidden
@@ -54,7 +59,7 @@ export function ContributorBars({ segments, total, threshold }: ContributorBarsP
                 />
               )}
             </div>
-            <span className="w-9 shrink-0 text-right font-mono text-xs text-text-secondary">
+            <span className="w-11 shrink-0 text-right font-mono text-xs text-text-secondary">
               {Math.round(pct)}%
             </span>
           </div>

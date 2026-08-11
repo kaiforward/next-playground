@@ -32,7 +32,7 @@ describe("getProvisionBySystem", () => {
     expect(entries.some((e) => e.systemId === c.id)).toBe(false);
   });
 
-  it("carries the persisted provision and band straight through, not re-derived", () => {
+  it("carries the persisted provision and nothing else — the band is not on the map payload", () => {
     const [a] = world.systems;
     const systems: WorldSystem[] = world.systems.map((s) =>
       s.id === a.id ? { ...s, provision: 0.62, supplyBand: "famine" } : s,
@@ -40,10 +40,10 @@ describe("getProvisionBySystem", () => {
     setWorld({ ...world, systems });
 
     const entry = getProvisionBySystem().find((e) => e.systemId === a.id)!;
-    // Famine while Provision reads mid — the survival punch-through — proves this is carried
-    // through, not re-binned from the number (a re-derivation would band this "strained").
-    expect(entry.provision).toBe(0.62);
-    expect(entry.band).toBe("famine");
+    // A famine world reading mid Provision — the survival punch-through — is carried at its true
+    // number, and the band it is in stays off this payload: the map steps its own fill at the band
+    // edges, and famine (which owns no span of the axis) is the per-system read's signal, not this one.
+    expect(entry).toEqual({ systemId: a.id, provision: 0.62 });
   });
 
   it("excludes a partially-written system — provision set but band absent still reads unassessed", () => {

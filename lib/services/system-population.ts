@@ -1,7 +1,7 @@
 import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { ServiceError } from "@/lib/services/errors";
-import { resolveProvisionRead } from "@/lib/services/provision-read";
+import { resolveProvisionRead, toProvisionRead, type ResolvedProvision } from "@/lib/services/provision-read";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, CROWDING } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
@@ -9,7 +9,7 @@ import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import { unrestContributors, unrestTrend } from "@/lib/engine/unrest-readout";
 import { crowdingPressure, type SupplyState } from "@/lib/engine/population";
-import type { SystemPopulationData, SystemProvisionRead, SystemUnrestRead } from "@/lib/types/api";
+import type { SystemPopulationData, SystemUnrestRead } from "@/lib/types/api";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 /**
@@ -52,7 +52,7 @@ export function resolveTaxPressure(system: WorldSystem, world: World): number {
  * crowding alone would call a world calm or worsening on a third of the evidence.
  */
 export function resolveUnrestBreakdown(
-  system: WorldSystem, world: World, provision: SystemProvisionRead,
+  system: WorldSystem, world: World, provision: ResolvedProvision,
 ): SystemUnrestRead {
   const tax = resolveTaxPressure(system, world);
   const crowding = crowdingPressure(
@@ -93,7 +93,7 @@ export function resolveUnrestBreakdown(
 
 /**
  * Dynamic population & social state for one system — population, popCap, unrest, a strike flag,
- * the pressure-sorted needs ledger, the Provisioned/band/memory/grievance read
+ * the pressure-sorted needs ledger, the Provisioned/band/memory read
  * (`SystemProvisionRead`), and the unrest contributor breakdown/trend (`SystemUnrestRead`). Unlike
  * the substrate read, these fields change every economy tick, so the hook
  * (`useSystemPopulation`) is tick-invalidated.
@@ -116,7 +116,9 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
     unrest: system.unrest,
     striking: system.unrest >= STRIKE_PARAMS.threshold,
     needs,
-    provision,
+    // The wire read; `resolveUnrestBreakdown` takes the fuller server-side one, whose grievance
+    // feeds the goods contributor the client is shown instead.
+    provision: toProvisionRead(provision),
     unrestBreakdown: resolveUnrestBreakdown(system, world, provision),
   };
 }

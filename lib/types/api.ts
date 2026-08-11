@@ -171,18 +171,21 @@ export interface PopNeedData {
 }
 
 /**
- * Provisioned + its band + the population's remembered level + the resulting grievance, shared
- * between `SystemPopulationData` and `SystemVitalsData`. Resolved through the exact functions the
- * tick uses (`readExpectation`, `grievanceShortfall`, both `lib/engine/`) so the panel and the sim
- * cannot disagree. `WorldSystem.provision`/`.supplyBand` are independently optional and absent means
- * never assessed, never zero — the `assessed: false` arm carries that absence rather than inventing
- * a reading; it is also what a PARTIALLY-written system (one of the pair present, the other absent)
- * renders as, since a half-written assessment is not a real one. `pct`/`expectationPct` are 0..100
- * (matching `SystemVitalsStability.pct`); `grievance` is `grievanceShortfall`'s raw [0,1] fraction,
- * not scaled to 100.
+ * Provisioned + its band + the population's remembered level, shared between `SystemPopulationData`
+ * and `SystemVitalsData`. Resolved through the exact functions the tick uses (`readExpectation`,
+ * both `lib/engine/`) so the panel and the sim cannot disagree. `WorldSystem.provision`/`.supplyBand`
+ * are independently optional and absent means never assessed, never zero — the `assessed: false` arm
+ * carries that absence rather than inventing a reading; it is also what a PARTIALLY-written system
+ * (one of the pair present, the other absent) renders as, since a half-written assessment is not a
+ * real one. `pct`/`expectationPct` are 0..100 (matching `SystemVitalsStability.pct`).
+ *
+ * The grievance the resolver derives from these two is deliberately NOT here: it is an input to the
+ * unrest floor's goods term, and the client is shown that effect (`SystemUnrestRead.contributors`),
+ * never the intermediate. It stays on the server-side `ResolvedProvision`
+ * (`lib/services/provision-read.ts`).
  */
 export type SystemProvisionRead =
-  | { assessed: true; pct: number; band: SupplyRegime; expectationPct: number; grievance: number }
+  | { assessed: true; pct: number; band: SupplyRegime; expectationPct: number }
   | { assessed: false };
 
 /**
@@ -244,7 +247,7 @@ export type SystemPopulationData =
       striking: boolean;
       /** Pop needs, pressure-sorted descending — the goods the population consumes and how met each want is. */
       needs: PopNeedData[];
-      /** Provisioned, its band, the remembered level, and grievance — see `SystemProvisionRead`. */
+      /** Provisioned, its band and the remembered level — see `SystemProvisionRead`. */
       provision: SystemProvisionRead;
       /** The unrest floor's contributor breakdown and trend — see `SystemUnrestRead`. */
       unrestBreakdown: SystemUnrestRead;
@@ -285,7 +288,7 @@ export type SystemVitalsData =
       stability: SystemVitalsStability;
       development: SystemVitalsDevelopment;
       population: SystemVitalsPopulation;
-      /** Provisioned, its band, the remembered level, and grievance — see `SystemProvisionRead`. */
+      /** Provisioned, its band and the remembered level — see `SystemProvisionRead`. */
       provision: SystemProvisionRead;
     }
   | { visibility: "unknown" };

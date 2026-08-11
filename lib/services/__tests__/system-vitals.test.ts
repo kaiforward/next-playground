@@ -158,18 +158,19 @@ describe("getSystemVitals — provision read", () => {
     expect(data.provision.expectationPct).toBeCloseTo(expectedEffective, 6);
   });
 
-  it("reports zero grievance whenever delivery meets or exceeds the remembered level, at any absolute level", () => {
+  it("carries Provisioned, its band and the remembered level and nothing else — grievance stays server-side", () => {
+    // The vitals tiles print the reading; grievance is an input to the unrest floor, resolved on the
+    // server (`ResolvedProvision`) and never serialised. An exact-shape assertion, so a field added
+    // back to the wire read fails here rather than shipping unread.
     withFields({ provision: 0.75, supplyBand: "supplied", provisionExpectation: 0.55 });
-    let data = getSystemVitals(system.id);
+    const data = getSystemVitals(system.id);
     if (data.visibility !== "visible") throw new Error("expected visible");
-    if (!data.provision.assessed) throw new Error("expected assessed");
-    expect(data.provision.grievance).toBe(0);
-
-    withFields({ provision: 0.95, supplyBand: "supplied", provisionExpectation: 0.95 });
-    data = getSystemVitals(system.id);
-    if (data.visibility !== "visible") throw new Error("expected visible");
-    if (!data.provision.assessed) throw new Error("expected assessed");
-    expect(data.provision.grievance).toBe(0);
+    expect(data.provision).toEqual({
+      assessed: true,
+      pct: 75,
+      band: "supplied",
+      expectationPct: Math.max(0.55, EXPECTATION_PARAMS.floor) * 100,
+    });
   });
 
   it("reports band Famine while Provisioned reads high — the famine punch-through is never re-derived from the percentage", () => {

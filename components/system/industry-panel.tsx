@@ -418,7 +418,8 @@ function DepositTable({
         {rows.map((row) => {
           const multi = row.types.length > 1;
           const quickAddOption = canOrder && row.types.length === 1 ? optionByType.get(row.types[0].buildingType) : undefined;
-          const rowPopNeed = !multi ? popNeedByGood.get(row.types[0].buildingType) : undefined;
+          const soleType = multi ? undefined : row.types[0];
+          const rowPopNeed = soleType?.outputGood ? popNeedByGood.get(soleType.outputGood) : undefined;
           const items = depositRowProblems(row, rowPopNeed, label);
           const hasProblems = items.length > 0;
           return (
@@ -449,7 +450,7 @@ function DepositTable({
               ))}
               {multi && row.types.map((t) => (
                 <Fragment key={t.buildingType}>
-                  <DepositTypeSubRow t={t} popNeed={popNeedByGood.get(t.buildingType)} systemId={systemId} canOrder={canOrder} option={optionByType.get(t.buildingType)} />
+                  <DepositTypeSubRow t={t} popNeed={t.outputGood ? popNeedByGood.get(t.outputGood) : undefined} systemId={systemId} canOrder={canOrder} option={optionByType.get(t.buildingType)} />
                   {ghosts.filter((g) => g.buildingType === t.buildingType).map((g) => (
                     <DepositGhostRow key={g.projectId} ghost={g} canCancel={canOrder} onCancel={onCancel} cancelPending={cancelPending} showActionColumn={canOrder} />
                   ))}

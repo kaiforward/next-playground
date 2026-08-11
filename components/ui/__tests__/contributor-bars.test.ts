@@ -28,15 +28,20 @@ describe("ContributorBars — one scaled bar per contributor", () => {
     expect(html).toContain("background:#f59e0b");
   });
 
-  it("a segment reading above total still renders a full bar, not an overflowing width", () => {
+  it("a segment reading above total renders a full bar but prints its TRUE value, not the clamped one", () => {
+    // The uncapped case the unrest breakdown actually produces (slopeShortage 2.4 against a famine
+    // shortfall). The track is finite, so the bar clamps; the label must not, or a world at 2.4×
+    // the scale would print "100%" — identical to one sitting exactly at it.
     const html = renderToStaticMarkup(
       ContributorBars({
-        segments: [{ label: "Goods shortfall", value: 1.4, color: "#f59e0b" }],
+        segments: [{ label: "Goods shortfall", value: 2.4, color: "#f59e0b" }],
         total: 1,
       }),
     );
     expect(html).toContain("width:100%");
-    expect(html).not.toContain("width:140%");
+    expect(html).not.toContain("width:240%");
+    expect(html).toContain(">240%<");
+    expect(html).not.toContain(">100%<");
   });
 
   it("total <= 0 renders every bar at 0% rather than dividing by zero", () => {

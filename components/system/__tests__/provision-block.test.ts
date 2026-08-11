@@ -15,7 +15,6 @@ const assessed: SystemProvisionRead = {
   pct: 68,
   band: "strained",
   expectationPct: 84,
-  grievance: 0.16,
 };
 
 function need(overrides: Partial<PopNeedData> & { goodId: string; goodName: string; satisfaction: number }): PopNeedData {

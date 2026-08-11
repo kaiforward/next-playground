@@ -26,7 +26,8 @@ A single mode toggle (`MapMode` in `lib/types/map.ts`) selects what the territor
   re-scaling). **Migration** is the per-system **attractiveness** heatmap (reuses `migrationAttractiveness`) —
   colour-only (a `SHOWS_NUMBERS` gate suppresses cell numbers) and **developed-gated** (undeveloped = absent =
   black); it re-scales to a focused faction's worlds like population/development. **Provision** is the per-system
-  **Provisioned** heatmap (reuses the persisted `StarSystem.provision`/`.supplyBand`, `getProvisionBySystem`) —
+  **Provisioned** heatmap (reuses the persisted `StarSystem.provision` via `getProvisionBySystem`, with
+  `.supplyBand` consulted only as the assessment gate, never shipped) —
   also colour-only and gated on assessment (never-assessed = absent = black), but unlike every other value mode it
   is **stepped, not continuous**, and never re-scales to a focused faction (see below).
 - **None** — no territory fill.
@@ -71,8 +72,8 @@ civilian basket**, not relative magnitudes:
   `DEPRIVED_PROVISION`, red the Rationing band, amber the Strained band, green at/above `SUPPLIED_PROVISION`)
   instead of blending between stops — a mature galaxy sits mostly at ~92-96% Supplied, so a continuous ramp would
   paint almost everything one colour. Every value inside a band renders identically. Famine (the survival
-  punch-through) owns no span of this axis — it's a separate signal (`ProvisionEntry.band`), not a fifth colour on
-  the map. The map's four steps are one heat scale in its own hues; the band chip's five tones are the badge
+  punch-through) owns no span of this axis — it's a separate signal, carried on the per-system read
+  (`SystemProvisionRead.band`) and not on the map payload at all, so the map shows the Provision axis only. The map's four steps are one heat scale in its own hues; the band chip's five tones are the badge
   palette's. The two surfaces must agree on how many states exist, not on which hue each wears.
 - **Absolute — `referenceMax` is ignored.** Every other value mode normalises to a reference max (global or
   faction-scoped); provision does not, because re-scaling would slide its colours out from under the fixed band
