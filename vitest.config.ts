@@ -38,6 +38,25 @@ export default defineConfig({
           ],
         },
       },
+      // Split by EXTENSION, not by directory: `.test.tsx` renders and runs in jsdom, `.test.ts` is
+      // pure logic and stays in the node project above. A test that renders needs JSX anyway, so
+      // the extension already tells the truth about which environment a file needs, and the pure
+      // maths under components/ (pixi geometry, the composition-width helpers) keeps running at
+      // node speed with no DOM to set up.
+      {
+        extends: true,
+        test: {
+          name: "component",
+          environment: "jsdom",
+          setupFiles: ["./vitest.setup.component.ts"],
+          // `app/` is included though nothing there is tested yet: a test file that silently
+          // matches no project reads exactly like a passing one.
+          include: [
+            "components/**/__tests__/**/*.test.tsx",
+            "app/**/__tests__/**/*.test.tsx",
+          ],
+        },
+      },
     ],
   },
 });
