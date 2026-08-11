@@ -4,6 +4,7 @@ import type { ShipSize, ShipRole } from "@/lib/constants/ships";
 import type { EventTypeId } from "@/lib/constants/events";
 import type { WorldMeta } from "@/lib/world/types";
 import type { Speed } from "@/lib/world/tick-loop";
+import type { SupplyRegime } from "@/lib/engine/population";
 
 export type { ShipSize, ShipRole };
 
@@ -209,6 +210,17 @@ export interface DevelopmentEntry {
 export interface MigrationEntry {
   systemId: string;
   attraction: number;
+}
+
+/** Per-system Provisioned (0..1, the necessity-weighted delivered share) + its band for the
+ *  Provisioned choropleth overlay — the same persisted fields (`StarSystem.provision`/`.supplyBand`)
+ *  the per-system panel reads. Absent means never assessed: the service gates an unassessed system
+ *  out entirely rather than returning a hollow reading, so absence renders through the existing
+ *  "missing from the map = black" convention every value mode already uses. */
+export interface ProvisionEntry {
+  systemId: string;
+  provision: number;
+  band: SupplyRegime;
 }
 
 /** Per-system ownership reading for the political territory + system markers. Tick-scoped: ownership

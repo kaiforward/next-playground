@@ -19,11 +19,12 @@ export interface AggregationTiers {
   faction: AggGroup[];
 }
 
-// Stability and migration are INTENSIVE modes — rates (1 − unrest / attractiveness) that must be
-// population-weighted so a populous core dominates and a tiny outpost can't drag it down. Population and
-// development are EXTENSIVE magnitudes → summed, so spreading into new systems adds instead of diluting.
-// (Migration is colour-only for now — this only matters once numbers are shown.)
-const isWeightedMode = (m: ValueMode) => m === "stability" || m === "migration";
+// Stability, migration and provision are INTENSIVE modes — rates (1 − unrest / attractiveness /
+// delivered share) that must be population-weighted so a populous core dominates and a tiny outpost
+// can't drag it down. Population and development are EXTENSIVE magnitudes → summed, so spreading into
+// new systems adds instead of diluting. (Migration and provision are colour-only for now — this only
+// matters once numbers are shown for either.)
+const isWeightedMode = (m: ValueMode) => m === "stability" || m === "migration" || m === "provision";
 
 export function aggregateValue(vals: number[], weights: number[], mode: ValueMode): number {
   if (vals.length === 0) return 0;

@@ -44,4 +44,12 @@ describe("formatValueNumber", () => {
       expect(formatValueNumber(0, "migration")).toBe("0");
     });
   });
+
+  describe("provision — 0..1 fraction rendered as 0-100 (unused while colour-only; kept honest)", () => {
+    it("scales by 100 and rounds, like stability", () => {
+      expect(formatValueNumber(0.87, "provision")).toBe("87");
+      expect(formatValueNumber(1, "provision")).toBe("100");
+      expect(formatValueNumber(0, "provision")).toBe("0");
+    });
+  });
 });

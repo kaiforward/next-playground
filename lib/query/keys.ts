@@ -19,6 +19,8 @@ export const queryKeys = {
   developmentMap: ["developmentMap"] as const,
   // All-systems migration attractiveness, developed systems only (tick-scoped — map choropleth)
   migrationMap: ["migrationMap"] as const,
+  // All-systems Provisioned + band, assessed systems only (tick-scoped — map choropleth)
+  provisionMap: ["provisionMap"] as const,
   // All-systems ownership (faction + developed tier — tick-scoped; political territory + markers)
   ownership: ["ownership"] as const,
   // Trade flow overlay (tick-scoped, gated by overlay toggle)

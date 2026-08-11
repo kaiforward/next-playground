@@ -1,4 +1,14 @@
-export type ValueMode = "population" | "development" | "stability" | "migration";
+import { SUPPLIED_PROVISION, RATIONING_PROVISION } from "@/lib/constants/economy";
+
+export type ValueMode = "population" | "development" | "stability" | "migration" | "provision";
+
+/**
+ * The four modes whose fill is a CONTINUOUS ramp (RAMPS + sample() below) — provision is excluded
+ * and handled by its own stepped path (PROVISION_BANDS + sampleStepped()) further down, so
+ * `RAMPS[mode]` can never silently treat a stepped mode as continuous (a missing key would be a
+ * compile error, not a runtime surprise).
+ */
+export type ContinuousMode = Exclude<ValueMode, "provision">;
 
 type Stop = readonly [number, readonly [number, number, number]];
 
@@ -7,12 +17,15 @@ type Stop = readonly [number, readonly [number, number, number]];
 // PRESENT range. population additionally reserves black for a literal 0 (0 people = nothing there).
 // stability/migration do NOT: every present (developed) system has a real value there, and its
 // floor (maximal unrest / least attractive) rides the red end of the ramp, not black —
-// absence is reserved for undeveloped/marketless systems, decided by the caller. Population and
+// absence is reserved for undeveloped/marketless systems, decided by the caller. provision follows
+// the same caller-decided convention (an unassessed system is simply absent from the value map — see
+// `getProvisionBySystem`) rather than RESERVES_ABSENT_ZERO: its "absent" is a missing FIELD
+// (never assessed), not a zero VALUE (0% Provisioned is a real, if dire, reading). Population and
 // migration share one two-pole red→green ramp (green = most/best) — a single value-mode colour language;
 // stability runs red (unstable) → teal → cyan (calm); development rides a grey floor → warm hue. Stops
 // are [t, [r,g,b]] with t ascending 0..1.
 const ABSENT = 0x08090c;
-const RAMPS: Record<ValueMode, readonly Stop[]> = {
+const RAMPS: Record<ContinuousMode, readonly Stop[]> = {
   population: [[0, [239, 68, 68]], [1, [34, 197, 94]]], // red → green
   development: [[0, [80, 84, 92]], [0.5, [158, 74, 44]], [1, [224, 132, 95]]], // grey floor → warm hue
   stability: [[0, [239, 68, 68]], [0.5, [26, 120, 140]], [1, [103, 232, 249]]], // red (unstable) → teal → cyan (calm)
@@ -22,12 +35,38 @@ const RAMPS: Record<ValueMode, readonly Stop[]> = {
 // Modes where a literal 0 means "nothing" and is drawn black (rather than the ramp floor). Stability
 // and migration are excluded — their 0 (or negative) is a real, present-system value that rides
 // the red floor; absence for migration is the developed/market gate, not a literal-0 check.
-const RESERVES_ABSENT_ZERO: Record<ValueMode, boolean> = {
+const RESERVES_ABSENT_ZERO: Record<ContinuousMode, boolean> = {
   population: true,
   development: true,
   stability: false,
   migration: false,
 };
+
+// Provisioned steps FLAT at the two edges the band classifier itself uses (`RATIONING_PROVISION`,
+// `SUPPLIED_PROVISION`) instead of interpolating between them: a mature galaxy sits mostly at
+// ~92-96% Supplied, so a continuous ramp would paint almost everything one colour. Every value
+// within a band renders IDENTICALLY — this is what makes it "stepped" rather than "a ramp with
+// custom stop positions" (sample() below would still blend between these three points). Colours:
+// red (below RATIONING_PROVISION — the Rationing band), amber (the Strained band), green (at/above
+// SUPPLIED_PROVISION — Supplied) — Shortage (the survival punch-through) owns no span of this axis,
+// since it can occur at any Provision level and is a separate signal (`ProvisionEntry.band`), not a
+// third colour here. Absolute scale, never referenceMax-normalised: see valueRampColorPixi below.
+const PROVISION_BANDS: readonly Stop[] = [
+  [0, [239, 68, 68]], // red — Rationing, Provision < RATIONING_PROVISION
+  [RATIONING_PROVISION, [217, 119, 6]], // amber — Strained
+  [SUPPLIED_PROVISION, [34, 197, 94]], // green — Supplied, Provision >= SUPPLIED_PROVISION
+];
+
+/** Flat step lookup: the colour of the highest band edge at or below `t` (edges ascending, inclusive
+ *  low side — matches `classifyRegime`'s `>=` boundaries). Unlike sample(), never blends. */
+function sampleStepped(bands: readonly Stop[], t: number): number {
+  const c = Math.max(0, Math.min(1, t));
+  let color = bands[0][1];
+  for (const [edge, rgb] of bands) {
+    if (c >= edge) color = rgb;
+  }
+  return pack(color);
+}
 
 // De-emphasis treatments for out-of-scope cells (faction focus). "desat" mixes each channel toward the
 // luminance grey; "dim" multiplies each channel down; "both" applies desat then dim and is the only
@@ -58,16 +97,20 @@ function sample(stops: readonly Stop[], t: number): number {
 /**
  * Colour for a PRESENT system's value. pop/development reserve black for a literal 0 (nothing built);
  * stability (and any non-reserving mode) rides its floor at 0. Absent systems are handled by the caller
- * (they never reach here). Normalised to referenceMax.
+ * (they never reach here). Continuous modes normalise to `referenceMax`; `provision` is the one
+ * exception — its band edges are absolute percentages, so it steps at PROVISION_BANDS and ignores
+ * `referenceMax` entirely (never re-scales to a focused faction's maximum, unlike population/
+ * development/migration).
  */
 export function valueRampColorPixi(value: number, referenceMax: number, mode: ValueMode): number {
+  if (mode === "provision") return sampleStepped(PROVISION_BANDS, value > 0 ? value : 0);
   if (RESERVES_ABSENT_ZERO[mode] && !(value > 0)) return ABSENT;
   const v = value > 0 ? value : 0;
   const max = referenceMax > 0 ? referenceMax : 1;
   return sample(RAMPS[mode], v / max);
 }
-export function rampFloorPixi(mode: ValueMode): number { return pack(RAMPS[mode][0][1]); }
-export function rampTopPixi(mode: ValueMode): number { return pack(RAMPS[mode][RAMPS[mode].length - 1][1]); }
+export function rampFloorPixi(mode: ContinuousMode): number { return pack(RAMPS[mode][0][1]); }
+export function rampTopPixi(mode: ContinuousMode): number { return pack(RAMPS[mode][RAMPS[mode].length - 1][1]); }
 export const ABSENT_COLOR = ABSENT;
 
 /** De-emphasis treatments for an out-of-scope cell (faction focus). "both" desaturates then dims. */
@@ -101,11 +144,30 @@ export function deEmphasize(color: number, treatment: DeEmphasis): number {
 }
 
 /**
- * CSS `rgb(...)` stops (low→high) for a mode's ramp — the single source the map
- * legend renders from, so the legend swatch can never drift from the cell fill.
+ * CSS `rgb(...)` stops (low→high) for a CONTINUOUS mode's ramp — the single source the map
+ * legend renders from, so the legend swatch can never drift from the cell fill. Discards stop
+ * POSITIONS, which is lossless only while a ramp's stops are evenly spaced — every continuous ramp
+ * here is. `provision`'s stepped fill is not, so it is excluded from this type and reads its
+ * legend from `provisionLegendStops` instead, which carries positions.
  */
-export function rampCssStops(mode: ValueMode): string[] {
+export function rampCssStops(mode: ContinuousMode): string[] {
   return RAMPS[mode].map(([, [r, g, b]]) => `rgb(${r}, ${g}, ${b})`);
+}
+
+/** A stepped-fill legend stop: the value where a flat colour band BEGINS (unlike `rampCssStops`, the
+ *  position is not discarded — provision's bands sit at the real classifier edges, not evenly spaced). */
+export interface SteppedLegendStop {
+  position: number;
+  css: string;
+}
+
+/**
+ * Legend stops for the `provision` stepped fill, in the same order and at the same edges
+ * (`RATIONING_PROVISION`, `SUPPLIED_PROVISION`) the cell fill itself steps at — so a legend built
+ * from this can never drift from PROVISION_BANDS, the way `rampCssStops` can't drift from RAMPS.
+ */
+export function provisionLegendStops(): SteppedLegendStop[] {
+  return PROVISION_BANDS.map(([position, [r, g, b]]) => ({ position, css: `rgb(${r}, ${g}, ${b})` }));
 }
 
 /** CSS colour for the reserved "no value / absent" fill (value 0). */

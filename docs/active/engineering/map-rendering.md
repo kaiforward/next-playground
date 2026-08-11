@@ -8,11 +8,11 @@ covers what is done with it once it arrives.
 
 The map is **EU5-style**: the **magnitude** value modes (population / development / stability) are read from the
 **number printed inside each system's Voronoi cell**, with colour complementing rather than carrying the meaning;
-the **migration** mode is a colour-only attractiveness heatmap (no natural printed unit). Everything stays
-**selectable at any zoom** via the cell rather than a tiny star hitbox. Each system's dot is coloured by its
-**star type**. Four value modes (stability / population / development / migration) share one choropleth; two
-structural modes (political / regions) and a plain "none" round out the toggle, and a single additive **logistics**
-overlay sits on top of any mode.
+**migration** and **provision** are colour-only heatmaps (no natural printed unit — provision's own number lives on
+the per-system panel, not the map). Everything stays **selectable at any zoom** via the cell rather than a tiny
+star hitbox. Each system's dot is coloured by its **star type**. Five value modes (stability / population /
+development / migration / provision) share one choropleth; two structural modes (political / regions) and a plain
+"none" round out the toggle, and a single additive **logistics** overlay sits on top of any mode.
 
 ## Map modes
 
@@ -21,11 +21,14 @@ A single mode toggle (`MapMode` in `lib/types/map.ts`) selects what the territor
 - **Political** — faction ownership. Zoomed in, cells are per-system; zoomed out they merge into faction shapes.
 - **Regions** — transparent fills with uniform neutral-slate borders (`0x64748b`). `regionId` is sim-load-bearing
   (region-targeted event modifiers, relations, derivations); only its colouring is neutral.
-- **Stability / Population / Development / Migration** — the **value modes**, rendered by the shared
+- **Stability / Population / Development / Migration / Provision** — the **value modes**, rendered by the shared
   value-choropleth layer (below). `isValueMapMode()` gates the value-mode-only behaviours (cell numbers, faction
   re-scaling). **Migration** is the per-system **attractiveness** heatmap (reuses `migrationAttractiveness`) —
   colour-only (a `SHOWS_NUMBERS` gate suppresses cell numbers) and **developed-gated** (undeveloped = absent =
-  black); it re-scales to a focused faction's worlds like population/development.
+  black); it re-scales to a focused faction's worlds like population/development. **Provision** is the per-system
+  **Provisioned** heatmap (reuses the persisted `StarSystem.provision`/`.supplyBand`, `getProvisionBySystem`) —
+  also colour-only and gated on assessment (never-assessed = absent = black), but unlike every other value mode it
+  is **stepped, not continuous**, and never re-scales to a focused faction (see below).
 - **None** — no territory fill.
 
 One **overlay** is additive and sits on top of whichever mode is active:
@@ -34,9 +37,10 @@ One **overlay** is additive and sits on top of whichever mode is active:
 
 ## Value modes — relative, faction-scopable gradients
 
-Every cell in a value mode is coloured on a **relative** ramp normalised to a reference max, so the read is
-"which of these is highest," not an absolute scale. Colour complements the printed number rather than carrying the
-meaning. Ramp semantics (`components/map/pixi/value-ramp.ts`):
+Every cell in a value mode **except provision** is coloured on a **relative** ramp normalised to a reference max, so
+the read is "which of these is highest," not an absolute scale. Colour complements the printed number rather than
+carrying the meaning. **Provision is the one absolute, stepped exception** — see its own subsection below. Ramp
+semantics (`components/map/pixi/value-ramp.ts`):
 
 - **Absent → black** (`0x08090c`). Absence is decided by the *consumer*: a cell missing from the value map (an
   undeveloped system with no live value) draws black. Population and development additionally reserve black for a
@@ -57,22 +61,45 @@ meaning. Ramp semantics (`components/map/pixi/value-ramp.ts`):
 
 The **legend renders from the same ramp source** (`rampCssStops`), so a swatch can never drift from the cell fill.
 
+### Provision — stepped, absolute, never re-scaled
+
+Provision breaks the pattern above on purpose, because its band edges (`SUPPLIED_PROVISION`, `RATIONING_PROVISION`
+— the same two the Population-tab band chip classifies on) are **fixed percentages of the civilian basket**, not
+relative magnitudes:
+
+- **Stepped, not interpolated.** `valueRampColorPixi` samples a flat 3-band lookup (red below
+  `RATIONING_PROVISION`, amber the Strained band, green at/above `SUPPLIED_PROVISION`) instead of blending between
+  stops — a mature galaxy sits mostly at ~92-96% Supplied, so a continuous ramp would paint almost everything one
+  colour. Every value inside a band renders identically. Shortage (the survival punch-through) owns no span of
+  this axis — it's a separate signal (`ProvisionEntry.band`), not a fourth colour on the map.
+- **Absolute — `referenceMax` is ignored.** Every other value mode normalises to a reference max (global or
+  faction-scoped); provision does not, because re-scaling would slide its colours out from under the fixed band
+  edges. `RESCALES_TO_SCOPE.provision` is `false` for the same reason stability's is, but provision's invariance is
+  additionally enforced inside `valueRampColorPixi` itself, which never reads `referenceMax` for this mode.
+- **Legend carries stop positions.** `rampCssStops` (used by every continuous mode's legend) discards stop
+  positions, which is lossless only while a ramp's stops are evenly spaced — provision's aren't. Its legend instead
+  reads `provisionLegendStops()`, which returns `{ position, css }` pairs so the legend's boundaries land at the
+  real band edges rather than even thirds.
+- **Colour-only** (`SHOWS_NUMBERS.provision = false`), same as migration — the per-system Provisioned percentage
+  lives on the Population tab, not the map.
+
 ## Faction focus — zoom-gated re-scaling
 
 The value ramp normalises to a **scope**, and the scope is the pathname — there is no separate focus state:
 
 - **Nothing focused** (`/`) → the ramp spans **all visible systems** (global): the galaxy's top value is the top
   of the ramp.
-- **A faction focused** (`/factions/[id]`) → population and development **re-normalise to that faction's members**
-  (its worlds span the full ramp), and out-of-scope cells are **de-emphasised** — desaturated *and* dimmed
-  ("both", the default treatment). Stability never re-scales (its `1 − unrest` scale is absolute), but its
-  non-focused factions still de-emphasise for visual consistency.
+- **A faction focused** (`/factions/[id]`) → population, development and migration **re-normalise to that
+  faction's members** (its worlds span the full ramp), and out-of-scope cells are **de-emphasised** — desaturated
+  *and* dimmed ("both", the default treatment). Stability and provision never re-scale — stability's `1 − unrest`
+  scale is absolute, and provision's band edges are fixed percentages that would slide out from under the colours
+  if rescaled — but their non-focused factions still de-emphasise for visual consistency.
 
 The re-scale is **zoom-gated for free**: you can only reach `/factions/[id]` via a zoomed-out faction click, so
 close work (zoomed in, selecting systems) never rescales the map underfoot. A **faction-union outline** is stroked
 over the value fills (reusing the political layer's cached unions — no new triangulation) so faction borders stay
 legible while a value mode paints the interior. `RESCALES_TO_SCOPE` marks the modes that re-normalise (population,
-development); a "hide" de-emphasis treatment is kept as a future user-preference toggle, not built.
+development, migration); a "hide" de-emphasis treatment is kept as a future user-preference toggle, not built.
 
 ## Numbers — three-tier zoom aggregation
 

@@ -19,6 +19,7 @@ import { useStability } from "@/lib/hooks/use-stability";
 import { usePopulation } from "@/lib/hooks/use-population";
 import { useDevelopment } from "@/lib/hooks/use-development";
 import { useMigration } from "@/lib/hooks/use-migration";
+import { useProvision } from "@/lib/hooks/use-provision";
 import { buildSystemRegionMap } from "@/lib/utils/region";
 import { resolveCarriedSegment } from "@/components/map/segment-carry";
 
@@ -65,6 +66,7 @@ export function StarMap({
   const populationBySystem = usePopulation(mapMode === "population" || mapMode === "stability");
   const developmentBySystem = useDevelopment(mapMode === "development");
   const migrationBySystem = useMigration(mapMode === "migration");
+  const provisionBySystem = useProvision(mapMode === "provision");
 
   // Stability is dynamic "story" state, so fog-of-war applies: only tint systems
   // the player can currently sense. We store STABILITY (1 − unrest), not raw unrest,
@@ -112,6 +114,17 @@ export function StarMap({
     }
     return gated;
   }, [migrationBySystem, visibleSystemIds]);
+
+  // Provision is dynamic story state too — same fog gate. The unassessed-gate already lives in the
+  // service (`getProvisionBySystem` returns assessed systems only), so this memo applies just the
+  // fog restriction, like migration.
+  const visibleProvision = useMemo(() => {
+    const gated = new Map<string, number>();
+    for (const [systemId, provision] of provisionBySystem) {
+      if (visibleSystemIds.has(systemId)) gated.set(systemId, provision);
+    }
+    return gated;
+  }, [provisionBySystem, visibleSystemIds]);
 
   // Overlay live ownership (factionId + developed) onto the static atlas. The base atlas is fetched
   // once (staleTime:Infinity); ownership refetches on the cycle start, so a new liveAtlas identity
@@ -329,6 +342,7 @@ export function StarMap({
         populationBySystem={visiblePopulation}
         developmentBySystem={visibleDevelopment}
         migrationBySystem={visibleMigration}
+        provisionBySystem={visibleProvision}
         selectedFactionId={selectedFactionId}
       />
 

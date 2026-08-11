@@ -14,6 +14,7 @@ import type {
   PopulationEntry,
   DevelopmentEntry,
   MigrationEntry,
+  ProvisionEntry,
   OwnershipEntry,
   ResourceVector,
 } from "./game";
@@ -58,6 +59,7 @@ export type StabilityResponse = ApiResponse<{ systems: StabilityEntry[] }>;
 export type PopulationResponse = ApiResponse<{ systems: PopulationEntry[] }>;
 export type DevelopmentResponse = ApiResponse<{ systems: DevelopmentEntry[] }>;
 export type MigrationResponse = ApiResponse<{ systems: MigrationEntry[] }>;
+export type ProvisionResponse = ApiResponse<{ systems: ProvisionEntry[] }>;
 export type OwnershipResponse = ApiResponse<{ systems: OwnershipEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
