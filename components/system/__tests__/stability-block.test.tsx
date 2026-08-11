@@ -9,11 +9,10 @@ import type { SystemUnrestRead } from "@/lib/types/api";
 // track at all.
 
 /**
- * Every absolutely-positioned mark in the block. `TrackRule` and `ContributorBars`' optional
- * per-bar threshold tick are the only two things that render one, so this single count says both
- * how many rules the track carries AND whether any per-bar marker was drawn — without depending on
- * how either is painted. A negative assertion tied to one rule's colour or dash would pass
- * vacuously the moment that painting changed.
+ * Every absolutely-positioned mark in the block. `TrackRule` is the only thing that renders one —
+ * `ContributorBars` has no per-bar marker of its own — so this count says how many rules the track
+ * carries, without depending on how any one of them is painted. A negative assertion tied to one
+ * rule's colour or dash would pass vacuously the moment that painting changed.
  */
 function marks(container: HTMLElement): NodeListOf<Element> {
   return container.querySelectorAll(".absolute");
@@ -39,10 +38,10 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
     expect(screen.getByText("Now 85%")).toBeInTheDocument();
     expect(screen.getByText("Heading for 0%")).toBeInTheDocument();
     expect(screen.getByText("Strike below 35%")).toBeInTheDocument();
-    expect(marks(container)).toHaveLength(2); // both track rules, and no per-bar marker
+    expect(marks(container)).toHaveLength(2); // both track rules
     expect(screen.getByText(/Falling/)).toBeInTheDocument();
     // `trend` describes UNREST. Printed as-is it would tell the owner a collapsing world is rising.
-    expect(screen.queryByText(/Rising/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/rising/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Climbing/)).not.toBeInTheDocument();
   });
 
@@ -58,10 +57,12 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
       <StabilityBlock unrest={0.4} striking={false} unrestBreakdown={unrestBreakdown} />,
     );
     expect(screen.getByText("Strike below 28%")).toBeInTheDocument(); // 1 - 0.72
-    // A tick across each bar would claim a per-cause threshold. `settled` here is 0.42 from three
-    // causes none of which exceeds 0.3, and a system with 0.3/0.2/0.2 strikes with every bar under
-    // the line — so the marker belongs to the total, which the track carries. Three contributor
-    // rows: a per-bar marker would put the count at five.
+    // `ContributorBars` has no per-bar marker to draw, so the absence here is structural, not
+    // merely unasserted. The design reasoning still holds: a tick across each bar would have
+    // claimed a per-cause threshold, but `settled` here is 0.42 from three causes none of which
+    // exceeds 0.3, and a system with 0.3/0.2/0.2 strikes with every bar under the line — so the
+    // marker belongs to the total, which the track carries. The count below is purely the track's
+    // own rules.
     expect(marks(container)).toHaveLength(2);
     expect(screen.getByText("Goods shortfall")).toBeInTheDocument();
     expect(screen.getByText(/Holding/)).toBeInTheDocument();

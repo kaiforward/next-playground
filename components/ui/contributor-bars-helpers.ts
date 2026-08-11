@@ -34,13 +34,3 @@ export function contributorBarWidths(
     return { label: segment.label, color: segment.color, pct, barPct: clamp(pct, 0, 100) };
   });
 }
-
-/**
- * Where a threshold marker sits across the same scale, or `undefined` when there is no marker to
- * draw. A marker is dropped rather than floored on a `total <= 0` scale: at zero scale its position
- * would be meaningless, and a tick pinned at 0% reads as a real threshold sitting at zero.
- */
-export function thresholdPosition(threshold: number | undefined, total: number): number | undefined {
-  if (threshold === undefined || total <= 0) return undefined;
-  return clamp((threshold / total) * 100, 0, 100);
-}

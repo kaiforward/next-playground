@@ -20,7 +20,6 @@ describe("PopulationSummary — occupancy bar, crowding chip, and the housed/ove
     // The three key entries always render. Scoped to the key row, because "Capacity" is also the
     // label of the stat row above it — an unscoped query matches both.
     const key = screen.getByText("Housed").closest("div");
-    expect(key).toHaveTextContent("Housed");
     expect(key).toHaveTextContent("Over capacity");
     expect(key).toHaveTextContent("Capacity");
   });

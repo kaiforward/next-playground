@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   contributorBarWidths,
-  thresholdPosition,
   type ContributorSegment,
 } from "@/components/ui/contributor-bars-helpers";
 
@@ -48,26 +47,5 @@ describe("contributorBarWidths", () => {
     const [only] = contributorBarWidths([segment("Crowding", 0.25)], 1);
     expect(only.label).toBe("Crowding");
     expect(only.color).toBe("Crowding-color");
-  });
-});
-
-describe("thresholdPosition", () => {
-  it("places the marker at its own share of the scale", () => {
-    expect(thresholdPosition(0.65, 1)).toBe(65);
-  });
-
-  it("clamps a marker beyond the scale onto the track", () => {
-    expect(thresholdPosition(3, 1)).toBe(100);
-    expect(thresholdPosition(-1, 1)).toBe(0);
-  });
-
-  it("has no position when no threshold was given", () => {
-    expect(thresholdPosition(undefined, 1)).toBeUndefined();
-  });
-
-  it("drops the marker on a zero scale rather than pinning it at 0%", () => {
-    // A tick at 0% would read as a real threshold sitting at zero, which is a different claim from
-    // "there is no meaningful position for it".
-    expect(thresholdPosition(0.65, 0)).toBeUndefined();
   });
 });
