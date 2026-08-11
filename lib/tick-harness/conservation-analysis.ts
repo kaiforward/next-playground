@@ -277,9 +277,26 @@ export function newStagedLedgerCensus(): StagedLedgerCensus {
  */
 export function recordStagedLedger(
   openProjects: ReadonlyArray<StagedProjectRow>,
-  staging: ReadonlyMap<string, FoundingStagingTotals>,
+  staging: Map<string, FoundingStagingTotals>,
   census: StagedLedgerCensus,
 ): void {
+  // `staging` here is the identity's OWN accumulator, not the lifetime one behind the founding cost
+  // reads — this function prunes it, which would wreck those reads.
+  //
+  // A system can be founded more than once in a run: abandonment resets a dead colony to unclaimed
+  // frontier, and frontier is claimable again. The draws are keyed by target system — the only key
+  // available while the target is still unclaimed — so a second establish on the same system would
+  // be compared against its predecessor's draws as well as its own, and report the dead colony's
+  // spend as goods missing from its successor's ledger. Dropping a system's total the moment it has
+  // no open establish keeps the accumulator scoped to one founding. This runs BEFORE the comparison
+  // so a re-founding is never measured against a stale total, and the prune is inside the recorder
+  // rather than left to the caller so the two can never drift apart.
+  const openEstablishSystems = new Set(
+    openProjects.filter((p) => p.kind === "colony_establish").map((p) => p.systemId),
+  );
+  for (const systemId of staging.keys()) {
+    if (!openEstablishSystems.has(systemId)) staging.delete(systemId);
+  }
   let ledger = 0;
   let drawn = 0;
   let projects = 0;

@@ -175,6 +175,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   // apart from `foundedColonies` because a colony stages for cycles before it is one: keyed by the
   // tracker, every draw but the last would be dropped as belonging to an unknown system.
   const foundingStaging = new Map<string, FoundingStagingTotals>();
+  // The staged-ledger identity's own copy of the same draws. Separate because it is pruned per
+  // founding (`recordStagedLedger`) while the map above must accumulate for a system's whole life —
+  // it is what the founding cost reads fold into when a colony is first seen developed.
+  const stagedLedgerStaging = new Map<string, FoundingStagingTotals>();
   // The founding lifecycle, all three parts accumulated per tick because none survives the tick that
   // produced it: the first cycle each colony was seen committed (its establish leaves the open queue
   // the cycle it lands), the concurrent in-flight census, and what held each colony back.
@@ -307,14 +311,16 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     recordCharterCensus(world.constructionProjects, charterCensus);
     recordSettledCycles(world.treasuries, settlementTickByFaction, factionCycles);
 
+    const foundingManifests = result.instrumentation.foundingManifests ?? [];
     foldFoundingTick(
       world.systems, world.meta.currentTick, developedAtStart, foundedColonies, foundingStaging,
-      result.instrumentation.foundingManifests ?? [],
+      foundingManifests,
     );
+    for (const draw of foundingManifests) recordFoundingManifest(stagedLedgerStaging, draw);
     // After the fold, never before it: this tick's last draw is staged on the very tick its
     // establish completes, and comparing a ledger against an accumulator missing that draw would
     // report a conserved move as lost goods.
-    recordStagedLedger(world.constructionProjects, foundingStaging, stagedLedgerCensus);
+    recordStagedLedger(world.constructionProjects, stagedLedgerStaging, stagedLedgerCensus);
     // The colony opening sample needs full tick rows (buildings + government drive the demand
     // weights). Due colonies are rare, so the rows are built only on the ticks that need them.
     // trajectoryDue extends this to the whole founding-trajectory window (~60 cycles), not just
