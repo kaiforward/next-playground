@@ -279,18 +279,15 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
-- **[M] Real component tests — a jsdom Vitest project with Testing Library.** The `unit` project has
-  no jsdom, so the six component test files assert substrings against `renderToStaticMarkup` output
-  (136 such assertions). That catches wiring and arithmetic but nothing visual, and it is brittle: an
-  assertion on `html).toContain('>Famine<')` breaks on a class rename and passes while the thing is
-  invisible. The pocket is small, but it sits on the panel components, which produced three shipped
-  inversion bugs in one branch — the weakest verification pointed at the worst record. A second
-  Vitest project with jsdom buys semantic queries (`getByRole`, `getByText`) that survive markup
-  churn, plus `user-event` for the interactions currently proven by nothing at all: the met-tail
-  expand, tooltip open state, keyboard navigation.
-  *Don't:* move logic back into components because they are now testable — the view-model-first
-  convention is what makes the logic properly tested; this covers the wiring and interaction left
-  over, not a licence to fatten components.
+- **[S] Component tests for the two interactions still proven by nothing** — tooltip open state and
+  keyboard navigation. Both are within what jsdom can honestly verify: a tooltip's open state is an
+  accessibility-tree fact (`aria-describedby`, the content appearing), and keyboard navigation is
+  interaction, driven by `user-event`. The needs ledger's rows are the concrete case — `NeedRow`
+  carries `tabIndex={0}` and a focus-visible ring, and nothing exercises either. Deferred from the
+  jsdom port, whose scope was replacing the existing html-string tests, not adding coverage.
+  *Don't:* extend this to appearance. Colour, size, position and layout are unverifiable without a
+  real browser, and asserting them in jsdom buys a test that passes while the thing is invisible —
+  that belongs to the integration-test thread, not here.
 - **[S] Per-category treasury spend attribution** — the tick merges charter fees and staged materials
   into one `foundingDebitsByFaction` figure, so the harness can neither check the charter conservation
   identity in money (it falls back to counting colonies) nor say what any faction spent on what in a
