@@ -20,80 +20,61 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   *Next step:* finish the instruction-mass cut (AGENTS.md done, docs + memory in flight), then design
   the replacement skills.
 
-- **[L] Economy band reconciliation** — the `shared/band-reconciliation` integration branch
-  (sub-features ride `feat/*` branches PR'd into it). Design lived in
-  `docs/planned/economy-band-reconciliation.md`, deleted at PR6's doc fold below — its geometry and
-  constants are shipped and described in [economy.md](./active/gameplay/economy.md). PR1-5 shipped
-  plus #202-#217 (time rename, necessity-weighted unrest, honest demand stages 1-3, colonisation
-  economics), the adaptive expectation, and abandonment (#221).
-  Everything stays on this branch and it ships as one shared→main PR; that was settled deliberately,
-  because the economy kept turning out to be wrong and the alternative was shipping interim-incoherent
-  UI to main. shared→main needs only a light sanity pass — every sub-feature is reviewed going in.
-  *Next step:* PR6 (the presentation layer, below), then shared→main.
-
 ---
 
-## Queued — PR6, then player seat
+## Queued
 
-7. **[L] PR6 — band-reconciliation presentation layer.** The branch's finish line. Two UI scopes:
-   the §6 presentation contract (panels speak regimes), formerly specced in the now-deleted
-   `docs/planned/economy-band-reconciliation.md`, **plus the Provision
-   display** (folded in from the UI queue): a Provision row + band badge on the Population tab, a
-   vitals-grid tile, a Provision choropleth alongside the existing map value modes, and the
-   adaptive-expectation surface — what this world is accustomed to (`provisionExpectation`) and
-   today's grievance against it, the worsening-vs-recovering read the mechanic already computes.
-   Needs the collaborative design pass + HTML prototype first (three-plus surfaces, one a map
-   mode). The Provision tooltip must carry the spec's wording — "weighted by how badly it needs
-   it" — the bare percentage invites the misreading the spec warns about.
-   *Next step:* the collaborative design pass + HTML prototype (breadth-first wireframes, then
-   refine the chosen one).
-   **PR6 owns the doc fold**, which is bigger than it looks — do it on the branch, before the final review:
-   - Four **active** docs the arc made stale: `economy-autonomic-agency.md` and `tick-engine.md`
-     still need verifying against code. `colonisation.md` was checked and is current.
-     `economy.md` was checked and fixed — its decay section wrongly documented a continuous
-     `count ← count − unrestRate · count` shave; it now describes the shipped whole-level
-     idle/collapse-debt teardown (`lib/engine/infrastructure-decay.ts`), and its band-edge
-     paragraph now records why the survival/critical-good crisis channel can't anchor a band edge
-     (the falsified `provision-band-edges.md` finding).
-   - Two **planned** docs whose features had already shipped — `necessity-weighted-unrest.md` and
-     `economy-rationing-amendment.md` — **promoted and deleted**. Both were nearly fully covered by
-     `economy.md` already; what wasn't, folded in: the verified `GOOD_NECESSITY` table and the
-     rationale for authoring it separately from `GOOD_CONSUMPTION`, the civilian-vs-industrial draw
-     ordering and opening-stock satisfaction rule, and a Stability label/threshold table. Fixed a
-     genuine staleness bug found while cross-checking: `economy.md`'s per-tick consumption step still
-     described the retired `sqrt((stock − MIN)/(MAX − MIN))` ramp instead of the shipped
-     `RATION_COVER`-based `consumptionFactor` curve. Both docs' own numbers had rotted too — the
-     necessity spec's first-cut unrest slopes (Rationing 1.8/Shortage 2.5) are not the shipped ones
-     (`slopeBase` 1.6/`slopeShortage` 2.4) — so nothing was promoted without checking it against
-     `lib/` first. The necessity spec's two follow-ons (`MarketCurve.k`, government layer revisit)
-     were already booked below and its five-band stability re-cut had already shipped, so neither
-     needed a fresh row; its "detailed unrest-history charts / recovery forecasts" backlog note was
-     the one unbooked deferral and is now the Unrest history / recovery forecast row under UI, below.
-   - `economy-band-reconciliation.md` itself — **deleted**, after confirming `RATION_EXIT_EPS`
-     survives (row 8, below) and the `provision-band-edges.md`/`pr6-presentation.md` findings
-     landed in `economy.md` and here.
-
----
-
-## Queued — player seat
-
-8. **[M] Phase 3 Slice 4 — alert feed** (faction situation log). Design:
-   [player-seat-roadmap.md](./planned/player-seat-roadmap.md). Slices 1-3 shipped; active specs
-   [player-seat.md](./active/gameplay/player-seat.md) + [player-seat-purse.md](./active/gameplay/player-seat-purse.md).
-   **Carries `RATION_EXIT_EPS`**, deferred here from PR6's gate: the band-transition hysteresis has no
-   surviving justification until this feed exists. Its other two rationales are dead — the per-good
+1. **[L] The attention layer — how the player finds what to do.** The system screens are built and
+   detailed, and deciding what to act on is still hard. The player's actual verbs are colonising and
+   building, so the layer's job is to surface, for each, either an issue to fix or an opportunity to
+   take. Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
+   approaching it** (the cue to build housing), and **which systems cannot meet their demand from
+   imports plus production**. Low stability already works as a third, and is the proof the approach
+   reads well.
+   Two surfaces, one problem. A **faction situation log** (player-seat Phase 3 Slice 4, design in
+   [player-seat-roadmap.md](./planned/player-seat-roadmap.md); slices 1-3 shipped, active specs
+   [player-seat.md](./active/gameplay/player-seat.md) +
+   [player-seat-purse.md](./active/gameplay/player-seat-purse.md)) and a **systems view ordered by
+   need** — a priority ranking over issues and opportunities, so the player can scan rather than
+   hunt. The ranking is the harder half and the one with no design at all.
+   The open design question, and the reason this is not a small item: EU5 / Crusader Kings-style
+   alerts are the reference Kai likes, and they are also widely criticised for nagging — constant
+   pop-ups the player learns to dismiss. Inform without irritating; that is the thing to solve, not
+   a detail to settle during implementation.
+   **Carries `RATION_EXIT_EPS`**, deferred here when the presentation layer shipped: the hysteresis has
+   no surviving justification until a log exists. Its other two rationales are dead — the per-good
    regime chips it was authored for were dropped, and visual flapping does not occur (bands are
    written once per 24-tick economy cycle, so the fastest a chip or map cell can change is every 4.8s
-   at speed 5, with SSE throttled to 4 emits/sec regardless). An alert per transition is different:
-   it accumulates in a log the player scrolls, so a system wobbling across an edge produces junk
-   entries at any speed. Calibrate the value against this feed's own spam, not against the chips.
-   **Open question to settle then:** whether the hysteresis applies to the persisted display band only
-   (presentational) or to the classifier itself (mechanical — the regime feeds the unrest term).
+   at speed 5, with SSE throttled to 4 emits/sec regardless). A log entry per transition is
+   different: it accumulates in a list the player scrolls, so a system wobbling across an edge
+   produces junk entries at any speed. Calibrate the value against the log's own spam, not the chips.
+   **Open question to settle then:** whether the hysteresis applies to the persisted display band
+   only (presentational) or to the classifier itself (mechanical — the regime feeds the unrest term).
    Unverified at deferral time; do not assume the first.
+   *Next step:* design pass on the ranking and the notification model before any spec — the
+   irritation problem is a design problem, and the two named reads are the first concrete test of
+   whatever ranking comes out.
+   *Don't:* ship a feed that fires per event without a ranking behind it. That is the failure mode
+   the genre is criticised for, and the reason this row is not just "add alerts".
 
-9. **[M] WS2 P2 — flow visualisation** on the map. Keeps its approved HTML prototype. Design:
-   [design-map-flow-overlays](../docs/planned/ui-ws2-map-modes.md), memory `project-ws2-map-modes`.
-
+2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+   colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
+   Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
+   slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
+   technologies exist. Kai's read is that this slows the simulation rather than breaking it.
+   The knob already exists: `habitableFraction` is housing-per-space efficiency
+   (`habitableSpace = generalSpace × habitableFraction`), and the expensive, low-yield
+   specialist-habitation *building* was recorded as a hook at that same decision — see memory
+   `project-barren-galaxy-artificial-habitation`.
+   **Honest dependency:** there is no technology or progression system in the codebase today — a grep
+   for terraforming or technology finds only event and faction flavour text. "Gated behind
+   technology" is therefore a new system, not a constant change, and the sequencing of the two is
+   itself part of the design.
+   *Next step:* `/measure` how many systems are viable at founding today and how fast the galaxy
+   actually colonises, before touching any constant.
+   *Don't:* buy scarcity by making systems dead. Barren-but-alive is a deliberate decision — rocky
+   barrens carry tiny artificial habitation so they read as small mining outposts, and only pure gas
+   giants are truly uninhabitable.
 ---
 
 ## Unqueued
@@ -134,9 +115,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   **separating `surplusDrawable`'s triple duty** (logistics donor cap / build input gate / founding
   manifest cap — three consumers of one figure, deferred at colonisation-economics). Kai's observation
   (2026-08-05, unmeasured): lots of edge cases with producers/consumers not reading the price based
-  on type properly — row 10 routes around live prices because of this; `/measure` it when this row
-  comes forward. Carries the former
-  queue item 4 unresolved: an exporter's resting price pins at its ceiling (measured at
+  on type properly, which is why at least one shipped mechanic routes around live prices rather than
+  reading them; `/measure` it when this row comes forward, since the row that named which mechanic is
+  gone. Carries an unresolved finding: an exporter's resting price pins at its ceiling (measured at
   equilibrium: 3.00× / 3.00× / 2.50× for `electronics` / `luxuries` / `fuel` — a drawn exporter
   rests at `EXPORT_RESERVE_COVER`, below the curve's saturation point, so the curve clamps, and
   price stops being a health gauge on exactly the cohort that ships goods). Acceptable meanwhile:
@@ -221,7 +202,7 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   Industry tabs carry: per-good cycles of cover against the anchor, the regime (Supplied / Low
   reserve / Rationing / Shortage / Glut), civilian versus industrial draw, local production against
   local use, and what logistics is moving in or out. Replaces what the Market tab was for; the
-  market table is a trading-game leftover and PR6 deliberately left it alone rather than half-fixing
+  market table is a trading-game leftover that the presentation layer deliberately left alone rather than half-fixing
   it. Needs an interaction design pass — this is the third goods-bearing surface, so it must earn
   its place against the needs ledger and the industry roster rather than duplicating them.
   *Don't:* rebuild it as a price table — cycles of cover is the unit, price is a secondary read.
@@ -275,6 +256,10 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   system when logistics carries people (decided at the abandonment measurement, 2026-08-10; the
   interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
   coarse in-fiction valve at most) are preserved in memory `design-logistics-depth-inputs`.
+  **Absorbs the former flow-visualisation row**, retired 2026-08-12: a logistics overlay already
+  ships on the map, and designing a second flow view before this pass changes what flows is
+  backwards. Its approved HTML prototype survives as an input —
+  [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md), memory `project-ws2-map-modes`.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
