@@ -444,12 +444,13 @@ describe("computeWorldCohorts", () => {
     expect(band?.meanShortfall).toBeLessThan(0.5);
   });
 
-  it("counts a system striking at exactly the threshold, and none below it", () => {
-    // The strike gate is inclusive: a world sitting on the threshold is striking. Two calm
-    // members either side of it keep the share from reading the same whichever way it points.
+  it("counts a system striking above the threshold, and none at or below it", () => {
+    // The strike gate is strict, matching `strikeMultiplier`: a world sitting exactly on the
+    // threshold still produces, so it is not striking. s2 sits exactly on it — the member that
+    // makes this fail if the comparison goes back to inclusive.
     const systems = [
-      sys("s1", { population: 5, unrest: 0.8 }),
-      sys("s2", { population: 5, unrest: 0.79 }),
+      sys("s1", { population: 5, unrest: 0.81 }),
+      sys("s2", { population: 5, unrest: 0.8 }),
       sys("s3", { population: 5, unrest: 0.1 }),
     ];
     const markets = [{ systemId: "s1", goodId: "water", satisfaction: 1 }];

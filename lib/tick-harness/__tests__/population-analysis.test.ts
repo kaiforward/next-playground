@@ -204,8 +204,8 @@ describe("summarizePopulation — striking share and stranded population", () =>
     const systems = [
       popSys("calm-a", 100, 1000, 0.1),
       popSys("calm-b", 100, 1000, 0.1),
-      popSys("calm-c", 100, 1000, 0.64),  // just under the threshold
-      popSys("striking", 100, 1000, 0.65), // exactly at it — inclusive
+      popSys("calm-c", 100, 1000, 0.65),  // exactly at the threshold — still produces, so not striking
+      popSys("striking", 100, 1000, 0.66), // above it
     ];
     const summary = summarizePopulation(systems, 400, 0.65, BRAKE_END);
     expect(summary.strikingCount).toBe(1);

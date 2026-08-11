@@ -302,7 +302,7 @@ export function computeWorldCohorts(
       // Absent from the start snapshot ⇒ founded during the run ⇒ started at 0, not excluded.
       a.startPopSum += startPopulationBySystem.get(s.id) ?? 0;
       a.endPopSum += s.population;
-      if (s.unrest >= strikeThreshold) a.striking += 1;
+      if (s.unrest > strikeThreshold) a.striking += 1;
       // A stale (emptyBasket) system's stored memory is a skipped-update artifact, not a current
       // reading — excluded from the distributions and counted instead, exactly like the
       // galaxy-wide fold in summarizeSupplyRegimes.

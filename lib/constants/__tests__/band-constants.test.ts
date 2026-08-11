@@ -381,10 +381,13 @@ describe("transient event shocks — a shock's duration, not just its magnitude,
 describe("promise 3 — broad shortage on an established world strikes while its memory holds", () => {
   const benignSupply: SupplyState = { regime: "rationing", survivalShortfall: false, criticalWeight: 0, emptyBasket: false };
 
-  it("reaches strike at zero tax when a fully-accustomed world loses half of what it is used to — single-constant guarantee slopeBase × 0.5 >= STRIKE_PARAMS.threshold", () => {
+  // Strictly greater, not ≥: striking is `unrest > threshold`, so a term landing exactly on the
+  // threshold would satisfy a ≥ assertion while failing to strike — the guarantee would read green
+  // and be false.
+  it("reaches strike at zero tax when a fully-accustomed world loses half of what it is used to — single-constant guarantee slopeBase × 0.5 > STRIKE_PARAMS.threshold", () => {
     const halfDipTerm = supplyUnrestTerm(0.5, 0, benignSupply, UNREST_PARAMS);
-    expect(halfDipTerm).toBeGreaterThanOrEqual(STRIKE_PARAMS.threshold); // zero tax: settled unrest is the term itself
-    expect(UNREST_PARAMS.slopeBase * 0.5).toBeGreaterThanOrEqual(STRIKE_PARAMS.threshold);
+    expect(halfDipTerm).toBeGreaterThan(STRIKE_PARAMS.threshold); // zero tax: settled unrest is the term itself
+    expect(UNREST_PARAMS.slopeBase * 0.5).toBeGreaterThan(STRIKE_PARAMS.threshold);
   });
 
   it("keeps the grievance slope flat across [0,1] — no reintroduced escalation ramp, read off the live UNREST_PARAMS", () => {

@@ -114,7 +114,9 @@ export function getSystemPopulation(systemId: string): SystemPopulationData {
     population: system.population,
     popCap: system.popCap,
     unrest: system.unrest,
-    striking: system.unrest >= STRIKE_PARAMS.threshold,
+    // Strictly greater, matching `strikeMultiplier` — a label may not claim production is suppressed
+    // on a world the engine is still letting produce.
+    striking: system.unrest > STRIKE_PARAMS.threshold,
     needs,
     // The wire read; `resolveUnrestBreakdown` takes the fuller server-side one, whose grievance
     // feeds the goods contributor the client is shown instead.

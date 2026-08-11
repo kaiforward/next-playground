@@ -110,7 +110,7 @@ export interface PopulationSummary {
   meanOccupancy: number;
   /** Systems with population ≤ 1 (ghost-town watch). */
   emptiedCount: number;
-  /** Systems with unrest ≥ strikeThreshold (striking). */
+  /** Systems with unrest > strikeThreshold (striking) — the engine's own strict comparison. */
   strikingCount: number;
   /** Striking systems as a share of those counted, in [0,1]. The count alone reads differently as
    *  the galaxy grows — 300 striking of 400 and 300 of 3000 are not the same galaxy. */
@@ -167,7 +167,7 @@ export function summarizePopulation(
       occupancyCount++;
     }
     if (s.population <= 1) emptiedCount++;
-    if (s.unrest >= strikeThreshold) strikingCount++;
+    if (s.unrest > strikeThreshold) strikingCount++;
   }
 
   const n = Math.max(1, settled.length);

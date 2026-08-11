@@ -243,7 +243,7 @@ export type SystemPopulationData =
       population: number;
       popCap: number;
       unrest: number;
-      /** True when unrest ≥ STRIKE_PARAMS.threshold. */
+      /** True when unrest > STRIKE_PARAMS.threshold — the engine's own strict comparison. */
       striking: boolean;
       /** Pop needs, pressure-sorted descending — the goods the population consumes and how met each want is. */
       needs: PopNeedData[];

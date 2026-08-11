@@ -15,14 +15,15 @@ export const STABILITY_RAMP_STOPS: Record<StabilityLabel, string> = {
 /**
  * Maps unrest (0…1) to a stability band label. The top edge is bound to
  * `STRIKE_PARAMS.threshold` — the label may never contradict the mechanic it names, so "Strike"
- * starts exactly where striking does. The other edges are descriptive literals: they gate no
- * mechanic, so their placement is a calibration choice, not a contract.
+ * starts exactly where striking does: strictly above the threshold, matching `strikeMultiplier`.
+ * The other edges are descriptive literals: they gate no mechanic, so their placement is a
+ * calibration choice, not a contract.
  */
 export function stabilityLabel(unrest: number): StabilityLabel {
   if (unrest < 0.2) return "Stable";
   if (unrest < 0.4) return "Calm";
   if (unrest < 0.5) return "Tense";
-  if (unrest < STRIKE_PARAMS.threshold) return "Unrest";
+  if (unrest <= STRIKE_PARAMS.threshold) return "Unrest";
   return "Strike";
 }
 

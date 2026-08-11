@@ -7,6 +7,7 @@ import { ServiceError } from "@/lib/services/errors";
 import { STRIKE_PARAMS, EXPECTATION_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, CROWDING } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { crowdingPressure } from "@/lib/engine/population";
+import { stabilityLabel } from "@/lib/utils/stability";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 let world: World;
@@ -33,7 +34,6 @@ describe("getSystemPopulation", () => {
     expect(data.popCap).toBe(system.popCap);
     expect(data.unrest).toBeGreaterThanOrEqual(0);
     expect(data.unrest).toBeLessThanOrEqual(1);
-    expect(data.striking).toBe(data.unrest >= STRIKE_PARAMS.threshold);
 
     // Full needs ledger — mid-pack goods like consumer_goods included.
     expect(data.needs.length).toBeGreaterThan(6);
@@ -52,6 +52,22 @@ describe("getSystemPopulation", () => {
     // goodName resolves the real display name via the GOODS lookup.
     const water = data.needs.find((n) => n.goodId === "water");
     expect(water?.goodName).toBe("Water");
+  });
+
+  // `strikeMultiplier` (lib/engine/population.ts) suppresses production on `unrest > threshold`, so a
+  // world sitting exactly on the threshold produces normally. The readout may not call it striking.
+  it("calls a world striking only above the threshold, never at it — matching the engine", () => {
+    system.unrest = STRIKE_PARAMS.threshold;
+    const at = getSystemPopulation(system.id);
+    if (at.visibility !== "visible") throw new Error("expected visible");
+    expect(at.striking).toBe(false);
+    expect(stabilityLabel(system.unrest)).not.toBe("Strike");
+
+    system.unrest = STRIKE_PARAMS.threshold + 1e-9;
+    const above = getSystemPopulation(system.id);
+    if (above.visibility !== "visible") throw new Error("expected visible");
+    expect(above.striking).toBe(true);
+    expect(stabilityLabel(system.unrest)).toBe("Strike");
   });
 
   it("reflects skilled work in the demand breakdown", () => {
