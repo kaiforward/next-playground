@@ -55,11 +55,20 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
      idle/collapse-debt teardown (`lib/engine/infrastructure-decay.ts`), and its band-edge
      paragraph now records why the survival/critical-good crisis channel can't anchor a band edge
      (the falsified `provision-band-edges.md` finding).
-   - Two **planned** docs whose features have already shipped and still need promoting into
-     `docs/active/` and deleting: `necessity-weighted-unrest.md` (448 lines — `GOOD_NECESSITY` and
-     `slopeShortage` are live, and its headline "every good … currently hits unrest with the same
-     instrument" is now false) and `economy-rationing-amendment.md` (89 lines — `RATION_COVER` is
-     live; its dangling link to the now-deleted band-reconciliation spec was patched, not promoted).
+   - Two **planned** docs whose features had already shipped — `necessity-weighted-unrest.md` and
+     `economy-rationing-amendment.md` — **promoted and deleted**. Both were nearly fully covered by
+     `economy.md` already; what wasn't, folded in: the verified `GOOD_NECESSITY` table and the
+     rationale for authoring it separately from `GOOD_CONSUMPTION`, the civilian-vs-industrial draw
+     ordering and opening-stock satisfaction rule, and a Stability label/threshold table. Fixed a
+     genuine staleness bug found while cross-checking: `economy.md`'s per-tick consumption step still
+     described the retired `sqrt((stock − MIN)/(MAX − MIN))` ramp instead of the shipped
+     `RATION_COVER`-based `consumptionFactor` curve. Both docs' own numbers had rotted too — the
+     necessity spec's first-cut unrest slopes (Rationing 1.8/Shortage 2.5) are not the shipped ones
+     (`slopeBase` 1.6/`slopeShortage` 2.4) — so nothing was promoted without checking it against
+     `lib/` first. The necessity spec's two follow-ons (`MarketCurve.k`, government layer revisit)
+     were already booked below and its five-band stability re-cut had already shipped, so neither
+     needed a fresh row; its "detailed unrest-history charts / recovery forecasts" backlog note was
+     the one unbooked deferral and is now the Unrest history / recovery forecast row under UI, below.
    - `economy-band-reconciliation.md` itself — **deleted**, after confirming `RATION_EXIT_EPS`
      survives (row 8, below) and the `provision-band-edges.md`/`pr6-presentation.md` findings
      landed in `economy.md` and here.
@@ -247,6 +256,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   wherever pacing constants are authored.
 - **[S] Move the dev cheat-panel button to the header** — the map sidebar and other floating elements block it.
 - **[S] Standardise main content panel size** — system detail should be smaller than command center.
+- **[S] Unrest history / recovery forecast** — a per-system chart of unrest over time and a forecast
+  of recovery trajectory, beyond the Population tab's current expectation/grievance snapshot.
+  Backlog polish, not started.
 
 **Audits Kai has asked for**
 - **[M] Trader-hangover audit** — sweep the codebase for leftovers from the old browser space-trading
