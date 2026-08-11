@@ -25,7 +25,7 @@ Skills are authored in `.agents/skills/` (canonical). `.claude/skills/` holds di
 - `npm run dev` — dev server (Turbopack)
 - `npx next build --webpack` — **the build gate**. `npm run build` uses Turbopack, which has other quirks.
 - `npx vitest run` — unit tests
-- `npm run simulate` — headless run of the real tick, reporting economy health at two horizons: 1000 ticks (startup/founding behaviour) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`.
+- `npm run simulate` — headless run of the real tick, reporting economy health at two horizons: 1000 ticks (startup/founding behaviour) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`. **Exits 1 if any conservation identity failed** — the report is still written in full, so read it; a failed identity means the founding ledger is out, not mistuned.
 - `npm run impact -- <SYMBOL>` — every module that reads a constant, field or signal, which tick processors declare it, which ones write it without declaring it, and their position in the run order. Run it before leaning on any shared quantity.
 - `npm run mutation -- --mutate "<changed lib files>"` — scoped StrykerJS run; a surviving mutant is a code change no test notices. Runs as a periodic batch (sweep → fix wave → re-sweep, typically overnight), not an in-session pre-review gate; incremental cache in `reports/stryker-incremental.json`. **Always scoped, never bare.**
 
