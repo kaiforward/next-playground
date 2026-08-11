@@ -263,24 +263,52 @@ already the isolated selling accessor §6 asks for.
 `components/map/pixi/pixi-map-canvas.tsx`, `components/map/star-map.tsx`,
 `components/map/map-overlay-controls.tsx`, `lib/query/keys.ts`,
 `lib/hooks/use-tick-invalidation.ts`, `lib/hooks/use-provision.ts` (new),
-`app/api/game/systems/provision/route.ts` (new)
+`app/api/game/systems/provision/route.ts` (new), `lib/types/__tests__/map.test.ts`,
+`docs/active/engineering/map-rendering.md`
 
 The list is the full set `migration` — the most recently added value mode — touches, walked rather
 than assumed. A `ValueMode` is not just a ramp and a service: it threads the aggregation and
 formatting used at zoomed-out LOD, the choropleth layer, the canvas, the map shell, and the tick
 invalidation that keeps it fresh. Their tests
 (`components/map/pixi/__tests__/{value-ramp,number-aggregation,number-format}.test.ts`) are where
-this task's detection list lands.
+most of this task's detection list lands; the two predicate entries land in
+`lib/types/__tests__/map.test.ts`.
+
+`docs/active/engineering/map-rendering.md` is a Files entry, not a doc-fold afterthought: it
+describes the roster in the present tense in several places ("Four value modes (stability /
+population / development / migration)…", the per-mode hue section, the `SHOWS_NUMBERS` gate), and a
+fifth value mode falsifies each. Task 8 does not name it, so without this it has no owner.
+
+Two files that consume `MapMode` need **no** change and are deliberately absent: `map-session.ts`
+routes through `isMapMode` and `pixi/objects/system-object.ts` through `isValueMapMode`, so widening
+the unions carries both. That the predicates are the only seam is what makes the last two `Proves`
+entries the right ones.
 
 **Interface:** `ProvisionEntry { systemId: string; provision: number; band: SupplyRegime }` and
 `getProvisionBySystem(): ProvisionEntry[]`, mirroring `getStabilityBySystem`. `MapMode` and
-`ValueMode` gain `"provision"`; `isValueMapMode` includes it. The ramp is stepped: the legend
-gradient renders from the same stops the Pixi layer fills from, as the four existing modes already
-do.
+`ValueMode` gain `"provision"`; `isValueMapMode` includes it.
+
+**The stepped ramp is new capability, not a new set of stops** — this corrects the original
+Interface, which claimed it worked "as the four existing modes already do". It does not:
+`sample()` (`components/map/pixi/value-ramp.ts:41-56`) linearly interpolates between stops, so every
+existing ramp is continuous by construction, and `rampCssStops` (`:107-109`) returns colours with
+their positions discarded, which is lossless only while a ramp's stops are evenly spaced. A ramp
+whose steps sit at `SUPPLIED_PROVISION` and `RATIONING_PROVISION` is neither. So this task adds a
+stepped fill path and carries stop positions through to the legend, keeping the existing four modes
+on their current continuous path unchanged.
+
+**The mode does not re-scale to a focused faction's maximum**, unlike population/development/
+migration. Provisioned's band edges are absolute percentages; re-scaling would slide the colours out
+from under the bands, so the same colour would mean a different band depending on which faction was
+selected. A forced consequence of the band edges being fixed, not a preference.
 
 **Proves:**
 - Two systems inside one band render the same colour; two either side of a band edge render
   different colours — the stepped property, which a continuous ramp would silently satisfy nowhere.
+- The legend renders its boundaries at the band edges, not at even intervals — the failure a
+  position-discarding legend helper produces, and the one a reader would misread as a fill bug.
+- Selecting a faction does not change any system's colour in this mode, while it still does in a
+  continuous mode — the re-scaling exemption, which nothing else would catch.
 - An unassessed system renders absent rather than the bottom of the ramp, so undeveloped space does
   not read as famine.
 - `isValueMapMode` returning true for the new mode is what gives it faction-scoped zoomed-out
