@@ -34,13 +34,26 @@ export function populationPanelView(pop: {
  * own "Strike" label — bound to the same `STRIKE_PARAMS.threshold` — can never name different
  * numbers.
  *
- * The headline total is `unrest` — the same actual, current-tick value the badge label and
- * `striking` are computed from — not `unrestBreakdown.settled` (the contributors' capped sum,
- * which is only where unrest is *heading*; the accumulator lags behind it) and not a
- * stability-flavoured `1 - unrest` (which would move opposite to bars that are scaled on unrest,
- * not stability). Sharing `unrest` with the badge means the number and the word beside it can
- * never disagree; sharing the unrest scale with the bars means the number and their fill can never
- * point in opposite directions.
+ * The headline is **stability**, `1 - unrest` — the same quantity the faction page
+ * (`vitals.stabilityPct`) and the map's stability mode already render, so this block stops being
+ * the one surface in the app that prints unrest under a "Stability" heading. It is derived from
+ * `unrest` — the same actual, current-tick value the badge label and `striking` are computed
+ * from — never `unrestBreakdown.settled` (the contributors' capped sum, which is only where
+ * unrest is *heading*; the accumulator lags behind it during a transient, so a headline built on
+ * it could print a calm figure beside a striking badge).
+ *
+ * The contributor bars stay on the raw unrest scale on purpose: a bar's value already reads as
+ * "how many stability points this cause is costing" (costing 30 points of stability IS
+ * contributing 0.3 of unrest — same quantity, no separate inversion to get wrong), so they now
+ * move the same way the eye reads "worse" as the headline does — bars grow, headline shrinks —
+ * instead of the previous version where an unrest headline grew right alongside them.
+ *
+ * **No per-bar strike marker.** The three causes sum (`settled = min(1, goods + tax + crowding)`,
+ * `lib/services/system-population.ts`), so the strike line is a property of the total and of
+ * nothing else: a system strikes at goods 0.3 + tax 0.2 + crowding 0.2 with no single cause near
+ * the threshold. A tick drawn across each bar reads as a per-cause limit that does not exist, and
+ * understates the risk on exactly the systems carrying three moderate pressures at once. The line
+ * is carried in the caption, against the headline it actually governs.
  */
 export function StabilityBlock({
   unrest,
@@ -51,6 +64,10 @@ export function StabilityBlock({
   striking: boolean;
   unrestBreakdown: SystemUnrestRead;
 }) {
+  // The goods contributor is withheld (not zero) pre-assessment — the segment list below already
+  // drops it rather than fabricating a bar. The headline stays honest regardless: it reads live
+  // `unrest`, never the visible segments' sum, so an unassessed system's missing goods bar cannot
+  // make it print calmer than the world actually is.
   const segments: ContributorSegment[] = unrestBreakdown.assessed
     ? [
         { label: "Goods shortfall", value: unrestBreakdown.contributors.goods, color: "var(--color-status-amber)" },
@@ -68,8 +85,10 @@ export function StabilityBlock({
         <SectionHeader as="h4">Stability</SectionHeader>
         <StabilityBadge unrest={unrest} />
       </div>
-      <ContributorBreakdown value={unrest} segments={segments} total={1} threshold={unrestBreakdown.strikeThreshold} />
-      <p className="mt-2 text-xs text-text-tertiary">Strike at {fractionPct(unrestBreakdown.strikeThreshold)}%.</p>
+      <ContributorBreakdown value={1 - unrest} segments={segments} total={1} />
+      <p className="mt-2 text-xs text-text-tertiary">
+        Strike below {fractionPct(1 - unrestBreakdown.strikeThreshold)}% stability.
+      </p>
       {striking && (
         <p className="mt-2 text-sm text-amber-300">Production suppressed — workers are striking.</p>
       )}
