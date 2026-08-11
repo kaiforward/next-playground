@@ -331,7 +331,36 @@ edge flapping its band chip and, later, spamming the alert feed.
 **Merge condition:** a value chosen from the measured edge population rather than authored blind,
 and the scope decision below recorded.
 
-**Scope decision owed at this gate.** §7 authored `RATION_EXIT_EPS` as hysteresis for the per-good
+**RESOLVED — deferred to the alert feed (ROADMAP row 8), owner decision.** No value is chosen here
+and no measurement was taken, deliberately. The constant had three possible justifications and two
+are dead:
+
+- *Per-good regime chips* — the surface it was authored for. Dropped with the market table; per-good
+  state now renders as a cover figure with no word to flap.
+- *Redefining "met"* (§6, `:463-467`: "met = Supplied (satisfaction ≈ 1 within `RATION_EXIT_EPS`) …
+  the legacy 0.95 'met' band is retired"). Already settled the other way in shipped code:
+  `NEED_MET_SATISFACTION = 0.95` survives at `components/system/needs-view.ts:13`, and its docstring
+  argues the case — 0.95 answers "is this good fully served" while the band edge answers "is anything
+  wrong here" as a world mean, they disagree on ~6 of 582 worlds, and that disagreement is correct.
+  It closes with "Never import the band edges here."
+- *Visual flapping* — measured, not assumed, and it does not occur. Bands are written once per
+  `CYCLE_LENGTH` 24-tick economy cycle (`tick-cadence.ts:19`, pinned by Task 1's cycle-boundary test),
+  speeds are `paused | 1 | 5 | max` ticks/sec (`tick-loop.ts:20`), so the fastest any chip, map cell
+  or glut item can change is every 4.8s at speed 5, with the SSE broadcast throttled to 4 emits/sec
+  (`:30`) at max. Same cadence for all three surfaces — there is no worst offender. A label changing
+  every few seconds is not flicker.
+
+What survives is the second half of §1's own sentence — "or spam the future alert feed". That is
+real: alerts accumulate in a log the player scrolls back through, so a system wobbling across an edge
+produces junk entries at any speed. But the feed does not exist, and it is the only instrument that
+could tell us what value actually stops the spam. Calibrating now would author the number blind
+against a surface that has not been built — the exact failure the gate exists to prevent.
+
+Booked onto ROADMAP row 8 with the open question of whether the hysteresis belongs on the persisted
+display band (presentational) or the classifier itself (mechanical — the regime feeds the unrest
+term). That was **not** verified before deferring and must not be assumed.
+
+**Superseded — the scope decision this gate originally owed.** §7 authored `RATION_EXIT_EPS` as hysteresis for the per-good
 regime chips. Those chips no longer exist as chips — the market table is dropped and per-good state
 renders as a cover figure — so the only surfaces that can flap are the system band chip and the
 Industry glut item. The constant should attach to the system band edges. This is a scope narrowing

@@ -63,6 +63,16 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 8. **[M] Phase 3 Slice 4 — alert feed** (faction situation log). Design:
    [player-seat-roadmap.md](./planned/player-seat-roadmap.md). Slices 1-3 shipped; active specs
    [player-seat.md](./active/gameplay/player-seat.md) + [player-seat-purse.md](./active/gameplay/player-seat-purse.md).
+   **Carries `RATION_EXIT_EPS`**, deferred here from PR6's gate: the band-transition hysteresis has no
+   surviving justification until this feed exists. Its other two rationales are dead — the per-good
+   regime chips it was authored for were dropped, and visual flapping does not occur (bands are
+   written once per 24-tick economy cycle, so the fastest a chip or map cell can change is every 4.8s
+   at speed 5, with SSE throttled to 4 emits/sec regardless). An alert per transition is different:
+   it accumulates in a log the player scrolls, so a system wobbling across an edge produces junk
+   entries at any speed. Calibrate the value against this feed's own spam, not against the chips.
+   **Open question to settle then:** whether the hysteresis applies to the persisted display band only
+   (presentational) or to the classifier itself (mechanical — the regime feeds the unrest term).
+   Unverified at deferral time; do not assume the first.
 
 9. **[M] WS2 P2 — flow visualisation** on the map. Keeps its approved HTML prototype. Design:
    [design-map-flow-overlays](../docs/planned/ui-ws2-map-modes.md), memory `project-ws2-map-modes`.
