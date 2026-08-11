@@ -973,7 +973,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
                       <tr key={n.goodId}><NeedCells n={n} density="tooltip" /></tr>
                     ))}
                   </NeedsTable>
-                  <p className="border-t border-border/60 pt-1 text-text-secondary">Higher-pressure needs create more unrest.</p>
+                  <p className="border-t border-border/60 pt-1 text-text-secondary">Doing worse than this population is used to breeds unrest — famine and critical shortages always do.</p>
                 </div>
               </TooltipContent>
             </Tooltip>
