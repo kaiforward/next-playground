@@ -102,6 +102,18 @@ export interface FoundingReadoutInputs {
 
 export type ConstructionProjectRow = ConstructionProjectBuildRow | ConstructionProjectColonyRow;
 
+/** One row of the funded front — a project whose next-cycle gain is positive, in queue order. */
+export interface FundedFrontRow {
+  projectId: string;
+  systemId: string;
+  systemName: string;
+  /** Building type + level count ("Housing ×4"), or "Establish Colony" — mirrors the construction
+   *  row's own title convention (`components/construction/construction-row.tsx`). */
+  label: string;
+  progress: number;
+  etaCycles: number | null;
+}
+
 export interface FactionConstructionReadout {
   /** Total per-cycle funding rate (base + centres) — the value the ETA forecast runs on. */
   pool: number;
@@ -117,6 +129,13 @@ export interface FactionConstructionReadout {
   buildOut: ConstructionProjectBuildRow[];
   /** Every row in queue order — the per-system section filters this by systemId. */
   all: ConstructionProjectRow[];
+  /** The projects the pool is actually funding THIS cycle — one entry per project whose
+   *  `nextCycleGain` is positive, in queue order (the order the pool funds them, not re-sorted by
+   *  progress). A colony held at a zero materials ceiling is absent here even mid-progress: it is
+   *  absorbing nothing this cycle, which is the front's whole definition. */
+  fundedFront: FundedFrontRow[];
+  /** Open projects not on the front — the pool hasn't reached them this cycle. */
+  waitingCount: number;
 }
 
 /** Human label for a build project's building type (mirrors the industry panel's `label`). */
@@ -323,6 +342,7 @@ export function computeFactionConstruction(
   const all: ConstructionProjectRow[] = [];
   const expansion: ConstructionProjectColonyRow[] = [];
   const buildOut: ConstructionProjectBuildRow[] = [];
+  const fundedFront: FundedFrontRow[] = [];
 
   projects.forEach((p, i) => {
     const base: ConstructionRowBase = {
@@ -336,6 +356,16 @@ export function computeFactionConstruction(
       etaCycles: etas[i],
       nextCycleGain: gains[i],
     };
+    if (gains[i] > 0) {
+      fundedFront.push({
+        projectId: p.id,
+        systemId: base.systemId,
+        systemName: base.systemName,
+        label: p.kind === "colony_establish" ? "Establish Colony" : `${buildingLabel(p.buildingType)} ×${p.levels}`,
+        progress: base.progress,
+        etaCycles: base.etaCycles,
+      });
+    }
     if (p.kind === "colony_establish") {
       const stalledReason = colonyStallReason(p, founding, cap);
       const supply = founding.supplyBySource.get(p.sourceSystemId) ?? [];
@@ -376,5 +406,6 @@ export function computeFactionConstruction(
   return {
     pool, poolBase: poolParts.base, poolCentres: poolParts.centres,
     expandCount: expansion.length, buildCount: buildOut.length, expansion, buildOut, all,
+    fundedFront, waitingCount: projects.length - fundedFront.length,
   };
 }

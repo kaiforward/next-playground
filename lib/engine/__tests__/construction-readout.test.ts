@@ -554,3 +554,124 @@ describe("construction readout — ceilings, progress and ordering", () => {
     expect(r.expansion[0]!.etaCycles).not.toBeNull();
   });
 });
+
+describe("computeFactionConstruction — fundedFront / waitingCount", () => {
+  const oneSystem: ConstructionSystemInfo[] = [
+    { id: "dev1", name: "Vela Prime", control: "developed", population: 80, buildings: {} },
+  ];
+
+  it("excludes a zero-gain project from the front and counts it in waitingCount", () => {
+    // pool === cap (4): only the front build is funded this cycle, the back build gets 0.
+    const twoBuilds: WorldConstructionProject[] = [
+      { kind: "build", id: "front", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+      { kind: "build", id: "back", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+    ];
+    const r = computeFactionConstruction(twoBuilds, oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
+    expect(r.pool).toBeCloseTo(4, 6);
+    expect(r.fundedFront.map((f) => f.projectId)).toEqual(["front"]);
+    expect(r.waitingCount).toBe(1);
+  });
+
+  it("excludes a materials-gated colony (capFor ceiling 0) from the front, not listed at zero progress", () => {
+    // Charter unpaid and unaffordable → foundingCeilings holds this colony at a ceiling of 0, so its
+    // nextCycleGain is 0 even though it already has real progress (workDone 40 of 100). The build
+    // behind it inherits the pool the colony was never going to consume.
+    const systems: ConstructionSystemInfo[] = [
+      { id: "src", name: "Vela Prime", control: "developed", population: 80, buildings: {} },
+      { id: "ctrl", name: "Kepler Reach", control: "controlled", population: 0, buildings: {} },
+    ];
+    const gatedColony: WorldColonyEstablishProject = {
+      kind: "colony_establish", id: "c1", origin: "auto", factionId: "f1", systemId: "ctrl",
+      sourceSystemId: "src", seedPop: 2, housingLevels: 1, workTotal: 100, workDone: 40,
+      stagedManifest: [], charterPaid: false, stalledCycles: 3,
+    };
+    const behindBuild: WorldConstructionProject = {
+      kind: "build", id: "behind", origin: "auto", factionId: "f1", systemId: "src",
+      buildingType: "housing", levels: 1, workTotal: 100, workDone: 0,
+    };
+    const r = computeFactionConstruction(
+      [gatedColony, behindBuild], systems, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4,
+      founded({ workingBalance: CHARTER - 1, supplyBySource: new Map([["src", supply(1000)]]) }),
+    );
+    expect(r.fundedFront.map((f) => f.projectId)).toEqual(["behind"]);
+    expect(r.fundedFront.some((f) => f.projectId === "c1")).toBe(false);
+    expect(r.waitingCount).toBe(1);
+    // Sanity: the colony really does have nonzero progress — absence is about this cycle's gain,
+    // not about progress being zero.
+    const gatedRow = r.all.find((row) => row.id === "c1");
+    expect(gatedRow?.progress).toBeCloseTo(0.4, 6);
+  });
+
+  it("keeps fundedFront.length + waitingCount equal to the open-project count, including a project the pool lands outright", () => {
+    // "landing": remaining work (2) is less than the cap (4), so the project completes this cycle —
+    // it still appears once in `projects` (a real tick would drop it, but the forecast is read over
+    // the STORED queue as of now) and its gain is its remaining work, not the cap.
+    const landsOutright: WorldConstructionProject = {
+      kind: "build", id: "lands", origin: "auto", factionId: "f1", systemId: "dev1",
+      buildingType: "housing", levels: 1, workTotal: 20, workDone: 18,
+    };
+    const midFront: WorldConstructionProject = {
+      kind: "build", id: "mid", origin: "auto", factionId: "f1", systemId: "dev1",
+      buildingType: "housing", levels: 1, workTotal: 8, workDone: 0,
+    };
+    const waitsAtBack: WorldConstructionProject = {
+      kind: "build", id: "back", origin: "auto", factionId: "f1", systemId: "dev1",
+      buildingType: "housing", levels: 1, workTotal: 8, workDone: 0,
+    };
+    const projects = [landsOutright, midFront, waitsAtBack];
+    const r = computeFactionConstruction(projects, oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
+    expect(r.pool).toBeCloseTo(4, 6); // exactly one cap: lands (2) + mid (2), back gets nothing
+    expect(r.fundedFront.map((f) => f.projectId)).toEqual(["lands", "mid"]);
+    expect(r.waitingCount).toBe(1);
+    expect(r.fundedFront.length + r.waitingCount).toBe(projects.length);
+  });
+
+  it("yields an empty front and a zero waitingCount for an empty queue", () => {
+    const r = computeFactionConstruction([], oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
+    expect(r.fundedFront).toEqual([]);
+    expect(r.waitingCount).toBe(0);
+  });
+
+  it("preserves queue order in the front rather than re-sorting by progress", () => {
+    // Ample pool funds both in parallel this cycle (front stays queue-ordered) even though the
+    // higher-progress project was inserted second.
+    const lowProgressFirst: WorldConstructionProject = {
+      kind: "build", id: "low", origin: "auto", factionId: "f1", systemId: "dev1",
+      buildingType: "housing", levels: 1, workTotal: 20, workDone: 0,
+    };
+    const highProgressSecond: WorldConstructionProject = {
+      kind: "build", id: "high", origin: "auto", factionId: "f1", systemId: "dev1",
+      buildingType: "housing", levels: 1, workTotal: 20, workDone: 16,
+    };
+    const ampleSystem: ConstructionSystemInfo[] = [
+      { id: "dev1", name: "Vela Prime", control: "developed", population: 400, buildings: {} },
+    ];
+    const r = computeFactionConstruction(
+      [lowProgressFirst, highProgressSecond], ampleSystem,
+      { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded(),
+    );
+    expect(r.pool).toBeGreaterThan(8); // enough to fund both at full cap this cycle
+    expect(r.fundedFront.map((f) => f.projectId)).toEqual(["low", "high"]);
+  });
+
+  it("produces an empty front while waitingCount still counts every open project when the pool is zero", () => {
+    const twoBuilds: WorldConstructionProject[] = [
+      { kind: "build", id: "a", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+      { kind: "build", id: "b", origin: "auto", factionId: "f1", systemId: "dev1", buildingType: "housing", levels: 1, workTotal: 8, workDone: 0 },
+    ];
+    // throughputPerPop 0 zeroes the pool regardless of population.
+    const r = computeFactionConstruction(twoBuilds, oneSystem, { throughputPerPop: 0, pointsPerLevel: 0 }, 4, founded());
+    expect(r.pool).toBe(0);
+    expect(r.fundedFront).toEqual([]);
+    expect(r.waitingCount).toBe(2);
+  });
+
+  it("labels a build row with type and level count, and a colony row as Establish Colony", () => {
+    const build: WorldConstructionProject = {
+      kind: "build", id: "hb", origin: "auto", factionId: "f1", systemId: "dev1",
+      buildingType: "housing", levels: 3, workTotal: 8, workDone: 0,
+    };
+    const r = computeFactionConstruction([build], oneSystem, { throughputPerPop: 0.05, pointsPerLevel: 5 }, 4, founded());
+    expect(r.fundedFront[0]?.label).toBe("Housing ×3");
+  });
+});

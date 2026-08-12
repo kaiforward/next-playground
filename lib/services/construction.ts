@@ -167,6 +167,7 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
     factionId,
     pool: readout.pool, poolBase: readout.poolBase, poolCentres: readout.poolCentres,
     automation, buildSystems, colonies, orderedCount,
+    fundedFront: readout.fundedFront, waitingCount: readout.waitingCount,
   };
 }
 

@@ -354,7 +354,7 @@ export type SystemIndustryData =
 export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 
 // ── Construction (build-queue / colony-visibility) ────────────────────────────
-import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
+import type { ConstructionProjectRow, FundedFrontRow } from "@/lib/engine/construction-readout";
 
 /** Per-system Construction section state. `hidden` renders nothing (developed with nothing building);
  *  `empty` is the controlled-not-yet-colonised state; `visible` carries the rows for this system.
@@ -378,6 +378,10 @@ export interface FactionConstructionData {
   colonies: Array<{ systemId: string; systemName: string; progress: number }>;
   /** Player-originated open projects across the faction. */
   orderedCount: number;
+  /** Projects the pool is actually funding this cycle, in queue order. */
+  fundedFront: FundedFrontRow[];
+  /** Open projects behind the front, not currently absorbing pool. */
+  waitingCount: number;
 }
 
 export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
