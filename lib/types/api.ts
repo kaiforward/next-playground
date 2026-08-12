@@ -402,15 +402,27 @@ export interface TrackerPinnedRow {
   provisionPct: number;
   developmentPct: number;
 }
-/** One row for a funded build or a forming colony — the row's name/label/progress-bar figures. */
-export interface TrackerBuildRow {
+/** Shared name/label/progress-bar figures for a funded build or a forming colony row. */
+export interface TrackerRowBase {
   systemId: string;
   systemName: string;
   label: string;
   progress: number;
   etaCycles: number | null;
 }
-export type TrackerColonyRow = TrackerBuildRow;
+/** One row for a funded build project. `projectId` is the required React key for a list of these:
+ *  a single system routinely runs several concurrent build projects (housing, an extractor, an
+ *  academy — the planner bundles gate-first), so `systemId` is NOT unique within `TrackerData.building`.
+ *  Keying on it duplicated/left-behind rows across re-renders (React can't reconcile a repeated key). */
+export interface TrackerBuildRow extends TrackerRowBase {
+  projectId: string;
+}
+/** One row for a forming colony. No `projectId` — unlike builds, `systemId` IS unique within
+ *  `TrackerData.colonising`: a system can never carry two concurrent `colony_establish` projects
+ *  (`colonyEligibility`'s `already_forming` gate in lib/services/colony-eligibility.ts, and the
+ *  autonomic planner's `inFlight` set in lib/engine/directed-build.ts, both refuse to start a
+ *  second one). `systemId` is a safe React key here. */
+export type TrackerColonyRow = TrackerRowBase;
 
 /** Tracker panel roll-up: pinned systems, the funded construction front, and forming colonies. */
 export interface TrackerData {

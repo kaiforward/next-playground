@@ -74,6 +74,8 @@ function TrackerPanelContent() {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <TrackerSection title="Pinned" count={data.pinned.length} emptyMessage="No pinned systems yet.">
         <ul>
+          {/* Keyed on systemId — safe here because pinnedSystemIds is deduped (a bookmark set, not a
+              project list), unlike the Building list below. */}
           {data.pinned.map((row) => (
             <TrackerRow
               key={row.systemId}
@@ -89,9 +91,13 @@ function TrackerPanelContent() {
 
       <TrackerSection title="Building" count={data.building.length} emptyMessage="Nothing funded this cycle.">
         <ul>
+          {/* Keyed on projectId, NOT systemId — a system routinely runs several concurrent build
+              projects, so systemId repeats within this list. A systemId key here breaks React's
+              reconciliation: duplicate keys leave stale rows behind and pile up new ones every
+              re-render instead of replacing them (see TrackerBuildRow's docstring). */}
           {data.building.slice(0, BUILDING_ROW_CAP).map((row) => (
             <TrackerRow
-              key={row.systemId}
+              key={row.projectId}
               systemId={row.systemId}
               name={`${row.systemName} · ${row.label}`}
               figures={[]}
@@ -119,6 +125,9 @@ function TrackerPanelContent() {
 
       <TrackerSection title="Colonising" count={data.colonising.length} emptyMessage="No colonies forming.">
         <ul>
+          {/* Keyed on systemId — safe here (unlike Building above): a system can never carry two
+              concurrent colony_establish projects, so systemId is unique within this list
+              (see TrackerColonyRow's docstring). Don't "fix" this to match Building's key. */}
           {data.colonising.map((row) => (
             <TrackerRow
               key={row.systemId}

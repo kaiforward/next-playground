@@ -80,8 +80,13 @@ function pinnedRow(systemId: string, systemName: string): TrackerPinnedRow {
   };
 }
 
-function buildRow(systemId: string, systemName: string, progress: number): TrackerBuildRow {
-  return { systemId, systemName, label: "Shipyard L2", progress, etaCycles: 4 };
+function buildRow(
+  systemId: string,
+  systemName: string,
+  progress: number,
+  projectId: string = `proj-${systemId}`,
+): TrackerBuildRow {
+  return { projectId, systemId, systemName, label: "Shipyard L2", progress, etaCycles: 4 };
 }
 
 beforeEach(() => {
@@ -209,6 +214,91 @@ describe("TrackerPanel — the Building section caps at 10 rows, keeping queue o
       el.getAttribute("data-system-id"),
     );
     expect(renderedIds).toEqual(rows.slice(0, 10).map((r) => r.systemId));
+  });
+});
+
+describe("TrackerPanel — a system with several concurrent build projects renders each as its own row", () => {
+  it("two funded builds at the SAME system both render, with their distinct labels", () => {
+    // The fixture shape the old tests never had: distinct projectIds, same systemId. A single
+    // system routinely runs several concurrent build projects (housing, an extractor, an academy —
+    // the planner bundles gate-first), so systemId alone can't tell these two rows apart.
+    trackerData = {
+      pinned: [],
+      waitingCount: 0,
+      colonising: [],
+      building: [
+        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 10, etaCycles: 3 },
+        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 20, etaCycles: 5 },
+      ],
+    };
+    const { rerender } = render(<TrackerPanel />);
+
+    expect(screen.getByRole("button", { name: /Sunnyvale · Housing x2/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Sunnyvale · Foundry x1/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Sunnyvale/ })).toHaveLength(2);
+
+    // React tolerates a duplicate key fine on a first mount (it only warns) — the corruption is a
+    // RECONCILIATION defect, so the real proof is that both rows survive a re-render untouched. Swap
+    // in a third, unrelated project ahead of them (mirrors the front reordering as new work is
+    // funded) and confirm neither same-system row is dropped, duplicated, or bleeds the other's data.
+    trackerData = {
+      pinned: [],
+      waitingCount: 0,
+      colonising: [],
+      building: [
+        { projectId: "p3", systemId: "sys-c", systemName: "Rigel", label: "Yard x1", progress: 5, etaCycles: 9 },
+        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 15, etaCycles: 2 },
+        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 25, etaCycles: 4 },
+      ],
+    };
+    rerender(<TrackerPanel />);
+
+    expect(screen.getByText("Building — 3")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Sunnyvale · Housing x2/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Sunnyvale · Foundry x1/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("button")).toHaveLength(3);
+  });
+});
+
+describe("TrackerPanel — re-rendering with fresh data replaces rows, never accumulates them", () => {
+  it("a tick's worth of new building data renders exactly the new row count, not the sum of old and new", () => {
+    // Reproduces the owner's report directly: the Tracker query is invalidated every economy cycle,
+    // so a systemId key (repeated across the SAME system's several projects) left stale rows behind
+    // on every re-render instead of replacing them — 46 DOM nodes for a 22-row, 10-capped list.
+    trackerData = {
+      pinned: [],
+      waitingCount: 0,
+      colonising: [],
+      building: [
+        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 10, etaCycles: 3 },
+        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 20, etaCycles: 5 },
+      ],
+    };
+    const { rerender } = render(<TrackerPanel />);
+    expect(screen.getAllByRole("button", { name: /Sunnyvale/ })).toHaveLength(2);
+
+    // Next cycle: "p1" (Housing) finished and dropped off the front; a new project "p3" (Yard, a
+    // different system) took its place at the front of the queue, and "p2" (Foundry) is still
+    // running. Same systemId repeated in the OLD list, and the front's order shifted — exactly the
+    // shape that makes React's key-based reconciliation lose track of which fiber is which.
+    trackerData = {
+      pinned: [],
+      waitingCount: 0,
+      colonising: [],
+      building: [
+        { projectId: "p3", systemId: "sys-c", systemName: "Rigel", label: "Yard x1", progress: 5, etaCycles: 8 },
+        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 45, etaCycles: 3 },
+      ],
+    };
+    rerender(<TrackerPanel />);
+
+    expect(screen.getByText("Building — 2")).toBeInTheDocument();
+    // The total rendered row count must match the NEW list (2), not the sum of old + new (4), and
+    // the completed project's row must actually be gone, not left behind as a stale duplicate.
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /Rigel · Yard x1/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Sunnyvale · Foundry x1/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Housing x2/ })).not.toBeInTheDocument();
   });
 });
 

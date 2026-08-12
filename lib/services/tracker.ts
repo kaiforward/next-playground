@@ -56,6 +56,7 @@ export function getTrackerData(): TrackerData {
   const building: TrackerBuildRow[] = construction.fundedFront
     .filter((row) => row.kind === "build")
     .map((row) => ({
+      projectId: row.projectId,
       systemId: row.systemId,
       systemName: row.systemName,
       label: row.label,
