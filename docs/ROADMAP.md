@@ -24,13 +24,22 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-The attention layer — how the player finds what to do — is **three surfaces, built separately**,
-rows 1-2 below plus the situation log at row 4. The split that separates them: an **outliner row is a
-thing** (it persists whether or not anything is wrong with it), an **alert-bar row is a condition**
-(it exists only while true and is cleared by fixing it), and a **log entry is an event** (a discrete
-transition that already happened). Settled 2026-08-12 against how EU5 and Victoria 3 do it — the four
-design principles, the genre sources and the reasoning are in memory `design-attention-layer-inputs`,
-which every one of these rows starts from.
+The attention layer — how the player finds what to do — is **two surfaces, built separately**, rows 1
+and 2 below. The split that separates them: an **outliner row is a thing** (it persists whether or not
+anything is wrong with it), an **alert-bar row is a condition** (it exists only while true and is
+cleared by fixing it). Settled 2026-08-12 against how EU5 and Victoria 3 do it — the four design
+principles, the genre sources and the reasoning are in memory `design-attention-layer-inputs`, which
+both rows start from.
+
+**A third surface was considered and dropped**: a separate dismissible feed of discrete events (the
+"situation log" of `player-seat-roadmap.md`). Events are conditions the player should act on, so they
+become alert-bar categories rather than a parallel scrolling list — one surface for "look at this",
+not two. Don't re-propose the feed without a case for what it holds that an alert cannot.
+
+**Open: what to call the row-1 surface.** "Outliner" is borrowed twice over (Paradox took it from 3D
+and document software, where it means a scene tree) and means nothing to a player who hasn't played
+those games. Candidate on the table: **Watchlist** — plain, and it does design work by making clear at
+a glance that it is not a problem list. Not settled; the row uses "outliner" as a placeholder.
 
 1. **[M] The outliner — the things the player is watching.** A pinnable side panel holding what the
    player wants to keep an eye on, never what is wrong. Three contents to start: **player-pinned
@@ -79,6 +88,25 @@ which every one of these rows starts from.
    Emitting the reason is new instrumentation and the bulk of the work. Precedent that it is
    tractable: one such signal already persists and no UI reads it — `logisticsFundingBound` on the
    market row (`lib/engine/directed-logistics.ts:174`).
+   **This row absorbs the events surface.** The 12 event types plus the three relations-owned ones
+   become alert categories rather than a separate feed — an event the player should act on is a
+   condition, and a parallel scrolling list is the second "look at this" surface the layer exists to
+   avoid. Supersedes the alert-feed/situation-log section of
+   [player-seat-roadmap.md](./planned/player-seat-roadmap.md).
+   **Undesigned and needed at the planning pass: what clicking an alert does.** In EU5 it varies by
+   category — some jump the camera, some open a panel, some apply the decision directly. Ours will
+   need the same per-category answer, and it interacts with the tier list rather than following from
+   it.
+   **Carries `RATION_EXIT_EPS`**, rehomed here when the situation log was dropped. Two of its three
+   rationales are already dead — the per-good regime chips it was authored for were dropped, and
+   visual flapping does not occur (bands are written once per 24-tick economy cycle, so the fastest a
+   chip or map cell can change is every 4.8s at speed 5, with SSE throttled to 4 emits/sec
+   regardless). The third was log spam, which died with the log. **So it now has no surviving
+   justification at all unless band transitions become an alert category** — if they do, calibrate the
+   hysteresis against a condition flapping on and off the bar; if they don't, delete the constant
+   rather than keep tuning it. **Open question either way:** whether the hysteresis applies to the
+   persisted display band only (presentational) or to the classifier itself (mechanical — the regime
+   feeds the unrest term). Unverified at deferral time; do not assume the first.
    *Next step:* author the category and tier list, then design the blocked-reason instrumentation the
    planner must emit.
    *Don't:* alert on a raw persistent state the player cannot act on. That is the precise EU5 failure
@@ -115,28 +143,6 @@ which every one of these rows starts from.
    *Don't:* buy scarcity by making systems dead. Barren-but-alive is a deliberate decision — rocky
    barrens carry tiny artificial habitation so they read as small mining outposts, and only pure gas
    giants are truly uninhabitable.
-
-4. **[M] The faction situation log — the events half of the attention layer.** A dismissible feed of
-   discrete transitions, distinct from both surfaces at rows 1-2: the outliner holds things, the alert
-   bar holds conditions, the log holds what *happened*. Designed as player-seat Phase 3 Slice 4
-   ([player-seat-roadmap.md](./planned/player-seat-roadmap.md); slices 1-3 shipped, active specs
-   [player-seat.md](./active/gameplay/player-seat.md) +
-   [player-seat-purse.md](./active/gameplay/player-seat-purse.md)). No design pass done yet — it was
-   left alone while rows 1-2 were settled, so it is the least ready of the three.
-   **Carries `RATION_EXIT_EPS`**, deferred here when the presentation layer shipped: the hysteresis has
-   no surviving justification until a log exists. Its other two rationales are dead — the per-good
-   regime chips it was authored for were dropped, and visual flapping does not occur (bands are
-   written once per 24-tick economy cycle, so the fastest a chip or map cell can change is every 4.8s
-   at speed 5, with SSE throttled to 4 emits/sec regardless). A log entry per transition is
-   different: it accumulates in a list the player scrolls, so a system wobbling across an edge
-   produces junk entries at any speed. Calibrate the value against the log's own spam, not the chips.
-   **Open question to settle then:** whether the hysteresis applies to the persisted display band
-   only (presentational) or to the classifier itself (mechanical — the regime feeds the unrest term).
-   Unverified at deferral time; do not assume the first.
-   *Next step:* design pass on the feed itself, once rows 1-2 have fixed what does *not* belong in it.
-   *Don't:* ship a feed that fires per event without the other two surfaces in place — an event
-   stream carrying conditions and things as well is the undifferentiated notification spam the whole
-   attention layer exists to avoid.
 ---
 
 ## Unqueued

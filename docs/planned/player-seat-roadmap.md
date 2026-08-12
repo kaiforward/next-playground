@@ -64,19 +64,24 @@ proven fun.
 
 ---
 
-## Alert feed (faction situation log)
+## Alert feed — superseded, see the roadmap
 
-The faction's per-asset alert feed and situation log — the Paradox alert-strip model
-(`grand-strategy-vision.md` calls this out as "Notifications / Captain's Log" in its systems-mapping
-table). Comes once there is enough autonomic + player activity happening across a faction's territory
-that surfacing "where to look" earns its own surface, rather than requiring the player to tour every
-system.
+This section described one merged surface — "the faction's per-asset alert feed and situation log",
+the Paradox alert-strip model, which `grand-strategy-vision.md` maps as "Notifications / Captain's
+Log". It has been superseded: the attention layer is now **two** surfaces, and the merged feed is not
+either of them.
+
+- A **things** surface (pinned systems, the construction queue's funded front, colonies forming).
+- A **conditions** surface — the alert bar, which also absorbs events. An event the player should act
+  on is a condition, so there is no separate scrolling log.
+
+Both live on `docs/ROADMAP.md` rows 1 and 2 with their design settled; reasoning and genre sources are
+in memory `design-attention-layer-inputs`. Nothing here is a live plan — the roadmap rows are.
 
 ---
 
 ## Sequencing
 
-The alert feed is designed but not planned in implementation detail — it gets its own design pass
-(spec → build plan) when picked up, following the same per-slice process the seat, control, and
-purse slices used. The purse follow-ons above are staged behind their prerequisites (Stage 2 before
-any price-linked income; control before claim pricing).
+The purse follow-ons above are staged behind their prerequisites (Stage 2 before any price-linked
+income; control before claim pricing), and each gets its own design pass (spec → build plan) when
+picked up, following the same per-slice process the seat, control, and purse slices used.
