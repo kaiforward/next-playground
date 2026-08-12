@@ -24,56 +24,75 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-1. **[L] The attention layer — how the player finds what to do.** The system screens are built and
-   detailed, and deciding what to act on is still hard. The player's actual verbs are colonising and
-   building, so the layer's job is to surface, for each, either an issue to fix or an opportunity to
-   take. Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
-   approaching it** (the cue to build housing), and **which systems cannot meet their demand from
-   imports plus production**. Low stability already works as a third, and is the proof the approach
-   reads well.
-   Two surfaces, one problem. A **faction situation log** (player-seat Phase 3 Slice 4, design in
-   [player-seat-roadmap.md](./planned/player-seat-roadmap.md); slices 1-3 shipped, active specs
-   [player-seat.md](./active/gameplay/player-seat.md) +
-   [player-seat-purse.md](./active/gameplay/player-seat-purse.md)) and a **systems view ordered by
-   need** — a priority ranking over issues and opportunities, so the player can scan rather than
-   hunt. The ranking is the harder half and the one with no design at all. Today's faction
-   **Territory** tab is a flat name + economy-type list
-   (`app/(game)/@panel/factions/[factionId]/territory/page.tsx`) — the natural site for the ranked
-   view, or the thing it replaces.
-   **Four principles settled 2026-08-12** from a read of how EU5 and Victoria 3 do it; reasoning and
-   sources in memory `design-attention-layer-inputs`, which the design pass starts from:
-   persistent state and discrete transition are **different surfaces** (a ranked list and a feed,
-   Victoria 3's outliner/situation split); **quiet successes, loud warnings** — automation-on
-   silences what the planner handles but never what it tried and could not do; alert on **unresolved
-   need**, not raw state; and prefer **intent visibility** (the planner declaring what it wants to
-   build next and where, on demand) over a notification.
-   **A third read with no surface at all: nothing on the map says where a colony is forming.** The
-   genre gets this nearly free because its map starts painted; ours appears out of black. Kai's
-   leaning — colonisation automation defaults **off**, AI founding slowed enough that a player can
-   keep up. This row owns the surface; the pacing lever is item 2 below.
-   **Carries `RATION_EXIT_EPS`**, deferred here when the presentation layer shipped: the hysteresis has
-   no surviving justification until a log exists. Its other two rationales are dead — the per-good
-   regime chips it was authored for were dropped, and visual flapping does not occur (bands are
-   written once per 24-tick economy cycle, so the fastest a chip or map cell can change is every 4.8s
-   at speed 5, with SSE throttled to 4 emits/sec regardless). A log entry per transition is
-   different: it accumulates in a list the player scrolls, so a system wobbling across an edge
-   produces junk entries at any speed. Calibrate the value against the log's own spam, not the chips.
-   **Open question to settle then:** whether the hysteresis applies to the persisted display band
-   only (presentational) or to the classifier itself (mechanical — the regime feeds the unrest term).
-   Unverified at deferral time; do not assume the first.
-   *Next step:* design pass on the ranking and the notification model before any spec — the
-   irritation problem is a design problem, and the two named reads are the first concrete test of
-   whatever ranking comes out.
-   *Don't:* ship a feed that fires per event without a ranking behind it, and don't alert on a
-   persistent state. The precise genre complaint is that dismissing an alert for a still-true state
-   makes it reappear instantly and crowd out the useful ones — that is why this row is not just
-   "add alerts".
+The attention layer — how the player finds what to do — is **three surfaces, built separately**,
+rows 1-2 below plus the situation log at row 4. The split that separates them: an **outliner row is a
+thing** (it persists whether or not anything is wrong with it), an **alert-bar row is a condition**
+(it exists only while true and is cleared by fixing it), and a **log entry is an event** (a discrete
+transition that already happened). Settled 2026-08-12 against how EU5 and Victoria 3 do it — the four
+design principles, the genre sources and the reasoning are in memory `design-attention-layer-inputs`,
+which every one of these rows starts from.
 
-2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[M] The outliner — the things the player is watching.** A pinnable side panel holding what the
+   player wants to keep an eye on, never what is wrong. Three contents to start: **player-pinned
+   systems** (a star affordance on the system panel, as Victoria 3 puts one on many tabs), the
+   **construction queue's funded front** — the items actually drawing from the pool plus a count for
+   everything behind it — and **one row per colony forming**, auto-pinned and removed by completion
+   rather than by hand. Both queues show all work regardless of `origin`, autonomic or player.
+   This is the only surface that answers **where a colony is forming**; the map says nothing, and the
+   genre gets that nearly free because its map starts painted while ours appears out of black.
+   Cheapest of the three: half the data already ships on the faction construction card
+   (`components/construction/faction-construction-card.tsx:84`), which is outliner content on the
+   wrong surface, and the rest is pinning. It is also where **quiet successes** live — the answer to
+   watching an automated domain without an alert firing to say it is fine.
+   Carries its own show/hide settings panel, as row 2 does.
+   *Next step:* layout pass on the panel — the pin affordance, the three sections, and where it docks
+   against the existing left-docked drawers.
+   *Don't:* make the construction entry a list of systems-with-active-projects. That is a per-place
+   list sitting next to the per-place pinned-systems list and duplicates it; the queue avoids the
+   collision precisely because it is a per-resource read (where the pool is going). Don't render every
+   project either — the Industry tab already carries per-system ghost rows.
+   *Later:* when pop wealth and the private builder land (memory `design-strata-private-builder`),
+   decide whether a stratum's own construction belongs in the player's queue at all.
+
+2. **[L] The alert bar — the conditions wanting a decision.** A top bar of alert categories ordered by
+   severity, carrying opportunities and decisions as well as faults (EU5's shape: red critical,
+   yellow important, blue informational). **Ranking is by authored category tier, never a computed
+   cross-domain score** — within a class, sort by that class's own natural measure (population pressed
+   against the cap for crowding, unserved demand rate for unmet need). Neither reference game ranks
+   instances across domains; a single global sort is what forces invented weights, and it is why the
+   housing-has-no-ROI problem dissolves here.
+   Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
+   approaching it** (the cue to build housing) and **which systems cannot meet their demand from
+   imports plus production**. Low stability already works as a third and is the proof the approach
+   reads well; strikes and famine already have their data too. A category expanding into its instance
+   list needs a host — today's faction **Territory** tab is a flat name + economy-type list
+   (`app/(game)/@panel/factions/[factionId]/territory/page.tsx`) and is the natural candidate.
+   **A per-category settings screen is load-bearing, not polish.** The most-subscribed EU5 alert mod
+   exists to hide exactly our intended class — buildings missing employees, RGOs missing employees,
+   unprofitable buildings — because those stay continuously true for states the player often cannot
+   fix. Checkbox per category, plus a small non-hideable tier (war declarations and the like).
+   **Opportunity alerts gate on the existing automation switch:** with a domain automated the
+   planner's ranked proposals are already being acted on, so surfacing them is noise — only what it
+   *tried and could not do* surfaces. That is this row's real cost, because those blocked cases leave
+   no trace in code today: an opportunity that does not fit space or labour is dropped by a bare
+   `continue` (`lib/engine/directed-build.ts:824`) or a zero-level binary search (`:848-850`).
+   Emitting the reason is new instrumentation and the bulk of the work. Precedent that it is
+   tractable: one such signal already persists and no UI reads it — `logisticsFundingBound` on the
+   market row (`lib/engine/directed-logistics.ts:174`).
+   *Next step:* author the category and tier list, then design the blocked-reason instrumentation the
+   planner must emit.
+   *Don't:* alert on a raw persistent state the player cannot act on. That is the precise EU5 failure
+   — dismissal is pointless because the condition is still true, so the alert returns instantly and
+   crowds out the useful ones.
+
+3. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
    technologies exist. Kai's read is that this slows the simulation rather than breaking it.
+   **A third lever, and the cheapest: colonisation automation defaults off**, with AI founding slowed
+   enough that a player can reasonably keep up by hand (Kai, 2026-08-12). Settled alongside the
+   attention layer, which owns the *surface* for a forming colony (row 1); this row owns the pacing.
    The knob already exists: `habitableFraction` is housing-per-space efficiency
    (`habitableSpace = generalSpace × habitableFraction`), and the expensive, low-yield
    specialist-habitation *building* was recorded as a hook at that same decision — see memory
@@ -96,6 +115,28 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    *Don't:* buy scarcity by making systems dead. Barren-but-alive is a deliberate decision — rocky
    barrens carry tiny artificial habitation so they read as small mining outposts, and only pure gas
    giants are truly uninhabitable.
+
+4. **[M] The faction situation log — the events half of the attention layer.** A dismissible feed of
+   discrete transitions, distinct from both surfaces at rows 1-2: the outliner holds things, the alert
+   bar holds conditions, the log holds what *happened*. Designed as player-seat Phase 3 Slice 4
+   ([player-seat-roadmap.md](./planned/player-seat-roadmap.md); slices 1-3 shipped, active specs
+   [player-seat.md](./active/gameplay/player-seat.md) +
+   [player-seat-purse.md](./active/gameplay/player-seat-purse.md)). No design pass done yet — it was
+   left alone while rows 1-2 were settled, so it is the least ready of the three.
+   **Carries `RATION_EXIT_EPS`**, deferred here when the presentation layer shipped: the hysteresis has
+   no surviving justification until a log exists. Its other two rationales are dead — the per-good
+   regime chips it was authored for were dropped, and visual flapping does not occur (bands are
+   written once per 24-tick economy cycle, so the fastest a chip or map cell can change is every 4.8s
+   at speed 5, with SSE throttled to 4 emits/sec regardless). A log entry per transition is
+   different: it accumulates in a list the player scrolls, so a system wobbling across an edge
+   produces junk entries at any speed. Calibrate the value against the log's own spam, not the chips.
+   **Open question to settle then:** whether the hysteresis applies to the persisted display band
+   only (presentational) or to the classifier itself (mechanical — the regime feeds the unrest term).
+   Unverified at deferral time; do not assume the first.
+   *Next step:* design pass on the feed itself, once rows 1-2 have fixed what does *not* belong in it.
+   *Don't:* ship a feed that fires per event without the other two surfaces in place — an event
+   stream carrying conditions and things as well is the undifferentiated notification spam the whole
+   attention layer exists to avoid.
 ---
 
 ## Unqueued
