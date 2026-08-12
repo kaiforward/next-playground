@@ -221,6 +221,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
       ? {
           controlledFactionId: factionIds[universe.playerFactionIndex],
           automation: { build: true, colonisation: true },
+          pinnedSystemIds: [],
         }
       : null;
 

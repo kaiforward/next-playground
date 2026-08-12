@@ -60,4 +60,6 @@ export const queryKeys = {
   // Per-faction treasury (balance/policy/settlement snapshot) — tick-invalidated.
   factionTreasuryAll: ["factionTreasury"] as const,
   factionTreasury: (factionId: string) => ["factionTreasury", factionId] as const,
+  // Tracker panel roll-up (pinned/building/colonising) — tick-invalidated, and dirtied by pin writes.
+  tracker: ["tracker"] as const,
 };

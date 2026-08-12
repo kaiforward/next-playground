@@ -43,6 +43,14 @@ export interface WorldPlayer {
   /** Per-domain autonomic switches. Off = the planner stops PROPOSING in that domain for the player's
    *  faction; committed funding and manual orders always continue. AI factions never read this. */
   automation: { build: boolean; colonisation: boolean };
+  /**
+   * Player-curated bookmark list for the Tracker panel (docs/active/gameplay/tracker.md), insertion-
+   * ordered and deduplicated at the write boundary — never re-sorted, never capped. Pinning is a
+   * bookmark, not an ownership claim: an id may name a system belonging to another faction. No
+   * processor reads this; a pinned id that no longer exists (abandoned back to unclaimed) is filtered
+   * on read rather than pruned here, so this list can carry stale ids between reads.
+   */
+  pinnedSystemIds: string[];
 }
 
 // ── Regions ─────────────────────────────────────────────────────

@@ -133,8 +133,8 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 12 (the supply-band vocabulary)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(12);
+  it("is at save format version 13 (pinned systems on the player seat)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(13);
   });
 
   it("rejects a prior-version (v11) save — saves break on the shape bump", () => {
@@ -357,6 +357,40 @@ describe("save format — player seat", () => {
   it("rejects a pre-6 save cleanly", () => {
     const stale = JSON.stringify({ formatVersion: 5, world: { meta: {} } });
     const result = deserializeWorld(stale);
+    expect(result.ok).toBe(false);
+  });
+
+  it("round-trips pinnedSystemIds in insertion order", () => {
+    const world = generateWorld({
+      systemCount: 120,
+      seed: 7,
+      playerFaction: { name: "Testers Guild", governmentType: "corporate", doctrine: "hegemonic" },
+    });
+    if (!world.player) throw new Error("fixture: expected a player seat");
+    const [a, b, c] = world.systems;
+    const withPins: World = {
+      ...world,
+      player: { ...world.player, pinnedSystemIds: [c.id, a.id, b.id] },
+    };
+    const result = deserializeWorld(serializeWorld(withPins));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.player?.pinnedSystemIds).toEqual([c.id, a.id, b.id]);
+  });
+
+  it("rejects a v12 save cleanly — its player seat has no pinnedSystemIds field", () => {
+    // v12's WorldPlayer has no `pinnedSystemIds` at all. deserializeWorld's structural spot-checks
+    // only cover `meta`, so nothing below the version gate would notice the missing array either —
+    // the version bump is the whole defence, same as the v11 supply-band case above.
+    const world = generateWorld({
+      systemCount: 60,
+      seed: 7,
+      playerFaction: { name: "Testers Guild", governmentType: "corporate", doctrine: "hegemonic" },
+    });
+    if (!world.player) throw new Error("fixture: expected a player seat");
+    const { pinnedSystemIds: _dropped, ...v12Player } = world.player;
+    const json = JSON.stringify({ formatVersion: 12, world: { ...world, player: v12Player } });
+    const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });
 });

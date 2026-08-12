@@ -423,6 +423,7 @@ export type OrderBuildResponse = ApiResponse<{ projectId: string; levels: number
 export type OrderColonyResponse = ApiResponse<{ projectId: string }>;
 export type CancelOrderResponse = ApiResponse<{ projectId: string }>;
 export type AutomationResponse = ApiResponse<{ build: boolean; colonisation: boolean }>;
+export type PinsResponse = ApiResponse<string[]>;
 
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
