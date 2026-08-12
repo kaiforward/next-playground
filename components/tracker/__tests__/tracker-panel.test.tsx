@@ -5,6 +5,7 @@ import { TrackerPanel } from "@/components/tracker/tracker-panel";
 import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row";
 import type { AtlasData } from "@/lib/types/game";
 import type { TrackerBuildRow, TrackerData, TrackerPinnedRow } from "@/lib/types/api";
+import { DEFAULT_TRACKER_SECTIONS, type TrackerSections } from "@/lib/hooks/use-tracker-sections";
 
 // TrackerPanel owns three suspense-backed hooks (useTracker, useAtlas) and a mutation
 // (useSetSystemPin). All three are mocked directly rather than through a real QueryClient —
@@ -95,6 +96,55 @@ beforeEach(() => {
   trackerData = emptyTracker();
 });
 
+/** Renders `TrackerPanel` with all sections on and settings closed, unless a test overrides
+ *  `sections` — the shared default so section-visibility tests aren't the only ones spelling
+ *  out all three props. */
+function renderPanel(sections: TrackerSections = DEFAULT_TRACKER_SECTIONS) {
+  return render(<TrackerPanel sections={sections} settingsOpen={false} onToggleSettings={vi.fn()} />);
+}
+
+describe("TrackerPanel — hiding a section removes its heading, not just its rows", () => {
+  it("Building off: no 'Building — N' heading and no build row, while Pinned and Colonising still render", () => {
+    trackerData = {
+      pinned: [pinnedRow("sys-a", "Sunnyvale")],
+      building: [buildRow("sys-b", "Rigel Yards", 50)],
+      waitingCount: 4,
+      colonising: [],
+    };
+    renderPanel({ pinned: true, building: false, colonising: true });
+
+    // The row is gone.
+    expect(screen.queryByRole("button", { name: /Rigel Yards/ })).not.toBeInTheDocument();
+    // The heading — and the count baked into its text — is gone too, not left behind empty.
+    expect(screen.queryByText(/Building/)).not.toBeInTheDocument();
+    // The waiting-count line belongs to the hidden section and disappears with it.
+    expect(screen.queryByText(/waiting on the pool/)).not.toBeInTheDocument();
+    // The other two sections are untouched by Building's removal.
+    expect(screen.getByText("Pinned — 1")).toBeInTheDocument();
+    expect(screen.getByText("Colonising — 0")).toBeInTheDocument();
+  });
+});
+
+describe("TrackerPanel — hiding every section leaves the header present", () => {
+  it("all three sections off: no section heading renders, but the title and settings toggle still do", () => {
+    trackerData = {
+      pinned: [pinnedRow("sys-a", "Sunnyvale")],
+      building: [buildRow("sys-b", "Rigel Yards", 50)],
+      waitingCount: 2,
+      colonising: [],
+    };
+    renderPanel({ pinned: false, building: false, colonising: false });
+
+    expect(screen.queryByText(/Pinned/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Building/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Colonising/)).not.toBeInTheDocument();
+    // The header — title and the settings toggle that reaches the very checkboxes that just
+    // hid everything — is still reachable, not collapsed away along with the sections.
+    expect(screen.getByText("Tracker")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tracker settings" })).toBeInTheDocument();
+  });
+});
+
 describe("TrackerPanel — row activation routes by kind, not to one shared path", () => {
   it("a build row opens Industry; a pinned row opens Overview — different destinations, proven by one push each", async () => {
     const user = userEvent.setup();
@@ -104,7 +154,7 @@ describe("TrackerPanel — row activation routes by kind, not to one shared path
       waitingCount: 0,
       colonising: [],
     };
-    render(<TrackerPanel />);
+    renderPanel();
 
     await user.click(screen.getByRole("button", { name: /Sunnyvale/ }));
     expect(push).toHaveBeenLastCalledWith("/system/sys-a?focus=10,20&loc=1");
@@ -118,7 +168,7 @@ describe("TrackerPanel — the locate nonce advances on every activation", () =>
   it("locating the same system twice produces two different `loc` values", async () => {
     const user = userEvent.setup();
     trackerData = { pinned: [pinnedRow("sys-a", "Sunnyvale")], building: [], waitingCount: 0, colonising: [] };
-    render(<TrackerPanel />);
+    renderPanel();
 
     const row = screen.getByRole("button", { name: /Sunnyvale/ });
     await user.click(row);
@@ -131,7 +181,7 @@ describe("TrackerPanel — the locate nonce advances on every activation", () =>
 
 describe("TrackerPanel — an empty section renders its empty state, not a bare heading", () => {
   it("all three sections empty: each heading is present AND each carries its empty-state message", () => {
-    render(<TrackerPanel />); // trackerData is emptyTracker() from beforeEach
+    renderPanel(); // trackerData is emptyTracker() from beforeEach
 
     expect(screen.getByText("Pinned — 0")).toBeInTheDocument();
     expect(screen.getByText("No pinned systems yet.")).toBeInTheDocument();
@@ -150,7 +200,7 @@ describe("TrackerPanel — the waiting count is a quiet line, present only when 
       waitingCount: 37,
       colonising: [],
     };
-    render(<TrackerPanel />);
+    renderPanel();
     expect(screen.getByText("37 more waiting on the pool")).toBeInTheDocument();
   });
 
@@ -161,7 +211,7 @@ describe("TrackerPanel — the waiting count is a quiet line, present only when 
       waitingCount: 0,
       colonising: [],
     };
-    render(<TrackerPanel />);
+    renderPanel();
     expect(screen.queryByText(/more waiting on the pool/)).not.toBeInTheDocument();
     expect(screen.queryByText(/0 more/)).not.toBeInTheDocument();
   });
@@ -174,7 +224,7 @@ describe("TrackerPanel — the Building section caps at 10 rows, keeping queue o
 
   it("renders exactly 10 rows and states how many more are funded when there are more than 10", () => {
     trackerData = { pinned: [], building: manyBuildRows(13), waitingCount: 5, colonising: [] };
-    render(<TrackerPanel />);
+    renderPanel();
 
     expect(screen.getAllByRole("button", { name: /Shipyard L2/ })).toHaveLength(10);
     // The two counts stay distinct: 3 funded-but-hidden by the cap, 5 not funded at all.
@@ -184,7 +234,7 @@ describe("TrackerPanel — the Building section caps at 10 rows, keeping queue o
 
   it("renders no 'more funded' phrasing at all when 10 or fewer rows are funded", () => {
     trackerData = { pinned: [], building: manyBuildRows(10), waitingCount: 0, colonising: [] };
-    render(<TrackerPanel />);
+    renderPanel();
 
     expect(screen.getAllByRole("button", { name: /Shipyard L2/ })).toHaveLength(10);
     expect(screen.queryByText(/more funded/)).not.toBeInTheDocument();
@@ -208,7 +258,7 @@ describe("TrackerPanel — the Building section caps at 10 rows, keeping queue o
       buildRow("sys-g", "Gamma", 15), // 11th — must be the one omitted
     ];
     trackerData = { pinned: [], building: rows, waitingCount: 0, colonising: [] };
-    render(<TrackerPanel />);
+    renderPanel();
 
     const renderedIds = Array.from(document.querySelectorAll("[data-system-id]")).map((el) =>
       el.getAttribute("data-system-id"),
@@ -231,7 +281,7 @@ describe("TrackerPanel — a system with several concurrent build projects rende
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 20, etaCycles: 5 },
       ],
     };
-    const { rerender } = render(<TrackerPanel />);
+    const { rerender } = renderPanel();
 
     expect(screen.getByRole("button", { name: /Sunnyvale · Housing x2/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sunnyvale · Foundry x1/ })).toBeInTheDocument();
@@ -251,12 +301,13 @@ describe("TrackerPanel — a system with several concurrent build projects rende
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 25, etaCycles: 4 },
       ],
     };
-    rerender(<TrackerPanel />);
+    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
 
     expect(screen.getByText("Building — 3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sunnyvale · Housing x2/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sunnyvale · Foundry x1/ })).toBeInTheDocument();
-    expect(screen.getAllByRole("button")).toHaveLength(3);
+    // Excludes the header's settings toggle, which is also a `button` but not a row.
+    expect(screen.getAllByRole("button", { name: (name) => name !== "Tracker settings" })).toHaveLength(3);
   });
 });
 
@@ -274,7 +325,7 @@ describe("TrackerPanel — re-rendering with fresh data replaces rows, never acc
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 20, etaCycles: 5 },
       ],
     };
-    const { rerender } = render(<TrackerPanel />);
+    const { rerender } = renderPanel();
     expect(screen.getAllByRole("button", { name: /Sunnyvale/ })).toHaveLength(2);
 
     // Next cycle: "p1" (Housing) finished and dropped off the front; a new project "p3" (Yard, a
@@ -290,12 +341,13 @@ describe("TrackerPanel — re-rendering with fresh data replaces rows, never acc
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 45, etaCycles: 3 },
       ],
     };
-    rerender(<TrackerPanel />);
+    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
 
     expect(screen.getByText("Building — 2")).toBeInTheDocument();
     // The total rendered row count must match the NEW list (2), not the sum of old + new (4), and
     // the completed project's row must actually be gone, not left behind as a stale duplicate.
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    // Excludes the header's settings toggle, which is also a `button` but not a row.
+    expect(screen.getAllByRole("button", { name: (name) => name !== "Tracker settings" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: /Rigel · Yard x1/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sunnyvale · Foundry x1/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Housing x2/ })).not.toBeInTheDocument();

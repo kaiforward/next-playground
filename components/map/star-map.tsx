@@ -349,8 +349,8 @@ export function StarMap({
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}
       {showMapDebug && <MapZoomDebug zoom={zoom} />}
 
-      {/* Right-edge column: Tracker (top) and the map controls dock (bottom) — see
-          map-right-rail.tsx for why they share one real container instead of two
+      {/* Right-edge column: Tracker (with its settings panel to its left when open) above the map
+          controls dock — see map-right-rail.tsx for why they share one real container instead of
           independently-positioned overlays. */}
       <MapRightRail mode={mapMode} setMode={setMapMode} overlays={overlays} toggle={toggle} />
     </div>
