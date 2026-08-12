@@ -387,6 +387,44 @@ export interface FactionConstructionData {
 export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
 export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
 
+// ── Tracker (docs/active/gameplay/tracker.md — pinned/building/colonising roll-up) ──
+/** One pinned system's row + card figures — the same derivations `SystemVitalsData` shows on the
+ *  system panel, so there is one definition of how a system is doing rather than a second. */
+export interface TrackerPinnedRow {
+  systemId: string;
+  systemName: string;
+  population: number;
+  /** Population against its cap — the early-warning crowding read; not clamped to 100, since
+   *  reading past it is the signal. */
+  populationPct: number;
+  stabilityPct: number;
+  /** 0 when the system has never been assessed by the economy yet (`SystemProvisionRead` unassessed). */
+  provisionPct: number;
+  developmentPct: number;
+}
+/** One row for a funded build or a forming colony — the row's name/label/progress-bar figures. */
+export interface TrackerBuildRow {
+  systemId: string;
+  systemName: string;
+  label: string;
+  progress: number;
+  etaCycles: number | null;
+}
+export type TrackerColonyRow = TrackerBuildRow;
+
+/** Tracker panel roll-up: pinned systems, the funded construction front, and forming colonies. */
+export interface TrackerData {
+  /** Player-curated bookmarks, insertion order — stale (abandoned) pins filtered, not zeroed. */
+  pinned: TrackerPinnedRow[];
+  /** The player faction's funded front (Task 2), builds only — forming colonies are `colonising`. */
+  building: TrackerBuildRow[];
+  /** Open build projects behind the front, not currently absorbing pool. */
+  waitingCount: number;
+  /** Every colony currently forming for the player's faction, funded or not this cycle. */
+  colonising: TrackerColonyRow[];
+}
+export type TrackerResponse = ApiResponse<TrackerData>;
+
 // ── Player build-options surface (per-system verbs: colonise / build) ────────
 import type { BuildOption } from "@/lib/engine/build-options";
 import type { ColonyBlockReason } from "@/lib/types/colonisation";

@@ -40,6 +40,9 @@ export function useTickInvalidation() {
         // Construction advances every funded cycle (same cycle economy tick) — refresh both surfaces.
         queryClient.invalidateQueries({ queryKey: queryKeys.systemConstructionAll });
         queryClient.invalidateQueries({ queryKey: queryKeys.factionConstructionAll });
+        // Tracker roll-up mirrors the same funded front/colonies, so it goes stale on the same cycle
+        // (also dirtied directly by pin writes — useSetSystemPin).
+        queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
         // Build-options feasibility (ETA, pool headroom) shifts on the same cycle.
         queryClient.invalidateQueries({ queryKey: queryKeys.systemBuildOptionsAll });
         // Faction Overview vitals (pop/stability/development roll-up + territory) advance every tick.

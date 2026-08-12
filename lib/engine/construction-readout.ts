@@ -107,6 +107,10 @@ export interface FundedFrontRow {
   projectId: string;
   systemId: string;
   systemName: string;
+  /** Discriminates build vs colony_establish — a colony's systemId is never a build's under today's
+   *  invariant (colony_establish only ever targets a controlled system, a build only a developed
+   *  one), but consumers that split by kind should read this rather than lean on that invariant. */
+  kind: "build" | "colony_establish";
   /** Building type + level count ("Housing ×4"), or "Establish Colony" — mirrors the construction
    *  row's own title convention (`components/construction/construction-row.tsx`). */
   label: string;
@@ -361,6 +365,7 @@ export function computeFactionConstruction(
         projectId: p.id,
         systemId: base.systemId,
         systemName: base.systemName,
+        kind: p.kind,
         label: p.kind === "colony_establish" ? "Establish Colony" : `${buildingLabel(p.buildingType)} ×${p.levels}`,
         progress: base.progress,
         etaCycles: base.etaCycles,
