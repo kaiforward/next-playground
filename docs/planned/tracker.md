@@ -93,6 +93,19 @@ There is no cap on pins.
 
 ## Rows and the card
 
+**Every row is a single line.** Nothing in the Tracker grows to two lines unless there is no way to
+avoid it — the panel's value is that a dozen rows are scannable at once, and depth belongs in the card
+rather than in the list. A row carries a name, at most two figures, and nothing else.
+
+Build and colony rows additionally carry a **2px progress bar flush along the bottom edge of the row**,
+full-bleed to the panel's sides, over a faint track. It reads as an underline rather than as a
+control, which is what keeps a list of them quiet. Build progress is drawn in the copper accent and
+colony progress in the secondary amber — a cosmetic separation only, since the section headings
+already distinguish them.
+
+Figures are icon-plus-number, never a bare glyph: population takes a person icon, stability a small
+colour swatch beside its value. Stability is never signalled by colour alone.
+
 Clicking a row flies the map to the system and opens the relevant tab: a pinned system and a forming
 colony both open Overview (where a colony's founding entry lives), a building row opens Industry
 (where its in-flight ghost row lives). This reuses the existing focus mechanism the "Show on Map"
