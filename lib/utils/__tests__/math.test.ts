@@ -1,5 +1,27 @@
 import { describe, it, expect } from "vitest";
-import { median, quantile, weightedMean } from "@/lib/utils/math";
+import { clamp, median, quantile, weightedMean } from "@/lib/utils/math";
+
+describe("clamp", () => {
+  // The Tracker's progress bar width is `clamp(progress, 0, 100)%`. Its only observable there is a
+  // style attribute, which jsdom cannot honestly verify — so the bounds are pinned here instead,
+  // per the component-test convention's own escape hatch.
+  it("returns the value untouched when it is already inside the bounds", () => {
+    expect(clamp(42, 0, 100)).toBe(42);
+  });
+
+  it("raises a value below the minimum to the minimum", () => {
+    expect(clamp(-13, 0, 100)).toBe(0);
+  });
+
+  it("lowers a value above the maximum to the maximum", () => {
+    expect(clamp(180, 0, 100)).toBe(100);
+  });
+
+  it("is inclusive at both bounds", () => {
+    expect(clamp(0, 0, 100)).toBe(0);
+    expect(clamp(100, 0, 100)).toBe(100);
+  });
+});
 
 describe("median", () => {
   it("returns the middle value for an odd-length list", () => {

@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { AtlasData, UniverseData, StarSystemInfo } from "@/lib/types/game";
-import { MapControlsDock } from "@/components/map/map-controls-dock";
+import { MapRightRail } from "@/components/map/map-right-rail";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
 import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
@@ -349,13 +349,10 @@ export function StarMap({
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}
       {showMapDebug && <MapZoomDebug zoom={zoom} />}
 
-      {/* Map controls dock (bottom-right) */}
-      <MapControlsDock
-        mode={mapMode}
-        setMode={setMapMode}
-        overlays={overlays}
-        toggle={toggle}
-      />
+      {/* Right-edge column: Tracker (top) and the map controls dock (bottom) — see
+          map-right-rail.tsx for why they share one real container instead of two
+          independently-positioned overlays. */}
+      <MapRightRail mode={mapMode} setMode={setMapMode} overlays={overlays} toggle={toggle} />
     </div>
   );
 }

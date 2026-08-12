@@ -39,6 +39,12 @@ import { twMerge } from "tailwind-merge";
  * - Global exclusivity: opening one card closes any other that is open,
  *   via a module-level "who's open" pointer — there is exactly one of
  *   these on screen at a time.
+ * - `disableClickOpen` on the root: opts a consumer whose trigger's click
+ *   already does something else (e.g. a Tracker row, which navigates on
+ *   click) out of Radix's own click-to-toggle, by calling
+ *   `event.preventDefault()` before Radix's internal handler runs — hover
+ *   and keyboard-focus opens are untouched, since Radix only gates the
+ *   click path on it.
  *
  * Escape-to-close and returning focus to the trigger on close are Radix's
  * own default (non-modal) Popover behaviour and are not reimplemented
@@ -74,6 +80,7 @@ interface RichCardContextValue {
   open: boolean;
   side: PopoverPrimitive.PopoverContentProps["side"];
   align: PopoverPrimitive.PopoverContentProps["align"];
+  disableClickOpen: boolean;
   openedByPointerRef: MutableRefObject<boolean>;
   suppressNextTriggerFocusRef: MutableRefObject<boolean>;
   scheduleOpen: () => void;
@@ -98,6 +105,12 @@ export interface RichCardProps {
   openDelay?: number;
   side?: PopoverPrimitive.PopoverContentProps["side"];
   align?: PopoverPrimitive.PopoverContentProps["align"];
+  /**
+   * Opts out of click-to-open. Set when the trigger's click already has a job (e.g. a Tracker row
+   * navigates on click) so the same gesture doesn't also open the card. Hover-open and
+   * keyboard-focus-open are unaffected — this suppresses only Radix's built-in click toggle.
+   */
+  disableClickOpen?: boolean;
   children: ReactNode;
 }
 
@@ -105,6 +118,7 @@ export function RichCard({
   openDelay = DEFAULT_OPEN_DELAY_MS,
   side = "bottom",
   align = "center",
+  disableClickOpen = false,
   children,
 }: RichCardProps) {
   const [open, setOpenState] = useState(false);
@@ -187,6 +201,7 @@ export function RichCard({
     open,
     side,
     align,
+    disableClickOpen,
     openedByPointerRef,
     suppressNextTriggerFocusRef,
     scheduleOpen,
@@ -244,10 +259,14 @@ export const RichCardTrigger = forwardRef<
         richCard.cancelScheduledOpen();
         richCard.openViaFocus();
       })}
-      onClick={composeHandlers<React.MouseEvent<HTMLButtonElement>>(onClick, () => {
+      onClick={composeHandlers<React.MouseEvent<HTMLButtonElement>>(onClick, (event) => {
         pointerActiveRef.current = false;
         richCard.openedByPointerRef.current = false;
         richCard.cancelScheduledOpen();
+        // Radix's own Trigger composes ITS click-toggle after this handler and skips it once
+        // the event is marked defaultPrevented (see RichCard's docblock) — this is the only line
+        // `disableClickOpen` adds.
+        if (richCard.disableClickOpen) event.preventDefault();
       })}
       {...props}
     />

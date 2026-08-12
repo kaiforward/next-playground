@@ -195,6 +195,78 @@ describe("RichCard — exclusivity", () => {
   });
 });
 
+describe("RichCard — disableClickOpen suppresses only the click-to-open path", () => {
+  // Click-to-open itself has no dedicated test elsewhere in this file (renderCard()'s trigger has
+  // never been clicked above) — these three cases close that gap from the opt-out side: a plain
+  // click does open by default, `disableClickOpen` suppresses exactly that and nothing else, and
+  // the row's own click handler still runs either way (the opt-out exists FOR that handler).
+
+  it("without the opt-out, a click opens the card (the behaviour being opted out of)", async () => {
+    const { user } = setup();
+    renderCard();
+    await user.click(screen.getByRole("button", { name: "System row" }));
+    expect(await screen.findByRole("button", { name: "Unpin" })).toBeInTheDocument();
+  });
+
+  it("with the opt-out, a click reaches the trigger's own handler but never opens the card", async () => {
+    const { user } = setup();
+    const onRowClick = vi.fn();
+    render(
+      <RichCard openDelay={OPEN_DELAY} disableClickOpen>
+        <RichCardTrigger>
+          <button type="button" onClick={onRowClick}>
+            System row
+          </button>
+        </RichCardTrigger>
+        <RichCardContent>
+          <p>System vitals</p>
+        </RichCardContent>
+      </RichCard>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "System row" }));
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    // Waited past what would have been the open moment for a click (which, unlike hover, has no
+    // delay at all) — confirms this is suppression, not a timing accident.
+    await wait(50);
+    expect(screen.queryByText("System vitals")).not.toBeInTheDocument();
+  });
+
+  it("with the opt-out, hover still opens the card after openDelay", async () => {
+    const { user } = setup();
+    render(
+      <RichCard openDelay={OPEN_DELAY} disableClickOpen>
+        <RichCardTrigger>
+          <button type="button">System row</button>
+        </RichCardTrigger>
+        <RichCardContent>
+          <p>System vitals</p>
+        </RichCardContent>
+      </RichCard>,
+    );
+
+    await user.hover(screen.getByRole("button", { name: "System row" }));
+    expect(await screen.findByText("System vitals")).toBeInTheDocument();
+  });
+
+  it("with the opt-out, keyboard focus still opens the card", async () => {
+    const { user } = setup();
+    render(
+      <RichCard openDelay={OPEN_DELAY} disableClickOpen>
+        <RichCardTrigger>
+          <button type="button">System row</button>
+        </RichCardTrigger>
+        <RichCardContent>
+          <p>System vitals</p>
+        </RichCardContent>
+      </RichCard>,
+    );
+
+    await user.tab();
+    expect(await screen.findByText("System vitals")).toBeInTheDocument();
+  });
+});
+
 describe("RichCard — openDelay guards against a passing pointer", () => {
   it("a pointer that enters and leaves before openDelay elapses never opens the card", async () => {
     const { user } = setup();
