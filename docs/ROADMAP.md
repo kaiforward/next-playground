@@ -36,12 +36,14 @@ both rows start from.
 become alert-bar categories rather than a parallel scrolling list — one surface for "look at this",
 not two. Don't re-propose the feed without a case for what it holds that an alert cannot.
 
-**Open: what to call the row-1 surface.** "Outliner" is borrowed twice over (Paradox took it from 3D
-and document software, where it means a scene tree) and means nothing to a player who hasn't played
-those games. Candidate on the table: **Watchlist** — plain, and it does design work by making clear at
-a glance that it is not a problem list. Not settled; the row uses "outliner" as a placeholder.
+The row-1 surface is called the **Tracker**. Not "outliner" — that is borrowed twice over (Paradox took
+it from 3D and document software, where it means a scene tree) and means nothing to a player who
+hasn't played those games. Not "watchlist" either: its nearest synonyms are blacklist and no-fly list,
+which is the wrong reading entirely. "Tracker" carries the quest-tracker sense players already know —
+a list of things you chose to follow, showing live progress.
 
-1. **[M] The outliner — the things the player is watching.** A pinnable side panel holding what the
+1. **[M] The Tracker — the things the player is watching.** Spec: [tracker.md](./planned/tracker.md).
+   A pinnable side panel holding what the
    player wants to keep an eye on, never what is wrong. Three contents to start: **player-pinned
    systems** (a star affordance on the system panel, as Victoria 3 puts one on many tabs), the
    **construction queue's funded front** — the items actually drawing from the pool plus a count for
@@ -81,8 +83,9 @@ a glance that it is not a problem list. Not settled; the row uses "outliner" as 
    estimate: the **safe transit area** (not closing while the cursor travels diagonally toward the
    card — HoverCard has a grace-area implementation this gives up), and **suppressing Popover's
    focus-on-open for hover opens** while keeping it for click and keyboard opens.
-   *Next step:* spec the outliner and the card primitive together, then `/build-plan`. No
-   `/spec-review` — no cross-mechanic surface; it is a read path plus one player-state field.
+   *Next step:* the HTML prototype pass the spec is waiting on (row density, the card, how the
+   Tracker and the map controls dock divide the right edge), then `/build-plan`. No `/spec-review` —
+   no cross-mechanic surface; it is a read path plus one player-state field.
    *Don't:* make the construction entry a list of systems-with-active-projects. That is a per-place
    list sitting next to the per-place pinned-systems list and duplicates it; the queue avoids the
    collision precisely because it is a per-resource read (where the pool is going). Don't render every
