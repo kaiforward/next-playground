@@ -1,10 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { clamp, median, quantile, weightedMean } from "@/lib/utils/math";
+import { clamp, median, progressWidthPct, quantile, weightedMean } from "@/lib/utils/math";
 
 describe("clamp", () => {
-  // The Tracker's progress bar width is `clamp(progress, 0, 100)%`. Its only observable there is a
-  // style attribute, which jsdom cannot honestly verify — so the bounds are pinned here instead,
-  // per the component-test convention's own escape hatch.
   it("returns the value untouched when it is already inside the bounds", () => {
     expect(clamp(42, 0, 100)).toBe(42);
   });
@@ -20,6 +17,26 @@ describe("clamp", () => {
   it("is inclusive at both bounds", () => {
     expect(clamp(0, 0, 100)).toBe(0);
     expect(clamp(100, 0, 100)).toBe(100);
+  });
+});
+
+describe("progressWidthPct", () => {
+  // TrackerRow's progress track renders `${progressWidthPct(progress)}%` as a style attribute,
+  // which jsdom cannot honestly verify (no layout engine) — so the width maths is pinned here
+  // instead, per the component-test convention's own escape hatch.
+
+  it("maps a mid-range fraction to its percentage — the exact bug this fixes: reading a fraction as a percentage rendered 0.55%, not 55%", () => {
+    expect(progressWidthPct(0.55)).toBeCloseTo(55, 10);
+  });
+
+  it("maps the bounds: 0 to 0, 1 to 100", () => {
+    expect(progressWidthPct(0)).toBe(0);
+    expect(progressWidthPct(1)).toBe(100);
+  });
+
+  it("clamps out-of-range input at both ends rather than drawing a fill past 100% or below 0", () => {
+    expect(progressWidthPct(1.5)).toBe(100);
+    expect(progressWidthPct(-0.3)).toBe(0);
   });
 });
 

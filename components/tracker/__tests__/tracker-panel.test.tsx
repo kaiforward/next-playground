@@ -162,6 +162,56 @@ describe("TrackerPanel — the waiting count is a quiet line, present only when 
   });
 });
 
+describe("TrackerPanel — the Building section caps at 10 rows, keeping queue order", () => {
+  function manyBuildRows(n: number): TrackerBuildRow[] {
+    return Array.from({ length: n }, (_, i) => buildRow(`sys-${i}`, `System ${i}`, 10));
+  }
+
+  it("renders exactly 10 rows and states how many more are funded when there are more than 10", () => {
+    trackerData = { pinned: [], building: manyBuildRows(13), waitingCount: 5, colonising: [] };
+    render(<TrackerPanel />);
+
+    expect(screen.getAllByRole("button", { name: /Shipyard L2/ })).toHaveLength(10);
+    // The two counts stay distinct: 3 funded-but-hidden by the cap, 5 not funded at all.
+    expect(screen.getByText("3 more funded this cycle, not shown")).toBeInTheDocument();
+    expect(screen.getByText("5 more waiting on the pool")).toBeInTheDocument();
+  });
+
+  it("renders no 'more funded' phrasing at all when 10 or fewer rows are funded", () => {
+    trackerData = { pinned: [], building: manyBuildRows(10), waitingCount: 0, colonising: [] };
+    render(<TrackerPanel />);
+
+    expect(screen.getAllByRole("button", { name: /Shipyard L2/ })).toHaveLength(10);
+    expect(screen.queryByText(/more funded/)).not.toBeInTheDocument();
+  });
+
+  it("keeps queue order when capping — the first 10 of the array, not re-sorted by name or progress", () => {
+    // Deliberately scrambled relative to both id/name order and progress order, so a cap that
+    // sorted (by name, by id, or by progress, ascending or descending) would reorder this and the
+    // omitted 11th row would not be the one actually last in the queue.
+    const rows: TrackerBuildRow[] = [
+      buildRow("sys-f", "Fyords", 40),
+      buildRow("sys-b", "Bexley", 90),
+      buildRow("sys-j", "Jonestown", 10),
+      buildRow("sys-a", "Aurora", 60),
+      buildRow("sys-h", "Halcyon", 20),
+      buildRow("sys-c", "Cordoba", 75),
+      buildRow("sys-k", "Kepler", 5),
+      buildRow("sys-d", "Delta", 55),
+      buildRow("sys-i", "Ionia", 33),
+      buildRow("sys-e", "Echo", 80),
+      buildRow("sys-g", "Gamma", 15), // 11th — must be the one omitted
+    ];
+    trackerData = { pinned: [], building: rows, waitingCount: 0, colonising: [] };
+    render(<TrackerPanel />);
+
+    const renderedIds = Array.from(document.querySelectorAll("[data-system-id]")).map((el) =>
+      el.getAttribute("data-system-id"),
+    );
+    expect(renderedIds).toEqual(rows.slice(0, 10).map((r) => r.systemId));
+  });
+});
+
 describe("TrackerRow — a zero-progress row still shows its track", () => {
   it("progress 0 renders the track and its fill element, not nothing", () => {
     const { container } = render(
@@ -181,7 +231,7 @@ describe("TrackerRow — a zero-progress row still shows its track", () => {
     // Existence only, which is the whole claim: a falsy `progress &&` guard would render neither
     // element at progress 0. The fill's WIDTH is deliberately not asserted — jsdom has no layout
     // engine, so a width assertion would prove only that a string reached a style attribute. The
-    // width maths lives in `clamp`, tested in node.
+    // width maths lives in `progressWidthPct`, tested in node.
     expect(fill).not.toBeNull();
   });
 });

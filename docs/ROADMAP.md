@@ -338,6 +338,18 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   it. Needs an interaction design pass — this is the third goods-bearing surface, so it must earn
   its place against the needs ledger and the industry roster rather than duplicating them.
   *Don't:* rebuild it as a price table — cycles of cover is the unit, price is a secondary read.
+- **[M] A full construction screen — every active project, not just the front.** The Tracker caps its
+  Building section at 10 rows, because a real faction runs ~44 funded builds at once and a panel meant
+  to be scanned cannot carry them. The capped rows and the queue behind the front are both summarised
+  as counts, so there is currently **nowhere to see the whole queue** — the per-system Industry tab
+  shows one system's builds, and the faction construction card shows systems-with-counts, neither of
+  which is the full list. Wanted: a sortable, filterable view of every open project across the faction
+  with its progress, funding rate and ETA. Surfaced by the owner while running the Tracker in a real
+  game (2026-08-12).
+  *Next step:* decide whether it is a faction-panel tab or its own route before any layout work —
+  it competes with the Territory tab, which the alert bar also wants as a host.
+  *Don't:* rebuild it as a second Tracker. The Tracker answers "where is my pool going right now";
+  this answers "show me everything", and the two want different orderings and different densities.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a

@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { RichCard, RichCardContent, RichCardTrigger } from "@/components/ui/rich-card";
-import { clamp } from "@/lib/utils/math";
+import { progressWidthPct } from "@/lib/utils/math";
 
 /** One icon-plus-number figure on a row — population's person icon, stability's colour swatch
  *  beside its value. `label` never renders visibly (the row stays one line); it exists so the
@@ -27,8 +27,10 @@ export interface TrackerRowProps {
   systemId: string;
   name: string;
   figures: TrackerFigure[];
-  /** 0-100. Renders the progress track whenever defined, including 0 — a stalled project stays
-   *  visible rather than rendering nothing. */
+  /** Fraction in [0,1] — matches `progressOf` (`lib/engine/construction-readout.ts`) and every
+   *  other progress consumer in the codebase; the ×100 conversion happens at render time via
+   *  `progressWidthPct`. Renders the progress track whenever defined, including 0 — a stalled
+   *  project stays visible rather than rendering nothing. */
   progress?: number;
   /** Copper for build progress, amber for colony progress — cosmetic only. Required alongside
    *  `progress` to pick a fill colour; a `progress` with no `tone` still draws the track. */
@@ -92,7 +94,7 @@ export function TrackerRow({ systemId, name, figures, progress, tone, onActivate
         <div aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-surface-active">
           <span
             className="block h-full"
-            style={{ width: `${clamp(progress, 0, 100)}%`, backgroundColor: fillColor }}
+            style={{ width: `${progressWidthPct(progress)}%`, backgroundColor: fillColor }}
           />
         </div>
       )}

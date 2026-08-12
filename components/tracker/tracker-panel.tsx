@@ -10,11 +10,18 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { StatList, StatRow } from "@/components/ui/stat-row";
+import { progressWidthPct } from "@/lib/utils/math";
 import { PersonIcon } from "@/components/ui/icons";
 import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row";
 import { stabilityRampColor } from "@/lib/utils/stability";
 import { formatPeople } from "@/lib/utils/format";
 import type { TrackerBuildRow, TrackerColonyRow, TrackerPinnedRow } from "@/lib/types/api";
+
+/** Building-row display cap (docs/planned/tracker.md → "Rows and the card": a dozen rows are
+ *  scannable, hundreds are not). The funded front can run to dozens of parallel projects in a real
+ *  game; only the first `BUILDING_ROW_CAP` in queue order render, and the rest are named in the
+ *  summary line rather than dropped silently. */
+const BUILDING_ROW_CAP = 10;
 
 /**
  * The Tracker panel (docs/active/gameplay/tracker.md) — pinned systems, the player faction's
@@ -82,7 +89,7 @@ function TrackerPanelContent() {
 
       <TrackerSection title="Building" count={data.building.length} emptyMessage="Nothing funded this cycle.">
         <ul>
-          {data.building.map((row) => (
+          {data.building.slice(0, BUILDING_ROW_CAP).map((row) => (
             <TrackerRow
               key={row.systemId}
               systemId={row.systemId}
@@ -95,6 +102,14 @@ function TrackerPanelContent() {
             />
           ))}
         </ul>
+        {/* Two distinct counts, deliberately not merged into one figure: rows still being funded
+            this cycle but hidden by the display cap, versus projects the pool hasn't reached at
+            all. Collapsing them would hide which is true of any given hidden project. */}
+        {data.building.length > BUILDING_ROW_CAP && (
+          <p className="px-3 py-1.5 text-[10px] text-text-tertiary">
+            {data.building.length - BUILDING_ROW_CAP} more funded this cycle, not shown
+          </p>
+        )}
         {data.waitingCount > 0 && (
           <p className="px-3 py-1.5 text-[10px] text-text-tertiary">
             {data.waitingCount} more waiting on the pool
@@ -199,7 +214,9 @@ function ProjectCard({ row, kind }: { row: TrackerBuildRow | TrackerColonyRow; k
           <span className="text-text-primary">{row.label}</span>
         </StatRow>
         <StatRow label="Progress">
-          <span className="font-mono text-text-primary">{Math.round(row.progress)}%</span>
+          {/* Same tested helper the bar's width uses — one definition of fraction → percent, so the
+              card's number and the bar it describes can never drift apart or repeat the units bug. */}
+          <span className="font-mono text-text-primary">{Math.round(progressWidthPct(row.progress))}%</span>
         </StatRow>
         <StatRow label="ETA">
           <span className="font-mono text-text-primary">
