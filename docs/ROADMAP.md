@@ -36,11 +36,21 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    [player-seat.md](./active/gameplay/player-seat.md) +
    [player-seat-purse.md](./active/gameplay/player-seat-purse.md)) and a **systems view ordered by
    need** — a priority ranking over issues and opportunities, so the player can scan rather than
-   hunt. The ranking is the harder half and the one with no design at all.
-   The open design question, and the reason this is not a small item: EU5 / Crusader Kings-style
-   alerts are the reference Kai likes, and they are also widely criticised for nagging — constant
-   pop-ups the player learns to dismiss. Inform without irritating; that is the thing to solve, not
-   a detail to settle during implementation.
+   hunt. The ranking is the harder half and the one with no design at all. Today's faction
+   **Territory** tab is a flat name + economy-type list
+   (`app/(game)/@panel/factions/[factionId]/territory/page.tsx`) — the natural site for the ranked
+   view, or the thing it replaces.
+   **Four principles settled 2026-08-12** from a read of how EU5 and Victoria 3 do it; reasoning and
+   sources in memory `design-attention-layer-inputs`, which the design pass starts from:
+   persistent state and discrete transition are **different surfaces** (a ranked list and a feed,
+   Victoria 3's outliner/situation split); **quiet successes, loud warnings** — automation-on
+   silences what the planner handles but never what it tried and could not do; alert on **unresolved
+   need**, not raw state; and prefer **intent visibility** (the planner declaring what it wants to
+   build next and where, on demand) over a notification.
+   **A third read with no surface at all: nothing on the map says where a colony is forming.** The
+   genre gets this nearly free because its map starts painted; ours appears out of black. Kai's
+   leaning — colonisation automation defaults **off**, AI founding slowed enough that a player can
+   keep up. This row owns the surface; the pacing lever is item 2 below.
    **Carries `RATION_EXIT_EPS`**, deferred here when the presentation layer shipped: the hysteresis has
    no surviving justification until a log exists. Its other two rationales are dead — the per-good
    regime chips it was authored for were dropped, and visual flapping does not occur (bands are
@@ -54,8 +64,10 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    *Next step:* design pass on the ranking and the notification model before any spec — the
    irritation problem is a design problem, and the two named reads are the first concrete test of
    whatever ranking comes out.
-   *Don't:* ship a feed that fires per event without a ranking behind it. That is the failure mode
-   the genre is criticised for, and the reason this row is not just "add alerts".
+   *Don't:* ship a feed that fires per event without a ranking behind it, and don't alert on a
+   persistent state. The precise genre complaint is that dismissing an alert for a still-true state
+   makes it reappear instantly and crowd out the useful ones — that is why this row is not just
+   "add alerts".
 
 2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
@@ -70,6 +82,15 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    for terraforming or technology finds only event and faction flavour text. "Gated behind
    technology" is therefore a new system, not a constant change, and the sequencing of the two is
    itself part of the design.
+   **A second pacing lever, from the EU5 read (2026-08-12): price the charter by distance and by
+   concurrent-colony count.** EU5 scales a colonial charter's cost with population, distance and how
+   many charters you already hold, plus a monthly upkeep per active colony, and caps expeditions at
+   roughly one per two years. Ours is `max(CHARTER_FEE_MIN, CHARTER_FEE_SPEND_MULT × maintenanceBill)`
+   (`lib/constants/colonisation.ts:81-89`) — it scales with faction *size* only, so neither distance
+   nor concurrency is priced. Both are cost-shaped ways to slow expansion without making systems
+   dead, and they compose with (rather than replace) the viability cut. Overlaps the control-shaped
+   **claim pricing** item in [player-seat-roadmap.md](./planned/player-seat-roadmap.md) — settle the
+   two together, not twice.
    *Next step:* `/measure` how many systems are viable at founding today and how fast the galaxy
    actually colonises, before touching any constant.
    *Don't:* buy scarcity by making systems dead. Barren-but-alive is a deliberate decision — rocky
@@ -155,10 +176,21 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still
   lack the goods). The former blocker — `demandRate` double-purposed as pricing anchor and logistics
   deficit anchor — cleared with #211/#212 and the `TARGET_COVER` role split: pricing keeps the floored
-  `demandRate` denominator, logistics and founding read real demand.
+  `demandRate` denominator, logistics and founding read real demand. Unlocks the strata-as-private-builder
+  mechanic on the social-strata row above — wealth pops hold is what a private builder spends.
 - **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
   their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
   its reference); nothing breaks if it never lands.
+  **Also carries the strata-as-private-builder mechanic** (scoped 2026-08-12; inputs in memory
+  `design-strata-private-builder`): in both reference games the strata are a *second builder* that is
+  neither the player nor automation — Victoria 3's investment pool splits the construction queue into
+  private and government by economic law; EU5's estates build regardless of the player's automation
+  settings and their builds cannot be cancelled. The interesting axis is **ownership, not output** —
+  same buildings and goods, but the returns bypass the treasury and tearing one down costs political
+  standing. Gated on real pop wealth (the row below, and the purse's Stage 3 monetisation staging),
+  since a stratum cannot invest what it does not hold.
+  *Don't:* give the private builder its own construction pool without deciding how it shares the
+  physical ceiling — a second unexamined pool breaks "money is fuel, not capacity".
 - **[S] Loose ends out of scope for band reconciliation, unpicked-up since** — noted but not designed:
   a legible EU5-style reserve/stockpile mechanic (visible policy-set stockpile, crisis
   release/requisition, war stores, rationed by access) — ties to purse Stage 2-3 monetisation and
