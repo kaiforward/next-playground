@@ -71,4 +71,11 @@ The runtime is packaging **path A** (in-process singleton) held to **path-B puri
 
 ## Not yet implemented
 
-Planned, not built (see [grand-strategy-vision.md](../../planned/grand-strategy-vision.md)): the rest of the player seat — direct control verbs; treasury/budgets and build orders; small-cores world-gen and colonisation; fog of war; the map-first UI redesign; time fiction; desktop (Electron/Tauri) packaging; the worker-side engine extraction. Ship travel, the fleet models, and the `ship-arrivals` processor exist in the backend, but world-gen seeds no ships, so they stay dormant until player fleets are built.
+Planned, not built (see [grand-strategy-vision.md](../../planned/grand-strategy-vision.md)):
+
+- **Fog of war** — every system is fully visible; see "No fog of war" above.
+- **Time fiction** — a tick has no defined in-fiction span. What is wanted first is a shared measuring language (wall-clock per speed setting, the 24-tick cycle as the unit pacing arguments are made in), not a design of game-time itself.
+- **Desktop (Electron/Tauri) packaging** and the **worker-side engine extraction** — the two halves of packaging path B. Both are on the roadmap as one item, gated on deciding what replaces the client query layer.
+- **Player fleets.** Ship travel, the fleet models and the `ship-arrivals` processor exist in the backend, but world-gen seeds no ships (`ships: []`), so they stay dormant until fleets are built.
+
+What this list used to claim, and no longer does — all four have shipped: the player seat's direct control verbs ([player-seat.md](../gameplay/player-seat.md)); the treasury, budget bands and build orders ([player-seat-purse.md](../gameplay/player-seat-purse.md)); small-cores world-gen and colonisation (every faction opens as one prefab homeworld in empty space — [colonisation.md](../gameplay/colonisation.md)); and the map-first UI, which is the shipped shape of the game — a live map with non-blocking docked drawers over it ([detail-panels.md](../design-system/detail-panels.md)).
