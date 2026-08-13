@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TrackerPanel } from "@/components/tracker/tracker-panel";
 import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row";
 import type { AtlasData } from "@/lib/types/game";
 import type { TrackerBuildRow, TrackerData, TrackerPinnedRow } from "@/lib/types/api";
+import type { PinInput } from "@/lib/schemas/player-pins";
 import { DEFAULT_TRACKER_SECTIONS, type TrackerSections } from "@/lib/hooks/use-tracker-sections";
 
 // TrackerPanel owns three suspense-backed hooks (useTracker, useAtlas) and a mutation
@@ -15,6 +16,24 @@ import { DEFAULT_TRACKER_SECTIONS, type TrackerSections } from "@/lib/hooks/use-
 
 const push = vi.fn();
 const setPinMutate = vi.fn();
+
+/** What the real `useSetSystemPin` does to the panel: the write invalidates the tracker query, the
+ *  row leaves `pinned`, and the `<li>`, its trigger and the card the Unpin button sits in all
+ *  unmount together. A bare `vi.fn()` over a fixed `trackerData` leaves the row on screen, so
+ *  every assertion after it describes a state the real app never reaches — the stranded focus this
+ *  models is invisible to a mock that keeps the row. Tests drive the re-render themselves, since
+ *  nothing here is connected to a QueryClient. */
+function unpinRemovesTheRow() {
+  setPinMutate.mockImplementation(({ systemId, pinned }: PinInput) => {
+    if (pinned) return;
+    const remaining = trackerData.pinned.filter((row) => row.systemId !== systemId);
+    trackerData = {
+      ...trackerData,
+      pinned: remaining,
+      pinnedSystemIds: remaining.map((row) => row.systemId),
+    };
+  });
+}
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn() }),
@@ -116,7 +135,7 @@ function buildRow(
 
 beforeEach(() => {
   push.mockClear();
-  setPinMutate.mockClear();
+  setPinMutate.mockReset();
   trackerData = tracker();
 });
 
@@ -126,6 +145,164 @@ beforeEach(() => {
 function renderPanel(sections: TrackerSections = DEFAULT_TRACKER_SECTIONS) {
   return render(<TrackerPanel sections={sections} settingsOpen={false} onToggleSettings={vi.fn()} />);
 }
+
+describe("TrackerPanel — Tab walks the list of rows", () => {
+  it("Tab moves from one row to the next, and does not strand focus inside the card a row opens", async () => {
+    // The list is the thing a keyboard user navigates. A row opens its card on focus — but if the
+    // card TAKES focus, the next Tab has nowhere to go: the card is portalled to the end of the
+    // document, so every remaining row is behind it in tab order and focus sticks on whatever the
+    // card contains. Two rows is the smallest fixture that can tell "walks the list" from "stuck".
+    const user = userEvent.setup();
+    trackerData = tracker({
+      pinned: [pinnedRow("sys-a", "Sunnyvale"), pinnedRow("sys-b", "Rigel")],
+    });
+    renderPanel();
+
+    const first = screen.getByRole("button", { name: /Sunnyvale/ });
+    const second = screen.getByRole("button", { name: /Rigel/ });
+
+    first.focus();
+    expect(first).toHaveFocus(); // the row keeps focus; the card opens beside it, not around it
+    // The card did open — this is the behaviour the fix must not trade away.
+    expect(await screen.findByText("Provisioned")).toBeInTheDocument();
+
+    await user.tab();
+    expect(second).toHaveFocus();
+  });
+
+  it("a keyboard user enters a row's card and Escape lands them back on that row", async () => {
+    // The round trip the whole convention exists for: the card is a real place for a keyboard
+    // user to go, and leaving it does not strand them in a portalled card at the end of the
+    // document, or on the row above.
+    const user = userEvent.setup();
+    trackerData = tracker({
+      pinned: [pinnedRow("sys-a", "Sunnyvale"), pinnedRow("sys-b", "Rigel")],
+    });
+    renderPanel();
+
+    // Walked from the top of the panel rather than by focusing a row directly: the settings
+    // toggle is the panel's first tabbable, then the rows in order.
+    // Captured before any card is open — once one is, its "Unpin <name>" button matches the same
+    // name pattern as the row it belongs to.
+    const first = screen.getByRole("button", { name: /Sunnyvale/ });
+    const second = screen.getByRole("button", { name: /Rigel/ });
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Tracker settings" })).toHaveFocus();
+    await user.tab();
+    expect(first).toHaveFocus();
+    await user.tab();
+    expect(second).toHaveFocus();
+
+    // ArrowDown enters the card the row opened.
+    await user.keyboard("{ArrowDown}");
+    expect(await screen.findByRole("button", { name: "Unpin Rigel" })).toHaveFocus();
+
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Unpin Rigel" })).not.toBeInTheDocument();
+    });
+    expect(second).toHaveFocus();
+  });
+});
+
+describe("TrackerPanel — unpinning from a card takes the row out from under the user", () => {
+  // Every case here presses Unpin from INSIDE the card, which is where the keyboard user is: the
+  // row, its trigger and the card all unmount on the mutation, so the trigger Radix would hand
+  // focus back to is gone and focus falls to the document body — the next Tab restarts from the
+  // top of the page. The panel owns the handoff because only it knows the list.
+
+  /** Enters row `name`'s card by keyboard and presses its Unpin button, then plays the mutation's
+   *  re-render, which is what actually removes the row. */
+  async function unpinFromCard(
+    user: ReturnType<typeof userEvent.setup>,
+    rerender: (ui: React.ReactElement) => void,
+    row: HTMLElement,
+    systemName: string,
+  ) {
+    row.focus();
+    await user.keyboard("{ArrowDown}");
+    expect(await screen.findByRole("button", { name: `Unpin ${systemName}` })).toHaveFocus();
+    await user.keyboard("{Enter}");
+    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: `Unpin ${systemName}` })).not.toBeInTheDocument();
+    });
+  }
+
+  it("focus lands on the next pinned row", async () => {
+    const user = userEvent.setup();
+    unpinRemovesTheRow();
+    trackerData = tracker({
+      pinned: [pinnedRow("sys-a", "Sunnyvale"), pinnedRow("sys-b", "Rigel")],
+    });
+    const { rerender } = renderPanel();
+
+    const first = screen.getByRole("button", { name: /Sunnyvale/ });
+    const second = screen.getByRole("button", { name: /Rigel/ });
+    await unpinFromCard(user, rerender, first, "Sunnyvale");
+
+    // First argument only: the panel also passes per-call mutation callbacks, which are its own
+    // bookkeeping and not part of what the write says.
+    expect(setPinMutate.mock.calls[0]?.[0]).toEqual({ systemId: "sys-a", pinned: false });
+    expect(screen.queryByRole("button", { name: /Sunnyvale/ })).not.toBeInTheDocument();
+    // Carrying on down the list from where the removed row was, not from the top of the document.
+    expect(second).toHaveFocus();
+  });
+
+  it("falls back to the previous row when the row unpinned was the last one", async () => {
+    const user = userEvent.setup();
+    unpinRemovesTheRow();
+    trackerData = tracker({
+      pinned: [pinnedRow("sys-a", "Sunnyvale"), pinnedRow("sys-b", "Rigel")],
+    });
+    const { rerender } = renderPanel();
+
+    const first = screen.getByRole("button", { name: /Sunnyvale/ });
+    const last = screen.getByRole("button", { name: /Rigel/ });
+    await unpinFromCard(user, rerender, last, "Rigel");
+
+    // There is no next row to move on to, so the list's own end takes it rather than nothing.
+    expect(first).toHaveFocus();
+  });
+
+  it("falls back to the panel header when the section is left empty", async () => {
+    const user = userEvent.setup();
+    unpinRemovesTheRow();
+    trackerData = tracker({ pinned: [pinnedRow("sys-a", "Sunnyvale")] });
+    const { rerender } = renderPanel();
+
+    const only = screen.getByRole("button", { name: /Sunnyvale/ });
+    await unpinFromCard(user, rerender, only, "Sunnyvale");
+
+    // No row left anywhere in the section — the header's settings toggle is the panel's own first
+    // tabbable and is present whatever the sections are showing, so a Tab from here walks the
+    // Tracker rather than the whole document.
+    expect(screen.getByText("No pinned systems yet.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tracker settings" })).toHaveFocus();
+  });
+});
+
+describe("TrackerPanel — a card is a named dialog, not a bare one", () => {
+  it("a pinned row's card is named for its system, a project row's for its project", async () => {
+    const user = userEvent.setup();
+    trackerData = tracker({
+      pinned: [pinnedRow("sys-a", "Sunnyvale")],
+      building: [buildRow("sys-b", "Rigel Yards", 0.5)],
+    });
+    renderPanel();
+
+    // ArrowDown puts a screen-reader user inside the card, which is a `dialog`. Unnamed, all they
+    // would hear on arrival is "dialog" — the card's subject has to be in its accessible name.
+    await user.tab(); // header settings toggle
+    await user.tab(); // the pinned row
+    expect(await screen.findByRole("dialog", { name: "Sunnyvale vitals" })).toBeInTheDocument();
+
+    await user.tab(); // the build row — its card takes over
+    expect(
+      await screen.findByRole("dialog", { name: "Building: Rigel Yards · Shipyard L2" }),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("TrackerPanel — hiding a section removes its heading, not just its rows", () => {
   it("Building off: no 'Building — N' heading and no build row, while Pinned and Colonising still render", () => {
@@ -418,6 +595,7 @@ describe("TrackerRow — a zero-progress row still shows its track", () => {
         tone="build"
         onActivate={vi.fn()}
         card={<div>card</div>}
+        cardLabel="card"
       />,
     );
     const track = container.querySelector(".bg-surface-active");
@@ -451,6 +629,7 @@ describe("TrackerRow — the coming cycle's gain is drawn only when there is one
         tone="build"
         onActivate={vi.fn()}
         card={<div>card</div>}
+        cardLabel="card"
       />,
     );
     expect(segmentsOf(container)).toHaveLength(2);
@@ -467,6 +646,7 @@ describe("TrackerRow — the coming cycle's gain is drawn only when there is one
         tone="colony"
         onActivate={vi.fn()}
         card={<div>card</div>}
+        cardLabel="card"
       />,
     );
     expect(segmentsOf(container)).toHaveLength(1);
@@ -483,6 +663,7 @@ describe("TrackerRow — the coming cycle's gain is drawn only when there is one
         tone="build"
         onActivate={vi.fn()}
         card={<div>card</div>}
+        cardLabel="card"
       />,
     );
     expect(segmentsOf(container)).toHaveLength(1);
@@ -555,6 +736,7 @@ describe("TrackerRow — a pinned row's accessible name is built from what actua
         figures={figures}
         onActivate={vi.fn()}
         card={<div>card</div>}
+        cardLabel="card"
       />,
     );
 
