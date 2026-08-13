@@ -173,7 +173,24 @@ point cloud stays neutral slate.
   and strokes the faction-union outline. It replaced three near-identical stability/population/development layers.
 - **Perf guardrails.** `pixi-map-canvas.tsx` and `objects/system-object.ts` are large and perf-sensitive: object
   *creation* is frustum-gated (not just visibility), number `Text` is pooled rather than one-always-on-per-system,
-  and per-frame work is guarded by cheap dirty/zoom-band checks. See the map gotchas in `CLAUDE.md`.
+  and per-frame work is guarded by cheap dirty/zoom-band checks.
+
+## Gotchas
+
+Non-obvious traps on this surface. Read before touching the map or any WebGL code.
+
+- Map extent comes from the atlas (`meta.mapSize`), never an env — pass it explicitly to `systemToTile` /
+  `tileBounds` / `frustumToTiles`.
+- Pixi rasterizes small text and sharp corners as aliased mush, so map markers use rounded corners plus
+  zoom-gated text — a deliberate departure from Foundry's no-rounding rule, which is HTML-only.
+- Throttle (leading+trailing), not debounce, for Pixi-ticker → `setState`. Debounce never fires during a
+  continuous zoom.
+- Frustum-gate object *creation*, not just visibility — `SystemObject` is expensive; create only in-frustum,
+  batched per frame.
+- `frustumToTiles` max col/row uses `ceil(max / TILE_SIZE) - 1` (half-open, matching `systemToTile`).
+- Keep tick-scoped data on tick-keyed queries, never viewport-keyed — viewport keys cause flicker and redundant
+  calls on every pan.
+- Native `<dialog>` modal: never `m-0` / `inset-auto`, which breaks `showModal()` UA centering.
 
 ## Deferred / bookmarked
 
