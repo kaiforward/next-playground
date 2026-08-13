@@ -29,6 +29,27 @@ panel (system, faction, faction list, diplomacy, events, styleguide).
 Navigation (Events / Factions / Diplomacy), game speed + tick, and Save / Exit live in the top bar —
 there is no separate sidebar, and the top bar's center-left is left roomy for the future treasury strip.
 
+The **right** edge is the Tracker's rail — a flex column holding the Tracker panel above the map
+controls dock, with the Tracker's own settings panel opening to its left. See
+[tracker.md](../gameplay/tracker.md). The system panel's header action slot carries that surface's
+star pin toggle, beside the cadence countdown and "Show on Map".
+
+## Hover surfaces — two tiers
+
+- **Tooltip** (`components/ui/tooltip.tsx`, Radix Tooltip) — one-line legends and term definitions.
+  Non-interactive by design: its content is wired as `aria-describedby`, closes on pointer-leave, and
+  is not keyboard-reachable. Carries the app-wide dotted-underline affordance on text triggers.
+- **`RichCard`** (`components/ui/rich-card.tsx`, Radix **Popover**) — the second, richer tier, for
+  content with a table or a control in it. A popover rather than a hover-card specifically so the
+  content is keyboard-reachable; hover-cards are mouse-only by design. Opens on hover after a delay,
+  on keyboard focus, and on click; takes focus only on the click/keyboard paths, never on hover;
+  survives the cursor travelling from trigger to card; one open at a time. Consumers whose trigger
+  click already means something else opt out of click-to-open — the Tracker's rows do, because a row
+  click navigates.
+
+  Scoped to one level. Nested, pinnable deep tooltips and the concept glossary behind them are
+  planned, not built; migrating the existing plain tooltips onto `RichCard` is deferred with them.
+
 ## Vitals grid
 
 `VitalTile` / `VitalGrid` / `GhostVitalTile` (`components/ui/vital-tile.tsx`) are a reusable, N-up

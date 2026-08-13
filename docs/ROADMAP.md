@@ -24,76 +24,21 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-The attention layer — how the player finds what to do — is **two surfaces, built separately**, rows 1
-and 2 below. The split that separates them: an **outliner row is a thing** (it persists whether or not
-anything is wrong with it), an **alert-bar row is a condition** (it exists only while true and is
-cleared by fixing it). Settled 2026-08-12 against how EU5 and Victoria 3 do it — the four design
-principles, the genre sources and the reasoning are in memory `design-attention-layer-inputs`, which
-both rows start from.
+The attention layer — how the player finds what to do — is two surfaces. The first, the **Tracker**,
+has shipped: `docs/active/gameplay/tracker.md`. The second, the **alert bar**, is row 1 below.
+
+The split that separates them: a **Tracker row is a thing** (it persists whether or not anything is
+wrong with it), an **alert-bar row is a condition** (it exists only while true and is cleared by
+fixing it). Settled against how EU5 and Victoria 3 do it — the four design principles, the genre
+sources and the reasoning are in memory `design-attention-layer-inputs`, which the alert-bar row
+starts from.
 
 **A third surface was considered and dropped**: a separate dismissible feed of discrete events (the
 "situation log" of `player-seat-roadmap.md`). Events are conditions the player should act on, so they
 become alert-bar categories rather than a parallel scrolling list — one surface for "look at this",
 not two. Don't re-propose the feed without a case for what it holds that an alert cannot.
 
-The row-1 surface is called the **Tracker**. Not "outliner" — that is borrowed twice over (Paradox took
-it from 3D and document software, where it means a scene tree) and means nothing to a player who
-hasn't played those games. Not "watchlist" either: its nearest synonyms are blacklist and no-fly list,
-which is the wrong reading entirely. "Tracker" carries the quest-tracker sense players already know —
-a list of things you chose to follow, showing live progress.
-
-1. **[M] The Tracker — the things the player is watching.** Spec: [tracker.md](./planned/tracker.md).
-   A pinnable side panel holding what the
-   player wants to keep an eye on, never what is wrong. Three contents to start: **player-pinned
-   systems** (a star affordance on the system panel, as Victoria 3 puts one on many tabs), the
-   **construction queue's funded front** — the items actually drawing from the pool plus a count for
-   everything behind it — and **one row per colony forming**, auto-pinned and removed by completion
-   rather than by hand. Both queues show all work regardless of `origin`, autonomic or player.
-   This is the only surface that answers **where a colony is forming**; the map says nothing, and the
-   genre gets that nearly free because its map starts painted while ours appears out of black.
-   The cheaper of the two rows: half the data already ships on the faction construction card
-   (`components/construction/faction-construction-card.tsx:84`), which is outliner content on the
-   wrong surface, and the rest is pinning. It is also where **quiet successes** live — the answer to
-   watching an automated domain without an alert firing to say it is fine.
-   Carries its own show/hide settings panel, as row 2 does.
-
-   **Settled at the layout pass** (reasoning in memory `design-attention-layer-inputs`):
-   - **Right side**, sharing one absolute container with the map controls dock so the two divide the
-     vertical space; the left is taken by the system/faction drawers. Moving map modes to a
-     centre-bottom strip is a possible later redesign, not part of this row.
-   - **A star toggle in the system panel header**, via `DetailPanel`'s existing `headerAction` slot
-     (`app/(game)/@panel/system/layout.tsx:68`). A star, **not a pin** — that header's "Show on Map"
-     button already uses `MapPinIcon` to mean *locate*, and two pins would collide. The same star
-     unpins, which is the keyboard route.
-   - **Rows carry population and stability**, icon + number to save horizontal space.
-   - **A rich card per row** holding the vitals table and an unpin control.
-   - **Clicking a row pans, zooms and opens the relevant tab** — reusing the existing
-     `?focus=x,y&loc=N` mechanism (`app/(game)/@panel/system/layout.tsx:61-66`). Pinned system and
-     forming colony open Overview; a construction row opens Industry.
-   - **No dedupe** between pinned systems and forming colonies — separate lists, different purposes.
-   - Pins are player state, so they live in `world.player` beside the automation switches: a
-     **save-format bump**, not a pure-UI change.
-
-   **Blocked on a shared primitive this row builds first: a Popover-based rich card.** Radix's
-   HoverCard is documented as mouse-only ("the content will be inaccessible to keyboard users"), and
-   the call is not to exclude keyboard users when the accessible primitive is available — so the card
-   is built on Popover with hover-to-open added, rather than sometimes-HoverCard-sometimes-Popover.
-   Scoped to **one level** here; nesting stays with the deep-tooltips row in Unqueued/UI, which also
-   owns migrating the existing plain tooltips. Two costs that are not the "just add hover listeners"
-   estimate: the **safe transit area** (not closing while the cursor travels diagonally toward the
-   card — HoverCard has a grace-area implementation this gives up), and **suppressing Popover's
-   focus-on-open for hover opens** while keeping it for click and keyboard opens.
-   *Next step:* the HTML prototype pass the spec is waiting on (row density, the card, how the
-   Tracker and the map controls dock divide the right edge), then `/build-plan`. No `/spec-review` —
-   no cross-mechanic surface; it is a read path plus one player-state field.
-   *Don't:* make the construction entry a list of systems-with-active-projects. That is a per-place
-   list sitting next to the per-place pinned-systems list and duplicates it; the queue avoids the
-   collision precisely because it is a per-resource read (where the pool is going). Don't render every
-   project either — the Industry tab already carries per-system ghost rows.
-   *Later:* when pop wealth and the private builder land (memory `design-strata-private-builder`),
-   decide whether a stratum's own construction belongs in the player's queue at all.
-
-2. **[L] The alert bar — the conditions wanting a decision.** A top bar of alert categories ordered by
+1. **[L] The alert bar — the conditions wanting a decision.** A top bar of alert categories ordered by
    severity, carrying opportunities and decisions as well as faults (EU5's shape: red critical,
    yellow important, blue informational). **Ranking is by authored category tier, never a computed
    cross-domain score** — within a class, sort by that class's own natural measure (population pressed
@@ -143,14 +88,14 @@ a list of things you chose to follow, showing live progress.
    — dismissal is pointless because the condition is still true, so the alert returns instantly and
    crowds out the useful ones.
 
-3. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
    technologies exist. Kai's read is that this slows the simulation rather than breaking it.
    **A third lever, and the cheapest: colonisation automation defaults off**, with AI founding slowed
    enough that a player can reasonably keep up by hand (Kai, 2026-08-12). Settled alongside the
-   attention layer, which owns the *surface* for a forming colony (row 1); this row owns the pacing.
+   attention layer, whose Tracker owns the *surface* for a forming colony; this row owns the pacing.
    The knob already exists: `habitableFraction` is housing-per-space efficiency
    (`habitableSpace = generalSpace × habitableFraction`), and the expensive, low-yield
    specialist-habitation *building* was recorded as a hook at that same decision — see memory
@@ -365,16 +310,16 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
   as this system's second tier.
-  **The primitive lands with queue row 1** — a Popover-based rich card with hover-to-open, keyboard
+  **The primitive shipped with the Tracker** (`RichCard`) — a Popover-based rich card with hover-to-open, keyboard
   access and a safe transit area, scoped to one level. What stays here: **nesting** (a parent card must
   not close while a child is open — neither Radix primitive gives this, so it is custom either way),
   pinning, the glossary, and **migrating the existing plain Radix tooltips** onto the card, which is
-  deliberately deferred rather than done alongside row 1.
+  deliberately deferred rather than done alongside the Tracker.
   Design input worth not losing: Paradox tooltips **follow the cursor until you hold still, then latch**
   so you can move onto them. That is a legitimate alternative to a grace-area polygon and arguably
   simpler; decide between them at the prototype pass.
   *Don't:* design the nesting model before there is a real chain of descriptions to design against —
-  the shape follows the content, and row 1 needs only one level.
+  the shape follows the content, and the Tracker needed only one level.
 - **[S] Game-term glossary** — one doc defining the game's terms of art in plain language (pop = 1
   million people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as
   the single source tooltips and tutorials quote from. The nested-tooltips row's "cross-linking
