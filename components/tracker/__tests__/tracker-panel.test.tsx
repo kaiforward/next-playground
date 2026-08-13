@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TrackerPanel } from "@/components/tracker/tracker-panel";
 import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row";
@@ -126,6 +126,71 @@ beforeEach(() => {
 function renderPanel(sections: TrackerSections = DEFAULT_TRACKER_SECTIONS) {
   return render(<TrackerPanel sections={sections} settingsOpen={false} onToggleSettings={vi.fn()} />);
 }
+
+describe("TrackerPanel — Tab walks the list of rows", () => {
+  it("Tab moves from one row to the next, and does not strand focus inside the card a row opens", async () => {
+    // The list is the thing a keyboard user navigates. A row opens its card on focus — but if the
+    // card TAKES focus, the next Tab has nowhere to go: the card is portalled to the end of the
+    // document, so every remaining row is behind it in tab order and focus sticks on whatever the
+    // card contains. Two rows is the smallest fixture that can tell "walks the list" from "stuck".
+    const user = userEvent.setup();
+    trackerData = tracker({
+      pinned: [pinnedRow("sys-a", "Sunnyvale"), pinnedRow("sys-b", "Rigel")],
+    });
+    renderPanel();
+
+    const first = screen.getByRole("button", { name: /Sunnyvale/ });
+    const second = screen.getByRole("button", { name: /Rigel/ });
+
+    first.focus();
+    expect(first).toHaveFocus(); // the row keeps focus; the card opens beside it, not around it
+    // The card did open — this is the behaviour the fix must not trade away.
+    expect(await screen.findByText("Provisioned")).toBeInTheDocument();
+
+    await user.tab();
+    expect(second).toHaveFocus();
+  });
+
+  it("a keyboard user enters a row's card, unpins from it, and lands back on the row", async () => {
+    // The round trip the whole convention exists for: the card's unpin control is a real route
+    // for a keyboard user, not a mouse-only convenience, and using it does not leave them
+    // stranded in a portalled card at the end of the document.
+    const user = userEvent.setup();
+    trackerData = tracker({
+      pinned: [pinnedRow("sys-a", "Sunnyvale"), pinnedRow("sys-b", "Rigel")],
+    });
+    renderPanel();
+
+    // Walked from the top of the panel rather than by focusing a row directly: the settings
+    // toggle is the panel's first tabbable, then the rows in order.
+    // Captured before any card is open — once one is, its "Unpin <name>" button matches the same
+    // name pattern as the row it belongs to.
+    const first = screen.getByRole("button", { name: /Sunnyvale/ });
+    const second = screen.getByRole("button", { name: /Rigel/ });
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Tracker settings" })).toHaveFocus();
+    await user.tab();
+    expect(first).toHaveFocus();
+    await user.tab();
+    expect(second).toHaveFocus();
+
+    // ArrowDown enters the card the row opened.
+    await user.keyboard("{ArrowDown}");
+    const unpin = await screen.findByRole("button", { name: "Unpin Rigel" });
+    expect(unpin).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    expect(setPinMutate).toHaveBeenCalledWith({ systemId: "sys-b", pinned: false });
+
+    // Escape is the way back out, and it lands on the row that was entered — not on the row
+    // above, and not on the document body with the card gone.
+    await user.keyboard("{Escape}");
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Unpin Rigel" })).not.toBeInTheDocument();
+    });
+    expect(second).toHaveFocus();
+  });
+});
 
 describe("TrackerPanel — hiding a section removes its heading, not just its rows", () => {
   it("Building off: no 'Building — N' heading and no build row, while Pinned and Colonising still render", () => {

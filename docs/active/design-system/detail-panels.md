@@ -42,13 +42,36 @@ star pin toggle, beside the cadence countdown and "Show on Map".
 - **`RichCard`** (`components/ui/rich-card.tsx`, Radix **Popover**) — the second, richer tier, for
   content with a table or a control in it. A popover rather than a hover-card specifically so the
   content is keyboard-reachable; hover-cards are mouse-only by design. Opens on hover after a delay,
-  on keyboard focus, and on click; takes focus only on the click/keyboard paths, never on hover;
-  survives the cursor travelling from trigger to card; one open at a time. Consumers whose trigger
-  click already means something else opt out of click-to-open — the Tracker's rows do, because a row
-  click navigates.
+  on keyboard focus, and on click; survives the cursor travelling from trigger to card; one open at a
+  time. Consumers whose trigger click already means something else opt out of click-to-open — the
+  Tracker's rows do, because a row click navigates.
 
   Scoped to one level. Nested, pinnable deep tooltips and the concept glossary behind them are
   planned, not built; migrating the existing plain tooltips onto `RichCard` is deferred with them.
+
+### The keyboard enter/exit convention
+
+Every rich card in the game obeys one contract, because triggers come in lists and a card is
+portalled to the end of the document — a card that takes focus puts every later trigger behind
+itself in tab order, and the list stops being walkable.
+
+- **Opening never moves focus.** Hover, click and keyboard focus all leave focus on the trigger.
+  Opening a card and entering it are two separate steps.
+- **ArrowDown on the trigger enters the card**, opening it first if it was closed. Focus lands on the
+  card's first control, or on the card itself when it holds no control, so its content is still
+  reachable by a screen reader. The key is consumed, so the page does not scroll as well.
+- **Escape closes the card and returns focus to the trigger** — the exit, and ArrowDown's
+  counterpart.
+- **Tab and Shift+Tab cycle within an entered card**, wrapping at its last and first control rather
+  than tabbing out into the empty document behind it. Escape is the way out, not the last resort.
+- **A card the pointer opened is keyboard-driven once entered**, so it hands focus back on Escape
+  like any other.
+- **The pointer never closes a card the keyboard is inside.** The pointer-leave grace period is
+  skipped while focus is in the content.
+
+A card whose content carries another card's trigger inherits all of this recursively — one level per
+ArrowDown, one per Escape — but nesting is not built (see above), and the one-open-at-a-time registry
+is what would have to change first: it would close the outer card as the inner one opened.
 
 ## Vitals grid
 

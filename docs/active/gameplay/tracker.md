@@ -95,9 +95,10 @@ action slot alongside the cadence countdown and "Show on Map".
 A star rather than a pin glyph: that same header already uses a map-pin icon to mean *locate this
 system*, and two pins side by side meaning "find it" and "watch it" would be ambiguous.
 
-The star is the keyboard route for both directions. The unpin control inside a row's card is a
-convenience for the mouse, never the only way. On a world with no player seat the toggle is absent
-rather than rendered and inert.
+The star is the route from the system panel and the unpin control inside a row's card is the route
+from the Tracker itself. Both work by mouse and by keyboard: a card is entered with ArrowDown on its
+row and left with Escape, so unpinning from the list never depends on visiting the system first. On a
+world with no player seat the toggle is absent rather than rendered and inert.
 
 ## Rows and the card
 
@@ -147,10 +148,13 @@ mouse-only by design — their content is unreachable by keyboard — and there 
 keyboard users when the accessible primitive is available. The plain tooltip remains the first tier
 for one-line legends; the card is the second, richer tier.
 
-It opens on hover after a delay, on keyboard focus, and on click. It does **not** take focus on a
-hover open, only on a click or keyboard open, so focus does not jump around as the cursor crosses a
-panel. It stays open while the cursor travels from trigger to card, closes on Escape returning focus
-to the trigger, and only one card is open at a time.
+It opens on hover after a delay, on keyboard focus, and on click, and **no open path moves focus** —
+focus stays on the row, so a card opening never interrupts a keyboard user walking the list and never
+makes the rows below it unreachable. Entering a card is a separate, deliberate press: **ArrowDown**
+goes in, **Escape** comes back out to the row. Tab inside a card cycles within it. The card stays
+open while the cursor travels from row to card, and only one card is open at a time. The full
+contract, which every popover in the game shares, is in
+[detail-panels.md](../design-system/detail-panels.md).
 
 A consumer can **opt out of click-to-open** where the trigger's click already means something else.
 The Tracker does exactly that: a row's click navigates, so the card is reached by hover or keyboard

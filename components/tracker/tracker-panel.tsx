@@ -250,8 +250,9 @@ function etaFigures(row: TrackerRowBase): TrackerFigure[] {
 }
 
 /** A pinned row's card: the same vitals the system panel's Overview grid shows, plus the unpin
- *  control — the mouse-convenience route (the star toggle in the system panel header,
- *  `components/system/pin-toggle.tsx`, is the keyboard route and works either way).
+ *  control — the route from the Tracker, reachable by mouse and by keyboard alike (ArrowDown on the
+ *  row enters the card, Escape leaves it). The star toggle in the system panel header,
+ *  `components/system/pin-toggle.tsx`, is the same action's route from the system.
  *
  *  Population against its cap lives here rather than on the row: the row carries at most two
  *  figures, and crowding that actually bites is the alert bar's to raise. */

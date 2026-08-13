@@ -4,11 +4,13 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import {
   createContext,
   forwardRef,
+  useCallback,
   useContext,
   useEffect,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
+  type ForwardedRef,
   type MutableRefObject,
   type ReactNode,
 } from "react";
@@ -31,9 +33,6 @@ import { twMerge } from "tailwind-merge";
  * Behaviour Radix's Popover does not give for free, implemented here:
  * - Hover-to-open, after `openDelay`, without moving focus (a hover open
  *   must never steal focus off whatever the keyboard user was doing).
- * - Click and keyboard-focus both open immediately AND move focus into the
- *   content — Radix's default `onOpenAutoFocus` already does this; hover
- *   opens are the one case that suppresses it (`openedByPointerRef`).
  * - A grace period on pointer-leave (of either trigger or content) before
  *   closing, so the pointer can cross the gap between them without the
  *   card closing under it.
@@ -46,11 +45,47 @@ import { twMerge } from "tailwind-merge";
  *   `event.preventDefault()` before Radix's internal handler runs — hover
  *   and keyboard-focus opens are untouched, since Radix only gates the
  *   click path on it.
+ * - The keyboard enter/exit convention below.
+ *
+ * ## The keyboard convention — every rich card in the game obeys it
+ *
+ * Opening and entering are two separate steps, because a card describes the
+ * thing its trigger already is: the trigger is where the user is, and a
+ * card that grabs focus takes them somewhere they did not ask to go. Cards
+ * are portalled to the end of the document, so a grabbed focus also puts
+ * every element after the trigger behind the card in tab order — in a list
+ * of triggers (the Tracker's rows) that makes the list unwalkable.
+ *
+ * - **Open never moves focus.** Hover, click and keyboard focus all leave
+ *   focus on the trigger.
+ * - **ArrowDown on the trigger enters the card**, opening it first if it is
+ *   closed. Focus lands on the card's first focusable element, or on the
+ *   content container itself when the card holds nothing focusable, so the
+ *   content is still reachable by a screen reader. The key is consumed, so
+ *   the page does not scroll as well.
+ * - **Escape closes the card and returns focus to the trigger** — the exit,
+ *   and the counterpart of ArrowDown.
+ * - **Tab and Shift+Tab cycle within an entered card** rather than leaving
+ *   it for the end-of-document void behind it. This is Radix's `FocusScope`
+ *   in `loop` mode, which its Popover always enables; nothing here
+ *   reimplements it, but it is half of why Escape is a way out and not the
+ *   only thing between the user and a dead end.
+ * - **A card entered by keyboard is keyboard-driven from then on**, even if
+ *   a hover opened it: `enterCard` clears `openedByPointerRef`, so the
+ *   close returns focus to the trigger instead of suppressing it.
+ *
+ * A card whose content itself contains a rich-card trigger inherits all of
+ * this recursively, one level per ArrowDown and one per Escape. The one
+ * thing that does not yet fit is the exclusivity registry, which would
+ * close the outer card as the inner one opened; nesting is out of scope
+ * (docs/active/design-system/detail-panels.md) and the registry is where it
+ * would start.
  *
  * Escape-to-close is Radix's own default (non-modal) Popover behaviour and
  * is not reimplemented here. Returning focus to the trigger on close is
- * Radix's too, but it is suppressed for a card that was opened by hover,
- * which never took focus in the first place — see `RichCardContent`.
+ * Radix's too, but it is suppressed for a card that was opened by hover and
+ * never entered, which never took focus in the first place — see
+ * `RichCardContent`.
  */
 
 const DEFAULT_OPEN_DELAY_MS = 300;
@@ -70,6 +105,31 @@ function releaseOpen(closeSelf: () => void) {
   if (openCard === closeSelf) openCard = null;
 }
 
+// Focusable-in-a-card selector. Deliberately attribute-based (`:not([disabled])` rather than
+// `:not(:disabled)`) so it reads the same in every DOM implementation the tests run in.
+const FOCUSABLE_IN_CARD = [
+  "a[href]",
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
+
+/**
+ * The one way focus ever gets into a card — both the "open it, then enter" and the "already open,
+ * enter" paths run through here, so entering cannot mean two different things depending on what
+ * the card's state was.
+ *
+ * A card with nothing focusable inside still has to be reachable, or its content is invisible to a
+ * screen reader driven by the keyboard; focus falls back to the content container, which Radix's
+ * `FocusScope` gives a `tabIndex` of -1 (programmatically focusable, never in the tab order).
+ */
+function focusIntoContent(content: HTMLElement | null) {
+  const first = content?.querySelector<HTMLElement>(FOCUSABLE_IN_CARD);
+  (first ?? content)?.focus();
+}
+
 function composeHandlers<E>(
   ...handlers: Array<((event: E) => void) | undefined>
 ): (event: E) => void {
@@ -85,9 +145,17 @@ interface RichCardContextValue {
   disableClickOpen: boolean;
   openedByPointerRef: MutableRefObject<boolean>;
   suppressNextTriggerFocusRef: MutableRefObject<boolean>;
+  /** The content element while the card is open, null while it is closed — the target the
+   *  trigger's ArrowDown focuses into, and what tells the close grace period that the keyboard
+   *  is currently inside this card. Written by `RichCardContent`. */
+  contentRef: MutableRefObject<HTMLDivElement | null>;
+  /** An enter asked for before the content existed: `enterCard` raises it, the content lowers it
+   *  as it mounts and takes the focus. */
+  pendingEnterRef: MutableRefObject<boolean>;
   scheduleOpen: () => void;
   cancelScheduledOpen: () => void;
   openViaFocus: () => void;
+  enterCard: () => void;
   scheduleClose: () => void;
   cancelScheduledClose: () => void;
 }
@@ -126,6 +194,8 @@ export function RichCard({
   const [open, setOpenState] = useState(false);
   const openedByPointerRef = useRef(false);
   const suppressNextTriggerFocusRef = useRef(false);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const pendingEnterRef = useRef(false);
   const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -205,9 +275,37 @@ export function RichCard({
     setOpen(true);
   }
 
+  /**
+   * ArrowDown from the trigger: the deliberate way in. Opens the card first if it is closed —
+   * focus cannot move into content that does not exist yet, so the intent is parked on
+   * `pendingEnterRef` and the content picks it up as it mounts.
+   */
+  function enterCard() {
+    cancelScheduledOpen();
+    cancelScheduledClose();
+    // Whatever opened this card, the keyboard is driving it now. `openedByPointerRef` gates the
+    // close-side focus return: left set, Escape would drop focus to the document body instead of
+    // handing it back to the trigger the user came from.
+    openedByPointerRef.current = false;
+    if (open) {
+      focusIntoContent(contentRef.current);
+      return;
+    }
+    pendingEnterRef.current = true;
+    setOpen(true);
+  }
+
   function scheduleClose() {
     clearCloseTimer();
-    closeTimerRef.current = setTimeout(() => setOpen(false), CLOSE_GRACE_MS);
+    closeTimerRef.current = setTimeout(() => {
+      closeTimerRef.current = null;
+      // The pointer wandering off never closes a card the keyboard is inside. The user stopped
+      // driving with the pointer the moment they entered; closing here would yank the card out
+      // from under them mid-read. Escape is their way out. Checked as the grace period expires,
+      // not when it was scheduled, because the enter can happen inside that window.
+      if (contentRef.current?.contains(document.activeElement)) return;
+      setOpen(false);
+    }, CLOSE_GRACE_MS);
   }
 
   function cancelScheduledClose() {
@@ -221,9 +319,12 @@ export function RichCard({
     disableClickOpen,
     openedByPointerRef,
     suppressNextTriggerFocusRef,
+    contentRef,
+    pendingEnterRef,
     scheduleOpen,
     cancelScheduledOpen,
     openViaFocus,
+    enterCard,
     scheduleClose,
     cancelScheduledClose,
   };
@@ -238,15 +339,25 @@ export function RichCard({
 /**
  * Trigger for a rich card, `asChild` like the tooltip trigger — wrap a
  * single interactive element (a row, a button, an icon). Wires pointer
- * hover (with the root's `openDelay`), click, and keyboard focus without
- * disturbing whatever handlers the wrapped element already carries.
+ * hover (with the root's `openDelay`), click, keyboard focus and the
+ * ArrowDown that enters the card, without disturbing whatever handlers the
+ * wrapped element already carries.
  */
 export const RichCardTrigger = forwardRef<
   HTMLButtonElement,
   ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>
 >(
   (
-    { onPointerEnter, onPointerLeave, onPointerDown, onPointerUp, onFocus, onClick, ...props },
+    {
+      onPointerEnter,
+      onPointerLeave,
+      onPointerDown,
+      onPointerUp,
+      onFocus,
+      onClick,
+      onKeyDown,
+      ...props
+    },
     forwardedRef,
   ) => {
     const richCard = useRichCardContext("RichCardTrigger");
@@ -295,6 +406,16 @@ export const RichCardTrigger = forwardRef<
           richCard.cancelScheduledOpen();
           richCard.openViaFocus();
         })}
+        onKeyDown={composeHandlers<React.KeyboardEvent<HTMLButtonElement>>(onKeyDown, (event) => {
+          // ArrowDown is the way in — see the convention in RichCard's docblock. Bare only: a
+          // modified ArrowDown belongs to the browser (and Alt+Down is a native combobox gesture
+          // on some platforms). A wrapped element that already handled the key keeps it.
+          if (event.key !== "ArrowDown" || event.defaultPrevented) return;
+          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+          // Consumed, so the page behind the card does not scroll on the same press.
+          event.preventDefault();
+          richCard.enterCard();
+        })}
         onClick={composeHandlers<React.MouseEvent<HTMLButtonElement>>(onClick, (event) => {
           pointerActiveRef.current = false;
           richCard.openedByPointerRef.current = false;
@@ -314,6 +435,13 @@ RichCardTrigger.displayName = "RichCardTrigger";
 interface RichCardContentProps
   extends Omit<PopoverPrimitive.PopoverContentProps, "side" | "align"> {}
 
+/** Writes a node to a forwarded ref of either shape, so the content element can be handed to a
+ *  consumer's ref AND kept on the card's own `contentRef` at the same time. */
+function assignForwardedRef(ref: ForwardedRef<HTMLDivElement>, node: HTMLDivElement | null) {
+  if (typeof ref === "function") ref(node);
+  else if (ref) ref.current = node;
+}
+
 export const RichCardContent = forwardRef<HTMLDivElement, RichCardContentProps>(
   (
     {
@@ -329,10 +457,28 @@ export const RichCardContent = forwardRef<HTMLDivElement, RichCardContentProps>(
     ref,
   ) => {
     const richCard = useRichCardContext("RichCardContent");
+    const { contentRef, pendingEnterRef } = richCard;
+
+    // Attaching the content element is also where an enter that had to open the card first gets
+    // paid off — this is the first instant the content exists. Deliberately not an effect keyed
+    // on `open`: this component stays mounted for the consumer's whole lifetime, and Radix's
+    // `Presence`, one level further in, mounts the content element a commit LATER than the open
+    // state flips, so such an effect would run with nothing yet to focus and never run again.
+    const setContentNode = useCallback(
+      (node: HTMLDivElement | null) => {
+        contentRef.current = node;
+        assignForwardedRef(ref, node);
+        if (!node || !pendingEnterRef.current) return;
+        pendingEnterRef.current = false;
+        focusIntoContent(node);
+      },
+      [ref, contentRef, pendingEnterRef],
+    );
+
     return (
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          ref={ref}
+          ref={setContentNode}
           side={richCard.side}
           align={richCard.align}
           sideOffset={sideOffset}
@@ -343,7 +489,18 @@ export const RichCardContent = forwardRef<HTMLDivElement, RichCardContentProps>(
             richCard.scheduleClose();
           })}
           onOpenAutoFocus={composeHandlers<Event>(onOpenAutoFocus, (event) => {
-            if (richCard.openedByPointerRef.current) event.preventDefault();
+            // The card NEVER takes focus, however it was opened. A rich card describes the thing
+            // its trigger already is, so focus belongs on the trigger: these triggers are rows in
+            // a list, and the content is portalled to the end of the document, so a card that
+            // takes focus puts every remaining row behind it in tab order — the next Tab has
+            // nowhere to go and focus sticks on whatever the card contains.
+            //
+            // Controls inside a card are not lost to the keyboard by this: they are reached by a
+            // deliberate way IN — ArrowDown on the trigger — rather than by a focus grab that
+            // breaks walking the list. That enter is `focusIntoContent`, called from the trigger
+            // or from `setContentNode` above, so opening and entering stay two separate steps
+            // even when one ArrowDown does both.
+            event.preventDefault();
           })}
           onCloseAutoFocus={composeHandlers<Event>(onCloseAutoFocus, (event) => {
             const openedByPointer = richCard.openedByPointerRef.current;
@@ -356,9 +513,10 @@ export const RichCardContent = forwardRef<HTMLDivElement, RichCardContentProps>(
               // just taken over is enough for Radix to dismiss THAT card.
               // Hovering from one row to the next would open the second card
               // and shut it again in the same frame. This is the close-side
-              // half of the open-side focus suppression. (The one case it
-              // gives up: a card hover-opened and then tabbed into loses
-              // focus to the body rather than to its trigger.)
+              // half of the open-side focus suppression. A hover-opened card
+              // the user then ENTERS is no longer one of these: `enterCard`
+              // clears the flag, so it closes down the keyboard path below
+              // and hands focus back to its trigger.
               event.preventDefault();
               return;
             }

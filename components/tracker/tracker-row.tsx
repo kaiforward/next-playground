@@ -56,7 +56,9 @@ export interface TrackerRowProps {
  *
  * The row's trigger is a `RichCard` with click-to-open disabled: activating the row (click or
  * Enter/Space) navigates via `onActivate`, and the card is reached only by hovering or
- * Tab-focusing the row, per the spec's split between the row's click and its card.
+ * Tab-focusing the row, per the spec's split between the row's click and its card. Neither opening
+ * path moves focus off the row, so Tab keeps walking the list; ArrowDown enters the card and
+ * Escape comes back — the rich card's keyboard convention, shared by every popover in the game.
  */
 export function TrackerRow({
   systemId,
