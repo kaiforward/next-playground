@@ -1,6 +1,6 @@
 # Functional Specification
 
-Master specification for the game. Describes what the game does, how systems connect, and links to detailed design docs. No code — for implementation details see `CLAUDE.md`.
+Master specification for the game. Describes what the game does, how systems connect, and links to detailed design docs. No code — for implementation details see `AGENTS.md`.
 
 > **⚙ Re-conception in progress.** The game is a **single-player grand-strategy game** — a
 > single-player, in-memory, no-login simulation of a living galaxy with the full map ([runtime

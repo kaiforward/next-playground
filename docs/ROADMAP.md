@@ -17,8 +17,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   premises far too early, and output Kai can't parse. Direction: drop superpowers for this project,
   write project-specific skills built around interconnected game systems (events is the recurring
   miss), make evidence the deliverable rather than a design.
-  *Next step:* finish the instruction-mass cut (AGENTS.md done, docs + memory in flight), then design
-  the replacement skills.
+  *Next step:* the instruction-mass cut is done (AGENTS.md is the single home for rules, memory and
+  doc pointers repointed at it); design the replacement skills.
 
 ---
 

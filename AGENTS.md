@@ -65,7 +65,7 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 - **Discriminated unions for results** — `{ ok: true; data } | { ok: false; error }`.
 - **Avoid postfix `!`** — use a real check. Exception: `find(...)!` in tests.
 - **Extract on the second occurrence** — UI to `components/ui|form/`, logic to `lib/utils|engine/`, types to `lib/types/`.
-- **Clean up what your change strands.** A field, prop or helper left without readers is part of that change, not a follow-up. `tsc` does not reach object literals typed by inference (a `map` callback return) — finish with a text grep, not a clean typecheck.
+- **Clean up what your change strands.** A field, prop or helper left without readers is part of that change, not a follow-up. `tsc` does not reach object literals typed by inference (a `map` callback return) — finish with a text grep, not a clean typecheck. The same sweep covers references in docs, skills and memory, and it runs **before the PR opens**, not after the merge.
 - **Comments describe the code, not the plan** — never name the plan/phase/PR that produced them.
 - Engine functions are pure — no `fs`/`process.env`/DB imports. World state comes from `getWorld()`.
 - Services own world-state and business logic; routes are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions. Responses use `ApiResponse<T>`.
@@ -160,6 +160,8 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 
 **Short replies. Lead with what needs a decision and stop.** Context, caveats and side-findings are available on request, not volunteered.
 
+**Open a findings report with 1-2 sentences on what it was investigating**, before any results. A report that leads with the answer forces the reader to reverse-engineer the question it came from.
+
 **Verifying changes** (dev has no live universe)
 - **Prove a mechanic works with `npm run simulate` measuring the actual outcome** — isolated engine fixtures pass while the galaxy is broken. Add a sim metric when a symptom hides inside an aggregate.
 - Verify generation/economy changes by intrinsic coherence, not parity with old output — seeded RNG shifts by design.
@@ -181,6 +183,7 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 
 **Executing fix batches**
 - **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched agent**, never inline — inline is for a single trivial edit. Ask first, describing the dispatch's scope in words. Model is your judgment per batch (never Fable). Then verify the agent's claims and make the judgement calls it flags.
+- **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorization to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent.
 
 **Scripts**
 - `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test). One-off diagnostics live in scratch, never committed.
