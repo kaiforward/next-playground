@@ -45,6 +45,11 @@ export interface TrackerRowProps {
   /** Rich-card content — the system's vitals table (pinned rows) or the project's detail
    *  (build/colony rows). Supplied by the panel, not derived here. */
   card: ReactNode;
+  /** The card's accessible name. The card is a `dialog`, and ArrowDown puts a screen-reader user
+   *  inside it — unnamed, all they would hear is "dialog". Required rather than optional: every
+   *  row's card has a subject, and a default derived from `name` would go stale silently for the
+   *  build rows, whose `name` already carries the project. */
+  cardLabel: string;
 }
 
 /**
@@ -69,6 +74,7 @@ export function TrackerRow({
   tone,
   onActivate,
   card,
+  cardLabel,
 }: TrackerRowProps) {
   const fillColor = tone ? TONE_COLOR[tone] : "var(--color-accent)";
   const projectedPct =
@@ -109,7 +115,7 @@ export function TrackerRow({
             ))}
           </button>
         </RichCardTrigger>
-        <RichCardContent>{card}</RichCardContent>
+        <RichCardContent aria-label={cardLabel}>{card}</RichCardContent>
       </RichCard>
       {progress !== undefined && (
         <div aria-hidden className="absolute inset-x-0 bottom-0 flex h-0.5 bg-surface-active">

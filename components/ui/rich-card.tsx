@@ -71,8 +71,9 @@ import { twMerge } from "tailwind-merge";
  *   reimplements it, but it is half of why Escape is a way out and not the
  *   only thing between the user and a dead end.
  * - **A card entered by keyboard is keyboard-driven from then on**, even if
- *   a hover opened it: `enterCard` clears `openedByPointerRef`, so the
- *   close returns focus to the trigger instead of suppressing it.
+ *   a hover opened it: `keyboardInsideRef` is raised by `enterCard` and is
+ *   what both the pointer-leave grace period and the close-side focus
+ *   return read, so neither depends on how the card was opened.
  *
  * A card whose content itself contains a rich-card trigger inherits all of
  * this recursively, one level per ArrowDown and one per Escape. The one
@@ -83,9 +84,21 @@ import { twMerge } from "tailwind-merge";
  *
  * Escape-to-close is Radix's own default (non-modal) Popover behaviour and
  * is not reimplemented here. Returning focus to the trigger on close is
- * Radix's too, but it is suppressed for a card that was opened by hover and
- * never entered, which never took focus in the first place — see
- * `RichCardContent`.
+ * Radix's too, and `RichCardContent` lets it happen in exactly one case: a
+ * card the keyboard had entered, closing for any reason other than another
+ * card taking over. Every other close suppresses it, because a card that
+ * never held focus has nothing to hand back and handing it back anyway
+ * *moves* the user — the focus lands on the trigger and a `focusin` outside
+ * whichever card has just taken over is all Radix needs to dismiss that one.
+ *
+ * **The limitation that remains:** a card the keyboard has entered, closed
+ * by another card taking over — the pointer wandering onto the next row
+ * while the keyboard sits inside this one — hands focus back to nothing.
+ * Returning it to the trigger is exactly the destructive case above, so
+ * focus falls to the document body instead, and the next Tab after that
+ * mixed pointer-and-keyboard sequence restarts from the top of the
+ * document. Only the takeover path is affected; Escape, an outside click
+ * and a pointer-leave close all still land the user where they should be.
  */
 
 const DEFAULT_OPEN_DELAY_MS = 300;
@@ -96,8 +109,23 @@ const CLOSE_GRACE_MS = 150;
 // any) was already open. Nothing renders off it.
 let openCard: (() => void) | null = null;
 
+// True only for the instant `claimOpen` spends closing the card that was
+// already open. The card being closed runs its own `setOpen(false)` inside
+// that call, synchronously, which is the one moment it can tell "another
+// card is taking over" apart from every other reason it might be closing —
+// and the difference decides whether it hands focus back to its trigger,
+// because a focus landing outside the incoming card dismisses it on sight.
+let takeoverInProgress = false;
+
 function claimOpen(closeSelf: () => void) {
-  if (openCard && openCard !== closeSelf) openCard();
+  if (openCard && openCard !== closeSelf) {
+    takeoverInProgress = true;
+    try {
+      openCard();
+    } finally {
+      takeoverInProgress = false;
+    }
+  }
   openCard = closeSelf;
 }
 
@@ -138,16 +166,28 @@ function composeHandlers<E>(
   };
 }
 
+/** What the close-side focus decision needs to know about the close that is already in progress,
+ *  captured the moment it starts because `onCloseAutoFocus` is dispatched a beat later, by which
+ *  time neither fact is still readable. */
+interface CloseReason {
+  /** The keyboard had been driven into this card — the only case where there is focus to hand back. */
+  entered: boolean;
+  /** Another card claimed the exclusivity registry; this one is closing to make room for it. */
+  takeover: boolean;
+}
+
 interface RichCardContextValue {
   open: boolean;
   side: PopoverPrimitive.PopoverContentProps["side"];
   align: PopoverPrimitive.PopoverContentProps["align"];
   disableClickOpen: boolean;
-  openedByPointerRef: MutableRefObject<boolean>;
+  /** Written by the root as the card closes, read by `RichCardContent`'s close-side focus
+   *  handling. The live flags behind it stay private to the root — this is the one thing the
+   *  content needs off them, and only after the decision has already been made. */
+  closeReasonRef: MutableRefObject<CloseReason>;
   suppressNextTriggerFocusRef: MutableRefObject<boolean>;
   /** The content element while the card is open, null while it is closed — the target the
-   *  trigger's ArrowDown focuses into, and what tells the close grace period that the keyboard
-   *  is currently inside this card. Written by `RichCardContent`. */
+   *  trigger's ArrowDown focuses into. Written by `RichCardContent`. */
   contentRef: MutableRefObject<HTMLDivElement | null>;
   /** An enter asked for before the content existed: `enterCard` raises it, the content lowers it
    *  as it mounts and takes the focus. */
@@ -192,7 +232,12 @@ export function RichCard({
   children,
 }: RichCardProps) {
   const [open, setOpenState] = useState(false);
-  const openedByPointerRef = useRef(false);
+  /** Raised by `enterCard` and lowered as the card closes: the keyboard is being driven inside
+   *  this card. Deliberately not "is focus in the content" — a mouse click on a control in the
+   *  card puts focus there too, and a card the pointer opened must still close when the pointer
+   *  leaves. */
+  const keyboardInsideRef = useRef(false);
+  const closeReasonRef = useRef<CloseReason>({ entered: false, takeover: false });
   const suppressNextTriggerFocusRef = useRef(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const pendingEnterRef = useRef(false);
@@ -226,13 +271,19 @@ export function RichCard({
     clearCloseTimer();
     if (next) {
       claimOpen(closeSelf);
+      // A fresh session records nothing yet, so a content unmount partway through one — a Tracker
+      // row dropping out of the list under an open card — can never replay the previous close's
+      // decision and pull focus onto a trigger that is going away too.
+      closeReasonRef.current = { entered: false, takeover: false };
     } else {
       releaseOpen(closeSelf);
-      // Neither `openedByPointerRef` nor the suppress-focus flag is touched
-      // here. Both are settled in `RichCardContent`'s `onCloseAutoFocus` —
-      // which Radix dispatches a beat AFTER this, and which still needs to
-      // know how the card that is closing was opened. Every open path
-      // rewrites `openedByPointerRef` for itself, so nothing is left stale.
+      // Every close funnels through here (Radix's `onOpenChange` included), so this is the one
+      // place both facts are still true: `takeoverInProgress` is only set for the duration of the
+      // `claimOpen` call this may be running inside, and the entered flag has to be cleared now so
+      // a later reopen never inherits it. `RichCardContent`'s `onCloseAutoFocus`, dispatched after
+      // this, reads what was recorded rather than re-deriving it.
+      closeReasonRef.current = { entered: keyboardInsideRef.current, takeover: takeoverInProgress };
+      keyboardInsideRef.current = false;
     }
     setOpenState(next);
   }
@@ -259,10 +310,7 @@ export function RichCard({
     if (open) return;
     clearCloseTimer();
     clearOpenTimer();
-    openTimerRef.current = setTimeout(() => {
-      openedByPointerRef.current = true;
-      setOpen(true);
-    }, openDelay);
+    openTimerRef.current = setTimeout(() => setOpen(true), openDelay);
   }
 
   function cancelScheduledOpen() {
@@ -271,7 +319,6 @@ export function RichCard({
 
   function openViaFocus() {
     clearOpenTimer();
-    openedByPointerRef.current = false;
     setOpen(true);
   }
 
@@ -283,10 +330,10 @@ export function RichCard({
   function enterCard() {
     cancelScheduledOpen();
     cancelScheduledClose();
-    // Whatever opened this card, the keyboard is driving it now. `openedByPointerRef` gates the
-    // close-side focus return: left set, Escape would drop focus to the document body instead of
-    // handing it back to the trigger the user came from.
-    openedByPointerRef.current = false;
+    // Whatever opened this card, the keyboard is driving it now. This is the flag the pointer-leave
+    // grace period stands down for, and the one that earns the focus hand-back on close: without
+    // it Escape would drop focus to the document body instead of the trigger the user came from.
+    keyboardInsideRef.current = true;
     if (open) {
       focusIntoContent(contentRef.current);
       return;
@@ -299,11 +346,16 @@ export function RichCard({
     clearCloseTimer();
     closeTimerRef.current = setTimeout(() => {
       closeTimerRef.current = null;
-      // The pointer wandering off never closes a card the keyboard is inside. The user stopped
-      // driving with the pointer the moment they entered; closing here would yank the card out
-      // from under them mid-read. Escape is their way out. Checked as the grace period expires,
-      // not when it was scheduled, because the enter can happen inside that window.
-      if (contentRef.current?.contains(document.activeElement)) return;
+      // The pointer wandering off never closes a card the keyboard was driven into. The user
+      // stopped driving with the pointer the moment they entered; closing here would yank the card
+      // out from under them mid-read. Escape is their way out. Checked as the grace period
+      // expires, not when it was scheduled, because the enter can happen inside that window.
+      //
+      // The flag, not "is focus inside the content": a mouse click on a control in the card puts
+      // focus there too, and a card the pointer opened and clicked into must still close when the
+      // pointer leaves — reading focus left it open indefinitely, with no gesture that would shut
+      // it short of clicking elsewhere.
+      if (keyboardInsideRef.current) return;
       setOpen(false);
     }, CLOSE_GRACE_MS);
   }
@@ -317,7 +369,7 @@ export function RichCard({
     side,
     align,
     disableClickOpen,
-    openedByPointerRef,
+    closeReasonRef,
     suppressNextTriggerFocusRef,
     contentRef,
     pendingEnterRef,
@@ -373,6 +425,11 @@ export const RichCardTrigger = forwardRef<
       <PopoverPrimitive.Trigger
         asChild
         ref={forwardedRef}
+        // The gesture is announced rather than left to be discovered: a screen reader reads the
+        // shortcut with the trigger's own name, which is the only place a keyboard user would
+        // learn that this row has a card and how to get into it. Before `{...props}`, so a
+        // consumer with a different gesture can still say so.
+        aria-keyshortcuts="ArrowDown"
         onPointerEnter={composeHandlers<React.PointerEvent<HTMLButtonElement>>(
           onPointerEnter,
           () => {
@@ -418,7 +475,6 @@ export const RichCardTrigger = forwardRef<
         })}
         onClick={composeHandlers<React.MouseEvent<HTMLButtonElement>>(onClick, (event) => {
           pointerActiveRef.current = false;
-          richCard.openedByPointerRef.current = false;
           richCard.cancelScheduledOpen();
           // Radix's own Trigger composes ITS click-toggle after this handler and skips it once
           // the event is marked defaultPrevented (see RichCard's docblock) — this is the only line
@@ -503,20 +559,20 @@ export const RichCardContent = forwardRef<HTMLDivElement, RichCardContentProps>(
             event.preventDefault();
           })}
           onCloseAutoFocus={composeHandlers<Event>(onCloseAutoFocus, (event) => {
-            const openedByPointer = richCard.openedByPointerRef.current;
-            richCard.openedByPointerRef.current = false;
-            if (openedByPointer) {
-              // A hover-opened card never took focus — `onOpenAutoFocus`
-              // above suppresses that — so there is nothing to hand back,
-              // and handing it back anyway is destructive: the focus lands
-              // on this trigger, and a `focusin` outside the card that has
-              // just taken over is enough for Radix to dismiss THAT card.
-              // Hovering from one row to the next would open the second card
-              // and shut it again in the same frame. This is the close-side
-              // half of the open-side focus suppression. A hover-opened card
-              // the user then ENTERS is no longer one of these: `enterCard`
-              // clears the flag, so it closes down the keyboard path below
-              // and hands focus back to its trigger.
+            const { entered, takeover } = richCard.closeReasonRef.current;
+            if (!entered || takeover) {
+              // Two closes with nothing to hand back, for two different reasons.
+              //
+              // Not entered: the card never took focus — `onOpenAutoFocus` above suppresses that —
+              // so a focus return here would MOVE the user rather than restore them, onto the
+              // trigger of a row the pointer is in the middle of leaving.
+              //
+              // A takeover: another card has just opened and holds the registry. Focus landing on
+              // this trigger is outside that card, and a `focusin` outside a Radix layer is enough
+              // to dismiss it — the incoming card would flash and vanish in the same frame,
+              // whether this one was entered or not. The cost is real and stated in the docblock:
+              // a card the keyboard was inside, evicted by a pointer opening the next row, leaves
+              // focus on the document body.
               event.preventDefault();
               return;
             }

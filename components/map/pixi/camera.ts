@@ -331,6 +331,9 @@ export class Camera {
   }
 
   private onWheel(e: WheelEvent) {
+    // No `defaultPrevented` guard needed here, unlike the keyboard: this listener is on the CANVAS,
+    // not the window, so it only ever sees a wheel whose target is the map itself. Cards, panels
+    // and dialogs are portalled elsewhere in the document and their scrolling never reaches it.
     e.preventDefault();
     if (!(e.target instanceof HTMLElement)) return;
     const rect = e.target.getBoundingClientRect();
@@ -338,8 +341,19 @@ export class Camera {
   }
 
   private onKeyDown(e: KeyboardEvent) {
+    // A handler nearer the user already spent this press. This listener is on the WINDOW, so it
+    // sees every keydown in the app after the element-level handlers have had it: a rich card's
+    // ArrowDown enters the card and calls `preventDefault()`, and without this line the same press
+    // also starts a camera pan that runs until keyup. `defaultPrevented` is the one signal that
+    // says so, and it costs nothing to honour — nothing in the app prevents a key it did not use.
+    if (e.defaultPrevented) return;
     // Stand down while the player is typing (save-name box, dev tools, …).
     if (e.target instanceof HTMLElement && isTypingTarget(e.target)) return;
+    // …and inside an open card, popover or modal. Those surfaces own the arrow keys for their own
+    // content while the user is in them, and a key they merely pass through (a held ArrowDown
+    // repeating INSIDE an entered card, which the card no longer marks as consumed) must not drag
+    // the map behind them.
+    if (e.target instanceof HTMLElement && e.target.closest('[role="dialog"]')) return;
     // Let modifier shortcuts through (Ctrl/Cmd+A select-all, Ctrl/Cmd+arrow, …) — only Shift, the
     // pan boost, is ours. Without this the window-level listener would hijack them app-wide.
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -352,6 +366,10 @@ export class Camera {
   }
 
   private onKeyUp(e: KeyboardEvent) {
+    // Deliberately unguarded, unlike `onKeyDown` above: releasing a held direction has to be
+    // unconditional. A keyup skipped because something marked it prevented — or because focus
+    // moved into a card between press and release — would leave the direction held forever and
+    // the map panning with no key down anywhere.
     this.shiftHeld = e.shiftKey;
     const dir = codeToPanDirection(e.code);
     if (dir) this.heldDirs.delete(dir);

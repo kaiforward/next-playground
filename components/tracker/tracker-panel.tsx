@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { useTracker } from "@/lib/hooks/use-tracker";
 import { useAtlas } from "@/lib/hooks/use-atlas";
@@ -51,6 +51,9 @@ export interface TrackerPanelProps {
  * taking over from that point, no measured/guessed max-height.
  */
 export function TrackerPanel({ sections, settingsOpen, onToggleSettings }: TrackerPanelProps) {
+  // Where focus goes when unpinning empties the Pinned section — see `TrackerPanelContent`'s
+  // unpin handling. The header is the one control that is always here whatever the sections do.
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   return (
     <div className="pointer-events-auto flex h-full min-h-0 w-72 shrink-0 flex-col border border-border bg-surface/95 shadow-lg backdrop-blur">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
@@ -58,6 +61,7 @@ export function TrackerPanel({ sections, settingsOpen, onToggleSettings }: Track
           Tracker
         </h2>
         <Button
+          ref={settingsButtonRef}
           variant="ghost"
           size="iconXs"
           aria-pressed={settingsOpen}
@@ -68,16 +72,36 @@ export function TrackerPanel({ sections, settingsOpen, onToggleSettings }: Track
         </Button>
       </div>
       <QueryBoundary>
-        <TrackerPanelContent sections={sections} />
+        <TrackerPanelContent sections={sections} fallbackFocusRef={settingsButtonRef} />
       </QueryBoundary>
     </div>
   );
 }
 
-function TrackerPanelContent({ sections }: { sections: TrackerSections }) {
+/** The row to put focus on once an unpinned row has gone, decided while the list still has it. */
+interface PendingUnpinFocus {
+  /** The row being unpinned — the handoff waits until this one has actually left the list. */
+  removedId: string;
+  /** The next pinned row, or the previous one when the unpinned row was last; null when it was
+   *  the only one and the section is about to be empty. */
+  nextId: string | null;
+}
+
+function TrackerPanelContent({
+  sections,
+  fallbackFocusRef,
+}: {
+  sections: TrackerSections;
+  fallbackFocusRef: RefObject<HTMLButtonElement | null>;
+}) {
   const data = useTracker();
   const { atlas } = useAtlas();
   const router = useRouter();
+  const setPin = useSetSystemPin();
+  // Scoped to the Pinned list on purpose: a system can appear in Pinned AND in Building at the
+  // same time, and both rows carry the same `data-system-id`.
+  const pinnedListRef = useRef<HTMLUListElement>(null);
+  const pendingUnpinFocusRef = useRef<PendingUnpinFocus | null>(null);
   // Monotonic per-panel nonce for `?loc=` — only needs to differ from its own previous value so
   // the map's focus effect (keyed on `focus|loc`, see star-map.tsx) re-fires even when locating
   // the same system twice in a row.
@@ -96,13 +120,55 @@ function TrackerPanelContent({ sections }: { sections: TrackerSections }) {
     router.push(`${path}?focus=${coords.x},${coords.y}&loc=${locRef.current}`);
   }
 
+  /**
+   * Unpinning from a row's own card deletes the thing the user is standing on: the mutation
+   * invalidates the tracker query, the row leaves `pinned`, and the `<li>`, its trigger and the
+   * card the Unpin button lives in all unmount together. There is no trigger left for the card to
+   * hand focus back to, so focus would fall to the document body and the next Tab would restart
+   * from the top of the page.
+   *
+   * The neighbour is chosen HERE, while the list still contains the row — the card knows only its
+   * own row — and the handoff itself waits for the row to actually go (see the effect below).
+   */
+  function unpin(systemId: string) {
+    const index = data.pinned.findIndex((row) => row.systemId === systemId);
+    const neighbour = data.pinned[index + 1] ?? data.pinned[index - 1] ?? null;
+    pendingUnpinFocusRef.current = { removedId: systemId, nextId: neighbour?.systemId ?? null };
+    setPin.mutate(
+      { systemId, pinned: false },
+      // A write that failed leaves the row where it is, and a handoff left pending would fire
+      // later — on whatever eventually removes that row, from the system panel's star, with the
+      // user's attention somewhere else entirely. Focus is only ever moved for a row this panel
+      // actually saw leave.
+      { onError: () => void (pendingUnpinFocusRef.current = null) },
+    );
+  }
+
+  useEffect(() => {
+    const pending = pendingUnpinFocusRef.current;
+    if (!pending) return;
+    // Not until the row is gone: the mutation is a round trip, and every render before the
+    // invalidated query comes back still has the row, its card and the focus inside it.
+    if (data.pinned.some((row) => row.systemId === pending.removedId)) return;
+    pendingUnpinFocusRef.current = null;
+    const nextRow = pending.nextId
+      ? pinnedListRef.current?.querySelector<HTMLButtonElement>(
+          `[data-system-id="${pending.nextId}"] button`,
+        )
+      : null;
+    // The section can also have emptied, or been hidden by the settings panel between the click
+    // and the response, in which case there is no row left to land on and the panel's own header
+    // takes it — still inside the Tracker, and still ahead of every section in tab order.
+    (nextRow ?? fallbackFocusRef.current)?.focus();
+  }, [data.pinned, fallbackFocusRef]);
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       {/* Hiding a section (TrackerSettings) drops its heading along with its rows — it is not
           rendered at all rather than rendered empty, per docs/active/gameplay/tracker.md → "Settings". */}
       {sections.pinned && (
         <TrackerSection title="Pinned" count={data.pinned.length} emptyMessage="No pinned systems yet.">
-          <ul>
+          <ul ref={pinnedListRef}>
             {/* Keyed on systemId — safe here because pinnedSystemIds is deduped (a bookmark set, not a
                 project list), unlike the Building list below. */}
             {data.pinned.map((row) => (
@@ -112,7 +178,8 @@ function TrackerPanelContent({ sections }: { sections: TrackerSections }) {
                 name={row.systemName}
                 figures={pinnedFigures(row)}
                 onActivate={() => activate(row.systemId, "")}
-                card={<PinnedCard row={row} />}
+                cardLabel={`${row.systemName} vitals`}
+                card={<PinnedCard row={row} onUnpin={() => unpin(row.systemId)} />}
               />
             ))}
           </ul>
@@ -160,6 +227,7 @@ function TrackerPanelContent({ sections }: { sections: TrackerSections }) {
                 nextCycleProgress={row.nextCycleProgress}
                 tone="build"
                 onActivate={() => activate(row.systemId, "industry")}
+                cardLabel={projectCardLabel(row, "Building")}
                 card={<ProjectCard row={row} kind="Building" />}
               />
             ))}
@@ -183,6 +251,7 @@ function TrackerPanelContent({ sections }: { sections: TrackerSections }) {
                 nextCycleProgress={row.nextCycleProgress}
                 tone="colony"
                 onActivate={() => activate(row.systemId, "")}
+                cardLabel={projectCardLabel(row, "Colonising")}
                 card={<ProjectCard row={row} kind="Colonising" />}
               />
             ))}
@@ -249,15 +318,25 @@ function etaFigures(row: TrackerRowBase): TrackerFigure[] {
   return [{ label: "Cycles remaining", value: etaLabel(row.etaCycles) }];
 }
 
+/** A project card's accessible name. A card is a `dialog` to a screen reader, and an unnamed
+ *  dialog announces as bare "dialog" — which is all a keyboard user entering by ArrowDown would
+ *  hear. Built here rather than inside `ProjectCard` so the name and the card's own heading come
+ *  off the same row in the same place. */
+function projectCardLabel(row: TrackerRowBase, kind: "Building" | "Colonising"): string {
+  return `${kind}: ${row.systemName} · ${row.label}`;
+}
+
 /** A pinned row's card: the same vitals the system panel's Overview grid shows, plus the unpin
  *  control — the route from the Tracker, reachable by mouse and by keyboard alike (ArrowDown on the
- *  row enters the card, Escape leaves it). The star toggle in the system panel header,
+ *  row enters the card). The star toggle in the system panel header,
  *  `components/system/pin-toggle.tsx`, is the same action's route from the system.
+ *
+ *  The unpin itself belongs to the panel, not to this card: it removes this very row, and where
+ *  focus goes afterwards can only be decided by whoever holds the list (see `unpin` above).
  *
  *  Population against its cap lives here rather than on the row: the row carries at most two
  *  figures, and crowding that actually bites is the alert bar's to raise. */
-function PinnedCard({ row }: { row: TrackerPinnedRow }) {
-  const setPin = useSetSystemPin();
+function PinnedCard({ row, onUnpin }: { row: TrackerPinnedRow; onUnpin: () => void }) {
   return (
     <div>
       <h3 className="mb-2 font-display text-xs font-bold text-text-primary">{row.systemName}</h3>
@@ -287,7 +366,7 @@ function PinnedCard({ row }: { row: TrackerPinnedRow }) {
         size="xs"
         fullWidth
         className="mt-3"
-        onClick={() => setPin.mutate({ systemId: row.systemId, pinned: false })}
+        onClick={onUnpin}
       >
         Unpin {row.systemName}
       </Button>

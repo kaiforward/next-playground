@@ -149,6 +149,16 @@ describe("RichCard — ArrowDown is the way into a card", () => {
     expect(screen.getByRole("dialog", { name: "Rigel vitals" })).toHaveFocus();
   });
 
+  it("advertises the gesture on the trigger, so it can be announced rather than guessed at", async () => {
+    renderCard();
+    // The only place a screen-reader user could learn the card exists and how to get into it —
+    // read out with the trigger's own name.
+    expect(screen.getByRole("button", { name: "System row" })).toHaveAttribute(
+      "aria-keyshortcuts",
+      "ArrowDown",
+    );
+  });
+
   it("consumes the key, so the page does not scroll as well", async () => {
     const { user } = setup();
     // What a scrolling page sees: the press reaches the document either
@@ -314,6 +324,28 @@ describe("RichCard — pointer transit between trigger and content", () => {
     expect(onUnpin).toHaveBeenCalledTimes(1);
   });
 
+  it("closes a hover-opened card the pointer clicked into once the pointer leaves", async () => {
+    const { user } = setup();
+    renderCard();
+    const trigger = screen.getByRole("button", { name: "System row" });
+
+    // Pure pointer use throughout: hover the row, move into the card, press a control in it. The
+    // click puts focus inside the content — which is NOT the same thing as the keyboard having
+    // been driven in there, and gating the grace period on where focus happens to be left this
+    // card open indefinitely, with no gesture that would shut it short of clicking elsewhere.
+    await user.hover(trigger);
+    const unpinButton = await screen.findByRole("button", { name: "Unpin" });
+    await user.unhover(trigger);
+    await user.hover(unpinButton);
+    await user.click(unpinButton);
+    expect(unpinButton).toHaveFocus();
+
+    await user.unhover(unpinButton);
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Unpin" })).not.toBeInTheDocument();
+    });
+  });
+
   it("the pointer leaving does not close a card the keyboard is inside", async () => {
     const { user } = setup();
     renderCard();
@@ -421,6 +453,54 @@ describe("RichCard — exclusivity", () => {
     await wait(200);
     expect(screen.getByText("Vitals for B")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Row A" })).not.toHaveFocus();
+    expect(document.body).toHaveFocus();
+  });
+
+  it("a card the keyboard had ENTERED also survives being taken over — the second card stays", async () => {
+    const { user } = setup();
+    render(
+      <>
+        <RichCard openDelay={OPEN_DELAY}>
+          <RichCardTrigger>
+            <button type="button">Row A</button>
+          </RichCardTrigger>
+          <RichCardContent>
+            <button type="button">Unpin A</button>
+          </RichCardContent>
+        </RichCard>
+        <RichCard openDelay={0}>
+          <RichCardTrigger>
+            <button type="button">Row B</button>
+          </RichCardTrigger>
+          <RichCardContent>
+            <p>Vitals for B</p>
+          </RichCardContent>
+        </RichCard>
+      </>,
+    );
+    const rowA = screen.getByRole("button", { name: "Row A" });
+
+    // Tab onto A and go in, then reach for the mouse: the mixed sequence. Suppressing the focus
+    // return on "the card was opened by a pointer" got this wrong, because an entered card is by
+    // definition not one of those — A handed focus back to its own trigger, that focus landed
+    // outside B, and Radix dismissed B on the spot. B flashed and vanished, and with the pointer
+    // already inside row B no further `pointerenter` would ever fire to bring it back.
+    await user.tab();
+    await screen.findByRole("button", { name: "Unpin A" });
+    await user.keyboard("{ArrowDown}");
+    expect(screen.getByRole("button", { name: "Unpin A" })).toHaveFocus();
+
+    await user.hover(screen.getByRole("button", { name: "Row B" }));
+    expect(await screen.findByText("Vitals for B")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unpin A" })).not.toBeInTheDocument();
+
+    // Well past both the dismissal Radix would do in the same frame and A's own close grace.
+    await wait(200);
+    expect(screen.getByText("Vitals for B")).toBeInTheDocument();
+    // The cost of getting there, pinned so it can't drift unnoticed: A's focus is NOT handed back
+    // to its trigger, because that is the very thing that killed B. It falls to the document body
+    // instead (see the limitation in RichCard's docblock).
+    expect(rowA).not.toHaveFocus();
     expect(document.body).toHaveFocus();
   });
 });

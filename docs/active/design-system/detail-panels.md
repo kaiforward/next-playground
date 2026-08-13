@@ -59,15 +59,28 @@ itself in tab order, and the list stops being walkable.
   Opening a card and entering it are two separate steps.
 - **ArrowDown on the trigger enters the card**, opening it first if it was closed. Focus lands on the
   card's first control, or on the card itself when it holds no control, so its content is still
-  reachable by a screen reader. The key is consumed, so the page does not scroll as well.
+  reachable by a screen reader. The key is consumed, so the page does not scroll as well — and so
+  the map's window-level pan keys, which stand down on a key another handler has spent, do not drag
+  the galaxy behind the card at the same time. The trigger carries `aria-keyshortcuts`, so the
+  gesture is announced with the trigger's own name rather than left to be discovered; the card is a
+  dialog and **every consumer names it**, or a keyboard user arrives at something announced as bare
+  "dialog".
 - **Escape closes the card and returns focus to the trigger** — the exit, and ArrowDown's
   counterpart.
 - **Tab and Shift+Tab cycle within an entered card**, wrapping at its last and first control rather
   than tabbing out into the empty document behind it. Escape is the way out, not the last resort.
 - **A card the pointer opened is keyboard-driven once entered**, so it hands focus back on Escape
   like any other.
-- **The pointer never closes a card the keyboard is inside.** The pointer-leave grace period is
-  skipped while focus is in the content.
+- **The pointer leaving never closes a card the keyboard has entered.** The pointer-leave grace
+  period stands down for the rest of that card's life; Escape is the way out. What counts is the
+  ArrowDown, not where focus happens to be — clicking a control inside a card with the mouse puts
+  focus in it too, and that card still closes when the pointer leaves.
+- **Opening the next card still closes the one before it**, entered or not — the one-at-a-time rule
+  outranks the rule above, because two cards on screen at once is the worse outcome. Focus then
+  falls to the document body rather than back to the closed card's row: returning it there would
+  land a `focusin` outside the card that just opened, which dismisses it on sight. This is the one
+  case where a keyboard user is left without a place to Tab on from, and it takes a deliberately
+  mixed sequence to reach — enter a card by keyboard, then hover another row with the mouse.
 
 A card whose content carries another card's trigger inherits all of this recursively — one level per
 ArrowDown, one per Escape — but nesting is not built (see above), and the one-open-at-a-time registry

@@ -97,8 +97,14 @@ system*, and two pins side by side meaning "find it" and "watch it" would be amb
 
 The star is the route from the system panel and the unpin control inside a row's card is the route
 from the Tracker itself. Both work by mouse and by keyboard: a card is entered with ArrowDown on its
-row and left with Escape, so unpinning from the list never depends on visiting the system first. On a
-world with no player seat the toggle is absent rather than rendered and inert.
+row, so unpinning from the list never depends on visiting the system first. On a world with no player
+seat the toggle is absent rather than rendered and inert.
+
+Unpinning from the card removes the row the user is standing on — the row, its card and the button
+just pressed all go at once — so Escape is not what gets them out of it. **Focus lands on the next
+pinned row**, or on the previous one when the row unpinned was the last, or on the panel's own
+settings toggle when that was the only pin left. Where a keyboard user continues from is decided by
+the Tracker, not left to fall to the top of the document.
 
 ## Rows and the card
 
