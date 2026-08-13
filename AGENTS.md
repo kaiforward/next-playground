@@ -128,12 +128,11 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` m
 
 **Theme "Foundry"** — industrial, sharp-edged, copper/amber. Reference: `docs/active/design-system/theme.md`. No rounded corners on cards/buttons/badges (only DetailPanel modal and FilterBar chips round), copper left-accent stripe on cards, `font-display` (Chakra Petch) for headings, `font-mono` (Geist Mono) for numbers.
 
-Use existing components over inline markup: `tv()` variants, typed props, semantic HTML (`<dl>` for key-value, `<button>` for actions). Keep variant counts small.
+**Before building any component, read `components/ui/` and `components/form/` for a pre-made one** — and read its props before using it. Inline markup is the last resort, not the starting point.
 
-- `components/ui/` — Button, Card, Badge, PageContainer, ProgressBar, StatDisplay, DataTable, StatList, EmptyState, LoadingFallback, ErrorFallback.
-- `components/form/` — TextInput, NumberInput, RangeInput, SelectInput, FormError.
-- `QueryBoundary` — Suspense + ErrorBoundary + QueryErrorResetBoundary with a mounted guard.
-- `Dialog` — native `<dialog>` wrapper; non-modal uses `.show()` + manual Escape/focus, modal uses `showModal()`. Companion `useDialog`.
+New components use `tv()` variants, typed props and semantic HTML (`<dl>` for key-value, `<button>` for actions). Keep variant counts small.
+
+`Dialog` is the one with non-obvious behaviour: non-modal uses `.show()` plus manual Escape/focus handling, modal uses `showModal()`. Companion `useDialog` hook.
 
 ## Git Workflow
 
