@@ -132,8 +132,9 @@ function TrackerPanelContent({ sections }: { sections: TrackerSections }) {
                   key={row.projectId}
                   systemId={row.systemId}
                   name={`${row.systemName} · ${row.label}`}
-                  figures={[]}
+                  figures={etaFigures(row)}
                   progress={row.progress}
+                  nextCycleProgress={row.nextCycleProgress}
                   tone="build"
                   onActivate={() => activate(row.systemId, "industry")}
                   card={<ProjectCard row={row} kind="Building" />}
@@ -168,8 +169,9 @@ function TrackerPanelContent({ sections }: { sections: TrackerSections }) {
                 key={row.systemId}
                 systemId={row.systemId}
                 name={row.systemName}
-                figures={[]}
+                figures={etaFigures(row)}
                 progress={row.progress}
+                nextCycleProgress={row.nextCycleProgress}
                 tone="colony"
                 onActivate={() => activate(row.systemId, "")}
                 card={<ProjectCard row={row} kind="Colonising" />}
@@ -211,6 +213,15 @@ function pinnedFigures(row: TrackerPinnedRow): TrackerFigure[] {
     { icon: <PersonIcon className="h-3.5 w-3.5" />, label: "Population", value: formatPeople(row.population) },
     { label: "Stability", value: `${Math.round(row.stabilityPct)}%`, swatchColor: stabilityRampColor(unrest) },
   ];
+}
+
+/** The one figure a build or colony row carries: cycles remaining, right-aligned in the same slot a
+ *  pinned row spends on population and stability. Same `etaCycles` the row's card shows, so the two
+ *  cannot disagree, and the same em-dash for a project with no forecast — a colony the pool has not
+ *  reached this cycle has no rate to divide by. It stays in the row's ordinary grey: the Tracker is a
+ *  quiet list, and calling out trouble is the alert bar's job, not a colour on every stalled row. */
+function etaFigures(row: TrackerBuildRow | TrackerColonyRow): TrackerFigure[] {
+  return [{ label: "Cycles remaining", value: row.etaCycles !== null ? `≈${row.etaCycles} cyc` : "—" }];
 }
 
 /** A pinned row's card: the same vitals the system panel's Overview grid shows, plus the unpin

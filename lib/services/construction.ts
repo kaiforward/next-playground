@@ -15,6 +15,7 @@ import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import {
   computeFactionConstruction,
+  workShareOf,
   type ConstructionSystemInfo,
   type FactionConstructionReadout,
   type FoundingReadoutInputs,
@@ -143,12 +144,20 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
   const world = getWorld();
 
   const bySystem = new Map<string, { systemName: string; count: number }>();
-  const colonies: Array<{ systemId: string; systemName: string; progress: number }> = [];
+  const colonies: FactionConstructionData["colonies"] = [];
   let orderedCount = 0;
   for (const row of readout.all) {
     if (row.origin === "player") orderedCount += 1;
     if (row.kind === "colony_establish") {
-      colonies.push({ systemId: row.systemId, systemName: row.systemName, progress: row.progress });
+      // Read off `all` rather than the funded front: a colony the pool cannot reach this cycle
+      // still gets a row wherever colonies are listed, and its gain is genuinely 0 — a front
+      // lookup would have to invent that same 0 for an absent row.
+      colonies.push({
+        systemId: row.systemId,
+        systemName: row.systemName,
+        progress: row.progress,
+        nextCycleProgress: workShareOf(row.nextCycleGain, row.workTotal),
+      });
     } else {
       const entry = bySystem.get(row.systemId) ?? { systemName: row.systemName, count: 0 };
       entry.count += 1;

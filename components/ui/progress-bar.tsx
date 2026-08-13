@@ -1,4 +1,5 @@
 import { tv, type VariantProps } from "tailwind-variants";
+import { progressWidthPct, projectedWidthPct } from "@/lib/utils/math";
 
 const progressBarVariants = tv({
   slots: {
@@ -64,9 +65,11 @@ export function ProgressBar({
   const percent = max > 0 ? (value / max) * 100 : 0;
   const styles = progressBarVariants({ size, color });
   const rightLabel = valueText ?? `${formatValue(value)} / ${formatValue(max)}`;
-  const donePct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  // Same two width helpers the Tracker's own inline track uses — one definition of "how wide is the
+  // fill" and "how much room is left for the forecast", so the two surfaces cannot drift apart.
+  const donePct = max > 0 ? progressWidthPct(value / max) : 0;
   const projectedPct =
-    max > 0 && projected && projected > 0 ? Math.min(100 - donePct, (projected / max) * 100) : 0;
+    max > 0 && projected !== undefined ? projectedWidthPct(value / max, projected / max) : 0;
 
   return (
     <div className={className}>

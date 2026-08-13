@@ -374,8 +374,14 @@ export interface FactionConstructionData {
   automation: { build: boolean; colonisation: boolean } | null;
   /** Systems with open build projects — count desc, then name asc. */
   buildSystems: Array<{ systemId: string; systemName: string; count: number }>;
-  /** Forming colonies — progress desc, then name asc. */
-  colonies: Array<{ systemId: string; systemName: string; progress: number }>;
+  /** Forming colonies — progress desc, then name asc. `nextCycleProgress` is the coming cycle's
+   *  gain in `progress`'s own units (0 for a colony the pool cannot reach this cycle). */
+  colonies: Array<{
+    systemId: string;
+    systemName: string;
+    progress: number;
+    nextCycleProgress: number;
+  }>;
   /** Player-originated open projects across the faction. */
   orderedCount: number;
   /** Projects the pool is actually funding this cycle, in queue order. */
@@ -408,6 +414,10 @@ export interface TrackerRowBase {
   systemName: string;
   label: string;
   progress: number;
+  /** What the coming cycle adds, in `progress`'s own units — the row's bar draws it as a lighter
+   *  segment ahead of the fill, the same forecast the system construction screen shows. 0 means
+   *  the project absorbs nothing next cycle, which is what a forming colony behind the front reads. */
+  nextCycleProgress: number;
   etaCycles: number | null;
 }
 /** One row for a funded build project. `projectId` is the required React key for a list of these:

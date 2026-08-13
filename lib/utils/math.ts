@@ -20,6 +20,16 @@ export function progressWidthPct(fraction: number): number {
 }
 
 /**
+ * Percentage width for the lighter "next step" segment drawn ahead of a progress fill, from the
+ * same [0,1] fractions as `progressWidthPct`. It is clamped to the room the fill leaves, so a
+ * forecast larger than the work remaining finishes the bar rather than overflowing it — a
+ * near-complete project is forecast its remaining work, not a full cycle's cap.
+ */
+export function projectedWidthPct(doneFraction: number, projectedFraction: number): number {
+  return clamp(progressWidthPct(projectedFraction), 0, 100 - progressWidthPct(doneFraction));
+}
+
+/**
  * Weighted arithmetic mean of `values`, each weighted by the parallel entry in `weights`.
  * Used for intensive faction/region aggregates (e.g. stability weighted by population) so a
  * populous core dominates and a tiny outpost can't drag the number down — the map and the

@@ -213,6 +213,84 @@ describe("getTrackerData", () => {
     expect(data.waitingCount).toBe(1);
   });
 
+  it("carries the coming cycle's real gain per row — and a 0 for a colony the pool cannot reach, never the front's rate", () => {
+    const world = seatWorld();
+    const pid = world.player!.controlledFactionId;
+    const home = world.factions.find((f) => f.id === pid)!.homeworldId;
+    const colonySite = world.systems.find((s) => s.id !== home);
+    if (!colonySite) throw new Error("fixture: expected a spare system");
+
+    const systems = world.systems.map((s) => {
+      if (s.id === home) return { ...s, population: 80 }; // pool = 4, exactly one build's cap
+      if (s.id === colonySite.id) {
+        return { ...s, factionId: pid, control: "controlled" as const, population: 0 };
+      }
+      if (s.factionId === pid) return { ...s, population: 0 };
+      return s;
+    });
+    const pidSystemIds = new Set(systems.filter((s) => s.factionId === pid).map((s) => s.id));
+    const buildings = world.buildings.filter((b) => !pidSystemIds.has(b.systemId));
+
+    setWorld({
+      ...world,
+      systems,
+      buildings,
+      constructionProjects: [
+        // Absorbs the whole pool: 4 of 8 work, so half the bar is forecast to fill next cycle.
+        {
+          kind: "build", id: "front", origin: "auto", factionId: pid, systemId: home,
+          buildingType: "housing", levels: 1, workTotal: 8, workDone: 0,
+        },
+        // Behind it with the pool exhausted — it absorbs nothing, and its row must say so.
+        {
+          kind: "colony_establish", id: "c1", origin: "auto", factionId: pid, systemId: colonySite.id,
+          sourceSystemId: home, seedPop: 2, housingLevels: 1, workTotal: 100, workDone: 10,
+          stagedManifest: [], charterPaid: true, stalledCycles: 0,
+        },
+      ],
+    });
+
+    const data = getTrackerData();
+    // The real fundQueue step in the row's own units, not a flat "some progress" placeholder.
+    expect(data.building[0].nextCycleProgress).toBeCloseTo(0.5, 10);
+    // The colony borrows its ETA from the front and finds none; its GAIN is defined without one,
+    // and is genuinely zero. A front lookup standing in for it would read the build's 0.5 here.
+    expect(data.colonising[0].etaCycles).toBeNull();
+    expect(data.colonising[0].nextCycleProgress).toBe(0);
+  });
+
+  it("forecasts a near-complete project its remaining work, so its bar finishes rather than overflowing", () => {
+    const world = seatWorld();
+    const pid = world.player!.controlledFactionId;
+    const home = world.factions.find((f) => f.id === pid)!.homeworldId;
+
+    const systems = world.systems.map((s) => {
+      if (s.id === home) return { ...s, population: 80 }; // pool 4 — twice the work this project has left
+      if (s.factionId === pid) return { ...s, population: 0 };
+      return s;
+    });
+    const pidSystemIds = new Set(systems.filter((s) => s.factionId === pid).map((s) => s.id));
+    const buildings = world.buildings.filter((b) => !pidSystemIds.has(b.systemId));
+
+    setWorld({
+      ...world,
+      systems,
+      buildings,
+      constructionProjects: [
+        {
+          kind: "build", id: "nearly", origin: "auto", factionId: pid, systemId: home,
+          buildingType: "housing", levels: 1, workTotal: 8, workDone: 6,
+        },
+      ],
+    });
+
+    const row = getTrackerData().building[0];
+    expect(row.progress).toBeCloseTo(0.75, 10);
+    // 2 work left of 8, not the cap's 4 — the pair sums to exactly a full bar.
+    expect(row.nextCycleProgress).toBeCloseTo(0.25, 10);
+    expect(row.progress + row.nextCycleProgress).toBeCloseTo(1, 10);
+  });
+
   it("splits building/colonising by a project's kind, not its systemId — a build and a colony sharing a system are not conflated", () => {
     const world = seatWorld();
     const pid = world.player!.controlledFactionId;

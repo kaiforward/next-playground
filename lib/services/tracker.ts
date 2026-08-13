@@ -61,6 +61,7 @@ export function getTrackerData(): TrackerData {
       systemName: row.systemName,
       label: row.label,
       progress: row.progress,
+      nextCycleProgress: row.nextCycleProgress,
       etaCycles: row.etaCycles,
     }));
 
@@ -72,6 +73,9 @@ export function getTrackerData(): TrackerData {
     systemName: colony.systemName,
     label: "Establish Colony",
     progress: colony.progress,
+    // Straight off the colony row, unlike `etaCycles`: the coming cycle's gain is defined for every
+    // forming colony (0 when the pool cannot reach it), so it needs no front lookup to stand in.
+    nextCycleProgress: colony.nextCycleProgress,
     etaCycles: frontBySystemId.get(colony.systemId)?.etaCycles ?? null,
   }));
 

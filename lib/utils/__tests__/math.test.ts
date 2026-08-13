@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { clamp, median, progressWidthPct, quantile, weightedMean } from "@/lib/utils/math";
+import {
+  clamp,
+  median,
+  progressWidthPct,
+  projectedWidthPct,
+  quantile,
+  weightedMean,
+} from "@/lib/utils/math";
 
 describe("clamp", () => {
   it("returns the value untouched when it is already inside the bounds", () => {
@@ -37,6 +44,29 @@ describe("progressWidthPct", () => {
   it("clamps out-of-range input at both ends rather than drawing a fill past 100% or below 0", () => {
     expect(progressWidthPct(1.5)).toBe(100);
     expect(progressWidthPct(-0.3)).toBe(0);
+  });
+});
+
+describe("projectedWidthPct", () => {
+  // The forecast segment ProgressBar and TrackerRow both draw after the fill. Same reason as
+  // above: its only observable in a component test is a style attribute, so the maths lives here.
+
+  it("converts the forecast fraction to a percentage when there is room for all of it", () => {
+    expect(projectedWidthPct(0.2, 0.15)).toBeCloseTo(15, 10);
+  });
+
+  it("clamps to the room the fill leaves — a project 10% from done forecast a full 30% cycle draws 10, finishing the bar rather than overflowing it", () => {
+    expect(projectedWidthPct(0.9, 0.3)).toBeCloseTo(10, 10);
+    expect(projectedWidthPct(0.9, 0.3) + progressWidthPct(0.9)).toBeCloseTo(100, 10);
+  });
+
+  it("draws nothing on a completed bar, and nothing for a project absorbing nothing this cycle", () => {
+    expect(projectedWidthPct(1, 0.3)).toBe(0);
+    expect(projectedWidthPct(0.4, 0)).toBe(0);
+  });
+
+  it("never draws a negative segment from a bad upstream value", () => {
+    expect(projectedWidthPct(0.4, -0.2)).toBe(0);
   });
 });
 

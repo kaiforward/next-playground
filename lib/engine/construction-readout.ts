@@ -115,6 +115,10 @@ export interface FundedFrontRow {
    *  row's own title convention (`components/construction/construction-row.tsx`). */
   label: string;
   progress: number;
+  /** Next funded cycle's gain as a share of total work, in [0,1] — `nextCycleGain / workTotal`,
+   *  the same quantity in the same units as `progress` so a consumer can draw the two adjacently
+   *  without holding the project's work totals. */
+  nextCycleProgress: number;
   etaCycles: number | null;
 }
 
@@ -164,6 +168,12 @@ export function describeBuildProject(buildingType: string): string {
 
 function progressOf(p: WorldConstructionProject): number {
   return p.workTotal > 0 ? Math.min(1, Math.max(0, p.workDone / p.workTotal)) : 0;
+}
+
+/** A work amount as a share of the project's total work, in [0,1] — `progress`'s units. A
+ *  zero-work project reads 0 rather than dividing, matching `progressOf`. */
+export function workShareOf(work: number, workTotal: number): number {
+  return workTotal > 0 ? Math.min(1, Math.max(0, work / workTotal)) : 0;
 }
 
 /** Soonest-ETA first; stalled (null) last; ties by system name — a total, deterministic order. */
@@ -368,6 +378,7 @@ export function computeFactionConstruction(
         kind: p.kind,
         label: p.kind === "colony_establish" ? "Establish Colony" : `${buildingLabel(p.buildingType)} ×${p.levels}`,
         progress: base.progress,
+        nextCycleProgress: workShareOf(gains[i], p.workTotal),
         etaCycles: base.etaCycles,
       });
     }

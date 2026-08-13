@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { RichCard, RichCardContent, RichCardTrigger } from "@/components/ui/rich-card";
-import { progressWidthPct } from "@/lib/utils/math";
+import { progressWidthPct, projectedWidthPct } from "@/lib/utils/math";
 
 /** One icon-plus-number figure on a row — population's person icon, stability's colour swatch
  *  beside its value. `label` never renders visibly (the row stays one line); it exists so the
@@ -32,6 +32,10 @@ export interface TrackerRowProps {
    *  `progressWidthPct`. Renders the progress track whenever defined, including 0 — a stalled
    *  project stays visible rather than rendering nothing. */
   progress?: number;
+  /** What the coming cycle adds, in `progress`'s units — drawn as a dimmer extension of the fill,
+   *  matching the system construction screen's projected segment. Omitted (or 0) draws nothing,
+   *  which is what a project the pool cannot reach this cycle reads. */
+  nextCycleProgress?: number;
   /** Copper for build progress, amber for colony progress — cosmetic only. Required alongside
    *  `progress` to pick a fill colour; a `progress` with no `tone` still draws the track. */
   tone?: "build" | "colony";
@@ -46,14 +50,29 @@ export interface TrackerRowProps {
 /**
  * One line in the Tracker: a name, at most two icon-plus-number figures, and — for build/colony
  * rows — a 2px progress track flush to the row's bottom edge, full-bleed to the panel's sides
- * (the track sits on the `<li>`, outside the padded trigger button, so it reaches both edges).
+ * (the track sits on the `<li>`, outside the padded trigger button, so it reaches both edges). The
+ * track carries the coming cycle's gain as a dimmer segment ahead of the fill, so a row shows both
+ * where a project stands and how fast it is moving without opening its card.
  *
  * The row's trigger is a `RichCard` with click-to-open disabled: activating the row (click or
  * Enter/Space) navigates via `onActivate`, and the card is reached only by hovering or
  * Tab-focusing the row, per the spec's split between the row's click and its card.
  */
-export function TrackerRow({ systemId, name, figures, progress, tone, onActivate, card }: TrackerRowProps) {
+export function TrackerRow({
+  systemId,
+  name,
+  figures,
+  progress,
+  nextCycleProgress,
+  tone,
+  onActivate,
+  card,
+}: TrackerRowProps) {
   const fillColor = tone ? TONE_COLOR[tone] : "var(--color-accent)";
+  const projectedPct =
+    progress !== undefined && nextCycleProgress !== undefined
+      ? projectedWidthPct(progress, nextCycleProgress)
+      : 0;
 
   return (
     <li className="relative border-b border-border/60 last:border-b-0" data-system-id={systemId}>
@@ -91,11 +110,20 @@ export function TrackerRow({ systemId, name, figures, progress, tone, onActivate
         <RichCardContent>{card}</RichCardContent>
       </RichCard>
       {progress !== undefined && (
-        <div aria-hidden className="absolute inset-x-0 bottom-0 h-0.5 bg-surface-active">
+        <div aria-hidden className="absolute inset-x-0 bottom-0 flex h-0.5 bg-surface-active">
           <span
             className="block h-full"
             style={{ width: `${progressWidthPct(progress)}%`, backgroundColor: fillColor }}
           />
+          {/* The coming cycle's gain, in the fill's own colour at half strength — a forecast, not
+              work already done. Half rather than the construction screen's 40%: this track is 2px
+              against that screen's 6px, and at that height a fainter segment stops reading. */}
+          {projectedPct > 0 && (
+            <span
+              className="block h-full"
+              style={{ width: `${projectedPct}%`, backgroundColor: fillColor, opacity: 0.5 }}
+            />
+          )}
         </div>
       )}
     </li>

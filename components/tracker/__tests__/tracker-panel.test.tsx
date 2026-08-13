@@ -87,7 +87,15 @@ function buildRow(
   progress: number,
   projectId: string = `proj-${systemId}`,
 ): TrackerBuildRow {
-  return { projectId, systemId, systemName, label: "Shipyard L2", progress, etaCycles: 4 };
+  return {
+    projectId,
+    systemId,
+    systemName,
+    label: "Shipyard L2",
+    progress,
+    nextCycleProgress: 0.05,
+    etaCycles: 4,
+  };
 }
 
 beforeEach(() => {
@@ -277,8 +285,8 @@ describe("TrackerPanel — a system with several concurrent build projects rende
       waitingCount: 0,
       colonising: [],
       building: [
-        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 10, etaCycles: 3 },
-        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 20, etaCycles: 5 },
+        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 0.10, nextCycleProgress: 0.05, etaCycles: 3 },
+        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.20, nextCycleProgress: 0.05, etaCycles: 5 },
       ],
     };
     const { rerender } = renderPanel();
@@ -296,9 +304,9 @@ describe("TrackerPanel — a system with several concurrent build projects rende
       waitingCount: 0,
       colonising: [],
       building: [
-        { projectId: "p3", systemId: "sys-c", systemName: "Rigel", label: "Yard x1", progress: 5, etaCycles: 9 },
-        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 15, etaCycles: 2 },
-        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 25, etaCycles: 4 },
+        { projectId: "p3", systemId: "sys-c", systemName: "Rigel", label: "Yard x1", progress: 0.05, nextCycleProgress: 0.05, etaCycles: 9 },
+        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 0.15, nextCycleProgress: 0.05, etaCycles: 2 },
+        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.25, nextCycleProgress: 0.05, etaCycles: 4 },
       ],
     };
     rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
@@ -321,8 +329,8 @@ describe("TrackerPanel — re-rendering with fresh data replaces rows, never acc
       waitingCount: 0,
       colonising: [],
       building: [
-        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 10, etaCycles: 3 },
-        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 20, etaCycles: 5 },
+        { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 0.10, nextCycleProgress: 0.05, etaCycles: 3 },
+        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.20, nextCycleProgress: 0.05, etaCycles: 5 },
       ],
     };
     const { rerender } = renderPanel();
@@ -337,8 +345,8 @@ describe("TrackerPanel — re-rendering with fresh data replaces rows, never acc
       waitingCount: 0,
       colonising: [],
       building: [
-        { projectId: "p3", systemId: "sys-c", systemName: "Rigel", label: "Yard x1", progress: 5, etaCycles: 8 },
-        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 45, etaCycles: 3 },
+        { projectId: "p3", systemId: "sys-c", systemName: "Rigel", label: "Yard x1", progress: 0.05, nextCycleProgress: 0.05, etaCycles: 8 },
+        { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.45, nextCycleProgress: 0.05, etaCycles: 3 },
       ],
     };
     rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
@@ -375,6 +383,102 @@ describe("TrackerRow — a zero-progress row still shows its track", () => {
     // engine, so a width assertion would prove only that a string reached a style attribute. The
     // width maths lives in `progressWidthPct`, tested in node.
     expect(fill).not.toBeNull();
+  });
+});
+
+describe("TrackerRow — the coming cycle's gain is drawn only when there is one", () => {
+  /** The track's segments. Existence and count only — the carve-out the component-test convention
+   *  allows, since jsdom can't verify a width. The widths are pinned in `math.test.ts`. */
+  function segmentsOf(container: HTMLElement): Element[] {
+    const track = container.querySelector(".bg-surface-active");
+    expect(track).not.toBeNull();
+    return Array.from(track?.querySelectorAll("span") ?? []);
+  }
+
+  it("a funded row draws the forecast segment alongside its fill", () => {
+    const { container } = render(
+      <TrackerRow
+        systemId="sys-a"
+        name="Rigel Yards"
+        figures={[]}
+        progress={0.4}
+        nextCycleProgress={0.2}
+        tone="build"
+        onActivate={vi.fn()}
+        card={<div>card</div>}
+      />,
+    );
+    expect(segmentsOf(container)).toHaveLength(2);
+  });
+
+  it("a row absorbing nothing next cycle draws its fill alone — no empty forecast element", () => {
+    const { container } = render(
+      <TrackerRow
+        systemId="sys-a"
+        name="Starved Colony"
+        figures={[]}
+        progress={0.4}
+        nextCycleProgress={0}
+        tone="colony"
+        onActivate={vi.fn()}
+        card={<div>card</div>}
+      />,
+    );
+    expect(segmentsOf(container)).toHaveLength(1);
+  });
+
+  it("a completed bar has no room left, so nothing is drawn ahead of it", () => {
+    const { container } = render(
+      <TrackerRow
+        systemId="sys-a"
+        name="Finishing Yards"
+        figures={[]}
+        progress={1}
+        nextCycleProgress={0.3}
+        tone="build"
+        onActivate={vi.fn()}
+        card={<div>card</div>}
+      />,
+    );
+    expect(segmentsOf(container)).toHaveLength(1);
+  });
+});
+
+describe("TrackerPanel — a build or colony row shows its cycles remaining on the row itself", () => {
+  it("a funded build reads its ETA on the row; a colony with no forecast reads an em-dash, not a stale number", () => {
+    trackerData = {
+      pinned: [],
+      waitingCount: 0,
+      building: [buildRow("sys-b", "Rigel Yards", 0.5)], // etaCycles 4
+      colonising: [
+        {
+          systemId: "sys-a",
+          systemName: "New Haven",
+          label: "Establish Colony",
+          progress: 0.3,
+          nextCycleProgress: 0,
+          etaCycles: null,
+        },
+      ],
+    };
+    renderPanel();
+
+    // Read off the row's accessible name rather than a standalone text query: that is what proves
+    // the figure rendered inside the row it describes, and it carries the sr-only label with it.
+    expect(
+      screen.getByRole("button", {
+        name: (name) => name.includes("Rigel Yards") && name.includes("≈4 cyc"),
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: (name) => name.includes("New Haven") && name.includes("Cycles remaining") && name.includes("—"),
+      }),
+    ).toBeInTheDocument();
+    // The unforecastable colony must not borrow the funded build's number.
+    expect(
+      screen.queryByRole("button", { name: (name) => name.includes("New Haven") && name.includes("4") }),
+    ).not.toBeInTheDocument();
   });
 });
 
