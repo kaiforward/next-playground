@@ -102,6 +102,26 @@ export interface FoundingReadoutInputs {
 
 export type ConstructionProjectRow = ConstructionProjectBuildRow | ConstructionProjectColonyRow;
 
+/** One row of the funded front — a project whose next-cycle gain is positive, in queue order. */
+export interface FundedFrontRow {
+  projectId: string;
+  systemId: string;
+  systemName: string;
+  /** Discriminates build vs colony_establish — a colony's systemId is never a build's under today's
+   *  invariant (colony_establish only ever targets a controlled system, a build only a developed
+   *  one), but consumers that split by kind should read this rather than lean on that invariant. */
+  kind: "build" | "colony_establish";
+  /** Building type + level count ("Housing ×4"), or "Establish Colony" — mirrors the construction
+   *  row's own title convention (`components/construction/construction-row.tsx`). */
+  label: string;
+  progress: number;
+  /** Next funded cycle's gain as a share of total work, in [0,1] — `nextCycleGain / workTotal`,
+   *  the same quantity in the same units as `progress` so a consumer can draw the two adjacently
+   *  without holding the project's work totals. */
+  nextCycleProgress: number;
+  etaCycles: number | null;
+}
+
 export interface FactionConstructionReadout {
   /** Total per-cycle funding rate (base + centres) — the value the ETA forecast runs on. */
   pool: number;
@@ -117,6 +137,13 @@ export interface FactionConstructionReadout {
   buildOut: ConstructionProjectBuildRow[];
   /** Every row in queue order — the per-system section filters this by systemId. */
   all: ConstructionProjectRow[];
+  /** The projects the pool is actually funding THIS cycle — one entry per project whose
+   *  `nextCycleGain` is positive, in queue order (the order the pool funds them, not re-sorted by
+   *  progress). A colony held at a zero materials ceiling is absent here even mid-progress: it is
+   *  absorbing nothing this cycle, which is the front's whole definition. */
+  fundedFront: FundedFrontRow[];
+  /** Open projects not on the front — the pool hasn't reached them this cycle. */
+  waitingCount: number;
 }
 
 /** Human label for a build project's building type (mirrors the industry panel's `label`). */
@@ -141,6 +168,12 @@ export function describeBuildProject(buildingType: string): string {
 
 function progressOf(p: WorldConstructionProject): number {
   return p.workTotal > 0 ? Math.min(1, Math.max(0, p.workDone / p.workTotal)) : 0;
+}
+
+/** A work amount as a share of the project's total work, in [0,1] — `progress`'s units. A
+ *  zero-work project reads 0 rather than dividing, matching `progressOf`. */
+export function workShareOf(work: number, workTotal: number): number {
+  return workTotal > 0 ? Math.min(1, Math.max(0, work / workTotal)) : 0;
 }
 
 /** Soonest-ETA first; stalled (null) last; ties by system name — a total, deterministic order. */
@@ -323,6 +356,7 @@ export function computeFactionConstruction(
   const all: ConstructionProjectRow[] = [];
   const expansion: ConstructionProjectColonyRow[] = [];
   const buildOut: ConstructionProjectBuildRow[] = [];
+  const fundedFront: FundedFrontRow[] = [];
 
   projects.forEach((p, i) => {
     const base: ConstructionRowBase = {
@@ -336,6 +370,18 @@ export function computeFactionConstruction(
       etaCycles: etas[i],
       nextCycleGain: gains[i],
     };
+    if (gains[i] > 0) {
+      fundedFront.push({
+        projectId: p.id,
+        systemId: base.systemId,
+        systemName: base.systemName,
+        kind: p.kind,
+        label: p.kind === "colony_establish" ? "Establish Colony" : `${buildingLabel(p.buildingType)} ×${p.levels}`,
+        progress: base.progress,
+        nextCycleProgress: workShareOf(gains[i], p.workTotal),
+        etaCycles: base.etaCycles,
+      });
+    }
     if (p.kind === "colony_establish") {
       const stalledReason = colonyStallReason(p, founding, cap);
       const supply = founding.supplyBySource.get(p.sourceSystemId) ?? [];
@@ -376,5 +422,6 @@ export function computeFactionConstruction(
   return {
     pool, poolBase: poolParts.base, poolCentres: poolParts.centres,
     expandCount: expansion.length, buildCount: buildOut.length, expansion, buildOut, all,
+    fundedFront, waitingCount: projects.length - fundedFront.length,
   };
 }

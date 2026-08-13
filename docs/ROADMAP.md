@@ -24,44 +24,78 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-1. **[L] The attention layer — how the player finds what to do.** The system screens are built and
-   detailed, and deciding what to act on is still hard. The player's actual verbs are colonising and
-   building, so the layer's job is to surface, for each, either an issue to fix or an opportunity to
-   take. Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
-   approaching it** (the cue to build housing), and **which systems cannot meet their demand from
-   imports plus production**. Low stability already works as a third, and is the proof the approach
-   reads well.
-   Two surfaces, one problem. A **faction situation log** (player-seat Phase 3 Slice 4, design in
-   [player-seat-roadmap.md](./planned/player-seat-roadmap.md); slices 1-3 shipped, active specs
-   [player-seat.md](./active/gameplay/player-seat.md) +
-   [player-seat-purse.md](./active/gameplay/player-seat-purse.md)) and a **systems view ordered by
-   need** — a priority ranking over issues and opportunities, so the player can scan rather than
-   hunt. The ranking is the harder half and the one with no design at all.
-   The open design question, and the reason this is not a small item: EU5 / Crusader Kings-style
-   alerts are the reference Kai likes, and they are also widely criticised for nagging — constant
-   pop-ups the player learns to dismiss. Inform without irritating; that is the thing to solve, not
-   a detail to settle during implementation.
-   **Carries `RATION_EXIT_EPS`**, deferred here when the presentation layer shipped: the hysteresis has
-   no surviving justification until a log exists. Its other two rationales are dead — the per-good
-   regime chips it was authored for were dropped, and visual flapping does not occur (bands are
-   written once per 24-tick economy cycle, so the fastest a chip or map cell can change is every 4.8s
-   at speed 5, with SSE throttled to 4 emits/sec regardless). A log entry per transition is
-   different: it accumulates in a list the player scrolls, so a system wobbling across an edge
-   produces junk entries at any speed. Calibrate the value against the log's own spam, not the chips.
-   **Open question to settle then:** whether the hysteresis applies to the persisted display band
-   only (presentational) or to the classifier itself (mechanical — the regime feeds the unrest term).
-   Unverified at deferral time; do not assume the first.
-   *Next step:* design pass on the ranking and the notification model before any spec — the
-   irritation problem is a design problem, and the two named reads are the first concrete test of
-   whatever ranking comes out.
-   *Don't:* ship a feed that fires per event without a ranking behind it. That is the failure mode
-   the genre is criticised for, and the reason this row is not just "add alerts".
+The attention layer — how the player finds what to do — is two surfaces. The first, the **Tracker**,
+has shipped: `docs/active/gameplay/tracker.md`. The second, the **alert bar**, is row 1 below.
+
+The split that separates them: a **Tracker row is a thing** (it persists whether or not anything is
+wrong with it), an **alert-bar row is a condition** (it exists only while true and is cleared by
+fixing it). Settled against how EU5 and Victoria 3 do it — the four design principles, the genre
+sources and the reasoning are in memory `design-attention-layer-inputs`, which the alert-bar row
+starts from.
+
+**A third surface was considered and dropped**: a separate dismissible feed of discrete events (the
+"situation log" of `player-seat-roadmap.md`). Events are conditions the player should act on, so they
+become alert-bar categories rather than a parallel scrolling list — one surface for "look at this",
+not two. Don't re-propose the feed without a case for what it holds that an alert cannot.
+
+1. **[L] The alert bar — the conditions wanting a decision.** A top bar of alert categories ordered by
+   severity, carrying opportunities and decisions as well as faults (EU5's shape: red critical,
+   yellow important, blue informational). **Ranking is by authored category tier, never a computed
+   cross-domain score** — within a class, sort by that class's own natural measure (population pressed
+   against the cap for crowding, unserved demand rate for unmet need). Neither reference game ranks
+   instances across domains; a single global sort is what forces invented weights, and it is why the
+   housing-has-no-ROI problem dissolves here.
+   Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
+   approaching it** (the cue to build housing) and **which systems cannot meet their demand from
+   imports plus production**. Low stability already works as a third and is the proof the approach
+   reads well; strikes and famine already have their data too. A category expanding into its instance
+   list needs a host — today's faction **Territory** tab is a flat name + economy-type list
+   (`app/(game)/@panel/factions/[factionId]/territory/page.tsx`) and is the natural candidate.
+   **A per-category settings screen is load-bearing, not polish.** The most-subscribed EU5 alert mod
+   exists to hide exactly our intended class — buildings missing employees, RGOs missing employees,
+   unprofitable buildings — because those stay continuously true for states the player often cannot
+   fix. Checkbox per category, plus a small non-hideable tier (war declarations and the like).
+   **Opportunity alerts gate on the existing automation switch:** with a domain automated the
+   planner's ranked proposals are already being acted on, so surfacing them is noise — only what it
+   *tried and could not do* surfaces. That is this row's real cost, because those blocked cases leave
+   no trace in code today: an opportunity that does not fit space or labour is dropped by a bare
+   `continue` (`lib/engine/directed-build.ts:824`) or a zero-level binary search (`:848-850`).
+   Emitting the reason is new instrumentation and the bulk of the work. Precedent that it is
+   tractable: one such signal already persists and no UI reads it — `logisticsFundingBound` on the
+   market row (`lib/engine/directed-logistics.ts:174`).
+   **This row absorbs the events surface.** The 12 event types plus the three relations-owned ones
+   become alert categories rather than a separate feed — an event the player should act on is a
+   condition, and a parallel scrolling list is the second "look at this" surface the layer exists to
+   avoid. Supersedes the alert-feed/situation-log section of
+   [player-seat-roadmap.md](./planned/player-seat-roadmap.md).
+   **Undesigned and needed at the planning pass: what clicking an alert does.** In EU5 it varies by
+   category — some jump the camera, some open a panel, some apply the decision directly. Ours will
+   need the same per-category answer, and it interacts with the tier list rather than following from
+   it.
+   **Carries `RATION_EXIT_EPS`**, rehomed here when the situation log was dropped. Two of its three
+   rationales are already dead — the per-good regime chips it was authored for were dropped, and
+   visual flapping does not occur (bands are written once per 24-tick economy cycle, so the fastest a
+   chip or map cell can change is every 4.8s at speed 5, with SSE throttled to 4 emits/sec
+   regardless). The third was log spam, which died with the log. **So it now has no surviving
+   justification at all unless band transitions become an alert category** — if they do, calibrate the
+   hysteresis against a condition flapping on and off the bar; if they don't, delete the constant
+   rather than keep tuning it. **Open question either way:** whether the hysteresis applies to the
+   persisted display band only (presentational) or to the classifier itself (mechanical — the regime
+   feeds the unrest term). Unverified at deferral time; do not assume the first.
+   *Next step:* author the category and tier list, then design the blocked-reason instrumentation the
+   planner must emit.
+   *Don't:* alert on a raw persistent state the player cannot act on. That is the precise EU5 failure
+   — dismissal is pointless because the condition is still true, so the alert returns instantly and
+   crowds out the useful ones.
 
 2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
    technologies exist. Kai's read is that this slows the simulation rather than breaking it.
+   **A third lever, and the cheapest: colonisation automation defaults off**, with AI founding slowed
+   enough that a player can reasonably keep up by hand (Kai, 2026-08-12). Settled alongside the
+   attention layer, whose Tracker owns the *surface* for a forming colony; this row owns the pacing.
    The knob already exists: `habitableFraction` is housing-per-space efficiency
    (`habitableSpace = generalSpace × habitableFraction`), and the expensive, low-yield
    specialist-habitation *building* was recorded as a hook at that same decision — see memory
@@ -70,6 +104,15 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
    for terraforming or technology finds only event and faction flavour text. "Gated behind
    technology" is therefore a new system, not a constant change, and the sequencing of the two is
    itself part of the design.
+   **A second pacing lever, from the EU5 read (2026-08-12): price the charter by distance and by
+   concurrent-colony count.** EU5 scales a colonial charter's cost with population, distance and how
+   many charters you already hold, plus a monthly upkeep per active colony, and caps expeditions at
+   roughly one per two years. Ours is `max(CHARTER_FEE_MIN, CHARTER_FEE_SPEND_MULT × maintenanceBill)`
+   (`lib/constants/colonisation.ts:81-89`) — it scales with faction *size* only, so neither distance
+   nor concurrency is priced. Both are cost-shaped ways to slow expansion without making systems
+   dead, and they compose with (rather than replace) the viability cut. Overlaps the control-shaped
+   **claim pricing** item in [player-seat-roadmap.md](./planned/player-seat-roadmap.md) — settle the
+   two together, not twice.
    *Next step:* `/measure` how many systems are viable at founding today and how fast the galaxy
    actually colonises, before touching any constant.
    *Don't:* buy scarcity by making systems dead. Barren-but-alive is a deliberate decision — rocky
@@ -155,10 +198,21 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still
   lack the goods). The former blocker — `demandRate` double-purposed as pricing anchor and logistics
   deficit anchor — cleared with #211/#212 and the `TARGET_COVER` role split: pricing keeps the floored
-  `demandRate` denominator, logistics and founding read real demand.
+  `demandRate` denominator, logistics and founding read real demand. Unlocks the strata-as-private-builder
+  mechanic on the social-strata row above — wealth pops hold is what a private builder spends.
 - **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
   their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
   its reference); nothing breaks if it never lands.
+  **Also carries the strata-as-private-builder mechanic** (scoped 2026-08-12; inputs in memory
+  `design-strata-private-builder`): in both reference games the strata are a *second builder* that is
+  neither the player nor automation — Victoria 3's investment pool splits the construction queue into
+  private and government by economic law; EU5's estates build regardless of the player's automation
+  settings and their builds cannot be cancelled. The interesting axis is **ownership, not output** —
+  same buildings and goods, but the returns bypass the treasury and tearing one down costs political
+  standing. Gated on real pop wealth (the row below, and the purse's Stage 3 monetisation staging),
+  since a stratum cannot invest what it does not hold.
+  *Don't:* give the private builder its own construction pool without deciding how it shares the
+  physical ceiling — a second unexamined pool breaks "money is fuel, not capacity".
 - **[S] Loose ends out of scope for band reconciliation, unpicked-up since** — noted but not designed:
   a legible EU5-style reserve/stockpile mechanic (visible policy-set stockpile, crisis
   release/requisition, war stores, rationed by access) — ties to purse Stage 2-3 monetisation and
@@ -229,6 +283,18 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   it. Needs an interaction design pass — this is the third goods-bearing surface, so it must earn
   its place against the needs ledger and the industry roster rather than duplicating them.
   *Don't:* rebuild it as a price table — cycles of cover is the unit, price is a secondary read.
+- **[M] A full construction screen — every active project, not just the front.** The Tracker caps its
+  Building section at 10 rows, because a real faction runs ~44 funded builds at once and a panel meant
+  to be scanned cannot carry them. The capped rows and the queue behind the front are both summarised
+  as counts, so there is currently **nowhere to see the whole queue** — the per-system Industry tab
+  shows one system's builds, and the faction construction card shows systems-with-counts, neither of
+  which is the full list. Wanted: a sortable, filterable view of every open project across the faction
+  with its progress, funding rate and ETA. Surfaced by the owner while running the Tracker in a real
+  game (2026-08-12).
+  *Next step:* decide whether it is a faction-panel tab or its own route before any layout work —
+  it competes with the Territory tab, which the alert bar also wants as a host.
+  *Don't:* rebuild it as a second Tracker. The Tracker answers "where is my pool going right now";
+  this answers "show me everything", and the two want different orderings and different densities.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
   duplicates the number in steady state and conflates the one-cycle latch lag with genuine insolvency.
   *Next step:* needs the settlement snapshot to persist the slider values used at settlement — a
@@ -244,6 +310,16 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
   as this system's second tier.
+  **The primitive shipped with the Tracker** (`RichCard`) — a Popover-based rich card with hover-to-open, keyboard
+  access and a safe transit area, scoped to one level. What stays here: **nesting** (a parent card must
+  not close while a child is open — neither Radix primitive gives this, so it is custom either way),
+  pinning, the glossary, and **migrating the existing plain Radix tooltips** onto the card, which is
+  deliberately deferred rather than done alongside the Tracker.
+  Design input worth not losing: Paradox tooltips **follow the cursor until you hold still, then latch**
+  so you can move onto them. That is a legitimate alternative to a grace-area polygon and arguably
+  simpler; decide between them at the prototype pass.
+  *Don't:* design the nesting model before there is a real chain of descriptions to design against —
+  the shape follows the content, and the Tracker needed only one level.
 - **[S] Game-term glossary** — one doc defining the game's terms of art in plain language (pop = 1
   million people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as
   the single source tooltips and tutorials quote from. The nested-tooltips row's "cross-linking

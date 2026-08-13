@@ -11,6 +11,7 @@ import { TabList, TabLink } from "@/components/ui/tabs";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { MapPinIcon } from "@/components/ui/icons";
 import { SystemCadenceCountdown } from "@/components/system/system-cadence-countdown";
+import { PinToggle } from "@/components/system/pin-toggle";
 
 function SystemPanelContent({
   systemId,
@@ -68,6 +69,7 @@ function SystemPanelContent({
   const headerAction = (
     <>
       <SystemCadenceCountdown systemId={systemId} />
+      <PinToggle systemId={systemId} />
       <Button
         variant="ghost"
         size="xs"

@@ -34,6 +34,10 @@ function GameShellInner({ panel, children }: GameShellProps) {
       <main className="flex-1 relative overflow-hidden">
         {children}
         {panel}
+        {/* The Tracker panel is not mounted here — it lives in `MapRightRail`
+            (components/map/map-right-rail.tsx), sharing a real flex container with the map
+            controls dock so the map is the only route the Tracker renders on. Routes without a
+            map (there are none currently — every game route renders `StarMap`) would lose it. */}
       </main>
       {process.env.NODE_ENV === "development" && <DevToolsPanel />}
     </div>

@@ -115,7 +115,13 @@ export function foundingReadoutInputs(
   };
 }
 
-function readoutForFaction(factionId: string): FactionConstructionReadout {
+/**
+ * One faction's whole construction readout, as the engine produces it. Exported for the server-side
+ * readers that need rows the client DTOs deliberately do not carry — the Tracker reads the funded
+ * front and the per-project ETAs from here rather than having `FactionConstructionData` widened with
+ * fields no client component renders.
+ */
+export function readoutForFaction(factionId: string): FactionConstructionReadout {
   const world = getWorld();
   const faction = world.factions.find((f) => f.id === factionId);
   if (!faction) throw new ServiceError(`Faction ${factionId} not found.`, 404);
@@ -143,12 +149,18 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
   const world = getWorld();
 
   const bySystem = new Map<string, { systemName: string; count: number }>();
-  const colonies: Array<{ systemId: string; systemName: string; progress: number }> = [];
+  const colonies: FactionConstructionData["colonies"] = [];
   let orderedCount = 0;
   for (const row of readout.all) {
     if (row.origin === "player") orderedCount += 1;
     if (row.kind === "colony_establish") {
-      colonies.push({ systemId: row.systemId, systemName: row.systemName, progress: row.progress });
+      // Read off `all` rather than the funded front: a colony the pool cannot reach this cycle
+      // still gets a row wherever colonies are listed.
+      colonies.push({
+        systemId: row.systemId,
+        systemName: row.systemName,
+        progress: row.progress,
+      });
     } else {
       const entry = bySystem.get(row.systemId) ?? { systemName: row.systemName, count: 0 };
       entry.count += 1;

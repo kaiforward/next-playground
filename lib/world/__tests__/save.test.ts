@@ -1,14 +1,20 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { generateWorld } from "../gen";
 import { serializeWorld, deserializeWorld, sanitizeSaveName, SAVE_FORMAT_VERSION } from "../save";
 import type { World } from "../types";
 import { runWorldTick } from "../tick";
+import { setWorld, clearWorld } from "../store";
+import { getTrackerData } from "@/lib/services/tracker";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { provision } from "@/lib/engine/population";
 import { EXPECTATION_PARAMS } from "@/lib/constants/population";
+
+afterEach(() => {
+  clearWorld();
+});
 
 describe("sanitizeSaveName", () => {
   it("lowercases and strips everything but [a-z0-9-_]", () => {
@@ -133,8 +139,8 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 12 (the supply-band vocabulary)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(12);
+  it("is at save format version 13 (pinned systems on the player seat)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(13);
   });
 
   it("rejects a prior-version (v11) save — saves break on the shape bump", () => {
@@ -358,6 +364,74 @@ describe("save format — player seat", () => {
     const stale = JSON.stringify({ formatVersion: 5, world: { meta: {} } });
     const result = deserializeWorld(stale);
     expect(result.ok).toBe(false);
+  });
+
+  it("round-trips pinnedSystemIds in insertion order", () => {
+    const world = generateWorld({
+      systemCount: 120,
+      seed: 7,
+      playerFaction: { name: "Testers Guild", governmentType: "corporate", doctrine: "hegemonic" },
+    });
+    if (!world.player) throw new Error("fixture: expected a player seat");
+    const [a, b, c] = world.systems;
+    const withPins: World = {
+      ...world,
+      player: { ...world.player, pinnedSystemIds: [c.id, a.id, b.id] },
+    };
+    const result = deserializeWorld(serializeWorld(withPins));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.player?.pinnedSystemIds).toEqual([c.id, a.id, b.id]);
+  });
+
+  it("rejects a stale formatVersion save even when its payload otherwise matches the current shape", () => {
+    // The version gate rejects on `formatVersion` alone, before the player seat (or anything else
+    // below `meta`) is ever inspected — stripping `pinnedSystemIds` here changes nothing about WHY
+    // this is rejected, only what a genuine v12 save (predating the field) would have looked like.
+    // Same defence as the v11 supply-band case above: the bump is the whole mechanism.
+    const world = generateWorld({
+      systemCount: 60,
+      seed: 7,
+      playerFaction: { name: "Testers Guild", governmentType: "corporate", doctrine: "hegemonic" },
+    });
+    if (!world.player) throw new Error("fixture: expected a player seat");
+    const { pinnedSystemIds: _dropped, ...v12Player } = world.player;
+    const json = JSON.stringify({ formatVersion: 12, world: { ...world, player: v12Player } });
+    const result = deserializeWorld(json);
+    expect(result.ok).toBe(false);
+  });
+
+  it("a CURRENT-version save whose player seat lacks pinnedSystemIds loads, then breaks the first read that touches it", () => {
+    // deserializeWorld's structural spot-checks cover only `meta` (see isWorldShaped's doc comment) —
+    // they were never going to notice a missing `pinnedSystemIds` on a save stamped with today's
+    // SAVE_FORMAT_VERSION. Every save `serializeWorld` actually produces always carries the field
+    // (it's a required, non-optional column on WorldPlayer), so this shape can only arise from a
+    // hand-edited or corrupted file, not from any real version transition — but the module's own
+    // contract is deliberately non-exhaustive, so it is worth pinning what that gap actually does.
+    const world = generateWorld({
+      systemCount: 60,
+      seed: 7,
+      playerFaction: { name: "Testers Guild", governmentType: "corporate", doctrine: "hegemonic" },
+    });
+    if (!world.player) throw new Error("fixture: expected a player seat");
+    const { pinnedSystemIds: _dropped, ...v13PlayerMissingPins } = world.player;
+    const json = JSON.stringify({
+      formatVersion: SAVE_FORMAT_VERSION,
+      world: { ...world, player: v13PlayerMissingPins },
+    });
+
+    const result = deserializeWorld(json);
+    // Loads successfully — the spot-check has nothing to say about a missing player field.
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.player?.pinnedSystemIds).toBeUndefined();
+
+    // The gap: the first Tracker read against this world throws, rather than degrading (e.g. to an
+    // empty pin list). This is a real behavioural hole for a corrupted/hand-edited save — flagged
+    // here, not silently patched with a `?? []` fallback, because a save-path behaviour change is a
+    // human decision (AGENTS.md), not one this test should make unilaterally.
+    setWorld(result.world);
+    expect(() => getTrackerData()).toThrow();
   });
 });
 

@@ -12,7 +12,7 @@ This is deliberately above implementation: it locks the concept, records what is
 
 **Why the pivot.** The concept audit (2026-07-05) found the project had already become this game in all but the player seat: ~80% of design and code effort went into the living world simulation (physical substrate, dynamic population, build/decay, logistics, specialisation, factions), while the player-facing trading layer stayed shallow and every attempt to deepen it fought the design (the contract layer was built then ditched; the trade rework was blocked on price-spread problems; multiplayer infrastructure was never designed). The personal-scale pilot fantasy (fly a ship, dodge hazards, arbitrage markets) cannot compete in its genre without real-time flight and combat, and real-time multiplayer was the single largest cost multiplier — anti-exploit design, contention design, infrastructure, and the need for a player population. The simulation is the crown jewel; this pivot makes it the game board.
 
-**The inversion that makes this cheap rather than expensive:** the autonomic agency layer (directed logistics, build planner, and the planned SP5 treasury / budget bands / doctrine-weighted priorities) stops being an NPC brain and becomes the **player's control surface** — and, unchanged, the AI opponents. Most strategy games struggle to make the AI play the player's game; we built the AI-playable version first.
+**The inversion that makes this cheap rather than expensive:** the autonomic agency layer (directed logistics, the build planner, the treasury and its budget bands — all shipped — plus the still-planned doctrine-weighted priorities) stops being an NPC brain and becomes the **player's control surface** — and, unchanged, the AI opponents. Most strategy games struggle to make the AI play the player's game; we built the AI-playable version first.
 
 ---
 
@@ -115,8 +115,8 @@ Seeding inverts from "8 majors + minors own everything" to **small developed fac
 - **Culture/ideology depth** — the lean v1 vs the deep layers (§5.2).
 - **Goods roster rework detail** — which goods survive, what construction/military actually consumes.
 - **Market/pricing model simplification** (noted 2026-07-06, during Phase 2 planning) — the curve/anchor/band pricing apparatus was built to price player arbitrage; as a pure cost signal for player/AI decisions it is likely over-built, and it's a performance suspect at uncapped tick speed. Re-derive a cheaper pricing model inside the Phase 4 economy re-point (single recalibration), informed by max-speed profiling from the Phase 2 ant farm — not before.
-- **UI paradigm** — the current page-per-screen web app vs a map-first single-surface app (genre standard). Likely map-first with panels; needs a design pass.
-- **Tick/time model** — tick length, speed steps, what "a day" is.
+- ~~**UI paradigm**~~ — **settled and shipped.** Map-first with panels, as this line predicted: a live map with non-blocking docked drawers over it, plus the Tracker's right-edge rail. See [detail-panels.md](../active/design-system/detail-panels.md).
+- **Tick/time model** — *partly settled*: the speed steps exist (pause / 1 / 5 / max). What is still open is tick length and what "a day" is — and the first thing wanted there is not a design of game-time but a shared measuring language (wall-clock per speed, the 24-tick cycle as the unit pacing arguments are made in), so calibration stops arguing from unanchored intuition.
 - **Title** — "Stellar Trader" no longer describes the game.
 
 ---

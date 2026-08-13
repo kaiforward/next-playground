@@ -375,13 +375,85 @@ export interface FactionConstructionData {
   /** Systems with open build projects — count desc, then name asc. */
   buildSystems: Array<{ systemId: string; systemName: string; count: number }>;
   /** Forming colonies — progress desc, then name asc. */
-  colonies: Array<{ systemId: string; systemName: string; progress: number }>;
+  colonies: Array<{
+    systemId: string;
+    systemName: string;
+    progress: number;
+  }>;
   /** Player-originated open projects across the faction. */
   orderedCount: number;
 }
 
 export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
 export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
+
+// ── Tracker (docs/active/gameplay/tracker.md — pinned/building/colonising roll-up) ──
+/** One pinned system's row + card figures — the same derivations `SystemVitalsData` shows on the
+ *  system panel, so there is one definition of how a system is doing rather than a second. */
+export interface TrackerPinnedRow {
+  systemId: string;
+  systemName: string;
+  population: number;
+  /** Population against its cap — the early-warning crowding read; not clamped to 100, since
+   *  reading past it is the signal. */
+  populationPct: number;
+  stabilityPct: number;
+  /** Same raw 0…1 unrest `getSystemVitals`'s `stability.unrest` reads — carried through so the
+   *  stability swatch colour is a straight read, not a `1 - stabilityPct / 100` re-derivation of a
+   *  quantity the service already computed. */
+  unrest: number;
+  /** null when the economy has never assessed this system yet (`SystemProvisionRead`'s
+   *  `assessed: false` arm) — the card renders an em-dash for it, never a 0% that would read as a
+   *  measured famine. */
+  provisionPct: number | null;
+  developmentPct: number;
+}
+/** Shared name/label/progress-bar figures for a funded build or a forming colony row. */
+export interface TrackerRowBase {
+  systemId: string;
+  systemName: string;
+  label: string;
+  progress: number;
+  /** What the coming cycle adds, in `progress`'s own units — the row's bar draws it as a lighter
+   *  segment ahead of the fill, the same forecast the system construction screen shows. 0 means
+   *  the project absorbs nothing next cycle, which is what a forming colony behind the front reads. */
+  nextCycleProgress: number;
+  etaCycles: number | null;
+}
+/** One row for a funded build project. `projectId` is the required React key for a list of these:
+ *  a single system routinely runs several concurrent build projects (housing, an extractor, an
+ *  academy — the planner bundles gate-first), so `systemId` is NOT unique within `TrackerData.building`.
+ *  Keying on it duplicated/left-behind rows across re-renders (React can't reconcile a repeated key). */
+export interface TrackerBuildRow extends TrackerRowBase {
+  projectId: string;
+}
+/** One row for a forming colony. No `projectId` — unlike builds, `systemId` IS unique within
+ *  `TrackerData.colonising`: a system can never carry two concurrent `colony_establish` projects
+ *  (`colonyEligibility`'s `already_forming` gate in lib/services/colony-eligibility.ts, and the
+ *  autonomic planner's `inFlight` set in lib/engine/directed-build.ts, both refuse to start a
+ *  second one). `systemId` is a safe React key here. */
+export type TrackerColonyRow = TrackerRowBase;
+
+/** Tracker panel roll-up: pinned systems, the funded construction front, and forming colonies. */
+export interface TrackerData {
+  /** Every system id on the player's pin list, in stored order and UNFILTERED — the write path
+   *  (`setSystemPin`) accepts any system, so this is the only list that answers "is this system
+   *  pinned right now". A pin-state control must join against this, never against `pinned`: that one
+   *  drops ids whose system reads no vitals, which would leave a stored pin showing as unpinned and
+   *  its toggle unable to clear it. */
+  pinnedSystemIds: string[];
+  /** Player-curated bookmarks, insertion order — the DISPLAY list, so pins whose system reads no
+   *  vitals (abandoned back to unclaimed, or merely controlled) are filtered out rather than
+   *  rendered with zeroed figures. A subset of `pinnedSystemIds`. */
+  pinned: TrackerPinnedRow[];
+  /** The player faction's funded front, builds only — forming colonies are `colonising`. */
+  building: TrackerBuildRow[];
+  /** Open build projects behind the front, not currently absorbing pool. */
+  waitingCount: number;
+  /** Every colony currently forming for the player's faction, funded or not this cycle. */
+  colonising: TrackerColonyRow[];
+}
+export type TrackerResponse = ApiResponse<TrackerData>;
 
 // ── Player build-options surface (per-system verbs: colonise / build) ────────
 import type { BuildOption } from "@/lib/engine/build-options";
@@ -423,6 +495,7 @@ export type OrderBuildResponse = ApiResponse<{ projectId: string; levels: number
 export type OrderColonyResponse = ApiResponse<{ projectId: string }>;
 export type CancelOrderResponse = ApiResponse<{ projectId: string }>;
 export type AutomationResponse = ApiResponse<{ build: boolean; colonisation: boolean }>;
+export type PinsResponse = ApiResponse<string[]>;
 
 export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
 export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;

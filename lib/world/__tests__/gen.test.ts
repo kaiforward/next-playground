@@ -292,6 +292,11 @@ describe("generateWorld — player faction", () => {
     const world = generateWorld({ ...base, playerFaction: authored });
     expect(world.player?.automation).toEqual({ build: true, colonisation: true });
   });
+
+  it("seats the player with no pinned systems", () => {
+    const world = generateWorld({ ...base, playerFaction: authored });
+    expect(world.player?.pinnedSystemIds).toEqual([]);
+  });
 });
 
 describe("treasury seeding", () => {
