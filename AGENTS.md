@@ -100,7 +100,7 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` i
 **Testing**
 - Two Vitest projects, split by **file extension**: `.test.tsx` renders in jsdom with Testing Library (`components/**`, `app/**`); `.test.ts` is pure logic in node (`lib/**`, `components/**`). A test that renders needs JSX anyway, so the extension already says which environment the file needs.
 - **A component test asserts roles, accessible names, text and what interaction changes — never classes or styles.** jsdom loads no CSS and has no layout engine, so a class or style assertion proves only that a string reached an attribute: it would pass with the stylesheet deleted, and `toHaveClass("grid-cols-3")` says nothing about whether the grid has three columns or is on screen at all. Appearance — colour, size, position, layout — is only verifiable in a real browser; asserting it here buys a test that passes while the thing is invisible, which is the failure this convention exists to stop. The one carve-out is **whether an element is rendered at all**, a structural fact even when a class is what identifies it. Where a number's only observable is a style (a bar width, a rule position), move the maths to a helper tested in node.
-- Two ways such a test passes vacuously: an accessible name built from props rather than from the DOM cannot fail when the element stops rendering; and `toHaveTextContent` cannot see a `NaN` in a style attribute, so divide-by-zero guards assert on `container.innerHTML`.
+- Two ways such a test passes vacuously: an accessible name built from props rather than from the DOM cannot fail when the element stops rendering; and `toHaveTextContent` cannot see a `NaN` in a style attribute, so divide-by-zero guards assert on `container.innerHTML`. A third: a mutation mocked over a fixed data object never removes the row, so anything downstream of the row unmounting (focus handoff, empty states) is asserted in a state the app never reaches.
 
 **Next.js 16 / React / TanStack Query**
 - `useSuspenseQuery` fires during SSR render, not in an effect — relative-URL `fetch()` crashes on the server. `QueryBoundary`'s mounted guard defers children past hydration.
@@ -130,6 +130,13 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` i
 **Misc**
 - **`git ls-files` is the instrument; `ls` lies.** A `.gitignore` negation under an excluded *directory* is a silent no-op — exclude the directory's *contents* (`/experiments/*`) if anything beneath it must be re-includable. Check `git ls-files` before assuming a path is versioned.
 - **Tailwind v4 scans the whole project for class candidates, including `docs/*.md`.** A backslash-hex sequence in scanned prose (a Windows path, a regex `\d`) reads as a CSS escape and aborts `next build` with `Invalid code point`. `docs/` is excluded via `@source not "../docs"` in `globals.css` — keep non-source prose out of the scan. Only surfaces on a real `next build`; `tsc` and Vitest stay green.
+
+**Tooling (Windows)**
+- **A "stopped" background process is often still running.** `TaskStop` kills the harness wrapper, not the node tree; an interrupt leaves it live too. Verify with `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select ProcessId, CommandLine` (identify by CommandLine, not PID) and kill with `Stop-Process -Id <ids> -Force`. One orphan ran ~25 min unnoticed, still mutating state.
+- **Multi-line `perl`/`sed` one-liners silently no-op on CRLF files** and report success — `core.autocrlf` means most tracked files are CRLF in the working tree. Use a Python edit that detects the line ending, or edit line by line.
+- **Inside a git worktree, an absolute path to the main checkout edits main, not the worktree.** Prefer normal branches; if a worktree is in use, commit there then `git worktree remove`.
+- **`\uXXXX` escapes cannot be written via Edit/Write** — the pipeline normalises them to the glyph, silently churning unicode-escaped literals. Regenerate via a PowerShell char-code loop and check `git diff` shows no escaped-line changes.
+- **Never `git checkout`/`restore`/`stash` a file to undo a temporary edit while it holds uncommitted work** — it reverts to HEAD, destroying the whole task's changes in that file. Copy the file aside first, or apply the inverse edit.
 
 ## UI Components
 
@@ -162,7 +169,7 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 
 ### Review process
 - **Spec gate:** `/spec-review <doc>` on any spec with cross-mechanic surface (economy, tick processors, changed signals/primitives) BEFORE writing the implementation plan. Pure-UI and tooling skip it.
-- **Everything you know about a PR goes on the table BEFORE it merges.** Findings, doubts, "worth considering" notes, anything you would otherwise append afterwards — they belong in the review response while the merge is still an open decision. A post-merge "oh, also, three things…" is withholding the inputs to a decision already made, and is the single most-repeated failure here. If you genuinely only see something after the merge, say plainly that it was missed at review time.
+- **Everything you know about a PR goes on the table BEFORE it merges.** Findings, doubts, "worth considering" notes, anything you would otherwise append afterwards — they belong in the review response while the merge is still an open decision. A post-merge "oh, also, three things…" is withholding the inputs to a decision already made, and is the single most-repeated failure here. If you genuinely only see something after the merge, say plainly that it was missed at review time. This includes interrupting a merge already in motion: one line before it lands, never after.
 - **A roadmap item is the owner's decision, not yours.** Booking a finding instead of fixing it must be (a) stated in the turn's response and (b) named in the commit message. Default: if it is cheap, self-contained and in a file the PR already touches, fix it and say so.
 - **Open the PR before reviewing**, so findings land as PR comments. Don't gate PR creation on a clean review.
 - **Review each sub-feature going INTO shared**, while it is small and in context — a whole-branch review at the end is the symptom of having skipped that gate, not the standard.
@@ -173,6 +180,9 @@ Use existing components instead of inline markup. Use `tv()` variants, typed pro
 - **Never merge over red CI.** Confirm an unrelated flake passes in isolation and fix it — don't merge past it.
 
 ## Working Practices
+
+**Short replies. Lead with what needs a decision and stop.** Length is how the one line that mattered
+gets missed. Context, caveats and side-findings are available on request, not volunteered by default.
 
 **Verifying changes** (dev has no live universe)
 - **Prove a mechanic works with `npm run simulate` measuring the actual outcome** — not isolated engine fixtures, which pass while the galaxy is 100% broken. Add a sim metric when a symptom hides inside an aggregate.
