@@ -354,7 +354,7 @@ export type SystemIndustryData =
 export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 
 // ── Construction (build-queue / colony-visibility) ────────────────────────────
-import type { ConstructionProjectRow, FundedFrontRow } from "@/lib/engine/construction-readout";
+import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
 
 /** Per-system Construction section state. `hidden` renders nothing (developed with nothing building);
  *  `empty` is the controlled-not-yet-colonised state; `visible` carries the rows for this system.
@@ -374,20 +374,14 @@ export interface FactionConstructionData {
   automation: { build: boolean; colonisation: boolean } | null;
   /** Systems with open build projects — count desc, then name asc. */
   buildSystems: Array<{ systemId: string; systemName: string; count: number }>;
-  /** Forming colonies — progress desc, then name asc. `nextCycleProgress` is the coming cycle's
-   *  gain in `progress`'s own units (0 for a colony the pool cannot reach this cycle). */
+  /** Forming colonies — progress desc, then name asc. */
   colonies: Array<{
     systemId: string;
     systemName: string;
     progress: number;
-    nextCycleProgress: number;
   }>;
   /** Player-originated open projects across the faction. */
   orderedCount: number;
-  /** Projects the pool is actually funding this cycle, in queue order. */
-  fundedFront: FundedFrontRow[];
-  /** Open projects behind the front, not currently absorbing pool. */
-  waitingCount: number;
 }
 
 export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
@@ -404,8 +398,14 @@ export interface TrackerPinnedRow {
    *  reading past it is the signal. */
   populationPct: number;
   stabilityPct: number;
-  /** 0 when the system has never been assessed by the economy yet (`SystemProvisionRead` unassessed). */
-  provisionPct: number;
+  /** Same raw 0…1 unrest `getSystemVitals`'s `stability.unrest` reads — carried through so the
+   *  stability swatch colour is a straight read, not a `1 - stabilityPct / 100` re-derivation of a
+   *  quantity the service already computed. */
+  unrest: number;
+  /** null when the economy has never assessed this system yet (`SystemProvisionRead`'s
+   *  `assessed: false` arm) — the card renders an em-dash for it, never a 0% that would read as a
+   *  measured famine. */
+  provisionPct: number | null;
   developmentPct: number;
 }
 /** Shared name/label/progress-bar figures for a funded build or a forming colony row. */
@@ -436,9 +436,17 @@ export type TrackerColonyRow = TrackerRowBase;
 
 /** Tracker panel roll-up: pinned systems, the funded construction front, and forming colonies. */
 export interface TrackerData {
-  /** Player-curated bookmarks, insertion order — stale (abandoned) pins filtered, not zeroed. */
+  /** Every system id on the player's pin list, in stored order and UNFILTERED — the write path
+   *  (`setSystemPin`) accepts any system, so this is the only list that answers "is this system
+   *  pinned right now". A pin-state control must join against this, never against `pinned`: that one
+   *  drops ids whose system reads no vitals, which would leave a stored pin showing as unpinned and
+   *  its toggle unable to clear it. */
+  pinnedSystemIds: string[];
+  /** Player-curated bookmarks, insertion order — the DISPLAY list, so pins whose system reads no
+   *  vitals (abandoned back to unclaimed, or merely controlled) are filtered out rather than
+   *  rendered with zeroed figures. A subset of `pinnedSystemIds`. */
   pinned: TrackerPinnedRow[];
-  /** The player faction's funded front (Task 2), builds only — forming colonies are `colonising`. */
+  /** The player faction's funded front, builds only — forming colonies are `colonising`. */
   building: TrackerBuildRow[];
   /** Open build projects behind the front, not currently absorbing pool. */
   waitingCount: number;

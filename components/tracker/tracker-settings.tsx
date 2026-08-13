@@ -19,7 +19,7 @@ export interface TrackerSettingsProps {
 }
 
 /**
- * The Tracker's settings surface (docs/planned/tracker.md → "Settings") — a checkbox per
+ * The Tracker's settings surface (docs/active/gameplay/tracker.md → "Settings") — a checkbox per
  * section, unticked meaning the section (heading included) is filtered out of `TrackerPanel`.
  *
  * A sibling PANEL, not a `RichCard` or a dropdown menu: hiding a section is a standing view

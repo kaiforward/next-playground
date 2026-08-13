@@ -22,4 +22,12 @@ describe("pinSchema", () => {
   it("rejects an empty systemId", () => {
     expect(pinSchema.safeParse({ systemId: "", pinned: true }).success).toBe(false);
   });
+
+  it("accepts a systemId at the 64-character bound", () => {
+    expect(pinSchema.safeParse({ systemId: "s".repeat(64), pinned: true }).success).toBe(true);
+  });
+
+  it("rejects a systemId past the 64-character bound", () => {
+    expect(pinSchema.safeParse({ systemId: "s".repeat(65), pinned: true }).success).toBe(false);
+  });
 });

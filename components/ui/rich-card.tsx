@@ -5,6 +5,7 @@ import {
   createContext,
   forwardRef,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -46,9 +47,10 @@ import { twMerge } from "tailwind-merge";
  *   and keyboard-focus opens are untouched, since Radix only gates the
  *   click path on it.
  *
- * Escape-to-close and returning focus to the trigger on close are Radix's
- * own default (non-modal) Popover behaviour and are not reimplemented
- * here.
+ * Escape-to-close is Radix's own default (non-modal) Popover behaviour and
+ * is not reimplemented here. Returning focus to the trigger on close is
+ * Radix's too, but it is suppressed for a card that was opened by hover,
+ * which never took focus in the first place — see `RichCardContent`.
  */
 
 const DEFAULT_OPEN_DELAY_MS = 300;
@@ -128,11 +130,11 @@ export function RichCard({
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // `closeSelf` needs a stable identity for the whole component's
-  // lifetime — the exclusivity registry above compares it by reference —
-  // but it must always run the LATEST `setOpen` (which closes over the
-  // current `open` value, needed for the suppress-focus bookkeeping
-  // below). `setOpenRef` bridges the two: reassigned every render, read
-  // through the one stable closure the registry holds.
+  // lifetime — the exclusivity registry above compares it by reference,
+  // and the unmount cleanup below releases the claim by that same
+  // reference — while `setOpen` is a fresh function every render.
+  // `setOpenRef` bridges the two: reassigned every render, read through
+  // the one stable closure the registry holds.
   const setOpenRef = useRef<(next: boolean) => void>(() => {});
   const [closeSelf] = useState<() => void>(() => () => setOpenRef.current(false));
 
@@ -156,17 +158,32 @@ export function RichCard({
       claimOpen(closeSelf);
     } else {
       releaseOpen(closeSelf);
-      openedByPointerRef.current = false;
-      // Radix returns focus to the trigger on close (Escape, outside
-      // click/focus, or losing exclusivity to another card). Without this
-      // flag, that programmatic focus lands on the trigger's `onFocus`
-      // handler indistinguishable from a real Tab press and reopens the
-      // card it just closed. Consumed by the very next trigger focus.
-      if (open) suppressNextTriggerFocusRef.current = true;
+      // Neither `openedByPointerRef` nor the suppress-focus flag is touched
+      // here. Both are settled in `RichCardContent`'s `onCloseAutoFocus` —
+      // which Radix dispatches a beat AFTER this, and which still needs to
+      // know how the card that is closing was opened. Every open path
+      // rewrites `openedByPointerRef` for itself, so nothing is left stale.
     }
     setOpenState(next);
   }
   setOpenRef.current = setOpen;
+
+  // Rows unmount routinely under a live pointer (the Tracker's query is
+  // invalidated every economy cycle), and React fires no `pointerleave`
+  // for an element that disappears beneath the cursor — so nothing else
+  // would ever clear these. A surviving open timer is the damaging one:
+  // it fires after this card is gone, claims the exclusivity registry and
+  // closes whichever card the user is actually reading. `releaseOpen` is
+  // reference-guarded, so it is a no-op for a card that never claimed —
+  // it must never blank a claim another card now holds.
+  useEffect(
+    () => () => {
+      if (openTimerRef.current !== null) clearTimeout(openTimerRef.current);
+      if (closeTimerRef.current !== null) clearTimeout(closeTimerRef.current);
+      releaseOpen(closeSelf);
+    },
+    [closeSelf],
+  );
 
   function scheduleOpen() {
     if (open) return;
@@ -227,58 +244,90 @@ export function RichCard({
 export const RichCardTrigger = forwardRef<
   HTMLButtonElement,
   ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>
->(({ onPointerEnter, onPointerLeave, onPointerDown, onFocus, onClick, ...props }, forwardedRef) => {
-  const richCard = useRichCardContext("RichCardTrigger");
-  // Local to this trigger: distinguishes a focus event caused by a mouse
-  // press (which `onClick`/Radix's own toggle will open) from a genuine
-  // keyboard (Tab) focus, which this component must open on its own.
-  const pointerActiveRef = useRef(false);
+>(
+  (
+    { onPointerEnter, onPointerLeave, onPointerDown, onPointerUp, onFocus, onClick, ...props },
+    forwardedRef,
+  ) => {
+    const richCard = useRichCardContext("RichCardTrigger");
+    // Local to this trigger: distinguishes a focus event caused by a mouse
+    // press (which `onClick`/Radix's own toggle will open) from a genuine
+    // keyboard (Tab) focus, which this component must open on its own.
+    // Every press ends in a pointer-up or a pointer-leave, so both clear
+    // it — a press that never becomes a click (press, drag off, release)
+    // must not leave keyboard-open dead for the rest of the row's life.
+    const pointerActiveRef = useRef(false);
 
-  return (
-    <PopoverPrimitive.Trigger
-      asChild
-      ref={forwardedRef}
-      onPointerEnter={composeHandlers<React.PointerEvent<HTMLButtonElement>>(onPointerEnter, () => {
-        richCard.cancelScheduledClose();
-        richCard.scheduleOpen();
-      })}
-      onPointerLeave={composeHandlers<React.PointerEvent<HTMLButtonElement>>(onPointerLeave, () => {
-        richCard.cancelScheduledOpen();
-        if (richCard.open) richCard.scheduleClose();
-      })}
-      onPointerDown={composeHandlers<React.PointerEvent<HTMLButtonElement>>(onPointerDown, () => {
-        pointerActiveRef.current = true;
-      })}
-      onFocus={composeHandlers<React.FocusEvent<HTMLButtonElement>>(onFocus, () => {
-        if (richCard.suppressNextTriggerFocusRef.current) {
-          // Radix returning focus here after a close, not a real Tab press.
-          richCard.suppressNextTriggerFocusRef.current = false;
-          return;
-        }
-        if (pointerActiveRef.current) return;
-        richCard.cancelScheduledOpen();
-        richCard.openViaFocus();
-      })}
-      onClick={composeHandlers<React.MouseEvent<HTMLButtonElement>>(onClick, (event) => {
-        pointerActiveRef.current = false;
-        richCard.openedByPointerRef.current = false;
-        richCard.cancelScheduledOpen();
-        // Radix's own Trigger composes ITS click-toggle after this handler and skips it once
-        // the event is marked defaultPrevented (see RichCard's docblock) — this is the only line
-        // `disableClickOpen` adds.
-        if (richCard.disableClickOpen) event.preventDefault();
-      })}
-      {...props}
-    />
-  );
-});
+    return (
+      <PopoverPrimitive.Trigger
+        asChild
+        ref={forwardedRef}
+        onPointerEnter={composeHandlers<React.PointerEvent<HTMLButtonElement>>(
+          onPointerEnter,
+          () => {
+            richCard.cancelScheduledClose();
+            richCard.scheduleOpen();
+          },
+        )}
+        onPointerLeave={composeHandlers<React.PointerEvent<HTMLButtonElement>>(
+          onPointerLeave,
+          () => {
+            pointerActiveRef.current = false;
+            richCard.cancelScheduledOpen();
+            if (richCard.open) richCard.scheduleClose();
+          },
+        )}
+        onPointerDown={composeHandlers<React.PointerEvent<HTMLButtonElement>>(onPointerDown, () => {
+          pointerActiveRef.current = true;
+        })}
+        onPointerUp={composeHandlers<React.PointerEvent<HTMLButtonElement>>(onPointerUp, () => {
+          // Fires after the focus a mouse press causes, so clearing here
+          // still lets that focus be recognised as pointer-driven.
+          pointerActiveRef.current = false;
+        })}
+        onFocus={composeHandlers<React.FocusEvent<HTMLButtonElement>>(onFocus, () => {
+          if (richCard.suppressNextTriggerFocusRef.current) {
+            // Radix returning focus here after a close, not a real Tab press.
+            richCard.suppressNextTriggerFocusRef.current = false;
+            return;
+          }
+          if (pointerActiveRef.current) return;
+          richCard.cancelScheduledOpen();
+          richCard.openViaFocus();
+        })}
+        onClick={composeHandlers<React.MouseEvent<HTMLButtonElement>>(onClick, (event) => {
+          pointerActiveRef.current = false;
+          richCard.openedByPointerRef.current = false;
+          richCard.cancelScheduledOpen();
+          // Radix's own Trigger composes ITS click-toggle after this handler and skips it once
+          // the event is marked defaultPrevented (see RichCard's docblock) — this is the only line
+          // `disableClickOpen` adds.
+          if (richCard.disableClickOpen) event.preventDefault();
+        })}
+        {...props}
+      />
+    );
+  },
+);
 RichCardTrigger.displayName = "RichCardTrigger";
 
 interface RichCardContentProps
   extends Omit<PopoverPrimitive.PopoverContentProps, "side" | "align"> {}
 
 export const RichCardContent = forwardRef<HTMLDivElement, RichCardContentProps>(
-  ({ className = "", sideOffset = 8, onPointerEnter, onPointerLeave, onOpenAutoFocus, children, ...props }, ref) => {
+  (
+    {
+      className = "",
+      sideOffset = 8,
+      onPointerEnter,
+      onPointerLeave,
+      onOpenAutoFocus,
+      onCloseAutoFocus,
+      children,
+      ...props
+    },
+    ref,
+  ) => {
     const richCard = useRichCardContext("RichCardContent");
     return (
       <PopoverPrimitive.Portal>
@@ -295,6 +344,41 @@ export const RichCardContent = forwardRef<HTMLDivElement, RichCardContentProps>(
           })}
           onOpenAutoFocus={composeHandlers<Event>(onOpenAutoFocus, (event) => {
             if (richCard.openedByPointerRef.current) event.preventDefault();
+          })}
+          onCloseAutoFocus={composeHandlers<Event>(onCloseAutoFocus, (event) => {
+            const openedByPointer = richCard.openedByPointerRef.current;
+            richCard.openedByPointerRef.current = false;
+            if (openedByPointer) {
+              // A hover-opened card never took focus — `onOpenAutoFocus`
+              // above suppresses that — so there is nothing to hand back,
+              // and handing it back anyway is destructive: the focus lands
+              // on this trigger, and a `focusin` outside the card that has
+              // just taken over is enough for Radix to dismiss THAT card.
+              // Hovering from one row to the next would open the second card
+              // and shut it again in the same frame. This is the close-side
+              // half of the open-side focus suppression. (The one case it
+              // gives up: a card hover-opened and then tabbed into loses
+              // focus to the body rather than to its trigger.)
+              event.preventDefault();
+              return;
+            }
+            // The only moment Radix may hand focus back to the trigger. Its
+            // non-modal Content calls this handler first, then focuses the
+            // trigger synchronously — but only when the close did NOT come
+            // from an interaction outside the card. That programmatic focus
+            // is indistinguishable, at the trigger's `onFocus`, from a real
+            // Tab press, and would reopen the card that just closed.
+            //
+            // So the flag is raised here and lowered again on the microtask
+            // that follows this dispatch: any focus Radix returns lands
+            // inside it, and any later, genuine Tab does not. Setting it at
+            // close time instead left it raised forever whenever Radix chose
+            // not to return focus — swallowing one real Tab-to-open, which
+            // reads as flakiness rather than as a bug.
+            richCard.suppressNextTriggerFocusRef.current = true;
+            queueMicrotask(() => {
+              richCard.suppressNextTriggerFocusRef.current = false;
+            });
           })}
           className={twMerge(
             "z-50 w-64 border border-border-strong border-l-2 border-l-accent bg-surface p-3 text-left shadow-lg animate-in fade-in-0 zoom-in-95",

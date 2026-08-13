@@ -2,14 +2,20 @@
  * Tracker read service — the roll-up behind the Tracker panel's three sections
  * (docs/active/gameplay/tracker.md): pinned systems, the player faction's funded construction
  * front, and its forming colonies. Pure marshalling over `getSystemVitals` (a pinned row's figures)
- * and `getFactionConstruction` (building/colonising) — no new derivation of its own.
+ * and `readoutForFaction` (building/colonising) — no new derivation of its own.
+ *
+ * It reads the construction READOUT rather than `getFactionConstruction`'s client DTO: the rows it
+ * needs (the funded front, and every colony's own ETA) are server-side quantities no client
+ * component renders, and widening the DTO to carry them would ship three fields to the browser for
+ * one server-to-server read.
  *
  * A world with no player seat (e.g. the calibration harness) has nothing to track: every section
  * reads empty rather than throwing, so the panel degrades instead of blanking the shell around it.
  */
 import { getWorld } from "@/lib/world/store";
 import { getSystemVitals } from "@/lib/services/system-vitals";
-import { getFactionConstruction } from "@/lib/services/construction";
+import { readoutForFaction } from "@/lib/services/construction";
+import { workShareOf } from "@/lib/engine/construction-readout";
 import type {
   TrackerData,
   TrackerPinnedRow,
@@ -17,12 +23,24 @@ import type {
   TrackerColonyRow,
 } from "@/lib/types/api";
 
-const EMPTY_TRACKER: TrackerData = { pinned: [], building: [], waitingCount: 0, colonising: [] };
+const EMPTY_TRACKER: TrackerData = {
+  pinnedSystemIds: [],
+  pinned: [],
+  building: [],
+  waitingCount: 0,
+  colonising: [],
+};
 
 export function getTrackerData(): TrackerData {
   const world = getWorld();
   const player = world.player;
   if (!player) return EMPTY_TRACKER;
+
+  // The write path accepts a pin on any system, so the stored list crosses the wire unfiltered:
+  // it is what a pin-state control (the system header's star toggle) joins against. `pinned` below
+  // is the narrower DISPLAY list — joining a toggle against that one would render a stored pin as
+  // unpinned and leave the player unable to clear it.
+  const pinnedSystemIds = [...player.pinnedSystemIds];
 
   // Stale pins are filtered here, not pruned on write (no processor touches pinnedSystemIds — see
   // WorldPlayer's docstring). A pin naming a system that no longer exists, or one that has been
@@ -30,7 +48,7 @@ export function getTrackerData(): TrackerData {
   // both are dropped rather than rendered with zeroed figures. Order is preserved: this walks
   // `pinnedSystemIds` in its own stored order and never re-sorts.
   const pinned: TrackerPinnedRow[] = [];
-  for (const systemId of player.pinnedSystemIds) {
+  for (const systemId of pinnedSystemIds) {
     const system = world.systems.find((s) => s.id === systemId);
     if (!system) continue;
     const vitals = getSystemVitals(systemId);
@@ -41,7 +59,10 @@ export function getTrackerData(): TrackerData {
       population: vitals.population.headcount,
       populationPct: system.popCap > 0 ? (system.population / system.popCap) * 100 : 0,
       stabilityPct: vitals.stability.pct,
-      provisionPct: vitals.provision.assessed ? vitals.provision.pct : 0,
+      unrest: vitals.stability.unrest,
+      // null, not 0: a system the economy has never assessed has no reading at all, and a 0 here
+      // would render as a measured famine. Every other surface distinguishes the two the same way.
+      provisionPct: vitals.provision.assessed ? vitals.provision.pct : null,
       developmentPct: vitals.development.pct,
     });
   }
@@ -49,11 +70,11 @@ export function getTrackerData(): TrackerData {
   // Pinning is a bookmark, not an ownership claim — deliberately no factionId filter above: a
   // pinned system belonging to another faction still reads its own vitals the same way.
 
-  const construction = getFactionConstruction(player.controlledFactionId);
+  const readout = readoutForFaction(player.controlledFactionId);
 
   // The front mixes build and colony_establish rows; split on the row's own `kind` rather than an
   // inferred invariant about which control state each project kind targets.
-  const building: TrackerBuildRow[] = construction.fundedFront
+  const building: TrackerBuildRow[] = readout.fundedFront
     .filter((row) => row.kind === "build")
     .map((row) => ({
       projectId: row.projectId,
@@ -65,29 +86,28 @@ export function getTrackerData(): TrackerData {
       etaCycles: row.etaCycles,
     }));
 
-  // Every colony forming gets a row, funded this cycle or not — the front only decides whether the
-  // row's ETA is currently forecastable, never whether the colony appears at all.
-  const frontBySystemId = new Map(construction.fundedFront.map((row) => [row.systemId, row]));
-  const colonising: TrackerColonyRow[] = construction.colonies.map((colony) => ({
-    systemId: colony.systemId,
-    systemName: colony.systemName,
-    label: "Establish Colony",
-    progress: colony.progress,
-    // Straight off the colony row, unlike `etaCycles`: the coming cycle's gain is defined for every
-    // forming colony (0 when the pool cannot reach it), so it needs no front lookup to stand in.
-    nextCycleProgress: colony.nextCycleProgress,
-    etaCycles: frontBySystemId.get(colony.systemId)?.etaCycles ?? null,
-  }));
+  // Every colony forming gets a row, funded this cycle or not, in queue order. Both figures come
+  // off the colony's OWN row: `etaCycles` is forecast for a project behind the front too (the
+  // forecast replays the queue until it lands), so reading it off the front instead would print the
+  // em-dash that means "no forecast at all" over a starved colony that has a real landing cycle.
+  const colonising: TrackerColonyRow[] = readout.all
+    .filter((row) => row.kind === "colony_establish")
+    .map((row) => ({
+      systemId: row.systemId,
+      systemName: row.systemName,
+      label: "Establish Colony",
+      progress: row.progress,
+      nextCycleProgress: workShareOf(row.nextCycleGain, row.workTotal),
+      etaCycles: row.etaCycles,
+    }));
 
-  // `construction.waitingCount` is the engine's own figure: open projects (builds AND colonies)
-  // behind the front. The Tracker's `waitingCount` documents a narrower thing — build projects only,
-  // not currently absorbing pool — because every colony already gets its own row in `colonising`
-  // whether or not it is funded this cycle; counting it again here would double-represent it. Builds
-  // have no such standalone list, so they alone collapse to a count. Derived from `buildSystems`
-  // (every open build project, funded or not, grouped by system) minus the builds already on the
-  // front, rather than touching the engine-level figure Task 2 pins.
-  const totalBuildProjects = construction.buildSystems.reduce((sum, s) => sum + s.count, 0);
+  // `readout.waitingCount` is the engine's own figure: open projects (builds AND colonies) behind
+  // the front. The Tracker's `waitingCount` documents a narrower thing — build projects only, not
+  // currently absorbing pool — because every colony already gets its own row in `colonising`
+  // whether or not it is funded this cycle; counting it again here would double-represent it.
+  // Builds have no such standalone list, so they alone collapse to a count.
+  const totalBuildProjects = readout.all.filter((row) => row.kind === "build").length;
   const waitingCount = totalBuildProjects - building.length;
 
-  return { pinned, building, waitingCount, colonising };
+  return { pinnedSystemIds, pinned, building, waitingCount, colonising };
 }

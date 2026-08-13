@@ -42,7 +42,12 @@ function PinToggleContent({ systemId }: { systemId: string }) {
   // whether the player has no seat or simply has nothing pinned yet, so it can't answer this alone.
   if (!atlas.player) return null;
 
-  const pinned = data.pinned.some((row) => row.systemId === systemId);
+  // Joined against the UNFILTERED id list, never the rendered `pinned` rows: a pin is a bookmark,
+  // not an ownership claim, so the write path stores one for any system while the display list drops
+  // the ones that read no vitals (unclaimed, or controlled but not yet developed). Reading the
+  // display list here would show a stored pin as unpressed, and the next click would re-send
+  // `pinned: true` — a no-op that leaves the pin stuck in the save with no way to remove it.
+  const pinned = data.pinnedSystemIds.includes(systemId);
 
   return (
     <Button

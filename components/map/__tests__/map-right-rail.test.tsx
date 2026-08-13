@@ -38,7 +38,7 @@ vi.mock("@/lib/hooks/use-atlas", () => ({
 }));
 
 function emptyTracker(): TrackerData {
-  return { pinned: [], building: [], waitingCount: 0, colonising: [] };
+  return { pinnedSystemIds: [], pinned: [], building: [], waitingCount: 0, colonising: [] };
 }
 
 vi.mock("@/lib/hooks/use-tracker", () => ({
@@ -59,6 +59,10 @@ describe("MapRightRail — the settings panel is a sibling, opened and closed fr
   it("closed by default: no settings panel, no section checkboxes reachable", () => {
     renderRail();
     expect(screen.queryByRole("group", { name: "Tracker sections" })).not.toBeInTheDocument();
+    // The dock is the rail's third sibling, mounted unconditionally alongside the Tracker
+    // pair — nothing else in this suite queries for it, so a regression that dropped it from
+    // the rail (losing map mode/overlay controls from every map screen) would go unnoticed.
+    expect(screen.getByTestId("map-controls-dock-stub")).toBeInTheDocument();
   });
 
   it("clicking the header's settings toggle mounts the sibling panel with its three checkboxes", async () => {

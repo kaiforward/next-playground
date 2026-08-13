@@ -65,8 +65,20 @@ vi.mock("@/lib/hooks/use-tracker", () => ({
   useTracker: () => trackerData,
 }));
 
-function emptyTracker(): TrackerData {
-  return { pinned: [], building: [], waitingCount: 0, colonising: [] };
+/** A whole `TrackerData` from just the sections a test cares about — the rest read empty.
+ *  `pinnedSystemIds` mirrors `pinned` unless overridden: the two diverge only for a pin whose
+ *  system reads no vitals, which is `PinToggle`'s concern (see pin-toggle.test.tsx), not the
+ *  panel's — the panel renders `pinned` and never looks at the id list. */
+function tracker(fields: Partial<TrackerData> = {}): TrackerData {
+  const pinned = fields.pinned ?? [];
+  return {
+    pinnedSystemIds: pinned.map((row) => row.systemId),
+    pinned: [],
+    building: [],
+    waitingCount: 0,
+    colonising: [],
+    ...fields,
+  };
 }
 
 function pinnedRow(systemId: string, systemName: string): TrackerPinnedRow {
@@ -76,11 +88,15 @@ function pinnedRow(systemId: string, systemName: string): TrackerPinnedRow {
     population: 2, // formatPeople(2) -> "2M", deterministic
     populationPct: 40,
     stabilityPct: 82,
+    unrest: 0.18,
     provisionPct: 90,
     developmentPct: 55,
   };
 }
 
+/** `progress` is a fraction in [0,1] — `TrackerRowProps.progress`'s documented units, and what the
+ *  service actually sends. A percent-scale number here clamps to 0 in `projectedWidthPct`, so any
+ *  forecast assertion built on one would pass vacuously. */
 function buildRow(
   systemId: string,
   systemName: string,
@@ -101,7 +117,7 @@ function buildRow(
 beforeEach(() => {
   push.mockClear();
   setPinMutate.mockClear();
-  trackerData = emptyTracker();
+  trackerData = tracker();
 });
 
 /** Renders `TrackerPanel` with all sections on and settings closed, unless a test overrides
@@ -113,12 +129,11 @@ function renderPanel(sections: TrackerSections = DEFAULT_TRACKER_SECTIONS) {
 
 describe("TrackerPanel — hiding a section removes its heading, not just its rows", () => {
   it("Building off: no 'Building — N' heading and no build row, while Pinned and Colonising still render", () => {
-    trackerData = {
+    trackerData = tracker({
       pinned: [pinnedRow("sys-a", "Sunnyvale")],
-      building: [buildRow("sys-b", "Rigel Yards", 50)],
+      building: [buildRow("sys-b", "Rigel Yards", 0.5)],
       waitingCount: 4,
-      colonising: [],
-    };
+    });
     renderPanel({ pinned: true, building: false, colonising: true });
 
     // The row is gone.
@@ -135,12 +150,11 @@ describe("TrackerPanel — hiding a section removes its heading, not just its ro
 
 describe("TrackerPanel — hiding every section leaves the header present", () => {
   it("all three sections off: no section heading renders, but the title and settings toggle still do", () => {
-    trackerData = {
+    trackerData = tracker({
       pinned: [pinnedRow("sys-a", "Sunnyvale")],
-      building: [buildRow("sys-b", "Rigel Yards", 50)],
+      building: [buildRow("sys-b", "Rigel Yards", 0.5)],
       waitingCount: 2,
-      colonising: [],
-    };
+    });
     renderPanel({ pinned: false, building: false, colonising: false });
 
     expect(screen.queryByText(/Pinned/)).not.toBeInTheDocument();
@@ -156,12 +170,10 @@ describe("TrackerPanel — hiding every section leaves the header present", () =
 describe("TrackerPanel — row activation routes by kind, not to one shared path", () => {
   it("a build row opens Industry; a pinned row opens Overview — different destinations, proven by one push each", async () => {
     const user = userEvent.setup();
-    trackerData = {
+    trackerData = tracker({
       pinned: [pinnedRow("sys-a", "Sunnyvale")],
-      building: [buildRow("sys-b", "Rigel Yards", 50)],
-      waitingCount: 0,
-      colonising: [],
-    };
+      building: [buildRow("sys-b", "Rigel Yards", 0.5)],
+    });
     renderPanel();
 
     await user.click(screen.getByRole("button", { name: /Sunnyvale/ }));
@@ -175,7 +187,7 @@ describe("TrackerPanel — row activation routes by kind, not to one shared path
 describe("TrackerPanel — the locate nonce advances on every activation", () => {
   it("locating the same system twice produces two different `loc` values", async () => {
     const user = userEvent.setup();
-    trackerData = { pinned: [pinnedRow("sys-a", "Sunnyvale")], building: [], waitingCount: 0, colonising: [] };
+    trackerData = tracker({ pinned: [pinnedRow("sys-a", "Sunnyvale")] });
     renderPanel();
 
     const row = screen.getByRole("button", { name: /Sunnyvale/ });
@@ -189,7 +201,7 @@ describe("TrackerPanel — the locate nonce advances on every activation", () =>
 
 describe("TrackerPanel — an empty section renders its empty state, not a bare heading", () => {
   it("all three sections empty: each heading is present AND each carries its empty-state message", () => {
-    renderPanel(); // trackerData is emptyTracker() from beforeEach
+    renderPanel(); // trackerData is tracker() — every section empty — from beforeEach
 
     expect(screen.getByText("Pinned — 0")).toBeInTheDocument();
     expect(screen.getByText("No pinned systems yet.")).toBeInTheDocument();
@@ -202,36 +214,81 @@ describe("TrackerPanel — an empty section renders its empty state, not a bare 
 
 describe("TrackerPanel — the waiting count is a quiet line, present only when nonzero", () => {
   it("renders the count when projects sit behind the front", () => {
-    trackerData = {
-      pinned: [],
-      building: [buildRow("sys-b", "Rigel Yards", 30)],
+    trackerData = tracker({
+      building: [buildRow("sys-b", "Rigel Yards", 0.3)],
       waitingCount: 37,
-      colonising: [],
-    };
+    });
     renderPanel();
     expect(screen.getByText("37 more waiting on the pool")).toBeInTheDocument();
   });
 
   it("renders no waiting line at all when nothing is behind the front — never '0 more'", () => {
-    trackerData = {
-      pinned: [],
-      building: [buildRow("sys-b", "Rigel Yards", 30)],
-      waitingCount: 0,
-      colonising: [],
-    };
+    trackerData = tracker({
+      building: [buildRow("sys-b", "Rigel Yards", 0.3)],
+    });
     renderPanel();
     expect(screen.queryByText(/more waiting on the pool/)).not.toBeInTheDocument();
     expect(screen.queryByText(/0 more/)).not.toBeInTheDocument();
+  });
+
+  it("still renders the waiting line when NOTHING is funded — the case where it matters most", () => {
+    // The pool wholly absorbed by colonies, or no pool at all: the front is empty and every open
+    // build is waiting. The section shows its empty state, and the count of what is behind the
+    // front is at its maximum — the two must not be alternatives, or the number vanishes exactly
+    // when it is the only thing left to say.
+    trackerData = tracker({ building: [], waitingCount: 12 });
+    renderPanel();
+
+    expect(screen.getByText("Building — 0")).toBeInTheDocument();
+    expect(screen.getByText("Nothing funded this cycle.")).toBeInTheDocument();
+    expect(screen.getByText("12 more waiting on the pool")).toBeInTheDocument();
+  });
+});
+
+describe("TrackerPanel — a pinned row's card carries the figures the row has no room for", () => {
+  /** Opens the first row's rich card by keyboard (Tab past the header's settings toggle onto the
+   *  row, which opens on focus) and returns the card's content region. Hover would work too; the
+   *  keyboard path is the one the spec requires to exist. */
+  async function openFirstRowCard(user: ReturnType<typeof userEvent.setup>) {
+    await user.tab(); // header settings toggle
+    await user.tab(); // the row
+    return screen.findByText("Sunnyvale", { selector: "h3" });
+  }
+
+  it("shows population against its cap — the crowding read the row deliberately omits", async () => {
+    const user = userEvent.setup();
+    trackerData = tracker({ pinned: [pinnedRow("sys-a", "Sunnyvale")] });
+    renderPanel();
+
+    await openFirstRowCard(user);
+
+    // The row itself carries only two figures (population, stability); the ratio lives here.
+    expect(screen.getByText("Of capacity")).toBeInTheDocument();
+    expect(screen.getByText("40%")).toBeInTheDocument();
+  });
+
+  it("renders an em-dash for a system the economy has never assessed, not '0%'", async () => {
+    const user = userEvent.setup();
+    trackerData = tracker({
+      pinned: [{ ...pinnedRow("sys-a", "Sunnyvale"), provisionPct: null }],
+    });
+    renderPanel();
+
+    await openFirstRowCard(user);
+
+    const provisioned = screen.getByText("Provisioned").closest("div");
+    expect(provisioned).toHaveTextContent("—");
+    expect(provisioned).not.toHaveTextContent("0%");
   });
 });
 
 describe("TrackerPanel — the Building section caps at 10 rows, keeping queue order", () => {
   function manyBuildRows(n: number): TrackerBuildRow[] {
-    return Array.from({ length: n }, (_, i) => buildRow(`sys-${i}`, `System ${i}`, 10));
+    return Array.from({ length: n }, (_, i) => buildRow(`sys-${i}`, `System ${i}`, 0.1));
   }
 
   it("renders exactly 10 rows and states how many more are funded when there are more than 10", () => {
-    trackerData = { pinned: [], building: manyBuildRows(13), waitingCount: 5, colonising: [] };
+    trackerData = tracker({ building: manyBuildRows(13), waitingCount: 5 });
     renderPanel();
 
     expect(screen.getAllByRole("button", { name: /Shipyard L2/ })).toHaveLength(10);
@@ -241,7 +298,7 @@ describe("TrackerPanel — the Building section caps at 10 rows, keeping queue o
   });
 
   it("renders no 'more funded' phrasing at all when 10 or fewer rows are funded", () => {
-    trackerData = { pinned: [], building: manyBuildRows(10), waitingCount: 0, colonising: [] };
+    trackerData = tracker({ building: manyBuildRows(10) });
     renderPanel();
 
     expect(screen.getAllByRole("button", { name: /Shipyard L2/ })).toHaveLength(10);
@@ -253,19 +310,19 @@ describe("TrackerPanel — the Building section caps at 10 rows, keeping queue o
     // sorted (by name, by id, or by progress, ascending or descending) would reorder this and the
     // omitted 11th row would not be the one actually last in the queue.
     const rows: TrackerBuildRow[] = [
-      buildRow("sys-f", "Fyords", 40),
-      buildRow("sys-b", "Bexley", 90),
-      buildRow("sys-j", "Jonestown", 10),
-      buildRow("sys-a", "Aurora", 60),
-      buildRow("sys-h", "Halcyon", 20),
-      buildRow("sys-c", "Cordoba", 75),
-      buildRow("sys-k", "Kepler", 5),
-      buildRow("sys-d", "Delta", 55),
-      buildRow("sys-i", "Ionia", 33),
-      buildRow("sys-e", "Echo", 80),
-      buildRow("sys-g", "Gamma", 15), // 11th — must be the one omitted
+      buildRow("sys-f", "Fyords", 0.4),
+      buildRow("sys-b", "Bexley", 0.9),
+      buildRow("sys-j", "Jonestown", 0.1),
+      buildRow("sys-a", "Aurora", 0.6),
+      buildRow("sys-h", "Halcyon", 0.2),
+      buildRow("sys-c", "Cordoba", 0.75),
+      buildRow("sys-k", "Kepler", 0.05),
+      buildRow("sys-d", "Delta", 0.55),
+      buildRow("sys-i", "Ionia", 0.33),
+      buildRow("sys-e", "Echo", 0.8),
+      buildRow("sys-g", "Gamma", 0.15), // 11th — must be the one omitted
     ];
-    trackerData = { pinned: [], building: rows, waitingCount: 0, colonising: [] };
+    trackerData = tracker({ building: rows });
     renderPanel();
 
     const renderedIds = Array.from(document.querySelectorAll("[data-system-id]")).map((el) =>
@@ -280,15 +337,12 @@ describe("TrackerPanel — a system with several concurrent build projects rende
     // The fixture shape the old tests never had: distinct projectIds, same systemId. A single
     // system routinely runs several concurrent build projects (housing, an extractor, an academy —
     // the planner bundles gate-first), so systemId alone can't tell these two rows apart.
-    trackerData = {
-      pinned: [],
-      waitingCount: 0,
-      colonising: [],
+    trackerData = tracker({
       building: [
         { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 0.10, nextCycleProgress: 0.05, etaCycles: 3 },
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.20, nextCycleProgress: 0.05, etaCycles: 5 },
       ],
-    };
+    });
     const { rerender } = renderPanel();
 
     expect(screen.getByRole("button", { name: /Sunnyvale · Housing x2/ })).toBeInTheDocument();
@@ -299,16 +353,13 @@ describe("TrackerPanel — a system with several concurrent build projects rende
     // RECONCILIATION defect, so the real proof is that both rows survive a re-render untouched. Swap
     // in a third, unrelated project ahead of them (mirrors the front reordering as new work is
     // funded) and confirm neither same-system row is dropped, duplicated, or bleeds the other's data.
-    trackerData = {
-      pinned: [],
-      waitingCount: 0,
-      colonising: [],
+    trackerData = tracker({
       building: [
         { projectId: "p3", systemId: "sys-c", systemName: "Rigel", label: "Yard x1", progress: 0.05, nextCycleProgress: 0.05, etaCycles: 9 },
         { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 0.15, nextCycleProgress: 0.05, etaCycles: 2 },
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.25, nextCycleProgress: 0.05, etaCycles: 4 },
       ],
-    };
+    });
     rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
 
     expect(screen.getByText("Building — 3")).toBeInTheDocument();
@@ -324,15 +375,12 @@ describe("TrackerPanel — re-rendering with fresh data replaces rows, never acc
     // Reproduces the owner's report directly: the Tracker query is invalidated every economy cycle,
     // so a systemId key (repeated across the SAME system's several projects) left stale rows behind
     // on every re-render instead of replacing them — 46 DOM nodes for a 22-row, 10-capped list.
-    trackerData = {
-      pinned: [],
-      waitingCount: 0,
-      colonising: [],
+    trackerData = tracker({
       building: [
         { projectId: "p1", systemId: "sys-a", systemName: "Sunnyvale", label: "Housing x2", progress: 0.10, nextCycleProgress: 0.05, etaCycles: 3 },
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.20, nextCycleProgress: 0.05, etaCycles: 5 },
       ],
-    };
+    });
     const { rerender } = renderPanel();
     expect(screen.getAllByRole("button", { name: /Sunnyvale/ })).toHaveLength(2);
 
@@ -340,15 +388,12 @@ describe("TrackerPanel — re-rendering with fresh data replaces rows, never acc
     // different system) took its place at the front of the queue, and "p2" (Foundry) is still
     // running. Same systemId repeated in the OLD list, and the front's order shifted — exactly the
     // shape that makes React's key-based reconciliation lose track of which fiber is which.
-    trackerData = {
-      pinned: [],
-      waitingCount: 0,
-      colonising: [],
+    trackerData = tracker({
       building: [
         { projectId: "p3", systemId: "sys-c", systemName: "Rigel", label: "Yard x1", progress: 0.05, nextCycleProgress: 0.05, etaCycles: 8 },
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.45, nextCycleProgress: 0.05, etaCycles: 3 },
       ],
-    };
+    });
     rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
 
     expect(screen.getByText("Building — 2")).toBeInTheDocument();
@@ -446,9 +491,7 @@ describe("TrackerRow — the coming cycle's gain is drawn only when there is one
 
 describe("TrackerPanel — a build or colony row shows its cycles remaining on the row itself", () => {
   it("a funded build reads its ETA on the row; a colony with no forecast reads an em-dash, not a stale number", () => {
-    trackerData = {
-      pinned: [],
-      waitingCount: 0,
+    trackerData = tracker({
       building: [buildRow("sys-b", "Rigel Yards", 0.5)], // etaCycles 4
       colonising: [
         {
@@ -460,7 +503,7 @@ describe("TrackerPanel — a build or colony row shows its cycles remaining on t
           etaCycles: null,
         },
       ],
-    };
+    });
     renderPanel();
 
     // Read off the row's accessible name rather than a standalone text query: that is what proves
@@ -479,6 +522,23 @@ describe("TrackerPanel — a build or colony row shows its cycles remaining on t
     expect(
       screen.queryByRole("button", { name: (name) => name.includes("New Haven") && name.includes("4") }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("TrackerPanel — a project row's card ETA matches the row's own coarse register", () => {
+  it("reads the same ≈-prefixed value as the row, never a falsely precise bare number", async () => {
+    const user = userEvent.setup();
+    trackerData = tracker({ building: [buildRow("sys-b", "Rigel Yards", 0.5)] }); // etaCycles 4
+    renderPanel();
+
+    await user.tab(); // header settings toggle
+    await user.tab(); // the row (Pinned and Colonising are empty — nothing else tabbable ahead of it)
+    await screen.findByText("Rigel Yards", { selector: "h3" });
+
+    // Scoped to the card's own ETA line — the row's OWN figure carries the identical text
+    // ("≈4 cyc"), so an unscoped text query would match both and fail on ambiguity.
+    const eta = screen.getByText("ETA").closest("div");
+    expect(eta).toHaveTextContent("≈4 cyc");
   });
 });
 

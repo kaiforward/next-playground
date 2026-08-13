@@ -11,7 +11,7 @@ export type TrackerSections = Record<TrackerSectionKey, boolean>;
 /**
  * Default AND fallback: every section on. A Tracker section carries no urgency (unlike the alert
  * bar), so defaulting to "show everything" — including whenever the stored value can't be
- * trusted — loses the player nothing (docs/planned/tracker.md → "Settings").
+ * trusted — loses the player nothing (docs/active/gameplay/tracker.md → "Settings").
  */
 export const DEFAULT_TRACKER_SECTIONS: TrackerSections = {
   pinned: true,
@@ -61,7 +61,7 @@ function writeStoredSections(sections: TrackerSections): void {
 
 /**
  * Which Tracker sections the player wants to see — a view preference, not world state (never
- * part of the save; docs/planned/tracker.md → "Settings"). Persisted to `localStorage`, not
+ * part of the save; docs/active/gameplay/tracker.md → "Settings"). Persisted to `localStorage`, not
  * `sessionStorage`: hiding a section is a "not interested in this" preference the player expects
  * to hold tomorrow, not something that resets when the tab closes.
  *

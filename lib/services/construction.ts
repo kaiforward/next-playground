@@ -15,7 +15,6 @@ import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import {
   computeFactionConstruction,
-  workShareOf,
   type ConstructionSystemInfo,
   type FactionConstructionReadout,
   type FoundingReadoutInputs,
@@ -116,7 +115,13 @@ export function foundingReadoutInputs(
   };
 }
 
-function readoutForFaction(factionId: string): FactionConstructionReadout {
+/**
+ * One faction's whole construction readout, as the engine produces it. Exported for the server-side
+ * readers that need rows the client DTOs deliberately do not carry — the Tracker reads the funded
+ * front and the per-project ETAs from here rather than having `FactionConstructionData` widened with
+ * fields no client component renders.
+ */
+export function readoutForFaction(factionId: string): FactionConstructionReadout {
   const world = getWorld();
   const faction = world.factions.find((f) => f.id === factionId);
   if (!faction) throw new ServiceError(`Faction ${factionId} not found.`, 404);
@@ -150,13 +155,11 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
     if (row.origin === "player") orderedCount += 1;
     if (row.kind === "colony_establish") {
       // Read off `all` rather than the funded front: a colony the pool cannot reach this cycle
-      // still gets a row wherever colonies are listed, and its gain is genuinely 0 — a front
-      // lookup would have to invent that same 0 for an absent row.
+      // still gets a row wherever colonies are listed.
       colonies.push({
         systemId: row.systemId,
         systemName: row.systemName,
         progress: row.progress,
-        nextCycleProgress: workShareOf(row.nextCycleGain, row.workTotal),
       });
     } else {
       const entry = bySystem.get(row.systemId) ?? { systemName: row.systemName, count: 0 };
@@ -176,7 +179,6 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
     factionId,
     pool: readout.pool, poolBase: readout.poolBase, poolCentres: readout.poolCentres,
     automation, buildSystems, colonies, orderedCount,
-    fundedFront: readout.fundedFront, waitingCount: readout.waitingCount,
   };
 }
 

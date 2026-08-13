@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getTrackerData } from "@/lib/services/tracker";
+import { getSystemVitals } from "@/lib/services/system-vitals";
 import { GET } from "@/app/api/game/player/tracker/route";
 import type { World } from "@/lib/world/types";
 
@@ -40,6 +41,41 @@ describe("getTrackerData", () => {
     expect(getTrackerData().pinned).toEqual([]);
   });
 
+  it("keeps a pin the display list drops on `pinnedSystemIds`, so the star toggle can still clear it", () => {
+    const world = seatWorld();
+    const pid = world.player!.controlledFactionId;
+    // A merely CONTROLLED system: pinnable (a pin is a bookmark, not an ownership claim) but it
+    // reads no vitals, so it can never appear in `pinned`. Before `pinnedSystemIds` existed, the
+    // toggle joined against `pinned`, showed this pin as unpinned, and re-sent `pinned: true` on
+    // every click — the pin was unremovable for the life of the save.
+    const site = world.systems.find((s) => s.id !== world.factions.find((f) => f.id === pid)!.homeworldId);
+    if (!site) throw new Error("fixture: expected a spare system");
+
+    setWorld({
+      ...world,
+      systems: world.systems.map((s) =>
+        s.id === site.id ? { ...s, factionId: pid, control: "controlled" as const } : s,
+      ),
+      player: { ...world.player!, pinnedSystemIds: [site.id] },
+    });
+
+    const data = getTrackerData();
+    expect(data.pinned).toEqual([]);
+    expect(data.pinnedSystemIds).toEqual([site.id]);
+  });
+
+  it("carries `pinnedSystemIds` in stored order, including an id whose system no longer exists", () => {
+    const world = seatWorld();
+    const home = world.factions.find((f) => f.id === world.player!.controlledFactionId)!.homeworldId;
+    setWorld({ ...world, player: { ...world.player!, pinnedSystemIds: ["ghost-system", home] } });
+
+    const data = getTrackerData();
+    // The display list drops the id that names nothing; the toggle's list keeps every stored id, in
+    // the order the player added them, so unpinning is possible from wherever a pin came from.
+    expect(data.pinned.map((p) => p.systemId)).toEqual([home]);
+    expect(data.pinnedSystemIds).toEqual(["ghost-system", home]);
+  });
+
   it("still returns a pinned system belonging to another faction — pinning is a bookmark, not an ownership claim", () => {
     const world = seatWorld();
     const pid = world.player!.controlledFactionId;
@@ -62,7 +98,13 @@ describe("getTrackerData", () => {
     expect(() => {
       data = getTrackerData();
     }).not.toThrow();
-    expect(data).toEqual({ pinned: [], building: [], waitingCount: 0, colonising: [] });
+    expect(data).toEqual({
+      pinnedSystemIds: [],
+      pinned: [],
+      building: [],
+      waitingCount: 0,
+      colonising: [],
+    });
   });
 
   it("scopes `building` to the player faction's own funded front, never a rival's queue", () => {
@@ -127,6 +169,62 @@ describe("getTrackerData", () => {
     });
 
     expect(getTrackerData().pinned.map((p) => p.systemId)).toEqual([first.id, home]);
+  });
+
+  /** Pins `home` after writing `fields` onto it, and returns the resulting row. */
+  function pinnedHomeRow(fields: Partial<World["systems"][number]>) {
+    const world = seatWorld();
+    const home = world.factions.find((f) => f.id === world.player!.controlledFactionId)!.homeworldId;
+    setWorld({
+      ...world,
+      systems: world.systems.map((s) => (s.id === home ? { ...s, ...fields } : s)),
+      player: { ...world.player!, pinnedSystemIds: [home] },
+    });
+    const row = getTrackerData().pinned[0];
+    if (!row) throw new Error("fixture: expected the homeworld pin to render");
+    return { home, row };
+  }
+
+  it("derives a pinned row's figures from that system's own seeded state", () => {
+    // Every figure is given a DIFFERENT value, so a row that read the wrong field — or the same
+    // field twice — could not still pass: 30 heads, 75% of cap, 82% stability, 63% provisioned.
+    const { home, row } = pinnedHomeRow({
+      population: 30,
+      popCap: 40,
+      unrest: 0.18,
+      provision: 0.63,
+      supplyBand: "supplied",
+    });
+
+    expect(row.population).toBe(30);
+    expect(row.populationPct).toBeCloseTo(75, 10);
+    expect(row.stabilityPct).toBeCloseTo(82, 10);
+    expect(row.unrest).toBeCloseTo(0.18, 10);
+    expect(row.provisionPct).toBeCloseTo(63, 10);
+    // Development is the ONE figure this service cannot restate from the row's own inputs, and the
+    // service's whole claim is that it is the system panel's figure rather than a second definition
+    // of it — so it is asserted against that read, not against a number copied out of a past run.
+    const vitals = getSystemVitals(home);
+    if (vitals.visibility !== "visible") throw new Error("fixture: expected visible vitals");
+    expect(row.developmentPct).toBe(vitals.development.pct);
+    expect(vitals.development.pct).toBeGreaterThan(0); // …and not a vacuous 0 === 0
+  });
+
+  it("reads populationPct as 0 for a system with no population cap, rather than dividing by it", () => {
+    // A 0 cap would divide to Infinity, which `JSON.stringify` writes as `null` — the row would
+    // reach the panel with no figure at all.
+    const { row } = pinnedHomeRow({ population: 12, popCap: 0 });
+
+    expect(row.populationPct).toBe(0);
+    expect(Number.isFinite(row.populationPct)).toBe(true);
+  });
+
+  it("reads provisionPct as null for a system the economy has never assessed, never as 0%", () => {
+    // A generated world has no provision reading until the economy has run a cycle. 0 here would
+    // render as a measured total famine on a world that has simply not been measured yet.
+    const { row } = pinnedHomeRow({ provision: undefined, supplyBand: undefined });
+
+    expect(row.provisionPct).toBeNull();
   });
 
   it("does not double-count a stalled colony behind the front in waitingCount, though it is listed in colonising", () => {
@@ -253,10 +351,13 @@ describe("getTrackerData", () => {
     const data = getTrackerData();
     // The real fundQueue step in the row's own units, not a flat "some progress" placeholder.
     expect(data.building[0].nextCycleProgress).toBeCloseTo(0.5, 10);
-    // The colony borrows its ETA from the front and finds none; its GAIN is defined without one,
-    // and is genuinely zero. A front lookup standing in for it would read the build's 0.5 here.
-    expect(data.colonising[0].etaCycles).toBeNull();
+    // The colony absorbs nothing THIS cycle, and its gain says so — it must not borrow the build's 0.5.
     expect(data.colonising[0].nextCycleProgress).toBe(0);
+    // …but it still has a forecast: the ETA replays the queue, so a colony behind the front lands
+    // once the front clears. The em-dash means "no forecast at all", and printing it here would
+    // report a starved colony as a permanently stalled one.
+    expect(data.colonising[0].etaCycles).not.toBeNull();
+    expect(data.colonising[0].etaCycles).toBeGreaterThan(data.building[0].etaCycles!);
   });
 
   it("forecasts a near-complete project its remaining work, so its bar finishes rather than overflowing", () => {
@@ -310,15 +411,20 @@ describe("getTrackerData", () => {
       systems,
       buildings,
       constructionProjects: [
-        // Both projects target the SAME system id — the collision Finding B's fix guards against.
+        // Both projects target the SAME system id — the collision a systemId-keyed lookup conflates.
+        // Their work totals differ (60 vs 20) so their ETAs cannot coincide: with equal totals the
+        // two figures agree by accident and a row reading the WRONG project's ETA still passes.
+        // The colony goes FIRST in the queue (`orderOpenProjects` keeps committed order), so a
+        // last-one-wins Map keyed on systemId resolves to the BUILD — the colony would inherit the
+        // build's ETA and the swap would be visible rather than masked by ordering luck.
+        {
+          kind: "colony_establish", id: "c1", origin: "auto", factionId: pid, systemId: home,
+          sourceSystemId: home, seedPop: 2, housingLevels: 1, workTotal: 60, workDone: 0,
+          stagedManifest: [], charterPaid: true, stalledCycles: 0,
+        },
         {
           kind: "build", id: "b1", origin: "auto", factionId: pid, systemId: home,
           buildingType: "housing", levels: 1, workTotal: 20, workDone: 0,
-        },
-        {
-          kind: "colony_establish", id: "c1", origin: "auto", factionId: pid, systemId: home,
-          sourceSystemId: home, seedPop: 2, housingLevels: 1, workTotal: 20, workDone: 0,
-          stagedManifest: [], charterPaid: true, stalledCycles: 0,
         },
       ],
     });
@@ -327,6 +433,11 @@ describe("getTrackerData", () => {
     expect(data.building.map((b) => b.systemId)).toEqual([home]);
     expect(data.building[0].label).toContain("Housing");
     expect(data.colonising.map((c) => c.systemId)).toEqual([home]);
+
+    // Each row's ETA is its own project's. Both draw the cap-4 slice from a pool that covers both,
+    // so the build lands in 20/4 = 5 cycles and the colony in 60/4 = 15.
+    expect(data.building[0].etaCycles).toBe(5);
+    expect(data.colonising[0].etaCycles).toBe(15);
   });
 });
 

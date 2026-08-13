@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import type { MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
 import { useTrackerSections } from "@/lib/hooks/use-tracker-sections";
@@ -45,22 +45,32 @@ interface MapRightRailProps {
  * thin `gap-2` seams — passes clicks through to the map behind it instead of swallowing them.
  *
  * Rendered from `star-map.tsx`, right after the Pixi canvas and the debug overlay.
+ *
+ * Wrapped in `React.memo`: `StarMap` re-renders this on every throttled pan/zoom tick
+ * (`THROTTLE_MS` in `lib/hooks/use-static-tiles.ts`), and without the memo boundary that drags the
+ * whole Tracker subtree — one stateful `RichCard` per row — along for a viewport change that never
+ * touches this component's own props. All four props are stable across those re-renders (`setMode`
+ * and `toggle` are `useCallback`s with empty deps in `star-map.tsx`; `overlays` and `mode` are plain
+ * state), so the memo boundary holds.
  */
-export function MapRightRail({ mode, setMode, overlays, toggle }: MapRightRailProps) {
+export const MapRightRail = memo(function MapRightRail({
+  mode,
+  setMode,
+  overlays,
+  toggle,
+}: MapRightRailProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { sections, setSection } = useTrackerSections();
+
+  const toggleSettings = useCallback(() => setSettingsOpen((open) => !open), []);
 
   return (
     <div className="pointer-events-none absolute inset-y-4 right-4 z-20 flex flex-col items-end gap-2">
       <div className="flex min-h-0 flex-1 gap-2">
         {settingsOpen && <TrackerSettings sections={sections} onChangeSection={setSection} />}
-        <TrackerPanel
-          sections={sections}
-          settingsOpen={settingsOpen}
-          onToggleSettings={() => setSettingsOpen((open) => !open)}
-        />
+        <TrackerPanel sections={sections} settingsOpen={settingsOpen} onToggleSettings={toggleSettings} />
       </div>
       <MapControlsDock mode={mode} setMode={setMode} overlays={overlays} toggle={toggle} />
     </div>
   );
-}
+});
