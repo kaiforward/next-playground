@@ -8,15 +8,14 @@ Single-player grand-strategy game in a procedurally generated galaxy — colonis
 
 ## Skills
 
-- `/measure` — evidence before design. Run it before anything rests on a claim about current behaviour, **including a claim that something is ruled out**.
-- `/bootstrap` — environment checks (node, deps, env, outdated packages, build)
-- `/spec-review <doc>` — adversarial review of a cross-mechanic spec, before planning
-- `/build-plan <feature>` — files, task order, interfaces between tasks; not the code
-- `/uber-review [PR#]` — multi-agent code review of a branch or PR
+Skills live in `.agents/skills/` (canonical; `.claude/skills/` holds discovery adapters only) and the harness lists them with descriptions each session. What it won't tell you is when they are not optional:
+
+- **`/measure` before anything rests on a claim about current behaviour** — including a claim that something is ruled out.
+- **`/spec-review <doc>` before planning** any spec with cross-mechanic surface.
+- Then `/build-plan` → `/implement-plan` → `/uber-review`.
 
 Pipeline these compose (brainstorm → evidence → spec → spec review → build plan → implementation gates → code review → merge): `docs/active/engineering/feature-process.md`.
 Design-stage hazard worksheet: `.agents/skills/shared/design-hazards.md` — fill at design, check at spec review.
-Skills are authored in `.agents/skills/`; `.claude/skills/` holds discovery adapters only.
 
 ## Commands
 
@@ -126,7 +125,7 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` m
 
 ## UI Components
 
-**Theme "Foundry"** — industrial, sharp-edged, copper/amber. Reference: `docs/active/design-system/theme.md`. No rounded corners on cards/buttons/badges (only DetailPanel modal and FilterBar chips round), copper left-accent stripe on cards, `font-display` (Chakra Petch) for headings, `font-mono` (Geist Mono) for numbers.
+**Theme "Foundry"** — industrial, copper/amber, and **square-cornered everywhere** (the DetailPanel modal and FilterBar chips are the only things that round). `docs/active/design-system/theme.md` is authoritative for colour, type and shape — read it before styling anything.
 
 **Before building any component, read `components/ui/` and `components/form/` for a pre-made one** — and read its props before using it. Inline markup is the last resort, not the starting point.
 
