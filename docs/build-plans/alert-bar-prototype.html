@@ -31,8 +31,9 @@
     --chip-overlap: -8px;
     --drawer-width: 300px;
     --rail-width: 236px;
-    /* The Tracker rail's own inset — `inset-y-4 right-4` in components/map/map-right-rail.tsx. */
-    --rail-inset: 16px;
+    /* Chosen 8px. The real rail is 16px today (`inset-y-4 right-4` in map-right-rail.tsx), so the
+       Tracker moves to match rather than the run being drawn out of step with it. */
+    --rail-inset: 8px;
     --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
     --font-mono: "Geist Mono", ui-monospace, monospace;
     --font-display: "Chakra Petch", var(--font-sans);
@@ -240,9 +241,9 @@
   <div class="control-group">
     <span>Inset</span>
     <div class="seg" id="seg-inset">
-      <button data-v="8" aria-pressed="false">8px</button>
+      <button data-v="8" aria-pressed="true">8px</button>
       <button data-v="12" aria-pressed="false">12px</button>
-      <button data-v="16" aria-pressed="true">16px — the rail's real value</button>
+      <button data-v="16" aria-pressed="false">16px — the rail's value today</button>
     </div>
   </div>
   <div class="control-group">

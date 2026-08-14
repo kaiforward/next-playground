@@ -47,6 +47,11 @@ rather than the separate dismissible feed that was considered and dropped.
   home.
 - **Chips are icon-plus-count, not labelled**, at **20px** icons, with chip height derived from that
   figure rather than set independently.
+- **The run is inset 8px** from both panels and from the top of the map, and carries **no backing
+  panel** — the chips are opaque and read over the map on their own.
+  **This moves the Tracker.** Its rail is 16px today (`inset-y-4 right-4`,
+  `components/map/map-right-rail.tsx:68`); it goes to 8px so the two surfaces line up, rather than the
+  run being drawn out of step with it. That file is in this feature's diff.
 - **The fault slash is cased** — a second line in the chip's own background colour, offset up and
   right, drawn under the slash. It carves a gap out of whatever the slash crosses so the negation
   reads as a negation rather than as one more stroke on a busy glyph.
