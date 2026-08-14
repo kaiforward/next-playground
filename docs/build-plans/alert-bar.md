@@ -86,14 +86,14 @@ icons use, drawn over the plain subject glyph and cased so it survives a busy on
 | Tier | Category | Icon | Condition, and its sort measure | Data |
 |---|---|---|---|---|
 | critical | Famine | `WheatOff` | Survival-good shortfall. Sorts by shortfall depth. | Ships today |
-| critical | Colony dying | `Globe` + slash | Famine world whose population is shrinking toward `ABANDON_POP_FLOOR`. Sorts by population ascending — **not** cycles-to-floor, which has no producer (hazard 5). | Derivable |
+| critical | Colony dying | `Globe` + slash | Famine world whose population is **shrinking** toward `ABANDON_POP_FLOOR`. Sorts by cycles to the floor. Needs the per-cycle population delta persisted — see below. | New (small) |
 | critical | Strike | `Megaphone` | Unrest past the strike threshold. Sorts by suppression. | Ships today |
 | critical | Maintenance unfunded | `BanknoteX` | Settlement could not pay the maintenance band — the only path into destructive decay. One faction-level row. | Ships today |
 | critical | **Crisis** | `Siren` | Events that can break a world — plague, raid, asteroid strike, inner-system conflict, border conflict. Sorts by phase severity. | Needs banding |
 | important | Deprived worlds | `BatteryLow` | Provision in the Deprived band. Sorts by Provision ascending. | Ships today |
 | important | Unrest rising | `TrendingUp` | Provision below the expectation the population is used to, not yet striking. Sorts by grievance depth. | Ships today |
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close. Sorts by unserved demand rate. | New |
-| important | Overcrowded | `BedDouble` | **Needs redefining.** Population at `popCap` is the *designed* build/decay equilibrium (measured 99% of developed systems), so "pressed against the cap" alerts on the healthy state. Wanted: at cap **and** housing unable to grow. | Derivable |
+| important | Overcrowded | `BedDouble` | **Defaults off, and the definition is unresolved.** 98.6% of developed systems are strictly over `popCap` at equilibrium, so no cap-relative threshold is a condition. A usable version would need a second conjunct — over cap **and** housing unable to grow — which is not specified here. | Derivable |
 | important | Build blocked | `HardHat` + slash | The planner wanted to build and could not — no land, no spare labour, no affordable whole level. Sorts by the ROI of what was dropped. **Defaults off**: measured at 50.4% of developed systems per planner run, not rare. | New |
 | important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. | Ships today |
 | important | **Disruption** | `TriangleAlert` — reused | Events that cost but do not threaten — shortage, storm, embargo, glut, a dissolved alliance. Sorts by phase severity. | Needs banding |
@@ -175,7 +175,7 @@ it started from were right about three of five and wrong about two, which is why
 |---|---|---|---|
 | Deprived worlds | **ON** | 0.4% → 0.0% | Measured rare, so it is a real signal rather than noise. The guess that it was common was wrong. |
 | Unrest rising | OFF | 13.8% → 22.3% | Common, and an early warning for a state Strike already announces loudly. |
-| Overcrowded | OFF | 49.0% → 99.0% | **Measuring the designed equilibrium** — build and decay rest at occupied housing, so population at cap is the healthy state. Needs redefining, not just hiding. |
+| Overcrowded | OFF | over cap: 7.9% → **98.6%** | Overcrowding is the resting state of a mature galaxy. Tightening from ≥90% to strictly-over-cap changed nothing (99.0% → 98.6%), so no threshold rescues it. |
 | Industry idle | OFF | 2.0% → 34.5% | EU5's single most-hidden alert, and often genuinely unfixable. |
 | Build blocked | OFF | 50.4% of developed systems per planner run | "Rare by construction" measured false at 2.5× its falsifier. |
 
@@ -274,6 +274,24 @@ Toggling does not close the panel.
 
 Two categories have no signal in the code today, and this is the bulk of the work:
 
+- **The per-cycle population delta**, persisted per system. `populationDelta` is computed every cycle
+  (`lib/tick/processors/population.ts:106`) and thrown away — only the resulting `population` is
+  written — so nothing in world state says whether a world is growing or shrinking. Without it,
+  Colony dying can only sort by raw population, which puts every freshly-seeded 2-pop colony above a
+  world actually collapsing: the seed size *is* the default state, so the alert would be mostly false
+  positives. With it, the condition becomes "in famine **and** shrinking" and the sort measure becomes
+  a real forecast, `(population − ABANDON_POP_FLOOR) / −delta`.
+
+  One field, written once per economy cycle alongside `population`. **Absent means never assessed, not
+  zero** — the same convention as `provision` and for the same reason, since 0 is a real reading
+  meaning "stable" and would otherwise be indistinguishable from "never ran".
+
+  **Hazard 1, stated up front:** this is authored for one job — the Colony dying forecast. It is
+  obviously attractive to the Tracker's rows, the Population panel, and the queued unrest-history /
+  recovery-forecast work. Those are welcome to read it, but any of them wanting a *different* shape
+  (a trailing average, a longer window) must add their own rather than redefining this one. That is
+  precisely how `TARGET_COVER` and `demandRate` happened.
+
 - **Build blocked.** The planner drops an opportunity it wanted with a bare `continue`
   (`lib/engine/directed-build.ts:824`, `if (maxLevels < 1) continue`) or a zero-level fit search,
   recording nothing. It must instead emit, per system, the reason the best-ranked dropped opportunity
@@ -291,9 +309,11 @@ the simulation is a mechanic wearing a notification's clothes.
 
 ### World state and saves
 
-**The alert bar adds no world state.** Every condition is derived at read time from fields the tick
-already persists, and category visibility is a browser preference. Nothing in the tick reads anything
-the alert bar writes, because it writes nothing.
+**The alert bar adds no *player* state, and one field of world state.** Category visibility is a
+browser preference, not a save field, so there is no per-player state at all. The one addition to the
+save is the per-cycle population delta above — a save-format bump, taken deliberately because the
+alternative is a Colony dying alert that is mostly false positives. Nothing in the tick reads anything
+the alert bar itself writes, because the bar writes nothing.
 
 The two new engine signals above are the exception and are the tick's own state, specified with the
 instrumentation rather than here.
@@ -349,7 +369,7 @@ an invented threshold.
 | Colonisation + founding manifest | Colony opportunity reads eligibility; Colony dying reads the abandonment line. No write path. | — |
 | Treasury / purse | Maintenance unfunded reads `WorldTreasurySettlement.paid.maintenance` against `maintenanceBill` (`lib/world/types.ts:405-421`). | — |
 | Factions + relations | `border_conflict` arrives as an event via the relations processor (`lib/tick/processors/relations.ts:34-37`); it lands in Crisis. **No war state exists** to interact with. | — |
-| Save format (`World` shape) | **No change.** Settings are a browser preference; no new persisted player state. Contrast the Tracker, which added `pinnedSystemIds`. | — |
+| Save format (`World` shape) | **One new per-system field** — the per-cycle population delta. Settings stay a browser preference, so no new *player* state. Contrast the Tracker, which added `pinnedSystemIds` and nothing else. | — |
 | The harness's own metrics | **None.** The harness drives `runWorldTick` and has no player seat, so no category evaluates. The two new engine signals must therefore be **inert when unread** and must not change any harness figure. | — |
 
 ### 4. A symptom asserted without a measurement
@@ -375,7 +395,7 @@ Evidence still owed.
 | Famine | `foldSupplyState`, `lib/engine/population.ts:262`; persisted `supplyBand` | `"famine"` only via the survival branch; **absent when never assessed** | matches |
 | Deprived band | same fold, persisted | four descriptive bands; famine punches through at any Provision | matches — Deprived is a band, not a Provision cutoff |
 | Strike | `system-population.ts:119`, `unrest > STRIKE_PARAMS.threshold` | boolean derived at read time | matches |
-| Colony dying | `lib/tick/processors/population.ts:111` reports systems already below the floor | reports **crossings**, not a countdown | **MISMATCH** — the processor reports systems that have already fallen. A cycles-to-floor forecast does not exist and must be derived read-side from population and its decline rate, or the measure changes to "in famine and shrinking" |
+| Colony dying | `lib/tick/processors/population.ts:111` reports systems already below the floor; `populationDelta` at `:106` is computed and discarded | reports **crossings**, not a countdown; the delta exists for one statement and is never written | **RESOLVED by persisting the delta** — the forecast then derives from two persisted numbers |
 | Maintenance unfunded | `WorldTreasurySettlement`, `lib/world/types.ts:405` | `paid` vs the bills, per settlement | matches |
 | Unrest rising | `grievanceShortfall`, `lib/engine/population.ts:295` | `expectation − provision`, both persisted | matches — no unrest history needed |
 | Build blocked | **does not exist** | — | new instrumentation |
@@ -510,17 +530,67 @@ Licenses:   Supports Build blocked defaulting OFF, and kills "rare by constructi
 **Outcome: falsified.** Falsifier B fires at 2.5× its threshold. **Build blocked defaults OFF**, and
 the claim that saved our version of it from EU5's fate does not hold.
 
+---
+
+### Re-measure — Overcrowded against the engine's own primitive
+
+The first reading used "≥90% of `popCap`", which was my threshold, not the game's. `crowdingPressure`
+(`lib/engine/population.ts:409`) is the engine's own: exactly zero at or below the cap, ramping to
+`PRESSURE_MAX` by `BRAKE_END` (1.15). Strictly *over* the cap is therefore the honest condition, and
+the pressure is a built-in sort measure.
+
+```
+===== STARTUP — 1000 ticks =====        developed systems: 253
+  Overcrowded>=90%   49.0%  (124)
+  Over cap (>100%)    7.9%  (20)
+  crowdPressure>0     7.9%  (20)
+
+===== EQUILIBRIUM — 10000 ticks =====   developed systems: 582
+  Overcrowded>=90%   99.0%  (576)
+  Over cap (>100%)   98.6%  (574)
+  crowdPressure>0    98.6%  (574)
+```
+
+```
+Meaning:    Worlds do not merely sit at their housing cap at equilibrium — almost all of them are
+            over it, and they get there over the run rather than starting there. Overcrowding is the
+            resting state of a mature galaxy, so it cannot be an alert condition at any threshold.
+Claim:      (re-measure) Overcrowded is a usable condition if defined as strictly over the cap
+            rather than near it.
+Number:     over cap 7.9% at startup → 98.6% at equilibrium. `crowdPressure > 0` reads identically,
+            confirming the two definitions are the same set.
+Horizon:    startup (1,000t) AND equilibrium (10,000t) — the split is the finding
+Cohort:     developed systems; per faction the largest six run 92-100% at equilibrium, so it is not
+            a cohort-mix artefact
+Licenses:   Supports Overcrowded being unusable as an alert at any cap-relative threshold, and
+            supports it defaulting off. Does NOT measure HOW FAR over the cap these worlds sit —
+            this is an incidence count, not a distribution. Marginally-over (a rounding equilibrium
+            between build and decay) and badly-over (housing chronically losing) are indistinguishable
+            in this reading, and they mean very different things.
+```
+
+**Outcome: falsified.** Tightening the threshold does not rescue the category — 98.6% against 99.0%
+is no improvement. Overcrowded **defaults off**, and "population against the cap" is not a condition
+this game has, at any threshold.
+
+**A finding outside this feature, worth surfacing on its own.** 7.9% → 98.6% is a drift across the
+run, not a founding artefact. The design's stated intent is that *proactive housing leads* population
+(`docs/SPEC.md`, Directed Logistics & Autonomic Agency), and at equilibrium it plainly does not — it
+is behind almost everywhere. Whether that is benign (build and decay resting a hair over occupancy)
+or real (housing chronically losing) turns entirely on the magnitude, which this reading does not
+have. **Not booked, not diagnosed** — raised here because it was found here.
+
 ### What the readings changed
 
 - **Deprived defaults ON.** It is rare, which is exactly what makes it a good alert.
 - **Build blocked defaults OFF**, and its justification is gone. It stays as a category — the reason
   it was wanted (automation's silent failures are the only signal there is) is unaffected — but it is
   now a category the player opts into, not one the design leans on.
-- **Overcrowded is measuring the wrong thing.** 99% of developed systems sit at ≥90% of `popCap` at
-  equilibrium, and that is not a fault: build and decay share one equilibrium at occupied housing, so
-  population resting at the cap is the *designed* healthy state. An alert firing on the intended
-  equilibrium is not noisy, it is wrong. Redefining it — population at cap **and** housing unable to
-  grow — is a spec change, not a default change. Booked below.
+- **Overcrowded stays off and its definition is unresolved.** Re-measured against the engine's own
+  `crowdingPressure` rather than my threshold: 98.6% of developed systems are strictly *over* the cap
+  at equilibrium, against 7.9% at startup. No cap-relative threshold makes it a condition. A usable
+  version needs a second conjunct — over cap **and** housing unable to grow — and that is a spec
+  question this measurement does not answer.
 - **The horizon split is load-bearing for Industry idle**: 2.0% at startup against 34.5% at
   equilibrium. A startup-only read would have called it rare and defaulted it on.
 
