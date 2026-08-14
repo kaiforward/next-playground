@@ -395,6 +395,33 @@ processor that only reports systems already past it.
 Both are the same trap: an alert count is an extensive quantity, so it grows with the empire. Any
 default-off decision must be made on a **rate** (share of developed systems), never a raw count.
 
+## Evidence
+
+Claims and falsifiers committed **before** the instruments ran, per `/measure` step 2. Any later edit
+to this section shows up in `git diff` rather than in nobody's memory.
+
+### Claim A — the four default-off categories are common
+
+> At equilibrium, each of the four categories defaulted off — Deprived, Unrest rising, Overcrowded,
+> Industry idle — is true for **more than 20%** of the player faction's developed systems.
+
+**Falsifier A:** if any of the four reads **below 10%** of developed systems at *both* horizons, its
+default-off is unjustified and that category defaults on instead.
+
+### Claim B — blocked builds are rare by construction
+
+> Per directed-build run at equilibrium, the planner drops an opportunity it wanted (no habitable
+> land, no spare labour, no affordable whole level) on **fewer than 5%** of the faction's developed
+> systems.
+
+**Falsifier B:** if blocked drops occur on **more than 20%** of developed systems per run at either
+horizon, "rare by construction" is false, and Build blocked defaults off with the other four rather
+than being one of the signals that justifies the whole principle-2 class.
+
+### Readings
+
+*(pending — instruments not yet run)*
+
 ## Evidence still owed
 
 1. **Category volume at ordinary play.** The EU5 failure this design exists to avoid is a category
