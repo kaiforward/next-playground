@@ -82,8 +82,13 @@ not two. Don't re-propose the feed without a case for what it holds that an aler
    rather than keep tuning it. **Open question either way:** whether the hysteresis applies to the
    persisted display band only (presentational) or to the classifier itself (mechanical — the regime
    feeds the unrest term). Unverified at deferral time; do not assume the first.
-   *Next step:* author the category and tier list, then design the blocked-reason instrumentation the
-   planner must emit.
+   **In progress on `feat/alert-bar`** — the prototype is approved, and the spec, the filled
+   design-hazards worksheet and the `/measure` evidence all live in
+   [alert-bar.md](./build-plans/alert-bar.md), which supersedes the detail above wherever they
+   disagree. Measured since this row was written: **"rare by construction" is false** — the planner
+   drops an opportunity it wanted at 50.4% of developed systems per run — so Build blocked defaults
+   off; and events became **three** valence-banded categories rather than one per type.
+   *Next step:* `/spec-review docs/build-plans/alert-bar.md`, then `/build-plan`.
    *Don't:* alert on a raw persistent state the player cannot act on. That is the precise EU5 failure
    — dismissal is pointless because the condition is still true, so the alert returns instantly and
    crowds out the useful ones.
