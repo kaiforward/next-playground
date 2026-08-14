@@ -970,3 +970,453 @@ convention would have been invented to say less than the colour already says.
 The visible-tooltip question is open and small: hovering already raises an overlapped chip clear of
 the stack, so a tooltip would be a second hover behaviour on the same target. Either the category name
 appears on hover, or it appears only on opening the flyout. Not decided; it changes no data.
+
+## Build plan
+
+Files, order and the contracts between tasks. Not the code — the spec above owns every decision, and a
+task needing one the spec does not carry goes back to the spec rather than being settled here.
+
+Fifteen tasks in four stages, one gate. Stages are check-in pauses on one branch, not PRs. **If the
+diff grows past comfortable review, split A+B (engine and read layer) from C (the surface)** — that is
+the owner's stated preference over deferring a category into its own cycle, because the chip and
+flyout machinery is shared across all seventeen.
+
+**The floor for a `WorldSystem` optional field**, walked against `supplyBand` (`npm run impact --
+supplyBand`, 15 refs / 7 modules) rather than imagined: the type, the tick row, the World-interface
+shape, the adapter's delete/assign pair, and **four** sites in `lib/world/tick.ts` — the join
+(`toTickSystems`), the merge (`mergeSystemsIntoWorld`), the redevelopment clear (`applyDevelopments`)
+and the abandonment clear (`applyAbandonments`). A task touching only the type and the writer is short
+by five files.
+
+**The floor for a `WorldMarket` optional field**, walked against `logisticsFundingBound` (26 refs /
+8 modules): the type, the producing engine's own state type, the World-interface shape, and three
+sites in `lib/world/tick.ts` — the market join, both merge paths (map and rows), and
+`resetAbandonedMarkets`.
+
+### Stage A — the persisted signals and the engine changes
+
+No UI in this stage. Every task adds an optional persisted field or an authored constant, and nothing
+in the tick reads any of them.
+
+### Task 1 — Persist the realised per-cycle population change
+
+Files: `lib/world/types.ts`, `lib/tick/rows.ts`, `lib/tick/world/population-world.ts`,
+`lib/tick/adapters/memory/population.ts`, `lib/world/tick.ts`, `lib/world/__tests__/tick.test.ts`,
+`lib/tick/adapters/memory/__tests__/population.test.ts`
+
+Interface: `WorldSystem.populationChange?: number` — the realised change in `population` across one
+economy cycle **including migration**, denominated per reference cycle. Written by the tick body after
+the migration stage, not by the population processor: `populationDelta`
+(`lib/engine/population.ts:458-473`) carries no migration term, and migration writes `population`
+afterwards in the same tick. Absent means never assessed. Joins the delete/assign pair at
+`lib/world/tick.ts:206-216` and `:263-272`, and the clears at `:533-538` and `:575-579`.
+
+Proves:
+- A system whose population fell only through migration reports a negative change, not zero — the
+  pre-migration `populationDelta` alone would report zero here.
+- A system abandoned and re-developed in later ticks reports **absent**, not its predecessor's value.
+- A never-assessed system reports absent, and absent survives a save round-trip as absent, not as 0.
+- A cycle in which population is unchanged reports 0, distinguishably from absent.
+- Changing `CYCLE_LENGTH` away from `REFERENCE_INTERVAL` does not change the reported figure.
+- The tick's own outputs — `population`, `unrest`, every harness figure — are identical to before.
+
+Consumes: nothing.
+
+### Task 2 — Persist the per-cycle survival-good stock change
+
+Files: `lib/world/types.ts`, `lib/engine/directed-logistics.ts`,
+`lib/tick/world/directed-logistics-world.ts`, `lib/world/tick.ts`, `lib/world/__tests__/tick.test.ts`
+
+Interface: `WorldMarket.stockChange?: number`, written only for `SURVIVAL_GOODS`
+(`lib/constants/physical-economy.ts:153`) — the realised change in `stock` across one economy cycle,
+after directed logistics has applied its hauls as stock deltas. Absent means never assessed. Joins the
+market join at `lib/world/tick.ts:316`, both merge paths at `:366-371` and `:404-409`, and
+`resetAbandonedMarkets` at `:593-604`.
+
+Proves:
+- A system importing its food and holding steady reports ~0, not a drain — the import lands as a stock
+  delta and must be inside the figure.
+- A system whose local production trails consumption **and** has no donor reports a negative change.
+- A non-survival good carries no `stockChange` on any market row.
+- An abandoned system's market row reports absent afterwards, while its `stock` is retained.
+- A market row predating this task loads with the field absent and is not read as 0.
+
+Consumes: nothing.
+
+### Task 3 — Emit the blocked-build reason and the dropped ROI
+
+Files: `lib/engine/directed-build.ts`, `lib/tick/processors/directed-build.ts`,
+`lib/tick/world/directed-build-world.ts`, `lib/world/types.ts`, `lib/tick/rows.ts`,
+`lib/world/tick.ts`, `lib/engine/__tests__/directed-build.test.ts`
+
+Interface: `WorldSystem.buildBlocked?: { reason: BuildBlockReason; droppedRoi: number }` and
+`export type BuildBlockReason = "no-capacity" | "no-input-supplier" | "no-consumer" | "no-labour" | "no-whole-level"`.
+Written per system on every planner run for the **best-ranked** dropped production opportunity, absent
+where one landed or none was wanted. The drop sites are `lib/engine/directed-build.ts:737, 738, 744,
+762, 775, 778, 790, 824, 874`. Housing refusals (`plannedHousingUnits`, `:186-199`) are **out of
+scope** — they belong to Task 8's *No housing headroom*.
+
+Proves:
+- A fully saturated system reports `no-capacity`, not absent. It drops at `:737`, before ranking —
+  the site the original two-site instrumentation missed entirely.
+- A system whose only obstacle is an absent input supplier reports `no-input-supplier`, distinctly
+  from `no-capacity`.
+- A system whose opportunity **landed** this run reports absent, so the row clears without waiting for
+  an abandonment.
+- A system the planner did not visit keeps its previous value rather than being cleared.
+- Turning build automation off does not blank the field — the assessment runs regardless
+  (`lib/tick/processors/directed-build.ts:450`); only proposal emission is gated.
+- The planner's own decisions — which proposals it emits, in what order — are unchanged.
+
+Consumes: nothing.
+
+### Task 4 — Emit the structural-unservable bit
+
+Files: `lib/engine/directed-logistics.ts`, `lib/tick/processors/directed-logistics.ts`,
+`lib/tick/world/directed-logistics-world.ts`, `lib/world/types.ts`, `lib/world/tick.ts`,
+`lib/engine/__tests__/directed-logistics.test.ts`
+
+Interface: `WorldMarket.demandUnservable?: boolean` — a deficit no reachable same-faction donor and no
+local production can close. Written per (system, good) on the **deficit endpoint only**, deliberately
+unlike `logisticsFundingBound`, which the matcher writes to **both** endpoints of a funding-bound haul
+(`lib/engine/directed-logistics.ts:170-175`, applied at
+`lib/tick/processors/directed-logistics.ts:128-129`).
+
+Proves:
+- A deficit left unserved purely by the work budget sets `logisticsFundingBound` and **not**
+  `demandUnservable` — the temporary and the structural must not collapse into one another.
+- A deficit with no reachable donor and no local producer sets `demandUnservable`.
+- The **donor** row of a funding-bound haul never has `demandUnservable`, though it does get
+  `logisticsFundingBound`.
+- A system unservable in three goods produces three market-row flags, which Task 9 counts as one
+  system.
+- A deficit that becomes servable clears the flag on the next logistics run.
+
+Consumes: nothing.
+
+### Task 5 — A sixth `IdleReason` for input starvation
+
+Files: `lib/engine/industry.ts`, `components/system/industry-rows.ts`,
+`components/system/needs-view.ts`, `components/system/industry-panel.tsx`,
+`lib/engine/__tests__/industry.test.ts`, `components/system/__tests__/needs-view.test.ts`
+
+Interface: `IdleReason` (`lib/engine/industry.ts:544`) gains `"inputs"`, derived from `inputGate < 1`,
+and `used` for a producer accounts for it so an input-starved building reads idle rather than fully
+used. **`needs-view.ts` is not optional here**: `buildProblems` treats any binding reason other than
+`"occupancy"` or `undefined` as a labour shortfall (`:82`), so a new reason renders as "understaffed"
+until that predicate and `staffingGradeName` (`:50-56`) are extended.
+
+Proves:
+- A fully staffed, freely selling factory with no recipe inputs reads idle with reason `"inputs"` —
+  today it reads `used === count` with no reason at all.
+- That same factory does **not** render an understaffed chip on the Industry panel, which is what the
+  `:82` predicate produces if left alone.
+- A factory short on both labour and inputs reports the binding constraint, not both.
+- A tier-0 extractable, which has no input gate, never reports `"inputs"`.
+- Existing idle reasons and health colouring are unchanged for every building that had one before.
+
+Consumes: nothing.
+
+### Task 6 — Author the event band and impact rank
+
+Files: `lib/constants/ui.ts`, `lib/constants/__tests__/ui.test.ts`
+
+Interface: `export type EventBand = "crisis" | "disruption" | "windfall"` and
+`export const EVENT_BAND: Record<EventTypeId, { band: EventBand; impactRank: number }>` — beside
+`EVENT_TYPE_ICON` (`lib/constants/ui.ts:117-138`) and keyed the same way, so the compiler requires all
+seventeen types. Values are the band table in the spec above; `impactRank` is the within-band sort for
+Crisis and Disruption, authored because no per-phase severity exists (`EventPhaseDefinition`,
+`lib/constants/events.ts:58-66`).
+
+Proves:
+- All seventeen `EventTypeId` members have a band — including `conflict_spillover`, `plague_risk` and
+  `refugee_crisis`, the three the first cut omitted.
+- Removing a key fails the typecheck rather than producing a partial map at runtime.
+- The three relations-owned types are banded, not just the fourteen spawned ones.
+- No band is empty.
+
+Consumes: nothing.
+
+### Gate 1 — the instrumentation is inert, and two owed numbers
+
+Arms: the branch at the end of Stage A, against `main`.
+
+Reads:
+- `npm run simulate` at **both horizons**, before and after Stage A. Every figure and all four
+  conservation identities identical — the signals are written but nothing in the tick reads them, so
+  drift means a write leaked into a decision path.
+- **Survival stock falling's threshold.** Cycles-to-empty (`stock / −stockChange`) across developed
+  systems, both horizons, cohorted, so the threshold is read rather than guessed. Spec `## Evidence
+  still owed` item 3.
+- **The Colony-dying-vs-Famine overlap.** Share of famine-banded developed systems carrying a negative
+  `populationChange`, both horizons. Spec item 4, falsifier written there.
+
+Merge condition: identical sim output at both horizons; the threshold set from the reading and written
+into the spec; the overlap measured and its falsifier called either way. **Booked at this gate:** if
+the overlap falsifier fires (>90% at either horizon), Task 9 drops the Colony dying category and the
+tier list loses a row — `populationChange` survives regardless, since the sort measure needs it.
+
+### Stage B — the read layer
+
+### Task 7 — The category registry
+
+Files: `lib/constants/alerts.ts` (new), `lib/types/alerts.ts` (new),
+`lib/constants/__tests__/alerts.test.ts` (new)
+
+Interface: `export type AlertTier = "critical" | "important" | "info"`; `export type AlertCategoryId`
+— a union of the seventeen ids; `export const ALERT_CATEGORIES: Record<AlertCategoryId,
+AlertCategoryDef>` where `AlertCategoryDef` carries `{ tier: AlertTier; icon: LucideIcon; faulted:
+boolean; label: string; conditionLine: string; destination: AlertDestination; defaultOn: boolean;
+hideable: boolean; order: number }`; and `export type AlertDestination = { kind: "system"; tab: "" |
+"population" | "industry" | "logistics" } | { kind: "faction" } | { kind: "events" }`. This is the
+spec's authored table in one place, so tier, default, destination and order cannot drift apart across
+the surfaces that read them.
+
+Proves:
+- Every `critical` category has `hideable: false`, and no other tier does — the non-hideable set is
+  exactly the critical tier.
+- Every category the spec's defaults table names OFF has `defaultOn: false`; every other is ON.
+- `order` is unique within a tier, so the authored order is total and a chip cannot move.
+- The destinations that are not systems carry no system tab.
+- Adding a category id without a table entry fails the typecheck.
+
+Consumes: Task 6.
+
+### Task 8 — The read service: state-derived categories
+
+Files: `lib/services/alerts.ts` (new), `lib/types/api.ts`, `lib/services/__tests__/alerts.test.ts` (new)
+
+Interface: `getAlertData(): AlertData` where `AlertData = { categories: AlertCategory[] }`,
+`AlertCategory = { id: AlertCategoryId; count: number; denominator: number; instances: AlertInstance[] }`,
+`AlertInstance = { systemId: string | null; name: string; measure: string; sortKey: number }`. This
+task covers the categories reading only persisted system state: Famine, Deprived worlds, Strike,
+Unrest rising, Overcrowded, No housing headroom, Colony dying — all scoped to the player faction's
+developed systems, which is also `denominator`.
+
+Proves:
+- A never-assessed system appears in **no** category rather than with a zero reading — `provision`,
+  `supplyBand`, `criticalWeight` and `provisionExpectation` are each absent-not-zero.
+- Unrest rising excludes a system with no stored `provisionExpectation`, so a fresh colony does not
+  report grievance against a read-side floor it has no memory of (`lib/engine/expectation.ts:43-52`).
+- A system at exactly `population === popCap` is **not** Overcrowded; one pop above it is.
+- No housing headroom evaluates headroom against **queue-adjusted** buildings, so a system whose
+  relief housing is already committed does not appear.
+- A system in another faction never appears in any category.
+- `popCap === 0` with population above 0 reads as not overcrowded, matching `lib/services/tracker.ts:60`.
+
+Consumes: Tasks 1, 7.
+
+### Task 9 — The read service: signal-derived, faction-level and event categories
+
+Files: `lib/services/alerts.ts`, `lib/services/__tests__/alerts.test.ts`. Reads (does not modify)
+`lib/services/build-options.ts` and `lib/services/colony-eligibility.ts` for the two opportunity
+categories, and `world.player.automation` (`lib/world/types.ts:45`) for their gate.
+
+Interface: extends `getAlertData` with the remaining ten categories — Survival stock falling, Demand
+unservable, Build blocked, Industry idle, Maintenance unfunded, the two `info` opportunity categories
+(Build opportunity, Colony opportunity) and the three event categories. Together with Task 8's seven
+that is all seventeen. Maintenance unfunded returns exactly one instance with `systemId: null`; the
+event categories return one instance per **event**, `systemId` nullable.
+
+Proves:
+- Maintenance unfunded does **not** fire when the maintenance slider is below 1.0 with a solvent
+  treasury — the test is `paid.maintenance < maintenanceBill × bands.maintenance`, not against the
+  full bill (`lib/engine/treasury.ts:126-131`).
+- It does not appear at all before a fresh world's first settlement (`lastSettlement` null).
+- A system unservable in three goods counts **once**, not three times.
+- An event in a rival faction's system raises no chip; a relations-owned pair event involving the
+  player's faction does.
+- A region-level event with `systemId: null` still counts, and the count is instances not systems.
+- Survival stock falling excludes a system whose stock is rising, and one whose cycles-to-empty is
+  above the Gate 1 threshold.
+- **Build opportunity and Colony opportunity return nothing while their domain's automation is ON**,
+  regardless of any settings checkbox — they self-gate on `world.player.automation`, and that gate is
+  independent of the category toggle. With automation off they return the planner's ranked proposals
+  and the eligible controlled systems respectively.
+
+Consumes: Tasks 2, 3, 4, 5, 6, 7, 8; Gate 1's threshold.
+
+### Task 10 — Route, hook, key, invalidation
+
+Files: `app/api/game/player/alerts/route.ts` (new), `lib/hooks/use-alerts.ts` (new),
+`lib/query/keys.ts`, `lib/hooks/use-tick-invalidation.ts`, `lib/types/api.ts`
+
+Interface: `GET /api/game/player/alerts` returning `AlertResponse` via `withServiceErrors` with
+`Cache-Control: private, no-cache`; `useAlerts()` on `queryKeys.alerts`, invalidated on **both** the
+`economyTick` and `eventNotifications` SSE channels — the event categories move on the second, every
+other category on the first.
+
+Proves:
+- The response carries `private, no-cache`, so a New game cannot serve stale system ids from cache.
+- An economy tick invalidates the key; an event notification also invalidates it.
+- The hook is a `useSuspenseQuery` inside a `QueryBoundary` and does not fetch during SSR render.
+- A service error surfaces as an error response rather than a partial payload.
+
+Consumes: Tasks 8, 9.
+
+### Stage C — the surface
+
+### Task 11 — `AlertChip`
+
+Files: `components/alerts/alert-chip.tsx` (new), `components/alerts/__tests__/alert-chip.test.tsx` (new)
+
+Interface: `AlertChip({ category, count, denominator, faulted, open, onOpen })` — a 20px icon plus
+count, opaque tier fill, optional cased fault slash, accessible name carrying category, count and
+denominator ("Famine, 3 of 253 developed systems").
+
+Proves:
+- The accessible name is built from the rendered DOM, not from props alone, so it fails when the
+  element stops rendering.
+- Count and denominator both reach the accessible name — a count with no denominator is the
+  extensive-number failure the spec names.
+- The fault slash renders only for the faulted categories.
+- The chip is a `button` and is keyboard-operable.
+- Whether the chip renders at all is asserted; its colours are not (jsdom has no CSS).
+
+Consumes: Task 7.
+
+### Task 12 — `AlertRun` — placement, packing, hysteresis
+
+Files: `components/alerts/alert-run.tsx` (new), `lib/utils/alert-packing.ts` (new),
+`components/map/map-right-rail.tsx`, `components/map/star-map.tsx`,
+`lib/utils/__tests__/alert-packing.test.ts` (new),
+`components/alerts/__tests__/alert-run.test.tsx` (new)
+
+Interface: `packRun(chipCount, availableWidth, criticalCount): { step: "spaced" | "overlap8" |
+"overlap16" | "collapse"; visible: number; collapsed: number }` — a pure function in `lib/utils/`,
+because the packing decision's only DOM observable is a style, and a class assertion in jsdom would
+pass with the stylesheet deleted. `AlertRun` renders the ordered chips over the map, inset 8px,
+tracking the Tracker rail's base width and its settings-panel exception. **`map-right-rail.tsx:68`
+changes `inset-y-4 right-4` to the 8px pair** — that class sits on the outer column shared by the
+Tracker, its settings panel and `MapControlsDock`, so all three move on top, bottom and right.
+
+Proves:
+- `packRun` never places a critical chip in the collapsed tail, at any width — the settings forbid
+  hiding those and layout must not hide them either.
+- Below the width that fits the critical tier plus a `+N`, the run renders nothing rather than
+  overflowing.
+- A category whose instances vanish keeps its chip for two cycles, then clears — a system oscillating
+  across a threshold must not toggle the run.
+- Chip order does not change when a count changes.
+- Empty space in the run passes clicks through to the map; only chips take pointer events.
+- `MapControlsDock` still clears the map's bottom edge at the new inset.
+
+Consumes: Tasks 7, 10, 11.
+
+### Task 13 — `AlertFlyout`
+
+Files: `components/alerts/alert-flyout.tsx` (new), `components/alerts/alert-row.tsx` (new),
+`components/tracker/tracker-panel.tsx`, `components/alerts/__tests__/alert-flyout.test.tsx` (new)
+
+Interface: `AlertFlyout({ category, instances, denominator, onNavigate, onClose })` — anchored under
+its chip, growing to the map area's height and scrolling inside past that, no row cap. A row is name
+plus measure; activating it navigates via the destination in `ALERT_CATEGORIES`, reusing the Tracker's
+focus mechanism (`components/tracker/tracker-panel.tsx:115-121`), **whose `segment` union widens from
+`"" | "industry"` to the five tab segments**.
+
+Proves:
+- A category with more instances than fit scrolls rather than truncating — no cap, no second home.
+- Only one flyout is open at a time; Escape closes it and returns focus to its chip.
+- A Maintenance unfunded flyout renders its single faction-level row with no system name.
+- An event row with `systemId: null` navigates to the events panel and attempts no map focus.
+- The footer states the count and its denominator.
+- A row click navigates and does **not** apply any action or clear the row.
+
+Consumes: Tasks 7, 10, 12.
+
+### Task 14 — `AlertSettings`
+
+Files: `components/alerts/alert-settings.tsx` (new), `lib/hooks/use-alert-categories.ts` (new),
+`lib/hooks/__tests__/use-alert-categories.test.tsx` (new),
+`components/alerts/__tests__/alert-settings.test.tsx` (new)
+
+Interface: `useAlertCategories(): { categories: Record<AlertCategoryId, boolean>; setCategory }`,
+persisted in `localStorage` and narrowed at the boundary with `typeof`/`in` only, modelled on
+`lib/hooks/use-tracker-sections.ts`. `AlertSettings` renders a checkbox per hideable category grouped
+by tier, opened from the control at the end of the run.
+
+Proves:
+- Critical categories render no control at all — not a disabled one, which would still suggest the set
+  is negotiable.
+- A malformed or partial stored value falls back to the authored defaults, not to all-on (the
+  Tracker's fallback, which is wrong here because an alert carries urgency).
+- The three spec-named default-off categories start unchecked on a first visit.
+- Toggling a category does not close the panel.
+- The two `info` categories stay hidden while their automation is on, whatever the checkbox says.
+
+Consumes: Tasks 7, 12.
+
+### Stage D — the fold
+
+### Task 15 — Doc fold
+
+Files: `docs/active/gameplay/alert-bar.md` (new), `docs/SPEC.md`, `docs/ROADMAP.md`,
+`docs/active/gameplay/tracker.md`, `docs/build-plans/alert-bar.md` (deleted),
+`docs/build-plans/alert-bar-prototype.html` (deleted)
+
+Interface: the spec above promoted to `docs/active/gameplay/alert-bar.md` in present tense, with no
+change history, phase numbers or dates; `docs/SPEC.md`'s Single-Player Runtime paragraph (which says
+the alert bar "remains planned") and its Tracker section updated; roadmap row 1 deleted; the Tracker's
+own doc updated where the rail inset moved; this working file and its prototype deleted.
+
+Proves: not a test task — the check is that `grep -rn "alert bar" docs/` finds no "planned" claim, and
+that nothing references the deleted working file.
+
+Consumes: every task.
+
+## Verification
+
+**Sim, both horizons, cohorted.** `npm run simulate` before and after Stage A must be identical at
+1,000 and 10,000 ticks including all four conservation identities — the whole design rests on the new
+signals being inert, so drift is a write that leaked into a decision path. Gate 1 owns that read.
+Stages B-D touch no tick code: the alert bar is a read surface and moves no sim metric by
+construction, which is the property to demonstrate rather than a number to improve.
+
+**Two readings the gate produces, not assertions this plan makes:** Survival stock falling's
+cycles-to-empty threshold, and the Colony-dying-vs-Famine overlap. Both cohorted by developed systems,
+both horizons.
+
+**Build gate:** `npx next build --webpack`. **Unit:** `npx vitest run`. **Mutation:** the scoped
+`npm run mutation -- --mutate "<changed lib files>"` sweep is the periodic overnight batch, not an
+in-session gate.
+
+**Manual smoke, by the owner:** the run over a live map at several window widths, the packing steps, a
+flyout that overflows, and the settings panel — packing and inset behaviour cannot be proven in jsdom,
+which has no layout.
+
+## Doc fold
+
+Runs on the branch before the final review, per sub-PR if A+B and C are split — never deferred to an
+integration merge.
+
+- **New:** `docs/active/gameplay/alert-bar.md`, promoted from the spec above.
+- **Stale on ship:** `docs/SPEC.md` — Single-Player Runtime says the alert bar "remains planned", and
+  the Tracker section describes the attention layer as having one shipped surface.
+- **Stale on ship:** `docs/active/gameplay/tracker.md` and any theme note describing the right rail's
+  16px inset (`components/map/map-right-rail.tsx:68` moves to 8px).
+- **Superseded:** roadmap row 1 — delete it, not amend it.
+- **Deleted:** this working file and `alert-bar-prototype.html`, after the promotion. Before deleting,
+  grep this file for deferred work and verify each item was actually booked.
+- **Memory:** `design-attention-layer-inputs` retires when this ships — already background only.
+
+## Not covered
+
+- **A visible hover tooltip carrying the category name.** *Dropped for now* — hovering already raises
+  an overlapped chip, so a tooltip is a second hover behaviour on one target, and the accessible name
+  carries the category regardless. Named as open in the spec.
+- **Richer flyout bodies** beyond name plus measure. *Dropped*: the spec commits to thin bodies
+  deliberately, and a later pass can add without redesign.
+- **A secondary "apply it" action on opportunity rows.** *Dropped*, with the seam left — the row's
+  right edge stays free, so it can be added without reworking the row.
+- **`RATION_EXIT_EPS`.** *Booked* — spec `## Evidence still owed` item 5. Band transitions did not
+  become a category, so the constant is a delete unless something else claims it, and this plan's
+  chip-level hysteresis is presentational and does not answer its question.
+- **The Provisioned map mode cannot show Famine.** *Booked at the doc fold* — unrelated to this
+  feature, surfaced during it; raise when map modes next open rather than folding it in here.
+- **Housing refusals inside Build blocked.** *Dropped*, reason in the spec: housing carries no ROI, so
+  a housing row would have nothing to sort by. *No housing headroom* owns that fact.
+- **A faction-wide list surface for a category that outgrows its flyout.** *Dropped* — the flyout is
+  uncapped and scrolls, so there is no overflow to host. The faction Territory tab is explicitly no
+  longer a candidate.
+- **The faction name and flag's new home.** *Dropped from this feature* — they go above the left
+  detail panels, separate work the owner has already scoped out of this branch.
