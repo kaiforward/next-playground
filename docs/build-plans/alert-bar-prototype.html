@@ -31,6 +31,8 @@
     --chip-overlap: -8px;
     --drawer-width: 300px;
     --rail-width: 236px;
+    /* The Tracker rail's own inset — `inset-y-4 right-4` in components/map/map-right-rail.tsx. */
+    --rail-inset: 16px;
     --font-sans: Geist, ui-sans-serif, system-ui, sans-serif;
     --font-mono: "Geist Mono", ui-monospace, monospace;
     --font-display: "Chakra Petch", var(--font-sans);
@@ -69,15 +71,15 @@
 
   /* ---- THE ALERT RUN — no bar, just the span between the panels ---- */
   .bar-chips {
-    position: absolute; z-index: 6; top: 10px;
+    position: absolute; z-index: 6; top: var(--rail-inset);
     left: var(--drawer-width); right: var(--rail-width);
-    margin: 0 10px; min-width: 0;
-    display: flex; align-items: center; gap: 5px; padding: 4px 6px;
+    margin: 0 var(--rail-inset); min-width: 0;
+    display: flex; align-items: center; gap: 5px; padding: 0;
     /* Empty space in the run must not swallow map clicks — only the chips are interactive. */
     pointer-events: none;
   }
   .bar-chips > * { pointer-events: auto; }
-  .bar-chips.with-bg { background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--border); }
+  .bar-chips.with-bg { background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--border); padding: 4px 6px; }
   .bar-chips.empty { display: none; }
 
   /* EU5's packing trick: chips overlap slightly and cast a shadow rightward, so the run reads as a
@@ -174,7 +176,9 @@
   .drawer .stub { margin-top: 14px; height: 64px; background: var(--surface-hover); }
   .drawer .stub + .stub { height: 130px; margin-top: 8px; }
 
-  .rail { position: absolute; right: 0; top: 0; bottom: 0; width: var(--rail-width); padding: 8px; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  /* Mirrors the real rail: `inset-y-4 right-4 … gap-2`. It was mocked at 8px here, which is why the
+     chip run looked out of step with it. */
+  .rail { position: absolute; right: 0; top: 0; bottom: 0; width: calc(var(--rail-width) + var(--rail-inset)); padding: var(--rail-inset); display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
   .rail .panel { background: var(--surface); border: 1px solid var(--border); pointer-events: auto; }
   .rail .dock { height: 78px; display: flex; align-items: center; justify-content: center; color: var(--text-tertiary); font-size: 11px; }
   .rail .tracker { flex: 1 1 auto; padding: 8px; overflow: hidden; }
@@ -231,6 +235,14 @@
       <button data-v="20" aria-pressed="true">20px</button>
       <button data-v="22" aria-pressed="false">22px</button>
       <button data-v="24" aria-pressed="false">24px</button>
+    </div>
+  </div>
+  <div class="control-group">
+    <span>Inset</span>
+    <div class="seg" id="seg-inset">
+      <button data-v="8" aria-pressed="false">8px</button>
+      <button data-v="12" aria-pressed="false">12px</button>
+      <button data-v="16" aria-pressed="true">16px — the rail's real value</button>
     </div>
   </div>
   <div class="control-group">
@@ -757,6 +769,8 @@ wireSeg('seg-labels',  v => chipMode = v);
 wireSeg('seg-size',    v => document.documentElement.style.setProperty('--chip-icon', v + 'px'));
 wireSeg('seg-stack',   v => stack = v);
 wireSeg('seg-bg',      v => background = v);
+// Drives the rail and the chip run together, so they can only ever be judged consistent.
+wireSeg('seg-inset',   v => document.documentElement.style.setProperty('--rail-inset', v + 'px'));
 wireSeg('seg-overlay', v => { overlay = v; document.querySelector('#icon-table tbody').innerHTML = ''; buildTableAgain(); });
 
 function buildTableAgain() {
