@@ -93,8 +93,8 @@ icons use, drawn over the plain subject glyph and cased so it survives a busy on
 | important | Deprived worlds | `BatteryLow` | Provision in the Deprived band. Sorts by Provision ascending. | Ships today |
 | important | Unrest rising | `TrendingUp` | Provision below the expectation the population is used to, not yet striking. Sorts by grievance depth. | Ships today |
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close. Sorts by unserved demand rate. | New |
-| important | Overcrowded | `BedDouble` | Population pressed against `popCap`. Sorts by cap utilisation. | Derivable |
-| important | Build blocked | `HardHat` + slash | The planner wanted to build and could not — no land, no spare labour, no affordable whole level. Sorts by the ROI of what was dropped. | New |
+| important | Overcrowded | `BedDouble` | **Needs redefining.** Population at `popCap` is the *designed* build/decay equilibrium (measured 99% of developed systems), so "pressed against the cap" alerts on the healthy state. Wanted: at cap **and** housing unable to grow. | Derivable |
+| important | Build blocked | `HardHat` + slash | The planner wanted to build and could not — no land, no spare labour, no affordable whole level. Sorts by the ROI of what was dropped. **Defaults off**: measured at 50.4% of developed systems per planner run, not rare. | New |
 | important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. | Ships today |
 | important | **Disruption** | `TriangleAlert` — reused | Events that cost but do not threaten — shortage, storm, embargo, glut, a dissolved alliance. Sorts by phase severity. | Needs banding |
 | info | Build opportunity | `HardHat` | Ranked planner proposals, **only while build automation is off**. Sorts by ROI. | Ships today |
@@ -168,16 +168,16 @@ automation is off, so they self-gate on top of the checkbox.
 **The critical tier cannot be turned off.** That is the small non-hideable set the design promised —
 nothing that can end a colony or start a war is switched off by accident. Five categories, locked on.
 
-**Four important-tier categories default to OFF**, each because it is either continuously true for a
-state the player often cannot fix — EU5's exact failure — or already being handled by the autonomic
-brain:
+**Four important-tier categories default to OFF.** The list below is the *measured* one — the guesses
+it started from were right about three of five and wrong about two, which is why it was measured:
 
-| Category | Why it starts off |
-|---|---|
-| Deprived worlds | Common, and directed logistics is already working on it. |
-| Unrest rising | An early warning for a state that Strike already announces loudly. |
-| Overcrowded | The autonomic builder puts housing up on its own. |
-| Industry idle | EU5's single most-hidden alert, and often genuinely unfixable. |
+| Category | Default | Measured rate (startup → equilibrium) | Why |
+|---|---|---|---|
+| Deprived worlds | **ON** | 0.4% → 0.0% | Measured rare, so it is a real signal rather than noise. The guess that it was common was wrong. |
+| Unrest rising | OFF | 13.8% → 22.3% | Common, and an early warning for a state Strike already announces loudly. |
+| Overcrowded | OFF | 49.0% → 99.0% | **Measuring the designed equilibrium** — build and decay rest at occupied housing, so population at cap is the healthy state. Needs redefining, not just hiding. |
+| Industry idle | OFF | 2.0% → 34.5% | EU5's single most-hidden alert, and often genuinely unfixable. |
+| Build blocked | OFF | 50.4% of developed systems per planner run | "Rare by construction" measured false at 2.5× its falsifier. |
 
 This is the same posture the opportunity categories already take with the automation switch: with a
 domain automated the player is not told what the brain is handling, only what it *could not* do. A
@@ -420,21 +420,115 @@ than being one of the signals that justifies the whole principle-2 class.
 
 ### Readings
 
-*(pending — instruments not yet run)*
+Instrument: a scratch runner driving the real `runWorldTick` on the quick run's own config
+(`DEFAULT_SYSTEM_COUNT`, seed 42), sampling at both horizons, counted over **developed systems** and
+reported per faction. Claim B additionally used a temporary counter at the planner's two drop sites,
+reverted in the same turn (`git checkout -- lib/engine/directed-build.ts`, verified by grep).
 
-## Evidence still owed
+Instrument validated before reading: the runner reports an absent Claim-B counter as **NOT MEASURED**
+rather than as zero — a counter that never fires and a mechanism that never fires look identical, and
+the first run exercised exactly that branch.
 
-1. **Category volume at ordinary play.** The EU5 failure this design exists to avoid is a category
-   that is continuously true for states the player cannot fix, crowding out the useful ones. Every
-   `important`-tier row above is a candidate: `Deprived` and `Industry idle` in particular could
-   plausibly carry a hundred rows in a 600-system galaxy, which would make them uninhabitable as
-   alerts regardless of how well the bar is drawn. Measure the instance count per category at both
-   horizons, cohorted. Since the settings pass, this decides each category's **default**, not whether
-   it exists — the four already defaulted off are the ones suspected worst, and the measurement
-   confirms or moves that list.
-2. **"Blocked builds are rare by construction."** This is the specific claim that saves our version of
-   the blocked-build alert from EU5's fate, and it is unmeasured. Flagged as such in
-   `design-attention-layer-inputs`.
+```
+===== STARTUP — 1000 ticks =====
+developed systems: 253
+  Famine          1.6%  (4)
+  Deprived        0.4%  (1)   [default OFF]
+  Strike          0.0%  (0)
+  Overcrowded    49.0%  (124)   [default OFF]
+  Unrest rising  13.8%  (35)   [default OFF]
+  Industry idle   2.0%  (5)   [default OFF, proxied by staffing]
+   faction-637            n=  22 deprived   0.0% crowd  22.7% grieve   0.0% idle   9.1%
+   faction-640            n=  17 deprived   0.0% crowd  47.1% grieve   5.9% idle   0.0%
+   faction-631            n=  17 deprived   0.0% crowd  41.2% grieve   5.9% idle  11.8%
+   faction-626            n=  17 deprived   0.0% crowd  29.4% grieve  23.5% idle   0.0%
+
+===== EQUILIBRIUM — 10000 ticks =====
+developed systems: 582
+  Famine          1.2%  (7)
+  Deprived        0.0%  (0)   [default OFF]
+  Strike          1.4%  (8)
+  Overcrowded    99.0%  (576)   [default OFF]
+  Unrest rising  22.3%  (130)   [default OFF]
+  Industry idle  34.5%  (201)   [default OFF, proxied by staffing]
+   faction-632            n=  45 deprived   0.0% crowd 100.0% grieve  20.0% idle  31.1%
+   faction-635            n=  38 deprived   0.0% crowd  94.7% grieve  28.9% idle  28.9%
+   faction-630            n=  36 deprived   0.0% crowd 100.0% grieve  19.4% idle  52.8%
+   faction-639            n=  36 deprived   0.0% crowd 100.0% grieve  16.7% idle  38.9%
+
+===== CLAIM B — planner blocked drops =====
+  -- equilibrium only (after t=1000) --
+  runs with >=1 blocked drop: 375
+  mean blocked systems per such run: 293.32 = 50.40% of developed
+  peak: 475 = 81.62% of developed
+  drops by reason: no-fit-space-or-labour=367449, no-whole-level=1691
+```
+
+---
+
+```
+Meaning:    Three of the four categories we defaulted off are indeed common, but the fourth —
+            Deprived — almost never happens, so hiding it by default hides a genuine signal.
+Claim:      Each of the four default-off categories is true for >20% of developed systems at
+            equilibrium.
+Number:     Deprived 0.4% → 0.0%; Unrest rising 13.8% → 22.3%; Overcrowded 49.0% → 99.0%;
+            Industry idle 2.0% → 34.5%
+Horizon:    startup (1,000t) AND equilibrium (10,000t)
+Cohort:     developed systems, galaxy-wide, with a per-faction breakdown showing the same rates
+            inside the largest factions — so the galaxy figure is not a cohort-mix artefact
+Licenses:   Supports the DEFAULT for each of these four categories. Does NOT support deleting any of
+            them, and does NOT measure Industry idle honestly — that row is proxied by labour
+            fulfilment alone, so it misses missing-input and missing-licence idleness and is a LOWER
+            bound. Does not speak to the categories not listed.
+```
+
+**Outcome: partly falsified.** Falsifier A fires for **Deprived** — 0.4% and 0.0%, below 10% at both
+horizons — so **Deprived defaults ON**. The other three survive: Overcrowded and Industry idle
+comfortably, Unrest rising on the equilibrium reading.
+
+---
+
+```
+Meaning:    "Blocked builds are rare by construction" is false. The planner drops an opportunity it
+            wanted at about half the empire on every run, which is the same shape as the EU5 alert
+            players install a mod to hide.
+Claim:      Per directed-build run at equilibrium, the planner drops an opportunity it wanted on
+            fewer than 5% of the faction's developed systems.
+Number:     50.40% of developed systems per run (mean), peak 81.62%. 367,449 drops for
+            no-fit-space-or-labour against 1,691 for no-whole-level.
+Horizon:    equilibrium (10,000t), with the startup ticks excluded from the equilibrium figure
+Cohort:     developed systems, per planner run — ticks where the planner did not run are excluded
+            rather than counted as zeros, which would divide by every tick instead of every run
+Licenses:   Supports Build blocked defaulting OFF, and kills "rare by construction". Does NOT
+            establish how many systems are *entirely* blocked: the counter records a system where at
+            least one opportunity was dropped, which is a SUPERSET of systems where nothing could be
+            built at all. It is an upper bound. A narrower instrument — systems where no opportunity
+            landed — is the follow-up if anyone wants to rescue the category, and it would have to
+            come in 10× lower to save the claim.
+```
+
+**Outcome: falsified.** Falsifier B fires at 2.5× its threshold. **Build blocked defaults OFF**, and
+the claim that saved our version of it from EU5's fate does not hold.
+
+### What the readings changed
+
+- **Deprived defaults ON.** It is rare, which is exactly what makes it a good alert.
+- **Build blocked defaults OFF**, and its justification is gone. It stays as a category — the reason
+  it was wanted (automation's silent failures are the only signal there is) is unaffected — but it is
+  now a category the player opts into, not one the design leans on.
+- **Overcrowded is measuring the wrong thing.** 99% of developed systems sit at ≥90% of `popCap` at
+  equilibrium, and that is not a fault: build and decay share one equilibrium at occupied housing, so
+  population resting at the cap is the *designed* healthy state. An alert firing on the intended
+  equilibrium is not noisy, it is wrong. Redefining it — population at cap **and** housing unable to
+  grow — is a spec change, not a default change. Booked below.
+- **The horizon split is load-bearing for Industry idle**: 2.0% at startup against 34.5% at
+  equilibrium. A startup-only read would have called it rare and defaulted it on.
+
+## Evidence still owed / now settled
+
+1. ~~Category volume at ordinary play~~ — **measured**, see Evidence above. Moved Deprived to
+   default-on and confirmed the other three.
+2. ~~"Blocked builds are rare by construction"~~ — **measured and false**, see Evidence above.
 3. **`RATION_EXIT_EPS`.** Carried here by roadmap row 1 with no surviving justification unless band
    transitions become an alert category. If they do, calibrate the hysteresis against a condition
    flapping on and off the bar; if they don't, delete the constant. Open either way: whether the
