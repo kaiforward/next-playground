@@ -42,9 +42,9 @@ rather than the separate dismissible feed that was considered and dropped.
   is the wrong trade.
 - **A full-width bar was built first and dropped.** It worked, but it reserved map height permanently
   — including on a quiet galaxy with nothing to say — and its own inner container was already inset to
-  this same span, which is the tell that the shell was doing nothing the run wasn't. **Consequence to
-  book:** the faction name and flag were going to live in that bar's left block, and now need another
-  home.
+  this same span, which is the tell that the shell was doing nothing the run wasn't. The faction name
+  and flag, once destined for that bar's left block, go above the system and faction detail panels on
+  the left instead — a separate piece of work, not this one.
 - **Chips are icon-plus-count, not labelled**, at **20px** icons, with chip height derived from that
   figure rather than set independently.
 - **The run is inset 8px** from both panels and from the top of the map, and carries **no backing
@@ -660,8 +660,13 @@ sort this category. That is why the second conjunct is in the condition rather t
    hysteresis applies to the persisted display band only (presentational) or to the classifier itself
    (mechanical — the regime feeds the unrest term). Unverified; do not assume the first.
 
-## Still open
+## Naming an unlabelled chip
 
-- **The `Unrest rising` glyph.** A bare `TrendingUp` with no subject to slash — see the tier list.
-- **A new home for the faction name and flag**, which were to live in the dropped full-width bar's
-  left block.
+Chips are icon-plus-count with no visible label, so a chip's **accessible name carries the category
+name and the count** — "Famine, 3 systems". Without it the control is a button with a count in it and
+nothing that says what the count is of.
+
+`Unrest rising` keeps its bare `TrendingUp`. It has no subject glyph to slash, but it does not need
+one: the chip's fill is its tier colour, so a rising arrow in the important-tier colour reads as
+something climbing that is a problem, which is the whole of what the category means. A second overlay
+convention would have been invented to say less than the colour already says.
