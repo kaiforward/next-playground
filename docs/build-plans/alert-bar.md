@@ -86,12 +86,12 @@ icons use, drawn over the plain subject glyph and cased so it survives a busy on
 | Tier | Category | Icon | Condition, and its sort measure | Data |
 |---|---|---|---|---|
 | critical | Famine | `WheatOff` | Survival-good shortfall. Sorts by shortfall depth. | Ships today |
-| critical | Colony dying | `Globe` + slash | Famine world falling toward `ABANDON_POP_FLOOR`. Sorts by cycles to the floor. | Derivable |
+| critical | Colony dying | `Globe` + slash | Famine world whose population is shrinking toward `ABANDON_POP_FLOOR`. Sorts by population ascending — **not** cycles-to-floor, which has no producer (hazard 5). | Derivable |
 | critical | Strike | `Megaphone` | Unrest past the strike threshold. Sorts by suppression. | Ships today |
 | critical | Maintenance unfunded | `BanknoteX` | Settlement could not pay the maintenance band — the only path into destructive decay. One faction-level row. | Ships today |
 | critical | **Crisis** | `Siren` | Events that can break a world — plague, raid, asteroid strike, inner-system conflict, border conflict. Sorts by phase severity. | Needs banding |
 | important | Deprived worlds | `BatteryLow` | Provision in the Deprived band. Sorts by Provision ascending. | Ships today |
-| important | Unrest rising | `TrendingUp` | Grievance climbing, not yet striking. Sorts by rate of climb. | Derivable |
+| important | Unrest rising | `TrendingUp` | Provision below the expectation the population is used to, not yet striking. Sorts by grievance depth. | Ships today |
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close. Sorts by unserved demand rate. | New |
 | important | Overcrowded | `BedDouble` | Population pressed against `popCap`. Sorts by cap utilisation. | Derivable |
 | important | Build blocked | `HardHat` + slash | The planner wanted to build and could not — no land, no spare labour, no affordable whole level. Sorts by the ROI of what was dropped. | New |
@@ -190,6 +190,210 @@ The measurement is still owed; it is no longer a gate on the spec being written.
 
 **Popover contents are deliberately thin for now:** a list of the affected systems, sorted by the
 category's own measure. Per-category click behaviour and richer bodies are a later pass.
+
+## Specification
+
+### What it is
+
+A run of small chips across the top of the map, each one a kind of trouble or opportunity that is
+**true right now**. A chip appears when at least one system meets its condition, carries the count of
+systems that do, and disappears when the last of them stops. Clicking a chip opens a short list of the
+systems affected, worst first; clicking a row goes there.
+
+That is the whole contract, and the sentence that decides every argument about it: **fixing the
+condition makes the row go away**. A row the player can look at but never clear does not belong here.
+
+The Tracker, beside it, holds the opposite kind of thing — worlds and projects the player is watching,
+which stay in the list whether or not anything is wrong. Nothing appears on both.
+
+### The rule that decides what belongs
+
+An alert-bar row is a **condition**: it exists only while true. A Tracker row is a **thing**: it
+persists regardless. Everything condition-shaped belongs here, everything thing-shaped there, and the
+split is exhaustive — there is no third surface, and a dismissible event log was considered and
+dropped precisely so there is only ever one place that says "look at this".
+
+Two consequences follow. The game decides what is on the alert bar, so the player needs a way to turn
+categories off; the player decides what is in the Tracker, so it needs a pin control instead. And
+because a condition clears itself, **nothing on this bar is dismissible** — dismissing a state that is
+still true is the genre failure the whole design exists to avoid.
+
+### Placement and behaviour
+
+The chips float over the top of the map, inset 8px from the system drawer on the left, the Tracker
+rail on the right, and the top of the map. Nothing reserves layout height: on a galaxy with no live
+conditions and no automation switched off, the surface is not there at all. Empty space in the run
+passes clicks through to the map; only the chips themselves are interactive.
+
+The inset is fixed to the two panel widths whether or not a panel is open, so the run never reflows
+when the player clicks a system.
+
+Chips are ordered by their category's authored tier — critical, then important, then informational —
+with a hairline separator between tiers. Within a tier the order is authored too, and stable: a chip
+never moves because its count changed.
+
+**Packing adapts to the space, in four steps.** Chips sit spaced while the run fits; overlap by 8px
+once it does not, each casting a shadow rightward with the leftmost on top and the hovered one raised
+clear; tighten as far as 16px of overlap before anything is given up; and only past that does the tail
+collapse into a `+N` chip. Overflow is a last resort, not the first answer, and at ordinary widths it
+does not fire. Chip fills are opaque so overlapping chips do not show each other — or the live map —
+through.
+
+### The categories
+
+Fifteen, in the table above. Each is authored into one of three tiers at design time. **There is no
+computed cross-domain score anywhere in this design**: instances sort only *within* their category, by
+that category's own natural measure, and categories sort only by their authored tier. This is what
+lets housing — which carries no ROI value at all — sit on the same bar as an industry proposal without
+inventing a weight to compare them.
+
+Discrete events are three categories banded by authored valence rather than one chip or fifteen:
+Crisis, Disruption, Windfall. Each event type is banded at authoring time, so an event chip's tier is
+authored exactly as every other category's is.
+
+### The flyout
+
+Clicking a chip opens a panel beneath it, anchored under that chip. It carries the category's name and
+icon, one line saying what the condition is, the affected systems in the category's own sort order,
+and a footer. A row is `name` plus that category's measure. Clicking a row flies the map to the system
+and opens the relevant panel tab, reusing the Tracker's focus mechanism.
+
+The list is capped and the flyout says so. Where a category's full list lives when it outgrows the cap
+is still open — the faction Territory tab is the candidate.
+
+Only one flyout is open at a time, Escape closes it, and clicking away closes it.
+
+### Settings
+
+A per-category panel from the control at the end of the run: a checkbox per category grouped by tier,
+persisted in the browser as a view preference, not in the save. **The critical tier cannot be turned
+off** — that is the small non-hideable set. Four important-tier categories default off, listed above.
+Toggling does not close the panel.
+
+### What the engine must newly emit
+
+Two categories have no signal in the code today, and this is the bulk of the work:
+
+- **Build blocked.** The planner drops an opportunity it wanted with a bare `continue`
+  (`lib/engine/directed-build.ts:824`, `if (maxLevels < 1) continue`) or a zero-level fit search,
+  recording nothing. It must instead emit, per system, the reason the best-ranked dropped opportunity
+  failed — no habitable land, no spare labour, no affordable whole level — plus the ROI of what was
+  dropped, for the within-category sort.
+- **Demand unservable.** No `residual` or `unserved` quantity exists in `lib/engine/directed-logistics.ts`.
+  A system whose deficit cannot be closed by any reachable donor *or* by local production must be
+  distinguishable from one merely waiting on the work budget — which `logisticsFundingBound` already
+  marks (`lib/engine/directed-logistics.ts:173`), read today by the build planner
+  (`lib/engine/directed-build.ts:340`) and industry (`lib/engine/industry.ts:402`) but by no UI.
+
+Both are **read-only additions from the alert bar's point of view**: the bar reads them, nothing about
+them changes what the tick decides. That is the property to preserve at review — an alert that changes
+the simulation is a mechanic wearing a notification's clothes.
+
+### World state and saves
+
+**The alert bar adds no world state.** Every condition is derived at read time from fields the tick
+already persists, and category visibility is a browser preference. Nothing in the tick reads anything
+the alert bar writes, because it writes nothing.
+
+The two new engine signals above are the exception and are the tick's own state, specified with the
+instrumentation rather than here.
+
+**Absence is not zero.** `provision`, `supplyBand` and `criticalWeight` are all absent on a system the
+economy has never assessed, and that is deliberate (`lib/world/types.ts:106-141`). A never-assessed
+system must not appear in Famine or Deprived; it has no reading, not a bad one. This is the same trap
+the Tracker already handles at `lib/services/tracker.ts:65`.
+
+## Design hazards — filled
+
+Per `.agents/skills/shared/design-hazards.md`. This is not a pure-UI change — two categories require
+new tick instrumentation — so every row is filled.
+
+### 1. One quantity, several unrelated jobs
+
+| Quantity | Every reader today | Which this design moves | Intended? |
+|---|---|---|---|
+| `supplyBand` | 15 refs across 7 modules (`npm run impact -- supplyBand`): population processor + adapter, `rows`, `population-world`, `world/tick`, `world/types`, `provision-map`, `provision-read` | **None.** Adds an eighth reader (the alert read service) and moves nothing. | Yes — pure read |
+| `provision` / `provisionExpectation` | population engine + processor, `provision-read`, `provision-map`, system vitals | **None.** Read for Deprived and for Unrest rising. | Yes — pure read |
+| `unrest`, `popCap`, `population` | economy, population, migration, decay, vitals, Tracker | **None.** | Yes — pure read |
+| `logisticsFundingBound` | `directed-build.ts:340`, `industry.ts:402` | **None**, but Demand unservable must not be confused with it — funding-bound is a *temporary* state, unservable is a structural one. Two conditions, two signals. | Yes, and stated |
+| *(new)* blocked-build reason | none — new | New quantity, sole reader is the alert read service. | Yes |
+| *(new)* event valence band | none — new | New per-type authoring, read by the alert read service. | Yes |
+
+The design's whole posture on this hazard: it **adds readers and moves nothing**. The one place that
+could go wrong is the two new signals acquiring tick-side readers later, which is why they are
+specified as emitted-and-read-only.
+
+### 2. A constant read for a meaning it was not authored to have
+
+| Constant | Docstring says | This design uses it as | Same? |
+|---|---|---|---|
+| `ABANDON_POP_FLOOR` (`lib/constants/population.ts:141`) | the population below which a famine system is abandoned | the line Colony dying counts down to | Yes |
+| `STRIKE_PARAMS.threshold` | the unrest above which a system strikes (`system-population.ts:119`) | the Strike category's condition | Yes |
+| `supplyBand === "famine"` | `foldSupplyState`'s survival punch-through; the docstring states it is a **strict biconditional** with `survivalShortfall` (`lib/world/types.ts:141`) | the Famine category's condition, read directly rather than re-inferred | Yes — and the biconditional is why no re-derivation is needed |
+| `criticalWeight` | crisis-term input; explicitly **not** inferable from `supplyBand`, and deliberately not clamped to [0,1] | **not used** — no category reads it | n/a |
+
+No constant is being read for a new meaning. Deprived reads the band, not a Provision number against
+an invented threshold.
+
+### 3. A system you did not think about
+
+| System | Interaction | Reason if none |
+|---|---|---|
+| Events | **Three categories are events.** Needs a new authored valence band per event type; `EventDefinition` has no severity or valence field today (`severity` is a child-spawn multiplier, `weight` is spawn frequency). | — |
+| Population + migration | Reads `population`, `popCap`, `provision`, `provisionExpectation`. Writes nothing. | — |
+| Unrest / regime | Reads `unrest` against `STRIKE_PARAMS.threshold`, and grievance as `expectation − provision` (`grievanceShortfall`, `lib/engine/population.ts:295`). Writes nothing. | — |
+| Industry + staffing | Industry idle reads existing per-building idle reasons. Build blocked's labour case reads the planner's own fit gate. | — |
+| Infrastructure decay | None directly, but Industry idle is the **early warning for decay** — idle capacity is what decay removes. Surfacing it does not change the decay rate. | — |
+| Directed logistics | Demand unservable is new instrumentation here. Must be distinguished from `logisticsFundingBound`. | — |
+| Directed build / planner | Build blocked is new instrumentation here. Build opportunity reads the ranked proposals, gated on the automation switch. | — |
+| Colonisation + founding manifest | Colony opportunity reads eligibility; Colony dying reads the abandonment line. No write path. | — |
+| Treasury / purse | Maintenance unfunded reads `WorldTreasurySettlement.paid.maintenance` against `maintenanceBill` (`lib/world/types.ts:405-421`). | — |
+| Factions + relations | `border_conflict` arrives as an event via the relations processor (`lib/tick/processors/relations.ts:34-37`); it lands in Crisis. **No war state exists** to interact with. | — |
+| Save format (`World` shape) | **No change.** Settings are a browser preference; no new persisted player state. Contrast the Tracker, which added `pinnedSystemIds`. | — |
+| The harness's own metrics | **None.** The harness drives `runWorldTick` and has no player seat, so no category evaluates. The two new engine signals must therefore be **inert when unread** and must not change any harness figure. | — |
+
+### 4. A symptom asserted without a measurement
+
+| Claim | Evidence | Horizon | Cohort |
+|---|---|---|---|
+| `supplyBand === "famine"` iff `survivalShortfall` | `lib/world/types.ts:141` docstring | code | — |
+| The planner drops blocked opportunities with no record | `lib/engine/directed-build.ts:824` | code | — |
+| No unserved/residual signal exists in logistics | grep of `lib/engine/directed-logistics.ts` — no `residual` or `unserved` symbol | code | — |
+| `logisticsFundingBound` is read by the engine but no UI | `directed-build.ts:340`, `industry.ts:402`; no `components/` reader | code | — |
+| No war state exists | every `war` identifier in `lib/` is a comment, a fog-of-war name, or a future-layer note | code | — |
+| Grievance is derivable without new history | `grievanceShortfall(expectation, provision)`, `lib/engine/population.ts:295`; both fields persisted | code | — |
+| **How many systems each category would carry** | **NONE — hypothesis** | — | — |
+| **"Blocked builds are rare by construction"** | **NONE — hypothesis** | — | — |
+
+The last two are labelled hypotheses, not findings. They set defaults, not the category list — see
+Evidence still owed.
+
+### 5. Designing against a threshold or primitive that does not exist
+
+| Consumes | Produced at | Actual shape today | Design assumes |
+|---|---|---|---|
+| Famine | `foldSupplyState`, `lib/engine/population.ts:262`; persisted `supplyBand` | `"famine"` only via the survival branch; **absent when never assessed** | matches |
+| Deprived band | same fold, persisted | four descriptive bands; famine punches through at any Provision | matches — Deprived is a band, not a Provision cutoff |
+| Strike | `system-population.ts:119`, `unrest > STRIKE_PARAMS.threshold` | boolean derived at read time | matches |
+| Colony dying | `lib/tick/processors/population.ts:111` reports systems already below the floor | reports **crossings**, not a countdown | **MISMATCH** — the processor reports systems that have already fallen. A cycles-to-floor forecast does not exist and must be derived read-side from population and its decline rate, or the measure changes to "in famine and shrinking" |
+| Maintenance unfunded | `WorldTreasurySettlement`, `lib/world/types.ts:405` | `paid` vs the bills, per settlement | matches |
+| Unrest rising | `grievanceShortfall`, `lib/engine/population.ts:295` | `expectation − provision`, both persisted | matches — no unrest history needed |
+| Build blocked | **does not exist** | — | new instrumentation |
+| Demand unservable | **does not exist** | — | new instrumentation |
+| Event valence | **does not exist** | `EventDefinition` has no severity/valence | new authoring |
+
+The Colony dying row is the hazard-5 catch: the design said "sorts by cycles to the floor" against a
+processor that only reports systems already past it.
+
+### 6. Designing against an aggregate that moves for other reasons
+
+| Metric | Read at which cohort | What else moves it |
+|---|---|---|
+| Per-category instance count | **Must be cohorted by world age and by developed-vs-frontier.** A galaxy-wide count rises purely with the number of developed systems. | Colonisation rate, universe size, the horizon. A count that doubles because the empire doubled is not a worsening condition. |
+| "Rare by construction" for Build blocked | Blocked events per planner run, per faction, not galaxy totals | Faction count, construction pool size, how saturated territory is |
+
+Both are the same trap: an alert count is an extensive quantity, so it grows with the empire. Any
+default-off decision must be made on a **rate** (share of developed systems), never a raw count.
 
 ## Evidence still owed
 
