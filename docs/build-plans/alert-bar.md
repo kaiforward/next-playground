@@ -116,22 +116,57 @@ something is climbing but not what. A second overlay type (a rising marker over 
 fix it at the cost of a second visual convention to learn. Not decided.
 
 **Custom icons are a live possibility** for this project rather than a rejected one. The lucide set
-plus the fault slash covers fifteen of sixteen; a dedicated set would be a later pass, and nothing
-here forecloses it.
+plus the cased slash covers thirteen of the fourteen; a dedicated set would be a later pass, and
+nothing here forecloses it.
 
 Two of the three `New` rows are the reads roadmap row 1 named by name (Overcrowded is `Derivable`
 rather than `New` — the per-system figure exists at `lib/services/tracker.ts:60`, what is missing is a
 faction-wide read of it). `Build blocked` is genuinely new instrumentation: the drop is a bare
 `continue` at `lib/engine/directed-build.ts:824` with no reason recorded anywhere.
 
-## Evidence still owed — the spec must not be written on these unmeasured
+## Settings, and what defaults off
+
+A per-category settings panel, opened from the bar's right-hand block and following the Tracker's
+pattern: a checkbox per category, grouped by tier, persisted in the browser as a view preference
+rather than in the save. The two `info` groups additionally only ever appear while their domain's
+automation is off, so they self-gate on top of the checkbox.
+
+**The critical tier cannot be turned off.** That is the small non-hideable set the design promised —
+nothing that can end a colony or start a war is switched off by accident. Five categories, locked on.
+
+**Four important-tier categories default to OFF**, each because it is either continuously true for a
+state the player often cannot fix — EU5's exact failure — or already being handled by the autonomic
+brain:
+
+| Category | Why it starts off |
+|---|---|
+| Deprived worlds | Common, and directed logistics is already working on it. |
+| Unrest rising | An early warning for a state that Strike already announces loudly. |
+| Overcrowded | The autonomic builder puts housing up on its own. |
+| Industry idle | EU5's single most-hidden alert, and often genuinely unfixable. |
+
+This is the same posture the opportunity categories already take with the automation switch: with a
+domain automated the player is not told what the brain is handling, only what it *could not* do. A
+player who wants to min-max turns them on.
+
+**It also changes what the volume measurement is for.** The question stops being "does this category
+survive the tier list" and becomes "does it default on or off", which is a far lower bar — a category
+measured as continuously true across dozens of systems is a default-off category, not a deleted one.
+The measurement is still owed; it is no longer a gate on the spec being written.
+
+**Popover contents are deliberately thin for now:** a list of the affected systems, sorted by the
+category's own measure. Per-category click behaviour and richer bodies are a later pass.
+
+## Evidence still owed
 
 1. **Category volume at ordinary play.** The EU5 failure this design exists to avoid is a category
    that is continuously true for states the player cannot fix, crowding out the useful ones. Every
    `important`-tier row above is a candidate: `Deprived` and `Industry idle` in particular could
    plausibly carry a hundred rows in a 600-system galaxy, which would make them uninhabitable as
    alerts regardless of how well the bar is drawn. Measure the instance count per category at both
-   horizons, cohorted, before the tier list is fixed.
+   horizons, cohorted. Since the settings pass, this decides each category's **default**, not whether
+   it exists — the four already defaulted off are the ones suspected worst, and the measurement
+   confirms or moves that list.
 2. **"Blocked builds are rare by construction."** This is the specific claim that saves our version of
    the blocked-build alert from EU5's fate, and it is unmeasured. Flagged as such in
    `design-attention-layer-inputs`.

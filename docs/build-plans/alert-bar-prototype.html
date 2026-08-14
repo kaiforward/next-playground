@@ -134,6 +134,26 @@
   .flyout footer { padding: 7px 10px; font-size: 11px; border-top: 1px solid var(--border); display: flex; gap: 14px; }
   .flyout footer button { font: inherit; font-size: 11px; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; }
 
+  /* settings panel */
+  .settings-flyout { width: 330px; max-height: 420px; }
+  .set-group { border-bottom: 1px solid var(--border); padding: 6px 0 8px; }
+  .set-group h5 { display: flex; align-items: baseline; gap: 8px; margin: 0; padding: 4px 10px 6px;
+    font-family: var(--font-display); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-tertiary); }
+  .set-group h5 span { font-family: var(--font-sans); font-size: 10px; letter-spacing: 0; text-transform: none; opacity: 0.85; }
+  .set-group ul { list-style: none; margin: 0; padding: 0; }
+  .set-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; }
+  .set-row:hover { background: var(--surface-hover); }
+  .set-row.locked { cursor: default; opacity: 0.75; }
+  .set-row.locked:hover { background: transparent; }
+  .set-row .box { width: 13px; height: 13px; flex: 0 0 auto; border: 1px solid var(--border-strong);
+    display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--background); }
+  .set-row .box.on { background: var(--accent); border-color: var(--accent); }
+  .set-row .ico { display: flex; flex: 0 0 auto; }
+  .set-row .ico svg { width: 15px; height: 15px; }
+  .set-row .lbl { color: var(--text-primary); display: flex; flex-direction: column; }
+  .set-row .hint { font-size: 10px; color: var(--text-tertiary); }
+  .set-row .lock { margin-left: auto; font-size: 9px; font-family: var(--font-mono); color: var(--text-tertiary); }
+
   /* ---- stage ---- */
   .stage { flex: 1 1 auto; position: relative; overflow: hidden; }
   .map { position: absolute; inset: 0;
@@ -415,22 +435,22 @@ const CATEGORIES = [
     why:'Relations dropped past hostile; production modifiers are live.',
     rows:[['Cygnus Combine','phase 2 of 3']] },
 
-  { id:'deprived', tier:'important', glyph:'batteryLow',  label:'Deprived',      icon:'BatteryLow', read:['fair','provision as a gauge — a bit abstract'], measure:'provision',
+  { id:'deprived', tier:'important', glyph:'batteryLow', off:'common, and logistics is already working on it', label:'Deprived', icon:'BatteryLow', read:['fair','provision as a gauge — a bit abstract'], measure:'provision',
     why:'Provision in the Deprived band, ascending.',
     rows:[['Alnair Station','38%'],['Kepler-442','44%'],['Mizar Yard','47%'],['Procyon B','51%']] },
-  { id:'unrest',   tier:'important', glyph:'trendingUp',  label:'Unrest rising', icon:'TrendingUp', read:['weak','says something is climbing, not what'], measure:'rate',
+  { id:'unrest',   tier:'important', glyph:'trendingUp', off:'an early warning for a state Strike already covers loudly', label:'Unrest rising', icon:'TrendingUp', read:['weak','says something is climbing, not what'], measure:'rate',
     why:'Grievance climbing for three cycles or more, not yet striking.',
     rows:[['Kepler-442','+0.06/cycle'],['Altair Hub','+0.04/cycle']] },
   { id:'demand',   tier:'important', glyph:'routeOff',    label:'Demand unservable', icon:'RouteOff', read:['ok','strong — no route can serve it'], measure:'unserved rate',
     why:'Neither imports nor local production can close the deficit.',
     rows:[['Alnair Station','no reachable Fuel'],['Mizar Yard','no reachable Electronics'],['Procyon B','no reachable Food']] },
-  { id:'crowd',    tier:'important', glyph:'bedDouble',   label:'Overcrowded',   icon:'BedDouble', read:['ok','housing shortage — concrete'], measure:'cap use',
+  { id:'crowd',    tier:'important', glyph:'bedDouble', off:'the autonomic builder puts housing up on its own', label:'Overcrowded', icon:'BedDouble', read:['ok','housing shortage — concrete'], measure:'cap use',
     why:'Population pressed against popCap. The cue to build housing.',
     rows:[['Sol Prime','99% of cap'],['Altair Hub','96% of cap'],['Denebola','93% of cap']] },
   { id:'blocked',  tier:'important', glyph:'hardHat', fault:true, label:'Build blocked', icon:'HardHat + slash', read:['ok','clean dome — takes the slash where Construction could not'], measure:'dropped ROI',
     why:'The planner wanted to build here and could not. With automation on this is the only signal there is.',
     rows:[['Mizar Yard','no spare labour'],['Denebola','no habitable land'],['Procyon B','level unaffordable']] },
-  { id:'idle',     tier:'important', glyph:'factory', fault:true, label:'Industry idle', icon:'Factory + slash', read:['ok','no FactoryOff in lucide — slash supplies it'], measure:'idle share',
+  { id:'idle',     tier:'important', glyph:'factory', fault:true, off:'EU5\'s single most-hidden alert — often unfixable', label:'Industry idle', icon:'Factory + slash', read:['ok','no FactoryOff in lucide — slash supplies it'], measure:'idle share',
     why:'Built capacity not running. Decay will take it if it stays.',
     rows:[['Kepler-442','2 factories, no skill-1 licence'],['Rigel Deep','1 extractor, unstaffed']] },
   // One chip for every discrete event, rather than one chip per kind of event. The rows carry the
@@ -485,9 +505,18 @@ function svg(cat, cls) {
          G[cat.glyph] + faultMarkup(cat.fault) + '</svg>';
 }
 
+/* Settings. Every category can be switched off EXCEPT the critical tier, which is the small
+   non-hideable set the design promised — nothing that can end a colony or a war is turned off by
+   accident. Four important-tier categories start OFF: each is either continuously true for states
+   the player often cannot fix (EU5's exact failure) or already handled by the autonomic brain. A
+   player who wants to min-max turns them on. */
+const lockedOn = c => c.tier === 'critical';
+const enabled = new Set(CATEGORIES.filter(c => lockedOn(c) || !c.off).map(c => c.id));
+let settingsOpen = false;
+
 function activeCategories() {
   const live = new Set(LOADS[load]);
-  return CATEGORIES.filter(c => live.has(c.id))
+  return CATEGORIES.filter(c => live.has(c.id) && enabled.has(c.id))
     .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
 }
 
@@ -513,7 +542,8 @@ function render() {
   host.innerHTML = html;
   packChips(host);
   buildFaultStrip();
-  if (openId) drawFlyout(openId);
+  if (settingsOpen) drawSettings();
+  else if (openId) drawFlyout(openId);
 }
 
 /* Adaptive packing, measured rather than assumed.
@@ -628,6 +658,41 @@ function drawFlyout(catId) {
   el.style.top = (tr.bottom - fr.top + 5) + 'px';
 }
 
+/* ---- the settings panel ---- */
+function drawSettings() {
+  const trigger = document.getElementById('settings-chip');
+  const frame = document.getElementById('frame');
+
+  const group = (tier, heading, note) => {
+    const rows = CATEGORIES.filter(c => c.tier === tier).map(c => {
+      const on = enabled.has(c.id), locked = lockedOn(c);
+      return '<li class="set-row' + (locked ? ' locked' : '') + '" data-set="' + c.id + '">' +
+        '<span class="box' + (on ? ' on' : '') + '">' + (on ? '✓' : '') + '</span>' +
+        '<span class="ico tier-' + c.tier + '" style="color:var(--tier-light)">' + svg(c) + '</span>' +
+        '<span class="lbl">' + c.label +
+          (c.off ? '<span class="hint">' + c.off + '</span>' : '') + '</span>' +
+        (locked ? '<span class="lock">always on</span>' : '') + '</li>';
+    }).join('');
+    return '<div class="set-group"><h5>' + heading +
+      (note ? '<span>' + note + '</span>' : '') + '</h5><ul>' + rows + '</ul></div>';
+  };
+
+  const el = document.createElement('div');
+  el.className = 'flyout settings-flyout tier-neutral';
+  el.innerHTML =
+    '<header><h4>Alerts</h4><span class="count">what appears on the bar</span></header>' +
+    group('critical', 'Critical', 'cannot be turned off') +
+    group('important', 'Important') +
+    group('info', 'Opportunities', 'only while that domain\'s automation is off') +
+    '<footer><button data-preset="all">Turn all on</button>' +
+    '<button data-preset="default">Reset to defaults</button></footer>';
+  frame.appendChild(el);
+
+  const fr = frame.getBoundingClientRect(), tr = trigger.getBoundingClientRect();
+  el.style.left = Math.max(8, tr.right - fr.left - el.offsetWidth) + 'px';
+  el.style.top = (tr.bottom - fr.top + 5) + 'px';
+}
+
 /* ---- fault-overlay comparison strip ---- */
 function buildFaultStrip() {
   const host = document.getElementById('fault-strip');
@@ -693,16 +758,47 @@ function buildTableAgain() {
 }
 
 document.addEventListener('click', (e) => {
+  // Toggling a category from inside the settings panel keeps the panel open — the whole point is
+  // trying combinations, and closing on every tick would make that unusable.
+  const setRow = e.target.closest('.set-row');
+  if (setRow) {
+    const c = CATEGORIES.find(x => x.id === setRow.dataset.set);
+    if (c && !lockedOn(c)) {
+      enabled.has(c.id) ? enabled.delete(c.id) : enabled.add(c.id);
+      render();
+    }
+    return;
+  }
+  const preset = e.target.closest('.settings-flyout footer button');
+  if (preset) {
+    enabled.clear();
+    CATEGORIES.forEach(c => {
+      if (preset.dataset.preset === 'all' || lockedOn(c) || !c.off) enabled.add(c.id);
+    });
+    render();
+    return;
+  }
+
+  if (e.target.closest('#settings-chip')) {
+    settingsOpen = !settingsOpen; openId = null; render(); return;
+  }
+
   const chip = e.target.closest('.chip');
-  if (chip && chip.id !== 'settings-chip') {
+  if (chip) {
     const id = chip.dataset.cat;
+    if (!id) return;                       // the +N overflow chip
+    settingsOpen = false;
     openId = openId === id ? null : id;
     render();
     return;
   }
-  if (!e.target.closest('.flyout') && !e.target.closest('.seg')) { openId = null; render(); }
+  if (!e.target.closest('.flyout') && !e.target.closest('.seg')) {
+    if (openId || settingsOpen) { openId = null; settingsOpen = false; render(); }
+  }
 });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && openId) { openId = null; render(); } });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && (openId || settingsOpen)) { openId = null; settingsOpen = false; render(); }
+});
 
 // Packing is measured, so it has to be re-measured when the window changes.
 window.addEventListener('resize', () => render());
