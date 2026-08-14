@@ -93,7 +93,7 @@ icons use, drawn over the plain subject glyph and cased so it survives a busy on
 | important | Deprived worlds | `BatteryLow` | Provision in the Deprived band. Sorts by Provision ascending. | Ships today |
 | important | Unrest rising | `TrendingUp` | Provision below the expectation the population is used to, not yet striking. Sorts by grievance depth. | Ships today |
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close. Sorts by unserved demand rate. | New |
-| important | Overcrowded | `BedDouble` | **Defaults off, and the definition is unresolved.** 98.6% of developed systems are strictly over `popCap` at equilibrium, so no cap-relative threshold is a condition. A usable version would need a second conjunct — over cap **and** housing unable to grow — which is not specified here. | Derivable |
+| important | Overcrowded | `BedDouble` | Over `popCap` **and** no habitable headroom for another housing level (`habitableHousingHeadroom < 1`). Sorts by population over cap. **Defaults off**: 0.4% of developed systems during expansion, 97.3% at build-out — useful exactly while there is still land to develop. | Derivable |
 | important | Build blocked | `HardHat` + slash | The planner wanted to build and could not — no land, no spare labour, no affordable whole level. Sorts by the ROI of what was dropped. **Defaults off**: measured at 50.4% of developed systems per planner run, not rare. | New |
 | important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. | Ships today |
 | important | **Disruption** | `TriangleAlert` — reused | Events that cost but do not threaten — shortage, storm, embargo, glut, a dissolved alliance. Sorts by phase severity. | Needs banding |
@@ -175,7 +175,7 @@ it started from were right about three of five and wrong about two, which is why
 |---|---|---|---|
 | Deprived worlds | **ON** | 0.4% → 0.0% | Measured rare, so it is a real signal rather than noise. The guess that it was common was wrong. |
 | Unrest rising | OFF | 13.8% → 22.3% | Common, and an early warning for a state Strike already announces loudly. |
-| Overcrowded | OFF | over cap: 7.9% → **98.6%** | Overcrowding is the resting state of a mature galaxy. Tightening from ≥90% to strictly-over-cap changed nothing (99.0% → 98.6%), so no threshold rescues it. |
+| Overcrowded | OFF | over cap + no room: 0.4% → **97.3%** | Selective and useful during expansion; saturates at build-out because the galaxy runs out of space. Kept deliberately, defaulted off. |
 | Industry idle | OFF | 2.0% → 34.5% | EU5's single most-hidden alert, and often genuinely unfixable. |
 | Build blocked | OFF | 50.4% of developed systems per planner run | "Rare by construction" measured false at 2.5× its falsifier. |
 
@@ -580,17 +580,67 @@ is behind almost everywhere. Whether that is benign (build and decay resting a h
 or real (housing chronically losing) turns entirely on the magnitude, which this reading does not
 have. **Not booked, not diagnosed** — raised here because it was found here.
 
+---
+
+### Third read — the distribution, and the two-conjunct condition
+
+Owner's diagnosis at this point: worlds sit over cap because systems **run out of space**, which is
+its own problem. That predicts the useful condition is "over cap AND no room to build housing", so
+both the distribution and that conjunct were measured. `habitableHousingHeadroom`
+(`lib/engine/directed-build.ts:163`) is the planner's own "can another housing level physically be
+built here", used rather than re-deriving the rule.
+
+```
+                                        STARTUP (1,000t)      EQUILIBRIUM (10,000t)
+developed systems                            253                     582
+Over cap (>100%)                            7.9%  (20)            98.6%  (574)
+No housing headroom                         0.4%  (1)             97.8%  (569)
+OVER CAP + NO ROOM                          0.4%  (1)             97.3%  (566)
+
+population / popCap distribution
+  startup      p10 0.505  p50 0.899  p75 0.993  p90 1.000  p99 1.050  max 1.104
+  equilibrium  p10 1.088  p50 1.115  p75 1.122  p90 1.122  p99 1.127  max 1.127
+  over 1.15x cap (BRAKE_END): 0.0% at BOTH horizons
+```
+
+```
+Meaning:    Being full is what a developed world IS once the galaxy is built out — over its cap, with
+            no land left to build on. Early in a game it is rare and worth flagging; by equilibrium
+            it describes almost every world, so no definition in this space stays selective.
+Claim:      (re-measure) Overcrowded becomes selective if defined as over cap AND unable to build
+            more housing.
+Number:     0.4% at startup → 97.3% at equilibrium. Adding the second conjunct moved equilibrium
+            from 98.6% to 97.3% — it selects almost nothing out.
+Horizon:    startup (1,000t) AND equilibrium (10,000t)
+Cohort:     developed systems; the six largest factions all read 92-100% over cap at equilibrium
+Licenses:   Supports Overcrowded defaulting off, and supports it being genuinely useful during
+            expansion. Does NOT support it as an equilibrium alert under any cap- or land-relative
+            definition tried. Says nothing about whether the galaxy running out of space is itself
+            correct — that is a substrate question, not an alert question.
+```
+
+**The crowd brake explains the shape.** Every developed world at equilibrium sits between 1.088× and
+1.127× of cap, and **nothing reaches `BRAKE_END` (1.15)** at either horizon, because growth ramps to
+zero by then. So cap utilisation cannot sort the category either: ranking 574 worlds across a
+0.034-wide band is ranking noise. The category has no usable within-class measure at equilibrium.
+
+**Outcome: falsified for equilibrium, confirmed for expansion.** The alert is kept — the owner's call
+— and the honest characterisation is that it *works when it matters*: during expansion, when there is
+still land to develop and the player can act, it fires on well under 1% of worlds. It saturates once
+the galaxy is built out, and that saturation is the space problem, not an alert-design problem.
+
 ### What the readings changed
 
 - **Deprived defaults ON.** It is rare, which is exactly what makes it a good alert.
 - **Build blocked defaults OFF**, and its justification is gone. It stays as a category — the reason
   it was wanted (automation's silent failures are the only signal there is) is unaffected — but it is
   now a category the player opts into, not one the design leans on.
-- **Overcrowded stays off and its definition is unresolved.** Re-measured against the engine's own
-  `crowdingPressure` rather than my threshold: 98.6% of developed systems are strictly *over* the cap
-  at equilibrium, against 7.9% at startup. No cap-relative threshold makes it a condition. A usable
-  version needs a second conjunct — over cap **and** housing unable to grow — and that is a spec
-  question this measurement does not answer.
+- **Overcrowded is kept, defaults off, and is defined with two conjuncts** — over `popCap` and no
+  habitable headroom for another housing level. Measured at 0.4% of developed systems during
+  expansion and 97.3% at build-out. It is a real alert for as long as there is land to develop, and
+  becomes a description of the galaxy once there is not. Neither the threshold nor the second
+  conjunct changes that: nothing reaches `BRAKE_END` (1.15) at either horizon, and the equilibrium
+  band is only 0.034 wide, so cap utilisation cannot sort it either.
 - **The horizon split is load-bearing for Industry idle**: 2.0% at startup against 34.5% at
   equilibrium. A startup-only read would have called it rare and defaulted it on.
 
