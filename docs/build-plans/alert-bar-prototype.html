@@ -277,9 +277,10 @@
   <strong>The fault slash applies to three chips only</strong> — Colony dying, Build blocked and
   Industry idle — so toggling it changes at most two things in an ordinary galaxy. The strip below the
   frame shows them side by side, plain against slashed, at 48px and at the chip's own size.
-  <strong>Discrete events are one chip</strong>, not one per kind: <code>Events</code> carries the
-  count and its flyout carries the individual events. Border conflict stays out of it as its own
-  critical chip.</div>
+  <strong>Discrete events are three chips</strong>, banded by authored valence rather than one per
+  kind: <code>Crisis</code>, <code>Disruption</code> and <code>Windfall</code>. Each flyout carries the
+  individual events with their own icons. <code>border_conflict</code> lives in <code>Crisis</code> —
+  there is no war state in the game yet, it is an event like any other.</div>
 
 <div class="note">
   <strong>The fault overlay is lucide's own convention, borrowed.</strong> Its <code>-off</code> icons
@@ -340,7 +341,7 @@
   </p>
   <div id="fault-strip" style="display:flex; gap:34px; flex-wrap:wrap; margin-top:14px;"></div>
 
-  <h2>The sixteen categories and their glyphs</h2>
+  <h2>The fifteen categories and their glyphs</h2>
   <p>
     Every glyph is a real lucide icon at 0.577, checked against the installed package. Those marked
     <em>reused</em> already appear in the game — <code>Crosshair</code> is
@@ -357,7 +358,7 @@
   <h2>How the placement landed here</h2>
   <p>
     <strong>Chips inside the existing top bar</strong> was killed by arithmetic. Its usable span holds
-    about five chips against sixteen categories, so it only works if the list is cut to roughly a
+    about five chips against fifteen categories, so it only works if the list is cut to roughly a
     third of what the design calls for — and that space is already promised to treasury readouts.
   </p>
   <p>
@@ -447,10 +448,6 @@ const CATEGORIES = [
   { id:'money',    tier:'critical',  glyph:'banknoteX',   label:'Maintenance unfunded', icon:'BanknoteX', read:['ok','strong'], measure:'shortfall',
     why:'The only path below the maintenance floor into destructive decay.',
     rows:[['Terran Concord','paid 61% of the bill']] },
-  { id:'war',      tier:'critical',  glyph:'crosshair',   label:'Border conflict', icon:'Crosshair — reused', read:['ok','already the border_conflict event icon'], measure:'phase',
-    why:'Relations dropped past hostile; production modifiers are live.',
-    rows:[['Cygnus Combine','phase 2 of 3']] },
-
   { id:'deprived', tier:'important', glyph:'batteryLow', off:'common, and logistics is already working on it', label:'Deprived', icon:'BatteryLow', read:['fair','provision as a gauge — a bit abstract'], measure:'provision',
     why:'Provision in the Deprived band, ascending.',
     rows:[['Alnair Station','38%'],['Kepler-442','44%'],['Mizar Yard','47%'],['Procyon B','51%']] },
@@ -475,7 +472,8 @@ const CATEGORIES = [
   { id:'crisis',   tier:'critical',  glyph:'siren', label:'Crisis', icon:'Siren', read:['ok','unused, and unmistakably an emergency'], measure:'phase severity',
     why:'Events that can break a world: plague, raid, asteroid strike, inner-system conflict.',
     rows:[['Procyon B','plague · outbreak','triangleAlert'],
-          ['Altair Hub','pirate raid · phase 2','skull']] },
+          ['Altair Hub','pirate raid · phase 2','skull'],
+          ['Cygnus Combine','border conflict · phase 2 of 3','crosshair']] },
 
   { id:'disrupt',  tier:'important', glyph:'triangleAlert', label:'Disruption', icon:'TriangleAlert — EventIcon\'s fallback', read:['fair','the generic middle band'], measure:'phase severity',
     why:'Events that cost but do not threaten: shortage, storm, embargo, glut, a dissolved alliance.',

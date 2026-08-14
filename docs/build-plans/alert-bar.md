@@ -66,7 +66,7 @@ rather than the separate dismissible feed that was considered and dropped.
 - **Wrapping and scrolling were not taken.** A wrapped second row grows the run downward over the map
   mid-game; a scrolling run hides alerts behind a gesture on a surface whose whole job is to be
   glanceable. Compression degrades more gracefully than either.
-- **Chips inside the existing top bar** was killed by arithmetic: ~5 chips against sixteen
+- **Chips inside the existing top bar** was killed by arithmetic: ~5 chips against fifteen
   categories, and that space is already promised to treasury readouts.
 - **Empty space inside the run passes clicks through to the map.** Only the chips take pointer events,
   the same rule the Tracker's rail already follows.
@@ -89,8 +89,7 @@ icons use, drawn over the plain subject glyph and cased so it survives a busy on
 | critical | Colony dying | `Globe` + slash | Famine world falling toward `ABANDON_POP_FLOOR`. Sorts by cycles to the floor. | Derivable |
 | critical | Strike | `Megaphone` | Unrest past the strike threshold. Sorts by suppression. | Ships today |
 | critical | Maintenance unfunded | `BanknoteX` | Settlement could not pay the maintenance band — the only path into destructive decay. One faction-level row. | Ships today |
-| critical | Border conflict | `Crosshair` — reused | An active `border_conflict` against us. Sorts by phase. | Ships today |
-| critical | **Crisis** | `Siren` | Events that can break a world — plague, raid, asteroid strike, inner-system conflict. Sorts by phase severity. | Needs banding |
+| critical | **Crisis** | `Siren` | Events that can break a world — plague, raid, asteroid strike, inner-system conflict, border conflict. Sorts by phase severity. | Needs banding |
 | important | Deprived worlds | `BatteryLow` | Provision in the Deprived band. Sorts by Provision ascending. | Ships today |
 | important | Unrest rising | `TrendingUp` | Grievance climbing, not yet striking. Sorts by rate of climb. | Derivable |
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close. Sorts by unserved demand rate. | New |
@@ -123,10 +122,18 @@ order, not a parallel scrolling list, and nothing about them is dismissible. Tha
 — an event flyout that grows dismissal, its own settings, or a persistent unread count has become the
 feed that was rejected.
 
-**Open, and reopened by the split: does `border_conflict` fold into `Crisis`?** It was kept as its own
-critical chip because folding a war into a chip that also held trade festivals buried it. `Crisis` is
-itself critical and non-hideable, so that reason no longer applies — but a border conflict is a
-standing diplomatic state rather than an arc that ends, which is an argument for keeping it out.
+**`border_conflict` folds into `Crisis`** — settled, after checking what it actually is. There is no
+war state in the codebase: every `war` identifier is a comment, a fog-of-war name, or a note about a
+future layer. `border_conflict` is purely an event, spawned by the relations processor when a pair
+drops to ≤-25 and handed to the events processor for its three-phase lifecycle
+(`lib/tick/processors/relations.ts:34-37`). An event belongs in an event band, and `Crisis` is
+critical and non-hideable, so nothing is buried by putting it there.
+
+**A dedicated war category is designed when war ships, not now.** The diplomacy and war layers are
+unbuilt, so authoring a category against them would be guessing at a shape. The bar's non-hideable
+critical tier is where it lands when there is something to put in it. The same caution applies to the
+whole political side of this list: the economy is what has actually been built, and every category
+above reads economic or population state except this one.
 
 **Two glyph pairs came out of this**, and they are the clearest thing on the bar: `Globe` plain is a
 colony you could found, `Globe` slashed is one dying; `HardHat` plain is a build you could order,
@@ -143,7 +150,7 @@ something is climbing but not what. A second overlay type (a rising marker over 
 fix it at the cost of a second visual convention to learn. Not decided.
 
 **Custom icons are a live possibility** for this project rather than a rejected one. The lucide set
-plus the cased slash covers fifteen of the sixteen; a dedicated set would be a later pass, and
+plus the cased slash covers fourteen of the fifteen; a dedicated set would be a later pass, and
 nothing here forecloses it.
 
 Two of the three `New` rows are the reads roadmap row 1 named by name (Overcrowded is `Derivable`
