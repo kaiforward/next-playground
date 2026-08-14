@@ -28,7 +28,6 @@
     --chip-icon: 20px;
     --chip-bg: var(--surface);
     --chip-height: calc(var(--chip-icon) + 6px);
-    --alertbar-height: calc(var(--chip-icon) + 14px);
     --chip-overlap: -8px;
     --drawer-width: 300px;
     --rail-width: 236px;
@@ -68,18 +67,18 @@
   .btn-ghost { font: inherit; font-size: 12px; padding: 5px 10px; background: transparent; border: 1px solid transparent; color: var(--text-secondary); cursor: pointer; }
   .btn-ghost:hover { border-color: var(--border-strong); color: var(--text-primary); }
 
-  /* ---- THE ALERT BAR — three blocks ---- */
-  .alertbar { height: var(--alertbar-height); flex: 0 0 auto; display: flex; align-items: stretch; background: var(--surface); border-bottom: 1px solid var(--border); }
-
-  .bar-faction {
-    width: var(--drawer-width); flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
-    padding: 0 12px; border-right: 1px solid var(--border); overflow: hidden;
+  /* ---- THE ALERT RUN — no bar, just the span between the panels ---- */
+  .bar-chips {
+    position: absolute; z-index: 6; top: 10px;
+    left: var(--drawer-width); right: var(--rail-width);
+    margin: 0 10px; min-width: 0;
+    display: flex; align-items: center; gap: 5px; padding: 4px 6px;
+    /* Empty space in the run must not swallow map clicks — only the chips are interactive. */
+    pointer-events: none;
   }
-  .flag { width: 16px; height: 12px; flex: 0 0 auto; background: linear-gradient(135deg, var(--accent) 0 50%, var(--secondary) 50% 100%); border: 1px solid rgba(0,0,0,0.4); }
-  .bar-faction .nm { font-family: var(--font-display); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bar-faction .tag { font-size: 9px; font-family: var(--font-mono); color: var(--text-tertiary); border: 1px solid var(--border-strong); padding: 0 3px; flex: 0 0 auto; }
-
-  .bar-chips { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; padding: 0 10px; overflow: hidden; }
+  .bar-chips > * { pointer-events: auto; }
+  .bar-chips.with-bg { background: color-mix(in srgb, var(--surface) 88%, transparent); border: 1px solid var(--border); }
+  .bar-chips.empty { display: none; }
 
   /* EU5's packing trick: chips overlap slightly and cast a shadow rightward, so the run reads as a
      layered stack. The leftmost (most severe) sits on top; hovering raises whichever is under the
@@ -92,7 +91,9 @@
   .bar-chips.overlap .tier-gap { margin: 0 5px 0 9px; }
   .bar-chips.overlap .tier-gap + .chip { margin-left: 0; }
 
-  .bar-settings { width: var(--rail-width); flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; padding: 0 12px; border-left: 1px solid var(--border); }
+  /* The settings control is the last item in the run, icon-only, and is never overflowed away. */
+  #settings-chip { margin-left: 8px; }
+  #settings-chip svg { width: var(--chip-icon); height: var(--chip-icon); }
 
   .chip {
     display: inline-flex; align-items: center; gap: 6px; height: var(--chip-height); padding: 0 9px;
@@ -196,17 +197,15 @@
 <body>
 
 <div class="proto-head">
-  <h1>Alert bar — layout A refinement</h1>
+  <h1>Alert run — over the map, between the panels</h1>
   <p>
-    The chosen placement, refined. The bar is full width in three blocks: the faction identity block
-    on the left (aligned to the system drawer), the alert chips in the middle, and the settings entry
-    on the right (aligned to the Tracker rail). Chips live only in the middle span, so a flyout stays
-    anchored directly under its own chip <em>and</em> never lands on either panel. Icons are the real
-    lucide glyphs; the bar and chip heights follow the icon size, so the size control below resizes
-    the whole bar. Chips overlap slightly by default, EU5-style, each shadowed rightward with the
-    leftmost on top and the hovered one raised clear. Narrow the browser window to see where the run
-    runs out of room — what no longer fits collapses into a <code>+N</code> chip rather than being
-    clipped silently.
+    There is no bar. The chips float over the map, inset to exactly the span between the system drawer
+    and the Tracker rail, so nothing reserves layout height and a flyout stays anchored under its own
+    chip while never landing on either panel. The settings control is the last item in the run. Icons
+    are the real lucide glyphs; chip height follows the icon size. Chips pack adaptively — spaced
+    while there is room, overlapping EU5-style once there isn't, each shadowed rightward with the
+    leftmost on top and the hovered one raised clear. Narrow the browser window to watch the packing
+    change; only at the very end does anything collapse into a <code>+N</code>.
   </p>
 </div>
 
@@ -232,6 +231,13 @@
       <button data-v="20" aria-pressed="true">20px</button>
       <button data-v="22" aria-pressed="false">22px</button>
       <button data-v="24" aria-pressed="false">24px</button>
+    </div>
+  </div>
+  <div class="control-group">
+    <span>Backing</span>
+    <div class="seg" id="seg-bg">
+      <button data-v="off" aria-pressed="true">none</button>
+      <button data-v="on" aria-pressed="false">panel behind the run</button>
     </div>
   </div>
   <div class="control-group">
@@ -281,23 +287,13 @@
     <button class="btn-ghost">Exit</button>
   </div>
 
-  <div class="alertbar">
-    <div class="bar-faction">
-      <span class="flag"></span>
-      <span class="nm">Terran Concord</span>
-      <span class="tag">YOU</span>
-    </div>
-    <div class="bar-chips" id="chips"></div>
-    <div class="bar-settings">
-      <button class="chip tier-neutral" id="settings-chip" title="Which categories appear">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
-        <span>Alerts</span>
-      </button>
-    </div>
-  </div>
-
   <div class="stage" id="stage">
     <div class="map"><div class="map-label">galaxy map</div></div>
+
+    <!-- No bar. The chip run floats over the map, inset to exactly the span between the two docked
+         panels. Its height follows the chips rather than the chips being fitted into a band, and it
+         costs nothing when the galaxy is quiet. -->
+    <div class="bar-chips" id="chips"></div>
     <div class="drawer">
       <h3>Kepler-442</h3>
       <div class="sub">Terran Concord · industrial</div>
@@ -344,21 +340,23 @@
     <tbody></tbody>
   </table>
 
-  <h2>Why layout A, and why not the other two</h2>
+  <h2>How the placement landed here</h2>
   <p>
-    <strong>B — chips inside the existing top bar</strong> was killed by arithmetic. Its usable span
-    holds about five chips, against sixteen categories, so it only works if the list is cut to roughly
-    a third of what the design calls for. That space is also already promised to treasury readouts.
+    <strong>Chips inside the existing top bar</strong> was killed by arithmetic. Its usable span holds
+    about five chips against fourteen categories, so it only works if the list is cut to roughly a
+    third of what the design calls for — and that space is already promised to treasury readouts.
   </p>
   <p>
-    <strong>C — a rail floating over the map</strong> was killed by the edges being taken. The left
-    edge is the system and faction drawers, the right is the Tracker rail, and an overlay has to fight
-    one of them. Rotating it horizontal collapses it into A while making its width budget change every
-    time a drawer opens — the chips would reflow whenever the player clicks a system.
+    <strong>A full-width bar under the top bar</strong> was built first and then dropped. It works, but
+    it reserves map height permanently — including on a quiet galaxy with nothing to say — and it made
+    the chips' vertical space a property of the band rather than of the chips. Its own inner container
+    was already inset to the span between the panels, which is the tell: the full-width shell was doing
+    nothing the inset run wasn't.
   </p>
   <p>
-    A costs 40px of map height permanently. That is the price, and the faction identity block is what
-    makes it worth paying: the space was going to be spent on that anyway.
+    <strong>What survives from it</strong> is the fixed inset. The run is bounded by the two panel
+    widths whether or not a drawer is open, so the chips never reflow when the player clicks a system —
+    that was the objection to floating the run in the first place, and pinning the inset answers it.
   </p>
 
   <h2>Still open</h2>
@@ -403,6 +401,8 @@ const G = {
   handshake: '<path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/>',
   sparkles: '<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/>'
 };
+
+const GEAR = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
 
 // The borrowed convention: lucide's own -off variants are the glyph plus this line.
 const FAULT_SLASH = '<path d="m2 2 20 20"/>';
@@ -485,7 +485,7 @@ const TIER_ORDER = ['critical','important','info'];
 /* ------------------------------------------------------------------ */
 /*  Render                                                            */
 /* ------------------------------------------------------------------ */
-let load = 'normal', chipMode = 'icon', overlay = 'shadow', stack = 'auto', openId = null;
+let load = 'normal', chipMode = 'icon', overlay = 'shadow', stack = 'auto', background = 'off', openId = null;
 
 function faultMarkup(wanted) {
   if (!wanted || overlay === 'off') return '';
@@ -541,6 +541,14 @@ function render() {
   host.style.removeProperty('--chip-overlap');
   host.innerHTML = html;
   packChips(host);
+
+  // Appended AFTER packing, so overflow can never eat the way into the settings.
+  host.insertAdjacentHTML('beforeend',
+    '<button class="chip tier-neutral" id="settings-chip" aria-expanded="' + settingsOpen +
+    '" title="Which alerts appear">' + GEAR + '</button>');
+  host.classList.toggle('with-bg', background === 'on');
+  host.classList.toggle('empty', cats.length === 0 && !settingsOpen);
+
   buildFaultStrip();
   if (settingsOpen) drawSettings();
   else if (openId) drawFlyout(openId);
@@ -557,9 +565,11 @@ function render() {
  * should never fire. The readout under the controls prints what was actually measured.
  */
 const OVERLAP_NOMINAL = -8, OVERLAP_FLOOR = -16, SPACED_GAP = 5, RESERVE = 74;
+// The settings control is appended after packing, so its width is held back here.
+const SETTINGS_W = 52;
 
 function packChips(host) {
-  const avail = host.clientWidth - 20;
+  const avail = host.clientWidth - 12 - SETTINGS_W;
   // Guard: if the span has not been laid out yet, every chip "overflows" and the bar blanks itself
   // down to a lone +N. Better to show an unfitted run than an empty one.
   if (avail <= 0) { readout(0, 0, 0, 'not laid out yet — nothing measured', 0); return; }
@@ -746,6 +756,7 @@ wireSeg('seg-load',    v => load = v);
 wireSeg('seg-labels',  v => chipMode = v);
 wireSeg('seg-size',    v => document.documentElement.style.setProperty('--chip-icon', v + 'px'));
 wireSeg('seg-stack',   v => stack = v);
+wireSeg('seg-bg',      v => background = v);
 wireSeg('seg-overlay', v => { overlay = v; document.querySelector('#icon-table tbody').innerHTML = ''; buildTableAgain(); });
 
 function buildTableAgain() {

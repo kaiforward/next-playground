@@ -28,17 +28,25 @@ rather than the separate dismissible feed that was considered and dropped.
 
 ## Settled so far
 
-- **Placement is layout A** — a 40px full-width strip directly under the top bar, in three blocks: a
-  **faction identity block** on the left (name and flag, width aligned to the system drawer), the
-  **alert chips** in the middle, the **settings entry** on the right (aligned to the Tracker rail).
-  The identity block is what makes the 34px worth spending — that corner was getting the faction name
-  and flag regardless.
-- **Chips live only in the middle span**, which is what keeps a flyout anchored directly under its own
-  chip *and* off both side panels. Sliding a popover away from its trigger to dodge a panel was
-  rejected: some alerts will open the system panel directly, so a popover that both drifts from its
-  chip and covers the thing it acts on is the wrong trade.
-- **Chips are icon-plus-count, not labelled**, at **20px** icons, with the bar and chip heights
-  derived from that figure rather than set independently.
+- **There is no bar.** The chip run floats over the top of the map, inset to exactly the span between
+  the system drawer and the Tracker rail, with the settings control as its last item. Nothing reserves
+  layout height, so the surface costs nothing on a quiet galaxy, and the run's height is a property of
+  the chips rather than of a band they sit inside. A backing panel behind just the run is optional and
+  undecided; the chips are opaque and legible over the map without one.
+- **The inset is fixed to the two panel widths, not to whether a panel is open.** That is what stops
+  the chips reflowing every time the player clicks a system — the objection that killed a floating run
+  the first time it was considered.
+- **The span is also what keeps a flyout anchored under its own chip and off both panels.** Sliding a
+  popover away from its trigger to dodge a panel was rejected outright: some alerts will open the
+  system panel directly, so a popover that both drifts from its chip and covers the thing it acts on
+  is the wrong trade.
+- **A full-width bar was built first and dropped.** It worked, but it reserved map height permanently
+  — including on a quiet galaxy with nothing to say — and its own inner container was already inset to
+  this same span, which is the tell that the shell was doing nothing the run wasn't. **Consequence to
+  book:** the faction name and flag were going to live in that bar's left block, and now need another
+  home.
+- **Chips are icon-plus-count, not labelled**, at **20px** icons, with chip height derived from that
+  figure rather than set independently.
 - **The fault slash is cased** — a second line in the chip's own background colour, offset up and
   right, drawn under the slash. It carves a gap out of whatever the slash crosses so the negation
   reads as a negation rather than as one more stroke on a busy glyph.
@@ -46,16 +54,17 @@ rather than the separate dismissible feed that was considered and dropped.
   while the run fits; **overlapped** at −8px EU5-style once it doesn't; **tightened** as far as −16px
   before anything is given up; and only then does the tail collapse into a `+N` chip. Overflow is a
   last resort that should never fire at ordinary widths, rather than the first answer.
-- **The overlap forces one thing:** chip fills must be **opaque** — the tier colour mixed into the bar
-  surface, not into transparency — or overlapping chips show through each other. Each is shadowed
-  rightward, the leftmost (most severe) sits on top, and hovering raises a chip clear of the stack.
-- **Wrapping and scrolling were not taken.** A wrapped second row changes the bar's height, which
-  moves the map under the player mid-game; a scrolling run hides alerts behind a gesture on a surface
-  whose whole job is to be glanceable. Compression degrades more gracefully than either.
-- **Layout B** (chips inside the existing top bar) was killed by the same arithmetic: ~5 chips, and
-  that space is already promised to treasury readouts. **Layout C** (a rail floating over the map) was
-  killed by both map edges already being taken — drawers left, Tracker right — and rotating it
-  horizontal collapses it into A while making the chip run reflow every time a drawer opens.
+- **The overlap forces one thing:** chip fills must be **opaque** — the tier colour mixed into a
+  surface, not into transparency — or overlapping chips show through each other, and over a live map
+  they would show the map through too. Each is shadowed rightward, the leftmost (most severe) sits on
+  top, and hovering raises a chip clear of the stack.
+- **Wrapping and scrolling were not taken.** A wrapped second row grows the run downward over the map
+  mid-game; a scrolling run hides alerts behind a gesture on a surface whose whole job is to be
+  glanceable. Compression degrades more gracefully than either.
+- **Chips inside the existing top bar** was killed by arithmetic: ~5 chips against fourteen
+  categories, and that space is already promised to treasury readouts.
+- **Empty space inside the run passes clicks through to the map.** Only the chips take pointer events,
+  the same rule the Tracker's rail already follows.
 
 ## Draft category and tier list
 
@@ -126,8 +135,8 @@ faction-wide read of it). `Build blocked` is genuinely new instrumentation: the 
 
 ## Settings, and what defaults off
 
-A per-category settings panel, opened from the bar's right-hand block and following the Tracker's
-pattern: a checkbox per category, grouped by tier, persisted in the browser as a view preference
+A per-category settings panel, opened from the control at the end of the chip run and following the
+Tracker's pattern: a checkbox per category, grouped by tier, persisted in the browser as a view preference
 rather than in the save. The two `info` groups additionally only ever appear while their domain's
 automation is off, so they self-gate on top of the checkbox.
 
