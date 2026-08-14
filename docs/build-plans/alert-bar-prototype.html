@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Alert bar — layout A refinement</title>
+<title>Alert run — over the map, between the panels</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600&display=swap" rel="stylesheet" />
@@ -340,12 +340,13 @@
   </p>
   <div id="fault-strip" style="display:flex; gap:34px; flex-wrap:wrap; margin-top:14px;"></div>
 
-  <h2>The fourteen categories and their glyphs</h2>
+  <h2>The sixteen categories and their glyphs</h2>
   <p>
     Every glyph is a real lucide icon at 0.577, checked against the installed package. Those marked
     <em>reused</em> already appear in the game — <code>Crosshair</code> is
     <code>border_conflict</code>'s icon in <code>EVENT_TYPE_ICON</code>
-    (<code>lib/constants/ui.ts:117</code>) and <code>Radio</code> is the top bar's Events nav — so the
+    (<code>lib/constants/ui.ts:117</code>) and <code>TriangleAlert</code> is <code>EventIcon</code>'s own
+    fallback — so the
     bar inherits vocabulary the player has already been taught.
   </p>
   <table id="icon-table">
@@ -356,7 +357,7 @@
   <h2>How the placement landed here</h2>
   <p>
     <strong>Chips inside the existing top bar</strong> was killed by arithmetic. Its usable span holds
-    about five chips against fourteen categories, so it only works if the list is cut to roughly a
+    about five chips against sixteen categories, so it only works if the list is cut to roughly a
     third of what the design calls for — and that space is already promised to treasury readouts.
   </p>
   <p>
@@ -401,7 +402,9 @@ const G = {
   wheatOff: '<path d="m2 22 10-10"/><path d="m16 8-1.17 1.17"/><path d="M3.47 12.53 5 11l1.53 1.53a3.5 3.5 0 0 1 0 4.94L5 19l-1.53-1.53a3.5 3.5 0 0 1 0-4.94Z"/><path d="m8 8-.53.53a3.5 3.5 0 0 0 0 4.94L9 15l1.53-1.53c.55-.55.88-1.25.98-1.97"/><path d="M10.91 5.26c.15-.26.34-.51.56-.73L13 3l1.53 1.53a3.5 3.5 0 0 1 .28 4.62"/><path d="M20 2h2v2a4 4 0 0 1-4 4h-2V6a4 4 0 0 1 4-4Z"/><path d="M11.47 17.47 13 19l-1.53 1.53a3.5 3.5 0 0 1-4.94 0L5 19l1.53-1.53a3.5 3.5 0 0 1 4.94 0Z"/><path d="m16 16-.53.53a3.5 3.5 0 0 1-4.94 0L9 15l1.53-1.53a3.49 3.49 0 0 1 1.97-.98"/><path d="M18.74 13.09c.26-.15.51-.34.73-.56L21 11l-1.53-1.53a3.5 3.5 0 0 0-4.62-.28"/><line x1="2" x2="22" y1="2" y2="22"/>',
   globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
   hardHat: '<path d="M10 10V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5"/><path d="M14 6a6 6 0 0 1 6 6v3"/><path d="M4 15v-3a6 6 0 0 1 6-6"/><rect x="2" y="15" width="20" height="4" rx="1"/>',
-  radio: '<path d="M16.247 7.761a6 6 0 0 1 0 8.478"/><path d="M19.075 4.933a10 10 0 0 1 0 14.134"/><path d="M4.925 19.067a10 10 0 0 1 0-14.134"/><path d="M7.753 16.239a6 6 0 0 1 0-8.478"/><circle cx="12" cy="12" r="2"/>',
+  skull: '<path d="m12.5 17-.5-1-.5 1h1z"/><path d="M15 22a1 1 0 0 0 1-1v-1a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20v1a1 1 0 0 0 1 1z"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="12" r="1"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  siren: '<path d="M7 18v-6a5 5 0 1 1 10 0v6"/><path d="M5 21a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-1a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2z"/><path d="M21 12h1"/><path d="M18.5 4.5 18 5"/><path d="M2 12h1"/><path d="M12 2v1"/><path d="m4.929 4.929.707.707"/><path d="M12 12v6"/>',
   megaphone: '<path d="M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z"/><path d="M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14"/><path d="M8 6v8"/>',
   banknoteX: '<path d="M13 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5"/><path d="m17 17 5 5"/><path d="M18 12h.01"/><path d="m22 17-5 5"/><path d="M6 12h.01"/><circle cx="12" cy="12" r="2"/>',
   crosshair: '<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>',
@@ -466,16 +469,24 @@ const CATEGORIES = [
   { id:'idle',     tier:'important', glyph:'factory', fault:true, off:'EU5\'s single most-hidden alert — often unfixable', label:'Industry idle', icon:'Factory + slash', read:['ok','no FactoryOff in lucide — slash supplies it'], measure:'idle share',
     why:'Built capacity not running. Decay will take it if it stays.',
     rows:[['Kepler-442','2 factories, no skill-1 licence'],['Rigel Deep','1 extractor, unstaffed']] },
-  // One chip for every discrete event, rather than one chip per kind of event. The rows carry the
-  // event's own icon and phase; the chip carries only the count. Border conflict stays OUT of here,
-  // as its own critical chip — see the note in the doc below.
-  { id:'events',   tier:'important', glyph:'radio', label:'Events', icon:'Radio — matches the Events nav', read:['ok','one chip, details inside'], measure:'severity, then recency',
-    why:'Discrete events running on our worlds — the arcs, not the standing conditions.',
-    rows:[['Procyon B','plague · phase 1','triangleAlert'],
-          ['Altair Hub','pirate raid · phase 2','triangleAlert'],
-          ['Sol Prime','trade festival · 2 phases left','sparkles'],
-          ['Helios Directorate','pact under negotiation · 6 ticks','handshake'],
-          ['Mizar Yard','solar storm · phase 3','triangleAlert']] },
+  // Events split by AUTHORED valence rather than one chip or fifteen. Each event type is banded at
+  // design time, so the chip's tier is authored the same way every other category's is — and the
+  // "does the chip colour track its worst member" question never arises.
+  { id:'crisis',   tier:'critical',  glyph:'siren', label:'Crisis', icon:'Siren', read:['ok','unused, and unmistakably an emergency'], measure:'phase severity',
+    why:'Events that can break a world: plague, raid, asteroid strike, inner-system conflict.',
+    rows:[['Procyon B','plague · outbreak','triangleAlert'],
+          ['Altair Hub','pirate raid · phase 2','skull']] },
+
+  { id:'disrupt',  tier:'important', glyph:'triangleAlert', label:'Disruption', icon:'TriangleAlert — EventIcon\'s fallback', read:['fair','the generic middle band'], measure:'phase severity',
+    why:'Events that cost but do not threaten: shortage, storm, embargo, glut, a dissolved alliance.',
+    rows:[['Mizar Yard','solar storm · phase 3','zap'],
+          ['Denebola','supply shortage · phase 1','triangleAlert'],
+          ['Rigel Deep','trade embargo · phase 2','triangleAlert']] },
+
+  { id:'windfall', tier:'info',      glyph:'sparkles', label:'Windfall', icon:'Sparkles — trade_festival\'s icon', read:['ok','good news, and the only blue event chip'], measure:'phases remaining',
+    why:'Events worth riding: trade festival, mining boom, tech breakthrough, a pact opening.',
+    rows:[['Sol Prime','trade festival · 2 phases left','sparkles'],
+          ['Helios Directorate','pact under negotiation · 6 ticks','handshake']] },
 
   { id:'build',    tier:'info',      glyph:'hardHat',     label:'Build ready',   icon:'HardHat', read:['ok','the un-slashed twin of Build blocked'], measure:'ROI',
     why:'Build automation is off, so the planner\'s ranked list surfaces here.',
@@ -489,8 +500,8 @@ const CATEGORIES = [
 const CANDIDATES = [];
 
 const LOADS = {
-  quiet:  ['famine','deprived','idle','events'],
-  normal: ['famine','strike','deprived','unrest','demand','crowd','blocked','idle','events'],
+  quiet:  ['famine','deprived','idle','windfall'],
+  normal: ['famine','crisis','strike','deprived','unrest','demand','crowd','blocked','idle','disrupt','windfall'],
   busy:   CATEGORIES.map(c => c.id)
 };
 const TIER_ORDER = ['critical','important','info'];

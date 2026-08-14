@@ -66,7 +66,7 @@ rather than the separate dismissible feed that was considered and dropped.
 - **Wrapping and scrolling were not taken.** A wrapped second row grows the run downward over the map
   mid-game; a scrolling run hides alerts behind a gesture on a surface whose whole job is to be
   glanceable. Compression degrades more gracefully than either.
-- **Chips inside the existing top bar** was killed by arithmetic: ~5 chips against fourteen
+- **Chips inside the existing top bar** was killed by arithmetic: ~5 chips against sixteen
   categories, and that space is already promised to treasury readouts.
 - **Empty space inside the run passes clicks through to the map.** Only the chips take pointer events,
   the same rule the Tracker's rail already follows.
@@ -76,11 +76,12 @@ rather than the separate dismissible feed that was considered and dropped.
 First cut. `Ships today` = a read exists and something renders it. `Derivable` = the data is in world
 state but nothing computes this shape of it. `New` = the engine throws the fact away today.
 
-Icons are real lucide 0.577 glyphs, checked against the installed package. Five are **reused** from
-`EVENT_TYPE_ICON` (`lib/constants/ui.ts:117`), so the bar inherits the vocabulary the events screen
-already teaches. Where lucide has no negated variant, the glyph carries a **fault slash** — the same
-corner-to-corner line lucide's own `-off` icons use, drawn over the plain subject glyph. `FactoryOff`
-and `ConstructionOff` do not exist in the library; this is how they are supplied.
+Icons are real lucide 0.577 glyphs, checked against the installed package. `Crosshair`,
+`TriangleAlert` and `Sparkles` are **reused** from `EVENT_TYPE_ICON` (`lib/constants/ui.ts:117`), so
+the bar inherits vocabulary the events screen already teaches, and the event flyouts carry each
+event's own icon from that same map. Where lucide has no negated variant — there is no `FactoryOff`
+or `GlobeOff` — the glyph carries a **fault slash**: the corner-to-corner line lucide's own `-off`
+icons use, drawn over the plain subject glyph and cased so it survives a busy one.
 
 | Tier | Category | Icon | Condition, and its sort measure | Data |
 |---|---|---|---|---|
@@ -89,31 +90,43 @@ and `ConstructionOff` do not exist in the library; this is how they are supplied
 | critical | Strike | `Megaphone` | Unrest past the strike threshold. Sorts by suppression. | Ships today |
 | critical | Maintenance unfunded | `BanknoteX` | Settlement could not pay the maintenance band — the only path into destructive decay. One faction-level row. | Ships today |
 | critical | Border conflict | `Crosshair` — reused | An active `border_conflict` against us. Sorts by phase. | Ships today |
+| critical | **Crisis** | `Siren` | Events that can break a world — plague, raid, asteroid strike, inner-system conflict. Sorts by phase severity. | Needs banding |
 | important | Deprived worlds | `BatteryLow` | Provision in the Deprived band. Sorts by Provision ascending. | Ships today |
 | important | Unrest rising | `TrendingUp` | Grievance climbing, not yet striking. Sorts by rate of climb. | Derivable |
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close. Sorts by unserved demand rate. | New |
 | important | Overcrowded | `BedDouble` | Population pressed against `popCap`. Sorts by cap utilisation. | Derivable |
 | important | Build blocked | `HardHat` + slash | The planner wanted to build and could not — no land, no spare labour, no affordable whole level. Sorts by the ROI of what was dropped. | New |
 | important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. | Ships today |
-| important | **Events** | `Radio` — matches the Events nav | **Every discrete event in one chip**, details inside. Sorts by severity, then recency. | Ships today |
+| important | **Disruption** | `TriangleAlert` — reused | Events that cost but do not threaten — shortage, storm, embargo, glut, a dissolved alliance. Sorts by phase severity. | Needs banding |
 | info | Build opportunity | `HardHat` | Ranked planner proposals, **only while build automation is off**. Sorts by ROI. | Ships today |
 | info | Colony opportunity | `Globe` | Eligible controlled systems, **only while colonisation automation is off**. Sorts by colony ROI. | Ships today |
+| info | **Windfall** | `Sparkles` — reused | Events worth riding — trade festival, mining boom, tech breakthrough, a pact opening. Sorts by phases remaining. | Needs banding |
 
-**Discrete events collapse into one chip, separate from the conditions.** The rest of the bar is
-standing system warnings and opportunities — things that are *true* until fixed. An event is a
-happening, with phases and an end, and giving each kind its own chip made the bar mostly weather
-report. One `Events` chip carries the count; the flyout carries the individual events with their own
-icons and phases.
+**Discrete events are separate from the conditions, and split three ways by authored valence** —
+`Crisis` (critical), `Disruption` (important), `Windfall` (info). The rest of the bar is standing
+system warnings and opportunities, things that are *true* until fixed; an event is a happening with
+phases and an end. Giving each of the fifteen kinds its own chip made the bar mostly weather report,
+but one chip for all of them buried a plague next to a trade festival.
 
-This does not reopen the dropped third surface: it is one chip on the same bar, ranked in the same
-tier order, not a parallel scrolling list, and nothing about it is dismissible. That is the line to
-hold — an Events flyout that grows dismissal, its own settings, or a persistent unread count has
-become the feed that was rejected.
+Three bands is the resolution, and it keeps the tier rule intact: each event **type** is banded at
+authoring time, so an event chip's tier is authored exactly like every other category's. It also
+dissolves the question of whether a merged Events chip should colour itself by its worst member — the
+split does that work at design time instead of at runtime.
 
-**Border conflict stays out of the Events chip**, as its own critical row — confirmed. It is the class
-the design promised would be non-hideable, and folding a war into a chip that also holds trade
-festivals would bury it at the wrong tier. **Still open:** whether the Events chip's colour tracks the
-worst event inside it (which both reference games do) or stays fixed at its authored tier.
+**The banding is new authoring, not a read of existing data.** `EventDefinition` carries no severity
+or valence: its `severity` field is a child-event spawn multiplier and `weight` is spawn frequency
+(`lib/constants/events.ts`). The band is a new per-type field, or a lookup beside `EVENT_TYPE_ICON`
+in `lib/constants/ui.ts:117`.
+
+This does not reopen the dropped third surface: three chips on the same bar, ranked in the same tier
+order, not a parallel scrolling list, and nothing about them is dismissible. That is the line to hold
+— an event flyout that grows dismissal, its own settings, or a persistent unread count has become the
+feed that was rejected.
+
+**Open, and reopened by the split: does `border_conflict` fold into `Crisis`?** It was kept as its own
+critical chip because folding a war into a chip that also held trade festivals buried it. `Crisis` is
+itself critical and non-hideable, so that reason no longer applies — but a border conflict is a
+standing diplomatic state rather than an arc that ends, which is an argument for keeping it out.
 
 **Two glyph pairs came out of this**, and they are the clearest thing on the bar: `Globe` plain is a
 colony you could found, `Globe` slashed is one dying; `HardHat` plain is a build you could order,
@@ -130,7 +143,7 @@ something is climbing but not what. A second overlay type (a rising marker over 
 fix it at the cost of a second visual convention to learn. Not decided.
 
 **Custom icons are a live possibility** for this project rather than a rejected one. The lucide set
-plus the cased slash covers thirteen of the fourteen; a dedicated set would be a later pass, and
+plus the cased slash covers fifteen of the sixteen; a dedicated set would be a later pass, and
 nothing here forecloses it.
 
 Two of the three `New` rows are the reads roadmap row 1 named by name (Overcrowded is `Derivable`
