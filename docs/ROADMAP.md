@@ -48,9 +48,8 @@ not two. Don't re-propose the feed without a case for what it holds that an aler
    Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
    approaching it** (the cue to build housing) and **which systems cannot meet their demand from
    imports plus production**. Low stability already works as a third and is the proof the approach
-   reads well; strikes and famine already have their data too. A category expanding into its instance
-   list needs a host — today's faction **Territory** tab is a flat name + economy-type list
-   (`app/(game)/@panel/factions/[factionId]/territory/page.tsx`) and is the natural candidate.
+   reads well; strikes and famine already have their data too. A category's instance list needs no
+   host beyond the flyout itself, which is uncapped and scrolls.
    **A per-category settings screen is load-bearing, not polish.** The most-subscribed EU5 alert mod
    exists to hide exactly our intended class — buildings missing employees, RGOs missing employees,
    unprofitable buildings — because those stay continuously true for states the player often cannot
@@ -296,8 +295,7 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   which is the full list. Wanted: a sortable, filterable view of every open project across the faction
   with its progress, funding rate and ETA. Surfaced by the owner while running the Tracker in a real
   game (2026-08-12).
-  *Next step:* decide whether it is a faction-panel tab or its own route before any layout work —
-  it competes with the Territory tab, which the alert bar also wants as a host.
+  *Next step:* decide whether it is a faction-panel tab or its own route before any layout work.
   *Don't:* rebuild it as a second Tracker. The Tracker answers "where is my pool going right now";
   this answers "show me everything", and the two want different orderings and different densities.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"

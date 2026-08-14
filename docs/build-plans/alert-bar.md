@@ -188,8 +188,8 @@ survive the tier list" and becomes "does it default on or off", which is a far l
 measured as continuously true across dozens of systems is a default-off category, not a deleted one.
 The measurement is still owed; it is no longer a gate on the spec being written.
 
-**Popover contents are deliberately thin for now:** a list of the affected systems, sorted by the
-category's own measure. Per-category click behaviour and richer bodies are a later pass.
+**Popover bodies are deliberately thin:** a list of the affected systems, sorted by the category's own
+measure, and nothing else. A row navigates; richer bodies are a later pass.
 
 ## Specification
 
@@ -197,8 +197,8 @@ category's own measure. Per-category click behaviour and richer bodies are a lat
 
 A run of small chips across the top of the map, each one a kind of trouble or opportunity that is
 **true right now**. A chip appears when at least one system meets its condition, carries the count of
-systems that do, and disappears when the last of them stops. Clicking a chip opens a short list of the
-systems affected, worst first; clicking a row goes there.
+systems that do, and disappears when the last of them stops. Clicking a chip opens the list of systems
+affected, worst first; clicking a row goes there.
 
 That is the whole contract, and the sentence that decides every argument about it: **fixing the
 condition makes the row go away**. A row the player can look at but never clear does not belong here.
@@ -255,11 +255,46 @@ authored exactly as every other category's is.
 
 Clicking a chip opens a panel beneath it, anchored under that chip. It carries the category's name and
 icon, one line saying what the condition is, the affected systems in the category's own sort order,
-and a footer. A row is `name` plus that category's measure. Clicking a row flies the map to the system
-and opens the relevant panel tab, reusing the Tracker's focus mechanism.
+and a footer carrying the total count.
 
-The list is capped and the flyout says so. Where a category's full list lives when it outgrows the cap
-is still open — the faction Territory tab is the candidate.
+**The flyout holds the whole list.** It grows to fit its rows, up to the height of the map area, and
+scrolls inside past that. There is no row cap and no second home for the overflow: a category's
+instances live in one place, in one order. Some categories will be long — Build blocked measured at
+50.4% of developed systems — and a long list is the honest shape of a common condition rather than a
+reason to split the surface. Both reference games run popovers to nearly full screen height for
+exactly this, and Build blocked among others defaults off, so the long lists are opt-in.
+
+Nothing is gained by a filter or a second sort here: instances sort only by the category's own measure,
+so the scroll is the whole feature.
+
+### What a row click does
+
+**Every row does the same thing: fly the map to the system and open the destination tab**, reusing the
+Tracker's focus mechanism (`components/tracker/tracker-panel.tsx:120`). The only per-category variation
+is which tab, authored beside the category's tier and icon.
+
+A row never applies an action in place. The bar's contract is that fixing the condition makes the row
+go away, so a click that both acts and clears the row is indistinguishable from dismissal — the one
+gesture this design does not have. EU5 can afford click-fires-an-effect only because right-click
+dismisses sits beside it to disambiguate. The pull is strongest on the two opportunity categories, and
+weakest on inspection: their proposals are already ranked on the system's own construction surface, so
+navigating there *is* the apply flow, with the ROI context the decision needs.
+
+| Category | Destination |
+|---|---|
+| Famine, Colony dying, Strike, Deprived worlds, Unrest rising, Overcrowded | system → `population` |
+| Industry idle, Build blocked, Build opportunity | system → `industry` |
+| Demand unservable | system → `logistics` |
+| Colony opportunity | system → root |
+| Maintenance unfunded | the faction panel — the row is faction-level, not a system |
+| Crisis, Disruption, Windfall | the system when the event has one, else the events panel |
+
+The five system tabs that exist are `population`, `industry`, `logistics`, `market` and `astrography`,
+plus the system root. Events carry `systemId: string | null` (`lib/world/types.ts:462`) — region-level
+events have no system, which is why that row is the one conditional destination.
+
+A row's right-hand edge is left free for a later secondary action, so an opportunity row can grow a
+direct "build it" without redesigning the row. Not built now.
 
 Only one flyout is open at a time, Escape closes it, and clicking away closes it.
 
@@ -625,10 +660,8 @@ sort this category. That is why the second conjunct is in the condition rather t
    hysteresis applies to the persisted display band only (presentational) or to the classifier itself
    (mechanical — the regime feeds the unrest term). Unverified; do not assume the first.
 
-## Open, and needed at the planning pass
+## Still open
 
-- **What clicking an instance does.** EU5 varies it per category — jump the camera, open a screen, or
-  apply the decision in place. Ours needs the same per-category answer, and for opportunity categories
-  "apply it" is a real option. It interacts with the tier list rather than following from it.
-- **Where a category's full instance list lives** when it outgrows a flyout. The roadmap nominates the
-  faction Territory tab (`app/(game)/@panel/factions/[factionId]/territory/page.tsx`).
+- **The `Unrest rising` glyph.** A bare `TrendingUp` with no subject to slash — see the tier list.
+- **A new home for the faction name and flag**, which were to live in the dropped full-width bar's
+  left block.
