@@ -1,7 +1,10 @@
 /**
  * Pure view-model for the Industry tab's tables — per-resource deposit rows and the
  * general-land partition. No DOM, no React. Row health is grounded in the decay engine
- * (`buildingHealth`), so a row's indicator can never contradict what actually decays.
+ * (`buildingHealth`). The only health this file computes is a deposit row's, and an extractor has no
+ * recipe gate, so those indicators still match what actually decays exactly; a producer idle only for
+ * want of inputs is the one row that can read contracting without decay agreeing (see
+ * `buildingHealth`).
  */
 import type { ResourceType, QualityBandId } from "@/lib/types/game";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
@@ -54,8 +57,9 @@ export interface DepositTypeRow {
    * exactly the shape `buildProblems` (`needs-view.ts`) needs for its `staffing` argument. `idleReason`
    * is `undefined` for the zeroed catalog entry `depositRows` emits when nothing of this type is built
    * (see below) — there is nothing to explain for a building that doesn't exist. Tier-0 extractors
-   * carry no skilled labour, so this only ever names "labour" (unskilled short) or "selling" (glut),
-   * never skill1/skill2.
+   * carry no skilled labour and no recipe, so this only ever names "labour" (unskilled short) or
+   * "selling" (glut) — never skill1/skill2, and never "inputs" (`inputGate` is 1 with no recipe,
+   * `industry.ts:787`).
    */
   staffedFraction: number;
   idleReason?: IdleReason;

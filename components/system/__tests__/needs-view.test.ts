@@ -160,4 +160,34 @@ describe("buildProblems", () => {
   it("housing (idleReason occupancy) never reads understaffed OR selling, at any staffedFraction", () => {
     expect(buildProblems({ staffedFraction: 0.5, idleReason: "occupancy" }, undefined, undefined, label)).toEqual([]);
   });
+
+  // ── A sixth IdleReason: "inputs" (input starvation) ──────────────────────
+
+  it("Proves 2 — a fully staffed, input-starved producer renders no understaffed chip (only the real input chip)", () => {
+    // Same fully-staffed factory buildIndustryReadout now names 'inputs' for. staffedFraction stays
+    // 1 (pure staffing ratio, unaffected by the gate — see industry.ts), so severity alone already
+    // keeps this case silent; the marginal-staffing case below is what actually exercises the fix.
+    const items = buildProblems({ staffedFraction: 1, idleReason: "inputs" }, { inputGate: 0, throttledBy: ["ore"] }, undefined, label);
+    expect(items).toEqual([{ kind: "input", label: "ore 0%", severity: "critical" }]);
+    expect(items.some((i) => i.kind === "staffing")).toBe(false);
+  });
+
+  it("'inputs' never gates a generic understaffed chip, even when staffing is also genuinely short", () => {
+    // Unlike "selling" (which DOES gate a staffing item — see the understaffed-AND-glutting test
+    // above), "inputs" is excluded from buildProblems's binding-reason predicate: an input shortfall
+    // already has its own, more precisely labelled report via the supply/throttledBy argument, so
+    // reporting it again as a generic "Understaffed" would mislabel the real cause. Breaking the
+    // hasBindingReason exclusion (i.e. treating "inputs" like "selling") would push a spurious
+    // { kind: "staffing", label: "Understaffed 50%" } item here.
+    const items = buildProblems({ staffedFraction: 0.5, idleReason: "inputs" }, { inputGate: 0, throttledBy: ["ore"] }, undefined, label);
+    expect(items).toEqual([{ kind: "input", label: "ore 0%", severity: "critical" }]);
+    expect(items.some((i) => i.kind === "staffing")).toBe(false);
+  });
+
+  it("'inputs' never reads Glut either — Glut is reserved for idleReason 'selling'", () => {
+    // The Glut branch checks `idleReason === "selling"` specifically; an input-starved producer
+    // with nothing else short and no throttledBy data supplied must render no items at all rather
+    // than falling into the selling-only Glut path.
+    expect(buildProblems({ staffedFraction: 1, idleReason: "inputs" }, undefined, undefined, label)).toEqual([]);
+  });
 });
