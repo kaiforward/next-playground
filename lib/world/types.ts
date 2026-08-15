@@ -364,6 +364,37 @@ export interface WorldMarket {
    * absent reachable supply. Missing => false.
    */
   logisticsFundingBound?: boolean;
+  /**
+   * The realised change in `stock` across one economy cycle, after directed logistics has applied
+   * its hauls as stock deltas — production minus consumption, net of imports/exports, denominated
+   * per reference cycle (dividing the realised change by this cycle's own `catchUpFactor`, the same
+   * denomination `WorldSystem.populationChange` uses) so the reading is unchanged if `CYCLE_LENGTH`
+   * is retuned. Written ONLY for `SURVIVAL_GOODS` (lib/constants/physical-economy.ts:153 — water and
+   * food); every other good's market row never carries this key, present or absent.
+   *
+   * Written by the tick body (lib/world/tick.ts), not by the directed-logistics engine or
+   * processor: snapshotted immediately BEFORE the economy processor mutates `stock` this cycle, and
+   * computed immediately AFTER directed logistics has applied its own stock updates that same tick —
+   * the two mutating stages this figure is defined to span. Same absence convention as
+   * `logisticsFundingBound` above: absent means never assessed, written for every survival-good
+   * market row belonging to a system the economy processor visited this cycle (0 included, distinct
+   * from absent), untouched for a market row it did not visit, and cleared — not carried forward —
+   * on abandonment (`resetAbandonedMarkets`, lib/world/tick.ts) so a resettled colony's warehouse
+   * does not inherit its predecessor's drain rate. `stock` itself is deliberately left untouched by
+   * that same reset — the warehouse is real.
+   *
+   * Cadence caveat: this figure is exact only while `cadence.logistics` coincides with
+   * `cadence.cycle` — the live game's constants (LOGISTICS_INTERVAL === CYCLE_LENGTH === 24) always
+   * do. Directed logistics runs on its OWN independently-tunable cadence
+   * (lib/constants/tick-cadence.ts); if that cadence is retuned away from the economy cycle's, this
+   * figure captures only the logistics application (if any) that happens to land on the SAME tick as
+   * the economy cycle boundary — a haul applied on any other tick is folded into `stock` without ever
+   * appearing in a reported change, and a cycle boundary with no coincident logistics run reports
+   * production-minus-consumption alone, with no import/export correction that cycle. Authored for one
+   * job — the Survival stock falling alert's `stock / −stockChange` cycles-to-empty measure. Nothing
+   * inside the tick reads it.
+   */
+  stockChange?: number;
 }
 
 // ── Factions ────────────────────────────────────────────────────

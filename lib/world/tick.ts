@@ -42,6 +42,7 @@ import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, EXPECTATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { MIN_DEMAND } from "@/lib/constants/market-economy";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { CYCLE_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -606,7 +607,10 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * `logisticsFundingBound` are all optional fields whose absence already reads as "not yet
  * assessed" — cleared (deleted) rather than zeroed, exactly as a freshly-created market row would
  * be. `productionSuppressed` has no such absent-reads-as-fresh convention, so it is explicitly set
- * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above.
+ * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above. `stockChange` joins
+ * the same clear for the same reason as `logisticsFundingBound`: it is a reading from a previous
+ * life and must not survive into the next — a re-founded colony's warehouse is real, but its
+ * predecessor's drain rate is not.
  */
 export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
   if (abandonedSystemIds.length === 0) return markets;
@@ -617,6 +621,7 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.honestUseRate;
     delete next.squeezeCycles;
     delete next.logisticsFundingBound;
+    delete next.stockChange;
     return next;
   });
 }
@@ -968,7 +973,23 @@ export async function runWorldTick(
   // is pure waste. The gate emits the same mid-cycle broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
+  // The realised per-cycle survival-good stock change's opening snapshot — captured here, BEFORE
+  // the economy processor mutates `stock` via production/consumption, so the write below (after
+  // directed logistics, further down this function) reads the true cycle-start value. Scoped to
+  // SURVIVAL_GOODS market rows belonging to a system that is developed AS OF THIS INSTANT — the
+  // same population the economy processor's own `getSystemIds` selects
+  // (`isEconomicallyActive`) — so "visited this cycle" at the write site means exactly "the economy
+  // processor assessed this system", nothing more, nothing less.
+  let stockAtCycleStart: Map<string, number> | undefined;
   if (isCycleStart(tick, cadence.cycle)) {
+    const developedNow = new Set(
+      systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
+    );
+    stockAtCycleStart = new Map(
+      markets
+        .filter((m) => SURVIVAL_GOODS.includes(m.goodId) && developedNow.has(m.systemId))
+        .map((m) => [`${m.systemId}|${m.goodId}`, m.stock]),
+    );
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.cycle,
@@ -1238,6 +1259,46 @@ export async function runWorldTick(
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
       logisticsBudget = dlResult.logisticsBudget;
       processorsRun.push("directed-logistics");
+    }
+
+    // ── realised per-cycle survival-good stock change (persisted; read by nothing else in the
+    // tick) ── Written HERE — after directed logistics has applied its own stock updates above —
+    // because the interface is explicitly "after directed logistics has applied its hauls as stock
+    // deltas": the economy processor's production/consumption write happened earlier this same
+    // tick, gated on the same `isCycleStart(tick, cadence.cycle)` predicate as this write, and
+    // directed logistics' haul (if this tick was also its own cycle start; it bails internally
+    // otherwise, leaving `markets` unchanged) just landed above.
+    //
+    // Gated on `stockAtCycleStart`: absent whenever this tick was not an economy-cycle boundary
+    // (the snapshot above is only taken then), so this skips cleanly on a tick where only logistics
+    // or build resolves, rather than diffing against a stale or absent snapshot.
+    //
+    // Cadence caveat (see the field's own docstring, lib/world/types.ts): directed logistics runs
+    // on its OWN independently-tunable cadence (`cadence.logistics`). While it coincides with
+    // `cadence.cycle` — the live game's constants always do — this write captures the full
+    // production-minus-consumption-net-of-hauls figure the interface describes. If the two cadences
+    // are retuned apart, this only ever captures a logistics application that happens to land on
+    // THIS tick; a haul on any other tick is folded into `stock` without ever appearing in a
+    // reported change, and a cycle boundary with no coincident logistics run reports
+    // production-minus-consumption alone. Accepted rather than solved: capturing every haul
+    // regardless of cadence alignment needs a cross-tick accumulator carrying its own persisted
+    // baseline, which is a larger shape than this reading is worth.
+    //
+    // Abandoned systems are excluded even though their survival-good rows sit in the snapshot:
+    // `resetAbandonedMarkets` already cleared this field above (before migration ran), and this
+    // system's control just flipped away from "developed" — writing a computed reading here would
+    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
+    // exists.
+    if (stockAtCycleStart) {
+      const snapshot = stockAtCycleStart;
+      const cycleCatchUp = catchUpFactor(cadence.cycle);
+      const abandonedThisCycle = new Set(abandonedSystemIds);
+      markets = markets.map((m): WorldMarket => {
+        if (abandonedThisCycle.has(m.systemId)) return m;
+        const before = snapshot.get(`${m.systemId}|${m.goodId}`);
+        if (before === undefined) return m;
+        return { ...m, stockChange: (m.stock - before) / cycleCatchUp };
+      });
     }
 
     // ── directed-build ──
