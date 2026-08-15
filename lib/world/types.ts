@@ -139,6 +139,24 @@ export interface WorldSystem {
    *  instead of where the engine already bounds it. Written once per economy cycle, alongside
    *  `provision`/`supplyBand`. */
   criticalWeight?: number;
+  /** The realised change in `population` across one economy cycle, including migration —
+   *  `population_after_migration − population_at_cycle_start`, denominated per reference cycle
+   *  (dividing the realised change by this cycle's own `catchUpFactor`, mirroring `populationDelta`'s
+   *  own denomination in lib/engine/population.ts rather than the scaled figure a single run
+   *  actually applies) so the reading is unchanged if `CYCLE_LENGTH` is retuned away from
+   *  `REFERENCE_INTERVAL`. Written by the tick body (`lib/world/tick.ts`), AFTER the migration
+   *  stage but BEFORE any colony-founding population transfer — not by the population processor:
+   *  `populationDelta` (lib/engine/population.ts) carries no migration term, and on a dying colony
+   *  departures are often the dominant drain, so persisting the biological delta alone would
+   *  systematically understate a collapse. Same absence convention as `provision`/`supplyBand`/
+   *  `criticalWeight` above: absent means never assessed, written for every system the population
+   *  processor visited this cycle (0 included, distinct from absent), untouched for one it did not,
+   *  and cleared — not carried forward — on abandonment or redevelopment (`applyAbandonments`,
+   *  `applyDevelopments`, both `lib/world/tick.ts`) so a re-founded colony never inherits its
+   *  predecessor's reading. Authored for one job — the Colony dying alert's sort measure; a reader
+   *  wanting a different shape (a trailing average, a longer window) adds its own field rather than
+   *  redefining this one. Nothing inside the tick reads it. */
+  populationChange?: number;
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */

@@ -94,7 +94,7 @@ import { InMemoryTreasuryWorld } from "@/lib/tick/adapters/memory/treasury";
 
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
 import { referenceMaintenanceBill } from "@/lib/engine/founding-cost";
-import { isCycleStart } from "@/lib/tick/shard";
+import { isCycleStart, catchUpFactor } from "@/lib/tick/shard";
 import type {
   TickContext,
   TickBroadcastRaw,
@@ -214,6 +214,10 @@ export function toTickSystems(world: World): TickSystem[] {
       provision: s.provision,
       supplyBand: s.supplyBand,
       criticalWeight: s.criticalWeight,
+      // Same pass-through-uncoerced treatment: nothing in this join computes it, the tick body
+      // writes it directly after the migration stage (see the field's own docstring,
+      // lib/world/types.ts), so this row purely carries forward whatever the previous World held.
+      populationChange: s.populationChange,
       yields: resourceVectorFromColumns(
         {
           yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -270,6 +274,12 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     else merged.supplyBand = tickSystem.supplyBand;
     if (tickSystem.criticalWeight === undefined) delete merged.criticalWeight;
     else merged.criticalWeight = tickSystem.criticalWeight;
+    // Same delete/assign treatment, same reason: written directly onto `tickSystem` by the tick
+    // body after the migration stage, never by a processor — a true absence (never assessed this
+    // cycle, or cleared by abandonment/redevelopment) must not become a present key holding
+    // `undefined`.
+    if (tickSystem.populationChange === undefined) delete merged.populationChange;
+    else merged.populationChange = tickSystem.populationChange;
     return merged;
   });
 }
@@ -535,6 +545,9 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
       delete next.provision;
       delete next.supplyBand;
       delete next.criticalWeight;
+      // Same resettlement rule: a predecessor's realised population change is a reading from a
+      // previous life and must not survive into this one.
+      delete next.populationChange;
     }
     return next;
   });
@@ -576,6 +589,11 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
     delete next.provision;
     delete next.supplyBand;
     delete next.criticalWeight;
+    // The tick body writes this AFTER this function runs (post-migration), so without this delete a
+    // naive later write would re-populate a stale reading on the system this same cycle just reset —
+    // see the write site below for how that's avoided; this clear is the defense that matters once
+    // the system survives untouched to a LATER cycle instead.
+    delete next.populationChange;
     return next;
   });
 }
@@ -1017,7 +1035,20 @@ export async function runWorldTick(
   // post-delta population below ABANDON_POP_FLOOR this cycle. Applied just below, outside the
   // gate — the tick body is the sole owner of the control-flip/reset the processor only reports.
   let abandonedSystemIds: string[] = [];
+  // The realised per-cycle population change's opening snapshot — captured here, BEFORE the
+  // population processor mutates `population`, so the write below (after migration) reads the true
+  // cycle-start value rather than an already-grown/declined one. Keyed by every system in this
+  // cycle's dissatisfaction set (`signals.dissatisfactionBySystem`, the same set the population
+  // processor itself iterates), so "visited this cycle" below means exactly "the population
+  // processor assessed it" — nothing more, nothing less.
+  let populationAtCycleStart: Map<string, number> | undefined;
   if (economySignals) {
+    // Local const alias: a closure below can't see the narrowing `if (economySignals)` gives the
+    // outer `let`, since it's reassigned elsewhere in this function.
+    const signals = economySignals;
+    populationAtCycleStart = new Map(
+      systems.filter((s) => signals.dissatisfactionBySystem.has(s.id)).map((s) => [s.id, s.population]),
+    );
     const popWorld = new InMemoryPopulationWorld({ systems, markets });
     const popResult = await runPopulationProcessor(
       popWorld,
@@ -1120,6 +1151,35 @@ export async function runWorldTick(
       systems = migWorld.systems;
       migrationMoved = migResult.migrationMoved;
       processorsRun.push("migration");
+    }
+
+    // ── realised per-cycle population change (persisted; read by nothing else in the tick) ──
+    // Written HERE — after migration, before directed-build's colony-founding transfer further
+    // below — because the interface is explicitly "including migration": `population_after_migration
+    // − population_at_cycle_start`. A colony founding's source-system debit is a distinct event, not
+    // part of this cycle's population-processor-plus-migration read, so it must land after this
+    // write, not before it.
+    //
+    // Gated on `economySignals` (equivalently `migrationResolves`, since both share
+    // `isCycleStart(tick, cadence.cycle)`): this whole outer block also runs when only logistics or
+    // build resolve, on a tick the population processor never touched — `populationAtCycleStart` is
+    // `undefined` there, so this skips cleanly rather than dividing by a stale snapshot.
+    //
+    // Abandoned systems are excluded even though they sit in the cycle-start visited set:
+    // `applyAbandonments` already cleared this field above (before migration ran), and this
+    // system's control just flipped away from "developed" — writing a computed reading here would
+    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
+    // exists.
+    if (economySignals && populationAtCycleStart) {
+      const cycleCatchUp = catchUpFactor(cadence.cycle);
+      const snapshot = populationAtCycleStart;
+      const abandonedThisCycle = new Set(abandonedSystemIds);
+      systems = systems.map((s): TickSystem => {
+        if (abandonedThisCycle.has(s.id)) return s;
+        const before = snapshot.get(s.id);
+        if (before === undefined) return s;
+        return { ...s, populationChange: (s.population - before) / cycleCatchUp };
+      });
     }
 
     // directed-logistics and directed-build share one hop-BFS, run at the

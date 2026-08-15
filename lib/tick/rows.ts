@@ -59,6 +59,14 @@ export interface TickSystem {
   /** This cycle's critical-good override weight, optional — passed through uncoerced alongside
    *  `provision`/`supplyBand`, un-clamped (see `lib/world/types.ts` for why). */
   criticalWeight?: number;
+  /** The realised per-cycle population change, optional — the `toTickSystems` join passes
+   *  `WorldSystem.populationChange` through UNCOERCED, same absence convention as `provision`/
+   *  `supplyBand`/`criticalWeight` above. No processor writes this field via the row-mutation path:
+   *  the tick body (`lib/world/tick.ts`) computes and writes it directly, after the migration stage,
+   *  from this row's own `population` before and after — the field lives on the row purely so it
+   *  round-trips through the join/merge and survives untouched for a system this economy cycle did
+   *  not visit. */
+  populationChange?: number;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

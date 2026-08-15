@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { runWorldTick, toTickSystems, applyBuildingIncreases, marketRowsBySystem } from "../tick";
+import {
+  runWorldTick, toTickSystems, applyBuildingIncreases, applyDevelopments, applyAbandonments,
+  marketRowsBySystem,
+} from "../tick";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serializeWorld, deserializeWorld } from "../save";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
@@ -13,11 +16,13 @@ import { consumptionRate } from "@/lib/engine/physical-economy";
 import {
   BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, labourTotal,
 } from "@/lib/constants/industry";
-import { CYCLE_LENGTH, type TickCadence } from "@/lib/constants/tick-cadence";
+import { CYCLE_LENGTH, REFERENCE_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { CROWDING, POPULATION_PARAMS, STRIKE_PARAMS, UNREST_PARAMS } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import type { TaxLevel } from "@/lib/types/game";
+import type { SystemDevelopment } from "@/lib/tick/world/directed-build-world";
+import type { TickSystem } from "@/lib/tick/rows";
 import type {
   World, WorldBuildProject, WorldFactionTreasury, WorldMarket, WorldShip, WorldSystem,
 } from "../types";
@@ -1126,6 +1131,226 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     );
     expect(reliefLevels).toBeGreaterThan(preGrowthLevels);
   }, 60_000);
+});
+
+// ── the realised per-cycle population change ─────────────────────────
+// `WorldSystem.populationChange` is written by the tick body itself, after the migration stage —
+// not by the population processor, which never sees migration's effect. These pin the write's
+// migration inclusion, its absence convention and its reference-cycle denomination. Whether
+// anything inside the tick reads it back is proven separately (the poisoning test below) rather
+// than by `npm run simulate`'s before/after comparison, which is a broader, owner-run gate.
+
+/** Reads `populationChange` off a system row, failing with a clear message rather than silently
+ *  treating an unassessed system as 0 — the exact distinction these tests exist to pin. */
+function requirePopulationChange(world: World, systemId: string): number {
+  const value = fixtureSystem(world, systemId).populationChange;
+  if (value === undefined) throw new Error(`expected populationChange to be assessed for ${systemId}`);
+  return value;
+}
+
+/** A developed homeworld reduced to housing alone (mirrors `populationFixture`), at a chosen
+ *  occupancy and unrest, with no treasury override — used where the test needs the source system's
+ *  starting row to be byte-identical across two worlds that only then diverge elsewhere. */
+function overshotHomeworld(base: World, systemId: string, occupancy: number, unrest: number): World {
+  return {
+    ...base,
+    systems: base.systems.map((s): WorldSystem =>
+      s.id === systemId
+        ? { ...s, population: occupancy * FIXTURE_POP_CAP, popCap: FIXTURE_POP_CAP, unrest }
+        : s,
+    ),
+    buildings: [
+      ...base.buildings.filter((b) => b.systemId !== systemId),
+      { systemId, buildingType: HOUSING_TYPE, count: FIXTURE_HOUSING_LEVELS, idleCycles: 0 },
+    ],
+    markets: base.markets.map((m) =>
+      m.systemId === systemId ? { ...m, stock: AMPLE_STOCK, satisfaction: 1 } : m,
+    ),
+  };
+}
+
+describe("runWorldTick — the realised per-cycle population change (WorldSystem.populationChange)", () => {
+  it("includes migration: a system whose population falls only through outflow reports a negative change, not the near-0 a pre-migration read would give", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const source = base.factions[0].homeworldId;
+    const destination = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+
+    // Isolated: the source alone, fully crowd-braked (growth pinned to 0) and past its cap
+    // (repulsive), well-fed so d = 0 — its faction owns no other developed system, so migration has
+    // no open edge to move anyone. Its populationChange is therefore exactly the pre-migration
+    // engine read: growth(0) minus a tiny standing-crowding decline.
+    const isolatedWorld = overshotHomeworld(base, source, OVERSHOOT_OCCUPANCY, 0);
+    const isolatedAfter = await runTicks(isolatedWorld, CYCLE_LENGTH, POPULATION_CADENCE);
+    const isolatedChange = requirePopulationChange(isolatedAfter, source);
+
+    // Connected: the same source row (byte-identical starting state), plus a calm, mostly-empty
+    // same-faction destination linked by one hop. The attractiveness gradient (calmer, far roomier)
+    // pulls a real share of the source's population out this cycle.
+    const connectedWorld: World = {
+      ...isolatedWorld,
+      systems: isolatedWorld.systems.map((s): WorldSystem =>
+        s.id === destination
+          ? { ...s, factionId, population: 0.05 * FIXTURE_POP_CAP, popCap: FIXTURE_POP_CAP, unrest: 0 }
+          : s,
+      ),
+      connections: [
+        ...isolatedWorld.connections,
+        { fromId: source, toId: destination, fuelCost: 1 },
+        { fromId: destination, toId: source, fuelCost: 1 },
+      ],
+    };
+    const connectedAfter = await runTicks(connectedWorld, CYCLE_LENGTH, POPULATION_CADENCE);
+    const connectedChange = requirePopulationChange(connectedAfter, source);
+
+    // The isolated run is near-flat (only the tiny standing-crowding decline term); the connected
+    // run is clearly, substantially more negative — the gap is migration's own contribution, which
+    // a write of the pre-migration delta alone could never show.
+    expect(Math.abs(isolatedChange)).toBeLessThan(20);
+    expect(connectedChange).toBeLessThan(-50);
+    expect(connectedChange - isolatedChange).toBeLessThan(-50);
+  }, 30_000);
+
+  it("clears on abandonment and again on redevelopment, so a re-founded colony never inherits its predecessor's reading", () => {
+    const base = toTickSystems(generateWorld({ systemCount: 100, seed: 42 }))[0];
+    const stale: TickSystem = { ...base, populationChange: -42 };
+
+    const [abandoned] = applyAbandonments([stale], [stale.id]);
+    expect(abandoned.populationChange).toBeUndefined();
+
+    // Redevelopment: a fresh establishment lands on the now-unclaimed system, sourced from a
+    // co-located donor with population to spare. Re-staled deliberately before this step — feeding
+    // applyAbandonments' own (already-verified) absence through would let applyDevelopments' clear
+    // go untested vacuously; this isolates that this function clears the field on its own contract,
+    // not merely because the row already happened to arrive absent.
+    const restaled: TickSystem = { ...abandoned, populationChange: -99 };
+    const donor: TickSystem = {
+      ...abandoned, id: `${abandoned.id}-donor`, population: 1000, populationChange: -7,
+    };
+    const development: SystemDevelopment = {
+      systemId: restaled.id, sourceSystemId: donor.id, seedPop: 10, housingLevels: 1, stockManifest: [],
+    };
+    const [redeveloped] = applyDevelopments([restaled, donor], [development]);
+    expect(redeveloped.populationChange).toBeUndefined();
+  });
+
+  it("a never-assessed system reports populationChange absent, and it survives a save round-trip as absent, not 0", async () => {
+    const generated = generateWorld({ systemCount: 100, seed: 42 });
+    const developed = generated.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+    expect(developed.populationChange).toBeUndefined();
+    expect("populationChange" in developed).toBe(false);
+
+    // One real tick — day 1, not a cycle boundary — so the economy/population stages never resolve
+    // and this system is never assessed, but `toTickSystems`/`mergeSystemsIntoWorld` (the join/merge
+    // pair the field's absence has to survive, `lib/world/tick.ts`) still run, unconditionally, on
+    // every tick. This exercises that pair rather than only the type declaration.
+    const after = (await runWorldTick(generated)).world;
+    const untouched = after.systems.find((s) => s.id === developed.id);
+    if (!untouched) throw new Error("expected the ticked world to still carry this system");
+    expect(untouched.populationChange).toBeUndefined();
+    expect("populationChange" in untouched).toBe(false);
+
+    const result = deserializeWorld(serializeWorld(after));
+    if (!result.ok) throw new Error(`expected the save round-trip to succeed: ${result.error}`);
+    const reloaded = result.world.systems.find((s) => s.id === developed.id);
+    if (!reloaded) throw new Error("expected the reloaded world to still carry this system");
+    expect(reloaded.populationChange).toBeUndefined();
+    expect("populationChange" in reloaded).toBe(false);
+  });
+
+  it("a cycle in which population holds steady reports 0, distinguishably from absent", async () => {
+    // occupancy 0 ⇒ population 0 throughout: growth, decline and death all scale with population,
+    // so the pre-migration delta is EXACTLY 0 regardless of d/unrest — and a well-fed (ample-stock)
+    // system never enters famine, so this never risks the abandonment branch despite population
+    // sitting below ABANDON_POP_FLOOR.
+    const { world, systemId } = populationFixture(0, 0);
+    const after = await runTicks(world, CYCLE_LENGTH, POPULATION_CADENCE);
+
+    const change = fixtureSystem(after, systemId).populationChange;
+    expect(change).not.toBeUndefined();
+    expect(change).toBe(0);
+  });
+
+  it("denominates per reference cycle: retuning CYCLE_LENGTH away from REFERENCE_INTERVAL leaves the figure unchanged", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const systemId = base.factions[0].homeworldId;
+    const factionId = base.factions[0].id;
+    // Calm, uncrowded, tax-free growth: d = 0 (ample stock), unrest held at exactly 0 by a zero
+    // standing floor (no tax, no crowding at r < 1) — the one scenario where the population
+    // processor's own relaxation-rate scaling (itself catchUp-dependent) can't introduce a
+    // cadence-dependent difference this test isn't about.
+    const world: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem =>
+        s.id === systemId
+          ? { ...s, population: 0.9 * FIXTURE_POP_CAP, popCap: FIXTURE_POP_CAP, unrest: 0 }
+          : s,
+      ),
+      buildings: [
+        ...base.buildings.filter((b) => b.systemId !== systemId),
+        { systemId, buildingType: HOUSING_TYPE, count: FIXTURE_HOUSING_LEVELS, idleCycles: 0 },
+      ],
+      markets: base.markets.map((m) =>
+        m.systemId === systemId ? { ...m, stock: AMPLE_STOCK, satisfaction: 1 } : m,
+      ),
+      treasuries: base.treasuries.map((t): WorldFactionTreasury =>
+        t.factionId === factionId ? { ...t, taxLevel: "very_low" } : t,
+      ),
+    };
+
+    // One real tick each, fast-forwarded to its own cycle boundary via meta.currentTick — avoids
+    // running dozens of intervening ticks (and their independent stochastic event draws) that a
+    // longer cadence would otherwise need, which would confound the comparison this test is about.
+    const referenceCadence: TickCadence = { cycle: REFERENCE_INTERVAL, logistics: NEVER, construction: NEVER };
+    const referenceWorld: World = { ...world, meta: { ...world.meta, currentTick: REFERENCE_INTERVAL - 1 } };
+    const referenceAfter = (await runWorldTick(referenceWorld, { cadence: referenceCadence })).world;
+
+    const retunedCycle = REFERENCE_INTERVAL * 2;
+    const retunedCadence: TickCadence = { cycle: retunedCycle, logistics: NEVER, construction: NEVER };
+    const retunedWorld: World = { ...world, meta: { ...world.meta, currentTick: retunedCycle - 1 } };
+    const retunedAfter = (await runWorldTick(retunedWorld, { cadence: retunedCadence })).world;
+
+    const reference = requirePopulationChange(referenceAfter, systemId);
+    const retuned = requirePopulationChange(retunedAfter, systemId);
+
+    expect(reference).toBeGreaterThan(0); // non-vacuous: real growth happened, not two zeros agreeing
+    expect(retuned).toBeCloseTo(reference, 6);
+  });
+
+  it("nothing inside the tick reads populationChange — poisoning the input changes no other output", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem => ({ ...s, populationChange: -999_999 })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    // populationChange itself legitimately differs run to run (each is a fresh per-cycle read over
+    // the same underlying dynamics) — stripped before comparing; everything else, including every
+    // harness/instrumentation figure, must be byte-identical.
+    const strip = (w: World): World => ({
+      ...w,
+      systems: w.systems.map((s): WorldSystem => ({ ...s, populationChange: undefined })),
+    });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(dirty.markets).toEqual(clean.markets);
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
 });
 
 // ── marketRowsBySystem: the persisted-figure seam ───────────────────
