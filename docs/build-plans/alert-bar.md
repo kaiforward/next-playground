@@ -69,7 +69,7 @@ separate dismissible feed that was considered and dropped.
 - **Wrapping and scrolling were not taken.** A wrapped second row grows the run downward over the map
   mid-game; a scrolling run hides alerts behind a gesture on a surface whose whole job is to be
   glanceable. Compression degrades more gracefully than either.
-- **Chips inside the existing top bar** was killed by arithmetic: ~5 chips against seventeen
+- **Chips inside the existing top bar** was killed by arithmetic: ~5 chips against sixteen
   categories, and that space is already promised to treasury readouts.
 - **Empty space inside the run passes clicks through to the map.** Only the chips take pointer events,
   the same rule the Tracker's rail already follows.
@@ -89,9 +89,7 @@ replacements if that reads badly in the prototype.
 Where lucide has no negated variant the glyph carries a **fault slash**: the corner-to-corner line
 lucide's own `-off` icons use, drawn over the plain subject glyph and cased so it survives a busy one.
 Checked against the installed package: there is no `FactoryOff` and no `BedDoubleOff`, so those two
-take the slash. **`GlobeOff` does exist** (`node_modules/lucide-react/dist/esm/icons/globe-off.js`),
-so Colony dying takes the stock glyph unless the cased slash proves more legible over a live map —
-a prototype question, not a spec one.
+take the slash.
 
 The `Clears by` column records how a row actually stops being true, per the contract below: **fix**
 (the player can act), **expiry** (an event's phases end), **world-resolves** (the simulation removes
@@ -99,14 +97,13 @@ the subject — a colony is abandoned, decay eats the idle capacity, population 
 
 | Tier | Category | Icon | Condition, and its sort measure | Clears by | Data |
 |---|---|---|---|---|---|
-| critical | Famine | `WheatOff` | Survival-good shortfall (`supplyBand === "famine"`). Sorts by shortfall depth. | fix | Ships today |
-| critical | Colony dying | `GlobeOff` | Famine world whose population is **shrinking** toward `ABANDON_POP_FLOOR`. Sorts by fractional decline rate (`−delta / population`), steepest first. Needs the per-cycle population delta persisted — see below. | fix / world-resolves (abandonment) | New (small) |
+| critical | Famine | `WheatOff` | Survival-good shortfall (`supplyBand === "famine"`). Sorts by time to abandonment, soonest first — an exponential countdown to `ABANDON_POP_FLOOR`, `ln(population / ABANDON_POP_FLOOR) / k` where `k = −populationChange / population`; a famine world that is **not shrinking** carries no countdown and sorts after the shrinking ones, by shortfall depth. Needs the per-cycle population delta persisted — see below. | fix / world-resolves (abandonment) | Ships today + New (small) |
 | critical | Strike | `Megaphone` | Unrest past the strike threshold. Sorts by suppression. | fix | Ships today |
 | critical | Maintenance unfunded | `BanknoteX` | Settlement could not pay the maintenance band **it was asked to pay** — insolvency, not a slider setting. The only path into destructive decay. One faction-level row, count always 1. | fix | Ships today |
 | critical | **Crisis** | `Siren` | Events that can break a world — plague, raid, asteroid strike, inner-system conflict, border conflict. Sorts by authored impact rank (new authoring, beside the band). | expiry | Needs banding |
 | important | Deprived worlds | `BatteryLow` | Provision in the Deprived band. Sorts by Provision ascending. | fix | Ships today |
 | important | Unrest rising | `TrendingUp` | Provision below the floored expectation the population is judged against, not yet striking. Requires a real memory (`provisionExpectation` present). Sorts by grievance depth. | fix | Ships today |
-| important | Survival stock falling | `Hourglass` | A survival good (`SURVIVAL_GOODS` — water, food) whose **stock is falling** with cycles-to-empty below a threshold. Sorts by cycles remaining, soonest first. Stock is used because directed logistics lands imports as stock deltas, so a falling stock is the true net drain; local consumption-vs-production would fire on every importer. Needs the per-cycle survival stock delta persisted — see below. | fix | New (small) |
+| important | Survival stock falling | `Hourglass` | A survival good (`SURVIVAL_GOODS` — water, food) with **cycles-to-empty below 3** — falling alone is meaningless, since stocks oscillate and over half of survival-good rows are falling at any moment, so the countdown carries the whole condition. Sorts by cycles remaining, soonest first. Stock is used because directed logistics lands imports as stock deltas, so a falling stock is the true net drain; local consumption-vs-production would fire on every importer. Needs the per-cycle survival stock delta persisted — see below. | fix | New (small) |
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close — structural, as distinct from the temporary `logisticsFundingBound`. Sorts by unserved demand rate. | fix | New |
 | important | Overcrowded | `BedDouble` | `population > popCap` — there are people with no housing. Sorts by cap utilisation. The threshold is definitional, not tuned: at 1.00 everyone is housed and the next person is not. | fix | Derivable |
 | important | No housing headroom | `BedDouble` + slash | Over `popCap` **and** no habitable room for another housing level (`habitableHousingHeadroom < 1`, evaluated against queue-adjusted buildings). The world needs housing and physically cannot build it. Sorts by population over cap. | world-resolves (population falls) | Derivable |
@@ -117,7 +114,7 @@ the subject — a colony is abandoned, decay eats the idle capacity, population 
 | info | Colony opportunity | `Globe` | Eligible controlled systems, **only while colonisation automation is off**. Sorts by colony ROI. | fix | Ships today |
 | info | **Windfall** | `Sparkles` — also a type icon | Events worth riding — trade festival, mining boom, tech breakthrough, a pact opening. Sorts by `ticksRemaining`, soonest to expire first. | expiry | Needs banding |
 
-**Seventeen categories.** Overcrowded was one category and is now two: combining "over the cap" with
+**Sixteen categories.** Overcrowded was one category and is now two: combining "over the cap" with
 "and no room to fix it" meant the manual builder — the player with build automation off, who is the
 one who needs the nudge — was told last, only once every habitable slot was already gone. The two
 facts are separate warnings and a system may raise both.
@@ -125,6 +122,24 @@ facts are separate warnings and a system may raise both.
 **Two categories are warnings ahead of a critical one, and sit one tier below it.** Unrest rising is
 important where Strike is critical; Survival stock falling is important where Famine is critical. The
 same relationship, authored the same way.
+
+**Colony dying is deleted, folded into Famine's sort rather than kept as a third warning.** The two
+categories above step down a tier because each is a warning *before* a bad state — a distinct, earlier
+condition that earns its own chip ahead of the critical one it precedes. Colony dying was never that
+shape: it was not an early signal of famine, it was famine advanced far enough to be terminal, which is
+exactly why it could not step down a tier the way the other two do — it is *more* urgent than the state
+it rides alongside, not less. A worse version of the same state is not a second chip; it is the sort
+order inside the one chip that already exists, which is what stops sixteen categories becoming forty. A
+pre-committed falsifier ran at Gate 1 and fired — see `## Evidence` → Colony dying vs Famine overlap —
+but it measured something else entirely and was withdrawn rather than acted on; the fold happens for
+the structural reason above, and would have happened at any reading.
+
+**Survival stock falling survives the same test Colony dying failed.** Famine is delivery failing;
+Survival stock falling is the buffer draining. A world can draw down its food warehouse while everyone
+is still fed — that is what a warehouse is for — and it can be in famine with a stock that is not
+falling if production just collapsed. Neither implies the other, so these are two conditions rather
+than one condition at two severities, and it stays one tier below Famine, matching Unrest rising below
+Strike.
 
 **Discrete events are separate from the conditions, and split three ways by authored valence** —
 `Crisis` (critical), `Disruption` (important), `Windfall` (info). The rest of the bar is standing
@@ -185,10 +200,11 @@ critical tier is where it lands when there is something to put in it. The same c
 whole political side of this list: the economy is what has actually been built, and every category
 above reads economic or population state except this one.
 
-**Three glyph pairs came out of this**, and they are the clearest thing on the bar: `Globe` plain is a
-colony you could found, `GlobeOff` is one dying; `HardHat` plain is a build you could order, `HardHat`
-slashed is one that could not happen; `BedDouble` plain is a world over its housing cap, `BedDouble`
-slashed is one that cannot build its way out. Same subject, faulted and not.
+**Two glyph pairs came out of this**, and they are the clearest thing on the bar: `HardHat` plain is a
+build you could order, `HardHat` slashed is one that could not happen; `BedDouble` plain is a world over
+its housing cap, `BedDouble` slashed is one that cannot build its way out. Same subject, faulted and
+not. `Globe` stands alone for Colony opportunity — there is no `GlobeOff` counterpart on the bar, since
+Colony dying is not a category.
 
 **`Construction` was rejected for Build blocked** and `HardHat` taken instead. That glyph is already
 three diagonal strokes, so even a cased fourth diagonal reads as more barrier hatching rather than as
@@ -202,7 +218,7 @@ climbing that is a problem, which is the whole of what the category means. A sec
 convention would have been invented to say less than the colour already says.
 
 **Custom icons are a live possibility** for this project rather than a rejected one. The lucide set
-plus the cased slash covers all seventeen; a dedicated set would be a later pass, and nothing here
+plus the cased slash covers all sixteen; a dedicated set would be a later pass, and nothing here
 forecloses it.
 
 The `Derivable` rows need no tick-side addition — Overcrowded and No housing headroom both compute
@@ -218,7 +234,7 @@ rather than in the save. The two `info` groups additionally only ever appear whi
 automation is off, so they self-gate on top of the checkbox.
 
 **The critical tier cannot be turned off.** That is the small non-hideable set the design promised —
-nothing that can end a colony or start a war is switched off by accident. Five categories, locked on.
+nothing that can end a colony or start a war is switched off by accident. Four categories, locked on.
 
 **Three important-tier categories default to OFF.** This table is the single authority on defaults —
 no other section states one. The list is the *measured* one where a measurement exists; the guesses it
@@ -350,7 +366,7 @@ an accident.
 
 ### The categories
 
-Seventeen, in the table above. Each is authored into one of three tiers at design time. **There is no
+Sixteen, in the table above. Each is authored into one of three tiers at design time. **There is no
 computed cross-domain score anywhere in this design**: instances sort only *within* their category, by
 that category's own natural measure, and categories sort only by their authored tier. This is what
 lets housing — which carries no ROI value at all — sit on the same bar as an industry proposal without
@@ -407,7 +423,7 @@ the apply flow, with the ROI context the decision needs.
 
 | Category | Destination |
 |---|---|
-| Famine, Colony dying, Strike, Deprived worlds, Unrest rising, Overcrowded, No housing headroom | system → `population` |
+| Famine, Strike, Deprived worlds, Unrest rising, Overcrowded, No housing headroom | system → `population` |
 | Industry idle, Build blocked, Build opportunity | system → `industry` |
 | Demand unservable, Survival stock falling | system → `logistics` |
 | Colony opportunity | system → root |
@@ -466,9 +482,9 @@ The four:
 
 - **The per-cycle population delta**, per system. `populationDelta` is computed every cycle
   (`lib/tick/processors/population.ts:106`) and thrown away — only the resulting `population` is
-  written — so nothing in world state says whether a world is growing or shrinking. Without it,
-  Colony dying can only sort by raw population, which puts every freshly-seeded 2-pop colony above a
-  world actually collapsing.
+  written — so nothing in world state says whether a world is growing or shrinking. Without it, Famine
+  has no way to tell a world sliding toward abandonment from one merely short this cycle, and every row
+  falls back to sorting by shortfall depth.
 
   **What is persisted is the realised change in `population` including migration**, computed as
   `population_after_migration − population_at_cycle_start` and written by the tick body after the
@@ -477,20 +493,25 @@ The four:
   and migration runs afterwards in the same tick; on a dying colony departures are a real and often
   dominant drain. Persisting the biological delta alone would systematically understate the collapse.
 
-  **The sort measure is the fractional decline rate, `−delta / population`** — steepest first. The
-  obvious `(population − ABANDON_POP_FLOOR) / −delta` does not work: every term of the delta scales
-  with population, so on a famine world the expression collapses to roughly
-  `(1 − 1/pop) / (declineRate·unrest + …)` and orders by unrest rather than by collapse speed. It is
-  also undefined at the edges — `delta === 0` gives `−Infinity` and sorts a stable world first,
-  `delta > 0` gives a negative finite value and also sorts first. Those cases are excluded by the
-  condition (the category requires shrinking) rather than guarded in the sort.
+  **The sort measure is time to abandonment, not the decline rate alone.** `k = −delta / population` is
+  the fractional decline rate per cycle, and because population falls proportionally rather than by a
+  fixed amount — a world going from 50 to 1 takes far longer than subtraction suggests — the countdown
+  is `ln(population / ABANDON_POP_FLOOR) / k`, an exponential time-to-empty. The obvious
+  `(population − ABANDON_POP_FLOOR) / −delta` was tried first and rejected: every term of the delta
+  scales with population, so on a famine world that linear expression collapses to roughly
+  `(1 − 1/pop) / (declineRate·unrest + …)` and orders by unrest rather than by collapse speed; the
+  logarithmic form has no such failure. It is undefined at the same edges the rate itself is — `delta
+  === 0` gives `k = 0` and an infinite countdown, `delta > 0` gives a negative `k` and a negative
+  countdown — and those cases are excluded by the condition rather than guarded in the formula: a
+  famine world that is not shrinking carries no countdown at all, and sorts after the shrinking ones,
+  by shortfall depth.
 
   Denominated **per reference cycle**, matching `delta`'s own denomination rather than the
   `delta × catchUpFactor` a single run applies — the two are equal only while `CYCLE_LENGTH` (24)
   equals `REFERENCE_INTERVAL` (24), and `CYCLE_LENGTH` is a documented knob.
 
-  **Hazard 1, stated up front:** this is authored for one job — the Colony dying measure. It is
-  obviously attractive to the Tracker's rows, the Population panel, and the queued unrest-history /
+  **Hazard 1, stated up front:** this is authored for one job — Famine's time-to-abandonment sort. It
+  is obviously attractive to the Tracker's rows, the Population panel, and the queued unrest-history /
   recovery-forecast work. Those are welcome to read it, but any of them wanting a *different* shape
   (a trailing average, a longer window) must add their own rather than redefining this one. That is
   precisely how `TARGET_COVER` and `demandRate` happened.
@@ -500,8 +521,9 @@ The four:
   directed logistics lands its hauls as stock deltas, so a falling stock is production minus
   consumption *after* imports; the purely local `honestUseRate > realizedProductionRate` would fire on
   every importer, which in a specialised economy is most of the galaxy by design. Cycles-to-empty is
-  then `stock / −delta`, and the alert's threshold on it is **owed a measurement** — a number to read
-  off a sim run, not to guess here.
+  then `stock / −delta`, and the alert's threshold on it is `cycles-to-empty < 3`, authored from remedy
+  time rather than read off a distribution — see the tier list's Survival stock falling entry and
+  `## Evidence` for the reasoning and the sanity-check reading.
 
 - **Build blocked.** The planner drops an opportunity it wanted with a bare `continue`, recording
   nothing. The drop is not one site but several, and the two the first cut named are not the important
@@ -598,8 +620,9 @@ what makes it correct. A bump would reject every named save and the rolling auto
 loads (`:78`, `SAVE_FORMAT_VERSION` 13) and buy nothing.
 
 One consequence to state rather than discover: on a save predating these fields every system reads
-absent, so Colony dying and Survival stock falling show nothing until the first economy cycle after
-load. That is correct, and it is not a bug.
+absent, so Survival stock falling shows nothing, and Famine's countdown sort has nothing to work from —
+every famine row falls back to sorting by shortfall depth — until the first economy cycle after load.
+That is correct, and it is not a bug.
 
 **Absence is not zero, for every category, not just two.** `provision`, `supplyBand`,
 `criticalWeight` and `provisionExpectation` are all absent on a system the economy has never assessed,
@@ -612,7 +635,7 @@ Per category, the nullable inputs that rule governs:
 | Category | Nullable inputs | Absent reads as |
 |---|---|---|
 | Famine, Deprived worlds | `supplyBand` | not in the category |
-| Colony dying | `supplyBand`, population delta | not in the category |
+| Famine (countdown sort only) | population delta | absent reads as **not shrinking** — the row still appears, gated by `supplyBand` alone, with no countdown; it sorts after the shrinking ones, by shortfall depth |
 | Unrest rising | `provision`, `provisionExpectation` | not in the category — **and this one matters**: `readExpectation` seeds a missing memory from this cycle's own Provision and floors the result at `EXPECTATION_PARAMS.floor` (0.5), so a never-seeded system would otherwise report grievance `max(0, 0.5 − provision)` — falling short of a floor it has no memory of. The category requires a real stored `provisionExpectation`. |
 | Overcrowded, No housing headroom | `popCap` | `popCap === 0` reads as not overcrowded, matching `lib/services/tracker.ts:60` |
 | Survival stock falling | survival stock delta | not in the category |
@@ -637,7 +660,7 @@ shape the hazard exists to catch.
 | `unrest` | **101 refs / 31 modules.** `npm run impact` additionally flags **`economy` (3/9 in run order) as touching `unrest` without declaring it as a read** — an undeclared writer, so what a reader sees depends on run-order position | **None.** | Yes — pure read |
 | `popCap` | **68 refs / 21 modules** | **None.** | Yes — pure read |
 | `logisticsFundingBound` | **27 refs / 9 modules**: `directed-logistics.ts:152,173`, `directed-build.ts:340`, `industry.ts:402,432,663,698,730,794`, **`infrastructure-decay.ts:63,119`**, `services/universe.ts:199,241`, `tick/processors/directed-logistics.ts:195-199`, `tick/processors/good-market-state.ts:186`, `tick/processors/infrastructure-decay.ts:49,65`. `directed build` is flagged as an **undeclared writer** at 7/9 | **None**, but Demand unservable must not be confused with it — funding-bound is *temporary*, unservable is structural. Two conditions, two signals, and the new one is per (system, good) on the deficit endpoint only. | Yes, and stated |
-| `STRIKE_PARAMS.threshold` | Strike suppression (`lib/services/system-population.ts:119` and the population engine) **and** the overshoot-death gate: `POPULATION_PARAMS.overshootDeathUnrestGate: STRIKE_PARAMS.threshold` (`lib/constants/population.ts:130`) → `lib/engine/population.ts:470` | **None** — but the coupling is real and kept deliberately. A system crossing 0.65 enters the Strike chip *and* acquires the death term that dominates its Colony dying measure, so the two critical categories fire and rank off one number. Moving the constant moves both. | Yes, and stated |
+| `STRIKE_PARAMS.threshold` | Strike suppression (`lib/services/system-population.ts:119` and the population engine) **and** the overshoot-death gate: `POPULATION_PARAMS.overshootDeathUnrestGate: STRIKE_PARAMS.threshold` (`lib/constants/population.ts:130`) → `lib/engine/population.ts:470` | **None** — but the coupling is real and kept deliberately, and it moved rather than went away. A system crossing 0.65 enters the Strike chip *and* acquires the death term that now dominates the population decline rate behind Famine's time-to-abandonment sort — the same coupling that used to reach Colony dying's measure reaches Famine's instead. Moving the constant still moves both. | Yes, and stated |
 | *(new)* blocked-build reason + dropped ROI | none — new | New quantity on `WorldSystem`, sole reader is the alert read service. | Yes |
 | *(new)* population delta, survival stock delta, structural-unservable bit | none — new | New quantities, sole reader is the alert read service. | Yes |
 | *(new)* event valence band + impact rank | none — new | New per-type authoring, read by the alert read service. | Yes |
@@ -659,8 +682,8 @@ dropped the clause that mattered.
 
 | Constant | Docstring says | This design uses it as | Same? |
 |---|---|---|---|
-| `ABANDON_POP_FLOOR` (`lib/constants/population.ts:133-141`) | "Abandonment's death line… famine + population below one pop — under a million people — means the colony is over. **A backstop, deliberately un-tuned: no window, no calibration sweep owns this number.**" | the line Colony dying's condition is oriented toward | **Qualified yes.** The design deliberately does **not** put it in the sort — the measure is `−delta / population`, so a future re-tune of this un-tuned backstop cannot silently re-order a critical alert. It remains the abandonment gate only. |
-| `STRIKE_PARAMS.threshold` (`:72-79`) | "Strike production-suppression regime derived from unrest… Threshold raised to 0.65 so only genuinely high-unrest systems strike" — says nothing about population death | the Strike category's condition | Yes for Strike. But see row 1: the constant has a **second, undocumented job** as `overshootDeathUnrestGate`, which couples it to Colony dying's measure. |
+| `ABANDON_POP_FLOOR` (`lib/constants/population.ts:133-141`) | "Abandonment's death line… famine + population below one pop — under a million people — means the colony is over. **A backstop, deliberately un-tuned: no window, no calibration sweep owns this number.**" | the line Famine's time-to-abandonment countdown counts down to | **Yes, and the consequence is accepted rather than hidden.** The countdown reads the constant for exactly its authored meaning — the line at which abandonment actually happens — which is the right reading. But the docstring also says the constant is deliberately un-tuned with no calibration sweep owning it, and the countdown now targets it directly (an earlier draft of this design kept it out of the sort for exactly this reason). A future re-tune of this backstop moves Famine's sort order, not just the abandonment gate. That coupling is new, and it is a stated cost of the countdown rather than an oversight. |
+| `STRIKE_PARAMS.threshold` (`:72-79`) | "Strike production-suppression regime derived from unrest… Threshold raised to 0.65 so only genuinely high-unrest systems strike" — says nothing about population death | the Strike category's condition | Yes for Strike. But see row 1: the constant has a **second, undocumented job** as `overshootDeathUnrestGate`, which couples it to Famine's sort measure. |
 | `EXPECTATION_PARAMS.floor` (`:85-88`) | "'No population normalises living on half of what it needs.' Applied at read as `max(stored, floor)` — the stored value itself is never floored. Independent of `SHORTAGE_SATISFACTION` despite the equal value… Do not couple them." | nothing directly — but it silently shapes Unrest rising, because `readExpectation` floors the effective expectation and seeds a missing memory from this cycle's own Provision | **Not the same**, and handled: the category requires a real stored `provisionExpectation`, so a never-seeded system is excluded rather than reported as falling short of a floor it has no memory of. |
 | `CROWDING.BRAKE_END` / `PRESSURE_MAX` (`:64-70`) | "Overcrowding shape **shared by the growth brake and the standing crowding-pressure ramp.** BRAKE_END is r = population/popCap at which growth reaches zero and crowding pressure reaches its max" | neither is a condition or a threshold here | n/a — and the shared job is why the measured utilisation band is so narrow: growth is braked to zero at 1.15, so nothing travels far past 1.0. That is mechanical, not incidental. |
 | `supplyBand === "famine"` | `foldSupplyState`'s survival punch-through; the docstring states it is a **strict biconditional** with `survivalShortfall` (`lib/world/types.ts:131-133`) | the Famine category's condition, read directly rather than re-inferred | Yes — verified at the producer too: `foldSupplyState` (`lib/engine/population.ts:257-262`) returns famine only from the survival branch, so it holds in both directions |
@@ -676,12 +699,12 @@ an invented threshold; Overcrowded reads `popCap` as the housing that exists, wh
 |---|---|---|
 | Events | **Three categories are events.** Needs a new authored valence band **and impact rank** per event type, over all **seventeen** `EventTypeId` members including the two child types that spread from parents. `EventDefinition` (`lib/constants/events.ts:68-79`) has no severity or valence field at all — `weight` is spawn frequency; the `severity` fields belong to `SpreadRule` (`:51`) and to the instance (`lib/world/types.ts:469`). Event categories are scoped to the player's faction and count **instances, not systems**. | — |
 | Population + migration | Reads `population`, `popCap`, `provision`, `provisionExpectation`. **And writes**: the persisted per-cycle population delta is the realised change *including* migration, so it is computed by the tick body after the migration stage — `populationDelta` (`lib/engine/population.ts:458-473`) carries no migration term, and on a dying colony departures are often the dominant drain. | — |
-| Unrest / regime | Reads `unrest` against `STRIKE_PARAMS.threshold`, and grievance as `expectation − provision` (`grievanceShortfall`, `lib/engine/population.ts:295`). Writes nothing. The threshold's second job as `overshootDeathUnrestGate` couples Strike to Colony dying's measure — see row 1. | — |
+| Unrest / regime | Reads `unrest` against `STRIKE_PARAMS.threshold`, and grievance as `expectation − provision` (`grievanceShortfall`, `lib/engine/population.ts:295`). Writes nothing. The threshold's second job as `overshootDeathUnrestGate` couples Strike to Famine's sort — see row 1. | — |
 | Industry + staffing | Industry idle reads existing per-building idle reasons **and needs a sixth**: `IdleReason` (`lib/engine/industry.ts:544`) has no input-starvation member, so an input-gated factory reads as fully used. Build blocked's labour case reads the planner's own fit gate. | — |
 | Infrastructure decay | **Decay is the clearing mechanism for Industry idle's staffing and licence causes, not their consequence** — the direction was stated backwards in the first cut. `idleLevels = floor(count − used)` (`lib/engine/infrastructure-decay.ts:95`) accrues a countdown while ≥ 1 and tears the level down; `used` then equals `count` and `idleReason` clears (`lib/engine/industry.ts:790`). So the row disappears when the capacity is destroyed. Accepted deliberately — decay is a mechanic the player is expected to know, and the flyout does not explain it. **The missing-inputs cause is the exception and clears by fix only**: decay's `used` comes from `buildingUsed`'s producer branch (`lib/engine/industry.ts:430-435`), which reads `effectiveFulfilment` and `canSell` but never `inputGate`, and decay's own `SystemDecayInput` carries no market stock to compute a gate from — so an input-starved factory is never torn down. That is a decision, not an oversight; see the emission section. Decay also reads `logisticsFundingBound` (`:63,119`), which row 1 now records. | — |
 | Directed logistics | Demand unservable is new instrumentation here, per (system, good) on the deficit endpoint only — unlike `logisticsFundingBound`, which is written to both endpoints of a funding-bound haul (`lib/engine/directed-logistics.ts:170-175`). Survival stock falling reads persisted `stock` plus a new per-cycle stock delta. | — |
 | Directed build / planner | Build blocked is new instrumentation here, across the full drop set rather than two sites. Build opportunity reads the ranked proposals, gated on the automation switch. Note the assessment runs for **every** faction regardless of `world.player` (`lib/tick/processors/directed-build.ts:450`) — the switch gates proposal *emission*, not the clock. | — |
-| Colonisation + founding manifest | Colony opportunity reads eligibility; Colony dying reads the abandonment line. No write path. | — |
+| Colonisation + founding manifest | Colony opportunity reads eligibility. No write path. | — |
 | Treasury / purse | Maintenance unfunded reads `paid.maintenance` against **`maintenanceBill × treasury.bands.maintenance`** — the band the settlement was *asked* to pay. Testing against the full bill would fire on any maintenance slider below 1.0, a legal player setting floored at 0.5: `settleLadder` computes `charge = bill × slider; pay = min(charge, available)` (`lib/engine/treasury.ts:126-131`), so `paid < bill` is true whenever the slider is down. Insolvency is `pay < charge`. Adds `WorldFactionTreasury.bands.maintenance` to the read list. | — |
 | Factions + relations | `border_conflict` arrives as an event via the relations processor (`lib/tick/processors/relations.ts:34-37`); it lands in Crisis. The three relations-owned events scope to pairs the player's faction is in. **No war state exists** to interact with. | — |
 | **Abandonment (tick body)** | Every persisted signal this design adds joins the resettlement reset: deleted in `applyAbandonments` (`lib/world/tick.ts:559`) beside `provision` / `supplyBand` / `criticalWeight` / `provisionExpectation`, deleted again on any flip to `developed` in `applyDevelopments` (`:533`), and threaded through `toTickSystems` (`:206`) and `mergeSystemsIntoWorld` (`:263`) by the same delete/assign pair so absence stays a true absence. Without it a re-founded colony carries the dead world's death rate. `logisticsFundingBound` already does this on the market side (`:601`). | — |
@@ -702,13 +725,15 @@ an invented threshold; Overcrowded reads `popCap` as the housing that exists, wh
 | An additive optional field needs no save bump | `lib/world/save.ts:6-10` docstring | code | — |
 | Per-category incidence | Deprived 0.4% → 0.0%; Unrest rising 13.8% → 22.3%; Overcrowded (over cap) 7.9% → 98.6%; Industry idle 2.0% → 34.5% | 1,000t **and** 10,000t | developed systems, with a per-faction breakdown showing the same rates inside the largest factions |
 | **"Blocked builds are rare by construction" — FALSE** | 50.40% of developed systems per planner run (mean), peak 81.62% | 10,000t, startup ticks excluded | developed systems, per planner run |
-| Whether Colony dying is a meaningful subset of Famine | **NONE — hypothesis.** Famine drives the satisfaction factor toward zero and elevates unrest, so the delta is negative by construction on most famine worlds; the overlap is unmeasured | — | — |
-| Survival stock falling's incidence and threshold | **NONE — owed.** The threshold is a number to read off a sim run | — | — |
+| The Colony-dying-vs-Famine overlap falsifier | **Measured at Gate 1 and withdrawn as invalid.** 100% of famine-banded developed systems carried a negative `populationChange` at equilibrium (7 of 7), 50% at startup (2 of 4) — it fired, but licenses nothing about the category's existence | startup (1,000t) and equilibrium (10,000t) | famine-banded developed systems |
+| Survival stock falling's threshold | **Authored from remedy time, not measured** — `cycles-to-empty < 3`. The measured incidence (6.7% → 2.4%) is a Gate 1 sanity check on that default, not its source | startup (1,000t) and equilibrium (10,000t) | developed systems |
 
-The first eight are code facts. The next two are the measured findings — see `## Evidence`, where each
-carries its instrument, both horizons and a `Licenses` line. The last two are labelled hypotheses, and
-neither sets a condition: the first is a question about whether Colony dying earns its own chip, the
-second is a threshold to measure before shipping.
+The first eight are code facts. The next two are the measured findings from spec review — see
+`## Evidence`, where each carries its instrument, both horizons and a `Licenses` line. The last two were
+settled at Gate 1: the Colony-dying overlap falsifier fired and was withdrawn — it measured a
+near-tautology, not whether Colony dying earned its own chip, and the category was dropped for a
+structural reason unrelated to this number; the Survival stock falling threshold is authored from
+remedy time, with its Gate 1 reading serving only as a sanity check on the volume it selects.
 
 ### 5. Designing against a threshold or primitive that does not exist
 
@@ -717,7 +742,7 @@ second is a threshold to measure before shipping.
 | Famine | `foldSupplyState`, `lib/engine/population.ts:262`; persisted `supplyBand` | `"famine"` only via the survival branch; **absent when never assessed** | matches |
 | Deprived band | same fold, persisted | four descriptive bands; famine punches through at any Provision | matches — Deprived is a band, not a Provision cutoff |
 | Strike | `system-population.ts:119`, `unrest > STRIKE_PARAMS.threshold` | boolean derived at read time | matches |
-| Colony dying | `lib/tick/processors/population.ts:111` reports systems already below the floor; `populationDelta` at `:106` is computed and discarded | reports **crossings**, not a countdown; the delta exists for one statement and is never written, and carries **no migration term** | **RESOLVED by persisting the realised post-migration change** — see the emission section; the earlier `(pop − floor) / −delta` measure was degenerate and was replaced by `−delta / population` |
+| Famine (time-to-abandonment sort) | `lib/tick/processors/population.ts:111` reports systems already below the floor; `populationDelta` at `:106` is computed and discarded | reports **crossings**, not a countdown; the delta exists for one statement and is never written, and carries **no migration term** | **RESOLVED by persisting the realised post-migration change** — see the emission section. The measure is `ln(population / ABANDON_POP_FLOOR) / k`, `k = −populationChange / population`: an exponential countdown to the real abandonment line, not the linear extrapolation `(pop − floor) / −delta` first proposed, and not the bare decline rate `−delta / population` proposed after that. A famine world that is not shrinking carries no countdown and sorts after the shrinking ones, by shortfall depth. |
 | Maintenance unfunded | `WorldTreasurySettlement`, `lib/world/types.ts:405-421` | `paid` per band, post-slider; the settlement carries **neither the charge nor the slider** | **partly missing** — the honest test needs `treasury.bands.maintenance` alongside, or the condition fires on a legal slider setting |
 | Unrest rising | `grievanceShortfall`, `lib/engine/population.ts:295`; `readExpectation`, `lib/engine/expectation.ts:43-52` | `max(stored, floor)` − provision, and a **missing memory is seeded from this cycle's own Provision** | matches only with the never-seeded guard — the category requires a stored `provisionExpectation` |
 | Overcrowded | `population`, `popCap` — both persisted `WorldSystem` columns | `popCap` recomputed live from surviving housing each cycle | matches |
@@ -728,10 +753,12 @@ second is a threshold to measure before shipping.
 | Demand unservable | **does not exist** | — | new instrumentation |
 | Event valence + impact rank | **does not exist** | `EventDefinition` has neither | new authoring, over all seventeen types |
 
-The Colony dying row is the original hazard-5 catch: the design said "sorts by cycles to the floor"
-against a processor that only reports systems already past it. Three more rows joined it at review —
-Maintenance unfunded, Industry idle and No housing headroom each consume something whose real shape
-differs from what the first cut assumed.
+The Famine time-to-abandonment row is the original hazard-5 catch: first authored under the name Colony
+dying, whose condition said "sorts by cycles to the floor" against a processor that only reports
+systems already past it. Colony dying was later dropped as its own category, and the same corrected
+sort measure now belongs to Famine instead. Three more rows joined it at review — Maintenance unfunded,
+Industry idle and No housing headroom each consume something whose real shape differs from what the
+first cut assumed.
 
 ### 6. Designing against an aggregate that moves for other reasons
 
@@ -961,6 +988,68 @@ is not in doubt: `CROWDING.BRAKE_END` is shared by the growth brake and the crow
 (`lib/constants/population.ts:64-70`), so growth is braked to zero at 1.15 and nothing travels far
 past 1.0.
 
+### Colony dying vs Famine overlap — the falsifier fired, and was withdrawn
+
+This falsifier was pre-committed at spec review, in hazard 4: fold Colony dying into Famine if more
+than 90% of famine-banded developed systems carry a negative `populationChange` at either horizon. It
+was read at Gate 1, fired, and is recorded here so nobody re-runs it.
+
+```
+Meaning:    Most famine worlds are indeed losing population, but the number never bore on the
+            question it was asked to answer. A world with no food loses population; a filter for
+            "famine and shrinking" that selects almost the whole famine set is closer to a
+            near-tautology than a discovery about whether these are two ideas or one.
+Claim:      More than 90% of famine-banded developed systems carry a negative populationChange, at
+            either horizon.
+Number:     100% at equilibrium (7 of 7); 50% at startup (2 of 4).
+Horizon:    startup (1,000t) AND equilibrium (10,000t)
+Cohort:     famine-banded developed systems
+Licenses:   Nothing about the category's existence. (a) It measures a near-tautology — a world with
+            no food loses population — so it could never have discriminated between "these are two
+            ideas" and "these are one". (b) It used a measured rate to decide a definition, which this
+            spec's own rule on aggregates forbids. (c) Its ">90% at either horizon" wording let the
+            seven-system equilibrium sample outvote the startup reading, which shows famine-but-stable
+            worlds do exist (2 of 4 negative, not 4 of 4).
+```
+
+**Outcome: fired, and withdrawn as invalid.** Colony dying is deleted, but not because this falsifier
+fired — it is deleted for the structural reason recorded in the tier list: it was never a warning ahead
+of Famine, it was Famine far enough along to be terminal, which is sort order inside one category
+rather than a second chip. The fold would have happened at any reading this falsifier produced.
+
+### Survival stock falling — threshold from remedy time, volume as a sanity check only
+
+The threshold is **not** read off a distribution. That framing (the earlier `## Evidence still owed`
+item 3) repeats the exact error the falsifier above just demonstrated: a rate can set a default, never
+a definition or a threshold standing in for one. The threshold is authored from **remedy time**: the
+fix for a draining survival good is a redirected shipment, and shipments move on the logistics cycle —
+one cycle for the matcher to see the deficit and route a haul, one for the goods to land, one of margin
+for the player to notice and act. Three cycles. Below that the alert would be announcing a problem the
+player has no time left to fix.
+
+Simply falling is meaningless on its own: stocks oscillate, so over half of survival-good rows are
+falling at any given moment. The countdown — cycles-to-empty below 3 — has to carry the whole
+condition; direction alone cannot.
+
+```
+Meaning:    Under a 3-cycle threshold the category is a little more common than the state it leads —
+            Famine — which is the right shape for a leading indicator: rarer would mean it seldom
+            warns before famine hits, commoner would mean it is firing on ordinary noise.
+Claim:      cycles-to-empty < 3 selects a plausible leading-indicator volume — more common than
+            Famine, not by orders of magnitude.
+Number:     6.7% of developed systems at startup, 2.4% at equilibrium, against Famine's own
+            1.6% → 1.2%.
+Horizon:    startup (1,000t) AND equilibrium (10,000t)
+Cohort:     developed systems
+Licenses:   Supports the existing default of ON, and confirms the authored threshold does not select
+            an absurd volume. Does NOT set the threshold — the 3-cycle figure comes from remedy time,
+            above, and would stand even had this reading come out differently. Does not license any
+            other cycles-to-empty cutoff as "more correct" on volume grounds alone.
+```
+
+**Outcome: default confirmed, threshold unchanged by the reading.** Survival stock falling defaults ON
+and its threshold is `cycles-to-empty < 3`.
+
 ### What the readings changed
 
 - **Deprived defaults ON.** It is rare, which is exactly what makes it a good alert.
@@ -972,6 +1061,11 @@ past 1.0.
   default was kept deliberately against a 98.6% equilibrium rate.
 - **The horizon split is load-bearing for Industry idle**: 2.0% at startup against 34.5% at
   equilibrium. A startup-only read would have called it rare and defaulted it on.
+- **Colony dying is deleted, and the falsifier that fired on it is withdrawn.** The category is gone
+  for the structural reason in the tier list, not for the 100%/50% overlap reading — a second instance
+  of the same lesson the next bullet states.
+- **Survival stock falling's threshold is authored, not measured**, and the Gate 1 reading is a sanity
+  check on the default rather than the threshold's source.
 - **What the readings did *not* license, learned the hard way here:** a rate can set a default and can
   reveal that the game is not living up to a definition. It cannot set the definition. Two design
   moves in the first cut did exactly that and were reversed at review.
@@ -983,16 +1077,17 @@ past 1.0.
 2. ~~"Blocked builds are rare by construction"~~ — **measured and false**, see Evidence above.
    Superseded in scope: the counter covered two of nine drop sites, so the true rate is higher. The
    conclusion is unaffected.
-3. **Survival stock falling's threshold.** Cycles-to-empty below what? A number to read off a sim run
-   at both horizons, cohorted by developed systems, before the category ships. Its incidence is owed
-   with it.
-4. **Whether Colony dying is a meaningful subset of Famine.** Famine drives the satisfaction factor
-   toward zero and elevates unrest, so the population delta is negative by construction on most famine
-   worlds — the second conjunct may select almost nothing Famine does not already select, in which
-   case Colony dying is a severity treatment inside the Famine chip rather than its own category.
-   Falsifier: if more than 90% of famine-banded developed systems carry a negative delta at either
-   horizon, fold it in. Note this bears on the *category*, not on the persisted delta, which the sort
-   measure needs either way.
+3. ~~Survival stock falling's threshold~~ — **settled: `cycles-to-empty < 3`, authored from remedy
+   time** (one logistics cycle for the matcher to route, one for the goods to land, one of margin to
+   notice), not read off a distribution. See `## Evidence` → Survival stock falling. The measured
+   incidence (6.7% → 2.4%, against Famine's 1.6% → 1.2%) is a Gate 1 sanity check on that default, not
+   its source.
+4. ~~Whether Colony dying is a meaningful subset of Famine~~ — **settled: Colony dying is deleted.**
+   Not for the falsifier's number — it fired (100% at equilibrium, 50% at startup) and was withdrawn as
+   invalid; see `## Evidence` → Colony dying vs Famine overlap — but for the structural reason recorded
+   in the tier list: it was never a warning ahead of Famine, it was Famine far enough along to be
+   terminal, which is sort order inside one category rather than a second chip. The persisted
+   population delta survives regardless — Famine's time-to-abandonment sort needs it.
 5. **`RATION_EXIT_EPS`.** Carried here by roadmap row 1 with no surviving justification unless band
    transitions become an alert category. They do not, so the constant is a delete unless something
    else claims it. Its open question — whether the hysteresis applies to the persisted display band
@@ -1024,7 +1119,7 @@ task needing one the spec does not carry goes back to the spec rather than being
 Fifteen tasks in four stages, one gate. Stages are check-in pauses on one branch, not PRs. **If the
 diff grows past comfortable review, split A+B (engine and read layer) from C (the surface)** — that is
 the owner's stated preference over deferring a category into its own cycle, because the chip and
-flyout machinery is shared across all seventeen.
+flyout machinery is shared across all sixteen.
 
 **The floor for a `WorldSystem` optional field**, walked against `supplyBand` (`npm run impact --
 supplyBand`, 15 refs / 7 modules) rather than imagined: the type, the tick row, the World-interface
@@ -1182,7 +1277,7 @@ Proves:
 
 Consumes: nothing.
 
-### Gate 1 — the instrumentation is inert, and two owed numbers
+### Gate 1 — the instrumentation is inert, and two owed numbers — passed
 
 Arms: the branch at the end of Stage A, against `main`.
 
@@ -1196,10 +1291,27 @@ Reads:
 - **The Colony-dying-vs-Famine overlap.** Share of famine-banded developed systems carrying a negative
   `populationChange`, both horizons. Spec item 4, falsifier written there.
 
+**Inertness: passed.** `npm run simulate` on `main` (`f0930d17`) against the branch at the end of Stage
+A, both horizons, whole-report diff. Only the two wall-clock timing lines differ; every figure and all
+four conservation identities are identical, and both runs exit 0.
+
+**The two owed readings are taken, and both are now settled rather than owed.** Spec `## Evidence still
+owed` items 3 and 4 are rewritten accordingly — see `## Evidence` → Survival stock falling and → Colony
+dying vs Famine overlap. Survival stock falling's threshold is `cycles-to-empty < 3`, authored from
+remedy time; the reading (6.7% → 2.4%) is a sanity check on that default, not its source. The
+Colony-dying falsifier fired (100% at equilibrium, 50% at startup) and was withdrawn as invalid — it
+measured a near-tautology and licenses nothing about the category's existence.
+
+**Superseding the consequence booked at this gate.** The plan said: if the overlap falsifier fires,
+Task 9 drops the Colony dying category. The falsifier did fire, but that is not why the category is
+gone — the fold happens for the structural reason recorded in the tier list (a warning ahead of a bad
+state earns its own chip one tier down; a worse version of the same state is sort order inside one
+chip, not a second chip), and would have happened at any falsifier reading. Task 9's category count and
+the tier list both lose the row; `populationChange` survives regardless, since Famine's
+time-to-abandonment sort needs it.
+
 Merge condition: identical sim output at both horizons; the threshold set from the reading and written
-into the spec; the overlap measured and its falsifier called either way. **Booked at this gate:** if
-the overlap falsifier fires (>90% at either horizon), Task 9 drops the Colony dying category and the
-tier list loses a row — `populationChange` survives regardless, since the sort measure needs it.
+into the spec; the overlap measured and its falsifier called either way. **Met.**
 
 ### Stage B — the read layer
 
@@ -1213,7 +1325,7 @@ worst-first rank for Build blocked's within-category sort, per the tier-list sec
 here rather than beside `BuildDropReason` because it is a presentation ordering, not an engine fact.
 
 Interface: `export type AlertTier = "critical" | "important" | "info"`; `export type AlertCategoryId`
-— a union of the seventeen ids; `export const ALERT_CATEGORIES: Record<AlertCategoryId,
+— a union of the sixteen ids; `export const ALERT_CATEGORIES: Record<AlertCategoryId,
 AlertCategoryDef>` where `AlertCategoryDef` carries `{ tier: AlertTier; icon: LucideIcon; faulted:
 boolean; label: string; conditionLine: string; destination: AlertDestination; defaultOn: boolean;
 hideable: boolean; order: number }`; and `export type AlertDestination = { kind: "system"; tab: "" |
@@ -1239,8 +1351,8 @@ Interface: `getAlertData(): AlertData` where `AlertData = { categories: AlertCat
 `AlertCategory = { id: AlertCategoryId; count: number; denominator: number; instances: AlertInstance[] }`,
 `AlertInstance = { systemId: string | null; name: string; measure: string; sortKey: number }`. This
 task covers the categories reading only persisted system state: Famine, Deprived worlds, Strike,
-Unrest rising, Overcrowded, No housing headroom, Colony dying — all scoped to the player faction's
-developed systems, which is also `denominator`.
+Unrest rising, Overcrowded, No housing headroom — all scoped to the player faction's developed systems,
+which is also `denominator`.
 
 Proves:
 - A never-assessed system appears in **no** category rather than with a zero reading — `provision`,
@@ -1263,8 +1375,8 @@ categories, and `world.player.automation` (`lib/world/types.ts:45`) for their ga
 
 Interface: extends `getAlertData` with the remaining ten categories — Survival stock falling, Demand
 unservable, Build blocked, Industry idle, Maintenance unfunded, the two `info` opportunity categories
-(Build opportunity, Colony opportunity) and the three event categories. Together with Task 8's seven
-that is all seventeen. Maintenance unfunded returns exactly one instance with `systemId: null`; the
+(Build opportunity, Colony opportunity) and the three event categories. Together with Task 8's six
+that is all sixteen. Maintenance unfunded returns exactly one instance with `systemId: null`; the
 event categories return one instance per **event**, `systemId` nullable.
 
 Proves:
@@ -1421,9 +1533,11 @@ signals being inert, so drift is a write that leaked into a decision path. Gate 
 Stages B-D touch no tick code: the alert bar is a read surface and moves no sim metric by
 construction, which is the property to demonstrate rather than a number to improve.
 
-**Two readings the gate produces, not assertions this plan makes:** Survival stock falling's
-cycles-to-empty threshold, and the Colony-dying-vs-Famine overlap. Both cohorted by developed systems,
-both horizons.
+**Two readings the gate produced, not assertions this plan made:** Survival stock falling's
+cycles-to-empty threshold — settled at `< 3`, authored from remedy time — and the
+Colony-dying-vs-Famine overlap, whose falsifier fired and was withdrawn as invalid; Colony dying is
+deleted for the structural reason in the tier list, not for this number. Both cohorted by developed
+systems, both horizons; see `## Evidence`.
 
 **Build gate:** `npx next build --webpack`. **Unit:** `npx vitest run`. **Mutation:** the scoped
 `npm run mutation -- --mutate "<changed lib files>"` sweep is the periodic overnight batch, not an
