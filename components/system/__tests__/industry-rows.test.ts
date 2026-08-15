@@ -94,6 +94,14 @@ describe("depositRows", () => {
     expect(rows[0].staffed).toBe(2);
     expect(rows[0].health).toBe("contracting");
   });
+
+  it("an idle extractor still reads 'contracting', never 'idle' — its idleReason is a decay-visible one ('labour'), and a tier-0 extractor can never carry 'inputs'", () => {
+    // 0.9/2.0 → floor(1.1) = 1 whole idle level, same shape as the "reads idle" fixtures at the
+    // engine layer, but with the extractor's own idleReason ("labour") threaded through — proves the
+    // wiring only flips to "idle" on "inputs", which this row type structurally never has.
+    const rows = depositRows([deposit("ore", 5)], [extractor("ore", 2, 0.9, 1, undefined, "labour")], 0, T);
+    expect(rows[0].health).toBe("contracting");
+  });
 });
 
 /**

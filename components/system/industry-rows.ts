@@ -2,9 +2,9 @@
  * Pure view-model for the Industry tab's tables — per-resource deposit rows and the
  * general-land partition. No DOM, no React. Row health is grounded in the decay engine
  * (`buildingHealth`). The only health this file computes is a deposit row's, and an extractor has no
- * recipe gate, so those indicators still match what actually decays exactly; a producer idle only for
- * want of inputs is the one row that can read contracting without decay agreeing (see
- * `buildingHealth`).
+ * recipe gate — `buildIndustryReadout` never names its idle reason "inputs" for a tier-0 building —
+ * so a deposit row's health can never read "idle"; every indicator here still matches what actually
+ * decays exactly (see `buildingHealth`).
  */
 import type { ResourceType, QualityBandId } from "@/lib/types/game";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
@@ -12,8 +12,9 @@ import { buildingHealth } from "@/lib/engine/industry";
 import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IndustryHealth, IdleReason } from "@/lib/engine/industry";
 import { buildProblems, type ProblemItem } from "@/components/system/needs-view";
 
-/** Severity ordering for the worst-of-contributors aggregation (collapsing is worst). */
-const SEVERITY: Record<IndustryHealth, number> = { stable: 0, contracting: 1, collapsing: 2 };
+/** Severity ordering for the worst-of-contributors aggregation (collapsing is worst, idle sits
+ *  between stable and contracting — real idleness, but not a state decay will act on). */
+const SEVERITY: Record<IndustryHealth, number> = { stable: 0, idle: 1, contracting: 2, collapsing: 3 };
 
 /**
  * The Staffed-column figure for one building entry — the single definition shared by the deposit
@@ -59,7 +60,7 @@ export interface DepositTypeRow {
    * (see below) — there is nothing to explain for a building that doesn't exist. Tier-0 extractors
    * carry no skilled labour and no recipe, so this only ever names "labour" (unskilled short) or
    * "selling" (glut) — never skill1/skill2, and never "inputs" (`inputGate` is 1 with no recipe,
-   * `industry.ts:787`).
+   * `industry.ts:787`) — so `health` below can never read "idle" for an extractor either.
    */
   staffedFraction: number;
   idleReason?: IdleReason;
@@ -103,7 +104,8 @@ export interface DepositRow {
  *
  * `staffed` is `staffedLevels` (pure labour), not the staffed-and-selling `used` — a glutting
  * extractor still reads its full labour here; `used` remains the input to `buildingHealth` so the
- * row's health indicator never disagrees with what actually decays.
+ * row's health indicator never disagrees with what actually decays (and, since an extractor's
+ * `idleReason` is never "inputs", `buildingHealth` never hands this row back "idle" either).
  */
 export function depositRows(
   deposits: SystemDepositSummary[],
@@ -120,7 +122,7 @@ export function depositRows(
     const def = BUILDING_TYPES[b.buildingType];
     const resource = def?.resource;
     if (!resource) continue;
-    const h = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: unrestThreshold });
+    const h = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: unrestThreshold, idleReason: b.idleReason });
     const staffed = staffedLevels(b);
     const acc: DepositResourceAgg = byResource.get(resource) ?? { built: 0, staffed: 0, output: 0, health: "stable" };
     acc.built += b.count;

@@ -578,16 +578,25 @@ describe("buildIndustryReadout — skill idle reason split", () => {
 describe("industryHealth", () => {
   const T = 0.75; // unrestDecayThreshold
   it("is 'collapsing' when unrest is above the decay threshold (teardown)", () => {
-    expect(industryHealth({ unrest: 0.8, idleLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("collapsing");
+    expect(industryHealth({ unrest: 0.8, idleLevels: 0, idleOnlyLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("collapsing");
   });
-  it("is 'contracting' when at least one whole level is idle and unrest is calm", () => {
-    expect(industryHealth({ unrest: 0.1, idleLevels: 3, unrestDecayThreshold: T })).toBe<IndustryHealth>("contracting");
+  it("is 'contracting' when at least one whole level is idle for a decay-visible reason and unrest is calm", () => {
+    expect(industryHealth({ unrest: 0.1, idleLevels: 3, idleOnlyLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("contracting");
   });
   it("is 'stable' when no whole level is idle and unrest is calm", () => {
-    expect(industryHealth({ unrest: 0.1, idleLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
+    expect(industryHealth({ unrest: 0.1, idleLevels: 0, idleOnlyLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
   });
   it("does not fire at exactly the threshold (mirrors the engine's strictly-above teardown)", () => {
-    expect(industryHealth({ unrest: T, idleLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
+    expect(industryHealth({ unrest: T, idleLevels: 0, idleOnlyLevels: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
+  });
+  it("is 'idle' when a whole level is idle only for want of recipe inputs and no decay-visible idle level exists", () => {
+    expect(industryHealth({ unrest: 0.1, idleLevels: 0, idleOnlyLevels: 2, unrestDecayThreshold: T })).toBe<IndustryHealth>("idle");
+  });
+  it("orders 'idle' below 'contracting': any decay-visible idle level wins even alongside input-only idle levels", () => {
+    expect(industryHealth({ unrest: 0.1, idleLevels: 1, idleOnlyLevels: 5, unrestDecayThreshold: T })).toBe<IndustryHealth>("contracting");
+  });
+  it("orders 'collapsing' above both: unrest teardown wins even with input-only idle levels present", () => {
+    expect(industryHealth({ unrest: 0.8, idleLevels: 0, idleOnlyLevels: 5, unrestDecayThreshold: T })).toBe<IndustryHealth>("collapsing");
   });
 });
 
@@ -595,22 +604,67 @@ describe("buildingHealth (per-building)", () => {
   const T = 0.75; // unrestDecayThreshold
 
   it("is 'collapsing' when unrest is above the decay threshold (teardown, even in use)", () => {
-    expect(buildingHealth({ used: 10, built: 10, unrest: 0.8, unrestDecayThreshold: T })).toBe<IndustryHealth>("collapsing");
+    expect(buildingHealth({ used: 10, built: 10, unrest: 0.8, unrestDecayThreshold: T, idleReason: undefined })).toBe<IndustryHealth>("collapsing");
   });
-  it("is 'contracting' when a whole level is idle — 0.9/2.0 → floor(1.1) = 1 idle level", () => {
-    expect(buildingHealth({ used: 0.9, built: 2, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("contracting");
+  it("is 'collapsing' even when the whole idle level is input-starved — unrest teardown wins over everything", () => {
+    expect(buildingHealth({ used: 0.9, built: 2, unrest: 0.8, unrestDecayThreshold: T, idleReason: "inputs" })).toBe<IndustryHealth>("collapsing");
+  });
+  it("is 'contracting' when a whole level is idle for a decay-visible reason — 0.9/2.0 → floor(1.1) = 1 idle level, reason 'labour'", () => {
+    expect(buildingHealth({ used: 0.9, built: 2, unrest: 0, unrestDecayThreshold: T, idleReason: "labour" })).toBe<IndustryHealth>("contracting");
+  });
+  it("is 'idle', not 'contracting', when the same whole idle level is bound only by recipe inputs", () => {
+    expect(buildingHealth({ used: 0.9, built: 2, unrest: 0, unrestDecayThreshold: T, idleReason: "inputs" })).toBe<IndustryHealth>("idle");
   });
   it("is 'stable' when understaffed by less than a whole unit — 1.5/2.0", () => {
-    expect(buildingHealth({ used: 1.5, built: 2, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
+    expect(buildingHealth({ used: 1.5, built: 2, unrest: 0, unrestDecayThreshold: T, idleReason: "inputs" })).toBe<IndustryHealth>("stable");
   });
   it("is 'stable' at 1.9/2.0 — the engine never sheds a sub-unit idle gap", () => {
-    expect(buildingHealth({ used: 1.9, built: 2, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
+    expect(buildingHealth({ used: 1.9, built: 2, unrest: 0, unrestDecayThreshold: T, idleReason: undefined })).toBe<IndustryHealth>("stable");
   });
   it("does not treat housing overshoot (used > built) as decay — it's a population sink, not infra", () => {
-    expect(buildingHealth({ used: 12, built: 10, unrest: 0, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
+    expect(buildingHealth({ used: 12, built: 10, unrest: 0, unrestDecayThreshold: T, idleReason: undefined })).toBe<IndustryHealth>("stable");
   });
   it("is 'stable' when nothing is built (no base to decay)", () => {
-    expect(buildingHealth({ used: 0, built: 0, unrest: 1, unrestDecayThreshold: T })).toBe<IndustryHealth>("stable");
+    expect(buildingHealth({ used: 0, built: 0, unrest: 1, unrestDecayThreshold: T, idleReason: undefined })).toBe<IndustryHealth>("stable");
+  });
+});
+
+describe("buildingHealth — reads 'idle' off a real buildIndustryReadout entry, never off an extractor", () => {
+  const MIN = 5;
+  const AMPLE = 1_000_000;
+  const honestUseRateOf = (): number => 2.5;
+  const one = (): number => 1;
+  const demandRateOf = (): number => 2.5;
+  const T = 0.75;
+
+  it("a fully staffed, freely selling producer idle only for want of recipe inputs reads 'idle'", () => {
+    // Same fixture as "reads idle with reason 'inputs'" above: fully staffed, freely selling, ore
+    // stock 0 — the recipe gate is the only thing binding.
+    const buildings = { metals: 4, vocational_school: 1 };
+    const pop = labourDemand(buildings);
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.idleReason).toBe("inputs");
+    expect(buildingHealth({ used: metals.used, built: metals.count, unrest: 0, unrestDecayThreshold: T, idleReason: metals.idleReason })).toBe<IndustryHealth>("idle");
+  });
+
+  it("a labour-bound producer still reads 'contracting' — decay can see a labour shortfall", () => {
+    const buildings = { metals: 4, vocational_school: 1 };
+    const pop = labourDemand(buildings) * 0.5;
+    const readout = buildIndustryReadout(buildings, pop, { metals: MIN, ore: AMPLE }, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.idleReason).toBe("labour");
+    expect(buildingHealth({ used: metals.used, built: metals.count, unrest: 0, unrestDecayThreshold: T, idleReason: metals.idleReason })).toBe<IndustryHealth>("contracting");
+  });
+
+  it("a tier-0 extractor never reads 'idle' — it has no recipe to be input-starved on", () => {
+    expect(GOOD_RECIPES["ore"]).toBeUndefined();
+    const buildings = { ore: 4 };
+    const pop = labourDemand(buildings) * 0.5;
+    const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
+    const ore = readout.buildings.find((b) => b.buildingType === "ore")!;
+    expect(ore.idleReason).toBe("labour");
+    expect(buildingHealth({ used: ore.used, built: ore.count, unrest: 0, unrestDecayThreshold: T, idleReason: ore.idleReason })).toBe<IndustryHealth>("contracting");
   });
 });
 

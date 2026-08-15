@@ -595,10 +595,14 @@ economy processor and a new field on `SystemDecayInput`.
 **It is not wired, by decision.** Decay eating a factory whose inputs merely have not arrived
 destroys the capacity the alert exists to rescue, and it is the one idle cause the player can
 straightforwardly fix. So the missing-inputs row clears by fix alone; the staffing and licence rows
-keep clearing by decay exactly as they do today. One consequence to carry forward: the Industry
-panel colours an input-starved building **contracting** while decay leaves it standing — the health
-colour is derived from the readout's `used`. That divergence is recorded in `buildingHealth`'s own
-docstring and is not resolved here.
+keep clearing by decay exactly as they do today.
+
+That leaves the Industry panel needing a word for a building that is genuinely idle and will never
+shed a level, so `IndustryHealth` carries a fourth state, **`idle`**, between `stable` and
+`contracting`. `contracting` means the decay engine is about to remove a level and is reserved for
+the causes it can actually see; `idle` names the input-starved case, which it cannot. Both the
+per-building read and the system-level roll-up make the split, since the roll-up counted idle levels
+off the same gated figure.
 
 All of these are **read-only from the alert bar's point of view**: the bar reads them, and nothing in
 the tick reads them back, so nothing about them changes what the tick decides. That is the property to

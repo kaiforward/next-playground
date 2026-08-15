@@ -134,9 +134,11 @@ undeveloped system).
   Specialisation · Production · Support** with exception-only problem sub-rows (input throttles and
   pop shortages; the full per-input list lives in the building tooltip), plus the skill-tiered Labour
   card and a pop-pressure chip on the health strip naming the top unmet needs. Health reads
-  **stable / contracting / collapsing**, grounded on the infrastructure-decay engine's
-  exact triggers (contracting = a whole idle level `floor(built − used) ≥ 1`; collapsing = the unrest
-  teardown), so a healthy system reads stable. On the player's own systems, in-flight builds render as
+  **stable / idle / contracting / collapsing**, grounded on the infrastructure-decay engine's
+  exact triggers (contracting = a whole idle level `floor(built − used) ≥ 1` for a reason decay can
+  act on; idle = the same whole-level gap, but for want of a recipe input, a cause decay can't see and
+  so will never shed on its own; collapsing = the unrest teardown), so a healthy system reads stable.
+  On the player's own systems, in-flight builds render as
   ghost rows in place with a quick-add `+` per row and a **New industry** dialog; see
   [player-seat.md](../gameplay/player-seat.md).
 - **Astrography / Logistics / Market** — the physical substrate, the imports/exports + production/

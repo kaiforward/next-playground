@@ -590,17 +590,25 @@ export interface SystemIndustryReadout {
 }
 
 /**
- * Coarse industry health, grounded in the infrastructure-decay engine's *exact* triggers so the
- * label never contradicts what actually decays. The engine removes a whole level only when unrest
- * tears it down, or a WHOLE level sits idle (floor(built − used) ≥ 1) past the sustained-idle buffer.
+ * Coarse industry health, grounded in the infrastructure-decay engine's *exact* triggers so no state
+ * name claims something the engine doesn't do. Three states mirror what the engine removes: it tears
+ * down a level under unrest, or when a WHOLE level sits idle (floor(built − used) ≥ 1) for a reason it
+ * can see, past the sustained-idle buffer. The fourth, `idle`, names a WHOLE level idle for a reason
+ * the engine cannot see (a recipe input never arrived) — real idleness, but nothing the engine will
+ * ever act on, so it must never read as `contracting`. Severity: stable < idle < contracting <
+ * collapsing.
  */
-export type IndustryHealth = "stable" | "contracting" | "collapsing";
+export type IndustryHealth = "stable" | "idle" | "contracting" | "collapsing";
 
 export interface IndustryHealthInput {
   /** Stored unrest integral 0…1. */
   unrest: number;
-  /** Total whole idle levels across the built base — Σ max(0, floor(built − used)). */
+  /** Whole idle levels whose binding cause the decay engine can see (labour, a skill ceiling, a
+   *  stalled sell-through, housing occupancy) — Σ max(0, floor(built − used)) restricted to those. */
   idleLevels: number;
+  /** Whole idle levels whose binding cause is recipe-input starvation alone — decay cannot see these
+   *  (its context carries no market stock), so they will never shed on their own. */
+  idleOnlyLevels: number;
   /** θ_decay — unrest strictly above this tears a level down immediately (the discrete collapse). */
   unrestDecayThreshold: number;
 }
@@ -608,12 +616,16 @@ export interface IndustryHealthInput {
 /**
  * System-level health mirroring what the decay engine removes:
  *  - collapsing: unrest above θ_decay → whole levels tear down immediately, even in use.
- *  - contracting: ≥1 whole idle level somewhere → the marginal idle level(s) shed after the buffer.
+ *  - contracting: ≥1 whole idle level with a decay-visible cause → the marginal idle level(s) shed
+ *    after the buffer.
+ *  - idle: no decay-visible idle level, but ≥1 whole level idle only for want of recipe inputs — real
+ *    idleness the engine will never touch.
  *  - stable: otherwise — capacity understaffed by less than a whole unit is never decayed.
  */
 export function industryHealth(input: IndustryHealthInput): IndustryHealth {
   if (input.unrest > input.unrestDecayThreshold) return "collapsing";
   if (input.idleLevels >= 1) return "contracting";
+  if (input.idleOnlyLevels >= 1) return "idle";
   return "stable";
 }
 
@@ -627,25 +639,34 @@ export interface BuildingHealthInput {
   unrest: number;
   /** θ_decay — unrest strictly above this tears a level down immediately. */
   unrestDecayThreshold: number;
+  /** Binding idle-cause name from the readout (`SystemIndustryReadout.buildings[].idleReason`).
+   *  Required rather than optional so every call site states its answer explicitly: only "inputs"
+   *  changes the read; every other reason, and `undefined` (nothing idle, or a building type the
+   *  readout never names a reason for), falls through to the existing decay-grounded read. */
+  idleReason: IdleReason | undefined;
 }
 
 /**
- * Per-building health on the same decay triggers: collapsing under unrest teardown, contracting when
- * a WHOLE level is idle (floor(built − used) ≥ 1 — the marginal idle level the engine sheds), else
- * stable. Fractional understaffing below one unit (e.g. 1.9/2.0, even 1.1/2.0) is stable — the engine
- * never touches it; housing overshoot yields a negative gap and is likewise not a decay trigger.
+ * Per-building health on the decay triggers, PLUS a fourth state for the one idle cause decay cannot
+ * see: collapsing under unrest teardown; idle when a WHOLE level is idle (floor(built − used) ≥ 1)
+ * and `idleReason` is "inputs" — a recipe input never arrived, which `computeSystemDecay` cannot
+ * detect (its context carries no market stock) and so will never shed; contracting when a WHOLE level
+ * is idle for any OTHER reason (labour, a skill ceiling, a stalled sell-through, housing occupancy) —
+ * the marginal idle level the engine actually sheds after the buffer; else stable. Fractional
+ * understaffing below one unit (e.g. 1.9/2.0, even 1.1/2.0) is stable — the engine never touches it;
+ * housing overshoot yields a negative gap and is likewise not a decay trigger.
  *
- * The triggers are the same, but the `used` fed in is not always the one decay computes. An
- * input-gated producer's readout `used` folds its recipe gate, which `computeSystemDecay` cannot see
- * — its context carries no market stock. So a factory idle ONLY for want of inputs reads
- * "contracting" here while decay leaves it alone. Every other row, and every other idle cause, still
- * agrees with decay exactly.
+ * The `used` fed in still folds the input gate for producers (`buildIndustryReadout`'s local fold —
+ * decay's own `used` does not), so the idle-level COUNT here can still differ from what
+ * `computeSystemDecay` would compute for that building. What no longer differs is the WORD: an
+ * input-starved factory now reads "idle", never "contracting" — the name that means "decay is about
+ * to shed this" is reserved for a reason decay can actually act on.
  */
 export function buildingHealth(input: BuildingHealthInput): IndustryHealth {
-  const { used, built, unrest, unrestDecayThreshold } = input;
+  const { used, built, unrest, unrestDecayThreshold, idleReason } = input;
   if (built <= 0) return "stable";
   if (unrest > unrestDecayThreshold) return "collapsing";
-  if (Math.floor(built - used) >= 1) return "contracting"; // ≥1 whole idle level (mirrors idleLevels())
+  if (Math.floor(built - used) >= 1) return idleReason === "inputs" ? "idle" : "contracting"; // ≥1 whole idle level (mirrors idleLevels())
   return "stable";
 }
 
