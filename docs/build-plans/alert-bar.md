@@ -110,7 +110,7 @@ the subject — a colony is abandoned, decay eats the idle capacity, population 
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close — structural, as distinct from the temporary `logisticsFundingBound`. Sorts by unserved demand rate. | fix | New |
 | important | Overcrowded | `BedDouble` | `population > popCap` — there are people with no housing. Sorts by cap utilisation. The threshold is definitional, not tuned: at 1.00 everyone is housed and the next person is not. | fix | Derivable |
 | important | No housing headroom | `BedDouble` + slash | Over `popCap` **and** no habitable room for another housing level (`habitableHousingHeadroom < 1`, evaluated against queue-adjusted buildings). The world needs housing and physically cannot build it. Sorts by population over cap. | world-resolves (population falls) | Derivable |
-| important | Build blocked | `HardHat` + slash | The **production** planner wanted to build and could not — no capacity, no reachable input supplier, no spare labour, no affordable whole level. Sorts by the ROI of what was dropped. Housing refusals belong to *No housing headroom*, not here: housing carries no ROI and would have nothing to sort by. **Defaults off**: measured at 50.4% of developed systems per planner run, not rare. | fix | New |
+| important | Build blocked | `HardHat` + slash | The **production** planner wanted to build and could not — no capacity, no reachable input supplier, no spare labour, no affordable whole level. Sorts by **authored reason severity**, worst first — see below. Housing refusals belong to *No housing headroom*, not here: housing carries no ROI and would have nothing to sort by. **Defaults off**: measured at 50.4% of developed systems per planner run, not rare. | fix | New |
 | important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. The missing-inputs case needs a sixth `IdleReason` — see below. | no staff / no licence: fix or world-resolves (decay removes it) · missing inputs: **fix only** | Ships today + new |
 | important | **Disruption** | `TriangleAlert` — also a type icon | Events that cost but do not threaten — shortage, storm, embargo, glut, a dissolved alliance, and the three below. Sorts by authored impact rank. | expiry | Needs banding |
 | info | Build opportunity | `HardHat` | Ranked planner proposals, **only while build automation is off**. Sorts by ROI. | fix | Ships today |
@@ -532,6 +532,34 @@ reason at all. Add a sixth `IdleReason` derived from `inputGate < 1` and thread 
 building actually reads idle. It is the most actionable of the three idle causes — a supply-chain
 failure the player can fix by building the supplier or the route — where "no staff" often cannot be
 fixed at all.
+
+**Build blocked sorts by authored reason severity, not by the dropped ROI.** The first cut said "sorts
+by the ROI of what was dropped", and that measure has no producer. Four of the planner's nine drop
+sites fire *before* anything is scored, so no opportunity object exists and there is nothing to
+divide: `no-input-supplier` is **always** 0, a saturated `no-capacity` is always 0, and the
+pre-ranking branch of `no-consumer` is too — while `no-whole-level` and `no-labour`, the two
+near-miss reasons, always carry a real figure. Sorting on it puts the least-blocked systems first.
+And the figure itself is annotated **"Ordering only"** where it is defined: it sums served quantity
+over route cost across goods whose `OUTPUT_PER_UNIT` differs by orders of magnitude
+(`lib/constants/industry.ts:208`), so it was built to rank candidates inside one planner run and was
+never a value comparable between systems.
+
+So the five reasons are ranked at design time, exactly as the event bands are, in
+`BUILD_DROP_SEVERITY: Record<BuildDropReason, number>` beside the category registry. Worst first
+means most-blocked first — a system that can build nothing at all outranks one that lost a marginal
+factory to a better-ranked rival:
+
+| Rank | Reason | Why here |
+|---|---|---|
+| 1 | `no-capacity` | Nothing can be built at all; the site is saturated. |
+| 2 | `no-input-supplier` | The chain is broken upstream — actionable, and it blocks every level of the good. |
+| 3 | `no-consumer` | Nothing reachable wants it; a routing or territory problem. |
+| 4 | `no-labour` | The site is viable and the population is not there yet. |
+| 5 | `no-whole-level` | The near miss — capacity exists but not a whole level of it. |
+
+`droppedRoi` is still emitted and still shown as the row's measure, but it is a **tiebreak within one
+reason only**, never the primary key, because it is not comparable across goods. Where it is 0 for
+every row in a reason, the order inside that reason is the stable authored one.
 
 **That fold is local to the readout, and deliberately does not reach decay.** There are two `used`
 values: `buildIndustryReadout`'s, which the panel and the alert service read, and
@@ -1179,6 +1207,10 @@ tier list loses a row — `populationChange` survives regardless, since the sort
 
 Files: `lib/constants/alerts.ts` (new), `lib/types/alerts.ts` (new),
 `lib/constants/__tests__/alerts.test.ts` (new)
+
+Also carries `export const BUILD_DROP_SEVERITY: Record<BuildDropReason, number>` — the authored
+worst-first rank for Build blocked's within-category sort, per the tier-list section above. It lives
+here rather than beside `BuildDropReason` because it is a presentation ordering, not an engine fact.
 
 Interface: `export type AlertTier = "critical" | "important" | "info"`; `export type AlertCategoryId`
 — a union of the seventeen ids; `export const ALERT_CATEGORIES: Record<AlertCategoryId,
