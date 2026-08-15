@@ -1247,6 +1247,152 @@ describe("planFactionProposals", () => {
   });
 });
 
+describe("planFactionProposals — Build blocked (blockedBuilds)", () => {
+  it("Proves 1 — a fully saturated system reports no-capacity, not absent (the pre-ranking capacity check, droppedRoi 0)", () => {
+    // A: a genuine structural food deficit (a candidate opportunity is possible in principle).
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    // B: every deposit slot for food's resource (arable) already built out — capUnits <= 0 for food
+    // at the VERY FIRST check, before a BuildOpportunity is ever constructed for this site×good.
+    const saturated: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, control: "developed",
+      buildings: { food: 10 },
+      slotCap: makeResourceVector({ arable: 10 }), generalSpace: 50, habitableSpace: 0,
+      goods: [],
+    };
+    const plan = planFactionProposals([deficit, saturated], () => 1, [], DEV_REFS);
+    const blocked = plan.blockedBuilds.find((b) => b.systemId === "B");
+    expect(blocked).toEqual({ systemId: "B", reason: "no-capacity", droppedRoi: 0 });
+  });
+
+  it("Proves 2 — a system whose only obstacle is an absent input supplier reports no-input-supplier, distinctly from no-capacity", () => {
+    // Mirrors "gates a tier-1+ build until its inputs are locally produced" (planFactionBuilds,
+    // above) — B has real space + labour for the tier-1+ metals factory, but no local ore
+    // production and no reachable ore surplus, so :738 fires (capacity is real — never :737).
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const builderNoInput: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 50, habitableSpace: 50, goods: [],
+    };
+    const plan = planFactionProposals([deficit, builderNoInput], () => 1, [], DEV_REFS);
+    const blocked = plan.blockedBuilds.find((b) => b.systemId === "B");
+    expect(blocked).toEqual({ systemId: "B", reason: "no-input-supplier", droppedRoi: 0 });
+  });
+
+  it("Proves 3 — a system whose opportunity landed this run reports absent, so the row clears without waiting for an abandonment", () => {
+    // Reuses "emits an industry proposal with value>0" — B's food build actually lands.
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const builder: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, control: "developed", buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    };
+    const plan = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS);
+    // Sanity: the food build actually landed at B (else this test would pass vacuously).
+    expect(plan.proposals.some((p) => p.systemId === "B" && p.items.some((i) => i.buildingType === "food"))).toBe(true);
+    expect(plan.blockedBuilds.some((b) => b.systemId === "B")).toBe(false);
+  });
+
+  it("reports no-whole-level when capacity is real but too small for even one whole level (the post-ranking whole-level check, droppedRoi > 0)", () => {
+    const cost = effectiveSpaceCost("metals");
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "metals", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const builder: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, control: "developed",
+      buildings: { ore: 5 }, // local ore satisfies the input gate; tier-0 so it costs no general space
+      slotCap: emptyResourceVector(), generalSpace: cost * 0.5, habitableSpace: 0, goods: [],
+    };
+    const plan = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS);
+    const blocked = plan.blockedBuilds.find((b) => b.systemId === "B");
+    expect(blocked?.reason).toBe("no-whole-level");
+    expect(blocked?.droppedRoi).toBeGreaterThan(0);
+  });
+
+  it("reports no-labour when the space/labour fit search cannot staff even one level (the post-ranking binary search, droppedRoi > 0)", () => {
+    // Mirrors "builds no industry when the builder has no spare labour" — pop is fully absorbed
+    // by the existing extractors, so the binary search finds no level 1..maxLevels it can staff.
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 1, demand: 50, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const builder: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 4 * oreLabour, control: "developed",
+      buildings: { ore: 4 },
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    };
+    const plan = planFactionProposals([deficit, builder], () => 1, [], DEV_REFS);
+    const blocked = plan.blockedBuilds.find((b) => b.systemId === "B");
+    expect(blocked?.reason).toBe("no-labour");
+    expect(blocked?.droppedRoi).toBeGreaterThan(0);
+  });
+
+  it("reports no-consumer when a higher-ranked opportunity at another site already claimed the whole deficit (post-ranking, droppedRoi > 0)", () => {
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    // Both B and C can each fully serve A's (small) deficit alone; B is nearer (cost 1) and so
+    // outscores C (cost 2) — B's opportunity is processed first and claims the whole shortfall.
+    const near: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 10_000, control: "developed", buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    };
+    const far: BuildSystemState = {
+      systemId: "C", factionId: "f1", population: 10_000, control: "developed", buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    };
+    const routeCost: RouteCost = (from, to) => {
+      if (from === to) return 0;
+      if ((from === "B" && to === "A") || (from === "A" && to === "B")) return 1;
+      if ((from === "C" && to === "A") || (from === "A" && to === "C")) return 2;
+      return null;
+    };
+    const plan = planFactionProposals([deficit, near, far], routeCost, [], DEV_REFS);
+    expect(plan.proposals.some((p) => p.systemId === "B" && p.items.some((i) => i.buildingType === "ore"))).toBe(true);
+    const blocked = plan.blockedBuilds.find((b) => b.systemId === "C");
+    expect(blocked?.reason).toBe("no-consumer");
+    expect(blocked?.droppedRoi).toBeGreaterThan(0);
+  });
+
+  it("Proves 6 (regression) — the planner's own decisions are unchanged: an unrelated existing scenario still lands exactly the same proposals", () => {
+    // Re-runs one of the file's own pre-existing assertions verbatim. If instrumenting the nine
+    // drop sites had touched a real conditional instead of only adding side-channel recording,
+    // this is the kind of test that would go red.
+    //
+    // On its own it exercises one path (electronics into a capable site). The real guarantee that
+    // the planner's decisions did not move is every other test in this file, unmodified and still
+    // passing — this one is a named smoke check standing in front of them, not a substitute.
+    const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS).proposals;
+    const bundle = proposals.find((p) => p.items.some((i) => i.buildingType === "electronics"));
+    expect(bundle).toBeDefined();
+    const types = bundle!.items.map((i) => i.buildingType);
+    expect(types).toContain(VOCATIONAL_SCHOOL_TYPE);
+    expect(types).toContain(RESEARCH_INSTITUTE_TYPE);
+    expect(types.indexOf(VOCATIONAL_SCHOOL_TYPE)).toBeLessThan(types.indexOf("electronics"));
+  });
+});
+
 function policySystem(
   good: BuildGoodState,
   partial: Partial<BuildSystemState> = {},

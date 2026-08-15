@@ -12,6 +12,7 @@ import type {
 } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
+import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 /** One system's build-relevant state: markets + buildings + body-derived capacity. */
 export interface SystemBuildRow {
@@ -57,6 +58,15 @@ export interface ProposalPersistenceUpdate {
 
 /** Processor-facing name for a founding-manifest line — one shape across the world boundary. */
 export type FoundingStockLine = WorldFoundingStockLine;
+
+/** One system's best-ranked dropped production opportunity this run — the world-boundary shape of
+ *  the engine's `BuildBlockReport` (`lib/engine/directed-build.ts`), which also owns `BuildDropReason`
+ *  and the full reasoning behind `droppedRoi`. */
+export interface BuildBlockedUpdate {
+  systemId: string;
+  reason: BuildDropReason;
+  droppedRoi: number;
+}
 
 /**
  * One per-cycle materials debit: a quantity of one good drawn from a founding source's market row
@@ -105,6 +115,11 @@ export interface DirectedBuildWorld {
   applyConstructionUpdates(factionKeys: Array<string | null>, projects: WorldConstructionProject[]): Promise<void>;
   /** Persist the saturating construction proposal-pressure counter per assessed market row. */
   applyProposalPersistenceUpdates(updates: ProposalPersistenceUpdate[]): Promise<void>;
+  /** Persist this run's best-ranked dropped production opportunity per system (Build blocked).
+   *  `visitedSystemIds` is every system belonging to a due faction this run, whether or not it
+   *  appears in `updates` — a visited system NOT in `updates` is cleared (nothing was dropped: it
+   *  either landed or was never wanted), and a system this run never visited is left untouched. */
+  applyBuildBlockedUpdates(visitedSystemIds: string[], updates: BuildBlockedUpdate[]): Promise<void>;
   /** Ownership writes from the claim step (unclaimed → controlled). */
   applyClaims(claims: SystemClaim[]): Promise<void>;
   /** Ownership writes from the develop step (controlled → developed + colony seed transfer). */

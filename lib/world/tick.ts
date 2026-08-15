@@ -111,6 +111,7 @@ import type {
   SystemClaim,
   SystemDevelopment,
   FoundingStagingDraw,
+  BuildBlockedUpdate,
 } from "@/lib/tick/world/directed-build-world";
 
 import type {
@@ -219,6 +220,10 @@ export function toTickSystems(world: World): TickSystem[] {
       // writes it directly after the migration stage (see the field's own docstring,
       // lib/world/types.ts), so this row purely carries forward whatever the previous World held.
       populationChange: s.populationChange,
+      // Same pass-through-uncoerced treatment: nothing in this join computes it, the directed-build
+      // processor's world adapter writes it directly (see the field's own docstring,
+      // lib/world/types.ts), so this row purely carries forward whatever the previous World held.
+      buildBlocked: s.buildBlocked,
       yields: resourceVectorFromColumns(
         {
           yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -281,6 +286,12 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     // `undefined`.
     if (tickSystem.populationChange === undefined) delete merged.populationChange;
     else merged.populationChange = tickSystem.populationChange;
+    // Same delete/assign treatment, same reason: written directly onto `tickSystem` by
+    // `applyBuildBlockedUpdates` below (the directed-build processor's world adapter), never by a
+    // processor via the generic row-mutation path — a true absence (never assessed this run, or
+    // cleared by abandonment/redevelopment) must not become a present key holding `undefined`.
+    if (tickSystem.buildBlocked === undefined) delete merged.buildBlocked;
+    else merged.buildBlocked = tickSystem.buildBlocked;
     return merged;
   });
 }
@@ -468,6 +479,40 @@ export function applyBuildingIncreases(systems: TickSystem[], updates: BuildBuil
   });
 }
 
+/**
+ * Fold directed-build's Build blocked report back into the system rows. `visitedSystemIds` is every
+ * system belonging to a due faction this run (the planner's own "visited" set, captured by the
+ * processor regardless of the build-automation switch — see the processor for why): a visited system
+ * NOT in `updates` is CLEARED, because nothing was dropped for it this run (it landed everything or
+ * wanted nothing), and a system this run never visited is left untouched, carrying forward whatever
+ * `buildBlocked` reading it already had. Delete/assign, not `buildBlocked: entry` in the object
+ * literal — see `mergeSystemsIntoWorld`'s own comment on the same pattern for why a present key
+ * holding `undefined` is not the same thing as a true absence.
+ */
+export function applyBuildBlockedUpdates(
+  systems: TickSystem[],
+  visitedSystemIds: string[],
+  updates: BuildBlockedUpdate[],
+): TickSystem[] {
+  if (visitedSystemIds.length === 0) return systems;
+  const visited = new Set(visitedSystemIds);
+  const bySystem = new Map(updates.map((u) => [u.systemId, u]));
+  return systems.map((s): TickSystem => {
+    if (!visited.has(s.id)) return s;
+    const update = bySystem.get(s.id);
+    if (!update) {
+      if (s.buildBlocked === undefined) return s;
+      const next = { ...s };
+      delete next.buildBlocked;
+      return next;
+    }
+    // An unreadable ROI reads as 0 rather than poisoning the world: `buildBlocked` is world state,
+    // and `JSON.stringify` turns a NaN into null.
+    const droppedRoi = Number.isFinite(update.droppedRoi) ? update.droppedRoi : 0;
+    return { ...s, buildBlocked: { reason: update.reason, droppedRoi } };
+  });
+}
+
 /** Count of resources this system has any deposit slot for — a claim/develop score input. */
 function countResourceDiversity(s: TickSystem): number {
   let n = 0;
@@ -549,6 +594,13 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
       // Same resettlement rule: a predecessor's realised population change is a reading from a
       // previous life and must not survive into this one.
       delete next.populationChange;
+      // Same resettlement rule: a predecessor's blocked-build reading belongs to the colony that
+      // just ended, not the one that just started. `applyBuildBlockedUpdates` below already runs
+      // (and already clears) BEFORE this function within the same tick — this system was still
+      // `controlled` when directed-build's own "visited" set was captured, so it can only ever have
+      // been cleared there, never freshly assigned — but the delete stays here too, matching every
+      // other field on this line, so a system surviving untouched to a LATER run is still covered.
+      delete next.buildBlocked;
     }
     return next;
   });
@@ -595,6 +647,12 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
     // see the write site below for how that's avoided; this clear is the defense that matters once
     // the system survives untouched to a LATER cycle instead.
     delete next.populationChange;
+    // Directed build's own visited-system clear (`applyBuildBlockedUpdates`, below) runs AFTER this
+    // function within the same tick and naturally excludes a system abandoned here — it flips to
+    // `unclaimed` above, so `isEconomicallyActive` drops it out of the planner's working set and it
+    // gets no fresh entry. This delete is the defense that matters once the system survives
+    // untouched (never reclaimed and redeveloped) to a LATER run instead.
+    delete next.buildBlocked;
     return next;
   });
 }
@@ -1452,6 +1510,10 @@ export async function runWorldTick(
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
       systems = applyClaims(systems, dbWorld.claims);
+      // Before applyDevelopments: a system founded this very run was still `controlled` when
+      // directed-build's own visited set was captured, so it is cleared here (nothing dropped for a
+      // system that was never economically active) rather than picking up a fresh reading.
+      systems = applyBuildBlockedUpdates(systems, dbWorld.buildBlockedVisitedSystemIds, dbWorld.buildBlockedUpdates);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
       // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —

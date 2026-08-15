@@ -104,6 +104,56 @@ export interface PlannedBuild {
 }
 
 /**
+ * Why the industry pass's own two-pass allocator dropped a production opportunity it wanted, at the
+ * site named in each comment below (`planFactionBundles`). Housing refusals (`plannedHousingUnits`)
+ * are a separate pass with a separate category (No housing headroom) and never produce one of these.
+ * - "no-capacity" — no buildable footprint/deposit slots left for the good, checked before ranking
+ *   (`:capUnits <= 0`, first loop) and again after (capacity another opportunity at the same site
+ *   already claimed, second loop).
+ * - "no-input-supplier" — a tier-1+ recipe input has no reachable surplus source.
+ * - "no-consumer" — no reachable system still wants this good: none is reachable at all, or every
+ *   reachable one's remaining shortfall was already claimed by a higher-ranked opportunity.
+ * - "no-whole-level" — capacity floors to fewer than one whole production level.
+ * - "no-labour" — the space/labour fit search found no level count (1..maxLevels) the site could
+ *   both house and staff. This is also where a gate's (academy/complex) OWN space requirement can
+ *   fail even though production alone would have fit — there is no separate "no-gate-space" reason,
+ *   so that case reads as "no-labour" too.
+ */
+export type BuildDropReason =
+  | "no-capacity"
+  | "no-input-supplier"
+  | "no-consumer"
+  | "no-labour"
+  | "no-whole-level";
+
+/**
+ * One system's best-ranked dropped production opportunity from a `planFactionBundles` run — the
+ * alert bar's Build blocked category. Absent (never constructed) for a system with nothing dropped:
+ * nothing was wanted this run, or everything landed.
+ *
+ * `droppedRoi` is the planner's own allocation-priority signal at the point of the drop, not the
+ * `value ÷ work` ROI a landed `BuildProposal` carries — that figure only exists once a bundle's
+ * items, and so its `work`, are fully decided, which a dropped candidate by definition never
+ * reaches. Two shapes:
+ * - A drop AFTER `opportunities.sort()` (capacity/consumer/whole-level/labour, once a candidate has
+ *   been scored and ranked against every other site×good) carries that candidate's own `score` —
+ *   the Σ(served ÷ route cost) figure the sort itself ranked by. It is a real, comparable priority
+ *   signal, just not the value/work ratio the word "ROI" means elsewhere in this file.
+ * - A drop BEFORE ranking — `capUnits <= 0` is the common case, firing before a `BuildOpportunity` is
+ *   even constructed for that site×good, so nothing was ever scored to report. There is no honest
+ *   number to put here: `droppedRoi` is `0`, the additive identity, not a claim that the missed
+ *   opportunity was worthless. A fully saturated system (blocked at every good, always this way) is
+ *   the case this matters for, and it is worth flagging plainly: sorting the category by `droppedRoi`
+ *   puts that system last within it, which is a real tension with "fully saturated" being one of the
+ *   worse things Build blocked can mean.
+ */
+export interface BuildBlockReport {
+  systemId: string;
+  reason: BuildDropReason;
+  droppedRoi: number;
+}
+
+/**
  * Build-side route cost over a bounded-hop distance map. A system reaches ITSELF at `selfCost`
  * (the cheapest positive route, so the planner's served ÷ cost scoring builds local self-supply
  * before export); any other system costs `hops × hopWeight`, or is unreachable (`null`) when it has
@@ -645,7 +695,7 @@ function planFactionBundles(
   routeCost: RouteCost,
   refs: DevelopmentRefs,
   structural: StructuralDeficit[],
-): PlannedBundle[] {
+): { bundles: PlannedBundle[]; blocked: BuildBlockReport[] } {
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
   // systems are skipped here, gating both the housing and industry passes in one place.
@@ -657,6 +707,23 @@ function planFactionBundles(
   }
 
   const bundles: PlannedBundle[] = [];
+
+  // Per-system best-ranked dropped opportunity this run (BuildBlockReport docstring above has the
+  // full reasoning). A ranked drop always wins over an unranked one for the same system — a scored
+  // candidate is strictly more informative than one that was never scored — and within one class the
+  // FIRST one recorded wins: for ranked drops that is the highest-scored, because `opportunities`
+  // (below) is iterated in descending-score order; for unranked drops there is no ranking to prefer
+  // among, so it is whichever the deterministic scan order reaches first.
+  const rankedBlockBySystem = new Map<string, BuildBlockReport>();
+  const unrankedBlockBySystem = new Map<string, BuildBlockReport>();
+  const recordUnrankedDrop = (systemId: string, reason: BuildDropReason): void => {
+    if (unrankedBlockBySystem.has(systemId)) return;
+    unrankedBlockBySystem.set(systemId, { systemId, reason, droppedRoi: 0 });
+  };
+  const recordRankedDrop = (systemId: string, reason: BuildDropReason, droppedRoi: number): void => {
+    if (rankedBlockBySystem.has(systemId)) return;
+    rankedBlockBySystem.set(systemId, { systemId, reason, droppedRoi });
+  };
 
   // ── Pass 1: housing relief (housing follows crowding). ──
   // Wherever a fed system's occupancy has outrun its housing, build the levels that bring it
@@ -704,7 +771,7 @@ function planFactionBundles(
     }
   }
 
-  if (remainingByGood.size === 0) return bundles;
+  if (remainingByGood.size === 0) return { bundles, blocked: [] };
 
   // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
   // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
@@ -734,14 +801,26 @@ function planFactionBundles(
 
     for (const site of working.values()) {
       const capUnits = buildableUnits(site, goodId);
-      if (capUnits <= 0) continue;
-      if (!isTier0 && !inputsAvailable(goodId, site, surplusSystemsByGood, routeCost)) continue;
+      if (capUnits <= 0) {
+        // The literal "no capacity" case, and the one that fires BEFORE a BuildOpportunity is ever
+        // constructed for this site×good — see BuildBlockReport's docstring for what droppedRoi means
+        // here (nothing: no rank exists yet).
+        recordUnrankedDrop(site.systemId, "no-capacity");
+        continue;
+      }
+      if (!isTier0 && !inputsAvailable(goodId, site, surplusSystemsByGood, routeCost)) {
+        recordUnrankedDrop(site.systemId, "no-input-supplier");
+        continue;
+      }
 
       const reachable = deficitSystemIds
         .map((sysId) => ({ sysId, cost: routeCost(site.systemId, sysId) }))
         .filter((r): r is { sysId: string; cost: number } => r.cost !== null && r.cost > 0)
         .sort((a, b) => a.cost - b.cost);
-      if (reachable.length === 0) continue;
+      if (reachable.length === 0) {
+        recordUnrankedDrop(site.systemId, "no-consumer");
+        continue;
+      }
 
       // Score family goods at their buffed per-unit so a seeded-complex site already ranks
       // higher (the snowball): buffed output means more served demand per unit of capacity.
@@ -759,7 +838,16 @@ function planFactionBundles(
         score += take / r.cost;
         capOutput -= take;
       }
-      if (score <= 0) continue;
+      if (score <= 0) {
+        // Every entry `deficitSystemIds` contains carries a strictly positive shortfall by
+        // construction (see remainingByGood above), `perUnit` is bounded below by `baseUnit > 0` via
+        // familyAnchorBuff (never < 1), and `reachable` is non-empty here — so `score` reaching 0
+        // should not be possible given today's invariants. Guarded rather than assumed, and recorded
+        // as "no-consumer" (the closest fit of the five) rather than forcing a new reason for a state
+        // that should be unreachable.
+        recordUnrankedDrop(site.systemId, "no-consumer");
+        continue;
+      }
 
       opportunities.push({ systemId: site.systemId, goodId, perUnit, reachable, score });
     }
@@ -772,10 +860,23 @@ function planFactionBundles(
     if (!site) continue;
 
     const capUnits = buildableUnits(site, opp.goodId);
-    if (capUnits <= 0) continue;
+    if (capUnits <= 0) {
+      // Post-ranking: a higher-scored opportunity at this same site (a different good) already
+      // claimed the capacity this one needed. `opp.score` is a real, ranked figure here — see
+      // BuildBlockReport's docstring.
+      recordRankedDrop(opp.systemId, "no-capacity", opp.score);
+      continue;
+    }
 
     const deficitMap = remainingByGood.get(opp.goodId);
-    if (!deficitMap) continue;
+    if (!deficitMap) {
+      // `opp.goodId` is one of `remainingByGood`'s own keys (opportunities are only ever built from
+      // its entries, and nothing in this function deletes a key from it), so this should not be
+      // reachable given today's invariants. Guarded rather than assumed; recorded as "no-consumer"
+      // (no demand map for this good is, at least, in that family) rather than forcing a new reason.
+      recordRankedDrop(opp.systemId, "no-consumer", opp.score);
+      continue;
+    }
 
     // Output we can usefully place = Σ over reachable remaining shortfalls, capped by capacity.
     let capOutput = capUnits * opp.perUnit;
@@ -788,7 +889,12 @@ function planFactionBundles(
       servedOutput += take;
       capOutput -= take;
     }
-    if (servedOutput <= 0) continue;
+    if (servedOutput <= 0) {
+      // Every reachable system's remaining shortfall was already claimed by a higher-scored
+      // opportunity processed earlier this pass.
+      recordRankedDrop(opp.systemId, "no-consumer", opp.score);
+      continue;
+    }
 
     // Buffed output per unit against the live working copy (reflects any complex already here) —
     // used to convert served demand into produced output when decrementing the deficit.
@@ -821,7 +927,11 @@ function planFactionBundles(
     // fills the passive buffer). Flooring here would build NOTHING whenever a system's per-tick demand
     // is below a single building's output, stranding every small consumer. Still capped by physical capacity.
     const maxLevels = Math.min(Math.floor(capUnits), Math.ceil(servedOutput / opp.perUnit));
-    if (maxLevels < 1) continue;
+    if (maxLevels < 1) {
+      // Capacity is real (capUnits > 0, checked above) but too small for even one whole level.
+      recordRankedDrop(opp.systemId, "no-whole-level", opp.score);
+      continue;
+    }
 
     const fitFor = (levels: number) => {
       const a = academyLift(site, opp.goodId, levels);
@@ -871,7 +981,12 @@ function planFactionBundles(
         hi = mid - 1;
       }
     }
-    if (prodLevels < 1) continue;
+    if (prodLevels < 1) {
+      // The space/labour fit search found no level count in [1, maxLevels] the site could both
+      // house (production + any gate it would need) and staff.
+      recordRankedDrop(opp.systemId, "no-labour", opp.score);
+      continue;
+    }
 
     // Apply the complex first (any later opportunity at this site sees the buff it grants), then
     // academies (raise the ceiling on the working copy), then the production — gate before production
@@ -915,7 +1030,16 @@ function planFactionBundles(
     bundles.push({ systemId: site.systemId, role: "industry", items, value, work });
   }
 
-  return bundles;
+  // A ranked drop always outranks an unranked one for the same system (see the docstring on the two
+  // maps above); a system with neither simply has nothing to report.
+  const blocked: BuildBlockReport[] = [];
+  const blockedSystemIds = new Set([...rankedBlockBySystem.keys(), ...unrankedBlockBySystem.keys()]);
+  for (const systemId of blockedSystemIds) {
+    const report = rankedBlockBySystem.get(systemId) ?? unrankedBlockBySystem.get(systemId);
+    if (report) blocked.push(report);
+  }
+
+  return { bundles, blocked };
 }
 
 /**
@@ -932,7 +1056,10 @@ export function planFactionBuilds(
   advance = 1,
 ): PlannedBuild[] {
   const assessment = assessStructuralDeficits(systems, [], routeCost, false, advance);
-  return planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits).flatMap((bundle) =>
+  // The blocked-drop report is Build blocked's alert-bar signal, scoped to the tick path
+  // (`planFactionProposals` below) — this engine-test surface deliberately discards it.
+  const { bundles } = planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits);
+  return bundles.flatMap((bundle) =>
     bundle.items.map((item) => ({ systemId: bundle.systemId, buildingType: item.buildingType, count: item.levels })),
   );
 }
@@ -944,6 +1071,9 @@ export interface FactionBuildPlan {
   /** Carried through from `assessStructuralDeficits` unchanged — see `StructuralAssessment`'s
    *  docstring. Calibration instrumentation only. */
   strikeSuppressedProposals: { suppressed: number; eligible: number };
+  /** This run's best-ranked dropped production opportunity per system that had one — see
+   *  `BuildBlockReport`. Persisted world state, unlike `strikeSuppressedProposals` above. */
+  blockedBuilds: BuildBlockReport[];
 }
 
 /**
@@ -965,7 +1095,8 @@ export function planFactionProposals(
   const assessment = assessStructuralDeficits(systems, openProjects, routeCost, true, advance);
   const factionBySystem = new Map(systems.map((system) => [system.systemId, system.factionId]));
   const proposals: BuildProposal[] = [];
-  for (const bundle of planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits)) {
+  const { bundles, blocked } = planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits);
+  for (const bundle of bundles) {
     const factionId = factionBySystem.get(bundle.systemId);
     if (factionId === null || factionId === undefined) continue;
     proposals.push({
@@ -981,6 +1112,7 @@ export function planFactionProposals(
   return {
     proposals, persistenceUpdates: assessment.persistenceUpdates,
     strikeSuppressedProposals: assessment.strikeSuppressedProposals,
+    blockedBuilds: blocked,
   };
 }
 /** A controlled system a faction could settle: its substrate + the developed seed source (from hop data). */

@@ -365,6 +365,32 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     expect(w.constructionProjects.some((p) => p.kind === "build" && p.systemId === "B" && p.buildingType === "food")).toBe(true);
   });
 
+  it("Proves 5 — turning build automation off does not blank the Build blocked field; only proposal emission is gated", async () => {
+    // A is developed with zero capacity of its own (see `scenario`'s own comment) — the food
+    // opportunity at A is always dropped as no-capacity, before the planner even ranks anything,
+    // regardless of what happens elsewhere. B has real capacity and lands the food build when
+    // automation allows it.
+    const on = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodCycles: 1 }));
+    await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+    });
+    const off = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodCycles: 1 }));
+    await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+    });
+
+    // Proposal EMISSION differs, as the existing tests above already pin…
+    expect(on.constructionProjects.some((p) => p.kind === "build" && p.systemId === "B")).toBe(true);
+    expect(off.constructionProjects).toHaveLength(0);
+
+    // …but the Build blocked assessment itself does not: same visited set, same report, on both runs.
+    expect(off.buildBlockedVisitedSystemIds.slice().sort()).toEqual(on.buildBlockedVisitedSystemIds.slice().sort());
+    expect(off.buildBlockedUpdates).toEqual(on.buildBlockedUpdates);
+    expect(on.buildBlockedUpdates.some((u) => u.systemId === "A" && u.reason === "no-capacity")).toBe(true);
+  });
+
   // A developed food SELF-SUPPLIER: buildings cover 1.1× demand (no capacity gap) and a persisted realized
   // rate of 0 keeps it off the exporter self-netting path — so the ONLY thing that can advance its clock is
   // the squeeze-feedback gap, isolating the two guards that suppress it.

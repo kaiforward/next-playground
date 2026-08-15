@@ -24,6 +24,7 @@ import type {
 import type { EventTypeId } from "@/lib/constants/events";
 import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
 import type { SupplyRegime } from "@/lib/engine/population";
+import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 // ── Meta ────────────────────────────────────────────────────────
 
@@ -157,6 +158,21 @@ export interface WorldSystem {
    *  wanting a different shape (a trailing average, a longer window) adds its own field rather than
    *  redefining this one. Nothing inside the tick reads it. */
   populationChange?: number;
+  /** This run's best-ranked dropped production opportunity from the directed-build planner — the
+   *  alert bar's Build blocked category. See `BuildDropReason` and `BuildBlockReport`
+   *  (`lib/engine/directed-build.ts`) for the reasons and for what `droppedRoi` is (and is not) at
+   *  each drop site. Written directly by the directed-build processor's world adapter
+   *  (`applyBuildBlockedUpdates`, `lib/tick/world/directed-build-world.ts`), applied in
+   *  `lib/world/tick.ts` — not by the generic per-system row-mutation path. Same absence convention
+   *  as `provision`/`supplyBand`/`criticalWeight`/`populationChange` above: absent means never
+   *  assessed, written for every system the directed-build planner visited this run that had
+   *  something dropped, absent for one that landed everything or wanted nothing, untouched for one
+   *  the planner did not visit this run (its faction was not due), and cleared — not carried
+   *  forward — on abandonment or redevelopment (`applyAbandonments`, `applyDevelopments`, both
+   *  `lib/world/tick.ts`) so a re-founded colony never inherits its predecessor's reading. Housing
+   *  refusals never appear here — they are *No housing headroom*'s signal, not this one. Nothing
+   *  inside the tick reads it. */
+  buildBlocked?: { reason: BuildDropReason; droppedRoi: number };
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */

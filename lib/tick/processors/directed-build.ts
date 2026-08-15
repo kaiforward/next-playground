@@ -26,6 +26,7 @@ import type {
   FoundingStockLine,
   FoundingStagingDraw,
   ProposalPersistenceUpdate,
+  BuildBlockedUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import {
   proposeFactionClaims,
@@ -400,6 +401,12 @@ export async function runDirectedBuildProcessor(
   // clock, distinct from the economy's squeeze clock — regardless of whether a proposal is emitted or
   // funded. Keyed by the market's composite id, the same convention the economy adapter writes by.
   const proposalPersistence: ProposalPersistenceUpdate[] = [];
+  // Build blocked (alert bar): every system belonging to a due faction this run — the "visited" set
+  // the world write clears against — and this run's best-ranked dropped opportunity per system that
+  // had one. Advances alongside proposalPersistence above for the same reason: the assessment runs
+  // for every due faction regardless of the automation switch, which gates PROPOSAL EMISSION only.
+  const buildBlockedVisitedSystemIds: string[] = [];
+  const blockedBuildUpdates: BuildBlockedUpdate[] = [];
   // Calibration instrumentation: new autonomic production-good levels committed THIS cycle, by good.
   // Counts proposal levels (before funding), not the final queue — so it measures the planner's
   // per-cycle output (the rate cap's target), not what the pool happened to afford. Housing, academies,
@@ -457,6 +464,13 @@ export async function runDirectedBuildProcessor(
       proposalPersistence.push({ id: `${u.systemId}|${u.goodId}`, proposalCycles: u.proposalCycles });
     }
     strikeSuppressed += buildPlan.strikeSuppressedProposals.suppressed;
+    // The assessment above runs unconditionally (see the comment on `buildStates`), so every system
+    // in `group` is visited whether or not build automation is on — the blocked-report write must not
+    // be gated by `skipBuild` either, only the proposals a few lines below are.
+    for (const s of group) buildBlockedVisitedSystemIds.push(s.systemId);
+    for (const b of buildPlan.blockedBuilds) {
+      blockedBuildUpdates.push({ systemId: b.systemId, reason: b.reason, droppedRoi: b.droppedRoi });
+    }
     strikeEligible += buildPlan.strikeSuppressedProposals.eligible;
     const buildProposals = skipBuild ? [] : buildPlan.proposals;
 
@@ -758,6 +772,12 @@ export async function runDirectedBuildProcessor(
 
   // Persist the construction proposal-pressure counters last — independent of ROI/funding outcome.
   if (proposalPersistence.length > 0) await world.applyProposalPersistenceUpdates(proposalPersistence);
+
+  // Persist Build blocked — every due faction's assessment ran above regardless of automation, so
+  // this write is unconditional too (see the comment where the two arrays are populated).
+  if (buildBlockedVisitedSystemIds.length > 0) {
+    await world.applyBuildBlockedUpdates(buildBlockedVisitedSystemIds, blockedBuildUpdates);
+  }
 
   return {
     workPerformedByFaction, foundingDebitsByFaction, buildCommitmentsByGood,

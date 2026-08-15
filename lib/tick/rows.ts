@@ -19,6 +19,7 @@ import type { EventTypeId } from "@/lib/constants/events";
 import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
 import type { SystemControl } from "@/lib/world/types";
 import type { SupplyRegime } from "@/lib/engine/population";
+import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 export interface TickSystem {
   id: string;
@@ -67,6 +68,14 @@ export interface TickSystem {
    *  round-trips through the join/merge and survives untouched for a system this economy cycle did
    *  not visit. */
   populationChange?: number;
+  /** This run's best-ranked dropped production opportunity, optional — the `toTickSystems` join
+   *  passes `WorldSystem.buildBlocked` through UNCOERCED, same absence convention as `provision`/
+   *  `supplyBand`/`criticalWeight`/`populationChange` above. No processor writes this field via the
+   *  row-mutation path: the directed-build processor's world adapter writes it directly through its
+   *  own `applyBuildBlockedUpdates` (`lib/tick/world/directed-build-world.ts`), applied in
+   *  `lib/world/tick.ts` alongside its other writes — the field lives on the row purely so it
+   *  round-trips through the join/merge and survives untouched for a system this run did not visit. */
+  buildBlocked?: { reason: BuildDropReason; droppedRoi: number };
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

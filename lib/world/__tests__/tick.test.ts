@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import {
   runWorldTick, toTickSystems, applyBuildingIncreases, applyDevelopments, applyAbandonments,
-  marketRowsBySystem, resetAbandonedMarkets,
+  applyBuildBlockedUpdates, marketRowsBySystem, resetAbandonedMarkets,
 } from "../tick";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serializeWorld, deserializeWorld } from "../save";
@@ -1588,6 +1588,95 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     const strip = (w: World): World => ({ ...w, markets: stripMarkets(w.markets) });
     expect(strip(dirty.world)).toEqual(strip(clean.world));
     expect(stripMarkets(dirty.markets)).toEqual(stripMarkets(clean.markets));
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
+});
+
+// ── Build blocked (WorldSystem.buildBlocked) ─────────────────────────
+// The engine's reason mapping and what `droppedRoi` means at a ranked vs. an unranked drop are
+// pinned directly against `planFactionProposals` in `lib/engine/__tests__/directed-build.test.ts`.
+// These pin the world layer's half of the contract: `applyBuildBlockedUpdates`'s visited/clear/set
+// behaviour (a visited system absent from the update list is CLEARED; an unvisited one is left
+// alone), and that nothing inside the tick reads the field back.
+
+describe("applyBuildBlockedUpdates — the visited/clear/set contract", () => {
+  const base = toTickSystems(generateWorld({ systemCount: 20, seed: 3 }));
+
+  it("sets buildBlocked for a visited system present in the update list", () => {
+    const [sys] = base;
+    const [next] = applyBuildBlockedUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, reason: "no-capacity", droppedRoi: 1.5 }],
+    );
+    expect(next.buildBlocked).toEqual({ reason: "no-capacity", droppedRoi: 1.5 });
+  });
+
+  it("clears buildBlocked for a visited system NOT present in the update list — nothing was dropped this run", () => {
+    const [sys] = base;
+    const stale: TickSystem = { ...sys, buildBlocked: { reason: "no-consumer", droppedRoi: 3 } };
+    const [next] = applyBuildBlockedUpdates([stale], [stale.id], []);
+    expect(next.buildBlocked).toBeUndefined();
+    expect("buildBlocked" in next).toBe(false);
+  });
+
+  it("leaves a system the run did not visit untouched, keeping its previous value", () => {
+    const [sys, other] = base;
+    if (!other) throw new Error("expected at least two systems in the fixture");
+    const stale: TickSystem = { ...sys, buildBlocked: { reason: "no-labour", droppedRoi: 2 } };
+    // `other` carries a previous run's reading AND is deliberately absent from visitedSystemIds
+    // (its faction was not due this run) — non-vacuous: were the visited guard dropped, `other`
+    // would be cleared exactly like `stale` is, since it too is absent from `updates`.
+    const otherStale: TickSystem = { ...other, buildBlocked: { reason: "no-whole-level", droppedRoi: 4 } };
+    const [next, untouched] = applyBuildBlockedUpdates([stale, otherStale], [stale.id], []);
+    expect(next.buildBlocked).toBeUndefined();       // visited, absent from updates → cleared
+    expect(untouched).toBe(otherStale);               // not visited → same object, unchanged
+    expect(untouched.buildBlocked).toEqual({ reason: "no-whole-level", droppedRoi: 4 });
+  });
+
+  it("guards a non-finite droppedRoi to 0 rather than writing NaN/Infinity into world state", () => {
+    const [sys] = base;
+    const [next] = applyBuildBlockedUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, reason: "no-capacity", droppedRoi: Number.POSITIVE_INFINITY }],
+    );
+    expect(next.buildBlocked?.droppedRoi).toBe(0);
+  });
+});
+
+describe("runWorldTick — nothing inside the tick reads buildBlocked back", () => {
+  it("poisoning the input changes no other output", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem => ({
+        ...s, buildBlocked: { reason: "no-capacity", droppedRoi: -999_999 },
+      })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    // buildBlocked itself legitimately differs run to run (a fresh per-run assessment) — stripped
+    // before comparing; everything else, including every harness/instrumentation figure, must be
+    // byte-identical. This also pins the Proves entry that the planner's own decisions (which
+    // proposals it emits, in what order) are unchanged: `systems`/`markets` carry those decisions'
+    // downstream effects, and they strip down to identical here.
+    const strip = (w: World): World => ({
+      ...w,
+      systems: w.systems.map((s): WorldSystem => ({ ...s, buildBlocked: undefined })),
+    });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(dirty.markets).toEqual(clean.markets);
     expect(dirty.events).toEqual(clean.events);
     expect(dirty.instrumentation).toEqual(clean.instrumentation);
   }, 30_000);

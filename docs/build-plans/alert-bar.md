@@ -1066,8 +1066,8 @@ Files: `lib/engine/directed-build.ts`, `lib/tick/processors/directed-build.ts`,
 `lib/tick/world/directed-build-world.ts`, `lib/world/types.ts`, `lib/tick/rows.ts`,
 `lib/world/tick.ts`, `lib/engine/__tests__/directed-build.test.ts`
 
-Interface: `WorldSystem.buildBlocked?: { reason: BuildBlockReason; droppedRoi: number }` and
-`export type BuildBlockReason = "no-capacity" | "no-input-supplier" | "no-consumer" | "no-labour" | "no-whole-level"`.
+Interface: `WorldSystem.buildBlocked?: { reason: BuildDropReason; droppedRoi: number }` and
+`export type BuildDropReason = "no-capacity" | "no-input-supplier" | "no-consumer" | "no-labour" | "no-whole-level"`.
 Written per system on every planner run for the **best-ranked** dropped production opportunity, absent
 where one landed or none was wanted. The drop sites are `lib/engine/directed-build.ts:737, 738, 744,
 762, 775, 778, 790, 824, 874`. Housing refusals (`plannedHousingUnits`, `:186-199`) are **out of
