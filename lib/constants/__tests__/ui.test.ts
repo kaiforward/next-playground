@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { GOOD_COLORS, getGoodColor, EVENT_BAND } from "../ui";
+import { GOOD_COLORS, getGoodColor, EVENT_BAND, compareEventSeverity } from "../ui";
 import type { EventBand } from "../ui";
 import { GOOD_NAMES, GOODS } from "../goods";
 import { EVENT_TYPE_IDS, RELATIONS_EVENT_TYPES } from "../events";
@@ -86,6 +86,28 @@ describe("EVENT_BAND", () => {
       );
       expect(new Set(ranks).size, `${band} ranks: ${ranks.join(",")}`).toBe(ranks.length);
     }
+  });
+
+  it("orders every crisis type above every disruption, and every disruption above every windfall", () => {
+    const byBand = (band: EventBand): EventTypeId[] =>
+      EVENT_TYPE_IDS.filter((id) => EVENT_BAND[id].band === band);
+    for (const worse of byBand("crisis")) {
+      for (const better of byBand("disruption")) {
+        expect(compareEventSeverity(worse, better), `${worse} vs ${better}`).toBeLessThan(0);
+      }
+    }
+    for (const worse of byBand("disruption")) {
+      for (const better of byBand("windfall")) {
+        expect(compareEventSeverity(worse, better), `${worse} vs ${better}`).toBeLessThan(0);
+      }
+    }
+  });
+
+  it("orders within a band by impactRank, lowest first", () => {
+    // plague is rank 1 of crisis, border_conflict rank 5 — the band's own extremes.
+    expect(compareEventSeverity("plague", "border_conflict")).toBeLessThan(0);
+    expect(compareEventSeverity("border_conflict", "plague")).toBeGreaterThan(0);
+    expect(compareEventSeverity("plague", "plague")).toBe(0);
   });
 
   it("carries no order on windfall, which sorts by ticksRemaining instead", () => {

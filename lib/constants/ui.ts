@@ -63,34 +63,6 @@ export const EVENT_TYPE_BADGE_COLOR: Record<
   alliance_dissolved: "amber",
 };
 
-/**
- * Danger priority per event type — higher = more dangerous.
- * Used to pick the "dominant" event for border/glow when multiple events affect one system.
- */
-export const EVENT_TYPE_DANGER_PRIORITY: Record<
-  keyof typeof EVENT_DEFINITIONS,
-  number
-> = {
-  trade_festival: 1,
-  tech_breakthrough: 2,
-  mining_boom: 3,
-  ore_glut: 4,
-  plague_risk: 5,
-  supply_shortage: 6,
-  refugee_crisis: 7,
-  trade_embargo: 8,
-  conflict_spillover: 9,
-  plague: 10,
-  pirate_raid: 11,
-  solar_storm: 12,
-  asteroid_strike: 13,
-  inner_system_conflict: 14,
-  // Diplomatic events: informational only, no danger contribution.
-  pact_under_negotiation: 0,
-  alliance_dissolved: 0,
-  // Border conflict ranks between conflict_spillover and plague.
-  border_conflict: 10,
-};
 
 import type { LucideIcon } from "lucide-react";
 import {
@@ -187,6 +159,24 @@ export const EVENT_BAND: Record<
   tech_breakthrough: { band: "windfall", impactRank: 0 },
   pact_under_negotiation: { band: "windfall", impactRank: 0 },
 };
+
+/** Band order, worst first. Not derivable from the union's declaration order — stated. */
+const EVENT_BAND_ORDER: Record<EventBand, number> = { crisis: 0, disruption: 1, windfall: 2 };
+
+/**
+ * The one severity ordering over event types, worst first: band before rank, and inside a band the
+ * lower `impactRank` first. Every surface that ranks events by how bad they are sorts through this,
+ * so a second scale cannot drift away from the authored one — which is exactly what happened before,
+ * when a separate hand-numbered priority disagreed with the bands about whether a plague or a solar
+ * storm was worse. Windfall types all carry rank 0 and therefore tie; they sort by `ticksRemaining`
+ * wherever that matters.
+ */
+export function compareEventSeverity(a: EventTypeId, b: EventTypeId): number {
+  const left = EVENT_BAND[a];
+  const right = EVENT_BAND[b];
+  const byBand = EVENT_BAND_ORDER[left.band] - EVENT_BAND_ORDER[right.band];
+  return byBand !== 0 ? byBand : left.impactRank - right.impactRank;
+}
 
 // ── Chart theme ──────────────────────────────────────────────
 
