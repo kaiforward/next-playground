@@ -4,6 +4,7 @@ import type {
   LogisticsMarketUpdate,
   LogisticsFlowInsert,
   LogisticsFundingBoundUpdate,
+  DemandUnservableUpdate,
 } from "@/lib/tick/world/directed-logistics-world";
 import { factionShardKeys } from "@/lib/engine/shard-order";
 
@@ -11,6 +12,7 @@ import { factionShardKeys } from "@/lib/engine/shard-order";
 export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   readonly stockUpdates = new Map<string, number>();
   readonly fundingBoundUpdates = new Map<string, boolean>();
+  readonly demandUnservableUpdates = new Map<string, boolean>();
   readonly flows: LogisticsFlowInsert[] = [];
 
   constructor(private readonly systems: SystemLogisticsRow[]) {}
@@ -30,6 +32,10 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
 
   async applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void> {
     for (const u of updates) this.fundingBoundUpdates.set(u.id, u.logisticsFundingBound);
+  }
+
+  async applyDemandUnservableUpdates(updates: DemandUnservableUpdate[]): Promise<void> {
+    for (const u of updates) this.demandUnservableUpdates.set(u.id, u.demandUnservable);
   }
 
   async appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void> {

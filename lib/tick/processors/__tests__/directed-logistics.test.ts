@@ -32,6 +32,12 @@ describe("MemoryDirectedLogisticsWorld", () => {
     expect(world.stockUpdates.get("m1")).toBe(42);
     expect(world.flows).toHaveLength(1);
   });
+
+  it("applies demand-unservable updates", async () => {
+    const world = new MemoryDirectedLogisticsWorld([]);
+    await world.applyDemandUnservableUpdates([{ id: "m1", demandUnservable: true }]);
+    expect(world.demandUnservableUpdates.get("m1")).toBe(true);
+  });
 });
 
 // ── fixture population and the demand rates it implies (ECONOMY_SCALE=1 under vitest)
@@ -467,6 +473,44 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(recoveredWorld.fundingBoundUpdates.get("mB")).toBe(false);
     expect(recoveredWorld.fundingBoundUpdates.has("mOther")).toBe(false);
     expect(recoveredWorld.fundingBoundUpdates.size).toBe(2);
+  });
+
+  it("marks a structurally unservable deficit and clears it once a donor becomes reachable", async () => {
+    // Run 1: B alone — no other system in the match holds food at all, so no reachable donor exists
+    // regardless of budget. Structural, and (unlike a funding-bound deficit) not a matter of money.
+    const isolated = new MemoryDirectedLogisticsWorld([
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+      },
+    ]);
+    await runDirectedLogisticsProcessor(isolated, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable,
+    });
+    expect(isolated.demandUnservableUpdates.get("mB")).toBe(true);
+    // Never budget-stopped at all (no candidate donor even entered the draw loop), so the funding-
+    // bound assessment is unchanged from its prior absence — no write, not an explicit false.
+    expect(isolated.fundingBoundUpdates.has("mB")).toBe(false);
+
+    // Run 2: the same deficit, now carrying the prior TRUE reading, with an ample donor added and
+    // reachable. The shortfall (38) is well inside the donor's drawable (47) and the budget (2000),
+    // so the deficit is fully served — the flag must explicitly clear to false, not merely go
+    // unwritten.
+    const recovered = new MemoryDirectedLogisticsWorld([
+      {
+        systemId: "A", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+      },
+      {
+        systemId: "B", factionId: "f1", population: 200, buildings: {},
+        yields: emptyResourceVector(), markets: [{ ...market("mB", "food", 10, 20), demandUnservable: true }],
+      },
+    ]);
+    await runDirectedLogisticsProcessor(recovered, { tick: DUE_TICK }, {
+      interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable,
+    });
+    expect(recovered.demandUnservableUpdates.get("mB")).toBe(false);
+    expect(recovered.demandUnservableUpdates.has("mA")).toBe(false); // a donor is never a candidate for this flag
   });
 
   it("keeps unreachable pairs unmarked", async () => {

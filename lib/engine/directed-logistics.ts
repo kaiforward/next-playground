@@ -177,9 +177,29 @@ export interface FundingBoundMatch {
   toSystemId: string;
 }
 
+/**
+ * One deficit no reachable same-faction donor — at its currently drawable capacity, summed across
+ * every candidate, before any budget is spent — could close, even given unlimited haul budget.
+ * Local production is not restated here: every entry in the deficit queue already failed the
+ * self-supply gate (`production < demand`), so "no local production can close it" already holds for
+ * anything that reaches this test.
+ *
+ * Independent of `FundingBoundMatch`, which records the budget stopping a fill that had enough
+ * reachable capacity to succeed. The two are decided from different quantities (summed candidate
+ * `drawable` vs. the budget-stopped donor's own draw) and are not mutually exclusive: a deficit whose
+ * reachable donors are jointly too small AND whose fill also hits the budget wall before exhausting
+ * them carries both. The processor records the deficit endpoint only — donors never appear here,
+ * unlike `FundingBoundMatch`, which names both ends of the haul it describes.
+ */
+export interface UnservableDeficit {
+  goodId: string;
+  systemId: string;
+}
+
 export interface TransferMatchResult {
   transfers: PlannedTransfer[];
   fundingBound: FundingBoundMatch[];
+  unservable: UnservableDeficit[];
 }
 
 /** Per-unit route cost between two systems; null = unreachable / beyond hop budget. */
@@ -258,9 +278,16 @@ export function matchFactionTransfers(
 
   const transfers: PlannedTransfer[] = [];
   const fundingBound: FundingBoundMatch[] = [];
+  const unservable: UnservableDeficit[] = [];
   for (const d of deficits) {
     const sources = surplusesByGood.get(d.goodId);
-    if (!sources) continue;
+    if (!sources) {
+      // No system anywhere in this faction currently holds surplus of this good at all — the
+      // deficit queue already guarantees no local production can close it (self-supply gate above),
+      // so this is the plainest structural case: no reachable donor, full stop.
+      unservable.push({ goodId: d.goodId, systemId: d.systemId });
+      continue;
+    }
 
     // Every willing donor serves the deficit, cheapest route first (tie: stable system order) —
     // one PlannedTransfer per donor-draw. A single-donor cap here left reachable stock unshipped
@@ -277,6 +304,14 @@ export function matchFactionTransfers(
     candidates.sort(
       (a, b) => a.perUnit - b.perUnit || a.source.order - b.source.order,
     );
+
+    // Total drawable capacity reachable for this deficit, summed BEFORE the draw loop below spends
+    // any of it — the structural test asks whether the shortfall is closeable at all, which unlimited
+    // budget could never change once this number is already short. Deliberately independent of the
+    // budget mechanics that decide `fundingBound`: the two questions are "does enough exist" and "did
+    // money reach what exists", and a deficit can fail both at once (see the type's own docstring).
+    let reachableDrawable = 0;
+    for (const candidate of candidates) reachableDrawable += candidate.source.drawable;
 
     let remaining = d.shortfall;
     let stoppedDonorId: string | null = null;
@@ -327,7 +362,16 @@ export function matchFactionTransfers(
         toSystemId: d.systemId,
       });
     }
+
+    // Structural: even every reachable donor's FULL drawable capacity, spent with no budget limit at
+    // all, would not have closed this shortfall. Decided against `reachableDrawable` (fixed before
+    // the draw loop above ran), never against `remaining` — `remaining` reflects however far the
+    // budget-limited loop actually got, which is exactly the quantity `fundingBound` above already
+    // answers for.
+    if (reachableDrawable < d.shortfall) {
+      unservable.push({ goodId: d.goodId, systemId: d.systemId });
+    }
   }
 
-  return { transfers, fundingBound };
+  return { transfers, fundingBound, unservable };
 }

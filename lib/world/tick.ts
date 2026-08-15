@@ -336,6 +336,7 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       squeezeCycles: m.squeezeCycles,
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
+      demandUnservable: m.demandUnservable,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -380,18 +381,35 @@ function applyLogisticsMarketUpdates(
   markets: WorldMarket[],
   stockUpdates: Map<string, number>,
   fundingBoundUpdates: Map<string, boolean>,
+  demandUnservableUpdates: Map<string, boolean>,
 ): WorldMarket[] {
-  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0) return markets;
+  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0 && demandUnservableUpdates.size === 0) return markets;
   return markets.map((m) => {
     const id = `${m.systemId}|${m.goodId}`;
     const newStock = stockUpdates.get(id);
     const logisticsFundingBound = fundingBoundUpdates.get(id);
-    if (newStock === undefined && logisticsFundingBound === undefined) return m;
-    return {
-      ...m,
-      stock: newStock ?? m.stock,
-      logisticsFundingBound: logisticsFundingBound ?? m.logisticsFundingBound,
-    };
+    const demandUnservable = demandUnservableUpdates.get(id);
+    // stock and logisticsFundingBound stay coupled exactly as before this field was added: either
+    // one changing rewrites both together (`?? m.field` on the untouched one), which is what stamps
+    // an explicit-undefined logisticsFundingBound key onto a market whose stock alone moved. That
+    // quirk predates demandUnservable and is not this task's to fix. demandUnservable is applied as
+    // an entirely separate, independently-conditioned spread — never folded into the branch above —
+    // so a market whose ONLY change this run is demandUnservable does not also pick up a spurious
+    // logisticsFundingBound key it never earned, and vice versa.
+    const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
+    if (!stockOrFundingChanged && demandUnservable === undefined) return m;
+    let next: WorldMarket = m;
+    if (stockOrFundingChanged) {
+      next = {
+        ...next,
+        stock: newStock ?? next.stock,
+        logisticsFundingBound: logisticsFundingBound ?? next.logisticsFundingBound,
+      };
+    }
+    if (demandUnservable !== undefined) {
+      next = { ...next, demandUnservable };
+    }
+    return next;
   });
 }
 
@@ -406,13 +424,17 @@ function patchLogisticsMarketRows(
   bySystem: Map<string, MarketRowForLogistics[]>,
   stockUpdates: Map<string, number>,
   fundingBoundUpdates: Map<string, boolean>,
+  demandUnservableUpdates: Map<string, boolean>,
 ): Map<string, MarketRowForLogistics[]> {
-  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0) return bySystem;
+  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0 && demandUnservableUpdates.size === 0) return bySystem;
   const touchedSystems = new Set<string>();
   for (const key of stockUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   for (const key of fundingBoundUpdates.keys()) {
+    touchedSystems.add(key.slice(0, key.indexOf("|")));
+  }
+  for (const key of demandUnservableUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   const patched = new Map(bySystem);
@@ -424,12 +446,25 @@ function patchLogisticsMarketRows(
       rows.map((r) => {
         const newStock = stockUpdates.get(r.id);
         const logisticsFundingBound = fundingBoundUpdates.get(r.id);
-        if (newStock === undefined && logisticsFundingBound === undefined) return r;
-        return {
-          ...r,
-          stock: newStock ?? r.stock,
-          logisticsFundingBound: logisticsFundingBound ?? r.logisticsFundingBound,
-        };
+        const demandUnservable = demandUnservableUpdates.get(r.id);
+        // Same isolation as applyLogisticsMarketUpdates above: stock/logisticsFundingBound stay
+        // coupled as they already were; demandUnservable is a separate, independently-conditioned
+        // spread so it cannot stamp a spurious logisticsFundingBound key (or vice versa) onto a row
+        // whose only real change this run is the other field.
+        const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
+        if (!stockOrFundingChanged && demandUnservable === undefined) return r;
+        let next: MarketRowForLogistics = r;
+        if (stockOrFundingChanged) {
+          next = {
+            ...next,
+            stock: newStock ?? next.stock,
+            logisticsFundingBound: logisticsFundingBound ?? next.logisticsFundingBound,
+          };
+        }
+        if (demandUnservable !== undefined) {
+          next = { ...next, demandUnservable };
+        }
+        return next;
       }),
     );
   }
@@ -668,7 +703,9 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above. `stockChange` joins
  * the same clear for the same reason as `logisticsFundingBound`: it is a reading from a previous
  * life and must not survive into the next — a re-founded colony's warehouse is real, but its
- * predecessor's drain rate is not.
+ * predecessor's drain rate is not. `demandUnservable` joins the same clear for the same reason: a
+ * structural reading names a shortfall THIS colony's donors and production could not close, and a
+ * resettled colony has neither yet — its own local-supply story starts over.
  */
 export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
   if (abandonedSystemIds.length === 0) return markets;
@@ -680,6 +717,7 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.squeezeCycles;
     delete next.logisticsFundingBound;
     delete next.stockChange;
+    delete next.demandUnservable;
     return next;
   });
 }
@@ -1282,6 +1320,7 @@ export async function runWorldTick(
     const logisticsMarketRows = marketRowsBySystem(markets);
     let dlStockUpdates: Map<string, number> = new Map();
     let dlFundingBoundUpdates: Map<string, boolean> = new Map();
+    let dlDemandUnservableUpdates: Map<string, boolean> = new Map();
 
     // ── directed-logistics ──
     {
@@ -1309,9 +1348,11 @@ export async function runWorldTick(
         markets,
         dlWorld.stockUpdates,
         dlWorld.fundingBoundUpdates,
+        dlWorld.demandUnservableUpdates,
       );
       dlStockUpdates = dlWorld.stockUpdates;
       dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
+      dlDemandUnservableUpdates = dlWorld.demandUnservableUpdates;
       const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
       flowEvents = [...flowEvents, ...newLogisticsFlows];
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
@@ -1439,6 +1480,7 @@ export async function runWorldTick(
           logisticsMarketRows,
           dlStockUpdates,
           dlFundingBoundUpdates,
+          dlDemandUnservableUpdates,
         ),
       );
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);

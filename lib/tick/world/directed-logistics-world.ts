@@ -36,6 +36,9 @@ export interface MarketRowForLogistics {
   /** Structural-deficit persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
   proposalCycles?: number;
   logisticsFundingBound?: boolean;
+  /** The prior assessment, read only so the processor can skip a no-op write; the matcher itself
+   *  never reads it as a decision input. See `WorldMarket.demandUnservable` for the full contract. */
+  demandUnservable?: boolean;
 }
 
 /** One system's logistics-relevant state. */
@@ -59,6 +62,11 @@ export interface LogisticsFundingBoundUpdate {
   logisticsFundingBound: boolean;
 }
 
+export interface DemandUnservableUpdate {
+  id: string;
+  demandUnservable: boolean;
+}
+
 export interface LogisticsFlowInsert {
   tick: number;
   fromSystemId: string;
@@ -76,6 +84,8 @@ export interface DirectedLogisticsWorld {
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
   /** Apply changed wanted-but-unfunded assessments without rewriting stock. */
   applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;
+  /** Apply changed structural-unservable assessments without rewriting stock. */
+  applyDemandUnservableUpdates(updates: DemandUnservableUpdate[]): Promise<void>;
   /** Append directed-logistics flow rows to the world flow log. */
   appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;
 }

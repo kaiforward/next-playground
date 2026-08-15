@@ -18,6 +18,7 @@ import type {
   LogisticsMarketUpdate,
   LogisticsFlowInsert,
   LogisticsFundingBoundUpdate,
+  DemandUnservableUpdate,
 } from "@/lib/tick/world/directed-logistics-world";
 
 export interface DirectedLogisticsProcessorParams {
@@ -117,6 +118,7 @@ export async function runDirectedLogisticsProcessor(
   const logisticsBudget = new Map<string, LogisticsBudgetLedger>();
   const allTransfers: PlannedTransfer[] = [];
   const fundingBoundMarketIds = new Set<string>();
+  const demandUnservableMarketIds = new Set<string>();
   for (const [factionId, group] of byFaction) {
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
     const states = group.map((r) => toLogisticsState(r, catchUp, funded, params.drawBrakeCeiling));
@@ -127,6 +129,11 @@ export async function runDirectedLogisticsProcessor(
       const to = marketByKey.get(`${bound.toSystemId}|${bound.goodId}`);
       if (from) fundingBoundMarketIds.add(from.id);
       if (to) fundingBoundMarketIds.add(to.id);
+    }
+    // Deficit endpoint only — never the donor a funding-bound match above may also have named.
+    for (const deficit of match.unservable) {
+      const at = marketByKey.get(`${deficit.systemId}|${deficit.goodId}`);
+      if (at) demandUnservableMarketIds.add(at.id);
     }
     if (factionId === null) continue;
     // Spent is summed over per-donor draws, so a fan-out is billed once — it must stay equal
@@ -201,6 +208,18 @@ export async function runDirectedLogisticsProcessor(
     }
   }
   if (fundingUpdates.length > 0) await world.applyFundingBoundUpdates(fundingUpdates);
+  const demandUnservableUpdates: DemandUnservableUpdate[] = [];
+  for (const row of rows) {
+    for (const market of row.markets) {
+      const demandUnservable = demandUnservableMarketIds.has(market.id);
+      if ((market.demandUnservable ?? false) === demandUnservable) continue;
+      demandUnservableUpdates.push({
+        id: market.id,
+        demandUnservable,
+      });
+    }
+  }
+  if (demandUnservableUpdates.length > 0) await world.applyDemandUnservableUpdates(demandUnservableUpdates);
   if (flows.length > 0) await world.appendLogisticsFlows(flows);
 
   return { workPerformedByFaction, logisticsBudget };

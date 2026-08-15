@@ -569,6 +569,74 @@ describe("matchFactionTransfers", () => {
 
 });
 
+// The temporary/structural distinction: `logisticsFundingBound` means "the work budget stopped a fill
+// that had enough reachable capacity to succeed"; `unservable` means "reachable donors and local
+// production together cannot supply this even with unlimited budget". Every fixture below is sized so
+// the two constraints genuinely differ — a donor generous enough that budget alone binds (Entry 1), or
+// so thin that no budget could ever be enough (Entry 3) — rather than two shapes that both happen to
+// be structurally unservable.
+describe("matchFactionTransfers — demandUnservable (structural vs. funding-bound)", () => {
+  it("sets logisticsFundingBound but NOT demandUnservable when reachable capacity is ample and only the work budget binds", () => {
+    // D1 alone can drawable 190 — comfortably more than B's 50-unit shortfall — so the shortfall is
+    // closeable in principle; only the faction's small budget (20) stops the fill short.
+    const d1 = sys("D1", 20, { goodId: "food", stock: 200, logisticsTarget: 10, demand: 5 });
+    const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
+
+    const result = matchFactionTransfers([d1, b], oneHop);
+    expect(result.transfers).toEqual([
+      { goodId: "food", fromSystemId: "D1", toSystemId: "B", quantity: 20, cost: 20 },
+    ]);
+    expect(result.fundingBound).toEqual([{ goodId: "food", fromSystemId: "D1", toSystemId: "B" }]);
+    expect(result.unservable).toEqual([]);
+  });
+
+  it("sets demandUnservable, not logisticsFundingBound, for a deficit with no donor anywhere and no local production", () => {
+    // B alone: no other system in the match holds this good at all, so `surplusesByGood` has no
+    // entry for it — the plainest structural case. Local production is 0 < demand by construction
+    // (sys()'s default), which is also what put B in the deficit queue at all.
+    const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 50, demand: 5 });
+
+    const result = matchFactionTransfers([b], oneHop);
+    expect(result.transfers).toEqual([]);
+    expect(result.fundingBound).toEqual([]);
+    expect(result.unservable).toEqual([{ goodId: "food", systemId: "B" }]);
+  });
+
+  it("can carry both flags at once — reachable capacity is jointly too small AND the budget also runs out before reaching it — but never puts demandUnservable on the donor", () => {
+    // D1's whole drawable (40) is already short of B's shortfall (200): even an infinite budget could
+    // not close this deficit from D1 alone. The budget (10) ALSO runs out partway through D1's own
+    // draw, so the same haul independently qualifies as funding-bound too. The deficit endpoint (B)
+    // carries both readings; the donor (D1) carries only the funding-bound one — a donor has no
+    // reading about ITS OWN local demand being unservable.
+    const d1 = sys("D1", 10, { goodId: "food", stock: 50, logisticsTarget: 10, demand: 5 });
+    const b = sys("B", 0, { goodId: "food", stock: 0, logisticsTarget: 200, demand: 5 });
+
+    const result = matchFactionTransfers([d1, b], oneHop);
+    expect(result.transfers).toEqual([
+      { goodId: "food", fromSystemId: "D1", toSystemId: "B", quantity: 10, cost: 10 },
+    ]);
+    expect(result.fundingBound).toEqual([{ goodId: "food", fromSystemId: "D1", toSystemId: "B" }]);
+    expect(result.unservable).toEqual([{ goodId: "food", systemId: "B" }]);
+  });
+
+  it("emits one unservable entry per good on the same system — de-duplicating to one system belongs to the read layer, not here", () => {
+    const threeDeficits: SystemLogisticsState = {
+      systemId: "B",
+      factionId: "f1",
+      generation: 0,
+      goods: ["food", "water", "ore"].map((goodId) => ({
+        goodId, stock: 0, logisticsTarget: 50, demand: 5, drawDemand: 5, civilianDemand: 5,
+        donorReserve: 10, production: 0, capacityProduction: 0,
+      })),
+    };
+
+    const result = matchFactionTransfers([threeDeficits], oneHop);
+    expect(result.unservable).toHaveLength(3);
+    expect(result.unservable.every((u) => u.systemId === "B")).toBe(true);
+    expect(new Set(result.unservable.map((u) => u.goodId))).toEqual(new Set(["food", "water", "ore"]));
+  });
+});
+
 // Direct coverage of the donor test shared by the logistics matcher AND the build planner.
 // The two-path rule (clears-margin OR structural-producer-above-reserve) and its guards are
 // pinned here so a boundary mutation — e.g. the structural-producer `>` softening to `>=` —

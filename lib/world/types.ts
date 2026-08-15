@@ -411,6 +411,37 @@ export interface WorldMarket {
    * inside the tick reads it.
    */
   stockChange?: number;
+  /**
+   * This row is a deficit no reachable same-faction donor and no local production could close on the
+   * latest directed-logistics run — the shortfall is structural, not a matter of this cycle's haul
+   * budget. Written by the directed-logistics ENGINE (`lib/engine/directed-logistics.ts`,
+   * `matchFactionTransfers`'s `unservable` result), threaded out through the processor
+   * (`lib/tick/processors/directed-logistics.ts`) exactly as `logisticsFundingBound` is.
+   *
+   * Deliberately unlike `logisticsFundingBound`, which the matcher writes to BOTH endpoints of a
+   * funding-bound haul (including the donor): this is written on the DEFICIT endpoint only. A donor
+   * carries no reading about its own local demand being unservable — that would put an exporting
+   * system in a category about unmet local demand, which is not what a donor is. Missing ⇒ false.
+   *
+   * Distinct from, and not exclusive with, `logisticsFundingBound`: that field means "the WORK
+   * BUDGET stopped a fill that had enough reachable capacity to succeed" — served next run with no
+   * change to the world. This field means "the shortfall would persist even with unlimited budget,
+   * because reachable donors and local production together cannot supply it" — the world itself
+   * would have to change (new capacity, a new route, a fresh donor). A deficit can carry both at
+   * once: reachable capacity can be jointly too small AND the budget can also run out before
+   * reaching even that insufficient capacity. See the engine type's own docstring for the exact test.
+   *
+   * Same conventions as `logisticsFundingBound` above — and note that is the closer of the two
+   * precedents: every deficit row the run visits is assessed, but the key is written only where the
+   * reading CHANGES, so a never-structural deficit stays absent rather than becoming a present
+   * `false`. (`stockChange` differs — it writes unconditionally every visit.) A deficit that gains a
+   * donor or a local producer therefore flips to `false` on the next run, is untouched for a row the
+   * run did not visit, and is
+   * cleared (deleted, `resetAbandonedMarkets`) on abandonment so a resettled colony does not inherit
+   * its predecessor's structural reading. Authored for one job — the Demand unservable alert. Nothing
+   * inside the tick reads it back.
+   */
+  demandUnservable?: boolean;
 }
 
 // ── Factions ────────────────────────────────────────────────────

@@ -1593,6 +1593,161 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
   }, 30_000);
 });
 
+// ── Demand unservable (WorldMarket.demandUnservable) ─────────────────
+// The classification itself — structural vs. funding-bound, the deficit-endpoint-only rule, the
+// three-goods-three-flags shape — is pinned directly against `matchFactionTransfers` in
+// `lib/engine/__tests__/directed-logistics.test.ts`. These pin the world layer's half of the
+// contract: the market-join / merge-path plumbing threading it into `World.markets`, the abandonment
+// clear, and that nothing inside the tick reads the field back.
+
+describe("marketRowsBySystem carries demandUnservable through the market join", () => {
+  it("carries a present value onto the projected row", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const flagged: WorldMarket = { ...base, demandUnservable: true };
+    const rows = marketRowsBySystem([flagged]).get(flagged.systemId);
+    expect(rows?.find((r) => r.goodId === flagged.goodId)?.demandUnservable).toBe(true);
+  });
+
+  it("carries absence through as undefined, matching logisticsFundingBound's own projection", () => {
+    // marketRowsBySystem is a plain per-tick projection, not the persisted WorldMarket row — like
+    // every other optional field on it (logisticsFundingBound included), an absent source reads
+    // undefined here rather than a truly absent key. The true-absence guarantee belongs to
+    // WorldMarket itself and is pinned separately (resetAbandonedMarkets, the poisoning test).
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const untouched: WorldMarket = { ...base };
+    delete untouched.demandUnservable;
+    const rows = marketRowsBySystem([untouched]).get(untouched.systemId);
+    const row = rows?.find((r) => r.goodId === untouched.goodId);
+    expect(row?.demandUnservable).toBeUndefined();
+  });
+});
+
+describe("resetAbandonedMarkets clears demandUnservable", () => {
+  it("deletes a stale structural reading on abandonment, leaving stock untouched", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const stale: WorldMarket = { ...base, demandUnservable: true, stock: 777 };
+
+    const [reset] = resetAbandonedMarkets([stale], [stale.systemId]);
+
+    expect(reset.demandUnservable).toBeUndefined();
+    expect("demandUnservable" in reset).toBe(false);
+    expect(reset.stock).toBe(777);
+  });
+});
+
+describe("runWorldTick — the structural-unservable bit end to end", () => {
+  it("marks the deficit endpoint when isolated from every same-faction donor, and clears once one becomes reachable", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const prepared: World = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      buildings: base.buildings.filter((bl) => !(bl.systemId === b && bl.buildingType === "water")),
+      markets: base.markets.map((m) =>
+        m.systemId === b && m.goodId === "water" ? { ...m, stock: 0 } : m,
+      ),
+      // B is cut off from every connection the base galaxy gave it — including any that already
+      // reached its now-shared faction — so no same-faction donor is reachable at any hop count,
+      // regardless of who else in the faction might otherwise hold surplus water.
+      connections: base.connections.filter((c) => c.fromId !== b && c.toId !== b),
+    };
+    const cadence = { cycle: 1, logistics: 1, construction: 99 };
+    const unservable = (await runWorldTick(prepared, { cadence })).world;
+    const bWaterBefore = unservable.markets.find((m) => m.systemId === b && m.goodId === "water");
+    expect(bWaterBefore?.demandUnservable).toBe(true);
+    expect(bWaterBefore?.logisticsFundingBound ?? false).toBe(false); // structural, not budget-stopped
+
+    const recovered: World = {
+      ...unservable,
+      markets: unservable.markets.map((m) =>
+        m.systemId === a && m.goodId === "water" ? { ...m, stock: 1_000_000 } : m,
+      ),
+      connections: [
+        ...unservable.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+    };
+    const cleared = (await runWorldTick(recovered, { cadence })).world;
+    const bWaterAfter = cleared.markets.find((m) => m.systemId === b && m.goodId === "water");
+    expect(bWaterAfter?.demandUnservable).toBe(false);
+  });
+
+  it("nothing inside the tick reads demandUnservable — poisoning the input changes no other output, including the matcher's own decisions", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      markets: base.markets.map((m): WorldMarket => ({ ...m, demandUnservable: true })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    // demandUnservable itself legitimately differs run to run (a fresh per-run assessment) —
+    // stripped before comparing; everything else, including every harness/instrumentation figure,
+    // must be byte-identical. This also pins the Proves entry that the matcher's own decisions —
+    // which hauls it plans, in what order — are unchanged: `markets`/`systems` carry those
+    // decisions' downstream effects (stock moved, funding-bound assessments), and they strip down
+    // to identical here.
+    const stripMarkets = (markets: WorldMarket[]): WorldMarket[] =>
+      markets.map((m): WorldMarket => ({ ...m, demandUnservable: undefined }));
+    const strip = (w: World): World => ({ ...w, markets: stripMarkets(w.markets) });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(stripMarkets(dirty.markets)).toEqual(stripMarkets(clean.markets));
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
+
+  it("nothing inside the tick reads demandUnservable, checked on a fixture that actually hauls — the galaxy-wide poisoning test above never exercises the matcher at all", async () => {
+    // `generateWorld({ systemCount: 100, seed: 42 })` alone produces ZERO logistics flow events at
+    // this horizon (confirmed while building this test) — no two same-faction developed systems are
+    // both deficit-and-donor and reachable, so ANY change to what the matcher reads would be
+    // invisible in that fixture regardless of whether it's a real leak. `twoSystemWaterGradient`
+    // guarantees a real haul every cycle logistics runs (donor A holds 1,000,000 water, recipient B
+    // has none and cannot self-supply), so this is the fixture that can actually catch one.
+    const { world: base } = twoSystemWaterGradient((market) => market);
+    const poisoned: World = {
+      ...base,
+      markets: base.markets.map((m): WorldMarket => ({ ...m, demandUnservable: true })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    expect(clean.world.flowEvents.length).toBeGreaterThan(0); // premise: this fixture DOES haul
+
+    const stripMarkets = (markets: WorldMarket[]): WorldMarket[] =>
+      markets.map((m): WorldMarket => ({ ...m, demandUnservable: undefined }));
+    const strip = (w: World): World => ({ ...w, markets: stripMarkets(w.markets) });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(stripMarkets(dirty.markets)).toEqual(stripMarkets(clean.markets));
+  }, 30_000);
+});
+
 // ── Build blocked (WorldSystem.buildBlocked) ─────────────────────────
 // The engine's reason mapping and what `droppedRoi` means at a ranked vs. an unranked drop are
 // pinned directly against `planFactionProposals` in `lib/engine/__tests__/directed-build.test.ts`.
