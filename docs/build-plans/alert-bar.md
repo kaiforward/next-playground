@@ -111,7 +111,7 @@ the subject — a colony is abandoned, decay eats the idle capacity, population 
 | important | Overcrowded | `BedDouble` | `population > popCap` — there are people with no housing. Sorts by cap utilisation. The threshold is definitional, not tuned: at 1.00 everyone is housed and the next person is not. | fix | Derivable |
 | important | No housing headroom | `BedDouble` + slash | Over `popCap` **and** no habitable room for another housing level (`habitableHousingHeadroom < 1`, evaluated against queue-adjusted buildings). The world needs housing and physically cannot build it. Sorts by population over cap. | world-resolves (population falls) | Derivable |
 | important | Build blocked | `HardHat` + slash | The **production** planner wanted to build and could not — no capacity, no reachable input supplier, no spare labour, no affordable whole level. Sorts by the ROI of what was dropped. Housing refusals belong to *No housing headroom*, not here: housing carries no ROI and would have nothing to sort by. **Defaults off**: measured at 50.4% of developed systems per planner run, not rare. | fix | New |
-| important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. The missing-inputs case needs a sixth `IdleReason` — see below. | fix / world-resolves (decay removes it) | Ships today + new |
+| important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. The missing-inputs case needs a sixth `IdleReason` — see below. | no staff / no licence: fix or world-resolves (decay removes it) · missing inputs: **fix only** | Ships today + new |
 | important | **Disruption** | `TriangleAlert` — also a type icon | Events that cost but do not threaten — shortage, storm, embargo, glut, a dissolved alliance, and the three below. Sorts by authored impact rank. | expiry | Needs banding |
 | info | Build opportunity | `HardHat` | Ranked planner proposals, **only while build automation is off**. Sorts by ROI. | fix | Ships today |
 | info | Colony opportunity | `Globe` | Eligible controlled systems, **only while colonisation automation is off**. Sorts by colony ROI. | fix | Ships today |
@@ -533,6 +533,23 @@ building actually reads idle. It is the most actionable of the three idle causes
 failure the player can fix by building the supplier or the route — where "no staff" often cannot be
 fixed at all.
 
+**That fold is local to the readout, and deliberately does not reach decay.** There are two `used`
+values: `buildIndustryReadout`'s, which the panel and the alert service read, and
+`computeSystemDecay`'s, which decides what is torn down. Both dispatch through `buildingUsed`, whose
+producer branch is `count × min(effectiveFulfilment(state, tier), canSell)`
+(`lib/engine/industry.ts:430-435`) — staffing and skill licence are in it, `inputGate` is not, and
+decay's `SystemDecayInput` (`lib/engine/infrastructure-decay.ts:51-64`) carries no market stock to
+compute one from. Giving decay that visibility would need a new per-(system, good) signal out of the
+economy processor and a new field on `SystemDecayInput`.
+
+**It is not wired, by decision.** Decay eating a factory whose inputs merely have not arrived
+destroys the capacity the alert exists to rescue, and it is the one idle cause the player can
+straightforwardly fix. So the missing-inputs row clears by fix alone; the staffing and licence rows
+keep clearing by decay exactly as they do today. One consequence to carry forward: the Industry
+panel colours an input-starved building **contracting** while decay leaves it standing — the health
+colour is derived from the readout's `used`. That divergence is recorded in `buildingHealth`'s own
+docstring and is not resolved here.
+
 All of these are **read-only from the alert bar's point of view**: the bar reads them, and nothing in
 the tick reads them back, so nothing about them changes what the tick decides. That is the property to
 preserve at review — an alert that changes the simulation is a mechanic wearing a notification's
@@ -633,7 +650,7 @@ an invented threshold; Overcrowded reads `popCap` as the housing that exists, wh
 | Population + migration | Reads `population`, `popCap`, `provision`, `provisionExpectation`. **And writes**: the persisted per-cycle population delta is the realised change *including* migration, so it is computed by the tick body after the migration stage — `populationDelta` (`lib/engine/population.ts:458-473`) carries no migration term, and on a dying colony departures are often the dominant drain. | — |
 | Unrest / regime | Reads `unrest` against `STRIKE_PARAMS.threshold`, and grievance as `expectation − provision` (`grievanceShortfall`, `lib/engine/population.ts:295`). Writes nothing. The threshold's second job as `overshootDeathUnrestGate` couples Strike to Colony dying's measure — see row 1. | — |
 | Industry + staffing | Industry idle reads existing per-building idle reasons **and needs a sixth**: `IdleReason` (`lib/engine/industry.ts:544`) has no input-starvation member, so an input-gated factory reads as fully used. Build blocked's labour case reads the planner's own fit gate. | — |
-| Infrastructure decay | **Decay is the clearing mechanism for Industry idle, not its consequence** — the direction was stated backwards in the first cut. `idleLevels = floor(count − used)` (`lib/engine/infrastructure-decay.ts:95`) accrues a countdown while ≥ 1 and tears the level down; `used` then equals `count` and `idleReason` clears (`lib/engine/industry.ts:790`). So the row disappears when the capacity is destroyed. Accepted deliberately — decay is a mechanic the player is expected to know, and the flyout does not explain it. Decay also reads `logisticsFundingBound` (`:63,119`), which row 1 now records. | — |
+| Infrastructure decay | **Decay is the clearing mechanism for Industry idle's staffing and licence causes, not their consequence** — the direction was stated backwards in the first cut. `idleLevels = floor(count − used)` (`lib/engine/infrastructure-decay.ts:95`) accrues a countdown while ≥ 1 and tears the level down; `used` then equals `count` and `idleReason` clears (`lib/engine/industry.ts:790`). So the row disappears when the capacity is destroyed. Accepted deliberately — decay is a mechanic the player is expected to know, and the flyout does not explain it. **The missing-inputs cause is the exception and clears by fix only**: decay's `used` comes from `buildingUsed`'s producer branch (`lib/engine/industry.ts:430-435`), which reads `effectiveFulfilment` and `canSell` but never `inputGate`, and decay's own `SystemDecayInput` carries no market stock to compute a gate from — so an input-starved factory is never torn down. That is a decision, not an oversight; see the emission section. Decay also reads `logisticsFundingBound` (`:63,119`), which row 1 now records. | — |
 | Directed logistics | Demand unservable is new instrumentation here, per (system, good) on the deficit endpoint only — unlike `logisticsFundingBound`, which is written to both endpoints of a funding-bound haul (`lib/engine/directed-logistics.ts:170-175`). Survival stock falling reads persisted `stock` plus a new per-cycle stock delta. | — |
 | Directed build / planner | Build blocked is new instrumentation here, across the full drop set rather than two sites. Build opportunity reads the ranked proposals, gated on the automation switch. Note the assessment runs for **every** faction regardless of `world.player` (`lib/tick/processors/directed-build.ts:450`) — the switch gates proposal *emission*, not the clock. | — |
 | Colonisation + founding manifest | Colony opportunity reads eligibility; Colony dying reads the abandonment line. No write path. | — |
