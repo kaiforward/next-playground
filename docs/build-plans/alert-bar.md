@@ -1656,8 +1656,11 @@ exactly as that one is:
   rather than by its highest-scoring one, per the spec's Build opportunity section. Absent where the
   system produced no scored opportunity.
 
-The survival band itself is authored in `lib/constants/alerts.ts` beside `BUILD_DROP_SEVERITY`,
-against `SURVIVAL_GOODS` — not persisted, since it is a presentation ordering like the other two.
+The band itself needs **no new authored table**: `SURVIVAL_GOODS`
+(`lib/constants/physical-economy.ts:153`) already is the authority on which goods are survival goods,
+so the band is a predicate over the persisted `goodId` and belongs to the read service, not here.
+What this task owes the band is the `goodId` — and the **choice of which opportunity to persist**,
+since a single stored score cannot be re-banded after the fact.
 
 Proves:
 - The assessment runs and both fields are written with their domain's automation **off** — the switch

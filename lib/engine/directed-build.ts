@@ -23,6 +23,7 @@ import {
   FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { charterFee, foundingCommitmentCost, foundingGoodsValue, projectedManifestWant } from "@/lib/engine/founding-cost";
 import {
@@ -151,6 +152,33 @@ export interface BuildBlockReport {
   systemId: string;
   reason: BuildDropReason;
   droppedRoi: number;
+}
+
+/**
+ * One system's best-ranked SCORED production opportunity from a `planFactionBundles` run — the alert
+ * bar's Build opportunity category, distinct from `BuildBlockReport` above (a dropped opportunity, not
+ * a scored one; the two categories read different systems on different cycles). `score` is
+ * `BuildOpportunity.score` verbatim — see that interface's own docstring for what it is ("Ordering
+ * only", not comparable between systems, a 13× unit-spread bias across goods) and is NOT normalised,
+ * rescaled or improved here.
+ *
+ * "Best-ranked" bands survival-serving goods (`SURVIVAL_GOODS`, `lib/constants/physical-economy.ts`)
+ * above every other good, then orders by `score` within a band — the same rule the read service
+ * applies when it bands the category for display (docs/build-plans/alert-bar.md, "Build opportunity
+ * sorts survival-serving builds first"). A single stored score cannot be re-banded after the fact, so
+ * the choice of which one candidate's terms to keep is made here, not downstream: a system whose
+ * highest score belongs to a non-survival good, but which also has ANY survival-serving opportunity,
+ * persists the survival one. On an exact tie (same band, same score) the first one scored in this
+ * run's scan order wins — the deterministic order `remainingByGood` (goods) × `working` (sites) walks.
+ *
+ * Absent for a system with nothing scored this run: every (site, good) pair it was a candidate for
+ * failed one of `BuildOpportunity`'s own gates (no capacity, no input supplier, no reachable consumer,
+ * or a non-positive score) before a `BuildOpportunity` was ever constructed for it.
+ */
+export interface BuildOpportunityReport {
+  systemId: string;
+  goodId: string;
+  score: number;
 }
 
 /**
@@ -712,7 +740,7 @@ function planFactionBundles(
   routeCost: RouteCost,
   refs: DevelopmentRefs,
   structural: StructuralDeficit[],
-): { bundles: PlannedBundle[]; blocked: BuildBlockReport[] } {
+): { bundles: PlannedBundle[]; blocked: BuildBlockReport[]; topOpportunities: BuildOpportunityReport[] } {
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
   // systems are skipped here, gating both the housing and industry passes in one place.
@@ -740,6 +768,23 @@ function planFactionBundles(
   const recordRankedDrop = (systemId: string, reason: BuildDropReason, droppedRoi: number): void => {
     if (rankedBlockBySystem.has(systemId)) return;
     rankedBlockBySystem.set(systemId, { systemId, reason, droppedRoi });
+  };
+
+  // Per-system best-ranked SCORED opportunity this run (BuildOpportunityReport docstring above has
+  // the full reasoning) — survival-serving goods band above every other good, highest score wins
+  // within a band, first-scored wins an exact tie. Recorded as each candidate is scored below, not
+  // reduced afterward, so it needs no second pass over `opportunities`.
+  const bestOpportunityBySystem = new Map<string, BuildOpportunityReport & { survival: boolean }>();
+  const recordScoredOpportunity = (systemId: string, goodId: string, score: number): void => {
+    const survival = SURVIVAL_GOODS.includes(goodId);
+    const current = bestOpportunityBySystem.get(systemId);
+    if (current) {
+      // A survival-serving current always outranks a non-survival candidate, whatever the scores.
+      if (current.survival && !survival) return;
+      // Same band: keep the higher (or equal — first-scored wins the tie) score.
+      if (current.survival === survival && current.score >= score) return;
+    }
+    bestOpportunityBySystem.set(systemId, { systemId, goodId, score, survival });
   };
 
   // ── Pass 1: housing relief (housing follows crowding). ──
@@ -788,7 +833,7 @@ function planFactionBundles(
     }
   }
 
-  if (remainingByGood.size === 0) return { bundles, blocked: [] };
+  if (remainingByGood.size === 0) return { bundles, blocked: [], topOpportunities: [] };
 
   // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
   // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
@@ -867,6 +912,10 @@ function planFactionBundles(
       }
 
       opportunities.push({ systemId: site.systemId, goodId, perUnit, reachable, score });
+      // Build opportunity's own signal (distinct from the blocked-drop reports above): every scored
+      // candidate is a real opportunity whether or not it goes on to land, so this records BEFORE the
+      // ranked-consumption loop below decides what actually builds.
+      recordScoredOpportunity(site.systemId, goodId, score);
     }
   }
 
@@ -1056,7 +1105,11 @@ function planFactionBundles(
     if (report) blocked.push(report);
   }
 
-  return { bundles, blocked };
+  const topOpportunities: BuildOpportunityReport[] = [...bestOpportunityBySystem.values()].map(
+    ({ systemId, goodId, score }) => ({ systemId, goodId, score }),
+  );
+
+  return { bundles, blocked, topOpportunities };
 }
 
 /**
@@ -1091,6 +1144,9 @@ export interface FactionBuildPlan {
   /** This run's best-ranked dropped production opportunity per system that had one — see
    *  `BuildBlockReport`. Persisted world state, unlike `strikeSuppressedProposals` above. */
   blockedBuilds: BuildBlockReport[];
+  /** This run's best-ranked SCORED production opportunity per system that had one — see
+   *  `BuildOpportunityReport`. Persisted world state, alongside `blockedBuilds` above. */
+  buildOpportunities: BuildOpportunityReport[];
 }
 
 /**
@@ -1112,7 +1168,7 @@ export function planFactionProposals(
   const assessment = assessStructuralDeficits(systems, openProjects, routeCost, true, advance);
   const factionBySystem = new Map(systems.map((system) => [system.systemId, system.factionId]));
   const proposals: BuildProposal[] = [];
-  const { bundles, blocked } = planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits);
+  const { bundles, blocked, topOpportunities } = planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits);
   for (const bundle of bundles) {
     const factionId = factionBySystem.get(bundle.systemId);
     if (factionId === null || factionId === undefined) continue;
@@ -1130,6 +1186,7 @@ export function planFactionProposals(
     proposals, persistenceUpdates: assessment.persistenceUpdates,
     strikeSuppressedProposals: assessment.strikeSuppressedProposals,
     blockedBuilds: blocked,
+    buildOpportunities: topOpportunities,
   };
 }
 /** A controlled system a faction could settle: its substrate + the developed seed source (from hop data). */

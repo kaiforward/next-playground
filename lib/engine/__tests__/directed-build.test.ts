@@ -1393,6 +1393,84 @@ describe("planFactionProposals — Build blocked (blockedBuilds)", () => {
   });
 });
 
+describe("planFactionProposals — Build opportunity (buildOpportunities)", () => {
+  it("Proves 2 — a system whose best-scoring opportunity serves a non-survival good, but which also has a survival-serving one, persists the survival one", () => {
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 20;
+    const builder = (): BuildSystemState => ({
+      systemId: "B", factionId: "f1", population: 100_000, control: "developed", buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    });
+    const foodSink: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const oreSink: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "ore", stock: 1, demand: 5000, capacityProduction: 0, proposalCycles: 1 }],
+    };
+
+    // Sanity: ore's own opportunity genuinely outscores food's alone — read directly off the new
+    // `buildOpportunities` interface so the scenario's asymmetry is MEASURED, not assumed. Without
+    // this, the combined assertion below could pass vacuously (food winning because it was the only
+    // real opportunity, not because the band overrode a higher-scoring rival).
+    const foodOnly = planFactionProposals([foodSink, builder()], () => 1, [], DEV_REFS);
+    const oreOnly = planFactionProposals([oreSink, builder()], () => 1, [], DEV_REFS);
+    const foodScore = foodOnly.buildOpportunities.find((o) => o.systemId === "B")?.score ?? 0;
+    const oreScore = oreOnly.buildOpportunities.find((o) => o.systemId === "B")?.score ?? 0;
+    expect(oreScore).toBeGreaterThan(foodScore);
+
+    // Combined: B can score BOTH goods this run — the band must still pick food (survival) despite
+    // ore's higher score.
+    const combined: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [
+        { goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 },
+        { goodId: "ore", stock: 1, demand: 5000, capacityProduction: 0, proposalCycles: 1 },
+      ],
+    };
+    const plan = planFactionProposals([combined, builder()], () => 1, [], DEV_REFS);
+    const opp = plan.buildOpportunities.find((o) => o.systemId === "B");
+    expect(opp?.goodId).toBe("food");
+    expect(opp?.score).toBe(foodScore);
+  });
+
+  it("is absent for a system that scored nothing this run", () => {
+    // Mirrors "Proves 1" above (fully saturated) — B has no free capacity for anything, so it never
+    // reaches a BuildOpportunity at all, let alone a best-ranked one.
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const saturated: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 200, control: "developed",
+      buildings: { food: 10 },
+      slotCap: makeResourceVector({ arable: 10 }), generalSpace: 50, habitableSpace: 0,
+      goods: [],
+    };
+    const plan = planFactionProposals([deficit, saturated], () => 1, [], DEV_REFS);
+    expect(plan.buildOpportunities.some((o) => o.systemId === "B")).toBe(false);
+  });
+
+  it("Proves 5 — the planner's own decisions are unchanged: an unrelated existing scenario still lands exactly the same proposals", () => {
+    // Recording the scored-opportunity side channel must not touch a single conditional in the
+    // planner's own decision logic — mirrors Build blocked's own regression smoke test for the same
+    // reason (Task 3), re-run here because this task edits the SAME function (`planFactionBundles`)
+    // a second time.
+    const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS).proposals;
+    const bundle = proposals.find((p) => p.items.some((i) => i.buildingType === "electronics"));
+    expect(bundle).toBeDefined();
+    const types = bundle!.items.map((i) => i.buildingType);
+    expect(types).toContain(VOCATIONAL_SCHOOL_TYPE);
+    expect(types).toContain(RESEARCH_INSTITUTE_TYPE);
+    expect(types.indexOf(VOCATIONAL_SCHOOL_TYPE)).toBeLessThan(types.indexOf("electronics"));
+  });
+});
+
 function policySystem(
   good: BuildGoodState,
   partial: Partial<BuildSystemState> = {},

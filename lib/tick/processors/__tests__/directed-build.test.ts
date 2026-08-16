@@ -391,6 +391,31 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     expect(on.buildBlockedUpdates.some((u) => u.systemId === "A" && u.reason === "no-capacity")).toBe(true);
   });
 
+  it("Proves 1 — turning build automation off does not blank Build opportunity either; only proposal emission is gated", async () => {
+    // Same scenario as Build blocked's own "Proves 5" directly above: B has real capacity and a
+    // reachable food deficit at A, so it scores a real opportunity whether or not automation lands
+    // the build.
+    const on = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodCycles: 1 }));
+    await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+    });
+    const off = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodCycles: 1 }));
+    await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      player: { factionId: "f1", automation: { build: false, colonisation: true } },
+    });
+
+    // Proposal EMISSION differs, as the existing tests above already pin…
+    expect(on.constructionProjects.some((p) => p.kind === "build" && p.systemId === "B")).toBe(true);
+    expect(off.constructionProjects).toHaveLength(0);
+
+    // …but the Build opportunity assessment itself does not: same visited set, same report, on both runs.
+    expect(off.buildOpportunityVisitedSystemIds.slice().sort()).toEqual(on.buildOpportunityVisitedSystemIds.slice().sort());
+    expect(off.buildOpportunityUpdates).toEqual(on.buildOpportunityUpdates);
+    expect(on.buildOpportunityUpdates.some((u) => u.systemId === "B" && u.goodId === "food")).toBe(true);
+  });
+
   // A developed food SELF-SUPPLIER: buildings cover 1.1× demand (no capacity gap) and a persisted realized
   // rate of 0 keeps it off the exporter self-netting path — so the ONLY thing that can advance its clock is
   // the squeeze-feedback gap, isolating the two guards that suppress it.
@@ -619,6 +644,31 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
     });
     expect(w.developments).toHaveLength(0);
     expect(w.constructionProjects).toHaveLength(0);
+  });
+
+  it("Proves 1 — advances Colony opportunity's assessment with colonisation automation off, yet emits no colony proposal", async () => {
+    const on = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
+      player: { factionId: "f1", automation: { build: true, colonisation: true } },
+    });
+    const off = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: { candidateProvider: (f) => (f === "f1" ? [colonyCand("c1")] : []), params: COLONY_PARAMS },
+      player: { factionId: "f1", automation: { build: true, colonisation: false } },
+    });
+
+    // Proposal EMISSION differs…
+    expect(on.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(true);
+    expect(off.constructionProjects.some((p) => p.kind === "colony_establish")).toBe(false);
+
+    // …but the Colony opportunity assessment itself does not: same visited (candidate) set, same
+    // terms, on both runs.
+    expect(off.colonyOpportunityVisitedSystemIds.slice().sort()).toEqual(on.colonyOpportunityVisitedSystemIds.slice().sort());
+    expect(off.colonyOpportunityUpdates).toEqual(on.colonyOpportunityUpdates);
+    expect(on.colonyOpportunityUpdates.some((u) => u.systemId === "c1")).toBe(true);
   });
 });
 

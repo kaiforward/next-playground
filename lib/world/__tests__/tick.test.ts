@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
 import {
   runWorldTick, toTickSystems, applyBuildingIncreases, applyDevelopments, applyAbandonments,
-  applyBuildBlockedUpdates, marketRowsBySystem, resetAbandonedMarkets,
+  applyBuildBlockedUpdates, applyBuildOpportunityUpdates, applyColonyOpportunityUpdates,
+  marketRowsBySystem, resetAbandonedMarkets,
 } from "../tick";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serializeWorld, deserializeWorld } from "../save";
@@ -1980,6 +1981,142 @@ describe("runWorldTick — nothing inside the tick reads buildBlocked back", () 
     const strip = (w: World): World => ({
       ...w,
       systems: w.systems.map((s): WorldSystem => ({ ...s, buildBlocked: undefined })),
+    });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(dirty.markets).toEqual(clean.markets);
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
+});
+
+// ── Build opportunity / Colony opportunity (WorldSystem.buildOpportunity / .colonyOpportunity) ──
+// Task 17. The engine's survival-band selection and what `score`/`value`/`work` mean are pinned
+// directly against `planFactionProposals`/`planFactionColonyProposals` in
+// `lib/engine/__tests__/directed-build.test.ts`. These pin the world layer's half of the contract:
+// `applyBuildOpportunityUpdates`/`applyColonyOpportunityUpdates`'s visited/clear/set behaviour — the
+// same shape `applyBuildBlockedUpdates` above uses, over two different visited-set populations — and
+// that nothing inside the tick reads either field back.
+
+describe("applyBuildOpportunityUpdates — the visited/clear/set contract", () => {
+  const base = toTickSystems(generateWorld({ systemCount: 20, seed: 3 }));
+
+  it("sets buildOpportunity for a visited system present in the update list", () => {
+    const [sys] = base;
+    const [next] = applyBuildOpportunityUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, score: 12.5, goodId: "food" }],
+    );
+    expect(next.buildOpportunity).toEqual({ score: 12.5, goodId: "food" });
+  });
+
+  it("Proves 3 — clears buildOpportunity for a visited system that stopped being a candidate (absent from the update list)", () => {
+    const [sys] = base;
+    const stale: TickSystem = { ...sys, buildOpportunity: { score: 4, goodId: "ore" } };
+    const [next] = applyBuildOpportunityUpdates([stale], [stale.id], []);
+    expect(next.buildOpportunity).toBeUndefined();
+    expect("buildOpportunity" in next).toBe(false);
+  });
+
+  it("Proves 4 — leaves a system the run did not visit untouched, keeping its previous value", () => {
+    const [sys, other] = base;
+    if (!other) throw new Error("expected at least two systems in the fixture");
+    const stale: TickSystem = { ...sys, buildOpportunity: { score: 3, goodId: "food" } };
+    // `other` carries a previous run's reading AND is deliberately absent from visitedSystemIds —
+    // non-vacuous: were the visited guard dropped, `other` would be cleared exactly like `stale` is,
+    // since it too is absent from `updates`.
+    const otherStale: TickSystem = { ...other, buildOpportunity: { score: 9, goodId: "metals" } };
+    const [next, untouched] = applyBuildOpportunityUpdates([stale, otherStale], [stale.id], []);
+    expect(next.buildOpportunity).toBeUndefined();       // visited, absent from updates → cleared
+    expect(untouched).toBe(otherStale);                   // not visited → same object, unchanged
+    expect(untouched.buildOpportunity).toEqual({ score: 9, goodId: "metals" });
+  });
+
+  it("guards a non-finite score to 0 rather than writing NaN/Infinity into world state", () => {
+    const [sys] = base;
+    const [next] = applyBuildOpportunityUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, score: Number.POSITIVE_INFINITY, goodId: "food" }],
+    );
+    expect(next.buildOpportunity?.score).toBe(0);
+  });
+});
+
+describe("applyColonyOpportunityUpdates — the visited/clear/set contract (a candidate-scoped visited set)", () => {
+  const base = toTickSystems(generateWorld({ systemCount: 20, seed: 3 }));
+
+  it("sets colonyOpportunity for a visited candidate present in the update list", () => {
+    const [sys] = base;
+    const [next] = applyColonyOpportunityUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, value: 40, work: 84 }],
+    );
+    expect(next.colonyOpportunity).toEqual({ value: 40, work: 84 });
+  });
+
+  it("Proves 3 — clears colonyOpportunity for a visited candidate that stopped being proposed (absent from the update list)", () => {
+    const [sys] = base;
+    const stale: TickSystem = { ...sys, colonyOpportunity: { value: 12, work: 20 } };
+    const [next] = applyColonyOpportunityUpdates([stale], [stale.id], []);
+    expect(next.colonyOpportunity).toBeUndefined();
+    expect("colonyOpportunity" in next).toBe(false);
+  });
+
+  it("Proves 4 — leaves a candidate the run did not visit untouched, keeping its previous value", () => {
+    const [sys, other] = base;
+    if (!other) throw new Error("expected at least two systems in the fixture");
+    const stale: TickSystem = { ...sys, colonyOpportunity: { value: 5, work: 10 } };
+    const otherStale: TickSystem = { ...other, colonyOpportunity: { value: 99, work: 200 } };
+    const [next, untouched] = applyColonyOpportunityUpdates([stale, otherStale], [stale.id], []);
+    expect(next.colonyOpportunity).toBeUndefined();
+    expect(untouched).toBe(otherStale);
+    expect(untouched.colonyOpportunity).toEqual({ value: 99, work: 200 });
+  });
+
+  it("guards a non-finite value/work to 0 rather than writing NaN/Infinity into world state", () => {
+    const [sys] = base;
+    const [next] = applyColonyOpportunityUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, value: Number.NaN, work: Number.POSITIVE_INFINITY }],
+    );
+    expect(next.colonyOpportunity).toEqual({ value: 0, work: 0 });
+  });
+});
+
+describe("runWorldTick — nothing inside the tick reads buildOpportunity or colonyOpportunity back", () => {
+  it("Proves 6 — poisoning the input changes no other output", async () => {
+    // Same fixture Build blocked's own poisoning test above uses (`systemCount: 100, seed: 42`), for
+    // the same reason it works there: this is a build-side signal, not a directed-logistics one, so
+    // this fixture's lack of flow events at this horizon (noted on that test) doesn't blind this test
+    // to a leak — a leak would show up in `systems`/`markets`/`instrumentation`, all covered below.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem => ({
+        ...s,
+        buildOpportunity: { score: -999_999, goodId: "food" },
+        colonyOpportunity: { value: -999_999, work: -999_999 },
+      })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    // Both fields legitimately differ run to run (a fresh per-run assessment) — stripped before
+    // comparing; everything else, including every harness/instrumentation figure, must be
+    // byte-identical. This also pins the Proves entry that the planner's own decisions (which
+    // proposals it emits, in what order) are unchanged.
+    const strip = (w: World): World => ({
+      ...w,
+      systems: w.systems.map((s): WorldSystem => ({
+        ...s, buildOpportunity: undefined, colonyOpportunity: undefined,
+      })),
     });
     expect(strip(dirty.world)).toEqual(strip(clean.world));
     expect(dirty.markets).toEqual(clean.markets);

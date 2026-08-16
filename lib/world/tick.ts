@@ -112,6 +112,8 @@ import type {
   SystemDevelopment,
   FoundingStagingDraw,
   BuildBlockedUpdate,
+  BuildOpportunityUpdate,
+  ColonyOpportunityUpdate,
 } from "@/lib/tick/world/directed-build-world";
 
 import type {
@@ -224,6 +226,11 @@ export function toTickSystems(world: World): TickSystem[] {
       // processor's world adapter writes it directly (see the field's own docstring,
       // lib/world/types.ts), so this row purely carries forward whatever the previous World held.
       buildBlocked: s.buildBlocked,
+      // Same pass-through-uncoerced treatment, same reason, written by the directed-build processor's
+      // own applyBuildOpportunityUpdates/applyColonyOpportunityUpdates (see the fields' own docstrings,
+      // lib/world/types.ts).
+      buildOpportunity: s.buildOpportunity,
+      colonyOpportunity: s.colonyOpportunity,
       yields: resourceVectorFromColumns(
         {
           yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
@@ -292,6 +299,13 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     // cleared by abandonment/redevelopment) must not become a present key holding `undefined`.
     if (tickSystem.buildBlocked === undefined) delete merged.buildBlocked;
     else merged.buildBlocked = tickSystem.buildBlocked;
+    // Same delete/assign treatment, same reason, for the two other directed-build side-channel
+    // writes — independent guards so a system whose only change was one of these three fields never
+    // has the other two stamped as a present key holding `undefined`.
+    if (tickSystem.buildOpportunity === undefined) delete merged.buildOpportunity;
+    else merged.buildOpportunity = tickSystem.buildOpportunity;
+    if (tickSystem.colonyOpportunity === undefined) delete merged.colonyOpportunity;
+    else merged.colonyOpportunity = tickSystem.colonyOpportunity;
     return merged;
   });
 }
@@ -579,6 +593,67 @@ export function applyBuildBlockedUpdates(
   });
 }
 
+/**
+ * Fold directed-build's Build opportunity report back into the system rows. Same visited/clear/set
+ * contract as `applyBuildBlockedUpdates` above — `visitedSystemIds` is the same "every system
+ * belonging to a due faction this run" set, a visited system NOT in `updates` is CLEARED (nothing
+ * scored for it this run), and an unvisited system is left untouched.
+ */
+export function applyBuildOpportunityUpdates(
+  systems: TickSystem[],
+  visitedSystemIds: string[],
+  updates: BuildOpportunityUpdate[],
+): TickSystem[] {
+  if (visitedSystemIds.length === 0) return systems;
+  const visited = new Set(visitedSystemIds);
+  const bySystem = new Map(updates.map((u) => [u.systemId, u]));
+  return systems.map((s): TickSystem => {
+    if (!visited.has(s.id)) return s;
+    const update = bySystem.get(s.id);
+    if (!update) {
+      if (s.buildOpportunity === undefined) return s;
+      const next = { ...s };
+      delete next.buildOpportunity;
+      return next;
+    }
+    // Same non-finite guard as buildBlocked's droppedRoi: world state must never carry a
+    // NaN/Infinity `JSON.stringify` would turn into null.
+    const score = Number.isFinite(update.score) ? update.score : 0;
+    return { ...s, buildOpportunity: { score, goodId: update.goodId } };
+  });
+}
+
+/**
+ * Fold directed-build's Colony opportunity report back into the system rows. `visitedSystemIds` is
+ * every colony-establish CANDIDATE the colonisation planner considered this run — a population
+ * distinct from Build blocked/opportunity's (a candidate is a CONTROLLED, not-yet-developed system) —
+ * captured regardless of the colonisation-automation switch. A visited candidate NOT in `updates` is
+ * CLEARED (nothing was proposed for it this run), and a candidate this run did not consider is left
+ * untouched.
+ */
+export function applyColonyOpportunityUpdates(
+  systems: TickSystem[],
+  visitedSystemIds: string[],
+  updates: ColonyOpportunityUpdate[],
+): TickSystem[] {
+  if (visitedSystemIds.length === 0) return systems;
+  const visited = new Set(visitedSystemIds);
+  const bySystem = new Map(updates.map((u) => [u.systemId, u]));
+  return systems.map((s): TickSystem => {
+    if (!visited.has(s.id)) return s;
+    const update = bySystem.get(s.id);
+    if (!update) {
+      if (s.colonyOpportunity === undefined) return s;
+      const next = { ...s };
+      delete next.colonyOpportunity;
+      return next;
+    }
+    const value = Number.isFinite(update.value) ? update.value : 0;
+    const work = Number.isFinite(update.work) ? update.work : 0;
+    return { ...s, colonyOpportunity: { value, work } };
+  });
+}
+
 /** Count of resources this system has any deposit slot for — a claim/develop score input. */
 function countResourceDiversity(s: TickSystem): number {
   let n = 0;
@@ -667,6 +742,14 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
       // been cleared there, never freshly assigned — but the delete stays here too, matching every
       // other field on this line, so a system surviving untouched to a LATER run is still covered.
       delete next.buildBlocked;
+      // Same resettlement rule, same reasoning as buildBlocked directly above.
+      delete next.buildOpportunity;
+      // A candidate that just developed was, by definition, IN this run's colonyOpportunity visited
+      // set (a colony candidate is exactly a controlled system being weighed for establishment) — so
+      // `applyColonyOpportunityUpdates` below already cleared it (a newly developed system is no
+      // longer a candidate, so it never appears in that write's `updates`). The delete stays here too,
+      // matching every other field on this line, for a system surviving untouched to a LATER run.
+      delete next.colonyOpportunity;
     }
     return next;
   });
@@ -713,12 +796,18 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
     // see the write site below for how that's avoided; this clear is the defense that matters once
     // the system survives untouched to a LATER cycle instead.
     delete next.populationChange;
-    // Directed build's own visited-system clear (`applyBuildBlockedUpdates`, below) runs AFTER this
-    // function within the same tick and naturally excludes a system abandoned here — it flips to
-    // `unclaimed` above, so `isEconomicallyActive` drops it out of the planner's working set and it
-    // gets no fresh entry. This delete is the defense that matters once the system survives
-    // untouched (never reclaimed and redeveloped) to a LATER run instead.
+    // These three deletes are the ONLY thing that ever clears an abandoned system's planner readings,
+    // and the reason is the opposite of what it looks like. An abandoned system flips to `unclaimed`
+    // above, so `isEconomicallyActive` drops it out of the planner's working set and it is never
+    // VISITED again — and the clear-visited-then-assign writes below (`applyBuildBlockedUpdates` and
+    // its two siblings) only touch systems inside their visited set, by design, because set-and-clear
+    // says an entity a run did not visit keeps its previous value. So "the write path naturally
+    // excludes it" is precisely why the delete is load-bearing rather than a backstop: without it a
+    // dead colony would advertise its last blocked build and its last opportunity indefinitely, which
+    // is the present-but-false reading the absence convention exists to prevent.
     delete next.buildBlocked;
+    delete next.buildOpportunity;
+    delete next.colonyOpportunity;
     return next;
   });
 }
@@ -1594,6 +1683,10 @@ export async function runWorldTick(
       // directed-build's own visited set was captured, so it is cleared here (nothing dropped for a
       // system that was never economically active) rather than picking up a fresh reading.
       systems = applyBuildBlockedUpdates(systems, dbWorld.buildBlockedVisitedSystemIds, dbWorld.buildBlockedUpdates);
+      // Same ordering reason as buildBlocked directly above — both must land before applyDevelopments
+      // so a system founded this very run clears rather than picking up a fresh reading.
+      systems = applyBuildOpportunityUpdates(systems, dbWorld.buildOpportunityVisitedSystemIds, dbWorld.buildOpportunityUpdates);
+      systems = applyColonyOpportunityUpdates(systems, dbWorld.colonyOpportunityVisitedSystemIds, dbWorld.colonyOpportunityUpdates);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
       // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —

@@ -76,6 +76,14 @@ export interface TickSystem {
    *  `lib/world/tick.ts` alongside its other writes — the field lives on the row purely so it
    *  round-trips through the join/merge and survives untouched for a system this run did not visit. */
   buildBlocked?: { reason: BuildDropReason; droppedRoi: number };
+  /** This run's best-ranked SCORED production opportunity, optional — same pass-through-uncoerced
+   *  treatment as `buildBlocked` above, written directly by the directed-build processor's own
+   *  `applyBuildOpportunityUpdates` (`lib/tick/world/directed-build-world.ts`). */
+  buildOpportunity?: { score: number; goodId: string };
+  /** This run's best-ranked colony-establish terms, optional — same pass-through-uncoerced treatment
+   *  as `buildBlocked` above, written directly by the directed-build processor's own
+   *  `applyColonyOpportunityUpdates` (`lib/tick/world/directed-build-world.ts`). */
+  colonyOpportunity?: { value: number; work: number };
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

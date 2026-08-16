@@ -173,6 +173,34 @@ export interface WorldSystem {
    *  refusals never appear here — they are *No housing headroom*'s signal, not this one. Nothing
    *  inside the tick reads it. */
   buildBlocked?: { reason: BuildDropReason; droppedRoi: number };
+  /** This run's best-ranked SCORED production opportunity from the directed-build planner — the alert
+   *  bar's Build opportunity category. `score` is `BuildOpportunity.score` verbatim (Ordering only,
+   *  not comparable between systems); `goodId` is the good it would serve, carried along because the
+   *  read service bands the category on it against `SURVIVAL_GOODS` — a system with any
+   *  survival-serving opportunity is represented by that one rather than its highest-scoring one; see
+   *  `BuildOpportunityReport` (`lib/engine/directed-build.ts`) for the full selection rule. Written
+   *  directly by the directed-build processor's world adapter (`applyBuildOpportunityUpdates`,
+   *  `lib/tick/world/directed-build-world.ts`), applied in `lib/world/tick.ts` — not by the generic
+   *  per-system row-mutation path. Same absence convention as `buildBlocked` above: absent means never
+   *  scored, written for every system the directed-build planner visited this run that scored
+   *  anything, absent for one that scored nothing, untouched for one the planner did not visit this
+   *  run, and cleared — not carried forward — on abandonment or redevelopment. Nothing inside the tick
+   *  reads it. */
+  buildOpportunity?: { score: number; goodId: string };
+  /** This run's best-ranked colony-establish terms from the directed-build planner — the alert bar's
+   *  Colony opportunity category. `value` is `colonyValue(c, …) − popCost` (the ROI numerator) and
+   *  `work` the establish-plus-housing denominator — the same terms `ColonyProposal` carries
+   *  (`lib/engine/directed-build.ts`). Written directly by the directed-build processor's world
+   *  adapter (`applyColonyOpportunityUpdates`, `lib/tick/world/directed-build-world.ts`), applied in
+   *  `lib/world/tick.ts` — not by the generic per-system row-mutation path. Absent means never
+   *  proposed: written for every CANDIDATE (a controlled, not-yet-developed system) the colonisation
+   *  planner actually proposed establishing this run, absent for one it considered but did not
+   *  propose (below the habitable floor, already in flight, net-negative value, or truncated by the
+   *  money/settler-supply gates), untouched for a candidate the planner did not consider this run
+   *  (its faction was not due, or the `develop` param was absent), and cleared — not carried forward —
+   *  on abandonment or redevelopment so a founded colony never inherits its own candidacy reading.
+   *  Nothing inside the tick reads it. */
+  colonyOpportunity?: { value: number; work: number };
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */
