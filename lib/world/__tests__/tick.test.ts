@@ -18,10 +18,13 @@ import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import {
   BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, labourTotal,
 } from "@/lib/constants/industry";
-import { CYCLE_LENGTH, REFERENCE_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
+import {
+  CYCLE_LENGTH, REFERENCE_INTERVAL, LOGISTICS_INTERVAL, type TickCadence,
+} from "@/lib/constants/tick-cadence";
 import { CROWDING, POPULATION_PARAMS, STRIKE_PARAMS, UNREST_PARAMS } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { EXPANSION } from "@/lib/constants/expansion";
 import type { TaxLevel } from "@/lib/types/game";
 import type { SystemDevelopment } from "@/lib/tick/world/directed-build-world";
 import type { TickSystem } from "@/lib/tick/rows";
@@ -1136,11 +1139,12 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
 });
 
 // ── the realised per-cycle population change ─────────────────────────
-// `WorldSystem.populationChange` is written by the tick body itself, after the migration stage —
-// not by the population processor, which never sees migration's effect. These pin the write's
-// migration inclusion, its absence convention and its reference-cycle denomination. Whether
-// anything inside the tick reads it back is proven separately (the poisoning test below) rather
-// than by `npm run simulate`'s before/after comparison, which is a broader, owner-run gate.
+// `WorldSystem.populationChange` is written by the tick body itself, after directed-build's
+// `applyDevelopments` — not by the population processor, which never sees migration's or
+// colony-founding's effect. These pin the write's migration inclusion, its colony-founding-donor
+// inclusion, its absence convention and its reference-cycle denomination. Whether anything inside
+// the tick reads it back is proven separately (the poisoning test below) rather than by `npm run
+// simulate`'s before/after comparison, which is a broader, owner-run gate.
 
 /** Reads `populationChange` off a system row, failing with a clear message rather than silently
  *  treating an unassessed system as 0 — the exact distinction these tests exist to pin. */
@@ -1353,6 +1357,130 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     expect(dirty.events).toEqual(clean.events);
     expect(dirty.instrumentation).toEqual(clean.instrumentation);
   }, 30_000);
+
+  // ── colony-founding donation, driven through runWorldTick, not applyDevelopments directly ──
+  // A specific, empirically-verified galaxy (seed 11, 90 systems) funds and completes a real
+  // colony-establish project — system-50 seeding system-40 — at tick 432 under the DEFAULT cadence,
+  // found the same way `lib/world/__tests__/tick-colony-source.test.ts` does: run the real loop
+  // forward and watch `control`/`constructionProjects`. `EXPANSION.COLONY_SEED_POP` fixes the
+  // donation at exactly 2 regardless of fixture size, so "unmistakably different" comes from a
+  // same-tick counterfactual rather than a huge donor: two clones of the identical pre-tick world
+  // (same `meta.currentTick`, so `tickRng(seed, tick)` draws identically in both —
+  // `lib/world/tick.ts:1070`) diverge ONLY in whether directed-build resolves this tick, isolating
+  // the donation's contribution to the donor's populationChange exactly, with no other system's
+  // dynamics free to differ between the two branches.
+  it("includes a colony-founding donation: the donor's populationChange is NOT short by the seed it gave away", async () => {
+    const base = generateWorld({ systemCount: 90, seed: 11 });
+    const preWorld = await runTicks(base, 431);
+
+    const withDonation = (await runWorldTick(preWorld)).world;
+    const withoutDonation = (await runWorldTick(preWorld, {
+      cadence: { cycle: CYCLE_LENGTH, logistics: LOGISTICS_INTERVAL, construction: NEVER },
+    })).world;
+
+    // Premise: the two branches genuinely diverge on founding this exact tick, not on some
+    // unrelated effect — the fixture's colony completes only when directed-build is allowed to run.
+    expect(fixtureSystem(withDonation, "system-40").control).toBe("developed");
+    expect(fixtureSystem(withoutDonation, "system-40").control).toBe("controlled");
+
+    const donationInclusive = requirePopulationChange(withDonation, "system-50");
+    const migrationOnly = requirePopulationChange(withoutDonation, "system-50");
+
+    expect(donationInclusive).toBeLessThan(migrationOnly);
+    // The gap is exactly the seed transfer, denominated per reference cycle (catchUpFactor
+    // (CYCLE_LENGTH) = 1 here, since CYCLE_LENGTH === REFERENCE_INTERVAL) — not a coincidental
+    // drift, since both branches share identical migration/economy/logistics rng draws this tick.
+    expect(migrationOnly - donationInclusive).toBeCloseTo(
+      EXPANSION.COLONY_SEED_POP / catchUpFactor(CYCLE_LENGTH), 6,
+    );
+  }, 30_000);
+
+  it("a system that donates nothing is unaffected by the move — its figure is identical whether or not directed-build resolves this tick", async () => {
+    const base = generateWorld({ systemCount: 90, seed: 11 });
+    const preWorld = await runTicks(base, 431);
+
+    const withDonation = (await runWorldTick(preWorld)).world;
+    const withoutDonation = (await runWorldTick(preWorld, {
+      cadence: { cycle: CYCLE_LENGTH, logistics: LOGISTICS_INTERVAL, construction: NEVER },
+    })).world;
+
+    // Two colonies complete simultaneously in this fixture (system-50→system-40 and
+    // system-85→system-77, both verified above/empirically) — excluded so the bystander really is
+    // uninvolved in either branch's founding.
+    const donors = new Set(["system-50", "system-85"]);
+    const bystander = withDonation.systems.find(
+      (s) => s.control === "developed" && !donors.has(s.id) && s.populationChange !== undefined,
+    );
+    if (!bystander) {
+      throw new Error("expected an uninvolved developed system with an assessed populationChange this cycle");
+    }
+
+    const withDonationValue = requirePopulationChange(withDonation, bystander.id);
+    const withoutDonationValue = requirePopulationChange(withoutDonation, bystander.id);
+    expect(withDonationValue).toBe(withoutDonationValue);
+  }, 30_000);
+
+  it("a system founded, abandoned and later redeveloped reports populationChange absent, not its predecessor's value — driven through runWorldTick across real cycles", async () => {
+    const base = generateWorld({ systemCount: 90, seed: 11 });
+    let world = await runTicks(base, 432); // the colony above (system-40, seeded from system-50) completes here
+
+    const colonyId = "system-40";
+    expect(fixtureSystem(world, colonyId).control).toBe("developed"); // premise: really founded first
+
+    // Force a real famine/abandonment: cut the colony off from any donor haul (no logistics rescue),
+    // drive population and stock to the death line, and let the REAL population processor call it
+    // via runWorldTick — the same technique the stockChange suite uses to reach the death line.
+    const savedConnections = world.connections;
+    world = {
+      ...world,
+      systems: world.systems.map((s): WorldSystem =>
+        s.id === colonyId ? { ...s, unrest: 0.9, population: 1.3, popCap: 20 } : s,
+      ),
+      buildings: world.buildings.filter(
+        (b) => !(b.systemId === colonyId && (b.buildingType === "water" || b.buildingType === "food")),
+      ),
+      markets: world.markets.map((m): WorldMarket =>
+        m.systemId === colonyId && (m.goodId === "water" || m.goodId === "food") ? { ...m, stock: 0 } : m,
+      ),
+      connections: world.connections.filter((c) => c.fromId !== colonyId && c.toId !== colonyId),
+    };
+
+    const KILL_CADENCE: TickCadence = { cycle: 1, logistics: 1, construction: NEVER };
+    let abandoned = false;
+    for (let i = 0; i < 3000 && !abandoned; i++) {
+      world = (await runWorldTick(world, { cadence: KILL_CADENCE })).world;
+      abandoned = fixtureSystem(world, colonyId).control !== "developed";
+    }
+    expect(abandoned).toBe(true); // non-vacuous: the fixture actually reaches the death line
+    expect(fixtureSystem(world, colonyId).control).toBe("unclaimed");
+    expect(fixtureSystem(world, colonyId).populationChange).toBeUndefined();
+
+    // Reclaim: restore connectivity to the original seed source and flip control back to
+    // `controlled` under the same faction, so the real develop provider considers it again — the
+    // claim mechanic itself is not under test here, only the write ordering once redevelopment fires.
+    const sourceFactionId = fixtureSystem(world, "system-50").factionId;
+    world = {
+      ...world,
+      connections: savedConnections,
+      systems: world.systems.map((s): WorldSystem =>
+        s.id === colonyId ? { ...s, control: "controlled", factionId: sourceFactionId } : s,
+      ),
+      treasuries: world.treasuries.map((t): WorldFactionTreasury =>
+        t.factionId === sourceFactionId ? { ...t, balance: t.balance + 1_000_000, pendingFounding: 0 } : t,
+      ),
+    };
+
+    let redeveloped = false;
+    for (let i = 0; i < 500 && !redeveloped; i++) {
+      world = (await runWorldTick(world)).world;
+      redeveloped = fixtureSystem(world, colonyId).control === "developed";
+    }
+    expect(redeveloped).toBe(true); // non-vacuous: the fixture actually re-founds
+
+    const refounded = fixtureSystem(world, colonyId);
+    expect(refounded.populationChange).toBeUndefined();
+    expect("populationChange" in refounded).toBe(false);
+  }, 120_000);
 });
 
 // ── the realised per-cycle survival-good stock change ─────────────────

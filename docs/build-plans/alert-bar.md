@@ -1223,11 +1223,13 @@ Files: `lib/world/types.ts`, `lib/tick/rows.ts`, `lib/tick/world/population-worl
 `lib/tick/adapters/memory/__tests__/population.test.ts`
 
 Interface: `WorldSystem.populationChange?: number` — the realised change in `population` across one
-economy cycle **including migration**, denominated per reference cycle. Written by the tick body after
-the migration stage, not by the population processor: `populationDelta`
-(`lib/engine/population.ts:458-473`) carries no migration term, and migration writes `population`
-afterwards in the same tick. Absent means never assessed. Joins the delete/assign pair at
-`lib/world/tick.ts:206-216` and `:263-272`, and the clears at `:533-538` and `:575-579`.
+economy cycle **including migration and colony-founding transfers**, denominated per reference cycle.
+Written by the tick body after the directed-build stage, not by the population processor:
+`populationDelta` (`lib/engine/population.ts:458-473`) carries no migration term, migration writes
+`population` afterwards in the same tick, and a colony-founding donor's seed debit
+(`applyDevelopments`) is a real population loss for that donor. Absent means never assessed. Joins the
+delete/assign pair at `lib/world/tick.ts:206-216` and `:263-272`, and the clears at `:533-538` and
+`:575-579`.
 
 Proves:
 - A system whose population fell only through migration reports a negative change, not zero — the

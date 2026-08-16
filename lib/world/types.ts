@@ -140,16 +140,19 @@ export interface WorldSystem {
    *  instead of where the engine already bounds it. Written once per economy cycle, alongside
    *  `provision`/`supplyBand`. */
   criticalWeight?: number;
-  /** The realised change in `population` across one economy cycle, including migration —
-   *  `population_after_migration − population_at_cycle_start`, denominated per reference cycle
-   *  (dividing the realised change by this cycle's own `catchUpFactor`, mirroring `populationDelta`'s
-   *  own denomination in lib/engine/population.ts rather than the scaled figure a single run
-   *  actually applies) so the reading is unchanged if `CYCLE_LENGTH` is retuned away from
-   *  `REFERENCE_INTERVAL`. Written by the tick body (`lib/world/tick.ts`), AFTER the migration
-   *  stage but BEFORE any colony-founding population transfer — not by the population processor:
+  /** The realised change in `population` across one economy cycle, including both migration and
+   *  colony-founding transfers — `population_after_this_cycle's_transfers − population_at_cycle_start`,
+   *  denominated per reference cycle (dividing the realised change by this cycle's own
+   *  `catchUpFactor`, mirroring `populationDelta`'s own denomination in lib/engine/population.ts
+   *  rather than the scaled figure a single run actually applies) so the reading is unchanged if
+   *  `CYCLE_LENGTH` is retuned away from `REFERENCE_INTERVAL`. Written by the tick body
+   *  (`lib/world/tick.ts`), AFTER the directed-build stage — not by the population processor:
    *  `populationDelta` (lib/engine/population.ts) carries no migration term, and on a dying colony
-   *  departures are often the dominant drain, so persisting the biological delta alone would
-   *  systematically understate a collapse. Same absence convention as `provision`/`supplyBand`/
+   *  chosen as a founding donor the colony-seed debit is often the dominant drain, so persisting
+   *  the migration-inclusive-but-pre-founding figure would still systematically understate the
+   *  collapse. A donor therefore reads more pessimistic for the single cycle it founds a colony,
+   *  self-correcting the next — accepted, because the field means realised change and erring toward
+   *  warning beats erring toward reassurance. Same absence convention as `provision`/`supplyBand`/
    *  `criticalWeight` above: absent means never assessed, written for every system the population
    *  processor visited this cycle (0 included, distinct from absent), untouched for one it did not,
    *  and cleared — not carried forward — on abandonment or redevelopment (`applyAbandonments`,

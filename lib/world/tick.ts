@@ -1393,35 +1393,6 @@ export async function runWorldTick(
       processorsRun.push("migration");
     }
 
-    // ── realised per-cycle population change (persisted; read by nothing else in the tick) ──
-    // Written HERE — after migration, before directed-build's colony-founding transfer further
-    // below — because the interface is explicitly "including migration": `population_after_migration
-    // − population_at_cycle_start`. A colony founding's source-system debit is a distinct event, not
-    // part of this cycle's population-processor-plus-migration read, so it must land after this
-    // write, not before it.
-    //
-    // Gated on `economySignals` (equivalently `migrationResolves`, since both share
-    // `isCycleStart(tick, cadence.cycle)`): this whole outer block also runs when only logistics or
-    // build resolve, on a tick the population processor never touched — `populationAtCycleStart` is
-    // `undefined` there, so this skips cleanly rather than dividing by a stale snapshot.
-    //
-    // Abandoned systems are excluded even though they sit in the cycle-start visited set:
-    // `applyAbandonments` already cleared this field above (before migration ran), and this
-    // system's control just flipped away from "developed" — writing a computed reading here would
-    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
-    // exists.
-    if (economySignals && populationAtCycleStart) {
-      const cycleCatchUp = catchUpFactor(cadence.cycle);
-      const snapshot = populationAtCycleStart;
-      const abandonedThisCycle = new Set(abandonedSystemIds);
-      systems = systems.map((s): TickSystem => {
-        if (abandonedThisCycle.has(s.id)) return s;
-        const before = snapshot.get(s.id);
-        if (before === undefined) return s;
-        return { ...s, populationChange: (s.population - before) / cycleCatchUp };
-      });
-    }
-
     // directed-logistics and directed-build share one hop-BFS, run at the
     // larger of their two (independently tunable) MAX_HOPS radii — each
     // stage's routeCost closure still applies its OWN cutoff below, so a BFS
@@ -1707,6 +1678,49 @@ export async function runWorldTick(
       foundingStalls = dbResult.foundingStalls;
       strikeSuppressedProposals = dbResult.strikeSuppressedProposals;
       processorsRun.push("directed-build");
+    }
+
+    // ── realised per-cycle population change (persisted; read by nothing else in the tick) ──
+    // Written HERE — after directed-build's `applyDevelopments` above, still inside this outer
+    // cycle-start block — because the interface is the realised change across the whole cycle,
+    // "including migration and colony-founding transfers": a colony founding's source-system debit
+    // (`applyDevelopments`, `popDelta.set(d.sourceSystemId, … − moved)` above) is exactly as real a
+    // population loss for the donor as migration is, so it must land inside this figure, not after
+    // it. A donor that founds a colony this cycle therefore reads more pessimistic for this one
+    // cycle than a mid-cycle read would show — accepted: the field means realised change, and this
+    // reading self-corrects next cycle once the donor's own population processor run picks a fresh
+    // baseline.
+    //
+    // Placement is still safe against resurrecting a value `applyDevelopments` just deleted: a
+    // colony-founding TARGET is always a `controlled` system immediately before this run
+    // (`lib/engine/directed-build.ts:1141`), never `developed`, so it can never be a key in
+    // `populationAtCycleStart` (keyed by `economySignals.dissatisfactionBySystem`, developed systems
+    // only) — the map below leaves it untouched (`before === undefined`), so `applyDevelopments`'
+    // own delete of a fresh target's `populationChange` stands. A colony-founding SOURCE is always a
+    // `developed` system throughout (`lib/engine/directed-build.ts:1189-1192` — it stays the seed
+    // source, never flips status), so it was already in the snapshot and simply reads its post-drain
+    // `population` here instead of its pre-drain one.
+    //
+    // Gated on `economySignals` (equivalently `migrationResolves`, since both share
+    // `isCycleStart(tick, cadence.cycle)`): this whole outer block also runs when only logistics or
+    // build resolve, on a tick the population processor never touched — `populationAtCycleStart` is
+    // `undefined` there, so this skips cleanly rather than dividing by a stale snapshot.
+    //
+    // Abandoned systems are excluded even though they sit in the cycle-start visited set:
+    // `applyAbandonments` already cleared this field above (before migration ran), and this
+    // system's control just flipped away from "developed" — writing a computed reading here would
+    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
+    // exists.
+    if (economySignals && populationAtCycleStart) {
+      const cycleCatchUp = catchUpFactor(cadence.cycle);
+      const snapshot = populationAtCycleStart;
+      const abandonedThisCycle = new Set(abandonedSystemIds);
+      systems = systems.map((s): TickSystem => {
+        if (abandonedThisCycle.has(s.id)) return s;
+        const before = snapshot.get(s.id);
+        if (before === undefined) return s;
+        return { ...s, populationChange: (s.population - before) / cycleCatchUp };
+      });
     }
 
   } // ── end cycle start ──
