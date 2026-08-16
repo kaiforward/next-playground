@@ -110,8 +110,8 @@ the subject — a colony is abandoned, decay eats the idle capacity, population 
 | important | Build blocked | `HardHat` + slash | The **production** planner wanted to build and could not — no capacity, no reachable input supplier, no spare labour, no affordable whole level. Sorts by **authored reason severity**, worst first — see below. Housing refusals belong to *No housing headroom*, not here: housing carries no ROI and would have nothing to sort by. **Defaults off**: measured at 50.4% of developed systems per planner run, not rare. | fix | New |
 | important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. The missing-inputs case needs a sixth `IdleReason` — see below. | no staff / no licence: fix or world-resolves (decay removes it) · missing inputs: **fix only** | Ships today + new |
 | important | **Disruption** | `TriangleAlert` — also a type icon | Events that cost but do not threaten — shortage, storm, embargo, glut, a dissolved alliance, and the three below. Sorts by authored impact rank. | expiry | Needs banding |
-| info | Build opportunity | `HardHat` | Ranked planner proposals, **only while build automation is off**. Sorts by ROI. | fix | Ships today |
-| info | Colony opportunity | `Globe` | Eligible controlled systems, **only while colonisation automation is off**. Sorts by colony ROI. | fix | Ships today |
+| info | Build opportunity | `HardHat` | Ranked planner proposals, **only while build automation is off**. Sorts **survival-serving builds first**, then by demand served per route cost — see below. | fix | New |
+| info | Colony opportunity | `Globe` | Eligible controlled systems, **only while colonisation automation is off**. Sorts by the planner's own `value / work` — a real ROI, unlike the build side. | fix | New |
 | info | **Windfall** | `Sparkles` — also a type icon | Events worth riding — trade festival, mining boom, tech breakthrough, a pact opening. Sorts by `ticksRemaining`, soonest to expire first. | expiry | Needs banding |
 
 **Sixteen categories.** Overcrowded was one category and is now two: combining "over the cap" with
@@ -582,6 +582,40 @@ factory to a better-ranked rival:
 `droppedRoi` is still emitted and still shown as the row's measure, but it is a **tiebreak within one
 reason only**, never the primary key, because it is not comparable across goods. Where it is 0 for
 every row in a reason, the order inside that reason is the stable authored one.
+
+**Build opportunity sorts survival-serving builds first, then by the planner's own score.** "Sorts by
+ROI" was the first cut and had no producer: there is no build-side ROI anywhere. The only ranking
+figure the planner computes is `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597,
+850-856`) — for each reachable system short of the good, the units this site could actually supply
+them, divided by route cost, summed. That is a real and useful measure of *where building would close
+unmet demand*, and it is what this category sorts by inside a band.
+
+It carries one bias, stated rather than hidden. `score` counts units, and a unit means a different
+amount of capacity per good: `OUTPUT_PER_UNIT` runs from 0.6 (`ship_frames`) to 8.0 (`gas`), a **13×
+spread** across all 26 goods (`lib/constants/physical-economy.ts:29-56`, six overrides at
+`lib/constants/industry.ts:200-206`; `ECONOMY_SCALE` scales all of them uniformly and does not touch
+the ratio). So the list skews toward the bulk end of the economy and ranks shipbuilding and military
+opportunities lower than the capacity they represent. Every system on the list still genuinely has
+reachable unmet demand it could serve — `take` is bounded by the real shortfall — so the skew costs
+order, never correctness, and on an informational chip that only appears with automation off that is
+an accepted trade. **The order is not a value ranking and must not be read as one.**
+
+What `score` does **not** carry is necessity: a hundred units of unmet food and a hundred units of
+unmet luxuries contribute identically, and nothing in the planner consults `SURVIVAL_GOODS`
+(`lib/constants/physical-economy.ts:153`) — the pair whose shortfall alone sets the Famine band. So
+the category bands before it sorts:
+
+| Band | Contents |
+|---|---|
+| 1 | the system's best opportunity **serving a survival good** — water or food |
+| 2 | its best opportunity otherwise |
+
+A system with any survival-serving opportunity is represented by that one and ranks above every
+band-2 system, whatever the scores say; inside a band the order is `score`, highest first. This is
+the same move `BUILD_DROP_SEVERITY` and `EVENT_BAND` make — where two quantities are not comparable,
+author the band and sort within it rather than inventing an exchange rate between them. It needs no
+tuned constant, which is the point: a survival-good multiplier would be a magic number standing in
+for a decision, and the decision is simply that feeding people outranks not feeding them.
 
 **That fold is local to the readout, and deliberately does not reach decay.** There are two `used`
 values: `buildIndustryReadout`'s, which the panel and the alert service read, and
@@ -1152,6 +1186,31 @@ by five files.
 sites in `lib/world/tick.ts` — the market join, both merge paths (map and rows), and
 `resetAbandonedMarkets`.
 
+### Resolution — every measure and the thing that produces it
+
+Every quantity the spec promises to sort, threshold or clear by, resolved to a producer before any
+task consumes it. Four rows resolved to nothing and are why Tasks 16-18 exist; the rest carry a
+receipt. Rows marked *(built)* were resolved and consumed by a committed task.
+
+| Measure | State | Producer |
+|---|---|---|
+| Famine — time to abandonment | exists *(built)* | `population` + `ABANDON_POP_FLOOR` (`lib/constants/population.ts:133`) + `populationChange` (Task 1) |
+| Strike — suppression | exists *(built)* | `strikeMultiplier` (`lib/engine/population.ts`) |
+| Deprived worlds — Provision ascending | exists *(built)* | `WorldSystem.provision` |
+| Unrest rising — grievance depth | exists *(built)* | `readExpectation` (`lib/engine/expectation.ts:43-52`) |
+| Overcrowded — cap utilisation | exists *(built)* | `population` / `popCap` |
+| No housing headroom — population over cap | exists *(built)* | same, plus `habitableHousingHeadroom` (`lib/engine/directed-build.ts:213`) |
+| Survival stock falling — cycles to empty | exists + new *(built)* | `WorldMarket.stock` + `stockChange` (Task 2) |
+| Build blocked — reason severity, ROI tiebreak | new *(built)* | `BUILD_DROP_SEVERITY` (Task 7) + `buildBlocked.droppedRoi` (Task 3) |
+| Industry idle — idle share | exists *(built)* | `buildIndustryReadout`'s `used` / `count`, with Task 5's `inputs` gate |
+| Crisis / Disruption — impact rank | new *(built)* | `EVENT_BAND[type].impactRank` (Task 6) |
+| Windfall — soonest to expire | exists | `ActiveEvent.ticksRemaining` (`lib/types/game.ts:296`) |
+| Maintenance unfunded — sort | n/a | single faction-level row; the order is vacuous |
+| **Demand unservable — unserved demand rate** | **new — Task 16** | the magnitude exists as `Deficit.shortfall` (`lib/engine/directed-logistics.ts:220`) and is discarded; Task 4 persisted only the boolean. `demandRate` (`lib/world/types.ts:333`) is *demand*, not *unserved* demand, and is not a substitute |
+| **Build opportunity — survival band, then demand served per route cost** | **new — Task 17** | the band is authored beside the category registry against `SURVIVAL_GOODS`; the score is `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597`), computed every run and discarded. "Sorts by ROI" had no producer — `lib/engine/build-options.ts` carries no value, score or ROI symbol at all |
+| **Colony opportunity — `value / work`** | **new — Task 17** | `ColonyProposal.value` and `.work` (`lib/engine/directed-build.ts:1197-1200`) are computed every run and discarded. `colonyValue(…)` itself (`:1344`) is unexported and needs faction-wide aggregates; `colonyEligibility` returns costs only (`lib/services/colony-eligibility.ts:74-78`) |
+| **Chip hysteresis — two consecutive cycles** | **new — Task 18** | `EconomyTickPayload` distinguishes a resolving tick from a mid-cycle one (`systemCount` / `shardIndex`, `lib/tick/processors/economy.ts:41,268`), but `useTickInvalidation` discards the payload, so no component can count cycles |
+
 ### Stage A — the persisted signals and the engine changes
 
 No UI in this stage. Every task adds an optional persisted field or an authored constant, and nothing
@@ -1546,6 +1605,107 @@ Proves: not a test task — the check is that `grep -rn "alert bar" docs/` finds
 that nothing references the deleted working file.
 
 Consumes: every task.
+
+### Tasks added by the resolution pass
+
+Three measures resolved to a producer that exists but is not persisted; each gets a task. A fourth
+resolved to nothing and is blocked on the spec — see below.
+
+**Order:** Tasks 16 and 17 are Stage A-shaped and run before Task 9's two affected categories are
+re-read; Task 18 runs with Task 10, before Task 12 consumes it.
+
+### Task 16 — Persist the unserved shortfall beside the unservable bit
+
+Files: `lib/engine/directed-logistics.ts`, `lib/tick/processors/directed-logistics.ts`,
+`lib/tick/world/directed-logistics-world.ts`, `lib/world/types.ts`, `lib/world/tick.ts`,
+`lib/engine/__tests__/directed-logistics.test.ts`
+
+Interface: `WorldMarket.unservedShortfall?: number` — the deficit left unclosed, written on the same
+deficit endpoint and under the same condition as `demandUnservable` (Task 4), absent everywhere that
+bit is absent. A **level, not a rate**: `Deficit.shortfall` is `max(0, target − stock)`
+(`lib/engine/directed-logistics.ts:38-44`), so it takes no per-cycle denomination, unlike Task 2's
+`stockChange`. Follows the `WorldMarket` optional-field floor above.
+
+Proves:
+- A system unservable in three goods carries three shortfall figures, and the read service still
+  counts it once — at the largest of them, not the sum.
+- A deficit closed by a reachable donor carries no shortfall, so the row clears with the bit.
+- A deficit left unserved purely by the work budget carries `logisticsFundingBound` and **neither**
+  the bit nor a shortfall — the temporary and the structural stay distinct.
+- An abandoned system's market row reports absent afterwards.
+- The figure is a level: changing `CYCLE_LENGTH` does not move it.
+
+Consumes: Task 4.
+
+### Task 17 — Persist the planner's ranked opportunity terms
+
+Files: `lib/engine/directed-build.ts`, `lib/tick/processors/directed-build.ts`,
+`lib/tick/world/directed-build-world.ts`, `lib/world/types.ts`, `lib/tick/rows.ts`,
+`lib/world/tick.ts`, `lib/engine/__tests__/directed-build.test.ts`
+
+Interface: two optional `WorldSystem` fields, both pure side-channel writes mirroring `buildBlocked`
+(Task 3) including `applyBuildBlockedUpdates`'s clear-visited-then-assign semantics, and inert
+exactly as that one is:
+
+- `colonyOpportunity?: { value: number; work: number }` — the terms `ColonyProposal` already carries
+  (`lib/engine/directed-build.ts:1197-1200`), `value` being `colonyValue(c, …) − popCost` and `work`
+  the establish-plus-housing denominator. Written per candidate system, absent where none was proposed.
+- `buildOpportunity?: { score: number; goodId: string }` — the **best-ranked** opportunity's own
+  `BuildOpportunity.score` (`:596-597`) and the good it would serve. The good rides along because the
+  read service bands on it: a system with any survival-serving opportunity is represented by that one
+  rather than by its highest-scoring one, per the spec's Build opportunity section. Absent where the
+  system produced no scored opportunity.
+
+The survival band itself is authored in `lib/constants/alerts.ts` beside `BUILD_DROP_SEVERITY`,
+against `SURVIVAL_GOODS` — not persisted, since it is a presentation ordering like the other two.
+
+Proves:
+- The assessment runs and both fields are written with their domain's automation **off** — the switch
+  gates proposal emission, not the clock (`lib/tick/processors/directed-build.ts:450`).
+- A system whose best-scoring opportunity serves a non-survival good, but which also has a
+  survival-serving one, persists the survival one — the band cannot be applied after the fact from a
+  single stored score.
+- A system that stops being a candidate clears rather than keeping a stale figure.
+- A system the run did not visit keeps its previous value.
+- The planner's own decisions — which proposals it emits, in what order — are unchanged.
+- Nothing inside the tick reads either field back.
+
+Consumes: Task 3's write-back pattern.
+
+### Task 18 — Surface the cycle boundary to the client
+
+Files: `lib/hooks/use-tick-invalidation.ts`, `lib/hooks/use-cycle-boundary.ts` (new),
+`lib/hooks/__tests__/use-cycle-boundary.test.tsx` (new)
+
+Interface: a hook exposing the count of resolving economy cycles seen this session, derived from
+`EconomyTickPayload` (`lib/tick/types.ts:32`) — which already distinguishes a boundary tick from a
+mid-cycle one, `systemCount` being 0 on the latter (`lib/tick/processors/economy.ts:41,268`) — where
+`useTickInvalidation` today subscribes and discards the payload. Task 12's hysteresis counts cycles
+through this, never renders or refetches.
+
+Proves:
+- A mid-cycle economy tick does not advance the count; a resolving one does.
+- The count survives a refetch that returns identical data.
+- A component consuming it sees exactly one advance per cycle across a multi-tick run.
+
+Consumes: nothing.
+
+### Task 9 — amended by the resolution pass
+
+Three of Task 9's sixteen categories were built against measures with no producer, and each carried a
+proxy the implementer chose rather than the spec. All three come out:
+
+- **Demand unservable** sorted by `demandRate`, which is demand, not unserved demand. Reads Task 16's
+  `unservedShortfall` instead, largest first, still counting a multi-good system once.
+- **Build opportunity** sorted by addable level count. Reads Task 17's `buildOpportunity`, banded
+  survival-first then by score.
+- **Colony opportunity** sorted by `seedPop ÷ (charter + projectedBill)`. Reads Task 17's
+  `colonyOpportunity`, by `value / work` descending.
+
+Its `Proves` list gains one entry: a system whose best-scoring build opportunity serves a non-survival
+good, while a survival-serving one also exists there, sorts above every band-2 system.
+
+Consumes additionally: Tasks 16, 17.
 
 ## Verification
 
