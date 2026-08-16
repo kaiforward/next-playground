@@ -49,10 +49,15 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.factionVitalsAll });
         // Treasury settles on the cycle start; funded fractions + snapshot move then.
         queryClient.invalidateQueries({ queryKey: queryKeys.factionTreasuryAll });
+        // Alert bar: every category except the three event bands moves on this cycle.
+        queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
       }),
       // Event notifications → refresh the events feed (detail panel).
       subscribeToEvent("eventNotifications", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.events });
+        // Alert bar: the three event-banded categories (Crisis / Disruption / Windfall) move on
+        // this channel, not economyTick.
+        queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
       }),
     ];
 

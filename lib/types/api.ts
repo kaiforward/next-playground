@@ -598,10 +598,13 @@ export interface AlertCategory {
   instances: AlertInstance[];
 }
 
-/** The alert bar's whole read. Categories not yet built (events, Build blocked, Industry idle, the
- *  opportunity/windfall categories, Maintenance unfunded, Survival stock falling, Demand unservable)
- *  are absent from the array rather than present with an empty read — each is added here as it
- *  ships, rather than owning a separate endpoint. */
+/** The alert bar's whole read — all sixteen categories (docs/build-plans/alert-bar.md tier table),
+ *  one endpoint rather than one per category. With a player seat, `getAlertData()`
+ *  (lib/services/alerts.ts) always emits every category id, tier-then-order sorted; a category with
+ *  nothing to say still appears, with `count: 0` and an empty `instances` array — the chip run
+ *  (Task 12) is what decides whether an empty category renders anything. A world with no player seat
+ *  (e.g. the calibration harness) reads `categories: []` entirely, the same posture `TrackerData`
+ *  takes for the same reason. */
 export interface AlertData {
   categories: AlertCategory[];
 }
