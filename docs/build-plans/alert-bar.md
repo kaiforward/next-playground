@@ -1679,9 +1679,14 @@ Files: `lib/hooks/use-tick-invalidation.ts`, `lib/hooks/use-cycle-boundary.ts` (
 
 Interface: a hook exposing the count of resolving economy cycles seen this session, derived from
 `EconomyTickPayload` (`lib/tick/types.ts:32`) — which already distinguishes a boundary tick from a
-mid-cycle one, `systemCount` being 0 on the latter (`lib/tick/processors/economy.ts:41,268`) — where
-`useTickInvalidation` today subscribes and discards the payload. Task 12's hysteresis counts cycles
-through this, never renders or refetches.
+mid-cycle one — where `useTickInvalidation` today subscribes and discards the payload. Task 12's
+hysteresis counts cycles through this, never renders or refetches.
+
+**`systemCount` is the only field that distinguishes them.** The resolving payload writes
+`systemCount: systemIds.length` (`lib/tick/processors/economy.ts:268-273`) and `economyMidCyclePayload`
+hard-codes `systemCount: 0` (`:39-42`); `shardIndex` and `shardCount` are populated identically on
+both and carry no signal. An earlier draft of this task cited them as candidates — corrected here
+rather than left to be re-derived.
 
 Proves:
 - A mid-cycle economy tick does not advance the count; a resolving one does.
