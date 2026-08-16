@@ -556,8 +556,15 @@ export function getAlertData(): AlertData {
   // planner actually proposed establishing this run" (the field's own docstring), so no separate
   // control or eligibility re-check belongs here — the alert and the planner's own founding decision
   // can never disagree about what counts as a candidate. Sorts by value / work descending (negated,
-  // best ROI first); a non-positive `work` (never produced by the planner's own sizing, but not a
-  // contract this file enforces) reads as absent rather than dividing by it. ──
+  // best ROI first).
+  //
+  // The `work <= 0` guard below is **unreachable against today's constants and deliberately kept**.
+  // `sizeColonyEstablish` (lib/engine/directed-build.ts:1301-1319) returns null rather than a
+  // proposal unless `housingLevels >= 1`, and `work` is `establishWork + housingLevels ×
+  // workCostPerLevel(HOUSING_TYPE)` — both terms non-negative constants — so the planner cannot emit
+  // a non-positive `work`. It is a divide-by-zero guard against a constants change, not a live
+  // branch, which is why no test pins it: a red-proof here could only be written by breaking the
+  // engine's own sizing invariant. Delete it only alongside that invariant. ──
   const colonyOpportunity: AlertInstance[] = [];
   if (!player.automation.colonisation) {
     for (const system of world.systems) {

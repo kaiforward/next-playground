@@ -1491,6 +1491,12 @@ Interface: `GET /api/game/player/alerts` returning `AlertResponse` via `withServ
 other category on the first.
 
 Proves:
+- **A world driven through real `runWorldTick` cycles produces alert rows whose systems and measures
+  match the state those cycles actually left** — the one seam nothing currently covers. Every
+  boundary is pinned in isolation (engine → processor → adapter → `WorldSystem` → read service), but
+  no test drives a tick and then reads the service, so a composition-only wiring defect would pass
+  everything. Booked here at review of Tasks 9/16/17 because this task is where a route first makes
+  the whole chain reachable end to end.
 - The response carries `private, no-cache`, so a New game cannot serve stale system ids from cache.
 - An economy tick invalidates the key; an event notification also invalidates it.
 - The hook is a `useSuspenseQuery` inside a `QueryBoundary` and does not fetch during SSR render.
