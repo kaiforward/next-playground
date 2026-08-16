@@ -87,14 +87,17 @@ not two. Don't re-propose the feed without a case for what it holds that an aler
    disagree. Measured since this row was written: **"rare by construction" is false** — the planner
    drops an opportunity it wanted at 50.4% of developed systems per run — so Build blocked defaults
    off; and events became **three** valence-banded categories rather than one per type.
-   **Split into two PRs.** Stages A+B — the persisted engine signals, the sixteen-category registry,
-   the read service and the route — are one PR; Stage C, the chip run, flyout and settings, is the
-   second. The chip and flyout machinery is shared across all sixteen categories, so the split is by
-   layer and never by deferring a category. A+B ships **inert**: nothing renders it, and
+   **Split into two PRs on a `shared/alert-bar` integration branch.** Stages A+B — the persisted
+   engine signals, the sixteen-category registry, the read service and the route — are the first
+   sub-PR; Stage C, the chip run, flyout and settings, is the second. Both merge into shared, then one
+   shared→main PR. The chip and flyout machinery is shared across all sixteen categories, so the split
+   is by layer and never by deferring a category. A+B is **inert**: nothing renders it, and
    `npm run simulate` is identical at both horizons before and after.
-   *Next step:* Stage C — `/implement-plan docs/build-plans/alert-bar.md` from Task 11, on a branch
-   off main once the A+B PR has merged. The doc fold (Task 15) rides Stage C, since the spec cannot
-   be promoted to `docs/active/` while half of what it describes is unbuilt.
+   The integration branch is what keeps main from carrying an undocumented half-feature: the doc fold
+   (Task 15) cannot run until Stage C exists, since the spec cannot be promoted to `docs/active/` as
+   current reality while half of what it describes is unbuilt.
+   *Next step:* Stage C — `/implement-plan docs/build-plans/alert-bar.md` from Task 11, on a `feat/*`
+   branch off `shared/alert-bar` once the A+B sub-PR has merged into it.
    *Don't:* alert on a raw persistent state the player cannot act on. That is the precise EU5 failure
    — dismissal is pointless because the condition is still true, so the alert returns instantly and
    crowds out the useful ones.
