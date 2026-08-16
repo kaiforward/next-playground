@@ -337,6 +337,7 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
       demandUnservable: m.demandUnservable,
+      unservedShortfall: m.unservedShortfall,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -382,8 +383,16 @@ function applyLogisticsMarketUpdates(
   stockUpdates: Map<string, number>,
   fundingBoundUpdates: Map<string, boolean>,
   demandUnservableUpdates: Map<string, boolean>,
+  unservedShortfallUpdates: Map<string, number>,
 ): WorldMarket[] {
-  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0 && demandUnservableUpdates.size === 0) return markets;
+  if (
+    stockUpdates.size === 0
+    && fundingBoundUpdates.size === 0
+    && demandUnservableUpdates.size === 0
+    && unservedShortfallUpdates.size === 0
+  ) {
+    return markets;
+  }
   return markets.map((m) => {
     const id = `${m.systemId}|${m.goodId}`;
     const newStock = stockUpdates.get(id);
@@ -407,7 +416,14 @@ function applyLogisticsMarketUpdates(
       };
     }
     if (demandUnservable !== undefined) {
+      // unservedShortfall rides the identical branch as the bit it can never appear without: `true`
+      // always has a matching entry in unservedShortfallUpdates (the processor writes them from the
+      // same classification pass), `false` has none, so the delete/assign pair below is exactly
+      // "present iff demandUnservable is true" rather than a present key holding `undefined`.
       next = { ...next, demandUnservable };
+      const shortfall = unservedShortfallUpdates.get(id);
+      if (shortfall === undefined) delete next.unservedShortfall;
+      else next.unservedShortfall = shortfall;
     }
     return next;
   });
@@ -425,8 +441,16 @@ function patchLogisticsMarketRows(
   stockUpdates: Map<string, number>,
   fundingBoundUpdates: Map<string, boolean>,
   demandUnservableUpdates: Map<string, boolean>,
+  unservedShortfallUpdates: Map<string, number>,
 ): Map<string, MarketRowForLogistics[]> {
-  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0 && demandUnservableUpdates.size === 0) return bySystem;
+  if (
+    stockUpdates.size === 0
+    && fundingBoundUpdates.size === 0
+    && demandUnservableUpdates.size === 0
+    && unservedShortfallUpdates.size === 0
+  ) {
+    return bySystem;
+  }
   const touchedSystems = new Set<string>();
   for (const key of stockUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
@@ -435,6 +459,9 @@ function patchLogisticsMarketRows(
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   for (const key of demandUnservableUpdates.keys()) {
+    touchedSystems.add(key.slice(0, key.indexOf("|")));
+  }
+  for (const key of unservedShortfallUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   const patched = new Map(bySystem);
@@ -462,7 +489,11 @@ function patchLogisticsMarketRows(
           };
         }
         if (demandUnservable !== undefined) {
+          // Same present-iff-true pairing as applyLogisticsMarketUpdates above.
           next = { ...next, demandUnservable };
+          const shortfall = unservedShortfallUpdates.get(r.id);
+          if (shortfall === undefined) delete next.unservedShortfall;
+          else next.unservedShortfall = shortfall;
         }
         return next;
       }),
@@ -705,7 +736,9 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * life and must not survive into the next — a re-founded colony's warehouse is real, but its
  * predecessor's drain rate is not. `demandUnservable` joins the same clear for the same reason: a
  * structural reading names a shortfall THIS colony's donors and production could not close, and a
- * resettled colony has neither yet — its own local-supply story starts over.
+ * resettled colony has neither yet — its own local-supply story starts over. `unservedShortfall`
+ * joins it too, for the same reason and because it cannot outlive the bit it is only ever present
+ * alongside.
  */
 export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
   if (abandonedSystemIds.length === 0) return markets;
@@ -718,6 +751,7 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.logisticsFundingBound;
     delete next.stockChange;
     delete next.demandUnservable;
+    delete next.unservedShortfall;
     return next;
   });
 }
@@ -1321,6 +1355,7 @@ export async function runWorldTick(
     let dlStockUpdates: Map<string, number> = new Map();
     let dlFundingBoundUpdates: Map<string, boolean> = new Map();
     let dlDemandUnservableUpdates: Map<string, boolean> = new Map();
+    let dlUnservedShortfallUpdates: Map<string, number> = new Map();
 
     // ── directed-logistics ──
     {
@@ -1349,10 +1384,12 @@ export async function runWorldTick(
         dlWorld.stockUpdates,
         dlWorld.fundingBoundUpdates,
         dlWorld.demandUnservableUpdates,
+        dlWorld.unservedShortfallUpdates,
       );
       dlStockUpdates = dlWorld.stockUpdates;
       dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
       dlDemandUnservableUpdates = dlWorld.demandUnservableUpdates;
+      dlUnservedShortfallUpdates = dlWorld.unservedShortfallUpdates;
       const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
       flowEvents = [...flowEvents, ...newLogisticsFlows];
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
@@ -1481,6 +1518,7 @@ export async function runWorldTick(
           dlStockUpdates,
           dlFundingBoundUpdates,
           dlDemandUnservableUpdates,
+          dlUnservedShortfallUpdates,
         ),
       );
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);

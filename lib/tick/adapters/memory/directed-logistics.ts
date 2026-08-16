@@ -13,6 +13,7 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   readonly stockUpdates = new Map<string, number>();
   readonly fundingBoundUpdates = new Map<string, boolean>();
   readonly demandUnservableUpdates = new Map<string, boolean>();
+  readonly unservedShortfallUpdates = new Map<string, number>();
   readonly flows: LogisticsFlowInsert[] = [];
 
   constructor(private readonly systems: SystemLogisticsRow[]) {}
@@ -35,7 +36,13 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   }
 
   async applyDemandUnservableUpdates(updates: DemandUnservableUpdate[]): Promise<void> {
-    for (const u of updates) this.demandUnservableUpdates.set(u.id, u.demandUnservable);
+    for (const u of updates) {
+      this.demandUnservableUpdates.set(u.id, u.demandUnservable);
+      // Written from the same update record as the bit above, never a separate pass — see
+      // `WorldMarket.unservedShortfall`'s contract. Absent here on a false/unset update, which is
+      // how the world-layer merge below knows to clear rather than carry a stale level forward.
+      if (u.unservedShortfall !== undefined) this.unservedShortfallUpdates.set(u.id, u.unservedShortfall);
+    }
   }
 
   async appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void> {

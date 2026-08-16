@@ -118,7 +118,10 @@ export async function runDirectedLogisticsProcessor(
   const logisticsBudget = new Map<string, LogisticsBudgetLedger>();
   const allTransfers: PlannedTransfer[] = [];
   const fundingBoundMarketIds = new Set<string>();
-  const demandUnservableMarketIds = new Set<string>();
+  // Market id → the unclosed deficit's own shortfall level. Presence in this map IS the
+  // demand-unservable classification — a Set<string> would lose the level the world layer needs to
+  // persist alongside the bit, so this map is the single source for both.
+  const demandUnservableShortfallByMarketId = new Map<string, number>();
   for (const [factionId, group] of byFaction) {
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
     const states = group.map((r) => toLogisticsState(r, catchUp, funded, params.drawBrakeCeiling));
@@ -133,7 +136,7 @@ export async function runDirectedLogisticsProcessor(
     // Deficit endpoint only — never the donor a funding-bound match above may also have named.
     for (const deficit of match.unservable) {
       const at = marketByKey.get(`${deficit.systemId}|${deficit.goodId}`);
-      if (at) demandUnservableMarketIds.add(at.id);
+      if (at) demandUnservableShortfallByMarketId.set(at.id, deficit.shortfall);
     }
     if (factionId === null) continue;
     // Spent is summed over per-donor draws, so a fan-out is billed once — it must stay equal
@@ -211,11 +214,19 @@ export async function runDirectedLogisticsProcessor(
   const demandUnservableUpdates: DemandUnservableUpdate[] = [];
   for (const row of rows) {
     for (const market of row.markets) {
-      const demandUnservable = demandUnservableMarketIds.has(market.id);
-      if ((market.demandUnservable ?? false) === demandUnservable) continue;
+      const unservedShortfall = demandUnservableShortfallByMarketId.get(market.id);
+      const demandUnservable = unservedShortfall !== undefined;
+      // Written together, from the same read of this run's classification, so the bit and the level
+      // can never diverge: a market whose ONLY change this run is the shortfall widening/narrowing
+      // (the bit stays true either way) still emits an update, which is why the shortfall — not just
+      // the bit — is part of the skip condition below.
+      if ((market.demandUnservable ?? false) === demandUnservable && market.unservedShortfall === unservedShortfall) {
+        continue;
+      }
       demandUnservableUpdates.push({
         id: market.id,
         demandUnservable,
+        unservedShortfall,
       });
     }
   }

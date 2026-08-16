@@ -194,6 +194,11 @@ export interface FundingBoundMatch {
 export interface UnservableDeficit {
   goodId: string;
   systemId: string;
+  /** The deficit's own `shortfall` (`Deficit.shortfall`, `target − stock` at classification time) —
+   *  the size of the gap this test found unclosable, carried along so the world layer can persist a
+   *  level rather than just the bit. Not `reachableDrawable`: that number decided WHETHER this entry
+   *  exists, not how large the unclosed gap is. */
+  shortfall: number;
 }
 
 export interface TransferMatchResult {
@@ -285,7 +290,7 @@ export function matchFactionTransfers(
       // No system anywhere in this faction currently holds surplus of this good at all — the
       // deficit queue already guarantees no local production can close it (self-supply gate above),
       // so this is the plainest structural case: no reachable donor, full stop.
-      unservable.push({ goodId: d.goodId, systemId: d.systemId });
+      unservable.push({ goodId: d.goodId, systemId: d.systemId, shortfall: d.shortfall });
       continue;
     }
 
@@ -369,7 +374,7 @@ export function matchFactionTransfers(
     // budget-limited loop actually got, which is exactly the quantity `fundingBound` above already
     // answers for.
     if (reachableDrawable < d.shortfall) {
-      unservable.push({ goodId: d.goodId, systemId: d.systemId });
+      unservable.push({ goodId: d.goodId, systemId: d.systemId, shortfall: d.shortfall });
     }
   }
 

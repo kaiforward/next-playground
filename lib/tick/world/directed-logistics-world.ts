@@ -39,6 +39,9 @@ export interface MarketRowForLogistics {
   /** The prior assessment, read only so the processor can skip a no-op write; the matcher itself
    *  never reads it as a decision input. See `WorldMarket.demandUnservable` for the full contract. */
   demandUnservable?: boolean;
+  /** The prior level, read only so the processor can skip a no-op write when neither the bit nor the
+   *  size changed. See `WorldMarket.unservedShortfall` for the full contract. */
+  unservedShortfall?: number;
 }
 
 /** One system's logistics-relevant state. */
@@ -65,6 +68,10 @@ export interface LogisticsFundingBoundUpdate {
 export interface DemandUnservableUpdate {
   id: string;
   demandUnservable: boolean;
+  /** The unclosed deficit's level (`UnservableDeficit.shortfall`) — present iff `demandUnservable` is
+   *  `true` on this same update; a closed row's update carries `demandUnservable: false` and omits
+   *  this key, which is how the world layer clears it back to absent. */
+  unservedShortfall?: number;
 }
 
 export interface LogisticsFlowInsert {

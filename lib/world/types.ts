@@ -442,6 +442,28 @@ export interface WorldMarket {
    * inside the tick reads it back.
    */
   demandUnservable?: boolean;
+  /**
+   * The unclosed deficit's own size — `Deficit.shortfall` (`max(0, target − stock)`,
+   * `lib/engine/directed-logistics.ts`) at the point `demandUnservable` was last assessed `true`. A
+   * LEVEL, not a rate: unlike `stockChange` it carries no per-cycle denomination, so retuning
+   * `CYCLE_LENGTH` does not move it.
+   *
+   * Written on the same deficit endpoint, in the same processor pass, under the identical condition
+   * as `demandUnservable` — the two come from one classification read and are pushed as one update
+   * record (`DemandUnservableUpdate`, `lib/tick/world/directed-logistics-world.ts`), so a market row
+   * must never carry one without the other. Present only while `demandUnservable` is `true`; absent
+   * wherever that bit is absent or `false` — a deficit closed by a reachable donor clears this figure
+   * along with the bit, not merely a `false`-shaped one.
+   *
+   * Same conventions otherwise as `demandUnservable`: a market the run did not visit keeps its
+   * previous value, and it updates whenever EITHER the bit or the level changes — a shortfall that
+   * widens or narrows while the market stays classified unservable still refreshes this figure, so it
+   * never goes stale behind an unchanged bit. Cleared (deleted, `resetAbandonedMarkets`) on
+   * abandonment for the same reason `demandUnservable` is. Authored for one job — the Demand
+   * unservable alert's within-category sort (largest shortfall first). Nothing inside the tick reads
+   * it back.
+   */
+  unservedShortfall?: number;
 }
 
 // ── Factions ────────────────────────────────────────────────────

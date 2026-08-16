@@ -599,7 +599,7 @@ describe("matchFactionTransfers — demandUnservable (structural vs. funding-bou
     const result = matchFactionTransfers([b], oneHop);
     expect(result.transfers).toEqual([]);
     expect(result.fundingBound).toEqual([]);
-    expect(result.unservable).toEqual([{ goodId: "food", systemId: "B" }]);
+    expect(result.unservable).toEqual([{ goodId: "food", systemId: "B", shortfall: 50 }]);
   });
 
   it("can carry both flags at once — reachable capacity is jointly too small AND the budget also runs out before reaching it — but never puts demandUnservable on the donor", () => {
@@ -616,16 +616,20 @@ describe("matchFactionTransfers — demandUnservable (structural vs. funding-bou
       { goodId: "food", fromSystemId: "D1", toSystemId: "B", quantity: 10, cost: 10 },
     ]);
     expect(result.fundingBound).toEqual([{ goodId: "food", fromSystemId: "D1", toSystemId: "B" }]);
-    expect(result.unservable).toEqual([{ goodId: "food", systemId: "B" }]);
+    expect(result.unservable).toEqual([{ goodId: "food", systemId: "B", shortfall: 200 }]);
   });
 
-  it("emits one unservable entry per good on the same system — de-duplicating to one system belongs to the read layer, not here", () => {
+  it("emits one unservable entry per good on the same system, each carrying its OWN shortfall figure — de-duplicating to one system, and picking the largest, belongs to the read layer, not here", () => {
+    // Targets deliberately differ per good so the three shortfalls are distinguishable — proving each
+    // entry carries its own level, not one shared reading a "largest of three" read (Task 9) could
+    // not actually distinguish.
+    const targets: Record<string, number> = { food: 50, water: 80, ore: 30 };
     const threeDeficits: SystemLogisticsState = {
       systemId: "B",
       factionId: "f1",
       generation: 0,
       goods: ["food", "water", "ore"].map((goodId) => ({
-        goodId, stock: 0, logisticsTarget: 50, demand: 5, drawDemand: 5, civilianDemand: 5,
+        goodId, stock: 0, logisticsTarget: targets[goodId], demand: 5, drawDemand: 5, civilianDemand: 5,
         donorReserve: 10, production: 0, capacityProduction: 0,
       })),
     };
@@ -634,6 +638,8 @@ describe("matchFactionTransfers — demandUnservable (structural vs. funding-bou
     expect(result.unservable).toHaveLength(3);
     expect(result.unservable.every((u) => u.systemId === "B")).toBe(true);
     expect(new Set(result.unservable.map((u) => u.goodId))).toEqual(new Set(["food", "water", "ore"]));
+    const shortfallByGood = new Map(result.unservable.map((u) => [u.goodId, u.shortfall]));
+    expect(shortfallByGood).toEqual(new Map([["food", 50], ["water", 80], ["ore", 30]]));
   });
 });
 
