@@ -140,6 +140,24 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   active relief order suspend the death line, or is the race accepted?
   *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
   exception to the money-is-fuel invariant.
+- **[M] Necessity weighting in the build planner** — the autonomic planner ranks opportunities by
+  `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597, 850-856`): units of unmet demand it
+  could serve, divided by route cost. That carries no necessity at all — a hundred units of unmet food
+  and a hundred of unmet luxuries score identically, and nothing in the planner consults
+  `SURVIVAL_GOODS`. **The alert bar shipped the fix on the read side only**, banding survival-serving
+  builds above the rest on its Build opportunity chip, which exists only while build automation is
+  off. So the player gets survival-first advice by hand and the planner does not follow it when
+  automated — same data, two answers depending on a switch. This row closes that.
+  Two things already established, so nobody re-derives them: `score` **is** demand-gated (`take` is
+  bounded by the real shortfall), so the planner is not necessity-blind in effect — a food shortage
+  raises food builds on its own, and what is missing is the *tiebreak* when several goods are short at
+  once. And the unit bias that skews the ranking toward bulk goods is **13×** (`ship_frames` 0.6 →
+  `gas` 8.0 across all 26 goods), not the "orders of magnitude" an earlier finding claimed.
+  *Next step:* `/measure` how often survival and non-survival opportunities actually compete inside one
+  planner run, both horizons, cohorted by developed systems — the weighting's value depends entirely on
+  that rate, and Kai's prior is that it is often.
+  *Don't:* copy the alert bar's band across without a sim reading. That band is a presentation
+  ordering with no simulation consequence; this one changes what every faction builds at every horizon.
 - **[L] Physical warehouse model — storage as a real, brake-relevant limit.** Today's storage
   constants (`EXTRACTOR/PRODUCTION_STORAGE_PER_UNIT`, `POP_CENTRE_STORAGE`) only deepen `maxStock`;
   they are authored per *producing* building while the brake knee is 40 cycles of *system-wide*
@@ -362,6 +380,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships on the map, and designing a second flow view before this pass changes what flows is
   backwards. Its approved HTML prototype survives as an input —
   [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md), memory `project-ws2-map-modes`.
+  **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
+  planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
+  unmet food ranks alongside a unit of unmet luxuries. Sibling of the necessity-weighting row under
+  Economy — settle the two together so survival goods are not privileged in one pillar and not the
+  other. The concrete place it lands is the **good-allocation cliff** row above, which owns the
+  allocation policy; this line exists so the pillar pass does not design that policy necessity-blind.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
