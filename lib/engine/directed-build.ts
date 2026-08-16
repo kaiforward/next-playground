@@ -277,8 +277,14 @@ interface StructuralAssessment {
   strikeSuppressedProposals: { suppressed: number; eligible: number };
 }
 
-/** Open build levels folded into one system's effective construction state. */
-function queuedLevelsBySystem(openProjects: WorldConstructionProject[]): Map<string, Record<string, number>> {
+/**
+ * Open BUILD-kind project levels, summed by building type — the shared fold behind every "what's
+ * already queued here" read: this module's own `effectiveBuildSystems` (below), the player build
+ * verbs' feasibility check (`lib/services/construction-orders.ts`), and the alert bar's No housing
+ * headroom read (`lib/services/alerts.ts`). `colony_establish` projects never contribute — they
+ * carry no `buildingType`/`levels` in this shape.
+ */
+export function queuedBuildLevelsBySystem(openProjects: WorldConstructionProject[]): Map<string, Record<string, number>> {
   const queued = new Map<string, Record<string, number>>();
   for (const project of openProjects) {
     if (project.kind !== "build") continue;
@@ -287,6 +293,17 @@ function queuedLevelsBySystem(openProjects: WorldConstructionProject[]): Map<str
     queued.set(project.systemId, levels);
   }
   return queued;
+}
+
+/** Same fold as `queuedBuildLevelsBySystem`, scoped to one system — for a caller that only ever
+ *  wants a single system's queue rather than the whole faction's. */
+export function queuedBuildLevelsAt(openProjects: WorldConstructionProject[], systemId: string): Record<string, number> {
+  const levels: Record<string, number> = {};
+  for (const project of openProjects) {
+    if (project.kind !== "build" || project.systemId !== systemId) continue;
+    levels[project.buildingType] = (levels[project.buildingType] ?? 0) + project.levels;
+  }
+  return levels;
 }
 
 /**
@@ -298,7 +315,7 @@ function effectiveBuildSystems(
   systems: BuildSystemState[],
   openProjects: WorldConstructionProject[],
 ): BuildSystemState[] {
-  const queuedBySystem = queuedLevelsBySystem(openProjects);
+  const queuedBySystem = queuedBuildLevelsBySystem(openProjects);
   return systems.map((system) => {
     const queued = queuedBySystem.get(system.systemId);
     if (!queued) return system;

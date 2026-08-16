@@ -134,7 +134,7 @@ describe("construction order services", () => {
     expect(after.find((p) => p.id === "decoy-sys")).toMatchObject({ levels: 5, systemId: otherSystemId });
   });
 
-  it("nets in-flight BUILD levels at this system from EVERY faction (committedAt has no faction filter)", () => {
+  it("nets in-flight BUILD levels at this system from EVERY faction (the queued fold has no faction filter)", () => {
     const h = home();
     setWorld({
       ...getWorld(),

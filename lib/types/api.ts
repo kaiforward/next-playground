@@ -568,3 +568,41 @@ export interface TreasuryPolicyData {
   bands: TreasuryBands;
 }
 export type UpdateTreasuryPolicyResponse = ApiResponse<TreasuryPolicyData>;
+
+// ── Alert bar (docs/build-plans/alert-bar.md — state-derived categories) ────
+import type { AlertCategoryId } from "@/lib/types/alerts";
+
+/**
+ * One system (or, for the event-banded categories not yet built, an event) an alert category
+ * is naming — the flyout's row. `measure` is the row's human-readable figure; `sortKey` is the
+ * number instances sort by WITHIN their category, ascending — smaller sorts first, and each
+ * category picks what "smaller" means so that ordering is always worst-first (see
+ * `lib/services/alerts.ts` for each category's convention). `systemId` is `string | null` for the
+ * interface's sake — every category built so far is system-scoped, so it is never null here.
+ */
+export interface AlertInstance {
+  systemId: string | null;
+  name: string;
+  measure: string;
+  sortKey: number;
+}
+
+/** One alert category's standing read: the chip's count, the flyout footer's denominator ("N of D
+ *  developed systems"), and the instance rows in the category's own sort order. */
+export interface AlertCategory {
+  id: AlertCategoryId;
+  /** Raw instance count — extensive, not a rate; grows with the empire (alert-bar.md:287-291). */
+  count: number;
+  /** The player faction's developed-systems count — shared across every system-scoped category. */
+  denominator: number;
+  instances: AlertInstance[];
+}
+
+/** The alert bar's whole read. Categories not yet built (events, Build blocked, Industry idle, the
+ *  opportunity/windfall categories, Maintenance unfunded, Survival stock falling, Demand unservable)
+ *  are absent from the array rather than present with an empty read — each is added here as it
+ *  ships, rather than owning a separate endpoint. */
+export interface AlertData {
+  categories: AlertCategory[];
+}
+export type AlertResponse = ApiResponse<AlertData>;
