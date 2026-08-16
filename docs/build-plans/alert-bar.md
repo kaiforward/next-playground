@@ -106,7 +106,7 @@ the subject — a colony is abandoned, decay eats the idle capacity, population 
 | important | Survival stock falling | `Hourglass` | A survival good (`SURVIVAL_GOODS` — water, food) with **cycles-to-empty below 3** — falling alone is meaningless, since stocks oscillate and over half of survival-good rows are falling at any moment, so the countdown carries the whole condition. Sorts by cycles remaining, soonest first. Stock is used because directed logistics lands imports as stock deltas, so a falling stock is the true net drain; local consumption-vs-production would fire on every importer. Needs the per-cycle survival stock delta persisted — see below. | fix | New (small) |
 | important | Demand unservable | `RouteOff` | A deficit no reachable donor and no local production can close — structural, as distinct from the temporary `logisticsFundingBound`. Sorts by unserved demand rate. | fix | New |
 | important | Overcrowded | `BedDouble` | `population > popCap` — there are people with no housing. Sorts by cap utilisation. The threshold is definitional, not tuned: at 1.00 everyone is housed and the next person is not. | fix | Derivable |
-| important | No housing headroom | `BedDouble` + slash | Over `popCap` **and** no habitable room for another housing level (`habitableHousingHeadroom < 1`, evaluated against queue-adjusted buildings). The world needs housing and physically cannot build it. Sorts by population over cap. | world-resolves (population falls) | Derivable |
+| important | No housing headroom | `BedDouble` + slash | Over `popCap`, **nothing queued to fix it**, and no habitable room for another housing level (`habitableHousingHeadroom < 1`, evaluated against queue-adjusted buildings). The world needs housing, has none coming, and physically cannot build it. Sorts by population over cap. | world-resolves (population falls) | Derivable |
 | important | Build blocked | `HardHat` + slash | The **production** planner wanted to build and could not — no capacity, no reachable input supplier, no spare labour, no affordable whole level. Sorts by **authored reason severity**, worst first — see below. Housing refusals belong to *No housing headroom*, not here: housing carries no ROI and would have nothing to sort by. **Defaults off**: measured at 50.4% of developed systems per planner run, not rare. | fix | New |
 | important | Industry idle | `Factory` + slash | Built capacity not running — no skill licence, missing inputs, no staff. Sorts by idle share. The missing-inputs case needs a sixth `IdleReason` — see below. | no staff / no licence: fix or world-resolves (decay removes it) · missing inputs: **fix only** | Ships today + new |
 | important | **Disruption** | `TriangleAlert` — also a type icon | Events that cost but do not threaten — shortage, storm, embargo, glut, a dissolved alliance, and the three below. Sorts by authored impact rank. | expiry | Needs banding |
@@ -750,7 +750,7 @@ remedy time, with its Gate 1 reading serving only as a sanity check on the volum
 | Maintenance unfunded | `WorldTreasurySettlement`, `lib/world/types.ts:405-421` | `paid` per band, post-slider; the settlement carries **neither the charge nor the slider** | **partly missing** — the honest test needs `treasury.bands.maintenance` alongside, or the condition fires on a legal slider setting |
 | Unrest rising | `grievanceShortfall`, `lib/engine/population.ts:295`; `readExpectation`, `lib/engine/expectation.ts:43-52` | `max(stored, floor)` − provision, and a **missing memory is seeded from this cycle's own Provision** | matches only with the never-seeded guard — the category requires a stored `provisionExpectation` |
 | Overcrowded | `population`, `popCap` — both persisted `WorldSystem` columns | `popCap` recomputed live from surviving housing each cycle | matches |
-| No housing headroom | `habitableHousingHeadroom`, `lib/engine/directed-build.ts:163-170` | a fractional housing-**unit** count, range [0, ∞); the planner's own `< 1` test means "no room for even one whole level" (`:189`). But the planner never calls it on raw state — `effectiveBuildSystems` (`:247-282`) folds open `build` projects in first, and is **not exported** | matches only against **queue-adjusted** buildings; needs a shared exported helper, else the alert lights on a system whose relief housing is already in flight |
+| No housing headroom | `habitableHousingHeadroom`, `lib/engine/directed-build.ts:213-220` | a fractional housing-**unit** count, range [0, ∞); the planner's own `< 1` test means "no room for even one whole level" (`:239`). But the planner never calls it on raw state — `effectiveBuildSystems` (`:297-333`) folds open `build` projects in first, and is **not exported** | matches only against **queue-adjusted** buildings, and the fold is monotonically *downward*, so it moves systems into the category rather than out of it — "relief already in flight" is a separate conjunct, not something the adjustment provides. Needs a shared exported helper: this is the third copy of the fold |
 | Survival stock falling | `stock`, `honestUseRate`, `realizedProductionRate` — all persisted (`lib/world/types.ts:288-322`) | present; but no **stock delta** exists | new instrumentation (small) |
 | Industry idle | `IdleReason`, `lib/engine/industry.ts:544` | five members; assigned only when `used < count`, and `used` for a producer is staffed-and-selling capacity, so input starvation is invisible — `inputGate` reaches `output` (`:786`) and nothing else | **partly missing** — skill-licence and staffing ship; missing-inputs needs a sixth member from `inputGate < 1` |
 | Build blocked | **does not exist** | — | new instrumentation, across nine drop sites |
@@ -960,9 +960,24 @@ have. **Not booked, not diagnosed** — raised here because it was found here.
 ### Overcrowded — the condition, and why a rate cannot set it
 
 **Two categories, both computable today.** Overcrowded is `population > popCap`. No housing headroom
-is that **and** `habitableHousingHeadroom(sys) < 1` (`lib/engine/directed-build.ts:163` — the
-planner's own "can another housing level physically be built here", evaluated against queue-adjusted
-buildings).
+is that, **and** no housing standing in the construction queue for this system, **and**
+`habitableHousingHeadroom(sys) < 1` (`lib/engine/directed-build.ts:213` — the planner's own "can
+another housing level physically be built here", evaluated against queue-adjusted buildings).
+
+**The queued-housing conjunct, and the direction of the queue adjustment.** These are two separate
+guards that read as one and are easy to collapse, so both are stated. The category means *nothing is
+coming and nothing can come* — which is why its `Clears by` is world-resolves rather than fix — so a
+system with a housing level already committed is excluded outright: it is building its way out, which
+is exactly the thing this category exists to say is impossible.
+
+The queue adjustment does **not** do that job, and assuming it does gets the direction backwards.
+`habitableHousingHeadroom` subtracts standing housing from both the habitable bound and the general
+bound (`lib/engine/directed-build.ts:213-220`), and `generalSpaceUsed` only ever adds, so folding
+queued levels in can only **lower** headroom — it moves systems *into* this category, never out of
+it. The planner's own `effectiveBuildSystems` folds the same way for the same reason: don't propose
+past a physical limit already spoken for. What the fold therefore earns its keep on, once queued
+housing is excluded separately, is a committed **factory** eating the general space housing would
+have needed — a real case, and the reason the answer is not simply to drop the adjustment.
 
 They were one category with both conjuncts, and splitting them is the substantive change this section
 records. Combining them meant a world was only called overcrowded once it *also* could not be fixed —
@@ -1364,8 +1379,11 @@ Proves:
 - Unrest rising excludes a system with no stored `provisionExpectation`, so a fresh colony does not
   report grievance against a read-side floor it has no memory of (`lib/engine/expectation.ts:43-52`).
 - A system at exactly `population === popCap` is **not** Overcrowded; one pop above it is.
-- No housing headroom evaluates headroom against **queue-adjusted** buildings, so a system whose
-  relief housing is already committed does not appear.
+- No housing headroom excludes a system with a housing level already in the construction queue — the
+  category means nothing is coming and nothing can come.
+- It evaluates headroom against **queue-adjusted** buildings, so a committed *factory* eating the
+  general space housing would have needed does count against the headroom. The adjustment moves
+  systems into this category, never out of it — see the Overcrowded evidence section.
 - A system in another faction never appears in any category.
 - `popCap === 0` with population above 0 reads as not overcrowded, matching `lib/services/tracker.ts:60`.
 
