@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { depositRows, depositRowProblems, depositTypeProblems, generalLand, idleLevelSplit, staffedLevels } from "../industry-rows";
+import { depositRows, depositRowProblems, depositTypeProblems, generalLand, staffedLevels } from "../industry-rows";
 import type { DepositTypeRow } from "../industry-rows";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
 import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IdleReason } from "@/lib/engine/industry";
@@ -92,14 +92,6 @@ describe("depositRows", () => {
     // fully-staffed `staffed` figure.
     const rows = depositRows([deposit("water", 3)], [extractor("water", 2, 1, 3, 1)], 0, T);
     expect(rows[0].staffed).toBe(2);
-    expect(rows[0].health).toBe("contracting");
-  });
-
-  it("an idle extractor still reads 'contracting', never 'idle' — its idleReason is a decay-visible one ('labour'), and a tier-0 extractor can never carry 'inputs'", () => {
-    // 0.9/2.0 → floor(1.1) = 1 whole idle level, same shape as the "reads idle" fixtures at the
-    // engine layer, but with the extractor's own idleReason ("labour") threaded through — proves the
-    // wiring only flips to "idle" on "inputs", which this row type structurally never has.
-    const rows = depositRows([deposit("ore", 5)], [extractor("ore", 2, 0.9, 1, undefined, "labour")], 0, T);
     expect(rows[0].health).toBe("contracting");
   });
 });
@@ -215,51 +207,5 @@ describe("generalLand", () => {
     expect(g.factoryFree).toBe(24); // free 42 − 18
     expect(g.habitable).toBe(70);
     expect(g.housing + g.factory + g.habitableFree + g.factoryFree).toBeCloseTo(space.general);
-  });
-});
-
-describe("idleLevelSplit", () => {
-  /** The industry panel's own input shape: a readout building entry. */
-  const b = (count: number, used: number, idleReason?: IdleReason) => ({ count, used, idleReason });
-
-  it("counts a whole idle level for want of inputs as idleOnly, and every other idle reason as decay-visible", () => {
-    const split = idleLevelSplit([
-      b(4, 1, "inputs"), // 3 whole levels idle, invisible to decay
-      b(5, 2, "labour"), // 3 whole levels idle, decay sheds these
-    ]);
-    expect(split.idleOnlyLevels).toBe(3);
-    expect(split.idleLevels).toBe(3);
-  });
-
-  it("does not swap the two — an inputs-only system reports nothing decay will shed", () => {
-    // The bug this guards against: with the accumulators crossed, the system chip reads "contracting"
-    // and claims capacity is about to be torn down when computeSystemDecay will never touch it.
-    const split = idleLevelSplit([b(6, 0, "inputs")]);
-    expect(split.idleLevels).toBe(0);
-    expect(split.idleOnlyLevels).toBe(6);
-  });
-
-  it("does not swap the two the other way either — a labour-starved system does report a coming shed", () => {
-    const split = idleLevelSplit([b(6, 0, "labour")]);
-    expect(split.idleLevels).toBe(6);
-    expect(split.idleOnlyLevels).toBe(0);
-  });
-
-  it("counts WHOLE levels only — a fraction under one level is not idle capacity at all", () => {
-    // floor(3 - 2.4) = 0: decay's own buffer, and the reason the chip does not flicker on rounding.
-    expect(idleLevelSplit([b(3, 2.4, "labour")])).toEqual({ idleLevels: 0, idleOnlyLevels: 0 });
-    expect(idleLevelSplit([b(3, 1.9, "inputs")])).toEqual({ idleLevels: 0, idleOnlyLevels: 1 });
-  });
-
-  it("never counts negative levels from a used figure above count (housing occupancy is uncapped)", () => {
-    // Housing's `used` can read past `count` on an overcrowded system; that is over-occupancy, not
-    // negative idleness, and it must not subtract from another building's real idle levels.
-    const split = idleLevelSplit([b(2, 5, undefined), b(4, 0, "labour")]);
-    expect(split.idleLevels).toBe(4);
-    expect(split.idleOnlyLevels).toBe(0);
-  });
-
-  it("reads an empty roster as nothing idle rather than throwing", () => {
-    expect(idleLevelSplit([])).toEqual({ idleLevels: 0, idleOnlyLevels: 0 });
   });
 });

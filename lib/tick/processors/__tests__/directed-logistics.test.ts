@@ -32,19 +32,6 @@ describe("MemoryDirectedLogisticsWorld", () => {
     expect(world.stockUpdates.get("m1")).toBe(42);
     expect(world.flows).toHaveLength(1);
   });
-
-  it("records an unserved-shortfall level and a served row's zero as distinct entries — neither is dropped", async () => {
-    // 0 is a real assessment ("this run found the row servable"), not an absence: the world layer
-    // reads it to DELETE a stale level, so an adapter that skipped zeros would silently strand one.
-    const world = new MemoryDirectedLogisticsWorld([]);
-    await world.applyUnservedShortfallUpdates([
-      { id: "m1", unservedShortfall: 38 },
-      { id: "m2", unservedShortfall: 0 },
-    ]);
-    expect(world.unservedShortfallUpdates.get("m1")).toBe(38);
-    expect(world.unservedShortfallUpdates.get("m2")).toBe(0);
-    expect(world.unservedShortfallUpdates.has("m3")).toBe(false);
-  });
 });
 
 // ── fixture population and the demand rates it implies (ECONOMY_SCALE=1 under vitest)
@@ -420,10 +407,6 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(gated.flows).toHaveLength(0);
     expect(gated.fundingBoundUpdates.get("mA")).toBe(true);
     expect(gated.fundingBoundUpdates.get("mB")).toBe(true);
-    // Reachable drawable (47) comfortably covers the shortfall (38) — only the zeroed budget stops
-    // the fill, so this is funding-bound WITHOUT being structural: no level is recorded at all, not
-    // even a zero (the row had none before, so there is nothing to clear and nothing to write).
-    expect(gated.unservedShortfallUpdates.has("mB")).toBe(false);
 
     // A faction missing from the map is ungated — identical to no map at all.
     const ungated = new MemoryDirectedLogisticsWorld(mk());
@@ -484,48 +467,6 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     expect(recoveredWorld.fundingBoundUpdates.get("mB")).toBe(false);
     expect(recoveredWorld.fundingBoundUpdates.has("mOther")).toBe(false);
     expect(recoveredWorld.fundingBoundUpdates.size).toBe(2);
-  });
-
-  it("marks a structurally unservable deficit and clears it once a donor becomes reachable", async () => {
-    // Run 1: B alone — no other system in the match holds food at all, so no reachable donor exists
-    // regardless of budget. Structural, and (unlike a funding-bound deficit) not a matter of money.
-    const isolated = new MemoryDirectedLogisticsWorld([
-      {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
-      },
-    ]);
-    await runDirectedLogisticsProcessor(isolated, { tick: DUE_TICK }, {
-      interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable,
-    });
-    // The level IS the classification: shortfall = target(48) − stock(10), strictly positive.
-    expect(isolated.unservedShortfallUpdates.get("mB")).toBe(38);
-    // Never budget-stopped at all (no candidate donor even entered the draw loop), so the funding-
-    // bound assessment is unchanged from its prior absence — no write, not an explicit false.
-    expect(isolated.fundingBoundUpdates.has("mB")).toBe(false);
-
-    // Run 2: the same deficit, now carrying the prior level, with an ample donor added and
-    // reachable. The shortfall (38) is well inside the donor's drawable (47) and the budget (2000),
-    // so the deficit is fully served — the level must explicitly clear to 0, not merely go unwritten:
-    // an unwritten row keeps its stale 38 through the world-layer merge.
-    const recovered = new MemoryDirectedLogisticsWorld([
-      {
-        systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
-      },
-      {
-        systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [
-          { ...market("mB", "food", 10, 20), unservedShortfall: 38 },
-        ],
-      },
-    ]);
-    await runDirectedLogisticsProcessor(recovered, { tick: DUE_TICK }, {
-      interval: LOGISTICS_INTERVAL, routeCost: () => 1, reachableSystemIds: allSystemIdsReachable,
-    });
-    expect(recovered.unservedShortfallUpdates.get("mB")).toBe(0);
-    // A donor is never a candidate for this reading — it had none and gains none.
-    expect(recovered.unservedShortfallUpdates.has("mA")).toBe(false);
   });
 
   it("keeps unreachable pairs unmarked", async () => {

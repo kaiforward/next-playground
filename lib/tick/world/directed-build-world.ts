@@ -12,7 +12,6 @@ import type {
 } from "@/lib/world/types";
 import type { MarketRowForLogistics } from "@/lib/tick/world/directed-logistics-world";
 import type { DevelopmentRefs } from "@/lib/engine/development";
-import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 /** One system's build-relevant state: markets + buildings + body-derived capacity. */
 export interface SystemBuildRow {
@@ -58,33 +57,6 @@ export interface ProposalPersistenceUpdate {
 
 /** Processor-facing name for a founding-manifest line — one shape across the world boundary. */
 export type FoundingStockLine = WorldFoundingStockLine;
-
-/** One system's best-ranked dropped production opportunity this run — the world-boundary shape of
- *  the engine's `BuildBlockReport` (`lib/engine/directed-build.ts`), which also owns `BuildDropReason`
- *  and the full reasoning behind `droppedRoi`. */
-export interface BuildBlockedUpdate {
-  systemId: string;
-  reason: BuildDropReason;
-  droppedRoi: number;
-}
-
-/** One system's best-ranked SCORED production opportunity this run — the world-boundary shape of the
- *  engine's `BuildOpportunityReport` (`lib/engine/directed-build.ts`), which owns the full reasoning
- *  behind `score` and the survival-band selection that picks which opportunity this is. */
-export interface BuildOpportunityUpdate {
-  systemId: string;
-  score: number;
-  goodId: string;
-}
-
-/** One system's best-ranked colony-establish terms this run — the world-boundary shape of the
- *  engine's `ColonyProposal.value`/`.work` (`lib/engine/directed-build.ts`), persisted only for a
- *  candidate that was actually proposed this run (see `applyColonyOpportunityUpdates`'s docstring). */
-export interface ColonyOpportunityUpdate {
-  systemId: string;
-  value: number;
-  work: number;
-}
 
 /**
  * One per-cycle materials debit: a quantity of one good drawn from a founding source's market row
@@ -133,23 +105,6 @@ export interface DirectedBuildWorld {
   applyConstructionUpdates(factionKeys: Array<string | null>, projects: WorldConstructionProject[]): Promise<void>;
   /** Persist the saturating construction proposal-pressure counter per assessed market row. */
   applyProposalPersistenceUpdates(updates: ProposalPersistenceUpdate[]): Promise<void>;
-  /** Persist this run's best-ranked dropped production opportunity per system (Build blocked).
-   *  `visitedSystemIds` is every system belonging to a due faction this run, whether or not it
-   *  appears in `updates` — a visited system NOT in `updates` is cleared (nothing was dropped: it
-   *  either landed or was never wanted), and a system this run never visited is left untouched. */
-  applyBuildBlockedUpdates(visitedSystemIds: string[], updates: BuildBlockedUpdate[]): Promise<void>;
-  /** Persist this run's best-ranked SCORED production opportunity per system (Build opportunity).
-   *  `visitedSystemIds` is the same set `applyBuildBlockedUpdates` uses — every system belonging to a
-   *  due faction this run — with the identical visited/clear/set contract. */
-  applyBuildOpportunityUpdates(visitedSystemIds: string[], updates: BuildOpportunityUpdate[]): Promise<void>;
-  /** Persist this run's best-ranked colony-establish terms per candidate (Colony opportunity).
-   *  `visitedSystemIds` is every CANDIDATE the colonisation planner considered this run (from the
-   *  `develop` param's `candidateProvider`) — a different population from build's visited set, since a
-   *  colony candidate is a controlled (not yet developed) system. A visited candidate NOT in `updates`
-   *  is cleared (nothing was proposed for it: below the habitable floor, in flight, net-negative value,
-   *  or truncated by the money/settler-supply gates), and a candidate this run never considered is left
-   *  untouched. */
-  applyColonyOpportunityUpdates(visitedSystemIds: string[], updates: ColonyOpportunityUpdate[]): Promise<void>;
   /** Ownership writes from the claim step (unclaimed → controlled). */
   applyClaims(claims: SystemClaim[]): Promise<void>;
   /** Ownership writes from the develop step (controlled → developed + colony seed transfer). */

@@ -10,7 +10,7 @@
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
 import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldMarket } from "@/lib/world/types";
 import { computeBuildOptions } from "@/lib/engine/build-options";
-import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
+import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
@@ -36,6 +36,16 @@ function playerSystem(seat: Seat, systemId: string): WorldSystem | { error: stri
 /** Mints a fresh construction-project id from the world's shared counter (matches the tick's own minting namespace). */
 function mintProjectId(world: World): string {
   return `construction-${world.nextId}`;
+}
+
+/** In-flight build levels by type at one system (the committed state feasibility nets against). */
+function committedAt(world: World, systemId: string): Record<string, number> {
+  const committed: Record<string, number> = {};
+  for (const p of world.constructionProjects) {
+    if (p.kind !== "build" || p.systemId !== systemId) continue;
+    committed[p.buildingType] = (committed[p.buildingType] ?? 0) + p.levels;
+  }
+  return committed;
 }
 
 export type OrderBuildResult =
@@ -71,7 +81,7 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
       generalSpace: system.generalSpace,
       habitableSpace: system.habitableSpace,
     },
-    queuedBuildLevelsAt(seat.world.constructionProjects, system.id),
+    committedAt(seat.world, system.id),
   );
   const option = options.find((o) => o.buildingType === input.buildingType);
   if (!option) return { ok: false, error: `Unknown building type: ${input.buildingType}` };

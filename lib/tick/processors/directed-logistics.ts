@@ -18,7 +18,6 @@ import type {
   LogisticsMarketUpdate,
   LogisticsFlowInsert,
   LogisticsFundingBoundUpdate,
-  UnservedShortfallUpdate,
 } from "@/lib/tick/world/directed-logistics-world";
 
 export interface DirectedLogisticsProcessorParams {
@@ -118,11 +117,6 @@ export async function runDirectedLogisticsProcessor(
   const logisticsBudget = new Map<string, LogisticsBudgetLedger>();
   const allTransfers: PlannedTransfer[] = [];
   const fundingBoundMarketIds = new Set<string>();
-  // Market id → the unclosed part of the deficit (its want less the capacity its reachable donors
-  // still held), for the deficits this run found structurally unservable. The level IS the
-  // classification — the engine only records an entry where that residue is strictly positive — so
-  // there is no separate bit to keep in step with it.
-  const unservedShortfallByMarketId = new Map<string, number>();
   for (const [factionId, group] of byFaction) {
     const funded = factionId === null ? 1 : params.fundingByFaction?.get(factionId) ?? 1;
     const states = group.map((r) => toLogisticsState(r, catchUp, funded, params.drawBrakeCeiling));
@@ -133,11 +127,6 @@ export async function runDirectedLogisticsProcessor(
       const to = marketByKey.get(`${bound.toSystemId}|${bound.goodId}`);
       if (from) fundingBoundMarketIds.add(from.id);
       if (to) fundingBoundMarketIds.add(to.id);
-    }
-    // Deficit endpoint only — never the donor a funding-bound match above may also have named.
-    for (const deficit of match.unservable) {
-      const at = marketByKey.get(`${deficit.systemId}|${deficit.goodId}`);
-      if (at) unservedShortfallByMarketId.set(at.id, deficit.shortfall);
     }
     if (factionId === null) continue;
     // Spent is summed over per-donor draws, so a fan-out is billed once — it must stay equal
@@ -200,27 +189,18 @@ export async function runDirectedLogisticsProcessor(
     );
     await world.applyMarketUpdates(marketUpdates);
   }
-  // One pass over the visited rows for both per-market assessments — they read the same two rows'
-  // worth of state and would otherwise walk the identical nested collection twice.
   const fundingUpdates: LogisticsFundingBoundUpdate[] = [];
-  const unservedShortfallUpdates: UnservedShortfallUpdate[] = [];
   for (const row of rows) {
     for (const market of row.markets) {
       const logisticsFundingBound = fundingBoundMarketIds.has(market.id);
-      if ((market.logisticsFundingBound ?? false) !== logisticsFundingBound) {
-        fundingUpdates.push({ id: market.id, logisticsFundingBound });
-      }
-      // 0 for every row this run did NOT classify unservable — the level is the whole assessment, so
-      // a widening or narrowing shortfall emits an update just as a newly-servable row does, and a
-      // row whose level is unchanged emits nothing.
-      const unservedShortfall = unservedShortfallByMarketId.get(market.id) ?? 0;
-      if ((market.unservedShortfall ?? 0) !== unservedShortfall) {
-        unservedShortfallUpdates.push({ id: market.id, unservedShortfall });
-      }
+      if ((market.logisticsFundingBound ?? false) === logisticsFundingBound) continue;
+      fundingUpdates.push({
+        id: market.id,
+        logisticsFundingBound,
+      });
     }
   }
   if (fundingUpdates.length > 0) await world.applyFundingBoundUpdates(fundingUpdates);
-  if (unservedShortfallUpdates.length > 0) await world.applyUnservedShortfallUpdates(unservedShortfallUpdates);
   if (flows.length > 0) await world.appendLogisticsFlows(flows);
 
   return { workPerformedByFaction, logisticsBudget };

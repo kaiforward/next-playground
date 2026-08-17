@@ -6,9 +6,6 @@ import type {
   SystemDevelopment,
   FoundingStagingDraw,
   ProposalPersistenceUpdate,
-  BuildBlockedUpdate,
-  BuildOpportunityUpdate,
-  ColonyOpportunityUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import type { WorldConstructionProject } from "@/lib/world/types";
 import { developmentRefs, type DevelopmentRefs } from "@/lib/engine/development";
@@ -26,22 +23,6 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
   readonly foundingStagingDraws: FoundingStagingDraw[] = [];
   /** Proposal-pressure counters written this run, keyed by composite market id, clamped to a finite [0,2]. */
   readonly proposalCycleUpdates = new Map<string, number>();
-  /** Every system belonging to a due faction this run (Build blocked's "visited" set) — a system
-   *  here with no matching entry in `buildBlockedUpdates` had nothing dropped. */
-  readonly buildBlockedVisitedSystemIds: string[] = [];
-  /** This run's best-ranked dropped production opportunity, one entry per system that had one. */
-  readonly buildBlockedUpdates: BuildBlockedUpdate[] = [];
-  /** Same visited set as `buildBlockedVisitedSystemIds` (Build opportunity shares Build blocked's
-   *  assessment run) — a system here with no matching entry in `buildOpportunityUpdates` had nothing
-   *  scored. */
-  readonly buildOpportunityVisitedSystemIds: string[] = [];
-  /** This run's best-ranked SCORED production opportunity, one entry per system that had one. */
-  readonly buildOpportunityUpdates: BuildOpportunityUpdate[] = [];
-  /** Every colony-establish CANDIDATE the colonisation planner considered this run — a candidate here
-   *  with no matching entry in `colonyOpportunityUpdates` had nothing proposed for it. */
-  readonly colonyOpportunityVisitedSystemIds: string[] = [];
-  /** This run's best-ranked colony-establish terms, one entry per candidate that was proposed. */
-  readonly colonyOpportunityUpdates: ColonyOpportunityUpdate[] = [];
   /** The live open-project set — updated in place by applyConstructionUpdates; read back by the tick body. */
   constructionProjects: WorldConstructionProject[];
 
@@ -104,21 +85,6 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
         : 0;
       this.proposalCycleUpdates.set(u.id, clamped);
     }
-  }
-
-  async applyBuildBlockedUpdates(visitedSystemIds: string[], updates: BuildBlockedUpdate[]): Promise<void> {
-    this.buildBlockedVisitedSystemIds.push(...visitedSystemIds);
-    this.buildBlockedUpdates.push(...updates);
-  }
-
-  async applyBuildOpportunityUpdates(visitedSystemIds: string[], updates: BuildOpportunityUpdate[]): Promise<void> {
-    this.buildOpportunityVisitedSystemIds.push(...visitedSystemIds);
-    this.buildOpportunityUpdates.push(...updates);
-  }
-
-  async applyColonyOpportunityUpdates(visitedSystemIds: string[], updates: ColonyOpportunityUpdate[]): Promise<void> {
-    this.colonyOpportunityVisitedSystemIds.push(...visitedSystemIds);
-    this.colonyOpportunityUpdates.push(...updates);
   }
 
   async applyClaims(claims: SystemClaim[]): Promise<void> {

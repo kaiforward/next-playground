@@ -41,12 +41,11 @@ export interface ProblemItem { kind: "input" | "pops" | "staffing" | "selling"; 
 
 /**
  * The labour grade a producer's idleReason names, for the "understaffed on which grade" chip —
- * undefined when the binding constraint isn't a named labour grade. That covers "selling" and
- * "inputs" alike: when either binds tighter than labour the engine never computes *which* grade was
- * the wall (see `buildIndustryReadout`'s idleReason branch, `industry.ts:790-804` — the
- * skill1/skill2/labour branches only run when selling and inputs do NOT bind tightest), so naming
- * one we didn't measure would be worse than staying generic. Callers fall back to a plain
- * "Understaffed" chip in both cases.
+ * undefined when the binding constraint isn't a named labour grade. That covers "selling": when
+ * selling binds tighter than labour the engine never computes *which* grade was the wall (see
+ * `buildIndustryReadout`'s idleReason branch, `industry.ts:790-802` — the skill1/skill2/labour
+ * branches only run when selling does NOT bind tightest), so naming one we didn't measure would be
+ * worse than staying generic. Callers fall back to a plain "Understaffed" chip in that case.
  */
 function staffingGradeName(reason: IdleReason | undefined): string | undefined {
   switch (reason) {
@@ -60,31 +59,17 @@ function staffingGradeName(reason: IdleReason | undefined): string | undefined {
 /**
  * Exception-reporting: items exist only for actual problems; a healthy row returns [].
  *
- * A row shows a chip for every negative state it is in, not only for the one the engine named as
- * tightest — an input-starved producer that is ALSO understaffed carries both its input chips and an
- * understaffed chip.
- *
- * That is what keying staffing off the *severity number* (`staffedFraction`) rather than off
- * `idleReason` naming a labour grade buys. `idleReason` is a single binding constraint: it reads
- * "selling" whenever selling binds tighter than labour (`canSell < fulfil` at `industry.ts:797`) and
- * "inputs" whenever a recipe input binds tighter still (`industry.ts:842`), in both cases while the
- * producer may be just as short on labour. `staffedFraction` is independent of both — for a producer
- * row it is the pure staffing ratio (`industry.ts:769-772`), which neither a glut nor an empty input
- * yard moves — so gating the staffing item on "idleReason is a labour reason" would let an
- * understaffed-and-glutting or understaffed-and-starved producer read with no understaffed chip at
- * all.
- *
- * Any binding reason can therefore gate a staffing item except "occupancy" and `undefined`.
- * `undefined` is a capacity/modifier row with nothing binding. "occupancy" is housing, the one row
- * whose `staffedFraction` is not a staffing ratio at all but literal occupancy
- * (`housingUsed(population) / count`, `industry.ts:785`) — homes draw no staff, so a half-empty
- * colony's housing would read "Understaffed 40%" for having spare rooms. `idleReason` is then only
- * used to *name the grade*, via `staffingGradeName` — which falls back to a generic "Understaffed"
- * chip for "selling" and "inputs", because in those cases the engine never measured which grade was
- * the actual wall.
- *
  * Precedence (spec §1/§6): understaffed classifies first — only a producer that is both fully
- * staffed and input-satisfied can read Glut.
+ * staffed and input-satisfied can read Glut. Staffing is keyed off the *severity number*
+ * (`staffedFraction`), not off `idleReason` naming a labour grade: `idleReason` reads "selling"
+ * whenever selling binds *tighter* than labour (`canSell < fulfil` at `industry.ts:797`), including
+ * while the producer is ALSO short on labour — so gating the staffing item on "idleReason is a
+ * labour reason" would let an understaffed-and-glutting producer read as pure Glut with no
+ * understaffed chip at all. Any binding reason other than "occupancy" (housing) or `undefined`
+ * (capacity/modifier rows with nothing binding) can gate a staffing item; `idleReason` is then only
+ * used to *name the grade*, via `staffingGradeName` — which falls back to a generic "Understaffed"
+ * chip when the reason is "selling", because in that case the engine never measured which grade was
+ * the actual wall.
  */
 export function buildProblems(
   staffing: { staffedFraction: number; idleReason?: IdleReason } | undefined,
@@ -94,8 +79,7 @@ export function buildProblems(
 ): ProblemItem[] {
   const items: ProblemItem[] = [];
 
-  const hasBindingReason =
-    staffing?.idleReason !== undefined && staffing.idleReason !== "occupancy";
+  const hasBindingReason = staffing?.idleReason !== undefined && staffing.idleReason !== "occupancy";
   let staffingShort = false;
   if (staffing && hasBindingReason) {
     const sev = needSeverity(staffing.staffedFraction);

@@ -9,7 +9,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SectionHeader } from "@/components/ui/section-header";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import { formatMagnitude, fractionPct } from "@/lib/utils/format";
-import { bandShortfall } from "@/lib/engine/treasury";
 
 /**
  * The faction's construction command summary: the automation switch pair (player faction only),
@@ -21,10 +20,7 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
   const data = useFactionConstruction(factionId);
   const treasury = useFactionTreasury(factionId);
   const runsPct = fractionPct(treasury.funded.construction);
-  // Shorted is decided inside the last settlement — what it paid against what it asked for — not by
-  // comparing that latched figure with the live slider, which the player can move at any time with
-  // no re-settle. See `bandShortfall`.
-  const shorted = bandShortfall(treasury.lastSettlement, "construction") !== null;
+  const shorted = runsPct < fractionPct(treasury.bands.construction);
   const setAutomation = useSetAutomation();
   const empty = data.buildSystems.length === 0 && data.colonies.length === 0;
 

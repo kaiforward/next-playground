@@ -26,9 +26,6 @@ import type {
   FoundingStockLine,
   FoundingStagingDraw,
   ProposalPersistenceUpdate,
-  BuildBlockedUpdate,
-  BuildOpportunityUpdate,
-  ColonyOpportunityUpdate,
 } from "@/lib/tick/world/directed-build-world";
 import {
   proposeFactionClaims,
@@ -403,24 +400,6 @@ export async function runDirectedBuildProcessor(
   // clock, distinct from the economy's squeeze clock — regardless of whether a proposal is emitted or
   // funded. Keyed by the market's composite id, the same convention the economy adapter writes by.
   const proposalPersistence: ProposalPersistenceUpdate[] = [];
-  // Build blocked (alert bar): every system belonging to a due faction this run — the "visited" set
-  // the world write clears against — and this run's best-ranked dropped opportunity per system that
-  // had one. Advances alongside proposalPersistence above for the same reason: the assessment runs
-  // for every due faction regardless of the automation switch, which gates PROPOSAL EMISSION only.
-  const buildBlockedVisitedSystemIds: string[] = [];
-  const blockedBuildUpdates: BuildBlockedUpdate[] = [];
-  // Build opportunity (alert bar): the planner's best-ranked SCORED opportunity per system, banded
-  // survival-first — see BuildOpportunityReport (lib/engine/directed-build.ts). Shares Build blocked's
-  // visited set above (same planFactionProposals run, same "every due faction, regardless of
-  // skipBuild" scope) — never gated by skipBuild, which only trims buildProposals below.
-  const buildOpportunityUpdates: BuildOpportunityUpdate[] = [];
-  // Colony opportunity (alert bar): every colony-establish CANDIDATE the colonisation planner
-  // considered this run (a population distinct from Build blocked's — a candidate is CONTROLLED, not
-  // yet developed) and this run's best-ranked colony-establish terms per candidate actually proposed.
-  // The assessment below runs regardless of skipColonise, matching Build blocked/opportunity's own
-  // "the switch gates proposal emission, not the clock" rule for its domain.
-  const colonyOpportunityVisitedSystemIds: string[] = [];
-  const colonyOpportunityUpdates: ColonyOpportunityUpdate[] = [];
   // Calibration instrumentation: new autonomic production-good levels committed THIS cycle, by good.
   // Counts proposal levels (before funding), not the final queue — so it measures the planner's
   // per-cycle output (the rate cap's target), not what the pool happened to afford. Housing, academies,
@@ -478,41 +457,22 @@ export async function runDirectedBuildProcessor(
       proposalPersistence.push({ id: `${u.systemId}|${u.goodId}`, proposalCycles: u.proposalCycles });
     }
     strikeSuppressed += buildPlan.strikeSuppressedProposals.suppressed;
-    // The assessment above runs unconditionally (see the comment on `buildStates`), so every system
-    // in `group` is visited whether or not build automation is on — the blocked-report write must not
-    // be gated by `skipBuild` either, only the proposals a few lines below are.
-    for (const s of group) buildBlockedVisitedSystemIds.push(s.systemId);
-    for (const b of buildPlan.blockedBuilds) {
-      blockedBuildUpdates.push({ systemId: b.systemId, reason: b.reason, droppedRoi: b.droppedRoi });
-    }
-    for (const o of buildPlan.buildOpportunities) {
-      buildOpportunityUpdates.push({ systemId: o.systemId, score: o.score, goodId: o.goodId });
-    }
     strikeEligible += buildPlan.strikeSuppressedProposals.eligible;
     const buildProposals = skipBuild ? [] : buildPlan.proposals;
 
     // Colony-establish proposals compete with builds on the same pool. Only faction-owned systems can
     // colonise (a null-faction group is independents — never); the develop param is omitted in build-only tests.
-    // The assessment runs regardless of `skipColonise` — Colony opportunity (alert bar) needs the
-    // planner's own terms even with colonisation automation off, mirroring build's own unconditional
-    // assessment above — only `colonyProposals` (what feeds the funding queue) is gated by the switch.
-    let allColonyProposals: ColonyProposal[] = [];
-    if (params.develop && factionId !== null) {
+    let colonyProposals: ColonyProposal[] = [];
+    if (params.develop && factionId !== null && !skipColonise) {
       const developedStates = buildStates.filter((s) => isEconomicallyActive(s.control));
       const openColonies = existing.filter(
         (p): p is WorldColonyEstablishProject => p.kind === "colony_establish",
       );
-      const candidates = params.develop.candidateProvider(factionId);
-      allColonyProposals = planFactionColonyProposals(
-        factionId, developedStates, candidates, openColonies, params.develop.params,
+      colonyProposals = planFactionColonyProposals(
+        factionId, developedStates, params.develop.candidateProvider(factionId), openColonies, params.develop.params,
         purse === undefined ? undefined : { balance: workingBalance, maintenanceBill: purse.maintenanceBill },
       );
-      for (const c of candidates) colonyOpportunityVisitedSystemIds.push(c.systemId);
-      for (const p of allColonyProposals) {
-        colonyOpportunityUpdates.push({ systemId: p.systemId, value: p.value, work: p.work });
-      }
     }
-    const colonyProposals = skipColonise ? [] : allColonyProposals;
 
     // Development-scaled pool floor (§7.9): reserve a self-weaning minimum slice for each young developed
     // colony, so its valid-but-low-ROI first build isn't monopolised out of the front-first pool by the
@@ -798,22 +758,6 @@ export async function runDirectedBuildProcessor(
 
   // Persist the construction proposal-pressure counters last — independent of ROI/funding outcome.
   if (proposalPersistence.length > 0) await world.applyProposalPersistenceUpdates(proposalPersistence);
-
-  // Persist Build blocked — every due faction's assessment ran above regardless of automation, so
-  // this write is unconditional too (see the comment where the two arrays are populated).
-  if (buildBlockedVisitedSystemIds.length > 0) {
-    await world.applyBuildBlockedUpdates(buildBlockedVisitedSystemIds, blockedBuildUpdates);
-  }
-
-  // Persist Build opportunity — same visited set, same unconditional-of-automation reasoning.
-  if (buildBlockedVisitedSystemIds.length > 0) {
-    await world.applyBuildOpportunityUpdates(buildBlockedVisitedSystemIds, buildOpportunityUpdates);
-  }
-
-  // Persist Colony opportunity — the candidate-scoped visited set, also unconditional of skipColonise.
-  if (colonyOpportunityVisitedSystemIds.length > 0) {
-    await world.applyColonyOpportunityUpdates(colonyOpportunityVisitedSystemIds, colonyOpportunityUpdates);
-  }
 
   return {
     workPerformedByFaction, foundingDebitsByFaction, buildCommitmentsByGood,

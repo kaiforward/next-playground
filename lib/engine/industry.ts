@@ -540,10 +540,8 @@ export function inputDemandFromProduction(
 /**
  * Why a building's `used` sits below its `count` — the binding constraint for the idle caption.
  * "skill1" names the vocational school (technicians), "skill2" the research institute (engineers).
- * "inputs" names a recipe input that never arrived (`inputGate < 1`) — tier-0/no-recipe goods never
- * report it, since their gate is always 1.
  */
-export type IdleReason = "occupancy" | "labour" | "skill1" | "skill2" | "selling" | "inputs";
+export type IdleReason = "occupancy" | "labour" | "skill1" | "skill2" | "selling";
 
 /** One per-head basket entry — a good a skilled grade consumes on top of the base need. */
 export interface SkillBasketEntry {
@@ -590,25 +588,17 @@ export interface SystemIndustryReadout {
 }
 
 /**
- * Coarse industry health, grounded in the infrastructure-decay engine's *exact* triggers so no state
- * name claims something the engine doesn't do. Three states mirror what the engine removes: it tears
- * down a level under unrest, or when a WHOLE level sits idle (floor(built − used) ≥ 1) for a reason it
- * can see, past the sustained-idle buffer. The fourth, `idle`, names a WHOLE level idle for a reason
- * the engine cannot see (a recipe input never arrived) — real idleness, but nothing the engine will
- * ever act on, so it must never read as `contracting`. Severity: stable < idle < contracting <
- * collapsing.
+ * Coarse industry health, grounded in the infrastructure-decay engine's *exact* triggers so the
+ * label never contradicts what actually decays. The engine removes a whole level only when unrest
+ * tears it down, or a WHOLE level sits idle (floor(built − used) ≥ 1) past the sustained-idle buffer.
  */
-export type IndustryHealth = "stable" | "idle" | "contracting" | "collapsing";
+export type IndustryHealth = "stable" | "contracting" | "collapsing";
 
 export interface IndustryHealthInput {
   /** Stored unrest integral 0…1. */
   unrest: number;
-  /** Whole idle levels whose binding cause the decay engine can see (labour, a skill ceiling, a
-   *  stalled sell-through, housing occupancy) — Σ max(0, floor(built − used)) restricted to those. */
+  /** Total whole idle levels across the built base — Σ max(0, floor(built − used)). */
   idleLevels: number;
-  /** Whole idle levels whose binding cause is recipe-input starvation alone — decay cannot see these
-   *  (its context carries no market stock), so they will never shed on their own. */
-  idleOnlyLevels: number;
   /** θ_decay — unrest strictly above this tears a level down immediately (the discrete collapse). */
   unrestDecayThreshold: number;
 }
@@ -616,22 +606,17 @@ export interface IndustryHealthInput {
 /**
  * System-level health mirroring what the decay engine removes:
  *  - collapsing: unrest above θ_decay → whole levels tear down immediately, even in use.
- *  - contracting: ≥1 whole idle level with a decay-visible cause → the marginal idle level(s) shed
- *    after the buffer.
- *  - idle: no decay-visible idle level, but ≥1 whole level idle only for want of recipe inputs — real
- *    idleness the engine will never touch.
+ *  - contracting: ≥1 whole idle level somewhere → the marginal idle level(s) shed after the buffer.
  *  - stable: otherwise — capacity understaffed by less than a whole unit is never decayed.
  */
 export function industryHealth(input: IndustryHealthInput): IndustryHealth {
   if (input.unrest > input.unrestDecayThreshold) return "collapsing";
   if (input.idleLevels >= 1) return "contracting";
-  if (input.idleOnlyLevels >= 1) return "idle";
   return "stable";
 }
 
 export interface BuildingHealthInput {
-  /** In-use amount for this building (occupancy for housing, staffed-and-selling-and-input-gated for
-   *  producers, as `buildIndustryReadout` computes it). */
+  /** In-use amount for this building (occupancy for housing, staffed-and-selling for producers). */
   used: number;
   /** Built count. */
   built: number;
@@ -639,34 +624,19 @@ export interface BuildingHealthInput {
   unrest: number;
   /** θ_decay — unrest strictly above this tears a level down immediately. */
   unrestDecayThreshold: number;
-  /** Binding idle-cause name from the readout (`SystemIndustryReadout.buildings[].idleReason`).
-   *  Required rather than optional so every call site states its answer explicitly: only "inputs"
-   *  changes the read; every other reason, and `undefined` (nothing idle, or a building type the
-   *  readout never names a reason for), falls through to the existing decay-grounded read. */
-  idleReason: IdleReason | undefined;
 }
 
 /**
- * Per-building health on the decay triggers, PLUS a fourth state for the one idle cause decay cannot
- * see: collapsing under unrest teardown; idle when a WHOLE level is idle (floor(built − used) ≥ 1)
- * and `idleReason` is "inputs" — a recipe input never arrived, which `computeSystemDecay` cannot
- * detect (its context carries no market stock) and so will never shed; contracting when a WHOLE level
- * is idle for any OTHER reason (labour, a skill ceiling, a stalled sell-through, housing occupancy) —
- * the marginal idle level the engine actually sheds after the buffer; else stable. Fractional
- * understaffing below one unit (e.g. 1.9/2.0, even 1.1/2.0) is stable — the engine never touches it;
- * housing overshoot yields a negative gap and is likewise not a decay trigger.
- *
- * The `used` fed in still folds the input gate for producers (`buildIndustryReadout`'s local fold —
- * decay's own `used` does not), so the idle-level COUNT here can still differ from what
- * `computeSystemDecay` would compute for that building. What no longer differs is the WORD: an
- * input-starved factory now reads "idle", never "contracting" — the name that means "decay is about
- * to shed this" is reserved for a reason decay can actually act on.
+ * Per-building health on the same decay triggers: collapsing under unrest teardown, contracting when
+ * a WHOLE level is idle (floor(built − used) ≥ 1 — the marginal idle level the engine sheds), else
+ * stable. Fractional understaffing below one unit (e.g. 1.9/2.0, even 1.1/2.0) is stable — the engine
+ * never touches it; housing overshoot yields a negative gap and is likewise not a decay trigger.
  */
 export function buildingHealth(input: BuildingHealthInput): IndustryHealth {
-  const { used, built, unrest, unrestDecayThreshold, idleReason } = input;
+  const { used, built, unrest, unrestDecayThreshold } = input;
   if (built <= 0) return "stable";
   if (unrest > unrestDecayThreshold) return "collapsing";
-  if (Math.floor(built - used) >= 1) return idleReason === "inputs" ? "idle" : "contracting"; // ≥1 whole idle level (mirrors idleLevels())
+  if (Math.floor(built - used) >= 1) return "contracting"; // ≥1 whole idle level (mirrors idleLevels())
   return "stable";
 }
 
@@ -760,20 +730,13 @@ export function buildIndustryReadout(
     logisticsFundingBound: logisticsFundingBoundOf,
   };
 
-  // Per-building "in use" — the decay-relevant quantity for every row EXCEPT a gated producer: housing
-  // occupancy, an academy's licence draw, a complex's family coverage and a producer's staffed-and-
-  // selling capacity are all resolved by the one shared buildingUsed dispatch (the same values
-  // computeSystemDecay sees). A producer additionally folds the input gate here, LOCAL to this
-  // readout rather than inside buildingUsed — so an input-starved factory reads idle here without
-  // moving what decay itself sees: decay's own ctx carries no market stock, so it cannot compute a
-  // gate, and wiring that visibility through is a separate, unbuilt task. staffedFraction is the
+  // Per-building "in use" — the decay-relevant quantity, resolved by the one shared buildingUsed
+  // dispatch (the same values computeSystemDecay sees): housing occupancy, an academy's licence draw,
+  // a complex's family coverage, or a producer's staffed-and-selling capacity. staffedFraction is the
   // panel's utilisation bar — used/count for the capacity/modifier rows, the pure staffing ratio for
-  // producers (so a fully-staffed-but-not-selling OR fully-staffed-but-input-starved producer still
-  // reads 100% staffed). idleReason captions an idle producer row: "labour" (headcount short),
-  // "skill1"/"skill2" (a skill ceiling drags fulfilment below the headcount gate), "selling" (output
-  // can't move), or "inputs" (a recipe input never arrived) — the strict binding-constraint minimum
-  // among gate, canSell and fulfil; a tie cascades to the next check (inputs, then selling, then the
-  // skill/labour split), the same convention the pre-existing selling/skill/labour chain already used.
+  // producers (so a fully-staffed-but-not-selling producer still reads 100% staffed). idleReason
+  // captions an idle producer row: "labour" (headcount short), "skill1"/"skill2" (a skill ceiling
+  // drags fulfilment below the headcount gate), or "selling" (output can't move).
   const buildingEntries: SystemIndustryReadout["buildings"] = [];
   for (const [buildingType, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
@@ -815,19 +778,15 @@ export function buildIndustryReadout(
     const outputGood = def?.outputGood;
     const tier: GoodTier = outputGood !== undefined ? (GOOD_TIER_BY_KEY[outputGood] ?? 0) : 0;
     const fulfil = effectiveFulfilment(state, tier);
+    const used = buildingUsed(buildingType, count, ctx);
     // output = the real production rate this cycle: buildingProduction × inputGate (selling is a
     // selling/decay signal, not a production multiplier — see lib/tick/processors/economy.ts).
     let output: number | undefined;
-    let gate = 1;
     if (outputGood !== undefined) {
       const production = buildingProduction(buildings, outputGood, state, yields);
-      gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, rationStockOf) : 1;
+      const gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, rationStockOf) : 1;
       output = production * gate;
     }
-    // used additionally folds the input gate: a producer whose recipe inputs never arrived is not
-    // actually running, however fully staffed and however freely its (unproduced) output would sell.
-    // gate is 1 for tier-0/no-recipe goods, so this is a no-op there (buildingUsed is already ≤ count).
-    const used = Math.min(buildingUsed(buildingType, count, ctx), count * gate);
     let idleReason: IdleReason | undefined;
     if (used < count) {
       // The selling factor is only read here to name the binding constraint; derive it lazily so a fully-used
@@ -835,12 +794,7 @@ export function buildIndustryReadout(
       const canSell = outputGood !== undefined && logisticsFundingBoundOf?.(outputGood)
         ? 1
         : Math.min(1, (outputGood !== undefined ? sellingFactorOf(outputGood) : 1) + USED_SLACK);
-      // gate must be the STRICT minimum against both canSell and fulfil to name "inputs" — on a tie
-      // it cascades into the existing chain below, the same "ties fall to the next check" convention
-      // that chain already used (canSell must be strictly < fulfil to read "selling"; a tie between
-      // canSell and fulfil falls into the skill/labour split rather than reading "selling").
-      if (gate < canSell && gate < fulfil) idleReason = "inputs";
-      else if (canSell < fulfil) idleReason = "selling";
+      if (canSell < fulfil) idleReason = "selling";
       else if (fulfil < state.labourFulfil) {
         // A skill ceiling binds. Name the pool that is actually the min the tier draws on;
         // on a tier-2 tie (neither academy) the lower grade (skill1) wins — it is the prerequisite.

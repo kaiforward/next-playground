@@ -502,8 +502,8 @@ Optional, human-gated, and **only** in PR mode. The review pipeline itself never
 
 5. **Only after the user confirms**, finish the merge:
    - Commit the fixes to the PR branch and push.
-   - Squash-merge **through the PR** (`gh pr merge --squash --subject … --body-file …`) with a **clean, atomic, feature-describing** commit message — a concise subject plus a body describing *what the feature does*. No "address review feedback", no merge/PR-plumbing noise, no implementation-detail changelog (per the clean-history convention). Never merge locally onto the target: the commit hook blocks direct commits on `shared/*` and `main`, and a local squash-merge is one.
-   - Sync the local base with `git fetch && git reset --hard origin/<base>`. It cannot fast-forward — the squash commit is a new commit whose lineage differs from the branch's own.
+   - Squash-merge into the base branch with a **clean, atomic, feature-describing** commit message — a concise subject plus a `--body-file` body describing *what the feature does*. No "address review feedback", no merge/PR-plumbing noise, no implementation-detail changelog (per the clean-history convention).
+   - Fast-forward the local base branch to the merged commit.
    - Delete the merged phase branch (local **and** remote).
 
 This mirrors the shared-feature-branch workflow: phase branches squash into the shared branch as one clean commit each; the single PR to `main` comes later, when the whole feature is done.

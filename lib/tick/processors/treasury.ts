@@ -159,7 +159,6 @@ export async function runTreasuryProcessor(
       logisticsBill: bills.logistics,
       constructionBill: bills.construction,
       paid: settled.paid,
-      charged: settled.charged,
       foundingExpense: pendingFounding,
     };
 

@@ -71,12 +71,11 @@ A well-kept file carries its own provenance line ("committed at `<sha>`, moved h
 - **written alongside** — falsifier and conclusion first appear in one commit. Not fatal, but a falsifier written after the number exists is not a falsifier; the `Licenses` line gets extra scrutiny.
 - **absent** — every current-behaviour claim in the spec is an untested hypothesis unless row 4 evidences it individually.
 
-### 1a. Checkable sentences — every one, anywhere in the doc
+### 1a. Current-behaviour sentences — every one, anywhere in the doc
 
-Any sentence stating how the game works **today**, or naming a quantity the feature will use, is a
-checkable claim, no matter where it sits — headline, rationale, a caveat, an aside inside a hazard
-row, a cell in a table. Build the list while reading the spec in full, and hand it to the lenses
-beside the worksheet audit. Each sentence is one of three kinds:
+Any sentence stating how the game works **today** is a checkable claim, no matter where it sits —
+headline, rationale, a caveat, an aside inside a hazard row. Build the list while reading the spec
+in full, and hand it to the lenses beside the worksheet audit. Each sentence is one of two kinds:
 
 - **mechanic** ("X is computed per cycle", "the allocator fills worst-first") — must match the
   code; verified with `file:line`.
@@ -84,30 +83,6 @@ beside the worksheet audit. Each sentence is one of three kinds:
   must be worded as an observation, never as a mechanism. An observed distribution written in
   mechanism language ("the 0-or-1 cliff") is a finding by itself: the next reader will quote it as
   a rule of the game.
-- **requirement** ("sorts by ROI", "ranked worst first", "clears by decay", "counts systems, not
-  instances") — names a quantity the feature intends to *use*. Each one must resolve to a producer:
-  an existing `file:line`, or an explicit statement that it is new authoring / new instrumentation
-  with the emission specified. **A requirement that resolves to nothing is a blocker finding**, not
-  a detail for planning to settle.
-
-**The third kind is the one this check was extended for, and it is the easiest to read past.** The
-first two are claims about what exists, so a reviewer instinctively goes looking. A requirement
-names a quantity that does not exist yet by definition, and when it is phrased as a concept —
-"ROI", "impact", "severity", "necessity" — there is no identifier to search for, so nothing prompts
-the check and the sentence sails through on grammar alone. One feature shipped four of these in one
-spec: "sorts by ROI" twice, "sorts by the ROI of what was dropped", and "clears by decay", against
-a codebase with no ROI figure in the named services and a decay path structurally unable to see the
-condition. Every one passed a full review here, was copied into a build-plan `Interface` line
-unchanged, and surfaced at implementation as a question the owner had to answer mid-build — each
-costing a spec amendment, a plan amendment, and a re-review of the parts not yet built.
-
-The tell is that the measures which were already field names (`supplyBand`, `popCap`,
-`STRIKE_PARAMS.threshold`) all carried receipts and none of them failed. **What could be grepped was
-checked; what was phrased as a concept never was.** So read the sort-measure and clears-by columns
-of any category or tier table noun by noun, not sentence by sentence.
-
-Downstream, `/build-plan`'s resolution pass runs the same check before it writes tasks. That is the
-backstop, not the primary net — catching it here is a conversation, catching it there is a re-plan.
 
 A false side-remark is *more* dangerous than a false conclusion — conclusions get attacked by
 every lens, while side-remarks get quoted in later design discussions as established fact. This
@@ -129,7 +104,7 @@ Each lens owns specific hazard rows:
 |---|---|
 | consumer-sweep | 1 (one quantity, several jobs), 2 (constant misread), 5 (primitive that doesn't exist) |
 | interaction-attack | 3 (a system you did not think about) |
-| consistency-attack | 4 (claims without measurement), 6 (aggregate moves for other reasons), + spec-internal contradiction and stability, + the step-1a checkable-sentence list (mechanic sentences vs code, observation sentences vs their measurement, **requirement sentences vs a named producer** — a sort measure or clears-by resolving to nothing is a blocker, not a note) |
+| consistency-attack | 4 (claims without measurement), 6 (aggregate moves for other reasons), + spec-internal contradiction and stability, + the step-1a current-behaviour sentence list (mechanic sentences vs code, observation sentences vs their measurement) |
 
 For each lens, write a 2–4 sentence attack framing **specific to this spec**, derived from the audit and the two lists. A row classified `assertion` or `missing` is that lens's primary target — it will produce the row's artifact itself and attack the spec with it; a row classified `evidence` gets spot-checked for completeness instead. Beyond the rows, aim at the spec's probable blind side — identify which *side* of each mechanism the spec redesigns and point the lens at the other side, e.g. "this spec redesigns the push side of each loop — sweep the receiving/clamping consumers whose triggers were previously synonymous with pathology." The sharpening never tells the lens what to conclude.
 

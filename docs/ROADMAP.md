@@ -17,8 +17,8 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   premises far too early, and output Kai can't parse. Direction: drop superpowers for this project,
   write project-specific skills built around interconnected game systems (events is the recurring
   miss), make evidence the deliverable rather than a design.
-  *Next step:* the instruction-mass cut is done (AGENTS.md is the single home for rules, memory and
-  doc pointers repointed at it); design the replacement skills.
+  *Next step:* finish the instruction-mass cut (AGENTS.md done, docs + memory in flight), then design
+  the replacement skills.
 
 ---
 
@@ -48,8 +48,9 @@ not two. Don't re-propose the feed without a case for what it holds that an aler
    Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
    approaching it** (the cue to build housing) and **which systems cannot meet their demand from
    imports plus production**. Low stability already works as a third and is the proof the approach
-   reads well; strikes and famine already have their data too. A category's instance list needs no
-   host beyond the flyout itself, which is uncapped and scrolls.
+   reads well; strikes and famine already have their data too. A category expanding into its instance
+   list needs a host — today's faction **Territory** tab is a flat name + economy-type list
+   (`app/(game)/@panel/factions/[factionId]/territory/page.tsx`) and is the natural candidate.
    **A per-category settings screen is load-bearing, not polish.** The most-subscribed EU5 alert mod
    exists to hide exactly our intended class — buildings missing employees, RGOs missing employees,
    unprofitable buildings — because those stay continuously true for states the player often cannot
@@ -81,23 +82,8 @@ not two. Don't re-propose the feed without a case for what it holds that an aler
    rather than keep tuning it. **Open question either way:** whether the hysteresis applies to the
    persisted display band only (presentational) or to the classifier itself (mechanical — the regime
    feeds the unrest term). Unverified at deferral time; do not assume the first.
-   **In progress on `feat/alert-bar`** — the prototype is approved, and the spec, the filled
-   design-hazards worksheet and the `/measure` evidence all live in
-   [alert-bar.md](./build-plans/alert-bar.md), which supersedes the detail above wherever they
-   disagree. Measured since this row was written: **"rare by construction" is false** — the planner
-   drops an opportunity it wanted at 50.4% of developed systems per run — so Build blocked defaults
-   off; and events became **three** valence-banded categories rather than one per type.
-   **Split into two PRs on a `shared/alert-bar` integration branch.** Stages A+B — the persisted
-   engine signals, the sixteen-category registry, the read service and the route — are the first
-   sub-PR; Stage C, the chip run, flyout and settings, is the second. Both merge into shared, then one
-   shared→main PR. The chip and flyout machinery is shared across all sixteen categories, so the split
-   is by layer and never by deferring a category. A+B is **inert**: nothing renders it, and
-   `npm run simulate` is identical at both horizons before and after.
-   The integration branch is what keeps main from carrying an undocumented half-feature: the doc fold
-   (Task 15) cannot run until Stage C exists, since the spec cannot be promoted to `docs/active/` as
-   current reality while half of what it describes is unbuilt.
-   *Next step:* Stage C — `/implement-plan docs/build-plans/alert-bar.md` from Task 11, on a `feat/*`
-   branch off `shared/alert-bar` once the A+B sub-PR has merged into it.
+   *Next step:* author the category and tier list, then design the blocked-reason instrumentation the
+   planner must emit.
    *Don't:* alert on a raw persistent state the player cannot act on. That is the precise EU5 failure
    — dismissal is pointless because the condition is still true, so the alert returns instantly and
    crowds out the useful ones.
@@ -150,24 +136,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   active relief order suspend the death line, or is the race accepted?
   *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
   exception to the money-is-fuel invariant.
-- **[M] Necessity weighting in the build planner** — the autonomic planner ranks opportunities by
-  `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597, 850-856`): units of unmet demand it
-  could serve, divided by route cost. That carries no necessity at all — a hundred units of unmet food
-  and a hundred of unmet luxuries score identically, and nothing in the planner consults
-  `SURVIVAL_GOODS`. **The alert bar shipped the fix on the read side only**, banding survival-serving
-  builds above the rest on its Build opportunity chip, which exists only while build automation is
-  off. So the player gets survival-first advice by hand and the planner does not follow it when
-  automated — same data, two answers depending on a switch. This row closes that.
-  Two things already established, so nobody re-derives them: `score` **is** demand-gated (`take` is
-  bounded by the real shortfall), so the planner is not necessity-blind in effect — a food shortage
-  raises food builds on its own, and what is missing is the *tiebreak* when several goods are short at
-  once. And the unit bias that skews the ranking toward bulk goods is **13×** (`ship_frames` 0.6 →
-  `gas` 8.0 across all 26 goods), not the "orders of magnitude" an earlier finding claimed.
-  *Next step:* `/measure` how often survival and non-survival opportunities actually compete inside one
-  planner run, both horizons, cohorted by developed systems — the weighting's value depends entirely on
-  that rate, and Kai's prior is that it is often.
-  *Don't:* copy the alert bar's band across without a sim reading. That band is a presentation
-  ordering with no simulation consequence; this one changes what every faction builds at every horizon.
 - **[L] Physical warehouse model — storage as a real, brake-relevant limit.** Today's storage
   constants (`EXTRACTOR/PRODUCTION_STORAGE_PER_UNIT`, `POP_CENTRE_STORAGE`) only deepen `maxStock`;
   they are authored per *producing* building while the brake knee is 40 cycles of *system-wide*
@@ -323,7 +291,8 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   which is the full list. Wanted: a sortable, filterable view of every open project across the faction
   with its progress, funding rate and ETA. Surfaced by the owner while running the Tracker in a real
   game (2026-08-12).
-  *Next step:* decide whether it is a faction-panel tab or its own route before any layout work.
+  *Next step:* decide whether it is a faction-panel tab or its own route before any layout work —
+  it competes with the Territory tab, which the alert bar also wants as a host.
   *Don't:* rebuild it as a second Tracker. The Tracker answers "where is my pool going right now";
   this answers "show me everything", and the two want different orderings and different densities.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
@@ -390,12 +359,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships on the map, and designing a second flow view before this pass changes what flows is
   backwards. Its approved HTML prototype survives as an input —
   [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md), memory `project-ws2-map-modes`.
-  **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
-  planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
-  unmet food ranks alongside a unit of unmet luxuries. Sibling of the necessity-weighting row under
-  Economy — settle the two together so survival goods are not privileged in one pillar and not the
-  other. The concrete place it lands is the **good-allocation cliff** row above, which owns the
-  allocation policy; this line exists so the pillar pass does not design that policy necessity-blind.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 

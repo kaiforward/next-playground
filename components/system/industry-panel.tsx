@@ -36,7 +36,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { useDialog } from "@/components/ui/dialog";
-import { depositRows, depositRowProblems, depositTypeProblems, generalLand, idleLevelSplit, staffedLevels, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
+import { depositRows, depositRowProblems, depositTypeProblems, generalLand, staffedLevels, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { buildProblems, needSeverity, problemGlyph, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
@@ -66,15 +66,11 @@ const problemRowVariants = tv({
 /**
  * Health → label / badge colour / text colour / glyph, in one place so the badge, tally, row
  * indicators and legend agree. Grounded in the decay engine (see industryHealth): a shape-first
- * glyph keeps it colourblind-safe. Stable holds, idle sits on a whole idle level decay can't see (a
- * recipe input, not a shrink), contracting slowly sheds idle levels, collapsing is unrest teardown.
- * Idle reads status-blue — informational rather than a point on the stable→collapsing danger ramp —
- * and a square glyph (■, per Foundry's square-corner motif) rather than a triangle, since it isn't
- * shrinking the way contracting/collapsing's triangles are.
+ * glyph keeps it colourblind-safe. Stable holds, contracting slowly sheds idle levels, collapsing
+ * is unrest teardown.
  */
 const HEALTH: Record<IndustryHealth, { label: string; badge: BadgeColor; text: string; glyph: string }> = {
   stable:      { label: "Stable",      badge: "green", text: "text-status-green-light", glyph: "●" },
-  idle:        { label: "Idle",        badge: "blue",  text: "text-status-blue-light",  glyph: "■" },
   contracting: { label: "Contracting", badge: "amber", text: "text-status-amber-light", glyph: "▽" },
   collapsing:  { label: "Collapsing",  badge: "red",   text: "text-status-red-light",   glyph: "▼" },
 };
@@ -548,7 +544,7 @@ function BuildingRow({
   canOrder: boolean;
   option?: BuildOptionData;
 }) {
-  const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD, idleReason: b.idleReason });
+  const health = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD });
   const items = buildProblems({ staffedFraction: b.staffedFraction, idleReason: b.idleReason }, supply, popNeed, label);
   const hasProblems = items.length > 0;
   const styles = problemRowVariants({ hasProblems });
@@ -695,8 +691,7 @@ function LegendTooltip() {
           <p className="mb-1 font-display text-[10px] font-semibold uppercase tracking-wider text-text-tertiary">Health — mirrors what decays</p>
           <ul className="space-y-0.5 text-[11px] text-text-secondary">
             <li><HealthGlyph health="stable" className="mr-1 text-[9px]" decorative /> stable — understaffed by under a whole unit; nothing sheds</li>
-            <li><HealthGlyph health="idle" className="mr-1 text-[9px]" decorative /> idle — a whole level idle for want of a recipe input; nothing sheds until the input arrives</li>
-            <li><HealthGlyph health="contracting" className="mr-1 text-[9px]" decorative /> contracting — a whole level sits idle for a reason decay can act on; the marginal level sheds after a buffer</li>
+            <li><HealthGlyph health="contracting" className="mr-1 text-[9px]" decorative /> contracting — a whole level sits idle; the marginal level sheds after a buffer</li>
             <li><HealthGlyph health="collapsing" className="mr-1 text-[9px]" decorative /> collapsing — unrest teardown; levels tear down immediately</li>
           </ul>
         </div>
@@ -895,12 +890,12 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   }
 
   // System health + per-building tally, grounded in the decay engine: a level sheds only under
-  // unrest teardown or when a WHOLE level is idle for a reason decay can see. `idleLevelSplit` owns
-  // that split and returns it under `industryHealth`'s own argument names — see its docstring.
-  const sysHealth = industryHealth({ unrest, ...idleLevelSplit(buildings), unrestDecayThreshold: THRESHOLD });
-  const tally: Record<IndustryHealth, number> = { stable: 0, idle: 0, contracting: 0, collapsing: 0 };
+  // unrest teardown or when a WHOLE level is idle (floor(built − used) ≥ 1).
+  const totalIdleLevels = buildings.reduce((s, b) => s + Math.max(0, Math.floor(b.count - b.used)), 0);
+  const sysHealth = industryHealth({ unrest, idleLevels: totalIdleLevels, unrestDecayThreshold: THRESHOLD });
+  const tally: Record<IndustryHealth, number> = { stable: 0, contracting: 0, collapsing: 0 };
   for (const b of buildings) {
-    tally[buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD, idleReason: b.idleReason })]++;
+    tally[buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD })]++;
   }
 
   // Extractors sit on deposit slots; factories/complexes/support buildings on general land (housing
@@ -986,7 +981,6 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
         )}
         <p className="mt-1.5 flex gap-3 font-mono text-[11px]">
           <span className="text-status-green-light">{tally.stable} stable</span>
-          <span className="text-status-blue-light">{tally.idle} idle</span>
           <span className="text-status-amber-light">{tally.contracting} contracting</span>
           <span className="text-status-red-light">{tally.collapsing} collapsing</span>
         </p>

@@ -27,7 +27,7 @@ export function useTickInvalidation() {
         // Migration attractiveness is a function of unrest/population/popCap/labour — all rewritten by
         // the economy processor this tick — so it goes stale on the same cycle as its sibling value modes.
         queryClient.invalidateQueries({ queryKey: queryKeys.migrationMap });
-        // Provisioned + band are written once per economy cycle, the same cycle as the rest
+        // Provisioned + band are written once per economy cycle (Task 1), the same cycle as the rest
         // of this handler's signals — refresh the choropleth on the same cadence.
         queryClient.invalidateQueries({ queryKey: queryKeys.provisionMap });
         // Ownership moves on the same cycle start (claim/develop) — refresh the political
@@ -49,15 +49,10 @@ export function useTickInvalidation() {
         queryClient.invalidateQueries({ queryKey: queryKeys.factionVitalsAll });
         // Treasury settles on the cycle start; funded fractions + snapshot move then.
         queryClient.invalidateQueries({ queryKey: queryKeys.factionTreasuryAll });
-        // Alert bar: every category except the three event bands moves on this cycle.
-        queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
       }),
       // Event notifications → refresh the events feed (detail panel).
       subscribeToEvent("eventNotifications", () => {
         queryClient.invalidateQueries({ queryKey: queryKeys.events });
-        // Alert bar: the three event-banded categories (Crisis / Disruption / Windfall) move on
-        // this channel, not economyTick.
-        queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
       }),
     ];
 

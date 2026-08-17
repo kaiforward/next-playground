@@ -1,10 +1,7 @@
 /**
  * Pure view-model for the Industry tab's tables — per-resource deposit rows and the
  * general-land partition. No DOM, no React. Row health is grounded in the decay engine
- * (`buildingHealth`). The only health this file computes is a deposit row's, and an extractor has no
- * recipe gate — `buildIndustryReadout` never names its idle reason "inputs" for a tier-0 building —
- * so a deposit row's health can never read "idle"; every indicator here still matches what actually
- * decays exactly (see `buildingHealth`).
+ * (`buildingHealth`), so a row's indicator can never contradict what actually decays.
  */
 import type { ResourceType, QualityBandId } from "@/lib/types/game";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
@@ -12,9 +9,8 @@ import { buildingHealth } from "@/lib/engine/industry";
 import type { SystemDepositSummary, SystemIndustryReadout, SubstrateSpace, IndustryHealth, IdleReason } from "@/lib/engine/industry";
 import { buildProblems, type ProblemItem } from "@/components/system/needs-view";
 
-/** Severity ordering for the worst-of-contributors aggregation (collapsing is worst, idle sits
- *  between stable and contracting — real idleness, but not a state decay will act on). */
-const SEVERITY: Record<IndustryHealth, number> = { stable: 0, idle: 1, contracting: 2, collapsing: 3 };
+/** Severity ordering for the worst-of-contributors aggregation (collapsing is worst). */
+const SEVERITY: Record<IndustryHealth, number> = { stable: 0, contracting: 1, collapsing: 2 };
 
 /**
  * The Staffed-column figure for one building entry — the single definition shared by the deposit
@@ -32,40 +28,6 @@ const SEVERITY: Record<IndustryHealth, number> = { stable: 0, idle: 1, contracti
  */
 export function staffedLevels(b: Pick<SystemIndustryReadout["buildings"][number], "tier" | "used" | "staffedFraction" | "count">): number {
   return b.tier === -1 ? b.used : b.staffedFraction * b.count;
-}
-
-/**
- * Whole idle levels across a system's buildings, split by whether infrastructure decay can SEE the
- * idleness — exactly the two arguments `industryHealth` takes, named to match so a call site cannot
- * cross them.
- *
- * A level sheds only when a WHOLE level is idle (`floor(built − used) ≥ 1`) for a reason decay can
- * see. "inputs" is the one reason it cannot: `computeSystemDecay`'s context carries no market stock,
- * so a factory idle purely for want of a recipe input will never shed. Counting those levels into
- * `idleLevels` would make the system chip claim a shed is coming when nothing will shed, which is the
- * whole reason the split exists.
- */
-export interface IdleLevelSplit {
-  /** Whole levels idle for a decay-visible reason (labour, a skill ceiling, a stalled sell-through,
-   *  housing occupancy) — the levels decay actually sheds. Reads "contracting". */
-  idleLevels: number;
-  /** Whole levels idle ONLY because recipe inputs never arrived — real idleness that decay cannot
-   *  see and will never act on. Reads "idle". */
-  idleOnlyLevels: number;
-}
-
-export function idleLevelSplit(
-  buildings: readonly Pick<SystemIndustryReadout["buildings"][number], "count" | "used" | "idleReason">[],
-): IdleLevelSplit {
-  let idleLevels = 0;
-  let idleOnlyLevels = 0;
-  for (const b of buildings) {
-    const levels = Math.max(0, Math.floor(b.count - b.used));
-    if (levels <= 0) continue;
-    if (b.idleReason === "inputs") idleOnlyLevels += levels;
-    else idleLevels += levels;
-  }
-  return { idleLevels, idleOnlyLevels };
 }
 
 /** One catalog extractor type's contribution to a shared deposit — the per-type breakdown under a
@@ -92,9 +54,8 @@ export interface DepositTypeRow {
    * exactly the shape `buildProblems` (`needs-view.ts`) needs for its `staffing` argument. `idleReason`
    * is `undefined` for the zeroed catalog entry `depositRows` emits when nothing of this type is built
    * (see below) — there is nothing to explain for a building that doesn't exist. Tier-0 extractors
-   * carry no skilled labour and no recipe, so this only ever names "labour" (unskilled short) or
-   * "selling" (glut) — never skill1/skill2, and never "inputs" (`inputGate` is 1 with no recipe,
-   * `industry.ts:787`) — so `health` below can never read "idle" for an extractor either.
+   * carry no skilled labour, so this only ever names "labour" (unskilled short) or "selling" (glut),
+   * never skill1/skill2.
    */
   staffedFraction: number;
   idleReason?: IdleReason;
@@ -138,8 +99,7 @@ export interface DepositRow {
  *
  * `staffed` is `staffedLevels` (pure labour), not the staffed-and-selling `used` — a glutting
  * extractor still reads its full labour here; `used` remains the input to `buildingHealth` so the
- * row's health indicator never disagrees with what actually decays (and, since an extractor's
- * `idleReason` is never "inputs", `buildingHealth` never hands this row back "idle" either).
+ * row's health indicator never disagrees with what actually decays.
  */
 export function depositRows(
   deposits: SystemDepositSummary[],
@@ -156,7 +116,7 @@ export function depositRows(
     const def = BUILDING_TYPES[b.buildingType];
     const resource = def?.resource;
     if (!resource) continue;
-    const h = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: unrestThreshold, idleReason: b.idleReason });
+    const h = buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: unrestThreshold });
     const staffed = staffedLevels(b);
     const acc: DepositResourceAgg = byResource.get(resource) ?? { built: 0, staffed: 0, output: 0, health: "stable" };
     acc.built += b.count;

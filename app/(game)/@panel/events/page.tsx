@@ -11,7 +11,7 @@ import { EventIcon } from "@/components/events/event-icon";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { useEvents } from "@/lib/hooks/use-events";
 import { useFilterState } from "@/lib/hooks/use-filter-state";
-import { EVENT_TYPE_BADGE_COLOR, compareEventSeverity } from "@/lib/constants/ui";
+import { EVENT_TYPE_BADGE_COLOR, EVENT_TYPE_DANGER_PRIORITY } from "@/lib/constants/ui";
 import type { ActiveEvent } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
 
@@ -53,8 +53,11 @@ const TYPE_CATEGORY: Record<EventTypeId, string> = {
 function sortEvents(events: ActiveEvent[], sortBy: string): ActiveEvent[] {
   return [...events].sort((a, b) => {
     switch (sortBy) {
-      case "severity":
-        return compareEventSeverity(a.type, b.type);
+      case "severity": {
+        const pa = EVENT_TYPE_DANGER_PRIORITY[a.type] ?? 0;
+        const pb = EVENT_TYPE_DANGER_PRIORITY[b.type] ?? 0;
+        return pb - pa;
+      }
       case "ticks":
         return a.ticksRemaining - b.ticksRemaining;
       case "system":

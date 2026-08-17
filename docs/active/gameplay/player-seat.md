@@ -181,7 +181,7 @@ actually land, not an isolated forecast.
   row with per-type sub-rows below it, each carrying its own quick-add since the parent row's Slots
   column is the shared pool the sub-rows draw down), everything else under its **Housing / Academies /
   Specialisation / Production / Support** heading (a group with only ghosts still renders its heading). A
-  ghost row: dim text, a ◇ amber glyph distinct from the health set (● stable / ■ idle / ▽ contracting / ▼
+  ghost row: dim text, a ◇ amber glyph distinct from the health set (● stable / ▽ contracting / ▼
   collapsing), `+N` levels, a slim progress bar, ETA. Player-originated ghosts add a gold **ORDERED**
   badge + inline ✕. The quick-add `+` column and a **New industry** button in the health strip appear
   only on the player's own systems; a rival's developed system renders the same tab read-only, ghosts

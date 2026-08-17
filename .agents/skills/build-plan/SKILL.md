@@ -50,42 +50,6 @@ or assertions. The no-code rule holds in this field like every other.
 `Proves` must be runnable at the task's own position in the order — a sim metric a later harness
 task builds belongs to that stage's gate, not to an earlier task's `Proves`.
 
-## Resolution — every measure gets a producer, before any task is written
-
-The first pass over the spec is not task decomposition. It is resolving every **quantity the spec
-promises to use** to the thing that produces it, and it happens before a single `### Task` block is
-written — a measure resolved after the tasks exist gets rationalised into the task that already
-mentions it, instead of stopping the plan.
-
-Build the list from the spec: every sort measure, every threshold, every condition input, every
-"clears by", every count and denominator — anything a task's `Interface` would end up naming. Each
-resolves to exactly one of three states, and the table ships in the plan:
-
-| State | What it requires |
-|---|---|
-| **exists** | a `file:line` the plan cites, verified by reading the range |
-| **new** | the task in this plan that produces it, named — and that task is in the order before its consumer |
-| **unresolvable** | the plan stops here and goes back to the spec |
-
-**No `Interface` line may name a measure that is not in that table.** A task whose sort key resolves
-to nothing is not a task yet, and writing it anyway converts a cheap planning conversation into a
-mid-implementation rewrite.
-
-**The trap this exists for: a measure written as a concept has no identifier to grep.** The
-self-review's grep-verified check below catches names the *plan* wrote down; it never fires on nouns
-the *spec* used, because there is nothing to search for. One feature shipped four of these — "sorts
-by ROI" twice, "sorts by the ROI of what was dropped", and "clears by decay" — against a codebase
-with no ROI figure in either named service and a decay path structurally unable to see the condition.
-Every one of them passed a full spec review, got copied into an `Interface` line unchanged, and was
-found by the implementer. Measures that were already field names (`supplyBand`, `popCap`,
-`STRIKE_PARAMS.threshold`) had a receipt in the spec and none of them failed. The split is exact:
-what could be grepped was checked, what was phrased as a concept never was.
-
-So the resolution pass runs on the spec's **prose**, noun by noun, not on the plan's citations.
-"Ranked by value", "worst first", "sorts by impact", "clears when the world resolves it" are all
-entries. Where the spec's own wording is the only thing that makes a measure sound real, that is the
-signal, not the reassurance.
-
 Phases are check-in pauses on one branch, never PRs — `AGENTS.md` owns the PR unit. A staged plan
 (stage → A/B → stage) interleaves `### Gate` blocks between task groups — Arms / Reads / Merge
 condition. A gate is not a task: it has no Files and no Interface, and it is where a
@@ -120,10 +84,6 @@ Minutes, by the author, before committing the plan. No agent dispatch.
   against a threshold that did not exist. A `file:line` citation is verified by **reading the
   range** — grep proves the name exists somewhere, not that the line is where the plan says (two
   same-named engine/processor files have already produced wrong-directory citations).
-- **Every measure in the resolution table still resolves.** Re-read the table against the finished
-  tasks: each `new` names a task that exists in the order and sits before its consumer, and no
-  `Interface` line names a measure the table does not carry. This is the cheap re-check of the pass
-  above, not a substitute for running it first.
 - **Files lists are walked against a sibling, not imagined.** For any task adding to a shape that
   already has members — a persisted field, a map mode, a response type, a processor signal — find
   the nearest existing member and grep every file *it* touches; that set is the floor. Verifying the

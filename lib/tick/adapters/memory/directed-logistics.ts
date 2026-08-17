@@ -4,7 +4,6 @@ import type {
   LogisticsMarketUpdate,
   LogisticsFlowInsert,
   LogisticsFundingBoundUpdate,
-  UnservedShortfallUpdate,
 } from "@/lib/tick/world/directed-logistics-world";
 import { factionShardKeys } from "@/lib/engine/shard-order";
 
@@ -12,9 +11,6 @@ import { factionShardKeys } from "@/lib/engine/shard-order";
 export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   readonly stockUpdates = new Map<string, number>();
   readonly fundingBoundUpdates = new Map<string, boolean>();
-  /** Market id → this run's structural-shortfall level: positive means unservable, 0 means the row
-   *  was assessed servable and the world layer should clear the key. Absent means untouched. */
-  readonly unservedShortfallUpdates = new Map<string, number>();
   readonly flows: LogisticsFlowInsert[] = [];
 
   constructor(private readonly systems: SystemLogisticsRow[]) {}
@@ -34,10 +30,6 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
 
   async applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void> {
     for (const u of updates) this.fundingBoundUpdates.set(u.id, u.logisticsFundingBound);
-  }
-
-  async applyUnservedShortfallUpdates(updates: UnservedShortfallUpdate[]): Promise<void> {
-    for (const u of updates) this.unservedShortfallUpdates.set(u.id, u.unservedShortfall);
   }
 
   async appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void> {

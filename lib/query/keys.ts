@@ -62,7 +62,4 @@ export const queryKeys = {
   factionTreasury: (factionId: string) => ["factionTreasury", factionId] as const,
   // Tracker panel roll-up (pinned/building/colonising) — tick-invalidated, and dirtied by pin writes.
   tracker: ["tracker"] as const,
-  // Alert bar categories — invalidated on BOTH the economyTick and eventNotifications SSE channels
-  // (the event-banded categories move on the second, every other category on the first).
-  alerts: ["alerts"] as const,
 };

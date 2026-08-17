@@ -477,7 +477,6 @@ describe("applyAbandonments / resetAbandonedMarkets / dropAbandonedBuildProjects
     return {
       systemId, goodId, stock, anchorMult: 1.4, demandRate: 3.2, storageCapacity: 500,
       honestUseRate: 2.9, squeezeCycles: 2, logisticsFundingBound: true, productionSuppressed: true,
-      stockChange: -18,
     };
   }
 
@@ -526,8 +525,6 @@ describe("applyAbandonments / resetAbandonedMarkets / dropAbandonedBuildProjects
       expect(m.logisticsFundingBound).toBeUndefined();
       expect("logisticsFundingBound" in m).toBe(false);
       expect(m.productionSuppressed).toBe(false); // explicit false, not merely absent
-      expect(m.stockChange).toBeUndefined();
-      expect("stockChange" in m).toBe(false);
     }
     expect(after.find((m) => m.goodId === "food")!.stock).toBe(340); // stock is the one thing kept
     expect(after.find((m) => m.goodId === "water")!.stock).toBe(12);
