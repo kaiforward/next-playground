@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { PopoverContent } from "@/components/ui/popover";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import type { AlertCategoryId, AlertTier } from "@/lib/types/alerts";
@@ -55,10 +55,6 @@ export interface AlertSettingsProps {
    *  component itself, so it stays a pure render of whatever state its owner hands it. */
   categories: AlertCategorySettings;
   onChangeCategory: (id: AlertCategoryId, on: boolean) => void;
-  /** Called on Escape and on an outside click — never on a checkbox toggle, which is the whole
-   *  point of the panel: trying combinations one after another would be unusable if every click
-   *  closed it. */
-  onClose: () => void;
 }
 
 /**
@@ -67,70 +63,24 @@ export interface AlertSettingsProps {
  * locked row (no control at all) for each of the four critical categories: rendering a disabled
  * checkbox there would still suggest the set is negotiable, which it isn't.
  *
- * A floating popover anchored under its own trigger, not a persistent rail sibling like
- * `TrackerSettings` — the prototype's own `settings-flyout` class shares the exact same anchoring
- * rules as a category's `AlertFlyout`, not the Tracker's fixed-width row-mate. It reimplements
- * `AlertFlyout`'s own non-modal popover mechanics by hand (manual Escape listener, outside-click
- * listener, focus captured on mount and restored on unmount) for the same reason that component
- * gives for not using `Dialog`: this project's pinned jsdom implements no `show`/`showModal`/`close`
- * on `HTMLDialogElement` at all, so a `Dialog`-based implementation could not be tested here either.
- * `AlertFlyout` is not reused directly since it renders one category's instances, not a settings
- * form — the shared mechanics are duplicated rather than factored out, a known, deliberately booked
- * gap (see `alert-run.tsx`'s own settings-control docstring for why the fix is out of this task's
- * file scope).
+ * A `PopoverContent`, exactly like `AlertFlyout` — see that component's own docstring for what the
+ * primitive (`components/ui/popover.tsx`) now supplies for free: the keyboard convention, the
+ * one-open-at-a-time registry (shared across every `Popover` instance, this one included — opening
+ * this panel closes whatever category flyout was open, and vice versa, with no code in this file or
+ * `alert-run.tsx` coordinating it), outside-click dismissal, and the `dialog` role. This component's
+ * caller wraps it in `<Popover align="end" disableHoverOpen>`; `align="end"` is what keeps this panel
+ * growing left from the gear's own right edge — the gear is always the LAST item in the run, so that
+ * stays inside the run's own reserved span without the `collisionBoundary` `AlertFlyout` needs (a
+ * category chip can sit anywhere in a packed run, not always at its right end).
  *
- * Anchored `right-0` rather than `left-0`: the gear is always the LAST item in the run, so a panel
- * growing left from its right edge stays inside the run's own reserved span without needing
- * `AlertFlyout`'s `runRef` horizontal-clamp effect (which exists precisely because a category chip
- * can sit anywhere in a packed run, not always at its right end).
+ * Toggling a checkbox does not close the panel: nothing in this component calls anything that would
+ * — there is no `onClose` here to call — and a click on a checkbox is an interaction INSIDE the
+ * content, which Radix's own dismissal layer never treats as a reason to close (see `AlertFlyout`'s
+ * own docstring for how that was verified).
  */
-export function AlertSettings({ categories, onChangeCategory, onClose }: AlertSettingsProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    const active = document.activeElement;
-    previousFocusRef.current = active instanceof HTMLElement ? active : null;
-    const firstControl = containerRef.current?.querySelector<HTMLElement>('input[type="checkbox"]');
-    firstControl?.focus();
-    return () => {
-      previousFocusRef.current?.focus();
-    };
-  }, []);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        event.target instanceof Node &&
-        !containerRef.current.contains(event.target)
-      ) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [onClose]);
-
-  // `pointer-events-auto` is load-bearing here for the same reason it is on `AlertFlyout` — this
-  // panel is a sibling of the settings trigger button inside the run's own `pointer-events-none`
-  // wrapper, so without it every row inside is dead to the mouse in a real browser while jsdom,
-  // which dispatches events straight at the element, would never catch the difference.
+export function AlertSettings({ categories, onChangeCategory }: AlertSettingsProps) {
   return (
-    <div
-      ref={containerRef}
-      role="dialog"
-      aria-label="Alert settings"
-      className="pointer-events-auto absolute right-0 top-[calc(100%+5px)] z-20 flex w-[330px] flex-col border border-border-strong bg-surface shadow-[0_18px_40px_rgba(0,0,0,0.6)]"
-    >
+    <PopoverContent aria-label="Alert settings" className="flex w-[330px] flex-col">
       <header className="shrink-0 border-b border-border px-2.5 py-2">
         <h3 className="font-display text-xs uppercase tracking-wider text-text-secondary">Alerts</h3>
         <p className="text-[11px] text-text-tertiary">What appears on the bar</p>
@@ -173,6 +123,6 @@ export function AlertSettings({ categories, onChangeCategory, onClose }: AlertSe
           );
         })}
       </div>
-    </div>
+    </PopoverContent>
   );
 }

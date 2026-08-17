@@ -149,10 +149,10 @@ convenience rather than a place information hides.
 
 ## The popover primitive
 
-The card renders inside a shared `Popover` component built on Radix's Popover rather than a
-hover-card. Hover-cards are mouse-only by design — their content is unreachable by keyboard — and
-there is no reason to exclude keyboard users when the accessible primitive is available. The plain
-tooltip remains the first tier for one-line legends; the popover is the second, richer tier.
+The card renders inside a shared `Popover` component built on Radix's Popover, whose content is
+reachable by keyboard as well as the mouse — there is no reason to exclude keyboard users when the
+accessible primitive is available. The plain tooltip remains the first tier for one-line legends;
+the popover is the second, richer tier.
 
 It opens on hover after a delay, on keyboard focus, and on click, and **no open path moves focus** —
 focus stays on the row, so a popover opening never interrupts a keyboard user walking the list and

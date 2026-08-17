@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
+import { PopoverContent } from "@/components/ui/popover";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { AlertRow } from "@/components/alerts/alert-row";
 import { TIER_COLOR } from "@/components/alerts/alert-chip";
@@ -9,11 +9,9 @@ import { CHIP_HEIGHT, RAIL_INSET } from "@/lib/constants/layout";
 import type { SystemTabSegment } from "@/lib/constants/system-tabs";
 import type { AlertCategory, AlertInstance } from "@/lib/types/api";
 
-/** The flyout's own 5px clearance below its chip — matches the literal in this file's
- *  `top-[calc(100%+5px)]` class below, which has to stay a literal (a Tailwind arbitrary-value
- *  class can't consume a JS variable — the class string itself is what the build scans for). Kept
- *  as a named number anyway so the `maxHeight` derivation below reads as three named pieces rather
- *  than a bare arithmetic literal. */
+/** The flyout's own 5px clearance below its chip — passed to `PopoverContent` as `sideOffset`
+ *  (overriding its own 8px default) and reused below so the `maxHeight` derivation reads as three
+ *  named pieces rather than a bare arithmetic literal. */
 const FLYOUT_CLEARANCE = 5;
 
 /** How far the flyout's own top-anchor point sits below the map's own top edge, before its own
@@ -97,14 +95,13 @@ export interface AlertFlyoutProps {
   /** Called with the resolved destination once a row is activated — never with the raw instance,
    *  so the caller never has to re-derive the destination branch this component already resolved. */
   onNavigate: (target: AlertNavigateTarget) => void;
-  /** Called on Escape, on an outside click, and after every row activation. Never called with any
-   *  side effect on the category's own data — see this component's own docstring. */
-  onClose: () => void;
   /** The packed run's own measured wrapper (`AlertRun`'s ref, threaded down through
-   *  `components/alerts/alert-run.tsx`) — used only to clamp this flyout's horizontal position
-   *  against the run's own left/right edges once real layout exists (see the horizontal-clamp effect
-   *  below). Undefined for every current caller of `AlertFlyout` directly (this file's own tests),
-   *  which is safe: the clamp effect no-ops without it, leaving the flyout at its default `left-0`. */
+   *  `components/alerts/alert-run.tsx`) — handed to `PopoverContent` as `collisionBoundary`, so
+   *  Radix's own collision detection (`@radix-ui/react-popper`'s `shift`/`flip`, on by default) keeps
+   *  this flyout inside the run's own reserved span rather than only the viewport, matching what the
+   *  deleted hand-rolled clamp did. Undefined for every current caller of `AlertFlyout` directly
+   *  (this file's own tests), which is safe: `collisionBoundary` undefined just falls back to
+   *  Radix's own default (the nearest clipping ancestor, effectively the viewport). */
   runRef?: RefObject<HTMLDivElement | null>;
 }
 
@@ -113,136 +110,59 @@ export interface AlertFlyoutProps {
  * every affected instance in the category's own sort order — no cap, no second home; a category
  * that is long is the honest shape of a common condition (docs/build-plans/alert-bar.md → "The
  * flyout") — and a footer stating the count with its denominator or unit (or no footer at all for
- * `faction` — see `alertFooterText`). Anchored under its own chip (`position: absolute`, a
- * positioned wrapper `AlertRunChips` gives each chip in `components/alerts/alert-run.tsx`) and
- * capped to the map area's own height: the map fills exactly `calc(100vh - var(--topbar-height))`
- * (`app/(game)/page.tsx`), and the chip run sits `FLYOUT_TOP_OFFSET` above where this flyout's own
- * top lands, so `100vh - var(--topbar-height) - FLYOUT_TOP_OFFSET` is exactly the room left below it
- * before the map itself runs out. The horizontal position defaults to `left-0` (lined up with the
- * chip) and is pulled back onto the run's own span by the clamp effect below when a chip near the
- * right of a packed run would otherwise hang the flyout off the run's own right inset and under the
- * Tracker rail — verbatim from the approved prototype's own `drawFlyout()` clamp.
+ * `faction` — see `alertFooterText`).
  *
- * Not a native `<dialog>`, though `components/ui/dialog.tsx`'s own non-modal `.show()` path
- * (`modal={false}`) — not `showModal()` — is the one that would actually apply here: `.show()`
- * renders in normal flow, not the browser's top layer, so a native `<dialog>` could in principle
- * anchor under a chip exactly as this popover does. The real reason to hand-roll it is testability,
- * not layering: this project's pinned jsdom (29.1.1) implements no `show`/`showModal`/`close` on
- * `HTMLDialogElement` at all — every existing consumer of `Dialog` (`BuildDialog`, `SaveGameDialog`,
- * …) has no test file for exactly that reason. Two of this component's own required behaviours —
- * only one flyout open at a time, and Escape closing it and returning focus to its chip — are things
- * a `Dialog`-based implementation could not pin down in a test AT ALL, not merely test more
- * awkwardly. This popover reimplements `Dialog`'s own non-modal semantics by hand instead — manual
- * Escape listener, focus captured on mount and restored on unmount — on a plain, testable `<div>`.
- * This is a popover over the map, not a modal: it never traps focus, and Tab is free to leave it.
+ * A `PopoverContent`, not a hand-rolled popover: `components/ui/popover.tsx` already implements the
+ * house keyboard convention (open never moves focus, ArrowDown enters, Escape exits and returns
+ * focus to the chip), the one-open-at-a-time registry, and outside-click dismissal — all of it wired
+ * by the caller (`AlertRunChips`, `components/alerts/alert-run.tsx`), which wraps this component's
+ * return value in `<Popover align="start" disableHoverOpen>`. `PopoverContent` supplies the `dialog`
+ * role itself; this component's only accessibility contribution is the `aria-label` naming it.
  *
- * A row's click never applies an action in place and never removes itself from the list: nothing
- * on this bar is dismissible, so a click that both acted and cleared would be indistinguishable
- * from a dismissal — the one gesture this design deliberately does not have. Activating a row calls
- * `onNavigate` with the resolved destination, then `onClose` — the flyout closes behind the
- * navigation it just caused, the same as choosing a destination from any other transient menu.
+ * Anchored under its own chip by Radix's own popper positioning (`side="bottom"`, the `Popover`
+ * default; `align="start"` lines this flyout's left edge up with its chip's, matching the approved
+ * prototype's unclamped case) and kept off the run's own right inset — under the Tracker rail — by
+ * `collisionBoundary={runRef?.current}`, Radix's own supported hook for constraining collision
+ * detection to a boundary narrower than the viewport (`@radix-ui/react-popper`'s `shift`+`flip`,
+ * `avoidCollisions: true` by default) rather than a hand-rolled measurement effect. Capped to the map
+ * area's own height: the map fills exactly `calc(100vh - var(--topbar-height))` (`app/(game)/page.tsx`),
+ * and the chip run sits `FLYOUT_TOP_OFFSET` above where this flyout's own top lands, so
+ * `100vh - var(--topbar-height) - FLYOUT_TOP_OFFSET` is exactly the room left below it before the map
+ * itself runs out.
+ *
+ * A row's click never applies an action in place and never removes itself from the list: nothing on
+ * this bar is dismissible, so a click that both acted and cleared would be indistinguishable from a
+ * dismissal — the one gesture this design deliberately does not have. Activating a row calls
+ * `onNavigate` with the resolved destination and nothing else — it does NOT close the popover, and
+ * there is no longer a way for it to: closing is `Popover`'s own job (Escape, an outside click), and
+ * this component holds no reference to that state at all. Verified against Radix's own dismissal
+ * layer (`@radix-ui/react-dismissable-layer`, wired through `PopoverContentNonModal`): it reacts only
+ * to interaction OUTSIDE the content, never to a click on something inside it, so a row's own click
+ * reaches only `onActivate` and never `Popover`'s close path.
  */
-export function AlertFlyout({ category, onNavigate, onClose, runRef }: AlertFlyoutProps) {
+export function AlertFlyout({ category, onNavigate, runRef }: AlertFlyoutProps) {
   const def = ALERT_CATEGORIES[category.id];
   const Icon = def.icon;
   const tier = TIER_COLOR[def.tier];
-  const containerRef = useRef<HTMLDivElement>(null);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-  const [left, setLeft] = useState(0);
 
-  // Mirrors `Dialog`'s own non-modal open effect (capture what had focus, move focus into the
-  // popover's first row, hand focus back on unmount) without the native `<dialog>` element — see
-  // this component's own docstring for why.
-  useEffect(() => {
-    const active = document.activeElement;
-    previousFocusRef.current = active instanceof HTMLElement ? active : null;
-    const firstRow = containerRef.current?.querySelector<HTMLElement>("button");
-    firstRow?.focus();
-    return () => {
-      previousFocusRef.current?.focus();
-    };
-  }, []);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  useEffect(() => {
-    function handlePointerDown(event: MouseEvent) {
-      if (
-        containerRef.current &&
-        event.target instanceof Node &&
-        !containerRef.current.contains(event.target)
-      ) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [onClose]);
-
-  // The horizontal clamp — verbatim from the approved prototype's own `drawFlyout()`:
-  //   const left = Math.min(tr.left - fr.left, span.right - fr.left - el.offsetWidth);
-  //   el.style.left = Math.max(span.left - fr.left, left) + 'px';
-  // The prototype computes in coordinates relative to the map frame it appends the flyout into; this
-  // component instead sits absolutely positioned within its OWN chip's wrapper (`AlertRunChips`'s
-  // `position: relative` div), whose left edge already IS the trigger's own left edge (`tr.left`) —
-  // so `left: 0` here is exactly the prototype's unclamped `tr.left - fr.left`. Reworking the same
-  // clamp into that local frame (subtracting `tr.left` from every term) collapses the `fr` term out
-  // entirely: `Math.max(span.left - tr.left, Math.min(0, span.right - tr.left - width))`. `runRef` —
-  // `AlertRun`'s own measured wrapper — stands in for the prototype's `span`; `containerRef.current
-  // .parentElement` (the per-chip wrapper) stands in for `trigger`. Inert in jsdom: every
-  // `getBoundingClientRect()` there returns all-zero rects and `offsetWidth` is 0, so `left` resolves
-  // to 0 — the same value the default `left-0` class already renders — and no existing test observes
-  // a difference.
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    const trigger = el?.parentElement;
-    const runEl = runRef?.current;
-    if (!el || !trigger || !runEl) return;
-
-    function place() {
-      if (!el || !trigger || !runEl) return;
-      const span = runEl.getBoundingClientRect();
-      const tr = trigger.getBoundingClientRect();
-      const width = el.offsetWidth;
-      setLeft(Math.max(span.left - tr.left, Math.min(0, span.right - tr.left - width)));
-    }
-
-    place();
-    window.addEventListener("resize", place);
-    return () => window.removeEventListener("resize", place);
-  }, [runRef]);
-
-  // Navigating does NOT close the flyout. The spec gives it exactly two ways to close — Escape, and
-  // a click outside it — and a row is neither. Keeping it open lets a player walk a category's
-  // instances one after another, which is the whole reason the list has no cap; closing on the first
-  // row would make a long list unusable and would also read as the dismissal gesture this bar
-  // deliberately does not have. The Tracker's own rich cards behave the same way.
   function activate(instance: AlertInstance) {
     onNavigate(resolveAlertTarget(category, instance));
   }
 
   const footerText = alertFooterText(category);
 
-  // `pointer-events-auto` below is load-bearing, not decoration. The run's own wrapper is
-  // `pointer-events-none` so empty space between chips passes clicks through to the map, and the
-  // chip button re-enables them for itself alone — this flyout is that button's SIBLING inside the
-  // same wrapper, so without this it inherits `none` and every row in it is dead to the mouse.
-  // jsdom cannot catch it: Testing Library dispatches events straight at the element, so a row click
-  // passes in a test while doing nothing at all in a browser.
+  // No `pointer-events-auto` here: `PopoverContent` portals to `document.body` (verified by reading
+  // `@radix-ui/react-popover`'s own `PopoverPortal`, which renders `@radix-ui/react-portal`'s
+  // `Portal` — a real DOM portal, defaulting to `document.body` when no `container` prop is given) —
+  // so this element is never a descendant of the run's own `pointer-events-none` wrapper
+  // (`components/alerts/alert-run.tsx`) and never inherits it, in a real browser or in jsdom alike.
   return (
-    <div
-      ref={containerRef}
-      role="dialog"
+    <PopoverContent
       aria-label={`${def.label} alerts`}
-      className="pointer-events-auto absolute top-[calc(100%+5px)] z-20 flex w-[340px] flex-col border border-border-strong bg-surface shadow-[0_18px_40px_rgba(0,0,0,0.6)]"
+      sideOffset={FLYOUT_CLEARANCE}
+      collisionBoundary={runRef?.current ?? undefined}
+      className="flex w-[340px] flex-col shadow-[0_18px_40px_rgba(0,0,0,0.6)]"
       style={{
-        left: `${left}px`,
         borderLeft: `2px solid ${tier.base}`,
         maxHeight: `calc(100vh - var(--topbar-height) - ${FLYOUT_TOP_OFFSET}px)`,
       }}
@@ -271,6 +191,6 @@ export function AlertFlyout({ category, onNavigate, onClose, runRef }: AlertFlyo
           {footerText}
         </footer>
       )}
-    </div>
+    </PopoverContent>
   );
 }

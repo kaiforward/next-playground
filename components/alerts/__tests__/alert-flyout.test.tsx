@@ -1,8 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
-import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AlertFlyout, resolveAlertTarget, alertFooterText } from "@/components/alerts/alert-flyout";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertFlyout,
+  resolveAlertTarget,
+  alertFooterText,
+  type AlertNavigateTarget,
+} from "@/components/alerts/alert-flyout";
 import type {
   AlertCategory,
   AlertInstance,
@@ -18,6 +23,14 @@ import type {
 // renders AlertFlyout directly with spy props, per the same convention alert-chip.test.tsx and
 // alert-run.test.tsx already use — accessible roles, names and rendered text, never a class or a
 // style.
+//
+// AlertFlyout's own return is now a `PopoverContent` (`components/ui/popover.tsx`), which requires a
+// `Popover` ancestor and starts closed — `renderOpenFlyout` below wraps it in a real `Popover` and
+// `PopoverTrigger`, then clicks the trigger, the same way `AlertRunChips` actually mounts it. The
+// Escape-closes/focus-returns mechanics that used to be pinned by a bespoke `Harness` in this file are
+// gone along with the hand-rolled Escape listener and focus capture they exercised — both are now
+// `Popover`'s own guarantees, already proven generically by `components/ui/__tests__/popover.test.tsx`
+// ("Escape is the way back out" and the exclusivity/pointer-transit blocks).
 
 function instance(name: string, measure: string, systemId: string | null, sortKey = 0): AlertInstance {
   return { systemId, name, measure, sortKey };
@@ -52,6 +65,26 @@ function crisisWith(instances: AlertInstance[]): EventAlertCategory {
 
 function manyInstances(n: number): AlertInstance[] {
   return Array.from({ length: n }, (_, i) => instance(`System ${i}`, `Provision ${i}%`, `sys-${i}`, i));
+}
+
+/** Mirrors how `AlertRun` actually mounts a flyout: a real `Popover`/`PopoverTrigger` pair, opened by
+ *  a real click rather than rendered pre-opened — `AlertFlyout`'s own return is a `PopoverContent`,
+ *  which needs a `Popover` ancestor and starts closed. */
+async function renderOpenFlyout(
+  category: AlertCategory,
+  onNavigate: (target: AlertNavigateTarget) => void = vi.fn(),
+) {
+  const user = userEvent.setup();
+  render(
+    <Popover>
+      <PopoverTrigger>
+        <button type="button">Open {category.id}</button>
+      </PopoverTrigger>
+      <AlertFlyout category={category} onNavigate={onNavigate} />
+    </Popover>,
+  );
+  await user.click(screen.getByRole("button", { name: `Open ${category.id}` }));
+  return { user };
 }
 
 describe("resolveAlertTarget — the row's destination, resolved off the category and the instance", () => {
@@ -107,34 +140,43 @@ describe("alertFooterText — states the denominator for a system-scoped categor
 });
 
 describe("AlertFlyout — renders every instance, no cap", () => {
-  it("a category with far more instances than could ever fit on screen still renders all of them", () => {
+  it("a category with far more instances than could ever fit on screen still renders all of them", async () => {
     // jsdom has no layout engine, so a scrollbar can't be asserted — the honest claim here is that
     // nothing truncates the list before it reaches the DOM. The scroll itself is a visual behaviour
     // (`overflow-y-auto` + a `max-height`) this test cannot see.
     const instances = manyInstances(40);
     const category: SystemScopedAlertCategory = { ...famine, count: 40, instances };
-    render(<AlertFlyout category={category} onNavigate={vi.fn()} onClose={vi.fn()} />);
+    await renderOpenFlyout(category);
 
-    expect(screen.getAllByRole("button")).toHaveLength(40);
+    // The trigger button is a "button" too, hence 41 rather than 40.
+    expect(screen.getAllByRole("button")).toHaveLength(41);
     expect(screen.getByText("System 39")).toBeInTheDocument();
   });
 });
 
 describe("AlertFlyout — Maintenance unfunded's single faction-level row", () => {
-  it("renders the faction's name and measure, with no system name attached", () => {
-    render(<AlertFlyout category={maintenanceUnfunded} onNavigate={vi.fn()} onClose={vi.fn()} />);
+  it("renders the faction's name and measure, with no system name attached", async () => {
+    await renderOpenFlyout(maintenanceUnfunded);
 
     const row = screen.getByRole("button", { name: /The Terran Compact/ });
     expect(row).toHaveTextContent("The Terran Compact");
     expect(row).toHaveTextContent("$1.2M short");
-    // Exactly one row — the faction-level category's count is always 0 or 1 by construction.
-    expect(screen.getAllByRole("button")).toHaveLength(1);
+    // Exactly one row plus the trigger — the faction-level category's count is always 0 or 1 by
+    // construction.
+    expect(screen.getAllByRole("button")).toHaveLength(2);
   });
 
-  it("renders no <footer> element at all — a stated '1 faction' count would carry no information", () => {
+  it("renders no <footer> element at all — a stated '1 faction' count would carry no information", async () => {
     const { container } = render(
-      <AlertFlyout category={maintenanceUnfunded} onNavigate={vi.fn()} onClose={vi.fn()} />,
+      <Popover>
+        <PopoverTrigger>
+          <button type="button">Open</button>
+        </PopoverTrigger>
+        <AlertFlyout category={maintenanceUnfunded} onNavigate={vi.fn()} />
+      </Popover>,
     );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Open" }));
 
     expect(container.querySelector("footer")).not.toBeInTheDocument();
   });
@@ -142,64 +184,28 @@ describe("AlertFlyout — Maintenance unfunded's single faction-level row", () =
 
 describe("AlertFlyout — row activation", () => {
   it("clicking a row navigates and leaves the flyout open, without removing the row", async () => {
-    const user = userEvent.setup();
     const onNavigate = vi.fn();
-    const onClose = vi.fn();
-    render(<AlertFlyout category={famine} onNavigate={onNavigate} onClose={onClose} />);
+    const { user } = await renderOpenFlyout(famine, onNavigate);
 
     await user.click(screen.getByRole("button", { name: /Rigel/ }));
 
     expect(onNavigate).toHaveBeenCalledTimes(1);
     expect(onNavigate).toHaveBeenCalledWith({ kind: "system", systemId: "sys-b", tab: "population" });
-    // The flyout has exactly two ways to close — Escape, and a click outside it. A row is neither,
-    // so a player can walk a category's instances one after another, which is the point of a list
-    // with no cap.
-    expect(onClose).not.toHaveBeenCalled();
     // The row is still in the document: activating it applied no action against the category's own
-    // data and did not remove itself from the list.
+    // data, did not remove itself from the list, and — since nothing in this component calls
+    // anything that would close the popover — did not close it either.
     expect(screen.getByRole("button", { name: /Rigel/ })).toBeInTheDocument();
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    // The trigger, plus Sunnyvale and Rigel's own rows.
+    expect(screen.getAllByRole("button")).toHaveLength(3);
   });
 
   it("an event row with no systemId calls onNavigate with the events route, never a system target", async () => {
-    const user = userEvent.setup();
     const onNavigate = vi.fn();
     const regionLevel = crisisWith([instance("Alliance dissolved", "2 ticks left", null)]);
-    render(<AlertFlyout category={regionLevel} onNavigate={onNavigate} onClose={vi.fn()} />);
+    const { user } = await renderOpenFlyout(regionLevel, onNavigate);
 
     await user.click(screen.getByRole("button", { name: /Alliance dissolved/ }));
 
     expect(onNavigate).toHaveBeenCalledWith({ kind: "route", path: "/events" });
-  });
-});
-
-/** Mirrors how `AlertRun` actually mounts a flyout: a trigger button that opens it, `onClose`
- *  wired to a real state update so escaping actually unmounts `AlertFlyout` — the only way to
- *  observe its real focus-restore cleanup rather than a spy that never runs it. */
-function Harness({ category }: { category: AlertCategory }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <button type="button" onClick={() => setOpen(true)}>
-        Open {category.id}
-      </button>
-      {open && <AlertFlyout category={category} onNavigate={vi.fn()} onClose={() => setOpen(false)} />}
-    </div>
-  );
-}
-
-describe("AlertFlyout — Escape closes it and returns focus to its chip", () => {
-  it("pressing Escape unmounts the flyout and returns focus to the button that opened it", async () => {
-    const user = userEvent.setup();
-    render(<Harness category={famine} />);
-
-    const trigger = screen.getByRole("button", { name: "Open famine" });
-    await user.click(trigger);
-    expect(screen.getByRole("dialog", { name: "Famine alerts" })).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-
-    expect(screen.queryByRole("dialog", { name: "Famine alerts" })).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
   });
 });

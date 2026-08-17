@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { forwardRef, type ComponentPropsWithoutRef, type CSSProperties } from "react";
 import { tv } from "tailwind-variants";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import type { AlertTier } from "@/lib/types/alerts";
@@ -28,6 +28,15 @@ const TIER_COLOR: Record<AlertTier, { base: string; light: string }> = {
 const chip = tv({
   base: [
     "relative z-[var(--z,1)] aria-expanded:z-[95] pointer-events-auto inline-flex h-[26px] flex-none items-center gap-1.5 whitespace-nowrap border px-[9px]",
+    // The two colour-mix knobs `AlertChip`'s own fill and border read, set only once Radix's
+    // `PopoverTrigger` writes `data-state="open"` onto this exact button (composed via `asChild`,
+    // not a wrapping element) — a custom property toggled by a `data-state` selector is the one
+    // channel that still reaches an inline `color-mix` value, since an inline style always outranks
+    // a class in the cascade and so can never itself be overridden by one. Inert for a consumer
+    // that never reads `--chip-mix`/`--chip-border-mix` in its own inline style (`CollapsedTail`,
+    // the settings trigger in `alert-run.tsx`) — the custom properties these two classes set simply
+    // go unread.
+    "data-[state=open]:[--chip-mix:32%] data-[state=open]:[--chip-border-mix:100%]",
     "font-sans text-[13px]",
     "transition-[filter] duration-150 hover:brightness-125 focus-visible:brightness-125",
     "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
@@ -63,27 +72,32 @@ function unitSuffix(category: AlertCategory): string | null {
   }
 }
 
-interface AlertChipProps {
+interface AlertChipOwnProps {
   /** The category's standing read — count, denominator (where its unit has one) and instances.
    *  Tier, icon, label and whether the category is faulted come off `ALERT_CATEGORIES[category.id]`
    *  rather than being taken as separate props, so a caller cannot contradict the authored table. */
   category: AlertCategory;
-  /** Whether this chip's flyout is open — drives the disclosure's pressed/expanded state. */
-  open: boolean;
-  onOpen: () => void;
   /** Resting stack order, from `stackZIndex` — the leftmost, most severe chip sits on top. Read by
    *  the shell's `z-[var(--z,1)]` base class. */
   zIndex?: number;
   /** Whether the run is packed at a negative gap (`isOverlapping`), which turns on the shadow and
    *  the hover raise. */
   overlapping?: boolean;
+  /** This chip's own packed spacing from `chipMarginLeft` (`components/alerts/alert-run.tsx`).
+   *  Applied directly to this button rather than a wrapping positioned `<div>`: `Popover` renders no
+   *  DOM node of its own (`PopperPrimitive.Root` is a bare context provider), so the trigger this
+   *  component renders is already the sole flex child the run's packing math is placing. */
+  marginLeft?: number;
 }
 
-// The two packing props are deliberately narrow rather than an open `className`/`style` pair. The
-// chip owns its own appearance — tier fill, icon, slash and the opaque-surface mix that lets chips
-// overlap without showing each other or the map through — and a caller that could pass arbitrary
-// styles could defeat that fill, which is the same reason tier, icon, label and `faulted` are read
-// off the registry rather than taken as props.
+// The three packing/category props are deliberately narrow rather than an open `className`/`style`
+// pair — omitted below from the DOM props this component otherwise forwards. The chip owns its own
+// appearance — tier fill, icon, slash and the opaque-surface mix that lets chips overlap without
+// showing each other or the map through — and a caller that could pass arbitrary styles could defeat
+// that fill, which is the same reason tier, icon, label and `faulted` are read off the registry
+// rather than taken as props.
+type AlertChipProps = AlertChipOwnProps &
+  Omit<ComponentPropsWithoutRef<"button">, keyof AlertChipOwnProps | "className" | "style" | "children">;
 
 /**
  * One alert category on the run — a 20px icon plus count, no visible label, an opaque tier-tinted
@@ -93,8 +107,22 @@ interface AlertChipProps {
  * The accessible name is assembled from rendered DOM content — a hidden label span, the visible
  * count, a hidden unit/denominator span — rather than a static `aria-label`. That ties the name to
  * the same elements a player sees: if the count stops rendering, "3" drops out of the name with it.
+ *
+ * Rendered as a `PopoverTrigger`'s child (`components/alerts/alert-run.tsx`), never with its own
+ * open/close state: Radix's Slot mechanism clones `onClick`, `aria-expanded`, `aria-haspopup`,
+ * `aria-controls`, `data-state`, `type` and a `ref` onto whatever single element `PopoverTrigger`
+ * wraps — which means a component in that position, not a plain `<button>` tag, has to accept and
+ * forward them itself, or they are silently dropped and the trigger never opens (`forwardRef` plus
+ * `{...triggerProps}` below is what makes that happen; `TrackerRow`'s own trigger button skips this
+ * because it inlines the `<button>` directly rather than wrapping a separate component). This
+ * component neither takes nor computes an `open` prop of its own — the fill's rest/open swap reads
+ * `data-state` in CSS instead, via the two custom properties `chip`'s own base sets from it (see
+ * their own docstring).
  */
-export function AlertChip({ category, open, onOpen, zIndex, overlapping }: AlertChipProps) {
+export const AlertChip = forwardRef<HTMLButtonElement, AlertChipProps>(function AlertChip(
+  { category, zIndex, overlapping, marginLeft, ...triggerProps },
+  ref,
+) {
   const def = ALERT_CATEGORIES[category.id];
   const Icon = def.icon;
   const tier = TIER_COLOR[def.tier];
@@ -102,35 +130,34 @@ export function AlertChip({ category, open, onOpen, zIndex, overlapping }: Alert
 
   // Opaque fill: the tier colour mixed into the surface, never into transparency — required because
   // packed chips overlap and sit over a live map. 15% at rest, 32% open, matching the approved
-  // prototype's `.chip` / `.chip[aria-expanded="true"]` mix percentages.
-  const backgroundColor = `color-mix(in srgb, ${tier.base} ${open ? 32 : 15}%, var(--color-surface))`;
-  const borderColor = open
-    ? tier.base
-    : `color-mix(in srgb, ${tier.base} 30%, var(--color-surface))`;
+  // prototype's `.chip` / `.chip[aria-expanded="true"]` mix percentages — expressed as a CSS
+  // `color-mix` reading `--chip-mix`/`--chip-border-mix`, which fall back to the rest values below
+  // until `chip`'s own `data-[state=open]:[--chip-mix:32%]` base class sets them, matching whether
+  // Radix has actually written `data-state="open"` onto this button.
+  const backgroundColor = `color-mix(in srgb, ${tier.base} var(--chip-mix, 15%), var(--color-surface))`;
+  const borderColor = `color-mix(in srgb, ${tier.base} var(--chip-border-mix, 30%), var(--color-surface))`;
 
   // `--z` is a custom property, which `CSSProperties` alone does not admit; the intersection names
-  // the one this component sets rather than opening the object to arbitrary keys.
+  // the ones this component sets rather than opening the object to arbitrary keys.
   const style: CSSProperties & { "--z"?: number } = {
     backgroundColor,
     borderColor,
     color: tier.light,
+    marginLeft,
     "--z": zIndex,
   };
 
   return (
-    <button
-      type="button"
-      aria-expanded={open}
-      onClick={onOpen}
-      className={chip({ overlapping })}
-      style={style}
-    >
+    <button ref={ref} type="button" className={chip({ overlapping })} style={style} {...triggerProps}>
       <Icon aria-hidden="true" className="h-5 w-5 flex-none">
         {def.faulted && (
           <>
             {/* The casing line: drawn first (so it paints under the slash), in the chip's own
                 background colour, offset up and right — it carves a gap out of the glyph so the
-                slash reads as a negation rather than one more stroke on a busy icon. */}
+                slash reads as a negation rather than one more stroke on a busy icon. Reads the same
+                `color-mix` as the button's own fill, so it stays in step with the rest/open swap
+                without its own `data-state` plumbing: a custom property inherits from this button to
+                every descendant, this `<path>` included. */}
             <path d="m3.6 0.4 20 20" stroke={backgroundColor} strokeWidth={3.2} />
             {/* The slash itself — lucide's own `-off` convention, borrowed for the two glyphs
                 (`Factory`, `BedDouble`) the library has no negated variant for. */}
@@ -149,4 +176,4 @@ export function AlertChip({ category, open, onOpen, zIndex, overlapping }: Alert
       {suffix != null && <> <span className="sr-only">{suffix}</span></>}
     </button>
   );
-}
+});

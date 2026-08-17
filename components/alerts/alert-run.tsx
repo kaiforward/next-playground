@@ -5,6 +5,7 @@ import type { RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SettingsIcon } from "@/components/ui/icons";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { AlertChip, chip } from "@/components/alerts/alert-chip";
 import { AlertFlyout, type AlertNavigateTarget } from "@/components/alerts/alert-flyout";
 import { AlertSettings } from "@/components/alerts/alert-settings";
@@ -98,10 +99,10 @@ export function AlertRun({ settingsOpen }: AlertRunProps) {
  * purpose (nothing behind an empty galaxy), so the loading state is the same as the empty state,
  * nothing, rather than a spinner floating over the map for one round trip.
  *
- * `runRef` is forwarded, unread, straight through to `AlertRunChips` and on to whichever
- * `AlertFlyout` is open — this component still measures nothing itself. It is `AlertRun`'s own
- * measuring ref (above), not a new one: the flyout's horizontal clamp needs the SAME rect
- * `ResizeObserver` already reads for packing, not a second element to keep in sync with it.
+ * `runRef` is forwarded, unread, straight through to `AlertRunChips` and on to every `AlertFlyout` —
+ * this component still measures nothing itself. It is `AlertRun`'s own measuring ref (above), not a
+ * new one: `AlertFlyout`'s own `collisionBoundary` needs the SAME rect `ResizeObserver` already reads
+ * for packing, not a second element to keep in sync with it.
  */
 export function AlertRunContent({
   availableWidth,
@@ -170,15 +171,15 @@ function useHysteresisVisibleIds(categories: AlertCategory[], cycle: number): Se
  * raise and the tier separator's tighter margins all apply only once `isOverlapping(gap)` — a spaced
  * run has nothing to cast a shadow over or raise a chip clear of.
  *
- * Which chip's flyout is open lives here as plain `useState` — ephemeral UI state, not persisted —
- * and is passed to each `AlertChip` as `open`/`onOpen`, and to `ActiveAlertFlyout` below (mounted
- * only for the open category, so at most one flyout ever renders). Each chip is wrapped in its own
- * `position: relative` `<div>` so its flyout — `position: absolute`, `top: 100%` — anchors under
- * THAT chip with no measurement of its own: `marginLeft` moves from `AlertChip` onto this wrapper so
- * the packed spacing is unchanged, and the wrapper's own width is exactly its chip's, so `left: 0`
- * lines the flyout's left edge up with the chip's by default — `runRef`, threaded through unread
- * here, is what `AlertFlyout` itself measures against to pull that back onto the run's own span near
- * the right of a packed run (see its own docstring).
+ * Which chip's flyout is open is no longer tracked here at all: each chip is its own `Popover`
+ * (`components/ui/popover.tsx`), self-managing its own open state, and the primitive's module-level
+ * exclusivity registry — not React state owned by this component — is what keeps at most one open at
+ * a time, chip flyouts and the settings panel alike (see the settings control below). `AlertChip`
+ * renders as the `PopoverTrigger`'s child and no longer takes `open`/`onOpen`: Radix writes
+ * `aria-expanded`/`data-state` onto that exact button, and the chip's own rest/open fill reads
+ * `data-state` in CSS (`components/alerts/alert-chip.tsx`). `Popover` itself renders no DOM node
+ * (`PopperPrimitive.Root` is a bare context provider), so `marginLeft` moves onto `AlertChip` itself
+ * rather than a wrapping positioned `<div>` — there is no longer a `<div>` to wrap.
  *
  * Reads `useAlertCategories()` to decide which of the hysteresis-visible categories
  * actually SHOW: a hideable category with its checkbox off is filtered out here, before `packRun`
@@ -206,7 +207,12 @@ function useHysteresisVisibleIds(categories: AlertCategory[], cycle: number): Se
  *
  * Mutually exclusive with an open category flyout, mirroring the approved prototype's own
  * `settingsOpen`/`openId` pair: opening the settings panel closes whichever flyout was open, and
- * opening a flyout closes settings — never both floating over the map at once.
+ * opening a flyout closes settings — never both floating over the map at once. This used to be code
+ * in this file; it is now `Popover`'s own module-level registry, since the settings panel is a
+ * `Popover` instance exactly like every chip's flyout (verified: the registry
+ * (`components/ui/popover.tsx`'s `openPopover`/`claimOpen`) is a bare module-level variable, not
+ * scoped to any one `Popover` React tree, so it applies across every mounted instance regardless of
+ * which component renders it).
  */
 function AlertRunChips({
   availableWidth,
@@ -218,8 +224,6 @@ function AlertRunChips({
   const { categories } = useAlerts();
   const cycle = useCycleBoundary();
   const visibleIds = useHysteresisVisibleIds(categories, cycle);
-  const [openId, setOpenId] = useState<AlertCategoryId | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const { categories: categorySettings, setCategory } = useAlertCategories();
 
   const shown = categories.filter((category) => {
@@ -239,16 +243,6 @@ function AlertRunChips({
 
   let lastTier: AlertTier | null = null;
 
-  function openChip(id: AlertCategoryId) {
-    setSettingsOpen(false);
-    setOpenId((current) => (current === id ? null : id));
-  }
-
-  function toggleSettings() {
-    setOpenId(null);
-    setSettingsOpen((open) => !open);
-  }
-
   return (
     <div className="flex items-center">
       {chips.map((category, index) => {
@@ -258,62 +252,60 @@ function AlertRunChips({
         const position = index === 0 ? "first" : isNewTier ? "after-separator" : "after-chip";
         const marginLeft = chipMarginLeft(gap, position);
         const zIndex = stackZIndex(index, chips.length);
-        const isOpen = openId === category.id;
         return (
           <Fragment key={category.id}>
             {isNewTier && <TierSeparator gap={gap} />}
-            <div className="relative inline-flex" style={{ marginLeft }}>
-              <AlertChip
-                category={category}
-                open={isOpen}
-                onOpen={() => openChip(category.id)}
-                zIndex={zIndex}
-                overlapping={overlapping}
-              />
-              {isOpen && (
-                <ActiveAlertFlyout category={category} onClose={() => setOpenId(null)} runRef={runRef} />
-              )}
-            </div>
+            <Popover align="start" disableHoverOpen>
+              <PopoverTrigger>
+                <AlertChip
+                  category={category}
+                  zIndex={zIndex}
+                  overlapping={overlapping}
+                  marginLeft={marginLeft}
+                />
+              </PopoverTrigger>
+              <ActiveAlertFlyout category={category} runRef={runRef} />
+            </Popover>
           </Fragment>
         );
       })}
       {collapsed > 0 && (
         <CollapsedTail categories={hidden} marginLeft={chipMarginLeft(gap, "after-chip")} />
       )}
-      <div
-        className="relative inline-flex"
-        style={{ marginLeft: chipMarginLeft(gap, hasChips ? "after-chip" : "first") }}
-      >
-        <button
-          type="button"
-          aria-expanded={settingsOpen}
-          aria-label="Alert settings"
-          onClick={toggleSettings}
-          className={chip({ overlapping, class: "border-border-strong bg-surface text-text-secondary" })}
-        >
-          <SettingsIcon aria-hidden="true" className="h-5 w-5" />
-        </button>
-        {settingsOpen && (
-          <AlertSettings
-            categories={categorySettings}
-            onChangeCategory={setCategory}
-            onClose={() => setSettingsOpen(false)}
-          />
-        )}
-      </div>
+      <Popover align="end" disableHoverOpen>
+        <PopoverTrigger>
+          <button
+            type="button"
+            aria-label="Alert settings"
+            className={chip({ overlapping, class: "border-border-strong bg-surface text-text-secondary" })}
+            style={{ marginLeft: chipMarginLeft(gap, hasChips ? "after-chip" : "first") }}
+          >
+            <SettingsIcon aria-hidden="true" className="h-5 w-5" />
+          </button>
+        </PopoverTrigger>
+        <AlertSettings categories={categorySettings} onChangeCategory={setCategory} />
+      </Popover>
     </div>
   );
 }
 
 /**
- * The one place `useSystemFocus()`/`useRouter()` actually run for the alert bar — deliberately
- * inside this small wrapper, itself mounted only while ITS OWN category's flyout is open, rather
- * than up in `AlertRunChips` (always mounted whenever the run has anything to show).
- * `useSystemFocus()` calls the suspense-backed `useAtlas()`; calling that unconditionally on every
- * render would make simply having a nonempty alert bar on screen depend on an atlas fetch, and
- * would throw in any test that renders `AlertRunContent`/`AlertRunChips` without a `QueryClient` —
- * every existing case in `alert-run.test.tsx`, none of which ever opens a flyout, so this component
- * never mounts in them and nothing there had to change.
+ * The one place `useSystemFocus()`/`useRouter()` actually run for the alert bar — kept in this small
+ * wrapper rather than inside `alert-flyout.tsx` itself so `AlertFlyout`'s own tests keep rendering it
+ * directly with a spy `onNavigate`, no router or atlas provider required (`alert-flyout.test.tsx`'s
+ * own stated convention).
+ *
+ * Mounted for every visible chip now, not only the open one: `Popover` exposes no open/closed signal
+ * to its consumer (no controlled `open` prop, no `onOpenChange` callback — see
+ * `components/ui/popover.tsx`'s own `PopoverProps`), so `AlertRunChips` above has no state left to
+ * conditionally render this component on, and `ActiveAlertFlyout` sits ABOVE `AlertFlyout`'s own
+ * `PopoverContent` in the tree — outside the boundary Radix's `Presence` gates — so mounting it is
+ * not itself deferred by the popover being closed. This is safe here specifically: `useSystemFocus()`
+ * calls `useAtlas()` (`lib/hooks/use-atlas.ts`), a `useSuspenseQuery` with `staleTime: Infinity`
+ * already read once at the page root (`app/(game)/page.tsx`) to draw the map itself, so every extra
+ * mount here subscribes to an already-resolved, indefinitely-fresh cache entry rather than triggering
+ * a fetch or a fresh suspend — verified by reading `use-atlas.ts` and grepping every `useAtlas()`
+ * call site. `useRouter()` reads context only, no fetch of any kind.
  *
  * Resolves an `AlertFlyout` row's already-decided target (`resolveAlertTarget`,
  * `components/alerts/alert-flyout.tsx`) into the actual navigation: `focusSystem` for a system
@@ -322,11 +314,9 @@ function AlertRunChips({
  */
 function ActiveAlertFlyout({
   category,
-  onClose,
   runRef,
 }: {
   category: AlertCategory;
-  onClose: () => void;
   runRef?: RefObject<HTMLDivElement | null>;
 }) {
   const router = useRouter();
@@ -337,9 +327,7 @@ function ActiveAlertFlyout({
     else if (target.kind === "route") router.push(target.path);
   }
 
-  return (
-    <AlertFlyout category={category} onNavigate={handleNavigate} onClose={onClose} runRef={runRef} />
-  );
+  return <AlertFlyout category={category} onNavigate={handleNavigate} runRef={runRef} />;
 }
 
 /** The hairline between tiers — verbatim from alert-bar-prototype.html's `.tier-gap` rule (resting

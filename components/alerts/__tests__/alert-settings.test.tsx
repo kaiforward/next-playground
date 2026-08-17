@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { AlertSettings } from "@/components/alerts/alert-settings";
 import { DEFAULT_ALERT_CATEGORIES, type AlertCategorySettings } from "@/lib/hooks/use-alert-categories";
 import type { AlertCategoryId } from "@/lib/types/alerts";
@@ -11,19 +12,33 @@ import type { AlertCategoryId } from "@/lib/types/alerts";
 // directly with a `categories` record and spy/stateful callbacks — no localStorage, no router, no
 // QueryBoundary. The boundary/hook-level tests (malformed storage, per-key merge, the automation-
 // independent no-op on a critical id) live in `lib/hooks/__tests__/use-alert-categories.test.tsx`.
+//
+// AlertSettings's own return is now a `PopoverContent` (`components/ui/popover.tsx`), which needs a
+// `Popover` ancestor and starts closed — `renderOpenPanel` below wraps it in a real `Popover`/
+// `PopoverTrigger` and clicks the trigger, the same way `AlertRunChips` actually mounts it. Escape
+// closing it and returning focus to its trigger is `Popover`'s own guarantee now (proven generically
+// in `components/ui/__tests__/popover.test.tsx`), not this file's to pin.
 
 const CRITICAL_LABELS = ["Famine", "Strike", "Maintenance unfunded", "Crisis"];
 
-function renderPanel(categories: AlertCategorySettings = DEFAULT_ALERT_CATEGORIES) {
+async function renderPanel(categories: AlertCategorySettings = DEFAULT_ALERT_CATEGORIES) {
+  const user = userEvent.setup();
   const onChangeCategory = vi.fn();
-  const onClose = vi.fn();
-  render(<AlertSettings categories={categories} onChangeCategory={onChangeCategory} onClose={onClose} />);
-  return { onChangeCategory, onClose };
+  render(
+    <Popover>
+      <PopoverTrigger>
+        <button type="button">Open settings</button>
+      </PopoverTrigger>
+      <AlertSettings categories={categories} onChangeCategory={onChangeCategory} />
+    </Popover>,
+  );
+  await user.click(screen.getByRole("button", { name: "Open settings" }));
+  return { user, onChangeCategory };
 }
 
 describe("AlertSettings — critical categories render no control at all", () => {
-  it("renders no checkbox for any of the four critical categories, while still naming them", () => {
-    renderPanel();
+  it("renders no checkbox for any of the four critical categories, while still naming them", async () => {
+    await renderPanel();
 
     for (const label of CRITICAL_LABELS) {
       // Not a disabled checkbox — a checkbox with this name must not exist in the accessibility
@@ -35,16 +50,16 @@ describe("AlertSettings — critical categories render no control at all", () =>
     }
   });
 
-  it("renders a checkbox for every hideable category — the absence above is category-specific, not global", () => {
-    renderPanel();
+  it("renders a checkbox for every hideable category — the absence above is category-specific, not global", async () => {
+    await renderPanel();
     // 16 categories total, 4 critical (no control) → 12 checkboxes.
     expect(screen.getAllByRole("checkbox")).toHaveLength(12);
   });
 });
 
 describe("AlertSettings — the three spec-named default-off categories render unchecked", () => {
-  it("renders Unrest rising, Build blocked and Industry idle unchecked given DEFAULT_ALERT_CATEGORIES", () => {
-    renderPanel();
+  it("renders Unrest rising, Build blocked and Industry idle unchecked given DEFAULT_ALERT_CATEGORIES", async () => {
+    await renderPanel();
 
     expect(screen.getByRole("checkbox", { name: "Unrest rising" })).not.toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Build blocked" })).not.toBeChecked();
@@ -55,46 +70,39 @@ describe("AlertSettings — the three spec-named default-off categories render u
   });
 });
 
-describe("AlertSettings — toggling a category calls back with the right id, never onClose", () => {
-  it("clicking an unchecked category's checkbox reports it turning on, and does not close the panel", async () => {
-    const user = userEvent.setup();
-    const { onChangeCategory, onClose } = renderPanel();
+describe("AlertSettings — toggling a category calls back with the right id", () => {
+  it("clicking an unchecked category's checkbox reports it turning on", async () => {
+    const { user, onChangeCategory } = await renderPanel();
 
     await user.click(screen.getByRole("checkbox", { name: "Unrest rising" }));
 
     expect(onChangeCategory).toHaveBeenCalledExactlyOnceWith("unrest_rising" satisfies AlertCategoryId, true);
-    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("clicking a checked category's checkbox reports it turning off", async () => {
-    const user = userEvent.setup();
-    const { onChangeCategory, onClose } = renderPanel();
+    const { user, onChangeCategory } = await renderPanel();
 
     await user.click(screen.getByRole("checkbox", { name: "Deprived worlds" }));
 
     expect(onChangeCategory).toHaveBeenCalledExactlyOnceWith("deprived_worlds" satisfies AlertCategoryId, false);
-    expect(onClose).not.toHaveBeenCalled();
   });
 });
 
 /** A stateful harness — real `categories` state fed back through `onChangeCategory`, so the panel's
  *  own checked state visibly updates the way it does wired to the real hook, not just the spy call
- *  arguments. Mirrors `alert-flyout.test.tsx`'s own `Harness`. */
+ *  arguments. */
 function SettingsHarness() {
-  const [open, setOpen] = useState(true);
   const [categories, setCategories] = useState<AlertCategorySettings>(DEFAULT_ALERT_CATEGORIES);
   function onChangeCategory(id: AlertCategoryId, on: boolean) {
     setCategories((prev) => ({ ...prev, [id]: on }));
   }
   return (
-    <div>
-      <button type="button" onClick={() => setOpen(true)}>
-        Open settings
-      </button>
-      {open && (
-        <AlertSettings categories={categories} onChangeCategory={onChangeCategory} onClose={() => setOpen(false)} />
-      )}
-    </div>
+    <Popover>
+      <PopoverTrigger>
+        <button type="button">Open settings</button>
+      </PopoverTrigger>
+      <AlertSettings categories={categories} onChangeCategory={onChangeCategory} />
+    </Popover>
   );
 }
 
@@ -102,46 +110,19 @@ describe("AlertSettings — a full toggle round trip stays open and reflects the
   it("checking Unrest rising flips it to checked while the panel remains mounted", async () => {
     const user = userEvent.setup();
     render(<SettingsHarness />);
+    await user.click(screen.getByRole("button", { name: "Open settings" }));
 
     const checkbox = screen.getByRole("checkbox", { name: "Unrest rising" });
     expect(checkbox).not.toBeChecked();
 
     await user.click(checkbox);
 
+    // The settings panel must not close when a checkbox is toggled — trying combinations one after
+    // another would be unusable if every click closed it. Checked structurally (the dialog and its
+    // checkbox are both still in the document, still reflecting the new state) rather than via an
+    // `onClose` spy: this component no longer has an `onClose` prop to call at all — closing is
+    // `Popover`'s own job now, and nothing here calls into it on a checkbox click.
     expect(screen.getByRole("checkbox", { name: "Unrest rising" })).toBeChecked();
     expect(screen.getByRole("dialog", { name: "Alert settings" })).toBeInTheDocument();
-  });
-});
-
-describe("AlertSettings — Escape closes it and returns focus to its own trigger", () => {
-  it("pressing Escape unmounts the panel and returns focus to the button that opened it", async () => {
-    const user = userEvent.setup();
-    function Harness() {
-      const [open, setOpen] = useState(false);
-      return (
-        <div>
-          <button type="button" onClick={() => setOpen(true)}>
-            Open settings
-          </button>
-          {open && (
-            <AlertSettings
-              categories={DEFAULT_ALERT_CATEGORIES}
-              onChangeCategory={vi.fn()}
-              onClose={() => setOpen(false)}
-            />
-          )}
-        </div>
-      );
-    }
-    render(<Harness />);
-
-    const trigger = screen.getByRole("button", { name: "Open settings" });
-    await user.click(trigger);
-    expect(screen.getByRole("dialog", { name: "Alert settings" })).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-
-    expect(screen.queryByRole("dialog", { name: "Alert settings" })).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
   });
 });

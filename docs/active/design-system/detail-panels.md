@@ -40,12 +40,11 @@ star pin toggle, beside the cadence countdown and "Show on Map".
   Non-interactive by design: its content is wired as `aria-describedby`, closes on pointer-leave, and
   is not keyboard-reachable. Carries the app-wide dotted-underline affordance on text triggers.
 - **`Popover`** (`components/ui/popover.tsx`, Radix **Popover**) — the second, richer tier, for
-  content with a table or a control in it. A popover rather than a hover-card specifically so the
-  content is keyboard-reachable; hover-cards are mouse-only by design. Opens on hover after a delay,
-  on keyboard focus, and on click; survives the cursor travelling from trigger to content; one open
-  at a time. Consumers whose trigger click already means something else opt out of click-to-open —
-  the Tracker's rows do, because a row click navigates. Consumers whose trigger hover already means
-  something else opt out of hover-to-open the same way.
+  content with a table or a control in it, with content reachable by keyboard as well as the mouse.
+  Opens on hover after a delay, on keyboard focus, and on click; survives the cursor travelling from
+  trigger to content; one open at a time. Consumers whose trigger click already means something else
+  opt out of click-to-open — the Tracker's rows do, because a row click navigates. Consumers whose
+  trigger hover already means something else opt out of hover-to-open the same way.
 
   Scoped to one level. Nested, pinnable deep tooltips and the concept glossary behind them are
   planned, not built; migrating the existing plain tooltips onto `Popover` is deferred with them.
