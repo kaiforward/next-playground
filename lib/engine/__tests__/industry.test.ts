@@ -57,7 +57,7 @@ import {
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { USED_SLACK } from "@/lib/constants/infrastructure";
-import { brakeKnee } from "@/lib/engine/tick";
+import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
@@ -603,6 +603,42 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const ore = readout.buildings.find((b) => b.buildingType === "ore")!;
     expect(ore.idleReason).not.toBe("inputs");
     expect(ore.idleReason).toBe("labour");
+  });
+
+  it("a strict tie between the selling allowance and labour fulfilment falls to the labour/skill split, not 'selling'", () => {
+    // The chain reads "selling" only on `canSell < fulfil` (lib/engine/industry.ts) — on an exact
+    // tie it must cascade to the skill/labour split below, the same "ties fall to the next check"
+    // convention the gate check above it already uses (proven directional, not at the tie itself, by
+    // the two tests above). No existing fixture reaches the tie: every one sits strictly on one side.
+    // Engineer canSell to land on fulfil exactly via the same brakeKnee/productionCeiling closed form
+    // buildIndustryReadout itself uses to derive the selling factor.
+    const buildings = { metals: 4, vocational_school: 1 };
+    const pop = labourDemand(buildings) * 0.5; // labourFulfil 0.5; skill1Fulfil 1 (ample licence) ⇒ fulfil 0.5
+    const state = computeLabourState(buildings, pop);
+    const knee = brakeKnee(
+      {
+        useRate: 2.5,
+        capacityProduction: buildingProduction(buildings, "metals", state, unitResourceVector()),
+        anchorMult: 1,
+      },
+      ECONOMY_SIM_PARAMS,
+    );
+    const targetSellingFactor = 0.5 - USED_SLACK; // canSell = min(1, factor + USED_SLACK) = 0.5 = fulfil
+    const metalsStock = knee.rampEnd - targetSellingFactor * (knee.rampEnd - knee.knee);
+    // Premise: the inversion actually lands the selling factor where intended, not near it.
+    expect(productionCeiling(metalsStock, knee)).toBeCloseTo(targetSellingFactor, 9);
+
+    const readout = buildIndustryReadout(
+      buildings, pop,
+      { metals: metalsStock, ore: AMPLE }, // ample ore ⇒ gate ≈ 1, well clear of the tie
+      unitResourceVector(),
+      { demandRateOf, honestUseRateOf, anchorMultOf: one },
+    );
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    // Premise: the tie is real (fulfil = 0.5), not a rounding coincidence on one side.
+    expect(metals.staffedFraction).toBeCloseTo(0.5, 6);
+    expect(readout.supplyChain.find((e) => e.goodId === "metals")!.inputGate).toBeCloseTo(1, 6);
+    expect(metals.idleReason).toBe("labour");
   });
 });
 
