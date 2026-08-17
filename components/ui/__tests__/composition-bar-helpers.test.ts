@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compositionSegmentWidths } from "@/components/ui/vital-tile-helpers";
+import { compositionSegmentWidths } from "@/components/ui/composition-bar-helpers";
 
 describe("compositionSegmentWidths", () => {
   it("splits a normal set of values into percentages that sum to 100", () => {

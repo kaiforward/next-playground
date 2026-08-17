@@ -1,10 +1,4 @@
 import type { ReactNode } from "react";
-import {
-  compositionSegmentWidths,
-  type CompositionSegment,
-} from "@/components/ui/vital-tile-helpers";
-
-export type { CompositionSegment } from "@/components/ui/vital-tile-helpers";
 
 /** The tile's 5px fill meter — omit on tiles that use `children` for their body instead (e.g. Population). */
 export interface VitalMeter {
@@ -30,7 +24,7 @@ export interface VitalTileProps {
   meter?: VitalMeter;
   /** Trailing hint content (e.g. "unrest 0.18"). */
   hint?: ReactNode;
-  /** Body content between the value and the hint row — e.g. a `CompositionBar`. */
+  /** Body content between the value and the hint row — e.g. a `CompositionBar` (`components/ui/composition-bar.tsx`). */
   children?: ReactNode;
   /** Grid columns this tile spans in its parent `VitalGrid` (default 1). */
   colSpan?: number;
@@ -139,46 +133,5 @@ export interface VitalGridProps {
 export function VitalGrid({ children, columns = 2 }: VitalGridProps) {
   return (
     <div className={`mb-[14px] grid items-stretch gap-[9px] ${GRID_COLUMNS_CLASS[columns]}`}>{children}</div>
-  );
-}
-
-export interface CompositionBarProps {
-  segments: CompositionSegment[];
-}
-
-/**
- * Composition sub-bar + legend — each segment's width is its share of the segment sum
- * (zero total ⇒ all segments render 0-width; see `compositionSegmentWidths`). Slots into
- * a `VitalTile`'s `children`, e.g. the Population tile's unskilled/technician/engineer/
- * unemployed split.
- */
-export function CompositionBar({ segments }: CompositionBarProps) {
-  const widths = compositionSegmentWidths(segments);
-  const summary = widths.map((segment) => `${segment.label} ${Math.round(segment.pct)}%`).join(", ");
-  return (
-    <div>
-      <div
-        role="img"
-        aria-label={`Composition: ${summary}`}
-        title="composition"
-        className="mt-[9px] flex h-[6px] overflow-hidden bg-surface-active"
-      >
-        {widths.map((segment) => (
-          <span
-            key={segment.label}
-            className="block h-full border-r border-surface last:border-r-0"
-            style={{ width: `${segment.pct}%`, background: segment.color }}
-          />
-        ))}
-      </div>
-      <div className="mt-[7px] flex flex-wrap gap-2 text-[9.5px] text-text-secondary">
-        {widths.map((segment) => (
-          <span key={segment.label} className="inline-flex items-center">
-            <i aria-hidden className="mr-[3px] inline-block h-2 w-2" style={{ background: segment.color }} />
-            {segment.label} {Math.round(segment.pct)}%
-          </span>
-        ))}
-      </div>
-    </div>
   );
 }
