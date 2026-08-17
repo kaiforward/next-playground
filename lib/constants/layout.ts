@@ -1,8 +1,9 @@
 /**
  * Cross-surface layout numbers the alert run (`components/alerts/alert-run.tsx`) needs to stay in
  * sync with panels it does not render — pulled into one module because they were previously
- * hardcoded, separately, in `alert-run.tsx` itself, and finding 2 of the Task 12 review round is
- * proof that comment discipline alone already let one of them drift from the panel it names.
+ * hardcoded, separately, in `alert-run.tsx` itself, and comment discipline alone already let one of
+ * them drift from the panel it names once, which is why they live here instead of beside their own
+ * usage.
  *
  * Each constant's docstring names the Tailwind class it must stay in sync with by hand — a Tailwind
  * class cannot consume a JS constant without a CSS-variable indirection, and that larger refactor is

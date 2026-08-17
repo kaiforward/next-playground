@@ -65,6 +65,40 @@ export const CRITICAL_STACK_OVERLAP = -(CHIP_WIDTH - 8);
  */
 export const PLUS_N_WIDTH = 46;
 
+/**
+ * The settings control's own footprint, in CSS pixels — computed from `AlertChip`'s shared `chip`
+ * shell (`components/alerts/alert-chip.tsx`), which the control reuses verbatim
+ * (`components/alerts/alert-run.tsx`), the same way `PLUS_N_WIDTH` reuses it:
+ *
+ *   border (`border`, 1px each side)            2px
+ *   horizontal padding (`px-[9px]`)             18px
+ *   icon (`w-5`)                                20px
+ *
+ * = 40px. No `gap-1.5` term: that class only costs space BETWEEN flex items, and the control has one
+ * child — the icon alone, no count, no label — so there is nothing for it to sit next to. The
+ * arithmetic is already exact in whole pixels, so there is no fraction to round; the same round-UP
+ * rule `CHIP_WIDTH` and `PLUS_N_WIDTH` follow still applies in spirit — an underestimate here would
+ * let `packRun` certify a fit the control then overflows.
+ */
+export const SETTINGS_WIDTH = 40;
+
+/**
+ * What every `packRun` width check reserves on top of whatever it is certifying for chips, so the
+ * always-rendered settings control (`SETTINGS_WIDTH`, `AlertRunChips` in `alert-run.tsx`) never
+ * overruns `availableWidth` beside them — the same failure class as certifying a chip count that
+ * overflows once an unmeasured control renders next to it.
+ *
+ * The extra `SPACED_GAP` term is the reservation's own margin allowance: the connecting gap between
+ * the control and whatever sits before it is `SPACED_GAP` at the `spaced` step and more negative
+ * (`OVERLAP_NOMINAL`, `OVERLAP_FLOOR`, `CRITICAL_STACK_OVERLAP`) at every other step, so `SPACED_GAP`
+ * — the only POSITIVE value among the four — is the one connecting margin a reservation that omitted
+ * it would underestimate. Reserving it unconditionally makes every check exact at the `spaced` step
+ * (where the true connecting margin IS `SPACED_GAP`) and merely conservative at the overlap steps
+ * (where the true margin is smaller, so the reservation asks for more room than the control actually
+ * takes) — safe in both directions, per this module's own rounding rule.
+ */
+const SETTINGS_RESERVE = SETTINGS_WIDTH + SPACED_GAP;
+
 export interface PackResult {
   step: "spaced" | "overlap8" | "overlap16" | "collapse";
   /** How many chips (from the front of the ordered list) actually render. */
@@ -132,34 +166,40 @@ function widthFor(n: number, gap: number): number {
  * Decide how the run packs `chipCount` ordered chips (critical tier first, by the caller's own
  * contract — this function trusts that ordering rather than re-deriving it) into `availableWidth`
  * CSS pixels, given that the first `criticalCount` of them are critical and may never be folded into
- * the collapsed tail.
+ * the collapsed tail. Every width check below reserves `SETTINGS_RESERVE` on top of the chips
+ * themselves, since the caller renders the settings control beside them unconditionally
+ * (`AlertRunChips`, `alert-run.tsx`) — the chip count this function certifies must leave the control
+ * room too, or the run overruns `availableWidth` by exactly the control's own footprint.
  *
  * Tries the three fixed-gap steps in order; past the floor, drops chips from the END of the list
  * (least severe first) until what remains, plus a reserved "+N" chip, fits — but never drops below
  * `criticalCount` visible. If even the critical tier plus a "+N" doesn't fit at the ordinary floor,
  * the critical tier alone is allowed to overlap further, down to `CRITICAL_STACK_OVERLAP`. Only if
- * that still doesn't fit does the run render nothing (`visible: 0, collapsed: 0`) — the floor below
- * which overflowing is worse than showing nothing, per alert-bar.md's placement section.
+ * that still doesn't fit does the run render no chips (`visible: 0, collapsed: 0`) — the floor below
+ * which overflowing is worse than showing nothing, per alert-bar.md's placement section. The settings
+ * control itself is unaffected by that floor: it renders regardless of what this function returns, so
+ * a maximally narrow run still leaves a way back into the categories that are hiding everything else.
  */
 export function packRun(chipCount: number, availableWidth: number, criticalCount: number): PackResult {
   if (chipCount <= 0 || availableWidth <= 0) {
     return { step: "collapse", visible: 0, collapsed: 0, gap: 0 };
   }
 
-  if (widthFor(chipCount, SPACED_GAP) <= availableWidth) {
+  if (widthFor(chipCount, SPACED_GAP) + SETTINGS_RESERVE <= availableWidth) {
     return { step: "spaced", visible: chipCount, collapsed: 0, gap: SPACED_GAP };
   }
-  if (widthFor(chipCount, OVERLAP_NOMINAL) <= availableWidth) {
+  if (widthFor(chipCount, OVERLAP_NOMINAL) + SETTINGS_RESERVE <= availableWidth) {
     return { step: "overlap8", visible: chipCount, collapsed: 0, gap: OVERLAP_NOMINAL };
   }
-  if (widthFor(chipCount, OVERLAP_FLOOR) <= availableWidth) {
+  if (widthFor(chipCount, OVERLAP_FLOOR) + SETTINGS_RESERVE <= availableWidth) {
     return { step: "overlap16", visible: chipCount, collapsed: 0, gap: OVERLAP_FLOOR };
   }
 
   // Past the floor: give up chips from the least-severe end, one at a time, never past
-  // criticalCount, re-checking the floor pack (plus the reserved "+N") at each candidate count.
+  // criticalCount, re-checking the floor pack (plus the reserved "+N" and the settings control) at
+  // each candidate count.
   for (let visible = chipCount - 1; visible > criticalCount; visible--) {
-    const need = widthFor(visible, OVERLAP_FLOOR) + PLUS_N_WIDTH;
+    const need = widthFor(visible, OVERLAP_FLOOR) + PLUS_N_WIDTH + SETTINGS_RESERVE;
     if (need <= availableWidth) {
       return { step: "collapse", visible, collapsed: chipCount - visible, gap: OVERLAP_FLOOR };
     }
@@ -168,14 +208,14 @@ export function packRun(chipCount: number, availableWidth: number, criticalCount
   // Down to just the critical tier (with a "+N" for the rest, if there is any rest to name).
   const collapsedAtCritical = chipCount - criticalCount;
   const plusNIfAny = collapsedAtCritical > 0 ? PLUS_N_WIDTH : 0;
-  if (widthFor(criticalCount, OVERLAP_FLOOR) + plusNIfAny <= availableWidth) {
+  if (widthFor(criticalCount, OVERLAP_FLOOR) + plusNIfAny + SETTINGS_RESERVE <= availableWidth) {
     return { step: "collapse", visible: criticalCount, collapsed: collapsedAtCritical, gap: OVERLAP_FLOOR };
   }
 
   // Even that doesn't fit: the settings forbid hiding a critical chip by turning it off, and
   // layout must not do it by dropping one into the tail either — so the critical tier stacks
   // past the ordinary floor instead of collapsing.
-  if (widthFor(criticalCount, CRITICAL_STACK_OVERLAP) + plusNIfAny <= availableWidth) {
+  if (widthFor(criticalCount, CRITICAL_STACK_OVERLAP) + plusNIfAny + SETTINGS_RESERVE <= availableWidth) {
     return {
       step: "collapse",
       visible: criticalCount,
@@ -184,7 +224,8 @@ export function packRun(chipCount: number, availableWidth: number, criticalCount
     };
   }
 
-  // Not even the critical tier, maximally stacked, plus a "+N" fits: render nothing rather than
-  // overflow the map.
+  // Not even the critical tier, maximally stacked, plus a "+N" and the settings control fits:
+  // render no chips rather than overflow the map. The settings control itself still renders — see
+  // this function's own docstring — so the run never actually goes empty here, only chip-less.
   return { step: "collapse", visible: 0, collapsed: 0, gap: 0 };
 }

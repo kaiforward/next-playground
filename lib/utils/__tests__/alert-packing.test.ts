@@ -7,6 +7,7 @@ import {
   OVERLAP_FLOOR,
   CRITICAL_STACK_OVERLAP,
   PLUS_N_WIDTH,
+  SETTINGS_WIDTH,
   isOverlapping,
   chipMarginLeft,
   separatorMargins,
@@ -20,26 +21,49 @@ function widthFor(n: number, gap: number): number {
   return n * CHIP_WIDTH + Math.max(0, n - 1) * gap;
 }
 
+/** The same reservation `packRun` adds to every check for the always-rendered settings control
+ *  (`lib/utils/alert-packing.ts`'s own `SETTINGS_RESERVE`, not exported since it is derived from two
+ *  constants this file already imports) — re-derived here rather than duplicated as a literal, so a
+ *  change to either ingredient moves every boundary below with it. */
+const SETTINGS_RESERVE = SETTINGS_WIDTH + SPACED_GAP;
+
 describe("packRun — the three fixed-gap steps, tried in order", () => {
   it("packs spaced when the run comfortably fits", () => {
-    const need = widthFor(3, SPACED_GAP);
+    const need = widthFor(3, SPACED_GAP) + SETTINGS_RESERVE;
     expect(packRun(3, need, 1)).toEqual({ step: "spaced", visible: 3, collapsed: 0, gap: SPACED_GAP });
   });
 
   it("falls back to overlap8 exactly when spaced no longer fits but overlap8 does", () => {
-    const needSpaced = widthFor(5, SPACED_GAP);
-    const needOverlap8 = widthFor(5, OVERLAP_NOMINAL);
+    const needSpaced = widthFor(5, SPACED_GAP) + SETTINGS_RESERVE;
+    const needOverlap8 = widthFor(5, OVERLAP_NOMINAL) + SETTINGS_RESERVE;
     const width = needOverlap8; // fits overlap8, and is below needSpaced (overlap8 < spaced width)
     expect(width).toBeLessThan(needSpaced);
     expect(packRun(5, width, 1)).toEqual({ step: "overlap8", visible: 5, collapsed: 0, gap: OVERLAP_NOMINAL });
   });
 
   it("tightens to overlap16 once overlap8 no longer fits", () => {
-    const needOverlap8 = widthFor(5, OVERLAP_NOMINAL);
-    const needOverlap16 = widthFor(5, OVERLAP_FLOOR);
+    const needOverlap8 = widthFor(5, OVERLAP_NOMINAL) + SETTINGS_RESERVE;
+    const needOverlap16 = widthFor(5, OVERLAP_FLOOR) + SETTINGS_RESERVE;
     const width = needOverlap16;
     expect(width).toBeLessThan(needOverlap8);
     expect(packRun(5, width, 1)).toEqual({ step: "overlap16", visible: 5, collapsed: 0, gap: OVERLAP_FLOOR });
+  });
+});
+
+describe("packRun — reserves room for the always-rendered settings control", () => {
+  it("does not certify spaced when the width fits the chips alone but not the chips plus the settings control", () => {
+    // Exactly enough for 3 chips spaced, nothing left over for the settings control that renders
+    // beside them unconditionally (alert-run.tsx) — packRun must not certify a fit the control then
+    // overflows.
+    const chipsOnly = widthFor(3, SPACED_GAP);
+    const chipsWithControl = chipsOnly + SETTINGS_RESERVE;
+    expect(packRun(3, chipsOnly, 1).step).not.toBe("spaced");
+    expect(packRun(3, chipsWithControl, 1)).toEqual({
+      step: "spaced",
+      visible: 3,
+      collapsed: 0,
+      gap: SPACED_GAP,
+    });
   });
 });
 
@@ -48,14 +72,14 @@ describe("packRun — past the floor, the least-severe tail collapses into a +N"
     // 6 chips, 2 critical. Dropping to 3 (2 critical + 1 important) plus the +N reserve fits at
     // the floor gap — the width is derived from the same constants packRun itself uses, so this
     // stays correct across a CHIP_WIDTH change rather than pinning a stale literal.
-    const width = widthFor(3, OVERLAP_FLOOR) + PLUS_N_WIDTH;
+    const width = widthFor(3, OVERLAP_FLOOR) + PLUS_N_WIDTH + SETTINGS_RESERVE;
     expect(packRun(6, width, 2)).toEqual({ step: "collapse", visible: 3, collapsed: 3, gap: OVERLAP_FLOOR });
   });
 
   it("stops dropping at exactly criticalCount — never fewer visible than the critical tier", () => {
     // 6 chips, 4 critical. Only 5 chips (1 dropped) doesn't fit; 4 (the critical tier alone) does.
-    const width = widthFor(4, OVERLAP_FLOOR) + PLUS_N_WIDTH;
-    expect(widthFor(5, OVERLAP_FLOOR) + PLUS_N_WIDTH).toBeGreaterThan(width);
+    const width = widthFor(4, OVERLAP_FLOOR) + PLUS_N_WIDTH + SETTINGS_RESERVE;
+    expect(widthFor(5, OVERLAP_FLOOR) + PLUS_N_WIDTH + SETTINGS_RESERVE).toBeGreaterThan(width);
     expect(packRun(6, width, 4)).toEqual({ step: "collapse", visible: 4, collapsed: 2, gap: OVERLAP_FLOOR });
   });
 });
@@ -65,8 +89,8 @@ describe("packRun — the critical tier stacks past the ordinary floor before it
     // 5 chips, 3 critical. The floor pack for the critical tier + a +N needs more than stacking all
     // the way to CRITICAL_STACK_OVERLAP does. A width in between still shows all 3 criticals
     // (packed tighter than the ordinary floor) rather than dropping one.
-    const needFloor = widthFor(3, OVERLAP_FLOOR) + PLUS_N_WIDTH;
-    const needStacked = widthFor(3, CRITICAL_STACK_OVERLAP) + PLUS_N_WIDTH;
+    const needFloor = widthFor(3, OVERLAP_FLOOR) + PLUS_N_WIDTH + SETTINGS_RESERVE;
+    const needStacked = widthFor(3, CRITICAL_STACK_OVERLAP) + PLUS_N_WIDTH + SETTINGS_RESERVE;
     const width = needStacked + 10;
     expect(width).toBeLessThan(needFloor);
     expect(packRun(5, width, 3)).toEqual({
@@ -80,7 +104,7 @@ describe("packRun — the critical tier stacks past the ordinary floor before it
 
 describe("packRun — below the width that fits the critical tier plus a +N, the run renders nothing", () => {
   it("renders nothing one pixel below the maximally-stacked critical-tier-plus-+N threshold", () => {
-    const threshold = widthFor(3, CRITICAL_STACK_OVERLAP) + PLUS_N_WIDTH;
+    const threshold = widthFor(3, CRITICAL_STACK_OVERLAP) + PLUS_N_WIDTH + SETTINGS_RESERVE;
     expect(packRun(5, threshold, 3)).toEqual({
       step: "collapse",
       visible: 3,
@@ -91,9 +115,10 @@ describe("packRun — below the width that fits the critical tier plus a +N, the
   });
 
   it("renders nothing when even the fully-stacked critical tier alone (no other chips at all) doesn't fit", () => {
-    // 4 chips, all critical — nothing to collapse into a +N, so the reserve is never added, but
-    // the tier still doesn't fit even fully stacked.
-    const stackedAll = widthFor(4, CRITICAL_STACK_OVERLAP); // no +N since nothing collapses
+    // 4 chips, all critical — nothing to collapse into a +N, so that reserve is never added, but the
+    // settings control's own reserve still applies (it renders regardless of chip count), and the
+    // tier still doesn't fit even fully stacked.
+    const stackedAll = widthFor(4, CRITICAL_STACK_OVERLAP) + SETTINGS_RESERVE; // no +N since nothing collapses
     expect(packRun(4, stackedAll - 1, 4)).toEqual({ step: "collapse", visible: 0, collapsed: 0, gap: 0 });
     expect(packRun(4, stackedAll, 4)).toEqual({
       step: "collapse",

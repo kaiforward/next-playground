@@ -100,8 +100,8 @@ export function AlertChip({ category, open, onOpen, zIndex, overlapping }: Alert
   const tier = TIER_COLOR[def.tier];
   const suffix = unitSuffix(category);
 
-  // Opaque fill: the tier colour mixed into the surface, never into transparency — required once
-  // chips overlap (Task 12) and sit over a live map. 15% at rest, 32% open, matching the approved
+  // Opaque fill: the tier colour mixed into the surface, never into transparency — required because
+  // packed chips overlap and sit over a live map. 15% at rest, 32% open, matching the approved
   // prototype's `.chip` / `.chip[aria-expanded="true"]` mix percentages.
   const backgroundColor = `color-mix(in srgb, ${tier.base} ${open ? 32 : 15}%, var(--color-surface))`;
   const borderColor = open

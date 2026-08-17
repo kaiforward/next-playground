@@ -329,8 +329,12 @@ shape population are unbuilt, so a rule fitted to today's numbers would encode a
 
 The chips float over the top of the map, inset 8px from the system drawer on the left, the Tracker
 rail on the right, and the top of the map. Nothing reserves layout height: on a galaxy with no live
-conditions and no automation switched off, the surface is not there at all. Empty space in the run
-passes clicks through to the map; only the chips themselves are interactive.
+conditions, no chips are there at all. The settings control is the one exception — it renders whenever
+the run mounts, whatever the chip count, because it is the run's own entry point back to itself: a
+player who has switched every hideable category off, with nothing critical firing right now, must
+always have a way back to the categories that are hiding everything else, not only while something
+else happens to be on the bar. Empty space in the run passes clicks through to the map; only the chips
+and the settings control are interactive.
 
 The inset is fixed to the system drawer's width on the left and the Tracker rail's **base** width
 (`w-72`, `components/tracker/tracker-panel.tsx:58`) on the right, whether or not either panel is open,
@@ -360,9 +364,11 @@ through.
 collapse last anyway, but the invariant has to be stated rather than left to ordering: a category the
 settings forbid switching off must not vanish by layout instead. If the run cannot fit the critical
 tier plus a `+N`, the critical chips overlap past 16px rather than collapse. Below the width of that,
-the run does not render at all — the span is fixed to the two panel widths regardless of viewport, so
-a narrow window can leave it small or negative, and that floor needs a defined behaviour rather than
-an accident.
+no chips render at all — the span is fixed to the two panel widths regardless of viewport, so a narrow
+window can leave it small or negative, and that floor needs a defined behaviour rather than an
+accident. The settings control is unaffected by that floor: the packing decision reserves its own
+footprint separately, so it is never the thing that overruns the span, and it keeps rendering however
+narrow the run gets.
 
 ### The categories
 
@@ -458,6 +464,10 @@ A per-category panel from the control at the end of the run: a checkbox per cate
 persisted in the browser as a view preference, not in the save. **The critical tier cannot be turned
 off** — that is the small non-hideable set. Three important-tier categories default off; the defaults
 table above is the single authority. Toggling does not close the panel.
+
+**The control itself is always present**, whether or not any chip is currently showing — it is the
+only way back to these checkboxes, so it cannot depend on there being anything else on the bar to
+click.
 
 ### What the engine must newly emit
 

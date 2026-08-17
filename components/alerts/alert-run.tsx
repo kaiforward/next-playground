@@ -4,9 +4,12 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { useRouter } from "next/navigation";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import { SettingsIcon } from "@/components/ui/icons";
 import { AlertChip, chip } from "@/components/alerts/alert-chip";
 import { AlertFlyout, type AlertNavigateTarget } from "@/components/alerts/alert-flyout";
+import { AlertSettings } from "@/components/alerts/alert-settings";
 import { useAlerts } from "@/lib/hooks/use-alerts";
+import { useAlertCategories } from "@/lib/hooks/use-alert-categories";
 import { useCycleBoundary } from "@/lib/hooks/use-cycle-boundary";
 import { useSystemFocus } from "@/lib/hooks/use-system-focus";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
@@ -33,8 +36,10 @@ interface AlertRunProps {
 /**
  * The alert run's mount point — floats over the top of the map, inset 8px from the system drawer on
  * the left, the Tracker rail on the right, and the top of the map (docs/build-plans/alert-bar.md →
- * "Placement and behaviour"). Reserves no layout height: an empty run renders nothing at all, not an
- * empty band.
+ * "Placement and behaviour"). Reserves no layout height: it is an absolutely positioned overlay, never
+ * a band the map's own layout budgets for. What renders inside varies — the settings control always
+ * mounts once the run itself does; chips are conditional on there being anything to show (see
+ * `AlertRunChips` below).
  *
  * The left inset is expressed as CSS alone — `DRAWER_WIDTH + RAIL_INSET` px
  * (`lib/constants/layout.ts`), matching `detail-panel.tsx`'s own `w-[560px] max-w-full` — a FIXED
@@ -174,6 +179,34 @@ function useHysteresisVisibleIds(categories: AlertCategory[], cycle: number): Se
  * lines the flyout's left edge up with the chip's by default — `runRef`, threaded through unread
  * here, is what `AlertFlyout` itself measures against to pull that back onto the run's own span near
  * the right of a packed run (see its own docstring).
+ *
+ * Reads `useAlertCategories()` to decide which of the hysteresis-visible categories
+ * actually SHOW: a hideable category with its checkbox off is filtered out here, before `packRun`
+ * ever sees it, same as a category with no live instances — turning a category off is
+ * indistinguishable from it never having fired, which is what keeps the packing and hysteresis logic
+ * above unaware settings exist at all. A non-hideable (critical) category shows regardless of what
+ * `categorySettings` says for it — `!hideable` short-circuits the check — so a corrupted or
+ * hand-edited `localStorage` value can never hide one, not just the settings panel's own missing
+ * control for it. The two `info` categories' own automation self-gate (`lib/services/alerts.ts`)
+ * needs no mirroring here: automation-on means the category's `count` never went above zero, so
+ * `useHysteresisVisibleIds` never admits its id regardless of what this filter or the checkbox says.
+ *
+ * The settings control itself is the run's own trailing item, appended after the last visible chip
+ * (or the collapsed "+N" tail, whichever renders last) using the same `chipMarginLeft` spacing a chip
+ * after a chip gets — or, when neither renders, sitting alone at the run's own left edge instead. It
+ * mounts UNCONDITIONALLY, independent of `visible`/`collapsed`: it is the run's only entry point back
+ * to its own category checkboxes, so a player who has switched every hideable category off, with
+ * nothing critical firing right now, must always have a way back to it rather than losing the run —
+ * and with it the only route back into settings — until `localStorage` is cleared by hand (owner
+ * decision, docs/build-plans/alert-bar.md → "Placement and behaviour"). `packRun`
+ * (`lib/utils/alert-packing.ts`) reserves the control's own footprint in every width check it makes,
+ * so whatever chip count it certifies always leaves the control room beside it — the same failure
+ * class as an unreserved width overrunning the run's span. Chips and the collapsed tail are still the
+ * thing that renders nothing rather than overflow; the control is carved out of that guarantee.
+ *
+ * Mutually exclusive with an open category flyout, mirroring the approved prototype's own
+ * `settingsOpen`/`openId` pair: opening the settings panel closes whichever flyout was open, and
+ * opening a flyout closes settings — never both floating over the map at once.
  */
 function AlertRunChips({
   availableWidth,
@@ -186,18 +219,35 @@ function AlertRunChips({
   const cycle = useCycleBoundary();
   const visibleIds = useHysteresisVisibleIds(categories, cycle);
   const [openId, setOpenId] = useState<AlertCategoryId | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { categories: categorySettings, setCategory } = useAlertCategories();
 
-  const shown = categories.filter((category) => visibleIds.has(category.id));
+  const shown = categories.filter((category) => {
+    if (!visibleIds.has(category.id)) return false;
+    const def = ALERT_CATEGORIES[category.id];
+    return !def.hideable || categorySettings[category.id];
+  });
   const criticalCount = shown.filter((category) => ALERT_CATEGORIES[category.id].tier === "critical").length;
   const { visible, collapsed, gap } = packRun(shown.length, availableWidth, criticalCount);
 
-  if (visible === 0) return null;
-
-  const chips = shown.slice(0, visible);
-  const hidden = shown.slice(visible);
+  // Chips render nothing rather than overflow (packRun's own contract) — but the settings control
+  // below is unconditional, so `hasChips` gates only the chip content, never the whole component.
+  const hasChips = visible > 0;
+  const chips = hasChips ? shown.slice(0, visible) : [];
+  const hidden = hasChips ? shown.slice(visible) : [];
   const overlapping = isOverlapping(gap);
 
   let lastTier: AlertTier | null = null;
+
+  function openChip(id: AlertCategoryId) {
+    setSettingsOpen(false);
+    setOpenId((current) => (current === id ? null : id));
+  }
+
+  function toggleSettings() {
+    setOpenId(null);
+    setSettingsOpen((open) => !open);
+  }
 
   return (
     <div className="flex items-center">
@@ -216,7 +266,7 @@ function AlertRunChips({
               <AlertChip
                 category={category}
                 open={isOpen}
-                onOpen={() => setOpenId((id) => (id === category.id ? null : category.id))}
+                onOpen={() => openChip(category.id)}
                 zIndex={zIndex}
                 overlapping={overlapping}
               />
@@ -230,6 +280,27 @@ function AlertRunChips({
       {collapsed > 0 && (
         <CollapsedTail categories={hidden} marginLeft={chipMarginLeft(gap, "after-chip")} />
       )}
+      <div
+        className="relative inline-flex"
+        style={{ marginLeft: chipMarginLeft(gap, hasChips ? "after-chip" : "first") }}
+      >
+        <button
+          type="button"
+          aria-expanded={settingsOpen}
+          aria-label="Alert settings"
+          onClick={toggleSettings}
+          className={chip({ overlapping, class: "border-border-strong bg-surface text-text-secondary" })}
+        >
+          <SettingsIcon aria-hidden="true" className="h-5 w-5" />
+        </button>
+        {settingsOpen && (
+          <AlertSettings
+            categories={categorySettings}
+            onChangeCategory={setCategory}
+            onClose={() => setSettingsOpen(false)}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -285,9 +356,9 @@ function TierSeparator({ gap }: { gap: number }) {
 }
 
 /** The tail of an over-full run, once `packRun` has decided some of the least-severe chips have to
- *  fold away — never a critical one, by `packRun`'s own contract. Plain count, no interaction yet:
- *  what clicking it does belongs to the flyout work (Task 13), same as an individual chip's click
- *  today. Consumes `AlertChip`'s own shell (`chip` from `components/alerts/alert-chip.tsx`) rather
+ *  fold away — never a critical one, by `packRun`'s own contract. Plain count, no interaction: it
+ *  names several different categories at once, so a single click has no one flyout to open the way an
+ *  individual chip's does. Consumes `AlertChip`'s own shell (`chip` from `components/alerts/alert-chip.tsx`) rather
  *  than hand-duplicating its classes — the two must not drift (AGENTS.md's extract-on-second-
  *  occurrence rule). `collapsed > 0` only happens past `packRun`'s overlap floor, so this tail is
  *  always drawn with the rightward shadow, same as any overlapping chip. */
