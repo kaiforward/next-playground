@@ -7,6 +7,7 @@ import type { AtlasData, UniverseData, StarSystemInfo } from "@/lib/types/game";
 import { MapRightRail } from "@/components/map/map-right-rail";
 import { AlertRun } from "@/components/alerts/alert-run";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
+import { DRAWER_WIDTH } from "@/lib/constants/layout";
 import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useMapData } from "@/lib/hooks/use-map-data";
@@ -318,15 +319,15 @@ export function StarMap({
   // ── Camera recenter offset — clear the docked drawer ────────────
   // The drawer renders for any non-root panel route (root "/" shows no panel — see selectedSystemId /
   // selectedFactionId above). When docked, shift the centerTarget point right so a focused system
-  // lands in the visible ~70% of the viewport instead of under the drawer (EU5/Vic3 behaviour). Width
-  // must track detail-panel.tsx's `w-[clamp(400px,30vw,560px)]` — no shared constant across the CSS
-  // class and this JS value, so keep them in sync by hand if that clamp changes. Plain consts (not
-  // memoised) so a live resize self-corrects on the next render; the value stays numerically stable
-  // when nothing changed, so it won't spuriously re-fire the centerTarget effect.
+  // lands in the visible ~70% of the viewport instead of under the drawer (EU5/Vic3 behaviour). The
+  // width is `DRAWER_WIDTH`, capped by the viewport for the `max-w-full` half of detail-panel.tsx's
+  // `w-[560px] max-w-full`. Plain consts (not memoised) so a live resize self-corrects on the next
+  // render; the value stays numerically stable when nothing changed, so it won't spuriously re-fire
+  // the centerTarget effect.
   const drawerDocked = pathname !== "/";
   const drawerWidthPx =
     drawerDocked && typeof window !== "undefined"
-      ? Math.min(560, Math.max(400, 0.3 * window.innerWidth))
+      ? Math.min(DRAWER_WIDTH, window.innerWidth)
       : 0;
   const centerOffsetX = drawerWidthPx / 2;
 
