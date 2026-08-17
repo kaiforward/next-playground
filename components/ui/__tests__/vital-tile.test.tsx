@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { CompositionBar, GhostVitalTile, VitalGrid, VitalTile } from "@/components/ui/vital-tile";
+import { GhostVitalTile, VitalGrid, VitalTile } from "@/components/ui/vital-tile";
+import { CompositionBar } from "@/components/ui/composition-bar";
 
 // Rendered in jsdom and queried the way a user or a screen reader finds things — by role, by
 // accessible name, by text. What a tile *shows* is asserted through its text content and the
@@ -118,23 +119,6 @@ describe("VitalTile — the three concrete Overview tiles render their real outp
     );
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
     expect(container.querySelector(".border-dashed")).toBeNull();
-  });
-});
-
-describe("CompositionBar — width math and a11y", () => {
-  it("a zero-total set announces every segment at 0% (no NaN)", () => {
-    const { container } = render(
-      <CompositionBar
-        segments={[
-          { label: "A", value: 0, color: "red" },
-          { label: "B", value: 0, color: "blue" },
-        ]}
-      />,
-    );
-    expect(screen.getByRole("img", { name: "Composition: A 0%, B 0%" })).toBeInTheDocument();
-    // Markup, not text content: a divide-by-zero surfaces as a `width: NaN%` style first.
-    expect(container.innerHTML).not.toContain("NaN");
-    expect(container.innerHTML).not.toContain("Infinity");
   });
 });
 

@@ -342,8 +342,8 @@ export class Camera {
 
   private onKeyDown(e: KeyboardEvent) {
     // A handler nearer the user already spent this press. This listener is on the WINDOW, so it
-    // sees every keydown in the app after the element-level handlers have had it: a rich card's
-    // ArrowDown enters the card and calls `preventDefault()`, and without this line the same press
+    // sees every keydown in the app after the element-level handlers have had it: a popover's
+    // ArrowDown enters the popover and calls `preventDefault()`, and without this line the same press
     // also starts a camera pan that runs until keyup. `defaultPrevented` is the one signal that
     // says so, and it costs nothing to honour — nothing in the app prevents a key it did not use.
     if (e.defaultPrevented) return;

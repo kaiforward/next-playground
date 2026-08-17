@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { RichCard, RichCardContent, RichCardTrigger } from "@/components/ui/rich-card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { progressWidthPct, projectedWidthPct } from "@/lib/utils/math";
 
 /** One icon-plus-number figure on a row — population's person icon, stability's colour swatch
@@ -39,16 +39,16 @@ export interface TrackerRowProps {
   /** Copper for build progress, amber for colony progress — cosmetic only. Required alongside
    *  `progress` to pick a fill colour; a `progress` with no `tone` still draws the track. */
   tone?: "build" | "colony";
-  /** Flies the map to the system and opens the destination tab. Does NOT open the card — that is
-   *  hover/keyboard-only here (see `disableClickOpen` on `RichCard`). */
+  /** Flies the map to the system and opens the destination tab. Does NOT open the popover — that is
+   *  hover/keyboard-only here (see `disableClickOpen` on `Popover`). */
   onActivate: () => void;
-  /** Rich-card content — the system's vitals table (pinned rows) or the project's detail
-   *  (build/colony rows). Supplied by the panel, not derived here. */
+  /** The popover's content — the system's vitals table (pinned rows) or the project's detail
+   *  (build/colony rows), rendered as a card. Supplied by the panel, not derived here. */
   card: ReactNode;
-  /** The card's accessible name. The card is a `dialog`, and ArrowDown puts a screen-reader user
-   *  inside it — unnamed, all they would hear is "dialog". Required rather than optional: every
-   *  row's card has a subject, and a default derived from `name` would go stale silently for the
-   *  build rows, whose `name` already carries the project. */
+  /** The popover's accessible name. The popover is a `dialog`, and ArrowDown puts a screen-reader
+   *  user inside it — unnamed, all they would hear is "dialog". Required rather than optional:
+   *  every row's popover has a subject, and a default derived from `name` would go stale silently
+   *  for the build rows, whose `name` already carries the project. */
   cardLabel: string;
 }
 
@@ -59,11 +59,11 @@ export interface TrackerRowProps {
  * track carries the coming cycle's gain as a dimmer segment ahead of the fill, so a row shows both
  * where a project stands and how fast it is moving without opening its card.
  *
- * The row's trigger is a `RichCard` with click-to-open disabled: activating the row (click or
+ * The row's trigger is a `Popover` with click-to-open disabled: activating the row (click or
  * Enter/Space) navigates via `onActivate`, and the card is reached only by hovering or
  * Tab-focusing the row, per the spec's split between the row's click and its card. Neither opening
- * path moves focus off the row, so Tab keeps walking the list; ArrowDown enters the card and
- * Escape comes back — the rich card's keyboard convention, shared by every popover in the game.
+ * path moves focus off the row, so Tab keeps walking the list; ArrowDown enters the popover and
+ * Escape comes back — the keyboard convention shared by every popover in the game.
  */
 export function TrackerRow({
   systemId,
@@ -84,8 +84,8 @@ export function TrackerRow({
 
   return (
     <li className="relative border-b border-border/60 last:border-b-0" data-system-id={systemId}>
-      <RichCard disableClickOpen openDelay={300} side="left" align="start">
-        <RichCardTrigger>
+      <Popover disableClickOpen openDelay={300} side="left" align="start">
+        <PopoverTrigger>
           <button
             type="button"
             onClick={onActivate}
@@ -114,9 +114,9 @@ export function TrackerRow({
               </span>
             ))}
           </button>
-        </RichCardTrigger>
-        <RichCardContent aria-label={cardLabel}>{card}</RichCardContent>
-      </RichCard>
+        </PopoverTrigger>
+        <PopoverContent aria-label={cardLabel}>{card}</PopoverContent>
+      </Popover>
       {progress !== undefined && (
         <div aria-hidden className="absolute inset-x-0 bottom-0 flex h-0.5 bg-surface-active">
           <span

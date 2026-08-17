@@ -27,7 +27,20 @@ export interface TickBroadcast {
   events: Partial<GlobalEventMap>;
 }
 
-/** Latest-wins broadcast throttle: at most 4 emits/sec so "max" speed can't melt SSE clients. */
+/**
+ * Latest-wins broadcast throttle: at most 4 emits/sec so "max" speed can't melt SSE clients.
+ *
+ * **A client must never count broadcasts to count anything.** This is latest-wins, not a queue — a
+ * frame arriving inside the window replaces the pending one rather than merging with it, so frames
+ * are dropped by design and the drop rate rises with speed. Anything periodic the payload carries is
+ * rarer still: the economy cycle resolves on one tick in `CYCLE_LENGTH`, so at speed a whole cycle,
+ * boundary frame included, can vanish inside a single window. A consumer counting edges then stalls
+ * silently, which is the worst shape of wrong — it looks like nothing is happening.
+ *
+ * Derive from the monotonic `currentTick` instead. Every frame that does arrive overwrites it, so it
+ * is correct however many were lost, and floor-dividing it answers "which cycle is the world in"
+ * without being able to miss one.
+ */
 const BROADCAST_MIN_INTERVAL_MS = 250;
 /** At "max", run ticks for this long, then yield the event loop so HTTP requests get served. */
 const MAX_SPEED_BUDGET_MS = 50;

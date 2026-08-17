@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -6,7 +7,7 @@ import type { AtlasData } from "@/lib/types/game";
 import type { TrackerData } from "@/lib/types/api";
 
 // Proves the owner-decision-2 wiring: the settings surface is a SIBLING panel toggled from the
-// Tracker's own header (never a RichCard/popover), and toggling one of its checkboxes actually
+// Tracker's own header (never a popover), and toggling one of its checkboxes actually
 // filters TrackerPanel's own sections — which requires `useTrackerSections()` to be a single
 // hook instance shared via props, not two independent instances that can't see each other's
 // writes. `MapControlsDock` is stubbed out: its own render tree (Pixi colour ramps, tooltips) is
@@ -49,10 +50,25 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
+// settingsOpen/onToggleSettings are owned by MapRightRail's caller, not by MapRightRail itself. This
+// harness is what a real caller (star-map.tsx) looks like: a single piece of state, passed down and
+// toggled from here, so the suite still exercises real open/close behaviour rather than a prop that
+// never changes.
 function renderRail() {
-  return render(
-    <MapRightRail mode="political" setMode={vi.fn()} overlays={{ logistics: false }} toggle={vi.fn()} />,
-  );
+  function Harness() {
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    return (
+      <MapRightRail
+        mode="political"
+        setMode={vi.fn()}
+        overlays={{ logistics: false }}
+        toggle={vi.fn()}
+        settingsOpen={settingsOpen}
+        onToggleSettings={() => setSettingsOpen((open) => !open)}
+      />
+    );
+  }
+  return render(<Harness />);
 }
 
 describe("MapRightRail — the settings panel is a sibling, opened and closed from the Tracker's own header", () => {

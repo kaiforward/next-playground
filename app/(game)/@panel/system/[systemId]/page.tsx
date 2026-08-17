@@ -23,8 +23,8 @@ import {
   VitalTile,
   VitalGrid,
   GhostVitalTile,
-  CompositionBar,
 } from "@/components/ui/vital-tile";
+import { CompositionBar } from "@/components/ui/composition-bar";
 import { BADGE_COLOR_VAR } from "@/components/ui/badge";
 import { bandLabel, bandTone } from "@/components/system/provision-view";
 import type { GovernmentType } from "@/lib/types/game";

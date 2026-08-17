@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { SectionHeader } from "@/components/ui/section-header";
 import { StatList, StatRow } from "@/components/ui/stat-row";
-import { StatDisplay } from "@/components/ui/stat-display";
 import { TabList, Tab } from "@/components/ui/tabs";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InlineAlert } from "@/components/ui/inline-alert";
@@ -305,27 +304,17 @@ function SectionHeadersSection() {
 function StatsSection() {
   return (
     <StyleSection title="Stats">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card variant="bordered" padding="sm">
-          <CardHeader title="StatDisplay" />
-          <CardContent className="space-y-3">
-            <StatDisplay label="Credits" value="1,250,000" />
-            <StatDisplay label="Systems Visited" value={42} trend="up" />
-            <StatDisplay label="Danger Level" value="0.35" trend="down" />
-          </CardContent>
-        </Card>
-        <Card variant="bordered" padding="sm">
-          <CardHeader title="StatRow" subtitle="Wrap in StatList for semantic &lt;dl&gt;" />
-          <CardContent>
-            <StatList className="space-y-2">
-              <StatRow label="Hull"><span>42 / 80</span></StatRow>
-              <StatRow label="Shield"><span>20 / 20</span></StatRow>
-              <StatRow label="Firepower"><span>18</span></StatRow>
-              <StatRow label="Evasion"><span>12</span></StatRow>
-            </StatList>
-          </CardContent>
-        </Card>
-      </div>
+      <Card variant="bordered" padding="sm">
+        <CardHeader title="StatRow" subtitle="Wrap in StatList for semantic &lt;dl&gt;" />
+        <CardContent>
+          <StatList className="space-y-2">
+            <StatRow label="Hull"><span>42 / 80</span></StatRow>
+            <StatRow label="Shield"><span>20 / 20</span></StatRow>
+            <StatRow label="Firepower"><span>18</span></StatRow>
+            <StatRow label="Evasion"><span>12</span></StatRow>
+          </StatList>
+        </CardContent>
+      </Card>
     </StyleSection>
   );
 }

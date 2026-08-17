@@ -13,8 +13,7 @@ import type { GlobalEventMap } from "@/lib/tick/types";
 //
 // `useTickContext`'s real implementation opens an EventSource, which jsdom can't drive. This
 // mock reproduces only the piece under test reads — subscribeToEvent — as a plain listener
-// registry the test can push broadcasts through synchronously. Mirrors
-// lib/hooks/__tests__/use-cycle-boundary.test.tsx's own mock.
+// registry the test can push broadcasts through synchronously.
 //
 // The stand-in is annotated with the REAL `SubscribeToEvent`, so a change to the production
 // signature fails here rather than leaving the mock free to accept a subscription the app could
