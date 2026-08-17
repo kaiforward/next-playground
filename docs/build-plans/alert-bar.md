@@ -372,6 +372,13 @@ that category's own natural measure, and categories sort only by their authored 
 lets housing — which carries no ROI value at all — sit on the same bar as an industry proposal without
 inventing a weight to compare them.
 
+**A chip is an outcome; a row is a reason.** Build blocked is one chip, not five, even though its five
+drop reasons (`no-capacity`, `no-input-supplier`, `no-consumer`, `no-labour`, `no-whole-level` —
+`lib/engine/directed-build.ts:125`) have entirely different player fixes. The outcome is the same in
+every case: a system wanted to build and could not. Which fix applies is what the row carries, sorted
+worst-first by `BUILD_DROP_SEVERITY`. Splitting one outcome across five chips spends the run's scarcest
+resource — horizontal space — on a distinction the flyout already makes.
+
 Discrete events are three categories banded by authored valence rather than one chip or seventeen:
 Crisis, Disruption, Windfall. Each event type is banded at authoring time, so an event chip's tier is
 authored exactly as every other category's is.
