@@ -79,6 +79,35 @@ describe("treasury processor", () => {
     expect(t.updatedAtTick).toBe(24);
   });
 
+  it("persists the maintenance the settlement asked for, frozen at the slider then in force", async () => {
+    // The alert bar's Maintenance unfunded reading is `paid[band] < charged[band]`, and it
+    // is only honest if the charge is captured at settlement — the player can move the slider at any
+    // time, with no re-settle. Two identical worlds settled at different sliders: the bill is the
+    // same, the charge tracks the slider, and both are half of the bill at 0.5.
+    const seed = () => new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    const full = seed();
+    await runTreasuryProcessor(full, ctxWithRealized(24, new Map()), makeParams());
+    const halved = new InMemoryTreasuryWorld({
+      treasuries: [makeTreasury({ bands: { maintenance: 0.5, logistics: 1, construction: 1 } })],
+      systems: [SYSTEM],
+    });
+    await runTreasuryProcessor(halved, ctxWithRealized(24, new Map()), makeParams());
+
+    const a = full.treasuries[0].lastSettlement;
+    const b = halved.treasuries[0].lastSettlement;
+    if (a === null || b === null) throw new Error("expected settlements on both worlds");
+    const chargeA = a.charged?.maintenance;
+    const chargeB = b.charged?.maintenance;
+    if (chargeA === undefined || chargeB === undefined) throw new Error("expected a recorded charge");
+    expect(a.maintenanceBill).toBeGreaterThan(0);
+    expect(chargeA).toBeCloseTo(a.maintenanceBill);
+    expect(b.maintenanceBill).toBeCloseTo(a.maintenanceBill);
+    expect(chargeB).toBeCloseTo(a.maintenanceBill * 0.5);
+    // A settlement that paid what it was asked for is solvent, at either slider.
+    expect(a.paid.maintenance).toBeCloseTo(chargeA);
+    expect(b.paid.maintenance).toBeCloseTo(chargeB);
+  });
+
   it("accrues work mid-cycle without settling, and bills it at the next settlement", async () => {
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
     await runTreasuryProcessor(world, { tick: 12, results: new Map() }, makeParams({

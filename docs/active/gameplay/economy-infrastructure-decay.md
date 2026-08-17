@@ -211,21 +211,24 @@ scattered:
 
 **Goal:** one at-a-glance view of the three quantities, per land-type and per building, plus a **decay/health
 read** now that the substrate moves — is this system holding at equilibrium (built ≈ used), sitting on idle
-capacity that will shed, or torn down under unrest? The panel should make "this world is stable / contracting /
-collapsing" obvious without reading numbers.
+capacity that will shed, stuck on idle capacity a recipe input is starving (which won't shed on its own), or
+torn down under unrest? The panel should make "this world is stable / idle / contracting / collapsing" obvious
+without reading numbers.
 
 **Shipped design** (collaborative, prototype-first — not an agent invoking `frontend-design` blind). The panel
 groups buildings by the two physical land **pools** — **Deposit land** (extractors, a per-resource table) and
 **General land** (housing + factories, a housing/factory/free magnitude bar whose free tail two-tones the
-**habitable** sub-cap in units). A system **health strip** (`stable / contracting / collapsing` via
+**habitable** sub-cap in units). A system **health strip** (`stable / idle / contracting / collapsing` via
 `industryHealth`) carries a per-building tally and an info-icon legend popover. The pool tables read
 **worked/slots** (staffing keeps a decimal; slot and output counts are whole, `≥1K` abbreviated) with a
 health glyph per row, gold-when-rich yield, and per-input `needs` lines for producers. Health is grounded in
 the decay engine's exact triggers via `buildingHealth`/`industryHealth` (`lib/engine/industry.ts`): a row is
-**collapsing** under unrest teardown, **contracting** when a WHOLE level is idle (`floor(built − used) ≥ 1`,
-the marginal level the engine sheds), else **stable** — so the label can never contradict what actually
-decays. Fed by live `used` + `sellingFactor`. Honours the Foundry theme and reuses `components/ui` primitives.
-It landed **last**, so it renders the finished, moving substrate.
+**collapsing** under unrest teardown, **contracting** when a WHOLE level is idle (`floor(built − used) ≥ 1`)
+for a reason decay can act on (the marginal level the engine sheds), **idle** when that same whole-level gap
+is bound only by a recipe input decay can't see (a producer's readout `used` folds the input gate, but
+`computeSystemDecay` carries no market stock to compute one from), else **stable** — so the label can never
+contradict what actually decays. Fed by live `used` + `sellingFactor`. Honours the Foundry theme and reuses
+`components/ui` primitives. It landed **last**, so it renders the finished, moving substrate.
 
 ---
 

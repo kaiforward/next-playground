@@ -4,8 +4,25 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { apiFetch } from "@/lib/query/fetcher";
 import type { Speed, TickBroadcast } from "@/lib/world/tick-loop";
 import type { GameWorldState } from "@/lib/types/game";
+import type { GlobalEventMap } from "@/lib/tick/types";
 
-type EventCallback = (events: unknown[]) => void;
+/**
+ * Subscribes to one broadcast channel for as long as the returned unsubscribe is uncalled.
+ * The channel name is a checked key of `GlobalEventMap` — a mistyped one fails the build instead
+ * of silently subscribing to a channel that never fires — and the callback receives that channel's
+ * own payload type, so a consumer never re-narrows what the frame guard already established.
+ */
+export type SubscribeToEvent = <K extends keyof GlobalEventMap>(
+  eventName: K,
+  cb: (events: GlobalEventMap[K]) => void,
+) => () => void;
+
+/** One listener set per broadcast channel. Every channel is present rather than optional, so a
+ *  channel added to `GlobalEventMap` fails the registry initialiser below until it is added there —
+ *  which is where its dispatch call sits too. */
+type EventListeners = {
+  [K in keyof GlobalEventMap]: Set<(events: GlobalEventMap[K]) => void>;
+};
 
 /** Narrows a parsed SSE frame before it's trusted as a TickBroadcast. */
 function isTickBroadcast(value: unknown): value is TickBroadcast {
@@ -29,7 +46,7 @@ interface UseTickResult {
   speed: Speed;
   achievedTps: number;
   isConnected: boolean;
-  subscribeToEvent: (eventName: string, cb: EventCallback) => () => void;
+  subscribeToEvent: SubscribeToEvent;
 }
 
 /**
@@ -43,7 +60,11 @@ export function useTick(): UseTickResult {
   const [speed, setSpeed] = useState<Speed>("paused");
   const [achievedTps, setAchievedTps] = useState(0);
   const [isConnected, setIsConnected] = useState(false);
-  const eventListeners = useRef<Map<string, Set<EventCallback>>>(new Map());
+  const eventListeners = useRef<EventListeners>({
+    economyTick: new Set(),
+    eventNotifications: new Set(),
+    shipArrived: new Set(),
+  });
 
   // Seed tick/speed/TPS from world state so the sidebar is correct before the
   // SSE connection establishes. apiFetch types the response as GameWorldState,
@@ -59,6 +80,17 @@ export function useTick(): UseTickResult {
   }, []);
 
   useEffect(() => {
+    /** Hands one channel's payload to that channel's listeners. Generic per call, because the
+     *  payload type is only known channel by channel — a loop over the frame's entries would put
+     *  every channel back on one erased type, which is what the callers would then have to undo. */
+    const dispatch = <K extends keyof GlobalEventMap>(
+      eventName: K,
+      events: GlobalEventMap[K] | undefined,
+    ) => {
+      if (!events || events.length === 0) return;
+      for (const cb of eventListeners.current[eventName]) cb(events);
+    };
+
     const es = new EventSource("/api/game/tick-stream");
 
     es.onopen = () => setIsConnected(true);
@@ -72,13 +104,10 @@ export function useTick(): UseTickResult {
         setSpeed(event.speed);
         setAchievedTps(event.achievedTps);
 
-        // Dispatch global events to listeners
-        for (const [eventName, eventList] of Object.entries(event.events)) {
-          const listeners = eventListeners.current.get(eventName);
-          if (listeners && eventList.length > 0) {
-            for (const cb of listeners) cb(eventList);
-          }
-        }
+        // Dispatch global events to listeners, one channel at a time.
+        dispatch("economyTick", event.events.economyTick);
+        dispatch("eventNotifications", event.events.eventNotifications);
+        dispatch("shipArrived", event.events.shipArrived);
       } catch {
         // Ignore malformed messages
       }
@@ -95,13 +124,11 @@ export function useTick(): UseTickResult {
   }, []);
 
   const subscribeToEvent = useCallback(
-    (eventName: string, cb: EventCallback) => {
-      if (!eventListeners.current.has(eventName)) {
-        eventListeners.current.set(eventName, new Set());
-      }
-      eventListeners.current.get(eventName)!.add(cb);
+    <K extends keyof GlobalEventMap>(eventName: K, cb: (events: GlobalEventMap[K]) => void) => {
+      const listeners = eventListeners.current[eventName];
+      listeners.add(cb);
       return () => {
-        eventListeners.current.get(eventName)?.delete(cb);
+        listeners.delete(cb);
       };
     },
     [],

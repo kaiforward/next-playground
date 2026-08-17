@@ -36,6 +36,10 @@ export interface MarketRowForLogistics {
   /** Structural-deficit persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
   proposalCycles?: number;
   logisticsFundingBound?: boolean;
+  /** The prior structural-shortfall level, read only so the processor can skip a no-op write; the
+   *  matcher itself never reads it as a decision input. See `WorldMarket.unservedShortfall` for the
+   *  full contract. */
+  unservedShortfall?: number;
 }
 
 /** One system's logistics-relevant state. */
@@ -59,6 +63,16 @@ export interface LogisticsFundingBoundUpdate {
   logisticsFundingBound: boolean;
 }
 
+export interface UnservedShortfallUpdate {
+  id: string;
+  /** The unclosed part of the deficit (`UnservableDeficit.shortfall`: its want less the capacity its
+   *  reachable donors still held) — strictly positive for a market this run classified structurally
+   *  unservable, and exactly `0` for one it did not. The size is the whole classification: the engine
+   *  only records an entry where that residue is positive, so `0` can only mean servable, and it is
+   *  how the world layer knows to clear the key back to absent. */
+  unservedShortfall: number;
+}
+
 export interface LogisticsFlowInsert {
   tick: number;
   fromSystemId: string;
@@ -76,6 +90,8 @@ export interface DirectedLogisticsWorld {
   applyMarketUpdates(updates: LogisticsMarketUpdate[]): Promise<void>;
   /** Apply changed wanted-but-unfunded assessments without rewriting stock. */
   applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;
+  /** Apply changed structural-unservable assessments without rewriting stock. */
+  applyUnservedShortfallUpdates(updates: UnservedShortfallUpdate[]): Promise<void>;
   /** Append directed-logistics flow rows to the world flow log. */
   appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;
 }
