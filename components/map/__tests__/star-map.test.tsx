@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { StarMap } from "@/components/map/star-map";
+import { DRAWER_WIDTH } from "@/lib/constants/layout";
 import type { AtlasData } from "@/lib/types/game";
 import type { GovernmentType } from "@/lib/types/game";
 
@@ -13,8 +14,17 @@ import type { GovernmentType } from "@/lib/types/game";
 // prop as plain text (no test-only attribute or class), which is what every assertion below reads.
 
 vi.mock("@/components/map/pixi/pixi-map-canvas", () => ({
-  PixiMapCanvas: ({ centerTarget }: { centerTarget?: { x: number; y: number; zoom: number } }) => (
-    <div>centerTarget: {centerTarget ? `${centerTarget.x},${centerTarget.y}` : "none"}</div>
+  PixiMapCanvas: ({
+    centerTarget,
+    centerOffsetX,
+  }: {
+    centerTarget?: { x: number; y: number; zoom: number };
+    centerOffsetX?: number;
+  }) => (
+    <>
+      <div>centerTarget: {centerTarget ? `${centerTarget.x},${centerTarget.y}` : "none"}</div>
+      <div>centerOffsetX: {String(centerOffsetX)}</div>
+    </>
   ),
 }));
 
@@ -79,13 +89,22 @@ const ATLAS: AtlasData = {
   player: { controlledFactionId: "player-faction", homeworldSystemId: "home-1" },
 };
 
+const JSDOM_DEFAULT_WIDTH = window.innerWidth;
+
 beforeEach(() => {
   nav.pathname = "/";
   nav.search = new URLSearchParams();
+  // The offset formula reads `window.innerWidth`, and the tests below move it — restored here so
+  // one of them cannot leak a viewport into the next.
+  window.innerWidth = JSDOM_DEFAULT_WIDTH;
 });
 
 function centerText(): string {
   return screen.getByText(/^centerTarget:/).textContent ?? "";
+}
+
+function offsetText(): string {
+  return screen.getByText(/^centerOffsetX:/).textContent ?? "";
 }
 
 describe("StarMap — camera recentring only follows an explicit ?focus, never a plain click", () => {
@@ -110,5 +129,31 @@ describe("StarMap — camera recentring only follows an explicit ?focus, never a
     nav.search = new URLSearchParams();
     rerender(<StarMap atlas={ATLAS} initialSelectedSystemId="home-1" />);
     expect(centerText()).toBe("centerTarget: 10,20");
+  });
+});
+
+describe("StarMap — the recentre offset clears the docked drawer, capped by the viewport", () => {
+  it("is zero on the root route, where no drawer is docked", () => {
+    render(<StarMap atlas={ATLAS} initialSelectedSystemId="home-1" />);
+    expect(offsetText()).toBe("centerOffsetX: 0");
+  });
+
+  it("is half the drawer's own width on a panel route", () => {
+    // The drawer is `w-[560px] max-w-full`, so the offset shifts the centre point by half of
+    // whatever it actually covers — the full DRAWER_WIDTH on any viewport wide enough for it.
+    window.innerWidth = 1400;
+    nav.pathname = "/system/sys-a";
+    render(<StarMap atlas={ATLAS} initialSelectedSystemId="home-1" />);
+    expect(offsetText()).toBe(`centerOffsetX: ${DRAWER_WIDTH / 2}`);
+  });
+
+  it("is capped by the viewport when the window is narrower than the drawer", () => {
+    // `max-w-full` is the half of the drawer's own sizing the formula has to honour: on a viewport
+    // narrower than 560px the drawer covers the whole width, and an uncapped offset would push the
+    // focused system off the visible area entirely.
+    window.innerWidth = 400;
+    nav.pathname = "/system/sys-a";
+    render(<StarMap atlas={ATLAS} initialSelectedSystemId="home-1" />);
+    expect(offsetText()).toBe("centerOffsetX: 200");
   });
 });

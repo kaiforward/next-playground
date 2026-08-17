@@ -18,7 +18,7 @@ import type {
 // its own. The disclosure mechanics that used to be pinned in this file — a click or Enter opening
 // it, `aria-expanded` reflecting that state — are Radix's `PopoverTrigger` contract now, exercised
 // generically in `components/ui/__tests__/popover.test.tsx` (its "click opens", "keyboard focus
-// opens" and `disableHoverOpen`/`disableClickOpen` cases all drive a real `PopoverTrigger`).
+// opens" and `pointerInert`/`disableClickOpen` cases all drive a real `PopoverTrigger`).
 
 // The slash is identified by the geometry that makes it a slash, rather than by a marker attribute
 // added for the test's benefit. The casing line beneath it carries a different `d`, so this matches

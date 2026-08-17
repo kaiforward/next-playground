@@ -6,7 +6,7 @@ import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { AlertRow } from "@/components/alerts/alert-row";
 import { TIER_COLOR } from "@/components/alerts/alert-chip";
 import { CHIP_HEIGHT, RAIL_INSET } from "@/lib/constants/layout";
-import type { SystemTabSegment } from "@/lib/constants/system-tabs";
+import type { AlertDestinationTab } from "@/lib/types/alerts";
 import type { AlertCategory, AlertInstance } from "@/lib/types/api";
 
 /** The flyout's own 5px clearance below its chip — passed to `PopoverContent` as `sideOffset`
@@ -44,20 +44,22 @@ export function alertFooterText(category: AlertCategory): string | null {
 /**
  * Where a row's activation resolves to — either a fly-to-system-and-open-tab (deferred to
  * `useSystemFocus()`, which needs live atlas coordinates this pure function has no access to) or a
- * plain route push with no map focus at all. `none` covers the one combination the destination
- * table never actually produces (a `system`-kind category whose instance carries no `systemId`) —
+ * plain route push with no map focus at all. `tab` carries `AlertDestinationTab`, the four-tab
+ * subset `lib/types/alerts.ts` pins with `satisfies` — never the full `SystemTabSegment`, which
+ * would re-widen here exactly what the destination table narrowed. `none` covers the one combination
+ * the destination table never actually produces (a `system`-kind category whose instance carries no `systemId`) —
  * `AlertInstance.systemId` is typed nullable across the whole union, so this function still has to
  * return something for it rather than assume the impossible away.
  */
 export type AlertNavigateTarget =
-  | { kind: "system"; systemId: string; tab: SystemTabSegment }
+  | { kind: "system"; systemId: string; tab: AlertDestinationTab }
   | { kind: "route"; path: string }
   | { kind: "none" };
 
 /**
  * Resolves a row's destination off `ALERT_CATEGORIES[category.id].destination` and the specific
  * instance's own `systemId` — the per-instance decision the destination table
- * (docs/build-plans/alert-bar.md → "What a row click does") reserves for the three event bands
+ * (docs/active/gameplay/alert-bar.md → "What a row click does") reserves for the three event bands
  * (system when the event has one, else the events panel) and, degenerately, for Maintenance
  * unfunded (always the faction panel, whatever `systemId` says).
  *
@@ -108,7 +110,7 @@ export interface AlertFlyoutProps {
 /**
  * The flyout a chip opens: the category's name and icon, one line saying what the condition is,
  * every affected instance in the category's own sort order — no cap, no second home; a category
- * that is long is the honest shape of a common condition (docs/build-plans/alert-bar.md → "The
+ * that is long is the honest shape of a common condition (docs/active/gameplay/alert-bar.md → "The
  * flyout") — and a footer stating the count with its denominator or unit (or no footer at all for
  * `faction` — see `alertFooterText`).
  *
@@ -116,7 +118,7 @@ export interface AlertFlyoutProps {
  * house keyboard convention (open never moves focus, ArrowDown enters, Escape exits and returns
  * focus to the chip), the one-open-at-a-time registry, and outside-click dismissal — all of it wired
  * by the caller (`AlertRunChips`, `components/alerts/alert-run.tsx`), which wraps this component's
- * return value in `<Popover align="start" disableHoverOpen>`. `PopoverContent` supplies the `dialog`
+ * return value in `<Popover align="start" pointerInert>`. `PopoverContent` supplies the `dialog`
  * role itself; this component's only accessibility contribution is the `aria-label` naming it.
  *
  * Anchored under its own chip by Radix's own popper positioning (`side="bottom"`, the `Popover`

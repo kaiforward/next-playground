@@ -59,8 +59,12 @@ rail on the right, and the top of the map. Nothing reserves layout height: on a 
 conditions, no chips are there at all. The settings control is the one exception — it renders whenever
 the run mounts, whatever the chip count, because it is the run's own entry point back to itself: a
 player who has switched every hideable category off, with nothing critical firing right now, must
-always have a way back to the categories that are hiding everything else. Empty space in the run passes
-clicks through to the map; only the chips and the settings control are interactive.
+always have a way back to the categories that are hiding everything else. It sits at the **start** of
+the run, before the first chip, so that its position never moves with the chip count: the run is
+left-anchored, so a control after the chips would slide rightward — taking its own open panel with it
+— the moment a category the player just switched on added a chip. The cost is that it precedes the
+most severe chip rather than trailing the run. Empty space in the run passes clicks through to the
+map; only the chips and the settings control are interactive.
 
 The left inset tracks the system drawer's fixed width; the right inset tracks the Tracker rail's own
 base width, plus the extra span the Tracker's own settings panel adds while that panel is open — a
@@ -176,7 +180,7 @@ direct "build it" without redesigning the row.
 
 ## Settings
 
-A per-category panel, opened from the control at the end of the chip run: a checkbox per category,
+A per-category panel, opened from the control at the start of the chip run: a checkbox per category,
 grouped by tier, persisted in the browser as a view preference rather than in the save. Toggling a
 category does not close the panel. Critical categories render no control at all — not a disabled one,
 which would still suggest the set is negotiable.

@@ -45,12 +45,15 @@ import { twMerge } from "tailwind-merge";
  *   `event.preventDefault()` before Radix's internal handler runs — hover
  *   and keyboard-focus opens are untouched, since Radix only gates the
  *   click path on it.
- * - `disableHoverOpen` on the root: the same opt-out for the hover path,
- *   for a consumer whose trigger hover already means something else (an
+ * - `pointerInert` on the root: the pointer is not an open/close gesture at
+ *   all, for a consumer whose trigger hover already means something else (an
  *   alert chip's raises it clear of an overlapped run) or whose triggers
  *   sit close enough that sweeping across them would open each in turn.
- *   It suppresses only the hover timer — click and keyboard focus still
- *   open, so nothing below changes.
+ *   Both the hover-open timer and the pointer-leave close are suppressed —
+ *   a gate on one alone would leave a popover that only click and keyboard
+ *   can open but any pointer drift dismisses. Click and keyboard focus still
+ *   open, and Escape, an outside click and the exclusivity registry still
+ *   close, so nothing below changes.
  * - The keyboard enter/exit convention below.
  *
  * ## The keyboard convention — every popover in the game obeys it
@@ -228,13 +231,18 @@ export interface PopoverProps {
    */
   disableClickOpen?: boolean;
   /**
-   * Opts out of hover-to-open. Set when the trigger's hover already means something else — an alert
-   * chip's does, raising it clear of the overlapped run — or when triggers sit close enough together
-   * that sweeping the pointer across them would open one after another. Click-open and
-   * keyboard-focus-open are unaffected: this suppresses only the hover timer, so the popover is still
-   * reachable by every other route and the keyboard convention below is untouched.
+   * Takes the pointer out of the open/close gesture set entirely — the hover-open timer AND the
+   * pointer-leave close. Set when the trigger's hover already means something else — an alert chip's
+   * does, raising it clear of the overlapped run — or when triggers sit close enough together that
+   * sweeping the pointer across them would open one after another.
+   *
+   * Deliberately symmetric, and named for the pointer rather than for opening: gating only the open
+   * path leaves a popover a click opens and an unrelated pointer movement dismisses 150ms later,
+   * which is worse than either whole behaviour. Click-open and keyboard-focus-open are unaffected,
+   * and Escape, an outside click and the exclusivity registry still close it, so the popover stays
+   * reachable and dismissable by every route that is not the pointer drifting.
    */
-  disableHoverOpen?: boolean;
+  pointerInert?: boolean;
   children: ReactNode;
 }
 
@@ -243,7 +251,7 @@ export function Popover({
   side = "bottom",
   align = "center",
   disableClickOpen = false,
-  disableHoverOpen = false,
+  pointerInert = false,
   children,
 }: PopoverProps) {
   const [open, setOpenState] = useState(false);
@@ -323,8 +331,8 @@ export function Popover({
 
   function scheduleOpen() {
     // The hover path, and only the hover path, runs through here — click and keyboard focus open
-    // directly rather than on a timer, which is what lets one opt-out suppress hover alone.
-    if (disableHoverOpen) return;
+    // directly rather than on a timer, which is what lets one opt-out suppress the pointer alone.
+    if (pointerInert) return;
     if (open) return;
     clearCloseTimer();
     clearOpenTimer();
@@ -361,6 +369,11 @@ export function Popover({
   }
 
   function scheduleClose() {
+    // The pointer-leave path, and only it, runs through here — so the same opt-out that keeps the
+    // pointer from opening this popover keeps it from closing one. Gating the open side alone would
+    // leave a consumer that only click and keyboard can open, yet any pointer drift off the trigger
+    // dismisses a grace period later.
+    if (pointerInert) return;
     clearCloseTimer();
     closeTimerRef.current = setTimeout(() => {
       closeTimerRef.current = null;

@@ -11,15 +11,16 @@ export type AlertCategorySettings = Record<AlertCategoryId, boolean>;
 /**
  * Default AND fallback: the authored `defaultOn` off `ALERT_CATEGORIES` for every category — read
  * off the registry field by field, never a second hand-written true/false list, so this can never
- * drift from `docs/build-plans/alert-bar.md`'s own defaults table (the single authority there).
+ * drift from the authored defaults (`docs/active/gameplay/alert-bar.md` → "The categories", the
+ * single authority there).
  *
  * Deliberately NOT the Tracker's own all-on fallback (`DEFAULT_TRACKER_SECTIONS`). A Tracker section
  * carries no urgency, so "show everything, including on a malformed read" costs the player nothing.
  * An alert category does carry urgency, and three important-tier categories are authored OFF by
- * default (`docs/build-plans/alert-bar.md` → "Settings, and what defaults off") — falling back to
- * all-on would silently re-enable exactly the categories the design chose to hide, on every
- * malformed read. Every critical category's own `defaultOn` is `true`, since the tier can never be
- * turned off anyway (see `hideable` below).
+ * default (`docs/active/gameplay/alert-bar.md` → "The categories") — falling back to all-on would
+ * silently re-enable exactly the categories the design chose to hide, on every malformed read. Every
+ * critical category's own `defaultOn` is `true`, since the tier can never be turned off anyway (see
+ * `hideable` below).
  */
 export const DEFAULT_ALERT_CATEGORIES: AlertCategorySettings = {
   famine: ALERT_CATEGORIES.famine.defaultOn,
@@ -54,8 +55,8 @@ export const DEFAULT_ALERT_CATEGORIES: AlertCategorySettings = {
  * stored object ever written) — the exact failure `parseSections` cannot have today, since the
  * Tracker's three keys are not expected to grow. A per-key merge instead treats an unrecognised or
  * missing key as "never assessed, use the authored default", the same convention the alert bar's own
- * signal fields (`docs/build-plans/alert-bar.md` → "Absent means never assessed, not zero") already
- * use for exactly this reason.
+ * signal fields (`docs/active/gameplay/alert-bar.md` → "What the engine emits") already use for
+ * exactly this reason.
  */
 function parseCategories(value: unknown): AlertCategorySettings {
   const merged: AlertCategorySettings = { ...DEFAULT_ALERT_CATEGORIES };

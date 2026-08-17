@@ -17,17 +17,22 @@ const TIER_COLOR: Record<AlertTier, { base: string; light: string }> = {
 };
 
 /**
- * Exported so `CollapsedTail` (`components/alerts/alert-run.tsx`) — the "+N" tail chip — consumes
- * the same shell instead of hand-duplicating its classes, per AGENTS.md's extract-on-second-
- * occurrence rule. `z-[var(--z,1)]` reads the resting stack z-index `AlertRun` sets per chip via the
- * `--z` custom property (`lib/utils/alert-packing.ts`'s `stackZIndex`) — the leftmost, most severe
- * chip sits on top by default; `aria-expanded:z-[95]` raises an open chip's own trigger clear of the
- * whole stack regardless of position. Both are inert (fall back to `1`, never trigger) for a chip
- * rendered outside the packed run, e.g. this component's own tests.
+ * Exported so `CollapsedTail` (`components/alerts/alert-run.tsx`) — the "+N" tail chip — and the
+ * run's settings control consume the same shell instead of hand-duplicating its classes, per
+ * AGENTS.md's extract-on-second-occurrence rule.
+ *
+ * Every item in the run is absolutely positioned at the left offset `layoutRun`
+ * (`lib/utils/alert-packing.ts`) placed it at, so the shell carries the positioning and the vertical
+ * centring — `top-1/2 -translate-y-1/2` inside a container of `RUN_HEIGHT`, the one rule that
+ * replaces the flex row's `items-center` for chips, control and tail alike. `z-[var(--z,1)]` reads
+ * the resting stack order the placed chip carries, set per chip via the `--z` custom property — the
+ * leftmost, most severe chip sits on top by default; `aria-expanded:z-[95]` raises an open chip's
+ * own trigger clear of the whole stack regardless of position. Both are inert (fall back to `1`,
+ * never trigger) for a chip rendered outside the placed run, e.g. this component's own tests.
  */
 const chip = tv({
   base: [
-    "relative z-[var(--z,1)] aria-expanded:z-[95] pointer-events-auto inline-flex h-[26px] flex-none items-center gap-1.5 whitespace-nowrap border px-[9px]",
+    "absolute top-1/2 -translate-y-1/2 z-[var(--z,1)] aria-expanded:z-[95] pointer-events-auto inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap border px-[9px]",
     // The two colour-mix knobs `AlertChip`'s own fill and border read, set only once Radix's
     // `PopoverTrigger` writes `data-state="open"` onto this exact button (composed via `asChild`,
     // not a wrapping element) — a custom property toggled by a `data-state` selector is the one
@@ -77,17 +82,19 @@ interface AlertChipOwnProps {
    *  Tier, icon, label and whether the category is faulted come off `ALERT_CATEGORIES[category.id]`
    *  rather than being taken as separate props, so a caller cannot contradict the authored table. */
   category: AlertCategory;
-  /** Resting stack order, from `stackZIndex` — the leftmost, most severe chip sits on top. Read by
-   *  the shell's `z-[var(--z,1)]` base class. */
+  /** Resting stack order, off the placed chip `layoutRun` returned — the leftmost, most severe chip
+   *  sits on top. Read by the shell's `z-[var(--z,1)]` base class. */
   zIndex?: number;
-  /** Whether the run is packed at a negative gap (`isOverlapping`), which turns on the shadow and
-   *  the hover raise. */
+  /** Whether the run laid out at a negative gap (`RunLayout`'s `overlapping`), which turns on the
+   *  shadow and the hover raise. */
   overlapping?: boolean;
-  /** This chip's own packed spacing from `chipMarginLeft` (`components/alerts/alert-run.tsx`).
-   *  Applied directly to this button rather than a wrapping positioned `<div>`: `Popover` renders no
-   *  DOM node of its own (`PopperPrimitive.Root` is a bare context provider), so the trigger this
-   *  component renders is already the sole flex child the run's packing math is placing. */
-  marginLeft?: number;
+  /** This chip's own left offset in the run, in CSS pixels, off the placed chip `layoutRun`
+   *  returned. Applied directly to this button rather than to a wrapping positioned `<div>`:
+   *  `Popover` renders no DOM node of its own (`PopperPrimitive.Root` is a bare context provider),
+   *  so the trigger this component renders is already the element the run is placing — and it has to
+   *  be, since a wrapper carrying the offset would also carry the z-index and scope the open chip's
+   *  `aria-expanded:z-[95]` raise inside its own stacking context. */
+  left?: number;
 }
 
 // The three packing/category props are deliberately narrow rather than an open `className`/`style`
@@ -95,9 +102,15 @@ interface AlertChipOwnProps {
 // appearance — tier fill, icon, slash and the opaque-surface mix that lets chips overlap without
 // showing each other or the map through — and a caller that could pass arbitrary styles could defeat
 // that fill, which is the same reason tier, icon, label and `faulted` are read off the registry
-// rather than taken as props.
+// rather than taken as props. `aria-label`/`aria-labelledby` are omitted for the same reason and by
+// the same mechanism: `{...triggerProps}` spreads LAST, so either one would replace the accessible
+// name this component assembles out of rendered DOM (see its docstring) with a static string that
+// cannot go stale with the elements it names.
 type AlertChipProps = AlertChipOwnProps &
-  Omit<ComponentPropsWithoutRef<"button">, keyof AlertChipOwnProps | "className" | "style" | "children">;
+  Omit<
+    ComponentPropsWithoutRef<"button">,
+    keyof AlertChipOwnProps | "className" | "style" | "children" | "aria-label" | "aria-labelledby"
+  >;
 
 /**
  * One alert category on the run — a 20px icon plus count, no visible label, an opaque tier-tinted
@@ -120,7 +133,7 @@ type AlertChipProps = AlertChipOwnProps &
  * their own docstring).
  */
 export const AlertChip = forwardRef<HTMLButtonElement, AlertChipProps>(function AlertChip(
-  { category, zIndex, overlapping, marginLeft, ...triggerProps },
+  { category, zIndex, overlapping, left, ...triggerProps },
   ref,
 ) {
   const def = ALERT_CATEGORIES[category.id];
@@ -143,7 +156,7 @@ export const AlertChip = forwardRef<HTMLButtonElement, AlertChipProps>(function 
     backgroundColor,
     borderColor,
     color: tier.light,
-    marginLeft,
+    left,
     "--z": zIndex,
   };
 

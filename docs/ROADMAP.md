@@ -27,7 +27,42 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[M] Every attention-layer setting lives in the save.** The rule (Kai, 2026-08-17): anything in
+   the Tracker or the alert bar is per-save, whatever kind of setting it is — a toggle, a pin, an
+   expanded section. Pins and `automation` already sit on `world.player`; the two preference hooks do
+   not. `use-alert-categories.ts` (category toggles) and `use-tracker-sections.ts` (section expansion)
+   both move onto `world.player` beside `pinnedSystemIds`, following the `player-pins` pattern —
+   service, Zod schema, a POST on the existing `app/api/game/player/alerts/route.ts`, and the hooks
+   rewritten to call it. Changes the `World` shape, so it breaks saves (fine pre-1.0) and wants the
+   world-integrity lens the alert-bar surface review skipped.
+   Two things fall out rather than needing separate work. `parseCategories`'s sixteen hand-written
+   `in`/`typeof` blocks disappear entirely — the value arrives typed, validated by Zod at the boundary,
+   so there is nothing left to narrow. And the near-identical-hook pair the duplication audit flagged
+   resolves by subtraction, not extraction: both copies leave `localStorage`, so there is no shared
+   helper to write.
+   Nothing genuinely user-level exists yet (no sound, theme or keybindings), so `localStorage` empties
+   out completely. `map-session.ts` stays as it is — `sessionStorage`, deliberately dying with the tab,
+   not a preference.
+   *Next step:* add the field to `WorldPlayer` and copy the `player-pins` service/schema/route shape.
+   *Don't:* key `localStorage` on the save instead. There is no save id — `WorldMeta` carries only
+   `seed`, `systemCount`, `mapSize`, `currentTick` — so it would mean adding one, which is the same
+   `World` shape change at worse semantics, and the settings still would not travel with the save file.
+
+2. **[M] Duplication sweep, and a mechanical check so it stops recurring.** Full audit at
+   `.agent-reviews/duplication-audit-2026-08-17.md` — seven ranked findings, two of which carry
+   docstrings that are currently false (`voronoi-cache.ts` claims it replaced triangulations that
+   still run; `universe-gen.ts` describes `yieldMult` as a different quantity than `body-gen.ts`
+   computes). Worst by cost: three Delaunay/Voronoi triangulations of the same point set, five
+   byte-identical value-mode map hooks, and a resource-column literal typed out eleven times where an
+   eighth resource type would silently read as empty.
+   *Next step:* build `scripts/duplication.ts` (npm-aliased) and burn down the standing stock in the
+   same pass, so the check starts from zero rather than reporting pre-existing pairs forever.
+   *Don't:* add a tenth `/uber-review` lens. Every lens is chunk-scoped and the duplicate is almost
+   always in a file the PR does not touch — five copies of the map hook landed across five PRs and no
+   diff of any size ever contained two of them. The missing capability is repo-wide search, which is
+   mechanical; route its output into the conventions lens, which already owns the rule.
+
+3. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
@@ -177,19 +212,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   distance-weighting the autonomic-build spare pool (a possible refinement to the response-pacing
   backstop, noted, not built). No design pass on any of the three; pull individually when its area
   comes forward rather than as a group.
-- **[S] Re-measure Build blocked's real firing rate under the shipped predicate before trusting its
-  default.** The 50.4%-of-developed-systems figure that put this category default OFF (alert bar) was
-  taken with a temporary two-site counter, before the full nine-site instrumentation shipped and before
-  a `hasCapacityCeiling` guard was added that excludes sites which never had a deposit at all from
-  counting as blocked — a guard the old counter did not have, and whose own docstring
-  (`lib/engine/directed-build.ts`) says omitting it "would put a block on nearly every economically
-  active system every run." The true rate under the shipped predicate is unmeasured and could be
-  materially lower.
-  *Next step:* `/measure` Build blocked's incidence with the real shipped code, both horizons, cohorted
-  by developed systems; revisit the default (`lib/constants/alerts.ts`) if it comes back low.
-  *Don't:* quote the old 50.4% figure as current — it was taken under a predicate the shipped code no
-  longer uses.
-
 **Platform**
 - **[XL] Retire Next.js and TanStack Query — this is a single-page game, not a web app.** Packaging
   path B from [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §6: the engine in a Web
@@ -313,14 +335,10 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   to it. Needs a visual treatment (a distinct marker layered over the ramp, most likely) before Famine
   is readable from that map mode at all.
   *Next step:* fold into whichever map-modes pass picks this up next — no design pass yet.
-- **[S] Alert bar: two small follow-ups from launch, neither blocking.** `CHIP_WIDTH`/`PLUS_N_WIDTH`
-  (`lib/utils/alert-packing.ts`) are authored estimates of a chip's rendered footprint, not a live
-  measurement of it, so they drift silently if the chip's padding, icon size or type scale ever change
-  — the run already holds a `ResizeObserver` (`components/alerts/alert-run.tsx`) that could feed
-  `packRun` a real width instead, once wired. And a fit-search failure on a building's *footprint*
-  rather than its labour currently reports as `no-labour` (`lib/engine/directed-build.ts`) for lack of a
-  dedicated sixth `BuildDropReason` — a spec decision, not a bug.
-  *Next step:* either independently, whichever comes up first.
+- **[S] A build fit-search failure on *footprint* reports as `no-labour`.** There is no dedicated sixth
+  `BuildDropReason` (`lib/engine/directed-build.ts`), so a site rejected for lack of space is attributed
+  to lack of workers. A spec decision, not a bug.
+  *Next step:* decide whether the sixth reason is worth its own band before adding it.
   *Don't:* let the width drift silently in the meantime — the packing tests derive their expected
   widths from the same constants they check, so a mismatch would only ever surface as visual overflow,
   never a red test.

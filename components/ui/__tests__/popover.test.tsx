@@ -577,11 +577,25 @@ describe("Popover — disableClickOpen suppresses only the click-to-open path", 
   });
 });
 
-describe("Popover — disableHoverOpen suppresses only the hover-to-open path", () => {
-  // Mirrors the disableClickOpen block above, from the hover side: a plain hover does open by
-  // default, `disableHoverOpen` suppresses exactly that and nothing else, and click/keyboard-focus
-  // opens are untouched — the alert bar's chips need hover to mean "raise clear of the overlapped
-  // stack" instead, without losing the click and keyboard paths into the popover.
+describe("Popover — pointerInert takes the pointer out of BOTH the open and the close gesture", () => {
+  // Mirrors the disableClickOpen block above, from the pointer side: a plain hover does open, and a
+  // pointer-leave does close, by default; `pointerInert` suppresses both and nothing else, leaving
+  // click and keyboard-focus opens untouched. The alert bar's chips need hover to mean "raise clear
+  // of the overlapped stack" instead — and, having opened by click, must not then be dismissed by
+  // the pointer moving anywhere that is neither the chip nor the flyout.
+
+  function renderInert() {
+    render(
+      <Popover openDelay={OPEN_DELAY} pointerInert>
+        <PopoverTrigger>
+          <button type="button">System row</button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <p>System vitals</p>
+        </PopoverContent>
+      </Popover>,
+    );
+  }
 
   it("without the opt-out, hover opens the popover after openDelay (the behaviour being opted out of)", async () => {
     const { user } = setup();
@@ -592,16 +606,7 @@ describe("Popover — disableHoverOpen suppresses only the hover-to-open path", 
 
   it("with the opt-out, hover never opens the popover", async () => {
     const { user } = setup();
-    render(
-      <Popover openDelay={OPEN_DELAY} disableHoverOpen>
-        <PopoverTrigger>
-          <button type="button">System row</button>
-        </PopoverTrigger>
-        <PopoverContent>
-          <p>System vitals</p>
-        </PopoverContent>
-      </Popover>,
-    );
+    renderInert();
 
     await user.hover(screen.getByRole("button", { name: "System row" }));
     // Waited well past openDelay — confirms this is suppression, not a timing accident.
@@ -611,16 +616,7 @@ describe("Popover — disableHoverOpen suppresses only the hover-to-open path", 
 
   it("with the opt-out, a click still opens the popover", async () => {
     const { user } = setup();
-    render(
-      <Popover openDelay={OPEN_DELAY} disableHoverOpen>
-        <PopoverTrigger>
-          <button type="button">System row</button>
-        </PopoverTrigger>
-        <PopoverContent>
-          <p>System vitals</p>
-        </PopoverContent>
-      </Popover>,
-    );
+    renderInert();
 
     await user.click(screen.getByRole("button", { name: "System row" }));
     expect(await screen.findByText("System vitals")).toBeInTheDocument();
@@ -628,19 +624,40 @@ describe("Popover — disableHoverOpen suppresses only the hover-to-open path", 
 
   it("with the opt-out, keyboard focus still opens the popover", async () => {
     const { user } = setup();
-    render(
-      <Popover openDelay={OPEN_DELAY} disableHoverOpen>
-        <PopoverTrigger>
-          <button type="button">System row</button>
-        </PopoverTrigger>
-        <PopoverContent>
-          <p>System vitals</p>
-        </PopoverContent>
-      </Popover>,
-    );
+    renderInert();
 
     await user.tab();
     expect(await screen.findByText("System vitals")).toBeInTheDocument();
+  });
+
+  it("with the opt-out, leaving the trigger with the pointer after a click-open does NOT close it", async () => {
+    // The asymmetry this pins: a click-open never raises `keyboardInsideRef` (only ArrowDown does),
+    // so a close path gated on that flag alone would fire here and dismiss the popover a grace
+    // period after the pointer wandered off — leaving a surface that only click and keyboard can
+    // open but any pointer movement takes away.
+    const { user } = setup();
+    renderInert();
+
+    await user.click(screen.getByRole("button", { name: "System row" }));
+    expect(await screen.findByText("System vitals")).toBeInTheDocument();
+
+    await user.unhover(screen.getByRole("button", { name: "System row" }));
+    // Well past the internal close-grace window, so this is suppression rather than a race with it.
+    await wait(300);
+    expect(screen.getByText("System vitals")).toBeInTheDocument();
+  });
+
+  it("without the opt-out, that same pointer-leave DOES close it", async () => {
+    // The control for the test above: the close path is live and reachable by exactly this
+    // sequence, so the assertion above is about the opt-out and not about `unhover` doing nothing.
+    const { user } = setup();
+    renderPopover();
+
+    await user.click(screen.getByRole("button", { name: "System row" }));
+    expect(await screen.findByText("System vitals")).toBeInTheDocument();
+
+    await user.unhover(screen.getByRole("button", { name: "System row" }));
+    await waitFor(() => expect(screen.queryByText("System vitals")).not.toBeInTheDocument());
   });
 });
 

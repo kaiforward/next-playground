@@ -16,7 +16,7 @@
  *  on any viewport where the clamp doesn't resolve to 560px. */
 export const DRAWER_WIDTH = 560;
 
-/** `components/tracker/tracker-panel.tsx:58` — the Tracker's own base width (`w-72`), always
+/** `components/tracker/tracker-panel.tsx:57` — the Tracker's own base width (`w-72`), always
  *  mounted whether or not its settings sibling is open. */
 export const TRACKER_BASE_WIDTH = 288;
 
@@ -25,10 +25,14 @@ export const TRACKER_BASE_WIDTH = 288;
  *  panel ADDS to the occupied right side while it is open. */
 export const TRACKER_SETTINGS_SPAN = 176 + 8;
 
-/** `components/map/map-right-rail.tsx:87`'s `inset-y-2 right-2` (8px) — the rail's own inset off
+/** `components/map/map-right-rail.tsx:80`'s `inset-y-2 right-2` (8px) — the rail's own inset off
  *  the map edges. Reused by the alert run so it sits the same 8px off the Tracker rail as the rail
  *  sits off the map's own edges, and reused again for the run's own `top-2` (`alert-run.tsx`) — the
- *  same standard 8px inset, this time off the map's top edge. */
+ *  same standard 8px inset, this time off the map's top edge.
+ *
+ *  The run's RIGHT inset counts it TWICE, and the two terms are not the same edge: the rail's own
+ *  offset from the map's right edge, which the run must clear before it reaches anything the rail
+ *  occupies, and then the run's gap from the rail itself. `alert-run.tsx` spells both out. */
 export const RAIL_INSET = 8;
 
 /** `components/alerts/alert-chip.tsx`'s own chip shell (`h-[26px]`) — the rendered height of one

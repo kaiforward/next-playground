@@ -5,7 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { AlertSettings } from "@/components/alerts/alert-settings";
 import { DEFAULT_ALERT_CATEGORIES, type AlertCategorySettings } from "@/lib/hooks/use-alert-categories";
-import type { AlertCategoryId } from "@/lib/types/alerts";
+import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
+import { ALERT_CATEGORY_IDS, type AlertCategoryId } from "@/lib/types/alerts";
 
 // AlertSettings is pure props-in: it never calls `useAlertCategories()` itself (mirrors
 // `TrackerSettingsProps`'s own `sections`/`onChangeSection` split), so every test here renders it
@@ -54,6 +55,53 @@ describe("AlertSettings — critical categories render no control at all", () =>
     await renderPanel();
     // 16 categories total, 4 critical (no control) → 12 checkboxes.
     expect(screen.getAllByRole("checkbox")).toHaveLength(12);
+  });
+});
+
+describe("AlertSettings — every category has a row, in each tier's own authored order", () => {
+  /** The rows this panel must show, tier by tier, spelled out rather than derived off the registry
+   *  the panel itself reads — a derived expectation would agree with any ordering the component
+   *  produced, including none. */
+  const EXPECTED_ROWS: ReadonlyArray<readonly [string, readonly string[]]> = [
+    ["Critical", ["Famine", "Strike", "Maintenance unfunded", "Crisis"]],
+    [
+      "Important",
+      [
+        "Deprived worlds",
+        "Unrest rising",
+        "Survival stock falling",
+        "Demand unservable",
+        "Overcrowded",
+        "No housing headroom",
+        "Build blocked",
+        "Industry idle",
+        "Disruption",
+      ],
+    ],
+    ["Opportunities", ["Build opportunity", "Colony opportunity", "Windfall"]],
+  ];
+
+  it("accounts for every id in the registry — a category the panel drops has an unreachable setting", () => {
+    // The point of the ordering coming off `ALERT_CATEGORIES` rather than a second list beside it:
+    // a seventeenth category cannot ship with no checkbox at all. This fails the moment the union
+    // grows past what the rows below name.
+    const named = EXPECTED_ROWS.flatMap(([, labels]) => labels);
+    expect(named).toHaveLength(ALERT_CATEGORY_IDS.length);
+    expect([...named].sort()).toEqual(ALERT_CATEGORY_IDS.map((id) => ALERT_CATEGORIES[id].label).sort());
+  });
+
+  it("renders each tier's rows in the registry's authored order within that tier", async () => {
+    await renderPanel();
+
+    for (const [heading, labels] of EXPECTED_ROWS) {
+      const group = screen.getByRole("group", { name: `${heading} alert categories` });
+      const text = group.textContent ?? "";
+      const positions = labels.map((label) => text.indexOf(label));
+      // Every row is present in this tier's group...
+      expect(positions.every((position) => position >= 0)).toBe(true);
+      // ...and in this order, front to back.
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    }
   });
 });
 

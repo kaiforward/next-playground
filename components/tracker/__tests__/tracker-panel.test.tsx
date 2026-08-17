@@ -354,15 +354,26 @@ describe("TrackerPanel — row activation routes by kind, not to one shared path
     renderPanel();
 
     await user.click(screen.getByRole("button", { name: /Sunnyvale/ }));
-    expect(push).toHaveBeenLastCalledWith("/system/sys-a?focus=10,20&loc=1");
+    expect(push).toHaveBeenLastCalledWith(expect.stringMatching(/^\/system\/sys-a\?focus=10,20&loc=\d+$/));
 
     await user.click(screen.getByRole("button", { name: /Rigel Yards/ }));
-    expect(push).toHaveBeenLastCalledWith("/system/sys-b/industry?focus=30,40&loc=2");
+    expect(push).toHaveBeenLastCalledWith(
+      expect.stringMatching(/^\/system\/sys-b\/industry\?focus=30,40&loc=\d+$/),
+    );
   });
 });
 
 describe("TrackerPanel — the locate nonce advances on every activation", () => {
-  it("locating the same system twice produces two different `loc` values", async () => {
+  /** The `loc` nonce off a pushed locate URL. Read rather than pinned to a literal: the counter is
+   *  shared by every `useSystemFocus()` caller in the process (`lib/hooks/use-system-focus.ts`), so
+   *  its absolute value is whatever has already been handed out, and only the fact that it MOVES is
+   *  the hook's actual contract. */
+  function locOf(url: unknown): number {
+    const match = typeof url === "string" ? /&loc=(\d+)$/.exec(url) : null;
+    return match ? Number(match[1]) : NaN;
+  }
+
+  it("locating the same system twice produces two different, ascending `loc` values", async () => {
     const user = userEvent.setup();
     trackerData = tracker({ pinned: [pinnedRow("sys-a", "Sunnyvale")] });
     renderPanel();
@@ -371,8 +382,14 @@ describe("TrackerPanel — the locate nonce advances on every activation", () =>
     await user.click(row);
     await user.click(row);
 
-    expect(push).toHaveBeenNthCalledWith(1, "/system/sys-a?focus=10,20&loc=1");
-    expect(push).toHaveBeenNthCalledWith(2, "/system/sys-a?focus=10,20&loc=2");
+    expect(push).toHaveBeenCalledTimes(2);
+    const first = locOf(push.mock.calls[0]?.[0]);
+    const second = locOf(push.mock.calls[1]?.[0]);
+    expect(Number.isFinite(first)).toBe(true);
+    expect(second).toBeGreaterThan(first);
+    // Everything but the nonce is identical — which is the whole reason the nonce has to move.
+    expect(push).toHaveBeenNthCalledWith(1, `/system/sys-a?focus=10,20&loc=${first}`);
+    expect(push).toHaveBeenNthCalledWith(2, `/system/sys-a?focus=10,20&loc=${second}`);
   });
 });
 

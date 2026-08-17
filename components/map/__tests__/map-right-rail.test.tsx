@@ -50,10 +50,10 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-// settingsOpen/onToggleSettings are lifted OUT of MapRightRail (finding 4 of the Task 12 review
-// round — it used to own this as its own useState and echo it upward). This harness is what a real
-// caller (star-map.tsx) looks like now: a single piece of state, passed down and toggled from here,
-// so the suite still exercises real open/close behaviour rather than a prop that never changes.
+// settingsOpen/onToggleSettings are owned by MapRightRail's caller, not by MapRightRail itself. This
+// harness is what a real caller (star-map.tsx) looks like: a single piece of state, passed down and
+// toggled from here, so the suite still exercises real open/close behaviour rather than a prop that
+// never changes.
 function renderRail() {
   function Harness() {
     const [settingsOpen, setSettingsOpen] = useState(false);

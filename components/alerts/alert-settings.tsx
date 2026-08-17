@@ -3,7 +3,7 @@
 import { PopoverContent } from "@/components/ui/popover";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
-import type { AlertCategoryId, AlertTier } from "@/lib/types/alerts";
+import { ALERT_CATEGORY_IDS, type AlertCategoryId, type AlertTier } from "@/lib/types/alerts";
 import type { AlertCategorySettings } from "@/lib/hooks/use-alert-categories";
 
 const TIER_ORDER: readonly AlertTier[] = ["critical", "important", "info"];
@@ -23,31 +23,22 @@ const TIER_NOTE: Record<AlertTier, string | null> = {
 };
 
 /**
- * All sixteen category ids, tier-grouped and in the registry's own authored `order` within each
- * tier — hand-mirrored here the same way `tracker-settings.tsx`'s own `SECTION_ORDER` mirrors its
- * panel's section order, rather than derived with `Object.entries(ALERT_CATEGORIES)`:
- * `Object.entries`/`Object.keys` widen a `Record<AlertCategoryId, …>`'s keys back to a bare
- * `string` (a standing TypeScript limitation on `Record`), which would need an `as` cast to hand an
- * id to `onChangeCategory(id: AlertCategoryId, …)` below — the one thing AGENTS.md forbids.
+ * The category ids belonging to one tier, in the registry's own authored `order` — read off
+ * `ALERT_CATEGORIES` rather than restated as a second hand-kept list, so this panel and
+ * `lib/services/alerts.ts` (which sorts the emitted categories on the same two fields) cannot drift
+ * apart, and a seventeenth category cannot ship with no checkbox at all.
+ *
+ * `ALERT_CATEGORY_IDS` (`lib/types/alerts.ts`) is what makes that possible without an `as` cast:
+ * `Object.entries`/`Object.keys` widen a `Record<AlertCategoryId, …>`'s keys back to a bare `string`
+ * (a standing TypeScript limitation on `Record`), which could not then be handed to
+ * `onChangeCategory(id: AlertCategoryId, …)` below. The `filter` copies before the sort, so nothing
+ * mutates a shared array during render.
  */
-const CATEGORY_ORDER: readonly AlertCategoryId[] = [
-  "famine",
-  "strike",
-  "maintenance_unfunded",
-  "crisis",
-  "deprived_worlds",
-  "unrest_rising",
-  "survival_stock_falling",
-  "demand_unservable",
-  "overcrowded",
-  "no_housing_headroom",
-  "build_blocked",
-  "industry_idle",
-  "disruption",
-  "build_opportunity",
-  "colony_opportunity",
-  "windfall",
-];
+function categoryIdsInTier(tier: AlertTier): AlertCategoryId[] {
+  return ALERT_CATEGORY_IDS.filter((id) => ALERT_CATEGORIES[id].tier === tier).sort(
+    (a, b) => ALERT_CATEGORIES[a].order - ALERT_CATEGORIES[b].order,
+  );
+}
 
 export interface AlertSettingsProps {
   /** Every category's current checkbox state — `useAlertCategories()`'s own `categories`, owned by
@@ -58,7 +49,7 @@ export interface AlertSettingsProps {
 }
 
 /**
- * The alert bar's settings panel, opened from the gear control at the end of the run
+ * The alert bar's settings panel, opened from the gear control at the start of the run
  * (`components/alerts/alert-run.tsx`) — a checkbox per HIDEABLE category, grouped by tier, plus a
  * locked row (no control at all) for each of the four critical categories: rendering a disabled
  * checkbox there would still suggest the set is negotiable, which it isn't.
@@ -68,10 +59,10 @@ export interface AlertSettingsProps {
  * one-open-at-a-time registry (shared across every `Popover` instance, this one included — opening
  * this panel closes whatever category flyout was open, and vice versa, with no code in this file or
  * `alert-run.tsx` coordinating it), outside-click dismissal, and the `dialog` role. This component's
- * caller wraps it in `<Popover align="end" disableHoverOpen>`; `align="end"` is what keeps this panel
- * growing left from the gear's own right edge — the gear is always the LAST item in the run, so that
- * stays inside the run's own reserved span without the `collisionBoundary` `AlertFlyout` needs (a
- * category chip can sit anywhere in a packed run, not always at its right end).
+ * caller wraps it in `<Popover align="start" pointerInert>`; `align="start"` is what keeps this
+ * panel growing right from the gear's own left edge — the gear is always the FIRST item in the run,
+ * so that stays inside the run's own reserved span without the `collisionBoundary` `AlertFlyout`
+ * needs (a category chip can sit anywhere in a packed run, not always at its left end).
  *
  * Toggling a checkbox does not close the panel: nothing in this component calls anything that would
  * — there is no `onClose` here to call — and a click on a checkbox is an interaction INSIDE the
@@ -87,7 +78,7 @@ export function AlertSettings({ categories, onChangeCategory }: AlertSettingsPro
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto py-1">
         {TIER_ORDER.map((tier) => {
-          const ids = CATEGORY_ORDER.filter((id) => ALERT_CATEGORIES[id].tier === tier);
+          const ids = categoryIdsInTier(tier);
           const note = TIER_NOTE[tier];
           return (
             <section key={tier} className="border-b border-border py-1.5 last:border-b-0">
