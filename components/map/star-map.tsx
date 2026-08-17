@@ -296,19 +296,26 @@ export function StarMap({
   // Hide the map until the first centre settles so a deep-link/focus doesn't flash the fitView.
   const [mapReady, setMapReadyState] = useState(() => centerTarget === undefined);
 
-  // Post-mount "locate on the map": recentre when the ?focus / ?systemId query changes (a "Show on
-  // Map" jump or any future locate action). Adjusted during render — the React idiom for resetting
-  // state on an input change — and keyed on the query string, so a per-tick atlas refresh (which
-  // churns universe.systems) never recentres, and a click (which changes only the pathname, not
-  // these params) never recentres. Leaving centerTarget untouched keeps its reference stable, so
-  // the canvas's centre effect no-ops on ticks. `loc` is a monotonic click-nonce a locate action
-  // bumps so re-locating to the SAME coordinates (unchanged ?focus) still re-fires the recentre.
-  const focusKey = `${searchParams.get("focus") ?? ""}|${searchParams.get("loc") ?? ""}|${initialSelectedSystemId ?? ""}`;
+  // Post-mount "locate on the map": recentre when the ?focus query changes (a "Show on Map" jump or
+  // any future locate action). Adjusted during render — the React idiom for resetting state on an
+  // input change — and keyed on the query string, so a per-tick atlas refresh (which churns
+  // universe.systems) never recentres, and a click (which changes only the pathname, not these
+  // params) never recentres. Leaving centerTarget untouched keeps its reference stable, so the
+  // canvas's centre effect no-ops on ticks. `loc` is a monotonic click-nonce a locate action bumps
+  // so re-locating to the SAME coordinates (unchanged ?focus) still re-fires the recentre.
+  //
+  // No fallback to `initialSelectedSystemId` here — that fallback belongs to the initial-mount
+  // `useState` above only. A plain map click routes to `/system/<id>` with neither `focus` nor `loc`
+  // set: if a prior focus navigation had set either, clearing them changes `focusKey` too, and
+  // resolving that "no focus" state back to the page-load-time initial system is what used to fly
+  // the camera back there on the click AFTER a focus navigation, not just on mount. With no
+  // fallback, a key change with an unparseable `?focus` leaves `centerTarget` exactly where it was,
+  // matching the intent already stated above: a click never recentres.
+  const focusKey = `${searchParams.get("focus") ?? ""}|${searchParams.get("loc") ?? ""}`;
   const [appliedFocusKey, setAppliedFocusKey] = useState(focusKey);
   if (focusKey !== appliedFocusKey) {
     setAppliedFocusKey(focusKey);
-    const target =
-      parseFocusParam(searchParams.get("focus")) ?? resolveSystemTarget(initialSelectedSystemId);
+    const target = parseFocusParam(searchParams.get("focus"));
     if (target) setCenterTarget(target);
   }
 

@@ -10,7 +10,6 @@ import {
   PLUS_N_WIDTH,
   SETTINGS_WIDTH,
 } from "@/lib/utils/alert-packing";
-import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import type { AlertData, SystemScopedAlertCategory } from "@/lib/types/api";
 import type { AtlasData } from "@/lib/types/game";
 
@@ -19,12 +18,6 @@ import type { AtlasData } from "@/lib/types/game";
 // them render `AlertRun` itself (the measuring wrapper), which needs a real `ResizeObserver` jsdom
 // doesn't implement, and would render an empty run at width 0 in every test that tried — the exact
 // vacuity AGENTS.md's testing section warns about.
-
-vi.mock("@/lib/hooks/use-tick-context", () => ({
-  useTickContext: () => ({ currentTick: transport.currentTick }),
-}));
-
-const transport = { currentTick: 0 };
 
 let alertsData: AlertData;
 vi.mock("@/lib/hooks/use-alerts", () => ({
@@ -72,7 +65,6 @@ const ALERT_CATEGORIES_STORAGE_KEY = "stellarTrader:alertCategories";
 const ALERT_SETTINGS_NAME = "Alert settings";
 
 beforeEach(() => {
-  transport.currentTick = 0;
   alertsData = { categories: [] };
   window.localStorage.clear();
 });
@@ -213,10 +205,8 @@ describe("AlertRunContent — only the chips and the settings control are intera
   });
 });
 
-describe("AlertRunContent — hysteresis: a chip survives two zero cycles, then clears on the third", () => {
-  it("stays visible through two consecutive zero-count cycles and clears on the third", () => {
-    // Cycle 0: Famine has instances — shows immediately (no grace needed to appear).
-    transport.currentTick = 1; // floor(1/CYCLE_LENGTH) = 0 → useCycleBoundary anchors here, cycle 0
+describe("AlertRunContent — a category's chip tracks its count directly, no grace window", () => {
+  it("clears immediately, the same render its count drops to zero — no stale chip left behind", () => {
     alertsData = { categories: [scoped("famine", 3)] };
     const { rerender } = render(<AlertRunContent availableWidth={500} />);
     // Scoped by name — the trailing settings control is also rendered once Famine's chip is live,
@@ -225,58 +215,11 @@ describe("AlertRunContent — hysteresis: a chip survives two zero cycles, then 
       "Famine, 3 of 253 developed systems",
     );
 
-    // Cycle 1: count drops to 0 — first zero cycle, still inside the grace window.
-    act(() => {
-      transport.currentTick = CYCLE_LENGTH;
-    });
     alertsData = { categories: [scoped("famine", 0)] };
-    rerender(<AlertRunContent availableWidth={500} />);
-    expect(screen.getByRole("button", { name: /^Famine/ })).toHaveAccessibleName(
-      "Famine, 0 of 253 developed systems",
-    );
-
-    // Cycle 2: still zero — second consecutive zero cycle, still inside the grace window.
-    act(() => {
-      transport.currentTick = CYCLE_LENGTH * 2;
-    });
-    rerender(<AlertRunContent availableWidth={500} />);
-    expect(screen.getByRole("button", { name: /^Famine/ })).toHaveAccessibleName(
-      "Famine, 0 of 253 developed systems",
-    );
-
-    // Cycle 3: a third consecutive zero cycle — past the two-cycle grace window, the chip clears.
-    act(() => {
-      transport.currentTick = CYCLE_LENGTH * 3;
-    });
     rerender(<AlertRunContent availableWidth={500} />);
     expect(screen.queryByRole("button", { name: /^Famine/ })).not.toBeInTheDocument();
     // The settings control is unconditional, so it is the one button left once Famine clears.
     expect(screen.getByRole("button", { name: ALERT_SETTINGS_NAME })).toBeInTheDocument();
-  });
-
-  it("a count that recovers mid-grace is shown live, not a stale remembered number", () => {
-    transport.currentTick = 1;
-    alertsData = { categories: [scoped("famine", 3)] };
-    const { rerender } = render(<AlertRunContent availableWidth={500} />);
-
-    act(() => {
-      transport.currentTick = CYCLE_LENGTH;
-    });
-    alertsData = { categories: [scoped("famine", 0)] };
-    rerender(<AlertRunContent availableWidth={500} />);
-    expect(screen.getByRole("button", { name: /^Famine/ })).toHaveAccessibleName(
-      "Famine, 0 of 253 developed systems",
-    );
-
-    // Recovers within the grace window — the chip never disappeared, so this is just its live data.
-    act(() => {
-      transport.currentTick = CYCLE_LENGTH * 2;
-    });
-    alertsData = { categories: [scoped("famine", 7)] };
-    rerender(<AlertRunContent availableWidth={500} />);
-    expect(screen.getByRole("button", { name: /^Famine/ })).toHaveAccessibleName(
-      "Famine, 7 of 253 developed systems",
-    );
   });
 });
 

@@ -348,10 +348,13 @@ Chips are ordered by their category's authored tier — critical, then important
 with a hairline separator between tiers. Within a tier the order is authored too, and stable: a chip
 never moves because its count changed.
 
-**A chip appears the cycle its first instance appears, and clears after two consecutive cycles with
-none.** Without that, a system oscillating across a threshold toggles its chip in and out of the run
-and re-packs every chip to its right. The hysteresis is presentational only — it touches no
-classifier, changes no condition, and rows inside an open flyout update immediately.
+**A category's chip tracks its count directly — it appears the moment the count goes above zero and
+clears the moment it returns to zero, with no grace window.** A count only reaches zero when every
+one of the category's instances has cleared, so keeping the chip a beat longer would mean either
+rendering a stale count or opening a flyout with no rows for it — there is no design that keeps the
+chip meaningful once its count is zero. A grace window would smooth a system oscillating across a
+threshold, but that only bites when a category is down to exactly one instance, which is rare enough
+that paying a constant, confusing cost across every category to smooth it is the wrong trade.
 
 **Packing adapts to the space, in four steps.** Chips sit spaced while the run fits; overlap by 8px
 once it does not, each casting a shadow rightward with the leftmost on top and the hovered one raised
@@ -1040,8 +1043,9 @@ needs the nudge. The two facts are separate warnings, and a system may raise bot
 **The condition is definitional and no measurement can move it.** At `population === popCap` everyone
 is housed and the next person is not; above it there are people with no housing, which is what the
 word means. Padding the threshold to 110% to dodge brief population surges would buy noise-resistance
-by making the alert mean something other than its name — hysteresis buys the same thing without
-touching the meaning, and that is where it lives (see Placement and behaviour).
+by making the alert mean something other than its name — the condition itself has to stay at
+`population === popCap`, whatever the run does to smooth how the chip presents it (see Placement
+and behaviour, which no longer smooths this at all).
 
 Incidence, for reference only and for **neither the condition nor the default**: over cap 7.9% at
 1,000 ticks, 98.6% at 10,000. The equilibrium figure is high because mature systems run out of space,
@@ -1163,8 +1167,9 @@ and its threshold is `cycles-to-empty < 3`.
    transitions become an alert category. They do not, so the constant is a delete unless something
    else claims it. Its open question — whether the hysteresis applies to the persisted display band
    only (presentational) or to the classifier itself (mechanical, since the regime feeds the unrest
-   term) — is **not** answered by this spec's chip-level hysteresis, which is presentational and
-   touches no classifier. Unverified; do not assume the first.
+   term) — is **not** answered here: the chip run tried a presentational hysteresis of its own and
+   dropped it (see Placement and behaviour), which settles nothing about `RATION_EXIT_EPS`'s
+   classifier-level question either way. Unverified; do not assume the first.
 
 ## Naming an unlabelled chip
 
@@ -1839,8 +1844,9 @@ integration merge.
 - **A secondary "apply it" action on opportunity rows.** *Dropped*, with the seam left — the row's
   right edge stays free, so it can be added without reworking the row.
 - **`RATION_EXIT_EPS`.** *Booked* — spec `## Evidence still owed` item 5. Band transitions did not
-  become a category, so the constant is a delete unless something else claims it, and this plan's
-  chip-level hysteresis is presentational and does not answer its question.
+  become a category, so the constant is a delete unless something else claims it; the chip run's own
+  presentational hysteresis, tried and then dropped (see Placement and behaviour), does not answer
+  its question either way.
 - **The Provisioned map mode cannot show Famine.** *Booked at the doc fold* — unrelated to this
   feature, surfaced during it; raise when map modes next open rather than folding it in here.
 - **Housing refusals inside Build blocked.** *Dropped*, reason in the spec: housing carries no ROI, so

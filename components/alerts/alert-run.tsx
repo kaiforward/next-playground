@@ -11,18 +11,12 @@ import { AlertFlyout, type AlertNavigateTarget } from "@/components/alerts/alert
 import { AlertSettings } from "@/components/alerts/alert-settings";
 import { useAlerts } from "@/lib/hooks/use-alerts";
 import { useAlertCategories } from "@/lib/hooks/use-alert-categories";
-import { useCycleBoundary } from "@/lib/hooks/use-cycle-boundary";
 import { useSystemFocus } from "@/lib/hooks/use-system-focus";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { DRAWER_WIDTH, TRACKER_BASE_WIDTH, TRACKER_SETTINGS_SPAN, RAIL_INSET } from "@/lib/constants/layout";
 import { packRun, isOverlapping, chipMarginLeft, separatorMargins, stackZIndex } from "@/lib/utils/alert-packing";
 import type { AlertCategory } from "@/lib/types/api";
-import type { AlertCategoryId, AlertTier } from "@/lib/types/alerts";
-
-/** A chip appears the cycle its first instance appears (immediately — count > 0 is enough) and
- *  clears after two consecutive cycles with none: still shown at 1 zero cycle and at 2, gone at 3.
- *  See `useHysteresisVisibleIds`. */
-const GRACE_CYCLES = 2;
+import type { AlertTier } from "@/lib/types/alerts";
 
 interface AlertRunProps {
   /** Whether the Tracker's settings panel is open — the one state the run's right inset tracks
@@ -119,47 +113,19 @@ export function AlertRunContent({
 }
 
 /**
- * Per-category presentational memory: once a category's count reaches zero its chip stays in the
- * run for two more cycles before disappearing, so a system oscillating across a threshold does not
- * toggle its chip in and out (and re-pack every chip to its right) every cycle
- * (docs/build-plans/alert-bar.md → "Placement and behaviour"). Cycle-scoped, not render-scoped: an
- * id's clock only moves when `cycle` itself changes, so however many re-renders land within one
- * cycle (an SSE refetch, an unrelated state change) cost it nothing.
+ * The suspense-dependent core: reads the live alert data, keeps only the categories with a live
+ * (nonzero) count, hands the result to `packRun` for placement, and renders the ordered chips
+ * (critical tier first — `useAlerts()` already returns every category tier-then-order sorted, per
+ * its own docstring, so this never re-sorts) plus a trailing "+N" for whatever `packRun` collapsed.
  *
- * Purely presentational: it decides membership in the shown set only, never the data rendered for a
- * member. The category object a visible chip renders is always the SAME live object `useAlerts()`
- * returned this render — never a remembered snapshot — so a count that recovers mid-grace, or an
- * open flyout reading the same category, both see the true current numbers immediately.
- *
- * The map lives in a ref and is written during render (the same adjust-during-render idiom
- * `useCycleBoundary` itself uses): the write is idempotent for a given `(categories, cycle)` pair,
- * so React re-invoking this render (StrictMode, a bail-out retry) just re-sets the same values.
- */
-function useHysteresisVisibleIds(categories: AlertCategory[], cycle: number): Set<AlertCategoryId> {
-  const lastNonZeroCycle = useRef(new Map<AlertCategoryId, number>());
-
-  for (const category of categories) {
-    if (category.count > 0) lastNonZeroCycle.current.set(category.id, cycle);
-  }
-
-  const visible = new Set<AlertCategoryId>();
-  for (const [id, seenAtCycle] of lastNonZeroCycle.current) {
-    if (cycle - seenAtCycle <= GRACE_CYCLES) {
-      visible.add(id);
-    } else {
-      // Out of the grace window — stop tracking it so the map doesn't grow across a whole session.
-      lastNonZeroCycle.current.delete(id);
-    }
-  }
-  return visible;
-}
-
-/**
- * The suspense-dependent core: reads the live alert data and the session's cycle count, applies the
- * hysteresis grace window, hands the result to `packRun` for placement, and renders the ordered
- * chips (critical tier first — `useAlerts()` already returns every category tier-then-order sorted,
- * per its own docstring, so this never re-sorts) plus a trailing "+N" for whatever `packRun`
- * collapsed.
+ * A category's chip tracks its count directly — no grace window. A category whose count drops to
+ * zero has had every one of its instances clear, so keeping its chip around after that would mean
+ * either rendering a stale count (a chip claiming to be interesting when it is not) or opening an
+ * empty flyout (a row for a system the condition no longer holds for) — there is no third option
+ * that keeps the chip meaningful. An earlier version stayed lit for two cycles to smooth a system
+ * oscillating across a threshold; that only bites when a category is down to exactly one instance
+ * (a count only reaches zero when every instance clears at once), so the churn it prevented was rare
+ * enough that paying a constant, confusing cost for it was the wrong trade.
  *
  * `packRun`'s `gap` is what actually places every chip — every number below (`chipMarginLeft`,
  * `separatorMargins`, `stackZIndex`, `isOverlapping`) is pure arithmetic from
@@ -181,16 +147,16 @@ function useHysteresisVisibleIds(categories: AlertCategory[], cycle: number): Se
  * (`PopperPrimitive.Root` is a bare context provider), so `marginLeft` moves onto `AlertChip` itself
  * rather than a wrapping positioned `<div>` — there is no longer a `<div>` to wrap.
  *
- * Reads `useAlertCategories()` to decide which of the hysteresis-visible categories
- * actually SHOW: a hideable category with its checkbox off is filtered out here, before `packRun`
- * ever sees it, same as a category with no live instances — turning a category off is
- * indistinguishable from it never having fired, which is what keeps the packing and hysteresis logic
- * above unaware settings exist at all. A non-hideable (critical) category shows regardless of what
- * `categorySettings` says for it — `!hideable` short-circuits the check — so a corrupted or
- * hand-edited `localStorage` value can never hide one, not just the settings panel's own missing
- * control for it. The two `info` categories' own automation self-gate (`lib/services/alerts.ts`)
- * needs no mirroring here: automation-on means the category's `count` never went above zero, so
- * `useHysteresisVisibleIds` never admits its id regardless of what this filter or the checkbox says.
+ * Reads `useAlertCategories()` to decide which of the live (nonzero-count) categories actually
+ * SHOW: a hideable category with its checkbox off is filtered out here, before `packRun` ever sees
+ * it, same as a category with no live instances — turning a category off is indistinguishable from
+ * it never having fired, which is what keeps the packing logic above unaware settings exist at all.
+ * A non-hideable (critical) category shows regardless of what `categorySettings` says for it —
+ * `!hideable` short-circuits the check — so a corrupted or hand-edited `localStorage` value can
+ * never hide one, not just the settings panel's own missing control for it. The two `info`
+ * categories' own automation self-gate (`lib/services/alerts.ts`) needs no mirroring here:
+ * automation-on means the category's `count` never went above zero, so the count check above never
+ * admits its id regardless of what this filter or the checkbox says.
  *
  * The settings control itself is the run's own trailing item, appended after the last visible chip
  * (or the collapsed "+N" tail, whichever renders last) using the same `chipMarginLeft` spacing a chip
@@ -222,12 +188,10 @@ function AlertRunChips({
   runRef?: RefObject<HTMLDivElement | null>;
 }) {
   const { categories } = useAlerts();
-  const cycle = useCycleBoundary();
-  const visibleIds = useHysteresisVisibleIds(categories, cycle);
   const { categories: categorySettings, setCategory } = useAlertCategories();
 
   const shown = categories.filter((category) => {
-    if (!visibleIds.has(category.id)) return false;
+    if (category.count <= 0) return false;
     const def = ALERT_CATEGORIES[category.id];
     return !def.hideable || categorySettings[category.id];
   });
