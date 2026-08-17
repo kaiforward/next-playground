@@ -5,6 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { AtlasData, UniverseData, StarSystemInfo } from "@/lib/types/game";
 import { MapRightRail } from "@/components/map/map-right-rail";
+import { AlertRun } from "@/components/alerts/alert-run";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
 import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
@@ -59,6 +60,12 @@ export function StarMap({
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
+  // Lifted here rather than owned inside MapRightRail — the same pattern as mapMode/overlays above —
+  // because AlertRun needs it too, for its own right inset (see AlertRun's docstring). A single
+  // source of truth passed down to both siblings, instead of MapRightRail owning it and echoing a
+  // copy upward through an effect.
+  const [alertRunSettingsOpen, setAlertRunSettingsOpen] = useState(false);
+  const toggleAlertRunSettings = useCallback(() => setAlertRunSettingsOpen((open) => !open), []);
   const { logisticsEdges } = useTradeFlow(overlays.logistics);
   const stabilityBySystem = useStability(mapMode === "stability");
   // Population is fetched for its own choropleth AND as the weights for stability's population-weighted
@@ -349,10 +356,21 @@ export function StarMap({
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}
       {showMapDebug && <MapZoomDebug zoom={zoom} />}
 
+      {/* The alert run's own left/right insets are pure CSS (see its docstring), so it needs no
+          layout data from this component beyond whether the Tracker's settings panel is open. */}
+      <AlertRun settingsOpen={alertRunSettingsOpen} />
+
       {/* Right-edge column: Tracker (with its settings panel to its left when open) above the map
           controls dock — see map-right-rail.tsx for why they share one real container instead of
           independently-positioned overlays. */}
-      <MapRightRail mode={mapMode} setMode={setMapMode} overlays={overlays} toggle={toggle} />
+      <MapRightRail
+        mode={mapMode}
+        setMode={setMapMode}
+        overlays={overlays}
+        toggle={toggle}
+        settingsOpen={alertRunSettingsOpen}
+        onToggleSettings={toggleAlertRunSettings}
+      />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -49,10 +50,25 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
+// settingsOpen/onToggleSettings are lifted OUT of MapRightRail (finding 4 of the Task 12 review
+// round — it used to own this as its own useState and echo it upward). This harness is what a real
+// caller (star-map.tsx) looks like now: a single piece of state, passed down and toggled from here,
+// so the suite still exercises real open/close behaviour rather than a prop that never changes.
 function renderRail() {
-  return render(
-    <MapRightRail mode="political" setMode={vi.fn()} overlays={{ logistics: false }} toggle={vi.fn()} />,
-  );
+  function Harness() {
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    return (
+      <MapRightRail
+        mode="political"
+        setMode={vi.fn()}
+        overlays={{ logistics: false }}
+        toggle={vi.fn()}
+        settingsOpen={settingsOpen}
+        onToggleSettings={() => setSettingsOpen((open) => !open)}
+      />
+    );
+  }
+  return render(<Harness />);
 }
 
 describe("MapRightRail — the settings panel is a sibling, opened and closed from the Tracker's own header", () => {
