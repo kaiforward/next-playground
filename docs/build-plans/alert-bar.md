@@ -1551,12 +1551,15 @@ Consumes: Tasks 8, 9.
 
 Files: `components/alerts/alert-chip.tsx` (new), `components/alerts/__tests__/alert-chip.test.tsx` (new)
 
-Interface: `AlertChip({ category, faulted, open, onOpen })` — a 20px icon plus count, opaque tier
+Interface: `AlertChip({ category, open, onOpen })` — a 20px icon plus count, opaque tier
 fill, optional cased fault slash, accessible name carrying category and count, plus the denominator
 where the category has one, in that category's own unit ("Famine, 3 of 253 developed systems";
 "Colony opportunity, 3 of 12 controlled systems"; "Crisis, 2 events"). The chip reads
 the count and unit off the `AlertCategory` union rather than taking them as separate props, so an
-event category cannot be handed a systems denominator.
+event category cannot be handed a systems denominator. **Whether the category is faulted is read the
+same way**, off `ALERT_CATEGORIES[category.id]` — it is authored per category, so a caller must not be
+able to hand a chip a slash the table does not grant it. Tier, icon and label come off the registry
+for the same reason.
 
 Proves:
 - The accessible name is built from the rendered DOM, not from props alone, so it fails when the
