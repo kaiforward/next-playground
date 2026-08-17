@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { useTracker } from "@/lib/hooks/use-tracker";
-import { useAtlas } from "@/lib/hooks/use-atlas";
+import { useSystemFocus } from "@/lib/hooks/use-system-focus";
 import { useSetSystemPin } from "@/lib/hooks/use-player-pins";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
@@ -95,30 +94,12 @@ function TrackerPanelContent({
   fallbackFocusRef: RefObject<HTMLButtonElement | null>;
 }) {
   const data = useTracker();
-  const { atlas } = useAtlas();
-  const router = useRouter();
+  const activate = useSystemFocus();
   const setPin = useSetSystemPin();
   // Scoped to the Pinned list on purpose: a system can appear in Pinned AND in Building at the
   // same time, and both rows carry the same `data-system-id`.
   const pinnedListRef = useRef<HTMLUListElement>(null);
   const pendingUnpinFocusRef = useRef<PendingUnpinFocus | null>(null);
-  // Monotonic per-panel nonce for `?loc=` — only needs to differ from its own previous value so
-  // the map's focus effect (keyed on `focus|loc`, see star-map.tsx) re-fires even when locating
-  // the same system twice in a row.
-  const locRef = useRef(0);
-
-  const coordsById = useMemo(
-    () => new Map(atlas.systems.map((s) => [s.id, { x: s.x, y: s.y }] as const)),
-    [atlas.systems],
-  );
-
-  function activate(systemId: string, segment: "" | "industry") {
-    const coords = coordsById.get(systemId);
-    if (!coords) return; // stale id (shouldn't happen — the service filters abandoned pins)
-    locRef.current += 1;
-    const path = segment ? `/system/${systemId}/${segment}` : `/system/${systemId}`;
-    router.push(`${path}?focus=${coords.x},${coords.y}&loc=${locRef.current}`);
-  }
 
   /**
    * Unpinning from a row's own card deletes the thing the user is standing on: the mutation

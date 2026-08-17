@@ -26,5 +26,14 @@ export const TRACKER_SETTINGS_SPAN = 176 + 8;
 
 /** `components/map/map-right-rail.tsx:87`'s `inset-y-2 right-2` (8px) — the rail's own inset off
  *  the map edges. Reused by the alert run so it sits the same 8px off the Tracker rail as the rail
- *  sits off the map's own edges. */
+ *  sits off the map's own edges, and reused again for the run's own `top-2` (`alert-run.tsx`) — the
+ *  same standard 8px inset, this time off the map's top edge. */
 export const RAIL_INSET = 8;
+
+/** `components/alerts/alert-chip.tsx`'s own chip shell (`h-[26px]`) — the rendered height of one
+ *  chip. `alert-flyout.tsx` needs this to know how far below the map's own top edge a chip's bottom
+ *  edge sits (`RAIL_INSET` above it, plus this), before its own 5px clearance beneath that — see
+ *  `alert-flyout.tsx`'s own docstring for the full derivation. Exists here, not as a local constant
+ *  in `alert-flyout.tsx`, because it tracks a class in a DIFFERENT file — the reason this module
+ *  exists at all. */
+export const CHIP_HEIGHT = 26;

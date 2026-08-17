@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { AlertRunContent } from "@/components/alerts/alert-run";
 import { CHIP_WIDTH, SPACED_GAP, OVERLAP_FLOOR, CRITICAL_STACK_OVERLAP, PLUS_N_WIDTH } from "@/lib/utils/alert-packing";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import type { AlertData, SystemScopedAlertCategory } from "@/lib/types/api";
+import type { AtlasData } from "@/lib/types/game";
 
 // AlertRunContent is the half of the run with no DOM measurement anywhere in it or below it — see
 // its own docstring. Every test here renders it directly with a literal `availableWidth`; none of
@@ -20,6 +22,28 @@ const transport = { currentTick: 0 };
 let alertsData: AlertData;
 vi.mock("@/lib/hooks/use-alerts", () => ({
   useAlerts: () => alertsData,
+}));
+
+// Only reached once a chip is actually clicked open: `ActiveAlertFlyout`
+// (components/alerts/alert-run.tsx) is the one place this file's own render tree touches
+// `useSystemFocus()`/`useRouter()`, and it mounts only for the open category. None of the tests
+// above this point ever click a chip, so these mocks change nothing for them — they exist for the
+// "only one flyout open" describe block below.
+const push = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace: vi.fn() }),
+}));
+
+const ATLAS: AtlasData = {
+  meta: { mapSize: 100, systemCount: 0, seed: 1 },
+  regions: [],
+  systems: [],
+  connections: [],
+  factions: [],
+  player: null,
+};
+vi.mock("@/lib/hooks/use-atlas", () => ({
+  useAtlas: () => ({ atlas: ATLAS }),
 }));
 
 function scoped(
@@ -199,5 +223,20 @@ describe("AlertRunContent — hysteresis: a chip survives two zero cycles, then 
     alertsData = { categories: [scoped("famine", 7)] };
     rerender(<AlertRunContent availableWidth={500} />);
     expect(screen.getByRole("button")).toHaveAccessibleName("Famine, 7 of 253 developed systems");
+  });
+});
+
+describe("AlertRunContent — only one flyout is open at a time", () => {
+  it("opening a second chip's flyout closes the first, rather than stacking both", async () => {
+    const user = userEvent.setup();
+    alertsData = { categories: [scoped("famine", 3), scoped("strike", 2)] };
+    render(<AlertRunContent availableWidth={widthFor(2, SPACED_GAP) + 50} />);
+
+    await user.click(screen.getByRole("button", { name: /Famine/ }));
+    expect(screen.getByRole("dialog", { name: "Famine alerts" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Strike/ }));
+    expect(screen.queryByRole("dialog", { name: "Famine alerts" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Strike alerts" })).toBeInTheDocument();
   });
 });

@@ -1,10 +1,14 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
+import { useRouter } from "next/navigation";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { AlertChip, chip } from "@/components/alerts/alert-chip";
+import { AlertFlyout, type AlertNavigateTarget } from "@/components/alerts/alert-flyout";
 import { useAlerts } from "@/lib/hooks/use-alerts";
 import { useCycleBoundary } from "@/lib/hooks/use-cycle-boundary";
+import { useSystemFocus } from "@/lib/hooks/use-system-focus";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { DRAWER_WIDTH, TRACKER_BASE_WIDTH, TRACKER_SETTINGS_SPAN, RAIL_INSET } from "@/lib/constants/layout";
 import { packRun, isOverlapping, chipMarginLeft, separatorMargins, stackZIndex } from "@/lib/utils/alert-packing";
@@ -72,7 +76,7 @@ export function AlertRun({ settingsOpen }: AlertRunProps) {
       className="pointer-events-none absolute top-2 z-20 flex min-w-0 items-center"
       style={{ left: `${DRAWER_WIDTH + RAIL_INSET}px`, right: `${rightSpan}px` }}
     >
-      <AlertRunContent availableWidth={availableWidth} />
+      <AlertRunContent availableWidth={availableWidth} runRef={ref} />
     </div>
   );
 }
@@ -88,11 +92,22 @@ export function AlertRun({ settingsOpen }: AlertRunProps) {
  * run, not the map behind it. `loadingFallback={null}`: the run reserves no layout height on
  * purpose (nothing behind an empty galaxy), so the loading state is the same as the empty state,
  * nothing, rather than a spinner floating over the map for one round trip.
+ *
+ * `runRef` is forwarded, unread, straight through to `AlertRunChips` and on to whichever
+ * `AlertFlyout` is open — this component still measures nothing itself. It is `AlertRun`'s own
+ * measuring ref (above), not a new one: the flyout's horizontal clamp needs the SAME rect
+ * `ResizeObserver` already reads for packing, not a second element to keep in sync with it.
  */
-export function AlertRunContent({ availableWidth }: { availableWidth: number }) {
+export function AlertRunContent({
+  availableWidth,
+  runRef,
+}: {
+  availableWidth: number;
+  runRef?: RefObject<HTMLDivElement | null>;
+}) {
   return (
     <QueryBoundary loadingFallback={null}>
-      <AlertRunChips availableWidth={availableWidth} />
+      <AlertRunChips availableWidth={availableWidth} runRef={runRef} />
     </QueryBoundary>
   );
 }
@@ -151,10 +166,22 @@ function useHysteresisVisibleIds(categories: AlertCategory[], cycle: number): Se
  * run has nothing to cast a shadow over or raise a chip clear of.
  *
  * Which chip's flyout is open lives here as plain `useState` — ephemeral UI state, not persisted —
- * and is passed to each `AlertChip` as `open`/`onOpen`. No flyout renders yet (Task 13); this only
- * drives the chip's own `aria-expanded` disclosure state.
+ * and is passed to each `AlertChip` as `open`/`onOpen`, and to `ActiveAlertFlyout` below (mounted
+ * only for the open category, so at most one flyout ever renders). Each chip is wrapped in its own
+ * `position: relative` `<div>` so its flyout — `position: absolute`, `top: 100%` — anchors under
+ * THAT chip with no measurement of its own: `marginLeft` moves from `AlertChip` onto this wrapper so
+ * the packed spacing is unchanged, and the wrapper's own width is exactly its chip's, so `left: 0`
+ * lines the flyout's left edge up with the chip's by default — `runRef`, threaded through unread
+ * here, is what `AlertFlyout` itself measures against to pull that back onto the run's own span near
+ * the right of a packed run (see its own docstring).
  */
-function AlertRunChips({ availableWidth }: { availableWidth: number }) {
+function AlertRunChips({
+  availableWidth,
+  runRef,
+}: {
+  availableWidth: number;
+  runRef?: RefObject<HTMLDivElement | null>;
+}) {
   const { categories } = useAlerts();
   const cycle = useCycleBoundary();
   const visibleIds = useHysteresisVisibleIds(categories, cycle);
@@ -181,17 +208,22 @@ function AlertRunChips({ availableWidth }: { availableWidth: number }) {
         const position = index === 0 ? "first" : isNewTier ? "after-separator" : "after-chip";
         const marginLeft = chipMarginLeft(gap, position);
         const zIndex = stackZIndex(index, chips.length);
+        const isOpen = openId === category.id;
         return (
           <Fragment key={category.id}>
             {isNewTier && <TierSeparator gap={gap} />}
-            <AlertChip
-              category={category}
-              open={openId === category.id}
-              onOpen={() => setOpenId((id) => (id === category.id ? null : category.id))}
-              marginLeft={marginLeft}
-              zIndex={zIndex}
-              overlapping={overlapping}
-            />
+            <div className="relative inline-flex" style={{ marginLeft }}>
+              <AlertChip
+                category={category}
+                open={isOpen}
+                onOpen={() => setOpenId((id) => (id === category.id ? null : category.id))}
+                zIndex={zIndex}
+                overlapping={overlapping}
+              />
+              {isOpen && (
+                <ActiveAlertFlyout category={category} onClose={() => setOpenId(null)} runRef={runRef} />
+              )}
+            </div>
           </Fragment>
         );
       })}
@@ -199,6 +231,43 @@ function AlertRunChips({ availableWidth }: { availableWidth: number }) {
         <CollapsedTail categories={hidden} marginLeft={chipMarginLeft(gap, "after-chip")} />
       )}
     </div>
+  );
+}
+
+/**
+ * The one place `useSystemFocus()`/`useRouter()` actually run for the alert bar — deliberately
+ * inside this small wrapper, itself mounted only while ITS OWN category's flyout is open, rather
+ * than up in `AlertRunChips` (always mounted whenever the run has anything to show).
+ * `useSystemFocus()` calls the suspense-backed `useAtlas()`; calling that unconditionally on every
+ * render would make simply having a nonempty alert bar on screen depend on an atlas fetch, and
+ * would throw in any test that renders `AlertRunContent`/`AlertRunChips` without a `QueryClient` —
+ * every existing case in `alert-run.test.tsx`, none of which ever opens a flyout, so this component
+ * never mounts in them and nothing there had to change.
+ *
+ * Resolves an `AlertFlyout` row's already-decided target (`resolveAlertTarget`,
+ * `components/alerts/alert-flyout.tsx`) into the actual navigation: `focusSystem` for a system
+ * destination, a plain `router.push` for a faction/events route, nothing for the one combination
+ * the destination table never produces.
+ */
+function ActiveAlertFlyout({
+  category,
+  onClose,
+  runRef,
+}: {
+  category: AlertCategory;
+  onClose: () => void;
+  runRef?: RefObject<HTMLDivElement | null>;
+}) {
+  const router = useRouter();
+  const focusSystem = useSystemFocus();
+
+  function handleNavigate(target: AlertNavigateTarget) {
+    if (target.kind === "system") focusSystem(target.systemId, target.tab);
+    else if (target.kind === "route") router.push(target.path);
+  }
+
+  return (
+    <AlertFlyout category={category} onNavigate={handleNavigate} onClose={onClose} runRef={runRef} />
   );
 }
 

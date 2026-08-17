@@ -7,7 +7,9 @@ import type { AlertTier } from "@/lib/types/alerts";
 import type { AlertCategory } from "@/lib/types/api";
 
 /** Tier → the shared status-colour pair it borrows (`globals.css`'s `--color-status-*` tokens) —
- *  critical reads as danger, important as caution, info as a neutral opportunity. */
+ *  critical reads as danger, important as caution, info as a neutral opportunity. Exported so
+ *  `alert-flyout.tsx`'s own border/icon accent reuses this rather than keeping a byte-for-byte copy
+ *  (AGENTS.md's extract-on-second-occurrence rule). */
 const TIER_COLOR: Record<AlertTier, { base: string; light: string }> = {
   critical: { base: "var(--color-status-red)", light: "var(--color-status-red-light)" },
   important: { base: "var(--color-status-amber)", light: "var(--color-status-amber-light)" },
@@ -42,7 +44,7 @@ const chip = tv({
   defaultVariants: { overlapping: false },
 });
 
-export { chip };
+export { chip, TIER_COLOR };
 
 /** The words after the count, per the `AlertCategory` union's `unit` discriminant — the branch
  *  that stops a system-scoped count reading as a bare, unscaled severity and stops an event or
@@ -69,9 +71,6 @@ interface AlertChipProps {
   /** Whether this chip's flyout is open — drives the disclosure's pressed/expanded state. */
   open: boolean;
   onOpen: () => void;
-  /** The gap before this chip, from `chipMarginLeft` — positive while the run is spaced, negative
-   *  once it overlaps. */
-  marginLeft?: number;
   /** Resting stack order, from `stackZIndex` — the leftmost, most severe chip sits on top. Read by
    *  the shell's `z-[var(--z,1)]` base class. */
   zIndex?: number;
@@ -80,7 +79,7 @@ interface AlertChipProps {
   overlapping?: boolean;
 }
 
-// The three packing props are deliberately narrow rather than an open `className`/`style` pair. The
+// The two packing props are deliberately narrow rather than an open `className`/`style` pair. The
 // chip owns its own appearance — tier fill, icon, slash and the opaque-surface mix that lets chips
 // overlap without showing each other or the map through — and a caller that could pass arbitrary
 // styles could defeat that fill, which is the same reason tier, icon, label and `faulted` are read
@@ -95,7 +94,7 @@ interface AlertChipProps {
  * count, a hidden unit/denominator span — rather than a static `aria-label`. That ties the name to
  * the same elements a player sees: if the count stops rendering, "3" drops out of the name with it.
  */
-export function AlertChip({ category, open, onOpen, marginLeft, zIndex, overlapping }: AlertChipProps) {
+export function AlertChip({ category, open, onOpen, zIndex, overlapping }: AlertChipProps) {
   const def = ALERT_CATEGORIES[category.id];
   const Icon = def.icon;
   const tier = TIER_COLOR[def.tier];
@@ -115,7 +114,6 @@ export function AlertChip({ category, open, onOpen, marginLeft, zIndex, overlapp
     backgroundColor,
     borderColor,
     color: tier.light,
-    marginLeft,
     "--z": zIndex,
   };
 
