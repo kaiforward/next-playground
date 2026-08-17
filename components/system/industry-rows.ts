@@ -34,6 +34,40 @@ export function staffedLevels(b: Pick<SystemIndustryReadout["buildings"][number]
   return b.tier === -1 ? b.used : b.staffedFraction * b.count;
 }
 
+/**
+ * Whole idle levels across a system's buildings, split by whether infrastructure decay can SEE the
+ * idleness — exactly the two arguments `industryHealth` takes, named to match so a call site cannot
+ * cross them.
+ *
+ * A level sheds only when a WHOLE level is idle (`floor(built − used) ≥ 1`) for a reason decay can
+ * see. "inputs" is the one reason it cannot: `computeSystemDecay`'s context carries no market stock,
+ * so a factory idle purely for want of a recipe input will never shed. Counting those levels into
+ * `idleLevels` would make the system chip claim a shed is coming when nothing will shed, which is the
+ * whole reason the split exists.
+ */
+export interface IdleLevelSplit {
+  /** Whole levels idle for a decay-visible reason (labour, a skill ceiling, a stalled sell-through,
+   *  housing occupancy) — the levels decay actually sheds. Reads "contracting". */
+  idleLevels: number;
+  /** Whole levels idle ONLY because recipe inputs never arrived — real idleness that decay cannot
+   *  see and will never act on. Reads "idle". */
+  idleOnlyLevels: number;
+}
+
+export function idleLevelSplit(
+  buildings: readonly Pick<SystemIndustryReadout["buildings"][number], "count" | "used" | "idleReason">[],
+): IdleLevelSplit {
+  let idleLevels = 0;
+  let idleOnlyLevels = 0;
+  for (const b of buildings) {
+    const levels = Math.max(0, Math.floor(b.count - b.used));
+    if (levels <= 0) continue;
+    if (b.idleReason === "inputs") idleOnlyLevels += levels;
+    else idleLevels += levels;
+  }
+  return { idleLevels, idleOnlyLevels };
+}
+
 /** One catalog extractor type's contribution to a shared deposit — the per-type breakdown under a
  *  resource worked by more than one building type. Zeroed with health "stable" when nothing's built. */
 export interface DepositTypeRow {

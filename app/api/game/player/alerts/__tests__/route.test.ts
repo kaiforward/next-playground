@@ -2,7 +2,6 @@ import { describe, it, expect, afterEach } from "vitest";
 import { GET } from "../route";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
-import type { AlertResponse } from "@/lib/types/api";
 
 describe("GET /api/game/player/alerts", () => {
   afterEach(() => {
@@ -17,9 +16,9 @@ describe("GET /api/game/player/alerts", () => {
     // Never `immutable` or a long max-age — New game replaces the world, so cached ids mismatch
     // (AGENTS.md → Caching / data shapes).
     expect(res.headers.get("Cache-Control")).toBe("private, no-cache");
-    const json = (await res.json()) as AlertResponse;
-    expect(json.data).toBeDefined();
-    expect(Array.isArray(json.data?.categories)).toBe(true);
+    // Asserted against the body the route really serialised, rather than through a type assertion
+    // that would claim the shape instead of checking it.
+    expect(await res.json()).toMatchObject({ data: { categories: expect.any(Array) } });
   });
 
   it("surfaces a service error as an error response rather than a partial payload", async () => {
@@ -31,8 +30,8 @@ describe("GET /api/game/player/alerts", () => {
     const res = await GET();
 
     expect(res.status).toBe(409);
-    const json = (await res.json()) as AlertResponse;
-    expect(json.error).toBe("No world loaded");
-    expect(json.data).toBeUndefined();
+    // `toEqual`, not `toMatchObject`: the error body must carry the message and NOTHING else, so a
+    // partial payload served alongside the error fails here.
+    expect(await res.json()).toEqual({ error: "No world loaded" });
   });
 });

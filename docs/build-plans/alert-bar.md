@@ -646,13 +646,14 @@ clothes. The bar itself writes nothing; the write edges belong to the processors
 ### World state and saves
 
 **The alert bar adds no *player* state.** Category visibility is a browser preference, not a save
-field, so there is no per-player state at all. What the save gains is the four persisted signals
-above: the population delta and the blocked-build reason + dropped ROI on `WorldSystem`, the survival
-stock delta and the structural-unservable bit on `WorldMarket`.
+field, so there is no per-player state at all. What the save gains is the seven persisted signals
+above: the population delta, the blocked-build reason + dropped ROI, the ranked build opportunity and
+the colony opportunity on `WorldSystem`; the survival stock delta and the unserved shortfall level on
+`WorldMarket`; the latched per-band charges on `WorldTreasurySettlement`.
 
 **No `SAVE_FORMAT_VERSION` bump is needed, and taking one would be actively wrong.** `save.ts`'s own
 rule: "An additive OPTIONAL field that old saves can legitimately omit does NOT need a bump: the field
-simply stays `undefined` on load, which is correct" (`lib/world/save.ts:6-10`). All four are exactly
+simply stays `undefined` on load, which is correct" (`lib/world/save.ts:6-10`). All seven are exactly
 that shape, and "absent means never assessed" is not merely compatible with an unbumped load — it is
 what makes it correct. A bump would reject every named save and the rolling autosave that Continue
 loads (`:78`, `SAVE_FORMAT_VERSION` 13) and buy nothing.
@@ -743,10 +744,10 @@ an invented threshold; Overcrowded reads `popCap` as the housing that exists, wh
 | Directed logistics | Demand unservable is new instrumentation here, per (system, good) on the deficit endpoint only — unlike `logisticsFundingBound`, which is written to both endpoints of a funding-bound haul (`lib/engine/directed-logistics.ts:170-175`). Survival stock falling reads persisted `stock` plus a new per-cycle stock delta. | — |
 | Directed build / planner | Build blocked is new instrumentation here, across the full drop set rather than two sites. Build opportunity reads the ranked proposals, gated on the automation switch. Note the assessment runs for **every** faction regardless of `world.player` (`lib/tick/processors/directed-build.ts:450`) — the switch gates proposal *emission*, not the clock. | — |
 | Colonisation + founding manifest | Colony opportunity reads eligibility. No write path. | — |
-| Treasury / purse | Maintenance unfunded reads `paid.maintenance` against **`maintenanceBill × treasury.bands.maintenance`** — the band the settlement was *asked* to pay. Testing against the full bill would fire on any maintenance slider below 1.0, a legal player setting floored at 0.5: `settleLadder` computes `charge = bill × slider; pay = min(charge, available)` (`lib/engine/treasury.ts:126-131`), so `paid < bill` is true whenever the slider is down. Insolvency is `pay < charge`. Adds `WorldFactionTreasury.bands.maintenance` to the read list. | — |
+| Treasury / purse | Maintenance unfunded reads `paid.maintenance` against **`WorldTreasurySettlement.charged.maintenance`** — the band the settlement was *asked* to pay, latched at that settlement. Testing against the full bill would fire on any maintenance slider below 1.0, a legal player setting floored at 0.5: `settleLadder` computes `charge = bill × slider; pay = min(charge, available)`, so `paid < bill` is true whenever the slider is down. Insolvency is `pay < charge`. Testing against the LIVE `treasury.bands.maintenance` is equally wrong in the other direction: the player verb writes the slider with no re-settle, so moving it flips the alert on a settlement that never changed. `settleLadder` reports `charged` per band and the treasury processor persists all three; `bandShortfall` (`lib/engine/treasury.ts`) is the single test, shared with the treasury and construction cards so no two surfaces can disagree, and it uses no live slider at all and skips a settlement that predates the field. | — |
 | Factions + relations | `border_conflict` arrives as an event via the relations processor (`lib/tick/processors/relations.ts:34-37`); it lands in Crisis. The three relations-owned events scope to pairs the player's faction is in. **No war state exists** to interact with. | — |
 | **Abandonment (tick body)** | Every persisted signal this design adds joins the resettlement reset: deleted in `applyAbandonments` (`lib/world/tick.ts:559`) beside `provision` / `supplyBand` / `criticalWeight` / `provisionExpectation`, deleted again on any flip to `developed` in `applyDevelopments` (`:533`), and threaded through `toTickSystems` (`:206`) and `mergeSystemsIntoWorld` (`:263`) by the same delete/assign pair so absence stays a true absence. Without it a re-founded colony carries the dead world's death rate. `logisticsFundingBound` already does this on the market side (`:601`). | — |
-| Save format (`World` shape) | **Four new optional fields** — population delta and blocked-build reason + dropped ROI on `WorldSystem`; survival stock delta and the structural-unservable bit on `WorldMarket`. All additive and optional, so **no `SAVE_FORMAT_VERSION` bump** (`lib/world/save.ts:6-10`). Settings stay a browser preference, so no new *player* state. Contrast the Tracker, which added `pinnedSystemIds` and nothing else. | — |
+| Save format (`World` shape) | **Seven new optional fields** — `populationChange`, `buildBlocked` (reason + dropped ROI), `buildOpportunity` (score + good) and `colonyOpportunity` (value + work) on `WorldSystem`; `stockChange` and `unservedShortfall` on `WorldMarket`; the latched per-band `charged` on `WorldTreasurySettlement`. Unservable demand is the shortfall level alone — absent or zero means servable — not a level paired with a separate bit. All additive and optional, so **no `SAVE_FORMAT_VERSION` bump** (`lib/world/save.ts:6-10`). Settings stay a browser preference, so no new *player* state. Contrast the Tracker, which added `pinnedSystemIds` and nothing else. | — |
 | The harness's own metrics | **None** — but not for a player-seat reason. The directed-build assessment runs for every faction whether or not `world.player` exists (`lib/tick/processors/directed-build.ts:450`), so the Build-blocked drop sites execute on every harness run; the spec's own Evidence measured 367,449 drops inside exactly that path. Inertness rests on nothing in the tick **reading** any new field, and on the four conservation identities being treasury/founding-scoped — none reads `population`, `popCap`, `buildings` or `stock`. The gate: `npm run simulate` at both horizons must be numerically identical before and after the instrumentation lands. | — |
 
 ### 4. A symptom asserted without a measurement
@@ -781,7 +782,7 @@ remedy time, with its Gate 1 reading serving only as a sanity check on the volum
 | Deprived band | same fold, persisted | four descriptive bands; famine punches through at any Provision | matches — Deprived is a band, not a Provision cutoff |
 | Strike | `system-population.ts:119`, `unrest > STRIKE_PARAMS.threshold` | boolean derived at read time | matches |
 | Famine (time-to-abandonment sort) | `lib/tick/processors/population.ts:111` reports systems already below the floor; `populationDelta` at `:106` is computed and discarded | reports **crossings**, not a countdown; the delta exists for one statement and is never written, and carries **no migration term** | **RESOLVED by persisting the realised post-migration change** — see the emission section. The measure is `ln(population / ABANDON_POP_FLOOR) / k`, `k = −populationChange / population`: an exponential countdown to the real abandonment line, not the linear extrapolation `(pop − floor) / −delta` first proposed, and not the bare decline rate `−delta / population` proposed after that. A famine world that is not shrinking carries no countdown and sorts after the shrinking ones, by shortfall depth. |
-| Maintenance unfunded | `WorldTreasurySettlement`, `lib/world/types.ts:405-421` | `paid` per band, post-slider; the settlement carries **neither the charge nor the slider** | **partly missing** — the honest test needs `treasury.bands.maintenance` alongside, or the condition fires on a legal slider setting |
+| Maintenance unfunded | `WorldTreasurySettlement`, `lib/world/types.ts` | `paid` per band, post-slider, plus `charged` — what the ladder asked each band for, latched at the same instant | **RESOLVED by latching the charge**. `paid` alone cannot distinguish a legal low slider from insolvency, and the live `bands.maintenance` is not the settlement's own slider — it moves with no re-settle, so the two terms have to come from one frozen row |
 | Unrest rising | `grievanceShortfall`, `lib/engine/population.ts:295`; `readExpectation`, `lib/engine/expectation.ts:43-52` | `max(stored, floor)` − provision, and a **missing memory is seeded from this cycle's own Provision** | matches only with the never-seeded guard — the category requires a stored `provisionExpectation` |
 | Overcrowded | `population`, `popCap` — both persisted `WorldSystem` columns | `popCap` recomputed live from surviving housing each cycle | matches |
 | No housing headroom | `habitableHousingHeadroom`, `lib/engine/directed-build.ts:213-220` | a fractional housing-**unit** count, range [0, ∞); the planner's own `< 1` test means "no room for even one whole level" (`:239`). But the planner never calls it on raw state — `effectiveBuildSystems` (`:297-333`) folds open `build` projects in first, and is **not exported** | matches only against **queue-adjusted** buildings, and the fold is monotonically *downward*, so it moves systems into the category rather than out of it — "relief already in flight" is a separate conjunct, not something the adjustment provides. Needs a shared exported helper: this is the third copy of the fold |
@@ -1249,7 +1250,11 @@ Files: `lib/world/types.ts`, `lib/engine/directed-logistics.ts`,
 
 Interface: `WorldMarket.stockChange?: number`, written only for `SURVIVAL_GOODS`
 (`lib/constants/physical-economy.ts:153`) — the realised change in `stock` across one economy cycle,
-after directed logistics has applied its hauls as stock deltas. Absent means never assessed. Joins the
+computed after the LAST stage of the tick that moves stock: directed logistics' hauls, then directed
+build's founding staging draw and staged manifest delivery. The draw belongs inside it for the same
+reason `populationChange` counts the colony seed, and the polarity makes it load-bearing: the reader
+divides `stock` by `−stockChange`, so a drain left outside quotes the donor a longer runway than it
+has. Absent means never assessed. Joins the
 market join at `lib/world/tick.ts:316`, both merge paths at `:366-371` and `:404-409`, and
 `resetAbandonedMarkets` at `:593-604`.
 
@@ -1260,6 +1265,7 @@ Proves:
 - A non-survival good carries no `stockChange` on any market row.
 - An abandoned system's market row reports absent afterwards, while its `stock` is retained.
 - A market row predating this task loads with the field absent and is not read as 0.
+- A founding donor's figure covers the survival goods it shipped out to stand up a colony.
 
 Consumes: nothing.
 
@@ -1277,8 +1283,13 @@ where one landed or none was wanted. The drop sites are `lib/engine/directed-bui
 scope** — they belong to Task 8's *No housing headroom*.
 
 Proves:
-- A fully saturated system reports `no-capacity`, not absent. It drops at `:737`, before ranking —
-  the site the original two-site instrumentation missed entirely.
+- A fully saturated system reports `no-capacity`, not absent. It drops at the pre-ranking capacity
+  check — the site the original two-site instrumentation missed entirely.
+- A site with **no slot cap at all** for the deficit good reports nothing. The scoring loop pairs
+  every site with every good in deficit — food and water always among them — so "capacity is 0" is
+  reached both by a site whose deposits are used up and by one that never had a deposit. Only the
+  first is a blocked build; recording the second would put a block on nearly every economically
+  active system every run, and break the absence convention the write path relies on.
 - A system whose only obstacle is an absent input supplier reports `no-input-supplier`, distinctly
   from `no-capacity`.
 - A system whose opportunity **landed** this run reports absent, so the row clears without waiting for
@@ -1290,27 +1301,36 @@ Proves:
 
 Consumes: nothing.
 
-### Task 4 — Emit the structural-unservable bit
+### Task 4 — Emit the structural-unservable reading
 
 Files: `lib/engine/directed-logistics.ts`, `lib/tick/processors/directed-logistics.ts`,
 `lib/tick/world/directed-logistics-world.ts`, `lib/world/types.ts`, `lib/world/tick.ts`,
 `lib/engine/__tests__/directed-logistics.test.ts`
 
-Interface: `WorldMarket.demandUnservable?: boolean` — a deficit no reachable same-faction donor and no
-local production can close. Written per (system, good) on the **deficit endpoint only**, deliberately
-unlike `logisticsFundingBound`, which the matcher writes to **both** endpoints of a funding-bound haul
+Interface: `WorldMarket.unservedShortfall?: number` — a deficit no reachable same-faction donor and
+no local production can close, carried as the unclosed LEVEL rather than a bit. The size is the whole
+classification: the matcher only queues a deficit whose shortfall is strictly positive, so a positive
+reading means unservable and absent-or-zero means servable, with no second field to keep in step.
+Written per (system, good) on the **deficit endpoint only**, deliberately unlike
+`logisticsFundingBound`, which the matcher writes to **both** endpoints of a funding-bound haul
 (`lib/engine/directed-logistics.ts:170-175`, applied at
-`lib/tick/processors/directed-logistics.ts:128-129`).
+`lib/tick/processors/directed-logistics.ts:128-129`). Task 16 below is folded into this one — the
+level and the classification are the same field.
 
 Proves:
-- A deficit left unserved purely by the work budget sets `logisticsFundingBound` and **not**
-  `demandUnservable` — the temporary and the structural must not collapse into one another.
-- A deficit with no reachable donor and no local producer sets `demandUnservable`.
-- The **donor** row of a funding-bound haul never has `demandUnservable`, though it does get
+- A deficit left unserved purely by the work budget sets `logisticsFundingBound` and **no**
+  `unservedShortfall` — the temporary and the structural must not collapse into one another.
+- A deficit with no reachable donor and no local producer carries a positive `unservedShortfall`.
+- The **donor** row of a funding-bound haul never carries one, though it does get
   `logisticsFundingBound`.
-- A system unservable in three goods produces three market-row flags, which Task 9 counts as one
+- A system unservable in three goods produces three market-row readings, which Task 9 counts as one
   system.
-- A deficit that becomes servable clears the flag on the next logistics run.
+- A deficit that becomes servable has the key DELETED on the next logistics run — not left holding a
+  stale level, and not persisted as a zero.
+- A deficit is **not** flagged for capacity an earlier deficit in the same run already drew. The
+  structural test sums each donor's drawable AS CLASSIFIED, before any deficit spent it: "would
+  persist even with unlimited budget" is a property of the galaxy, not of the order the worst-first
+  queue happens to walk, and a donor drawn fully dry must not drop out of the sum either.
 
 Consumes: nothing.
 
@@ -1322,16 +1342,21 @@ Files: `lib/engine/industry.ts`, `components/system/industry-rows.ts`,
 
 Interface: `IdleReason` (`lib/engine/industry.ts:544`) gains `"inputs"`, derived from `inputGate < 1`,
 and `used` for a producer accounts for it so an input-starved building reads idle rather than fully
-used. **`needs-view.ts` is not optional here**: `buildProblems` treats any binding reason other than
-`"occupancy"` or `undefined` as a labour shortfall (`:82`), so a new reason renders as "understaffed"
-until that predicate and `staffingGradeName` (`:50-56`) are extended.
+used. **`needs-view.ts` is not optional here**: `buildProblems` names the labour grade from
+`idleReason`, and there is no grade to name when inputs bind — so `staffingGradeName` returns
+`undefined` for `"inputs"` and the row falls back to the generic "Understaffed N%" chip, exactly as
+`"selling"` already does. `"inputs"` stays a *binding reason*: excluding it from that predicate would
+drop the understaffed chip from a producer that is both starved and genuinely short-staffed, and the
+row shows a chip for every negative state it is in. Staffing is keyed off `staffedFraction`, which is
+independent of the input gate, so nothing about that is double-reporting.
 
 Proves:
 - A fully staffed, freely selling factory with no recipe inputs reads idle with reason `"inputs"` —
   today it reads `used === count` with no reason at all.
-- That same factory does **not** render an understaffed chip on the Industry panel, which is what the
-  `:82` predicate produces if left alone.
-- A factory short on both labour and inputs reports the binding constraint, not both.
+- That same factory renders no understaffed chip — because its staffing NUMBER is fine, not because
+  of its reason.
+- A producer that is both input-starved and understaffed renders **both** chips, the staffing one
+  generic.
 - A tier-0 extractable, which has no input gate, never reports `"inputs"`.
 - Existing idle reasons and health colouring are unchanged for every building that had one before.
 
@@ -1428,7 +1453,14 @@ Consumes: Task 6.
 Files: `lib/services/alerts.ts` (new), `lib/types/api.ts`, `lib/services/__tests__/alerts.test.ts` (new)
 
 Interface: `getAlertData(): AlertData` where `AlertData = { categories: AlertCategory[] }`,
-`AlertCategory = { id: AlertCategoryId; count: number; denominator: number; instances: AlertInstance[] }`,
+`AlertCategory` a discriminated union on what the count counts —
+`{ id; unit: "developed_systems"; count; denominator; instances }` for the system-scoped categories,
+`{ id; unit: "controlled_systems"; count; denominator; instances }` for Colony opportunity, whose
+candidates are claimed-but-undeveloped systems and so are a share of that total rather than the
+developed one, `{ id; unit: "events"; count; instances }` for Crisis / Disruption / Windfall, which
+carry no denominator at all (an event count is not a share of the systems total and can exceed it),
+and `{ id; unit: "faction"; count; instances }` for Maintenance unfunded, the one faction-level
+category, whose count is 0 or 1 and likewise a share of nothing,
 `AlertInstance = { systemId: string | null; name: string; measure: string; sortKey: number }`. This
 task covers the categories reading only persisted system state: Famine, Deprived worlds, Strike,
 Unrest rising, Overcrowded, No housing headroom — all scoped to the player faction's developed systems,
@@ -1464,8 +1496,10 @@ event categories return one instance per **event**, `systemId` nullable.
 
 Proves:
 - Maintenance unfunded does **not** fire when the maintenance slider is below 1.0 with a solvent
-  treasury — the test is `paid.maintenance < maintenanceBill × bands.maintenance`, not against the
-  full bill (`lib/engine/treasury.ts:126-131`).
+  treasury — the test is `bandShortfall(settlement, "maintenance")`, not against the full bill
+  (`lib/engine/treasury.ts`, `settleLadder`).
+- It does not fire either when the player RAISES the slider after a solvent settlement: both terms
+  are latched at the settlement, so live policy cannot retroactively make a paid bill look short.
 - It does not appear at all before a fresh world's first settlement (`lastSettlement` null).
 - A system unservable in three goods counts **once**, not three times.
 - An event in a rival faction's system raises no chip; a relations-owned pair event involving the
@@ -1510,15 +1544,20 @@ Consumes: Tasks 8, 9.
 
 Files: `components/alerts/alert-chip.tsx` (new), `components/alerts/__tests__/alert-chip.test.tsx` (new)
 
-Interface: `AlertChip({ category, count, denominator, faulted, open, onOpen })` — a 20px icon plus
-count, opaque tier fill, optional cased fault slash, accessible name carrying category, count and
-denominator ("Famine, 3 of 253 developed systems").
+Interface: `AlertChip({ category, faulted, open, onOpen })` — a 20px icon plus count, opaque tier
+fill, optional cased fault slash, accessible name carrying category and count, plus the denominator
+where the category has one, in that category's own unit ("Famine, 3 of 253 developed systems";
+"Colony opportunity, 3 of 12 controlled systems"; "Crisis, 2 events"). The chip reads
+the count and unit off the `AlertCategory` union rather than taking them as separate props, so an
+event category cannot be handed a systems denominator.
 
 Proves:
 - The accessible name is built from the rendered DOM, not from props alone, so it fails when the
   element stops rendering.
-- Count and denominator both reach the accessible name — a count with no denominator is the
-  extensive-number failure the spec names.
+- Count and denominator both reach a system-scoped chip's accessible name — a count with no
+  denominator is the extensive-number failure the spec names.
+- An event chip names its unit ("2 events") and never borrows the developed-systems denominator, and
+  neither does the faction-level Maintenance unfunded chip.
 - The fault slash renders only for the faulted categories.
 - The chip is a `button` and is keyboard-operable.
 - Whether the chip renders at all is asserted; its colours are not (jsdom has no CSS).
@@ -1558,7 +1597,8 @@ Consumes: Tasks 7, 10, 11.
 Files: `components/alerts/alert-flyout.tsx` (new), `components/alerts/alert-row.tsx` (new),
 `components/tracker/tracker-panel.tsx`, `components/alerts/__tests__/alert-flyout.test.tsx` (new)
 
-Interface: `AlertFlyout({ category, instances, denominator, onNavigate, onClose })` — anchored under
+Interface: `AlertFlyout({ category, onNavigate, onClose })` — instances, count and unit come off the
+`AlertCategory` union rather than as separate props — anchored under
 its chip, growing to the map area's height and scrolling inside past that, no row cap. A row is name
 plus measure; activating it navigates via the destination in `ALERT_CATEGORIES`, reusing the Tracker's
 focus mechanism (`components/tracker/tracker-panel.tsx:115-121`), **whose `segment` union widens from
@@ -1569,7 +1609,8 @@ Proves:
 - Only one flyout is open at a time; Escape closes it and returns focus to its chip.
 - A Maintenance unfunded flyout renders its single faction-level row with no system name.
 - An event row with `systemId: null` navigates to the events panel and attempts no map focus.
-- The footer states the count and its denominator.
+- The footer states the count and, for a system-scoped category, its denominator; an event or
+  faction-level category's footer states the unit instead.
 - A row click navigates and does **not** apply any action or clear the row.
 
 Consumes: Tasks 7, 10, 12.
@@ -1622,24 +1663,24 @@ resolved to nothing and is blocked on the spec — see below.
 **Order:** Tasks 16 and 17 are Stage A-shaped and run before Task 9's two affected categories are
 re-read; Task 18 runs with Task 10, before Task 12 consumes it.
 
-### Task 16 — Persist the unserved shortfall beside the unservable bit
+### Task 16 — The unserved shortfall IS the unservable reading
 
 Files: `lib/engine/directed-logistics.ts`, `lib/tick/processors/directed-logistics.ts`,
 `lib/tick/world/directed-logistics-world.ts`, `lib/world/types.ts`, `lib/world/tick.ts`,
 `lib/engine/__tests__/directed-logistics.test.ts`
 
-Interface: `WorldMarket.unservedShortfall?: number` — the deficit left unclosed, written on the same
-deficit endpoint and under the same condition as `demandUnservable` (Task 4), absent everywhere that
-bit is absent. A **level, not a rate**: `Deficit.shortfall` is `max(0, target − stock)`
-(`lib/engine/directed-logistics.ts:38-44`), so it takes no per-cycle denomination, unlike Task 2's
-`stockChange`. Follows the `WorldMarket` optional-field floor above.
+Interface: folded into Task 4 — `WorldMarket.unservedShortfall?: number` is the single field, and a
+positive value is what "unservable" means. A **level, not a rate**: the deficit's
+`max(0, target − stock)` (`lib/engine/directed-logistics.ts:38-44`) less the drawable capacity its
+reachable donors still hold — the part no donor can cover, not the whole want — so it takes no
+per-cycle denomination, unlike Task 2's `stockChange`. Follows the `WorldMarket` optional-field floor above.
 
 Proves:
 - A system unservable in three goods carries three shortfall figures, and the read service still
   counts it once — at the largest of them, not the sum.
-- A deficit closed by a reachable donor carries no shortfall, so the row clears with the bit.
-- A deficit left unserved purely by the work budget carries `logisticsFundingBound` and **neither**
-  the bit nor a shortfall — the temporary and the structural stay distinct.
+- A deficit closed by a reachable donor has the key deleted rather than zeroed on the row.
+- A deficit left unserved purely by the work budget carries `logisticsFundingBound` and **no**
+  shortfall — the temporary and the structural stay distinct.
 - An abandoned system's market row reports absent afterwards.
 - The figure is a level: changing `CYCLE_LENGTH` does not move it.
 
@@ -1689,18 +1730,26 @@ Files: `lib/hooks/use-tick-invalidation.ts`, `lib/hooks/use-cycle-boundary.ts` (
 `lib/hooks/__tests__/use-cycle-boundary.test.tsx` (new)
 
 Interface: a hook exposing the count of resolving economy cycles seen this session, derived from
-`EconomyTickPayload` (`lib/tick/types.ts:32`) — which already distinguishes a boundary tick from a
-mid-cycle one — where `useTickInvalidation` today subscribes and discards the payload. Task 12's
-hysteresis counts cycles through this, never renders or refetches.
+`useTickContext().currentTick` — `floor(currentTick / CYCLE_LENGTH)`, anchored at the first tick the
+transport reports so the count still starts at 0. Task 12's hysteresis counts cycles through this,
+never renders or refetches.
 
-**`systemCount` is the only field that distinguishes them.** The resolving payload writes
-`systemCount: systemIds.length` (`lib/tick/processors/economy.ts:268-273`) and `economyMidCyclePayload`
-hard-codes `systemCount: 0` (`:39-42`); `shardIndex` and `shardCount` are populated identically on
-both and carry no signal. An earlier draft of this task cited them as candidates — corrected here
-rather than left to be re-derived.
+**Derived from the tick, not from the boundary broadcast.** `EconomyTickPayload` does distinguish the
+two — the resolving payload writes `systemCount: systemIds.length` and `economyMidCyclePayload`
+hard-codes `systemCount: 0`, while `shardIndex`/`shardCount` carry no signal on either — but the
+CHANNEL is lossy: the tick loop throttles broadcasts to one per 250 ms and is latest-wins, replacing
+the pending frame rather than merging its `events` (`lib/world/tick-loop.ts`). One tick in
+`CYCLE_LENGTH` carries the boundary payload, so at speed a whole cycle can pass inside a single
+throttle window and an edge-counting hook stalls silently — taking the chip hysteresis with it.
+`currentTick` is overwritten by every frame that does arrive, so it is correct however many were
+dropped. The anchor waits for a positive tick because `useTick` opens at 0 and seeds from REST in an
+effect; anchoring on that placeholder would hand a live world's first real frame a count in the
+hundreds.
 
 Proves:
-- A mid-cycle economy tick does not advance the count; a resolving one does.
+- A mid-cycle tick does not advance the count; crossing a boundary does.
+- The count advances by the cycles actually crossed when the transport drops whole cycles of frames.
+- It starts at 0 when it mounts against a world already thousands of ticks in.
 - The count survives a refetch that returns identical data.
 - A component consuming it sees exactly one advance per cycle across a multi-tick run.
 

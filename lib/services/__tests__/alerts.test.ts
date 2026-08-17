@@ -2,6 +2,11 @@ import { describe, it, expect, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getAlertData } from "@/lib/services/alerts";
+import { getSystemIndustry } from "@/lib/services/universe";
+import { labourDemand } from "@/lib/engine/industry";
+import { strikeMultiplier } from "@/lib/engine/population";
+import { STRIKE_PARAMS } from "@/lib/constants/population";
+import { HOUSING_TYPE } from "@/lib/constants/industry";
 import type {
   World, WorldSystem, WorldBuildProject, WorldMarket, WorldEvent,
   WorldFactionTreasury, WorldTreasurySettlement,
@@ -48,6 +53,13 @@ function developedPatch(pid: string, extra: Partial<WorldSystem> = {}): Partial<
   return { factionId: pid, control: "developed", ...extra };
 }
 
+/** A colony CANDIDATE owned by the player faction — claimed, not yet developed, which is exactly the
+ *  control state the colonisation planner draws its candidates from (lib/world/tick.ts's
+ *  `developProvider`) and therefore the only state a stored `colonyOpportunity` can sit on. */
+function candidatePatch(pid: string, extra: Partial<WorldSystem> = {}): Partial<WorldSystem> {
+  return { factionId: pid, control: "controlled", ...extra };
+}
+
 function category(id: AlertCategory["id"]): AlertCategory {
   const found = getAlertData().categories.find((c) => c.id === id);
   if (!found) throw new Error(`category ${id} missing from getAlertData()`);
@@ -70,6 +82,29 @@ function marketRow(systemId: string, goodId: string, overrides: Partial<WorldMar
 
 function withEvents(world: World, events: WorldEvent[]): World {
   return { ...world, events };
+}
+
+/** Windfall's measure and sortKey are both `phaseStartTick + phaseDuration − currentTick`, so a
+ *  fixture that exercises either has to move the clock as well as the event. */
+function withTick(world: World, currentTick: number): World {
+  return { ...world, meta: { ...world.meta, currentTick } };
+}
+
+/** Replaces the building roster at the named systems, leaving every other system's untouched. */
+function withBuildings(
+  world: World, systemIds: string[], rows: Array<{ systemId: string; buildingType: string; count: number }>,
+): World {
+  const replaced = new Set(systemIds);
+  return {
+    ...world,
+    buildings: [
+      ...world.buildings.filter((b) => !replaced.has(b.systemId)),
+      ...rows.map((r) => ({ ...r, idleCycles: 0 })),
+    ],
+    // A spare system carries no construction projects at world-gen, but clearing them keeps the
+    // headroom fixtures below independent of anything world-gen may queue there later.
+    constructionProjects: world.constructionProjects.filter((p) => !replaced.has(p.systemId)),
+  };
 }
 
 function fixtureEvent(overrides: Partial<WorldEvent> = {}): WorldEvent {
@@ -238,6 +273,32 @@ describe("getAlertData", () => {
       expect(ids).not.toContain(atThreshold);
       expect(ids).toContain(aboveThreshold);
     });
+
+    it("sorts the most suppressed world first — ascending strikeMultiplier, worst first", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      // Authored deliberately in the OPPOSITE order to the expected sort: a constant sortKey would
+      // leave them in this array order and read mildest-first.
+      const [milder, worse] = spareSystemIds(world, 2);
+      setWorld(
+        withSystems(
+          world,
+          new Map([
+            [milder, developedPatch(pid, { unrest: 0.7 })],
+            [worse, developedPatch(pid, { unrest: 0.95 })],
+          ]),
+        ),
+      );
+
+      // Premise, measured not assumed: more unrest really is more suppression on this scale, so the
+      // expected order below is not an artefact of two equal multipliers.
+      const worseMultiplier = strikeMultiplier(0.95, STRIKE_PARAMS);
+      expect(worseMultiplier).toBeLessThan(strikeMultiplier(0.7, STRIKE_PARAMS));
+
+      const strike = category("strike");
+      expect(strike.instances.map((i) => i.systemId)).toEqual([worse, milder]);
+      expect(strike.instances[0].measure).toBe(`production at ${Math.round(worseMultiplier * 100)}%`);
+    });
   });
 
   describe("Deprived worlds", () => {
@@ -327,6 +388,28 @@ describe("getAlertData", () => {
 
       expect(category("unrest_rising").instances.map((i) => i.systemId)).not.toContain(striking);
     });
+
+    it("sorts the deepest grievance first — the sortKey is negated, so a dropped minus sign inverts it", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      // Authored shallowest-first so a constant sortKey (or an un-negated one) reads mildest-first.
+      const [shallow, deep] = spareSystemIds(world, 2);
+      setWorld(
+        withSystems(
+          world,
+          new Map([
+            // grievance 0.8 − 0.7 = 0.1
+            [shallow, developedPatch(pid, { provision: 0.7, provisionExpectation: 0.8, unrest: 0.1 })],
+            // grievance 0.9 − 0.3 = 0.6 — six times deeper
+            [deep, developedPatch(pid, { provision: 0.3, provisionExpectation: 0.9, unrest: 0.1 })],
+          ]),
+        ),
+      );
+
+      const unrestRising = category("unrest_rising");
+      expect(unrestRising.instances.map((i) => i.systemId)).toEqual([deep, shallow]);
+      expect(unrestRising.instances[0].measure).toBe("30% Provisioned, expects 90%");
+    });
   });
 
   describe("Overcrowded", () => {
@@ -359,6 +442,26 @@ describe("getAlertData", () => {
       );
 
       expect(category("overcrowded").instances.map((i) => i.systemId)).not.toContain(zeroCap);
+    });
+
+    it("sorts the most over-capacity world first — the sortKey is negated, so a dropped minus sign inverts it", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      // Authored mildest-first so a constant (or un-negated) sortKey reads mildest-first too.
+      const [milder, worse] = spareSystemIds(world, 2);
+      setWorld(
+        withSystems(
+          world,
+          new Map([
+            [milder, developedPatch(pid, { population: 110, popCap: 100 })], // 110% of housing
+            [worse, developedPatch(pid, { population: 200, popCap: 100 })], // 200% of housing
+          ]),
+        ),
+      );
+
+      const overcrowded = category("overcrowded");
+      expect(overcrowded.instances.map((i) => i.systemId)).toEqual([worse, milder]);
+      expect(overcrowded.instances[0].measure).toBe("200% of housing");
     });
   });
 
@@ -502,6 +605,33 @@ describe("getAlertData", () => {
       expect(category("overcrowded").instances.map((i) => i.systemId)).not.toContain(target);
       expect(category("no_housing_headroom").instances.map((i) => i.systemId)).not.toContain(target);
     });
+
+    it("sorts the most over-cap world first — the sortKey is negated, so a dropped minus sign inverts it", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      // Authored mildest-first so a constant (or un-negated) sortKey reads mildest-first too.
+      const [milder, worse] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          // Both: 5 landed housing levels on habitableSpace 5 exhaust headroom outright
+          // (min(5 − 5, 100 − 5) = 0), so both satisfy the category's third conjunct with no queue
+          // fold needed, and neither has a housing level standing in its queue.
+          [milder, developedPatch(pid, { population: 61, popCap: 60, generalSpace: 100, habitableSpace: 5 })],
+          [worse, developedPatch(pid, { population: 100, popCap: 60, generalSpace: 100, habitableSpace: 5 })],
+        ]),
+      );
+      setWorld(
+        withBuildings(withTargets, [milder, worse], [
+          { systemId: milder, buildingType: HOUSING_TYPE, count: 5 },
+          { systemId: worse, buildingType: HOUSING_TYPE, count: 5 },
+        ]),
+      );
+
+      const noHousing = category("no_housing_headroom");
+      expect(noHousing.instances.map((i) => i.systemId)).toEqual([worse, milder]);
+      expect(noHousing.instances[0].measure).toBe("40 over cap, no room to build");
+    });
   });
 
   describe("Survival stock falling", () => {
@@ -548,6 +678,30 @@ describe("getAlertData", () => {
       expect(stockFalling.instances.filter((i) => i.systemId === target)).toHaveLength(1);
       expect(stockFalling.instances[0].measure).toBe("food empties in 1.0 cycles");
     });
+
+    it("excludes a row carrying stock but no stockChange — never assessed is not a countdown", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      const withTarget = withSystems(world, new Map([[target, developedPatch(pid)]]));
+      // Absent, not zero, and not rare: world-gen never writes `stockChange` (lib/world/gen.ts),
+      // so this is the state EVERY market row is in on a freshly generated world and on any save
+      // written before the field existed — until an economy cycle has run. `stock / -undefined` is
+      // NaN, and NaN fails every comparison below it, so an absent reading that reached the divide
+      // would leak an instance measured "empties in NaN cycles".
+      setWorld(withMarketRows(withTarget, [marketRow(target, "food", { stock: 50 })]));
+
+      // The COUNT, not membership: a NaN sortKey sorts unpredictably, so `not.toContain` on the
+      // instance list could pass by accident while the leak sat elsewhere in it.
+      expect(category("survival_stock_falling").count).toBe(0);
+
+      // Same row, same system, with a real reading: 50 / 25 = 2 cycles, inside the threshold. The
+      // exclusion above is therefore the absent field, not a fixture the category never walked.
+      setWorld(withMarketRows(withTarget, [marketRow(target, "food", { stock: 50, stockChange: -25 })]));
+      const assessed = category("survival_stock_falling");
+      expect(assessed.count).toBe(1);
+      expect(assessed.instances[0].systemId).toBe(target);
+    });
   });
 
   describe("Demand unservable", () => {
@@ -563,10 +717,10 @@ describe("getAlertData", () => {
         ]),
       );
       const withFixture = withMarketRows(withTargets, [
-        marketRow(target, "food", { demandUnservable: true, unservedShortfall: 5 }),
-        marketRow(target, "ore", { demandUnservable: true, unservedShortfall: 20 }),
-        marketRow(target, "metals", { demandUnservable: true, unservedShortfall: 8 }),
-        // A row with no demandUnservable flag never contributes — a merely funding-bound deficit
+        marketRow(target, "food", { unservedShortfall: 5 }),
+        marketRow(target, "ore", { unservedShortfall: 20 }),
+        marketRow(target, "metals", { unservedShortfall: 8 }),
+        // A row with no unservedShortfall never contributes — a merely funding-bound deficit
         // (logisticsFundingBound) is a different, temporary condition.
         marketRow(servable, "food", { logisticsFundingBound: true }),
       ]);
@@ -580,19 +734,30 @@ describe("getAlertData", () => {
       expect(unservable.instances[0].measure).toBe("ore unserved by 20.0");
     });
 
-    it("excludes a row carrying the bit with no persisted shortfall — absence-not-zero, never demandRate", () => {
+    it("excludes a row with no shortfall and one whose shortfall is 0 — absence-or-zero is servable, never demandRate", () => {
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
-      const [target] = spareSystemIds(world, 1);
-      const withTarget = withSystems(world, new Map([[target, developedPatch(pid)]]));
-      const withFixture = withMarketRows(withTarget, [
-        // demandUnservable true, but unservedShortfall was never written (a corrupt/legacy row) —
-        // this must not fall back to demandRate, the proxy this rework removes.
-        marketRow(target, "food", { demandUnservable: true, demandRate: 999 }),
+      const [absent, zeroed] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [absent, developedPatch(pid)],
+          [zeroed, developedPatch(pid)],
+        ]),
+      );
+      const withFixture = withMarketRows(withTargets, [
+        // No unservedShortfall at all: a row the logistics run never classified. Must not fall back
+        // to demandRate, the read-time proxy the persisted level replaced.
+        marketRow(absent, "food", { demandRate: 999 }),
+        // A literal 0: the level IS the classification, and the engine never queues a deficit with a
+        // non-positive shortfall, so 0 can only mean servable — never "unservable by nothing".
+        marketRow(zeroed, "food", { unservedShortfall: 0, demandRate: 999 }),
       ]);
       setWorld(withFixture);
 
-      expect(category("demand_unservable").instances.map((i) => i.systemId)).not.toContain(target);
+      const ids = category("demand_unservable").instances.map((i) => i.systemId);
+      expect(ids).not.toContain(absent);
+      expect(ids).not.toContain(zeroed);
     });
   });
 
@@ -614,6 +779,34 @@ describe("getAlertData", () => {
 
       const blocked = category("build_blocked");
       expect(blocked.instances.map((i) => i.systemId)).toEqual([saturated, nearMiss]);
+    });
+
+    it("tiebreaks WITHIN one reason by droppedRoi (bigger drop first) and never spills into the next-more-severe reason's bucket", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      // Authored in an order that is neither the expected sort nor severity-stable: a sortKey of
+      // `severity` alone would leave the three no-consumer rows in THIS order (roi 0, 1000, 1e9),
+      // which is the reverse of what the tiebreak must produce.
+      const [roiNone, roiMid, roiHuge, worseReason] = spareSystemIds(world, 4);
+      setWorld(
+        withSystems(
+          world,
+          new Map([
+            [roiNone, developedPatch(pid, { buildBlocked: { reason: "no-consumer", droppedRoi: 0 } })],
+            [roiMid, developedPatch(pid, { buildBlocked: { reason: "no-consumer", droppedRoi: 1000 } })],
+            // The spill case: no-consumer is severity 3, so its worst possible key approaches 2 from
+            // above without ever reaching it. 1e9 puts this row at 3 − 1e9/(1e9+1) ≈ 2.000000001.
+            [roiHuge, developedPatch(pid, { buildBlocked: { reason: "no-consumer", droppedRoi: 1e9 } })],
+            // …and no-input-supplier is severity 2 with droppedRoi 0, i.e. sortKey exactly 2 — the
+            // best case of the next-more-severe reason, which the row above must still sort behind.
+            [worseReason, developedPatch(pid, { buildBlocked: { reason: "no-input-supplier", droppedRoi: 0 } })],
+          ]),
+        ),
+      );
+
+      const blocked = category("build_blocked");
+      expect(blocked.instances.map((i) => i.systemId)).toEqual([worseReason, roiHuge, roiMid, roiNone]);
+      expect(blocked.instances[2].measure).toBe("no consumer (dropped ROI 1000.00)");
     });
   });
 
@@ -638,6 +831,191 @@ describe("getAlertData", () => {
       expect(idle.instances.map((i) => i.systemId)).toContain(target);
       expect(idle.instances.find((i) => i.systemId === target)?.measure).toBe("100% idle capacity");
     });
+
+    it("divides idle levels by BUILT non-housing levels — 2 of 5 idle ore levels beside 5 housing levels reads 40%", () => {
+      // The one fixture that pins the denominator AND the housing exclusion at once. 40% is
+      // reachable only by the authored formula: 100% is what a constant denominator (or dividing by
+      // idleLevelsTotal) gives, and folding housing back into both terms gives 70%.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      const roster = { ore: 5, [HOUSING_TYPE]: 5 };
+      // Half-staffed: ore's used is 5 × labourFulfil = 2.5, so exactly 2 WHOLE levels read idle.
+      const withTarget = withSystems(
+        world,
+        new Map([[target, developedPatch(pid, { population: 0.5 * labourDemand(roster) })]]),
+      );
+      setWorld(
+        withBuildings(withTarget, [target], [
+          { systemId: target, buildingType: "ore", count: 5 },
+          { systemId: target, buildingType: HOUSING_TYPE, count: 5 },
+        ]),
+      );
+
+      // Premise, measured off the panel's own readout rather than assumed: exactly 2 whole ore
+      // levels are idle, and housing carries idle levels of its own that must NOT reach the figure.
+      const panel = getSystemIndustry(target);
+      if (panel.visibility !== "visible") throw new Error("fixture: target is not visible");
+      const ore = panel.buildings.find((b) => b.buildingType === "ore")!;
+      const housing = panel.buildings.find((b) => b.buildingType === HOUSING_TYPE)!;
+      expect(Math.floor(ore.count - ore.used)).toBe(2);
+      expect(Math.floor(housing.count - housing.used)).toBeGreaterThanOrEqual(1);
+
+      const idle = category("industry_idle");
+      expect(idle.instances.find((i) => i.systemId === target)?.measure).toBe("40% idle capacity");
+    });
+
+    it("says nothing about a system whose idle capacity is under one WHOLE level", () => {
+      // The gate the "100% idle" fixture cannot reach: it is whole idle levels that make a system
+      // worth naming, not any idleness at all — a system running at 95% staffing is working, and a
+      // category that fired on it would name most of the empire every cycle.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      const roster = { ore: 5 };
+      const withTarget = withSystems(
+        world,
+        new Map([[target, developedPatch(pid, { population: 0.95 * labourDemand(roster) })]]),
+      );
+      setWorld(withBuildings(withTarget, [target], [{ systemId: target, buildingType: "ore", count: 5 }]));
+
+      // Premise: there IS real idle capacity here (used strictly below count), just less than one
+      // whole level of it — without this the exclusion below could hold for the wrong reason.
+      const panel = getSystemIndustry(target);
+      if (panel.visibility !== "visible") throw new Error("fixture: target is not visible");
+      const ore = panel.buildings.find((b) => b.buildingType === "ore")!;
+      expect(ore.used).toBeLessThan(ore.count);
+      expect(ore.used).toBeGreaterThan(ore.count - 1);
+
+      expect(category("industry_idle").instances.map((i) => i.systemId)).not.toContain(target);
+    });
+
+    it("surfaces a fully staffed, freely selling producer idled only by missing recipe inputs", () => {
+      // The documented reason this category goes through the full readout rather than a cheaper
+      // persisted signal: the input gate is folded into `used` only inside buildIndustryReadout, so
+      // an input-starved factory is invisible to every other idle signal in the game. Nothing here
+      // is short of labour, skill or a buyer — only ore, which never arrives.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      const roster = { metals: 5, vocational_school: 1 };
+      const withTarget = withSystems(
+        world,
+        new Map([[target, developedPatch(pid, { population: labourDemand(roster) })]]),
+      );
+      setWorld(
+        withBuildings(withTarget, [target], [
+          { systemId: target, buildingType: "metals", count: 5 },
+          // Licenses the skilled work metals draws, so no skill ceiling can be the binding cause.
+          { systemId: target, buildingType: "vocational_school", count: 1 },
+        ]),
+      );
+
+      // Premise, read off the panel: the smelters are fully staffed and the readout names INPUTS —
+      // not labour, not skill, not selling — as the binding constraint.
+      const panel = getSystemIndustry(target);
+      if (panel.visibility !== "visible") throw new Error("fixture: target is not visible");
+      const metals = panel.buildings.find((b) => b.buildingType === "metals")!;
+      expect(metals.staffedFraction).toBeCloseTo(1, 6);
+      expect(metals.idleReason).toBe("inputs");
+
+      expect(category("industry_idle").instances.map((i) => i.systemId)).toContain(target);
+    });
+
+    it("reads a market row's PERSISTED honestUseRate, not a recompute — a stored figure that lifts the brake knee takes the system out of the category", () => {
+      // The two runs below differ in exactly one field. Fully staffed extractors sitting on a
+      // glutted yard: with no persisted use figure the readout recomputes one, the brake knee lands
+      // far below the stock and the producers stop selling, so every level reads idle. A persisted
+      // use figure orders of magnitude larger puts the knee above the same stock, the producers
+      // sell, and nothing is idle. A read that ignored the stored figure would report the first
+      // answer in both runs.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      const roster = { ore: 5 };
+      const withTarget = withSystems(
+        world,
+        new Map([[target, developedPatch(pid, { population: labourDemand(roster) })]]),
+      );
+      const withOre = withBuildings(withTarget, [target], [{ systemId: target, buildingType: "ore", count: 5 }]);
+      const GLUT = 1e6;
+
+      // No persisted figure: the recompute fallback runs and the brake is shut on this stock.
+      setWorld(withMarketRows(withOre, [marketRow(target, "ore", { stock: GLUT, storageCapacity: GLUT * 10 })]));
+      const recomputed = getSystemIndustry(target);
+      if (recomputed.visibility !== "visible") throw new Error("fixture: target is not visible");
+      expect(recomputed.buildings.find((b) => b.buildingType === "ore")!.idleReason).toBe("selling");
+      expect(category("industry_idle").instances.map((i) => i.systemId)).toContain(target);
+
+      // Same world, same stock, plus a persisted use figure large enough to carry the knee past it.
+      clearWorld();
+      setWorld(
+        withMarketRows(withOre, [
+          marketRow(target, "ore", { stock: GLUT, storageCapacity: GLUT * 10, honestUseRate: 1e9 }),
+        ]),
+      );
+      const persisted = getSystemIndustry(target);
+      if (persisted.visibility !== "visible") throw new Error("fixture: target is not visible");
+      expect(persisted.buildings.find((b) => b.buildingType === "ore")!.idleReason).toBeUndefined();
+      expect(category("industry_idle").instances.map((i) => i.systemId)).not.toContain(target);
+    });
+
+    it("reports exactly what the Industry panel's own readout says is idle — one shared context, two consumers", () => {
+      // Both surfaces build a `buildIndustryReadout` context from world state, and they must build
+      // the SAME one: if they diverge in any accessor (the persisted-vs-recomputed honestUseRate
+      // fallback, the anchor multiplier, the funding-bound bit), the panel and the chip start
+      // disagreeing about which levels are running. This walks every developed player system and
+      // pins the chip's figure against the panel's own readout, recomputed here from the panel's
+      // published buildings rather than from any shared helper.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [partial, unstaffed] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          // A small population against several extractor levels — partially staffed, so the readout
+          // carries real fractional `used` figures rather than a degenerate all-or-nothing one.
+          [partial, developedPatch(pid, { population: 40 })],
+          [unstaffed, developedPatch(pid, { population: 0 })],
+        ]),
+      );
+      const withBuildings: World = {
+        ...withTargets,
+        buildings: [
+          ...withTargets.buildings.filter((b) => b.systemId !== partial && b.systemId !== unstaffed),
+          { systemId: partial, buildingType: "ore", count: 6, idleCycles: 0 },
+          { systemId: partial, buildingType: HOUSING_TYPE, count: 3, idleCycles: 0 },
+          { systemId: unstaffed, buildingType: "ore", count: 5, idleCycles: 0 },
+        ],
+      };
+      // No `honestUseRate` on these rows, so the readout must take its recompute fallback — the one
+      // accessor most likely to be written differently by two hand-rolled context assemblies.
+      setWorld(withMarketRows(withBuildings, [
+        marketRow(partial, "ore", { stock: 40 }),
+        marketRow(unstaffed, "ore", { stock: 40 }),
+      ]));
+
+      const idle = category("industry_idle");
+      expect(idle.instances.length).toBeGreaterThan(0); // premise: something is actually idle
+
+      const developed = getWorld().systems.filter((s) => s.factionId === pid && s.control === "developed");
+      expect(developed.length).toBeGreaterThan(1);
+      for (const system of developed) {
+        const panel = getSystemIndustry(system.id);
+        if (panel.visibility !== "visible") throw new Error(`fixture: ${system.id} is not visible`);
+        let builtLevels = 0;
+        let idleLevels = 0;
+        for (const b of panel.buildings) {
+          if (b.buildingType === HOUSING_TYPE) continue;
+          builtLevels += b.count;
+          idleLevels += Math.max(0, Math.floor(b.count - b.used));
+        }
+        const expected = builtLevels > 0 && idleLevels >= 1
+          ? `${Math.round((idleLevels / builtLevels) * 100)}% idle capacity`
+          : undefined;
+        expect(idle.instances.find((i) => i.systemId === system.id)?.measure).toBe(expected);
+      }
+    });
   });
 
   describe("Maintenance unfunded", () => {
@@ -655,7 +1033,8 @@ describe("getAlertData", () => {
         bands: { maintenance: 0.5, logistics: 1, construction: 1 },
         lastSettlement: settlement({
           maintenanceBill: 100,
-          paid: { maintenance: 50, logistics: 0, construction: 0 }, // exactly bill × slider — solvent
+          charged: { maintenance: 50, logistics: 0, construction: 0 }, // bill × the 0.5 slider in force at the settlement
+          paid: { maintenance: 50, logistics: 0, construction: 0 }, // paid it in full — solvent
         }),
       });
       setWorld(withFixture);
@@ -670,7 +1049,8 @@ describe("getAlertData", () => {
         bands: { maintenance: 1, logistics: 1, construction: 1 },
         lastSettlement: settlement({
           maintenanceBill: 100,
-          paid: { maintenance: 50, logistics: 0, construction: 0 }, // 50 < 100 × 1 — insolvent
+          charged: { maintenance: 100, logistics: 0, construction: 0 },
+          paid: { maintenance: 50, logistics: 0, construction: 0 }, // 50 < 100 asked — insolvent
         }),
       });
       setWorld(withFixture);
@@ -678,6 +1058,84 @@ describe("getAlertData", () => {
       const unfunded = category("maintenance_unfunded");
       expect(unfunded.instances).toHaveLength(1);
       expect(unfunded.instances[0].systemId).toBeNull();
+    });
+
+    it("counts the faction, bare — no developed-systems denominator on a row that names no system", () => {
+      // This is one faction-level row whose count is 0 or 1 by construction. Carried against the
+      // shared denominator it would render "Maintenance unfunded, 1 of 253 developed systems" about
+      // a settlement, which is not a share of anything — the same reason the event categories carry
+      // no denominator either.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      // Three extra developed systems, so the shared denominator is a number visibly bigger than
+      // this category's own count of 1 — the exact misreading ("1 of 4 developed systems") the bare
+      // count exists to avoid.
+      const withEmpire = withSystems(
+        world,
+        new Map(spareSystemIds(world, 3).map((id) => [id, developedPatch(pid)])),
+      );
+      setWorld(
+        withTreasury(withEmpire, pid, {
+          bands: { maintenance: 1, logistics: 1, construction: 1 },
+          lastSettlement: settlement({
+            maintenanceBill: 100,
+            charged: { maintenance: 100, logistics: 0, construction: 0 },
+            paid: { maintenance: 50, logistics: 0, construction: 0 },
+          }),
+        }),
+      );
+
+      const unfunded = category("maintenance_unfunded");
+      expect(unfunded.unit).toBe("faction");
+      expect(unfunded.count).toBe(1);
+      // No denominator key at all — not a present-but-zero one a renderer would print as "1 of 0".
+      expect("denominator" in unfunded).toBe(false);
+      // Non-vacuous: the shared denominator this category must NOT be carrying is a real, larger
+      // number on the very same read.
+      const famine = category("famine");
+      if (famine.unit !== "developed_systems") throw new Error("Famine must count developed systems");
+      expect(famine.denominator).toBeGreaterThan(1);
+    });
+
+    it("does not fire after the player raises the slider on a faction whose last settlement was solvent", () => {
+      // The settlement is the solvent one above — charged 50 at a 0.5 slider and paid all of it —
+      // but the player has since pushed maintenance to 1.0 with no settlement in between (the verb
+      // writes the slider and nothing else, so `paid` is frozen at what the OLD slider asked for).
+      // Reading the live slider here would charge this settlement 100 retroactively and fire a
+      // critical, non-hideable alert on a solvent faction — and it would fire for taking exactly the
+      // corrective action the alert asks for, indefinitely while the game is paused.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const withFixture = withTreasury(world, pid, {
+        bands: { maintenance: 1, logistics: 1, construction: 1 },
+        lastSettlement: settlement({
+          maintenanceBill: 100,
+          charged: { maintenance: 50, logistics: 0, construction: 0 },
+          paid: { maintenance: 50, logistics: 0, construction: 0 },
+        }),
+      });
+      setWorld(withFixture);
+
+      expect(category("maintenance_unfunded").instances).toHaveLength(0);
+    });
+
+    it("does not fire on a settlement written before the charge was recorded — absent reads as never assessed", () => {
+      // A save from before the field existed carries `paid` and the bill but no record of what the
+      // settlement asked for. Guessing from the live slider is exactly the fault above, so an
+      // unrecorded charge is skipped and the faction's next settlement fills it in — even though
+      // these numbers would look insolvent against a 1.0 slider.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const withFixture = withTreasury(world, pid, {
+        bands: { maintenance: 1, logistics: 1, construction: 1 },
+        lastSettlement: settlement({
+          maintenanceBill: 100,
+          paid: { maintenance: 50, logistics: 0, construction: 0 },
+        }),
+      });
+      setWorld(withFixture);
+
+      expect(category("maintenance_unfunded").instances).toHaveLength(0);
     });
   });
 
@@ -764,6 +1222,160 @@ describe("getAlertData", () => {
       expect(category("windfall").count).toBe(2);
       expect(category("windfall").instances.every((i) => i.systemId === null)).toBe(true);
     });
+
+    it("counts events with no denominator at all, while a system-scoped category carries the developed-systems total", () => {
+      // The two units are not interchangeable: an event count can exceed the developed-systems total
+      // (a region phase covers many systems from one instance, and the pair events have no system at
+      // all), so an event chip that borrowed the shared denominator would read "3 of 2".
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const otherFaction = world.factions.find((f) => f.id !== pid)!.id;
+      const [target] = spareSystemIds(world, 1);
+      const withTarget = withSystems(
+        world,
+        new Map([[target, developedPatch(pid, { supplyBand: "famine", provision: 0.1, population: 100 })]]),
+      );
+      const withFixture = withEvents(withTarget, [
+        fixtureEvent({
+          id: "ev-1", type: "pact_under_negotiation", systemId: null, regionId: null,
+          metadata: { factionAId: pid, factionBId: otherFaction, expiresAtTick: 9999 },
+        }),
+      ]);
+      setWorld(withFixture);
+
+      const developedCount = getWorld().systems.filter(
+        (s) => s.factionId === pid && s.control === "developed",
+      ).length;
+
+      const famine = category("famine");
+      if (famine.unit !== "developed_systems") throw new Error("Famine must count developed systems");
+      expect(famine.count).toBe(1);
+      expect(famine.denominator).toBe(developedCount);
+
+      const windfall = category("windfall");
+      expect(windfall.unit).toBe("events");
+      expect(windfall.count).toBe(1);
+      // No denominator key at all — not a present-but-zero one a renderer would print as "1 of 0".
+      expect("denominator" in windfall).toBe(false);
+    });
+
+    it("sorts crisis events by the authored impactRank, worst type first, and names the event and its phase", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [raided, plagued] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [raided, developedPatch(pid)],
+          [plagued, developedPatch(pid)],
+        ]),
+      );
+      // Authored mildest-first, so a constant sortKey leaves them in this order and reads backwards.
+      setWorld(
+        withEvents(withTargets, [
+          fixtureEvent({ id: "ev-raid", type: "pirate_raid", phase: "raiding", systemId: raided }),
+          fixtureEvent({ id: "ev-plague", type: "plague", phase: "outbreak", systemId: plagued }),
+        ]),
+      );
+
+      const crisis = category("crisis");
+      expect(crisis.instances.map((i) => i.systemId)).toEqual([plagued, raided]);
+      expect(crisis.instances[0].measure).toBe("Plague — Outbreak");
+    });
+
+    it("sorts disruption events by the authored impactRank too — its own branch, its own sortKey", () => {
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [glutted, embargoed] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [glutted, developedPatch(pid)],
+          [embargoed, developedPatch(pid)],
+        ]),
+      );
+      setWorld(
+        withEvents(withTargets, [
+          fixtureEvent({ id: "ev-glut", type: "ore_glut", phase: "glut", systemId: glutted }),
+          fixtureEvent({ id: "ev-embargo", type: "trade_embargo", phase: "imposed", systemId: embargoed }),
+        ]),
+      );
+
+      const disruption = category("disruption");
+      expect(disruption.instances.map((i) => i.systemId)).toEqual([embargoed, glutted]);
+      expect(disruption.instances[0].measure).toBe("Trade Embargo — Imposed");
+    });
+
+    it("sorts windfall events by ticks remaining, soonest to expire first, and measures that same figure", () => {
+      // Windfall's ticksRemaining is BOTH its sortKey and its measure, so this is the one category
+      // where an ordering defect and a wrong figure are the same defect.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [lasting, expiring] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [lasting, developedPatch(pid)],
+          [expiring, developedPatch(pid)],
+        ]),
+      );
+      // Both phases started at tick 100 and the clock reads 100, so remaining is the duration:
+      // 50 ticks against 10. Authored longest-first so a constant sortKey reads backwards.
+      setWorld(
+        withEvents(withTick(withTargets, 100), [
+          fixtureEvent({
+            id: "ev-lasting", type: "mining_boom", phase: "boom", systemId: lasting,
+            phaseStartTick: 100, phaseDuration: 50,
+          }),
+          fixtureEvent({
+            id: "ev-expiring", type: "trade_festival", phase: "festival", systemId: expiring,
+            phaseStartTick: 100, phaseDuration: 10,
+          }),
+        ]),
+      );
+
+      const windfall = category("windfall");
+      expect(windfall.instances.map((i) => i.systemId)).toEqual([expiring, lasting]);
+      expect(windfall.instances[0].measure).toBe("10 ticks remaining");
+      expect(windfall.instances[1].measure).toBe("50 ticks remaining");
+    });
+
+    it("clamps an already-expired windfall to 0 rather than counting down past it", () => {
+      // A phase whose end tick is long past — the world's event sweep has not retired it yet. The
+      // countdown must floor at 0: a negative figure would read as "-350 ticks remaining" and would
+      // sort ahead of every live windfall.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [expired, live] = spareSystemIds(world, 2);
+      const withTargets = withSystems(
+        world,
+        new Map([
+          [expired, developedPatch(pid)],
+          [live, developedPatch(pid)],
+        ]),
+      );
+      setWorld(
+        withEvents(withTick(withTargets, 500), [
+          fixtureEvent({
+            id: "ev-expired", type: "trade_festival", phase: "festival", systemId: expired,
+            phaseStartTick: 100, phaseDuration: 50, // ends at 150, i.e. 350 ticks ago
+          }),
+          fixtureEvent({
+            id: "ev-live", type: "mining_boom", phase: "boom", systemId: live,
+            phaseStartTick: 500, phaseDuration: 20,
+          }),
+        ]),
+      );
+
+      const windfall = category("windfall");
+      const row = windfall.instances.find((i) => i.systemId === expired);
+      expect(row?.measure).toBe("0 ticks remaining");
+      expect(row?.sortKey).toBe(0);
+      // Non-vacuous on the clamp: an unclamped −350 would still sort first, so the live event has to
+      // be the one that proves 0 is a floor and not just "the smallest number here".
+      expect(windfall.instances.map((i) => i.systemId)).toEqual([expired, live]);
+      expect(windfall.instances[1].measure).toBe("20 ticks remaining");
+    });
   });
 
   describe("Build opportunity / Colony opportunity — automation self-gate", () => {
@@ -809,7 +1421,7 @@ describe("getAlertData", () => {
       const [target] = spareSystemIds(world, 1);
       const withTarget = withSystems(
         world,
-        new Map([[target, { factionId: pid, colonyOpportunity: { value: 100, work: 10 } }]]),
+        new Map([[target, candidatePatch(pid, { colonyOpportunity: { value: 100, work: 10 } })]]),
       );
       setWorld(withAutomation(withTarget, { colonisation: true }));
 
@@ -822,7 +1434,7 @@ describe("getAlertData", () => {
       const [target] = spareSystemIds(world, 1);
       const withTarget = withSystems(
         world,
-        new Map([[target, { factionId: pid, colonyOpportunity: { value: 100, work: 10 } }]]),
+        new Map([[target, candidatePatch(pid, { colonyOpportunity: { value: 100, work: 10 } })]]),
       );
       setWorld(withAutomation(withTarget, { colonisation: false }));
 
@@ -833,7 +1445,7 @@ describe("getAlertData", () => {
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
       const [target] = spareSystemIds(world, 1);
-      const withTarget = withSystems(world, new Map([[target, { factionId: pid, control: "controlled" }]]));
+      const withTarget = withSystems(world, new Map([[target, candidatePatch(pid)]]));
       setWorld(withAutomation(withTarget, { colonisation: false }));
 
       expect(category("colony_opportunity").instances.map((i) => i.systemId)).not.toContain(target);
@@ -949,15 +1561,60 @@ describe("getAlertData", () => {
         world,
         new Map([
           // ROI 2
-          [lowRoi, { factionId: pid, colonyOpportunity: { value: 20, work: 10 } }],
+          [lowRoi, candidatePatch(pid, { colonyOpportunity: { value: 20, work: 10 } })],
           // ROI 5
-          [highRoi, { factionId: pid, colonyOpportunity: { value: 50, work: 10 } }],
+          [highRoi, candidatePatch(pid, { colonyOpportunity: { value: 50, work: 10 } })],
         ]),
       );
       setWorld(withAutomation(withFixture, { colonisation: false }));
 
       const colonyOpp = category("colony_opportunity");
       expect(colonyOpp.instances.map((i) => i.systemId)).toEqual([highRoi, lowRoi]);
+    });
+
+    it("counts candidates against the CONTROLLED systems total, never the developed one it is disjoint from", () => {
+      // A colony candidate is a claimed, not-yet-developed system, so it is never in the developed
+      // set the other system-scoped chips are a share of. Carried against that denominator the chip
+      // can print more candidates than there are developed systems — "3 of 1 developed systems" —
+      // because the two populations have no member in common.
+      //
+      // Sized so the misread is visible: four developed systems, three candidates, two of them
+      // carrying a stored proposal. Nothing here can pass by coincidence — the right denominator (3)
+      // is neither the wrong one (4) nor the count (2).
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [devA, devB, devC, candA, candB, candC] = spareSystemIds(world, 6);
+      const withFixture = withSystems(
+        world,
+        new Map([
+          [devA, developedPatch(pid)],
+          [devB, developedPatch(pid)],
+          [devC, developedPatch(pid)],
+          [candA, candidatePatch(pid, { colonyOpportunity: { value: 50, work: 10 } })],
+          [candB, candidatePatch(pid, { colonyOpportunity: { value: 20, work: 10 } })],
+          // A third candidate the planner proposed nothing for: in the denominator, not the count.
+          [candC, candidatePatch(pid)],
+        ]),
+      );
+      setWorld(withAutomation(withFixture, { colonisation: false }));
+
+      const developedCount = getWorld().systems.filter(
+        (s) => s.factionId === pid && s.control === "developed",
+      ).length;
+
+      const colonyOpp = category("colony_opportunity");
+      if (colonyOpp.unit !== "controlled_systems") throw new Error("Colony opportunity must count controlled systems");
+      expect(colonyOpp.count).toBe(2);
+      expect(colonyOpp.denominator).toBe(3);
+      // The developed total is a real, different number on this very same read — and the one this
+      // category must not be carrying.
+      expect(developedCount).toBe(4); // three patched here plus the faction's homeworld
+      expect(colonyOpp.denominator).not.toBe(developedCount);
+      const famine = category("famine");
+      if (famine.unit !== "developed_systems") throw new Error("Famine must count developed systems");
+      expect(famine.denominator).toBe(developedCount);
+      // What the mismatch actually breaks: a count that can exceed what it is rendered against.
+      expect(colonyOpp.count).toBeLessThanOrEqual(colonyOpp.denominator);
     });
   });
 

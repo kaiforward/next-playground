@@ -56,6 +56,7 @@ import {
 } from "@/lib/constants/industry";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
+import { USED_SLACK } from "@/lib/constants/infrastructure";
 import { brakeKnee } from "@/lib/engine/tick";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
@@ -527,6 +528,68 @@ describe("buildIndustryReadout — per-building used + idleReason", () => {
     const gate = readout.supplyChain.find((e) => e.goodId === "metals")!.inputGate;
     expect(gate).toBeGreaterThan(0.5); // looser than the 0.5 labour floor
     expect(metals.idleReason).toBe("labour");
+  });
+
+  // A PARTIALLY throttled gate. Every fixture above reaches the input gate only at its two extremes
+  // — 0 (no ore at all) or 1 (ample ore) — so the whole open interval, which is where the gate
+  // actually lives in a running economy, is untested. Widening ore's own demand rate lifts its
+  // ration threshold well above the stock supplied, putting the draw on the scarcity ramp:
+  // consumptionFactor(500, RATION_COVER × 1000) = sqrt(500 / 2000) = 0.5.
+  const ORE_DEMAND_RATE = 1000;
+  const partialGateDemandRateOf = (goodId: string): number => (goodId === "ore" ? ORE_DEMAND_RATE : 2.5);
+  const RAMPED_ORE_STOCK = 0.25 * ECONOMY_CONSTANTS.RATION_COVER * ORE_DEMAND_RATE; // cf = sqrt(0.25) = 0.5
+
+  it("reports 'inputs' on a PARTIALLY throttled gate, not only a shut one", () => {
+    const buildings = { metals: 4, vocational_school: 1 };
+    const pop = labourDemand(buildings); // fully staffed: labour cannot be the binding constraint
+    const readout = buildIndustryReadout(
+      buildings, pop,
+      { metals: MIN, ore: RAMPED_ORE_STOCK }, // metals at floor ⇒ sells freely, so selling cannot bind
+      unitResourceVector(),
+      { demandRateOf: partialGateDemandRateOf, honestUseRateOf, anchorMultOf: one },
+    );
+    const gate = readout.supplyChain.find((e) => e.goodId === "metals")!.inputGate;
+    // The premise this fixture exists for, measured: a gate strictly inside (0, 1).
+    expect(gate).toBeGreaterThan(0);
+    expect(gate).toBeLessThan(1);
+    expect(gate).toBeCloseTo(0.5, 6);
+
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.used).toBeCloseTo(4 * gate, 6); // the gate, not labour or selling, sets `used`
+    expect(metals.idleReason).toBe("inputs");
+  });
+
+  it("reports 'selling', not 'inputs', when the selling allowance binds tighter than a partially throttled gate", () => {
+    // canSell < gate < fulfil — the ordering case no existing fixture reaches, because every one of
+    // them has the gate at an extreme. A glutted yard puts the selling factor at 0, so canSell is
+    // USED_SLACK (0.15), below the 0.5 gate, which is itself below the fully staffed fulfil of 1.
+    const buildings = { metals: 4, vocational_school: 1 };
+    const pop = labourDemand(buildings);
+    const glutted = shutStock(buildings, pop);
+    const readout = buildIndustryReadout(
+      buildings, pop,
+      { metals: glutted, ore: RAMPED_ORE_STOCK },
+      unitResourceVector(),
+      { demandRateOf: partialGateDemandRateOf, honestUseRateOf, anchorMultOf: one },
+    );
+    const gate = readout.supplyChain.find((e) => e.goodId === "metals")!.inputGate;
+    expect(gate).toBeCloseTo(0.5, 6);
+    expect(gate).toBeGreaterThan(USED_SLACK); // canSell is exactly USED_SLACK at a shut brake
+    const metals = readout.buildings.find((b) => b.buildingType === "metals")!;
+    expect(metals.staffedFraction).toBeCloseTo(1, 6); // fulfil = 1, so canSell < gate < fulfil holds
+    expect(metals.idleReason).toBe("selling");
+
+    // Non-vacuous on the ORDERING, not just on this fixture: hold the glut and take the ore away,
+    // so the gate drops below the same canSell, and the reason flips to "inputs". The chain really
+    // is naming the strict minimum rather than preferring one cause outright.
+    const starved = buildIndustryReadout(
+      buildings, pop,
+      { metals: glutted },
+      unitResourceVector(),
+      { demandRateOf: partialGateDemandRateOf, honestUseRateOf, anchorMultOf: one },
+    );
+    expect(starved.supplyChain.find((e) => e.goodId === "metals")!.inputGate).toBe(0);
+    expect(starved.buildings.find((b) => b.buildingType === "metals")!.idleReason).toBe("inputs");
   });
 
   it("a tier-0 extractable never reports 'inputs' — it has no recipe to gate", () => {

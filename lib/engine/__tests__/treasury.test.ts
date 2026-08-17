@@ -4,6 +4,7 @@ import {
   productionTaxIncome,
   maintenanceBill,
   settleLadder,
+  bandShortfall,
   maintenanceOutputMalus,
   maintenanceBufferScale,
   type TreasuryBands,
@@ -96,11 +97,86 @@ describe("settleLadder", () => {
     expect(r.balance).toBe(5);
   });
 
+  it("reports what each band was ASKED to pay, out of range clamped exactly as the ladder applies it", () => {
+    // `charged` is what makes insolvency decidable from the settlement alone: a band is insolvent
+    // iff `paid < charged`, and both are fixed at the same instant. Maintenance is asked for its full
+    // bill and pays it; construction is asked for half of a 40 bill and the ladder runs out of money
+    // at 10 — the shortfall that a comparison against the slider alone could not distinguish from a
+    // deliberate half-funding. An out-of-range slider is clamped, so `charged` never exceeds the bill.
+    const sliders: TreasuryBands = { maintenance: 1, logistics: 1, construction: 0.5 };
+    const r = settleLadder(0, 40, { maintenance: 30, logistics: 0, construction: 40 }, sliders);
+    expect(r.charged).toEqual({ maintenance: 30, logistics: 0, construction: 20 });
+    expect(r.paid.maintenance).toBe(30);
+    expect(r.paid.construction).toBe(10);
+
+    const overRange = settleLadder(0, 1000, { maintenance: 30, logistics: 0, construction: 0 },
+      { maintenance: 4, logistics: 1, construction: 1 });
+    expect(overRange.charged.maintenance).toBe(30);
+  });
+
   it("never goes negative and coerces non-finite inputs to 0", () => {
     const r = settleLadder(NaN, Infinity, { maintenance: NaN, logistics: 5, construction: 5 }, FULL);
     expect(Number.isFinite(r.balance)).toBe(true);
     expect(r.balance).toBeGreaterThanOrEqual(0);
     expect(r.paid.maintenance).toBe(0);
+  });
+});
+
+describe("bandShortfall", () => {
+  // Every fixture here is a settlement ALONE — the function takes no slider argument, which is the
+  // structural half of the fix: there is no seam across which a live policy value could be compared
+  // with a frozen outcome, because the caller has nothing live to hand it.
+  const settled = (paid: TreasuryBands, charged?: TreasuryBands) => ({ paid, charged });
+  const bands = (maintenance: number, logistics: number, construction: number): TreasuryBands =>
+    ({ maintenance, logistics, construction });
+
+  it("is null for a band that paid what it was asked, however far below its full bill that was", () => {
+    // The half-funded case: a legal slider at 0.5 charges half the bill and the faction pays all of
+    // it. Solvent on every band — and the player raising a slider afterwards cannot reach this
+    // reading, because nothing here can see today's slider.
+    const s = settled(bands(50, 10, 5), bands(50, 10, 5));
+    expect(bandShortfall(s, "maintenance")).toBeNull();
+    expect(bandShortfall(s, "logistics")).toBeNull();
+    expect(bandShortfall(s, "construction")).toBeNull();
+  });
+
+  it("reports the shortfall amount for a band the ladder could not fully pay", () => {
+    // Maintenance was asked 100 and paid 60; the two lower rungs got nothing they were asked for.
+    const s = settled(bands(60, 0, 0), bands(100, 20, 40));
+    expect(bandShortfall(s, "maintenance")).toBeCloseTo(40);
+    expect(bandShortfall(s, "logistics")).toBeCloseTo(20);
+    expect(bandShortfall(s, "construction")).toBeCloseTo(40);
+  });
+
+  it("is null for a band charged nothing at all — an unbilled band is not an unfunded one", () => {
+    const s = settled(bands(0, 0, 0), bands(0, 0, 0));
+    expect(bandShortfall(s, "construction")).toBeNull();
+  });
+
+  it("is null for a settlement predating the charge, and for no settlement at all", () => {
+    // An older save carries `paid` with no record of what was asked. Guessing from the live slider
+    // is the fault this function removes, so absent reads as never-assessed and the next settlement
+    // fills it in — even where the paid figures alone would look short against a full slider.
+    expect(bandShortfall(settled(bands(50, 0, 0)), "maintenance")).toBeNull();
+    expect(bandShortfall(null, "maintenance")).toBeNull();
+    expect(bandShortfall(undefined, "maintenance")).toBeNull();
+  });
+
+  it("agrees exactly with settleLadder's own output — no float residue on a fully funded band", () => {
+    // The end-to-end guarantee the callers rest on: run the real ladder, and a band it funded in
+    // full reads null rather than a hairline positive. `pay = min(charge, available)` hands back the
+    // identical value, so the comparison needs no epsilon — pinned here rather than assumed.
+    const sliders: TreasuryBands = { maintenance: 0.5, logistics: 0.3, construction: 0.7 };
+    const full = settleLadder(0, 1000, { maintenance: 30, logistics: 20, construction: 40 }, sliders);
+    expect(bandShortfall(full, "maintenance")).toBeNull();
+    expect(bandShortfall(full, "logistics")).toBeNull();
+    expect(bandShortfall(full, "construction")).toBeNull();
+
+    // Same bills and sliders, income that runs out inside the construction rung.
+    const starved = settleLadder(0, 30, { maintenance: 30, logistics: 20, construction: 40 }, sliders);
+    expect(bandShortfall(starved, "maintenance")).toBeNull(); // 15 asked, 15 paid
+    expect(bandShortfall(starved, "logistics")).toBeNull();   // 6 asked, 6 paid
+    expect(bandShortfall(starved, "construction")).toBeCloseTo(19); // 28 asked, 9 left
   });
 });
 

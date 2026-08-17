@@ -7,6 +7,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { useAlerts } from "@/lib/hooks/use-alerts";
 import { makeQueryClient } from "@/lib/query/client";
 import { QueryBoundary } from "@/components/ui/query-boundary";
+import type { AlertResponse } from "@/lib/types/api";
 
 function AlertCountProbe() {
   // Defensive on `alerts` itself (not `?.categories`): a real useSuspenseQuery guarantees `alerts`
@@ -17,7 +18,9 @@ function AlertCountProbe() {
   return <div data-testid="alert-count">{alerts?.categories.length}</div>;
 }
 
-function jsonResponse(body: unknown): Response {
+/** The alert route's own envelope — `apiFetch` unwraps `data`, so a body typed as anything looser
+ *  would let a fixture serialise a shape the real route can never send. */
+function jsonResponse(body: AlertResponse): Response {
   return new Response(JSON.stringify(body), {
     status: 200,
     headers: { "Content-Type": "application/json" },
@@ -35,10 +38,8 @@ describe("useAlerts — a real useSuspenseQuery", () => {
     const fetchPromise = new Promise<Response>((resolve) => {
       resolveFetch = resolve;
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockReturnValue(fetchPromise),
-    );
+    const fetchMock = vi.fn().mockReturnValue(fetchPromise);
+    vi.stubGlobal("fetch", fetchMock);
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -59,6 +60,29 @@ describe("useAlerts — a real useSuspenseQuery", () => {
     });
 
     await waitFor(() => expect(screen.getByTestId("alert-count")).toHaveTextContent("0"));
+  });
+
+  it("fetches the alert route the API actually serves", async () => {
+    // The mock above answers any URL, so nothing else in this file would notice the hook asking for
+    // the wrong path — a 404 in the browser behind a green suite. `/api/game/player/alerts` is the
+    // route directory on disk (app/api/game/player/alerts/route.ts), transcribed here rather than
+    // imported, so a rename that moves the route without moving the hook fails here.
+    const queryClient = makeQueryClient();
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(jsonResponse({ data: { categories: [] } })));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Suspense fallback={<div data-testid="loading">loading</div>}>
+          <AlertCountProbe />
+        </Suspense>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId("alert-count")).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith("/api/game/player/alerts");
   });
 });
 

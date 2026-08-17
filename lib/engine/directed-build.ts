@@ -108,9 +108,11 @@ export interface PlannedBuild {
  * Why the industry pass's own two-pass allocator dropped a production opportunity it wanted, at the
  * site named in each comment below (`planFactionBundles`). Housing refusals (`plannedHousingUnits`)
  * are a separate pass with a separate category (No housing headroom) and never produce one of these.
- * - "no-capacity" — no buildable footprint/deposit slots left for the good, checked before ranking
- *   (`:capUnits <= 0`, first loop) and again after (capacity another opportunity at the same site
- *   already claimed, second loop).
+ * - "no-capacity" — the site's footprint/deposit slots for the good are used up, checked before
+ *   ranking (`:capUnits <= 0`, first loop) and again after (capacity another opportunity at the same
+ *   site already claimed, second loop). USED UP, not merely absent: the pre-ranking check records
+ *   this only for a site with a gross ceiling for the good (`hasCapacityCeiling`), so a system with
+ *   no deposit for a good — never a plausible builder of it — reports nothing rather than a block.
  * - "no-input-supplier" — a tier-1+ recipe input has no reachable surplus source.
  * - "no-consumer" — no reachable system still wants this good: none is reachable at all, or every
  *   reachable one's remaining shortfall was already claimed by a higher-ranked opportunity.
@@ -164,8 +166,8 @@ export interface BuildBlockReport {
  *
  * "Best-ranked" bands survival-serving goods (`SURVIVAL_GOODS`, `lib/constants/physical-economy.ts`)
  * above every other good, then orders by `score` within a band — the same rule the read service
- * applies when it bands the category for display (docs/build-plans/alert-bar.md, "Build opportunity
- * sorts survival-serving builds first"). A single stored score cannot be re-banded after the fact, so
+ * applies when it bands the category for display (`buildOpportunitySortKey`,
+ * `lib/services/alerts.ts`). A single stored score cannot be re-banded after the fact, so
  * the choice of which one candidate's terms to keep is made here, not downstream: a system whose
  * highest score belongs to a non-survival good, but which also has ANY survival-serving opportunity,
  * persists the survival one. On an exact tie (same band, same score) the first one scored in this
@@ -563,6 +565,24 @@ export function buildableUnits(sys: BuildSystemState, goodId: string): number {
   return Math.max(0, remainingGeneral / cost);
 }
 
+/**
+ * Could this system host a unit of `goodId` AT ALL — its gross ceiling, ignoring everything already
+ * built? Tier-0 needs at least one deposit slot for the good's resource; tier-1+ needs some general
+ * space and a positive footprint. This is what separates the two states `buildableUnits` returns 0
+ * for alike: a site whose capacity for the good is USED UP (a real, reportable obstacle) and a site
+ * that never had any (a good it was never a plausible builder of — most goods at most systems).
+ */
+function hasCapacityCeiling(sys: BuildSystemState, goodId: string): boolean {
+  const tier = GOOD_TIER_BY_KEY[goodId];
+  if (tier === undefined) return false;
+  if (tier === 0) {
+    const resource = BUILDING_TYPES[goodId]?.resource;
+    if (!resource) return false;
+    return sys.slotCap[resource] > 0;
+  }
+  return effectiveSpaceCost(goodId) > 0 && sys.generalSpace > 0;
+}
+
 /** Additional output of `goodId` a system can host = buildable units × per-unit output. */
 export function buildableOutput(sys: BuildSystemState, goodId: string): number {
   return buildableUnits(sys, goodId) * (OUTPUT_PER_UNIT[goodId] ?? 0);
@@ -867,7 +887,15 @@ function planFactionBundles(
         // The literal "no capacity" case, and the one that fires BEFORE a BuildOpportunity is ever
         // constructed for this site×good — see BuildBlockReport's docstring for what droppedRoi means
         // here (nothing: no rank exists yet).
-        recordUnrankedDrop(site.systemId, "no-capacity");
+        //
+        // Recorded only where the site HAS a ceiling for this good to have exhausted. Every site is
+        // scanned against every good in deficit — food and water always among them — so without this
+        // gate a system with no arable deposit at all would report a blocked food build, and nearly
+        // every economically-active system in the faction would carry a block every run for goods it
+        // could never have built. That is the opposite of what the report means, and it would break
+        // the absence convention the write path relies on: a visited system with no entry landed
+        // everything or wanted nothing.
+        if (hasCapacityCeiling(site, goodId)) recordUnrankedDrop(site.systemId, "no-capacity");
         continue;
       }
       if (!isTier0 && !inputsAvailable(goodId, site, surplusSystemsByGood, routeCost)) {

@@ -350,7 +350,6 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       squeezeCycles: m.squeezeCycles,
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
-      demandUnservable: m.demandUnservable,
       unservedShortfall: m.unservedShortfall,
     };
     const list = bySystem.get(m.systemId);
@@ -396,13 +395,11 @@ function applyLogisticsMarketUpdates(
   markets: WorldMarket[],
   stockUpdates: Map<string, number>,
   fundingBoundUpdates: Map<string, boolean>,
-  demandUnservableUpdates: Map<string, boolean>,
   unservedShortfallUpdates: Map<string, number>,
 ): WorldMarket[] {
   if (
     stockUpdates.size === 0
     && fundingBoundUpdates.size === 0
-    && demandUnservableUpdates.size === 0
     && unservedShortfallUpdates.size === 0
   ) {
     return markets;
@@ -411,16 +408,16 @@ function applyLogisticsMarketUpdates(
     const id = `${m.systemId}|${m.goodId}`;
     const newStock = stockUpdates.get(id);
     const logisticsFundingBound = fundingBoundUpdates.get(id);
-    const demandUnservable = demandUnservableUpdates.get(id);
-    // stock and logisticsFundingBound stay coupled exactly as before this field was added: either
-    // one changing rewrites both together (`?? m.field` on the untouched one), which is what stamps
-    // an explicit-undefined logisticsFundingBound key onto a market whose stock alone moved. That
-    // quirk predates demandUnservable and is not this task's to fix. demandUnservable is applied as
-    // an entirely separate, independently-conditioned spread — never folded into the branch above —
-    // so a market whose ONLY change this run is demandUnservable does not also pick up a spurious
+    const unservedShortfall = unservedShortfallUpdates.get(id);
+    // stock and logisticsFundingBound stay coupled exactly as they always were: either one changing
+    // rewrites both together (`?? m.field` on the untouched one), which is what stamps an
+    // explicit-undefined logisticsFundingBound key onto a market whose stock alone moved. That quirk
+    // predates unservedShortfall and is deliberately left alone. unservedShortfall is applied as an
+    // entirely separate, independently-conditioned spread — never folded into the branch above — so a
+    // market whose ONLY change this run is the shortfall does not also pick up a spurious
     // logisticsFundingBound key it never earned, and vice versa.
     const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
-    if (!stockOrFundingChanged && demandUnservable === undefined) return m;
+    if (!stockOrFundingChanged && unservedShortfall === undefined) return m;
     let next: WorldMarket = m;
     if (stockOrFundingChanged) {
       next = {
@@ -429,15 +426,13 @@ function applyLogisticsMarketUpdates(
         logisticsFundingBound: logisticsFundingBound ?? next.logisticsFundingBound,
       };
     }
-    if (demandUnservable !== undefined) {
-      // unservedShortfall rides the identical branch as the bit it can never appear without: `true`
-      // always has a matching entry in unservedShortfallUpdates (the processor writes them from the
-      // same classification pass), `false` has none, so the delete/assign pair below is exactly
-      // "present iff demandUnservable is true" rather than a present key holding `undefined`.
-      next = { ...next, demandUnservable };
-      const shortfall = unservedShortfallUpdates.get(id);
-      if (shortfall === undefined) delete next.unservedShortfall;
-      else next.unservedShortfall = shortfall;
+    if (unservedShortfall !== undefined) {
+      // A positive level is the structural reading; 0 is this run saying the row is servable, which
+      // deletes the key rather than persisting a zero — absence, not a falsy number, is what "not
+      // unservable" looks like on a market row.
+      next = { ...next };
+      if (unservedShortfall > 0) next.unservedShortfall = unservedShortfall;
+      else delete next.unservedShortfall;
     }
     return next;
   });
@@ -454,13 +449,11 @@ function patchLogisticsMarketRows(
   bySystem: Map<string, MarketRowForLogistics[]>,
   stockUpdates: Map<string, number>,
   fundingBoundUpdates: Map<string, boolean>,
-  demandUnservableUpdates: Map<string, boolean>,
   unservedShortfallUpdates: Map<string, number>,
 ): Map<string, MarketRowForLogistics[]> {
   if (
     stockUpdates.size === 0
     && fundingBoundUpdates.size === 0
-    && demandUnservableUpdates.size === 0
     && unservedShortfallUpdates.size === 0
   ) {
     return bySystem;
@@ -470,9 +463,6 @@ function patchLogisticsMarketRows(
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   for (const key of fundingBoundUpdates.keys()) {
-    touchedSystems.add(key.slice(0, key.indexOf("|")));
-  }
-  for (const key of demandUnservableUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   for (const key of unservedShortfallUpdates.keys()) {
@@ -487,13 +477,13 @@ function patchLogisticsMarketRows(
       rows.map((r) => {
         const newStock = stockUpdates.get(r.id);
         const logisticsFundingBound = fundingBoundUpdates.get(r.id);
-        const demandUnservable = demandUnservableUpdates.get(r.id);
+        const unservedShortfall = unservedShortfallUpdates.get(r.id);
         // Same isolation as applyLogisticsMarketUpdates above: stock/logisticsFundingBound stay
-        // coupled as they already were; demandUnservable is a separate, independently-conditioned
+        // coupled as they already were; unservedShortfall is a separate, independently-conditioned
         // spread so it cannot stamp a spurious logisticsFundingBound key (or vice versa) onto a row
         // whose only real change this run is the other field.
         const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
-        if (!stockOrFundingChanged && demandUnservable === undefined) return r;
+        if (!stockOrFundingChanged && unservedShortfall === undefined) return r;
         let next: MarketRowForLogistics = r;
         if (stockOrFundingChanged) {
           next = {
@@ -502,12 +492,11 @@ function patchLogisticsMarketRows(
             logisticsFundingBound: logisticsFundingBound ?? next.logisticsFundingBound,
           };
         }
-        if (demandUnservable !== undefined) {
-          // Same present-iff-true pairing as applyLogisticsMarketUpdates above.
-          next = { ...next, demandUnservable };
-          const shortfall = unservedShortfallUpdates.get(r.id);
-          if (shortfall === undefined) delete next.unservedShortfall;
-          else next.unservedShortfall = shortfall;
+        if (unservedShortfall !== undefined) {
+          // Same positive-means-unservable, zero-means-clear rule as applyLogisticsMarketUpdates.
+          next = { ...next };
+          if (unservedShortfall > 0) next.unservedShortfall = unservedShortfall;
+          else delete next.unservedShortfall;
         }
         return next;
       }),
@@ -823,11 +812,9 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above. `stockChange` joins
  * the same clear for the same reason as `logisticsFundingBound`: it is a reading from a previous
  * life and must not survive into the next — a re-founded colony's warehouse is real, but its
- * predecessor's drain rate is not. `demandUnservable` joins the same clear for the same reason: a
+ * predecessor's drain rate is not. `unservedShortfall` joins the same clear for the same reason: a
  * structural reading names a shortfall THIS colony's donors and production could not close, and a
- * resettled colony has neither yet — its own local-supply story starts over. `unservedShortfall`
- * joins it too, for the same reason and because it cannot outlive the bit it is only ever present
- * alongside.
+ * resettled colony has neither yet — its own local-supply story starts over.
  */
 export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
   if (abandonedSystemIds.length === 0) return markets;
@@ -839,7 +826,6 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.squeezeCycles;
     delete next.logisticsFundingBound;
     delete next.stockChange;
-    delete next.demandUnservable;
     delete next.unservedShortfall;
     return next;
   });
@@ -1414,7 +1400,6 @@ export async function runWorldTick(
     const logisticsMarketRows = marketRowsBySystem(markets);
     let dlStockUpdates: Map<string, number> = new Map();
     let dlFundingBoundUpdates: Map<string, boolean> = new Map();
-    let dlDemandUnservableUpdates: Map<string, boolean> = new Map();
     let dlUnservedShortfallUpdates: Map<string, number> = new Map();
 
     // ── directed-logistics ──
@@ -1443,58 +1428,16 @@ export async function runWorldTick(
         markets,
         dlWorld.stockUpdates,
         dlWorld.fundingBoundUpdates,
-        dlWorld.demandUnservableUpdates,
         dlWorld.unservedShortfallUpdates,
       );
       dlStockUpdates = dlWorld.stockUpdates;
       dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
-      dlDemandUnservableUpdates = dlWorld.demandUnservableUpdates;
       dlUnservedShortfallUpdates = dlWorld.unservedShortfallUpdates;
       const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
       flowEvents = [...flowEvents, ...newLogisticsFlows];
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
       logisticsBudget = dlResult.logisticsBudget;
       processorsRun.push("directed-logistics");
-    }
-
-    // ── realised per-cycle survival-good stock change (persisted; read by nothing else in the
-    // tick) ── Written HERE — after directed logistics has applied its own stock updates above —
-    // because the interface is explicitly "after directed logistics has applied its hauls as stock
-    // deltas": the economy processor's production/consumption write happened earlier this same
-    // tick, gated on the same `isCycleStart(tick, cadence.cycle)` predicate as this write, and
-    // directed logistics' haul (if this tick was also its own cycle start; it bails internally
-    // otherwise, leaving `markets` unchanged) just landed above.
-    //
-    // Gated on `stockAtCycleStart`: absent whenever this tick was not an economy-cycle boundary
-    // (the snapshot above is only taken then), so this skips cleanly on a tick where only logistics
-    // or build resolves, rather than diffing against a stale or absent snapshot.
-    //
-    // Cadence caveat (see the field's own docstring, lib/world/types.ts): directed logistics runs
-    // on its OWN independently-tunable cadence (`cadence.logistics`). While it coincides with
-    // `cadence.cycle` — the live game's constants always do — this write captures the full
-    // production-minus-consumption-net-of-hauls figure the interface describes. If the two cadences
-    // are retuned apart, this only ever captures a logistics application that happens to land on
-    // THIS tick; a haul on any other tick is folded into `stock` without ever appearing in a
-    // reported change, and a cycle boundary with no coincident logistics run reports
-    // production-minus-consumption alone. Accepted rather than solved: capturing every haul
-    // regardless of cadence alignment needs a cross-tick accumulator carrying its own persisted
-    // baseline, which is a larger shape than this reading is worth.
-    //
-    // Abandoned systems are excluded even though their survival-good rows sit in the snapshot:
-    // `resetAbandonedMarkets` already cleared this field above (before migration ran), and this
-    // system's control just flipped away from "developed" — writing a computed reading here would
-    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
-    // exists.
-    if (stockAtCycleStart) {
-      const snapshot = stockAtCycleStart;
-      const cycleCatchUp = catchUpFactor(cadence.cycle);
-      const abandonedThisCycle = new Set(abandonedSystemIds);
-      markets = markets.map((m): WorldMarket => {
-        if (abandonedThisCycle.has(m.systemId)) return m;
-        const before = snapshot.get(`${m.systemId}|${m.goodId}`);
-        if (before === undefined) return m;
-        return { ...m, stockChange: (m.stock - before) / cycleCatchUp };
-      });
     }
 
     // ── directed-build ──
@@ -1577,7 +1520,6 @@ export async function runWorldTick(
           logisticsMarketRows,
           dlStockUpdates,
           dlFundingBoundUpdates,
-          dlDemandUnservableUpdates,
           dlUnservedShortfallUpdates,
         ),
       );
@@ -1678,6 +1620,60 @@ export async function runWorldTick(
       foundingStalls = dbResult.foundingStalls;
       strikeSuppressedProposals = dbResult.strikeSuppressedProposals;
       processorsRun.push("directed-build");
+    }
+
+    // ── realised per-cycle survival-good stock change (persisted; read by nothing else in the
+    // tick) ── Written HERE — after directed logistics has applied its own stock updates AND after
+    // directed-build's founding staging draws and staged manifest delivery above, still inside this
+    // outer cycle-start block. The interface is the realised change across the whole cycle: a
+    // founding donor's survival-good draw (`applyFoundingStagingDraws`) leaves its warehouse exactly
+    // as really as consumption does, so it belongs inside this figure rather than after it — and the
+    // polarity makes that load-bearing rather than cosmetic. The one reader divides `stock` by
+    // `−stockChange` for a cycles-to-empty countdown, so a drain left outside the figure reports a
+    // longer runway than the donor actually has: the reading would err toward reassurance on exactly
+    // the system that just gave its stores away. A donor that stages a manifest this cycle therefore
+    // reads more pessimistic for this one cycle than a mid-cycle read would show — accepted, the same
+    // way `populationChange` below accepts it, and it self-corrects next cycle from a fresh baseline.
+    //
+    // Gated on `stockAtCycleStart`: absent whenever this tick was not an economy-cycle boundary
+    // (the snapshot is only taken then), so this skips cleanly on a tick where only logistics
+    // or build resolves, rather than diffing against a stale or absent snapshot.
+    //
+    // Cadence caveat (see the field's own docstring, lib/world/types.ts): directed logistics runs
+    // on its OWN independently-tunable cadence (`cadence.logistics`). While it coincides with
+    // `cadence.cycle` — the live game's constants always do — this write captures the full
+    // production-minus-consumption-net-of-hauls figure the interface describes. If the two cadences
+    // are retuned apart, this only ever captures a logistics application that happens to land on
+    // THIS tick; a haul on any other tick is folded into `stock` without ever appearing in a
+    // reported change, and a cycle boundary with no coincident logistics run reports
+    // production-minus-consumption alone. Accepted rather than solved: capturing every haul
+    // regardless of cadence alignment needs a cross-tick accumulator carrying its own persisted
+    // baseline, which is a larger shape than this reading is worth.
+    //
+    // Placement is safe against resurrecting a row a colony founding just created or cleared, for
+    // the mirror of `populationChange`'s reason below. A founding TARGET is `controlled` right up to
+    // `applyDevelopments` this same run, so none of its rows are in `stockAtCycleStart` (keyed by
+    // the systems that were developed when the snapshot was taken) — its fresh rows from
+    // `addMarketsForSettledSystems`, and the manifest `applyStagedManifestDelivery` lands on them,
+    // are left untouched at `before === undefined`, absent as a never-assessed row should be. A
+    // founding SOURCE is `developed` throughout, so it was already in the snapshot and simply reads
+    // its post-draw `stock` here instead of its pre-draw one.
+    //
+    // Abandoned systems are excluded even though their survival-good rows sit in the snapshot:
+    // `resetAbandonedMarkets` already cleared this field above (before migration ran), and this
+    // system's control just flipped away from "developed" — writing a computed reading here would
+    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
+    // exists.
+    if (stockAtCycleStart) {
+      const snapshot = stockAtCycleStart;
+      const cycleCatchUp = catchUpFactor(cadence.cycle);
+      const abandonedThisCycle = new Set(abandonedSystemIds);
+      markets = markets.map((m): WorldMarket => {
+        if (abandonedThisCycle.has(m.systemId)) return m;
+        const before = snapshot.get(`${m.systemId}|${m.goodId}`);
+        if (before === undefined) return m;
+        return { ...m, stockChange: (m.stock - before) / cycleCatchUp };
+      });
     }
 
     // ── realised per-cycle population change (persisted; read by nothing else in the tick) ──

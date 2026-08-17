@@ -11,7 +11,7 @@ import { TREASURY } from "@/lib/constants/treasury";
 import { buildingLabel } from "@/lib/engine/construction-readout";
 import { formatMagnitude } from "@/lib/utils/format";
 import type { TaxLevel } from "@/lib/types/game";
-import type { TreasuryBands } from "@/lib/engine/treasury";
+import { bandShortfall, type TreasuryBands } from "@/lib/engine/treasury";
 
 function money(n: number): string {
   return formatMagnitude(n);
@@ -111,6 +111,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
           label="Maintenance"
           set={data.bands.maintenance}
           runs={data.funded.maintenance}
+          shorted={bandShortfall(data.lastSettlement, "maintenance") !== null}
           floor={TREASURY.MAINTENANCE_SLIDER_FLOOR}
           interactive={interactive}
           onCommit={commitBand("maintenance")}
@@ -119,6 +120,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
           label="Logistics"
           set={data.bands.logistics}
           runs={data.funded.logistics}
+          shorted={bandShortfall(data.lastSettlement, "logistics") !== null}
           interactive={interactive}
           onCommit={commitBand("logistics")}
         />
@@ -126,6 +128,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
           label="Construction"
           set={data.bands.construction}
           runs={data.funded.construction}
+          shorted={bandShortfall(data.lastSettlement, "construction") !== null}
           interactive={interactive}
           onCommit={commitBand("construction")}
         />

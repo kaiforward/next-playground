@@ -16,6 +16,7 @@ import type { SystemControl, WorldColonyEstablishProject, WorldConstructionProje
 import { emptyResourceVector, unitResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { RouteCost } from "@/lib/engine/directed-logistics";
 import type { ClaimCandidate, ExpansionParams } from "@/lib/engine/expansion";
+import { sizeColonyEstablish } from "@/lib/engine/directed-build";
 import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
@@ -366,16 +367,28 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
   });
 
   it("Proves 5 — turning build automation off does not blank the Build blocked field; only proposal emission is gated", async () => {
-    // A is developed with zero capacity of its own (see `scenario`'s own comment) — the food
-    // opportunity at A is always dropped as no-capacity, before the planner even ranks anything,
-    // regardless of what happens elsewhere. B has real capacity and lands the food build when
-    // automation allows it.
-    const on = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodCycles: 1 }));
+    // C is developed with a single arable slot it has already built out — a real blocked food build,
+    // whatever happens elsewhere. (A, developed with no arable deposit at all, is not: it could never
+    // have hosted a food extractor, so it reports nothing — asserted below so this fixture keeps
+    // saying which of the two "capacity is 0" states is the reportable one.) B has real capacity and
+    // lands the food build when automation allows it. C holds no population and no market rows, so it
+    // neither feeds the construction pool nor moves the deficit the other two are assessed on.
+    const saturatedSlots = emptyResourceVector();
+    saturatedSlots.arable = 1;
+    const rows = (): SystemBuildRow[] => [
+      ...scenario(0, 0, 20, 100, { control: "developed", foodCycles: 1 }),
+      {
+        systemId: "C", factionId: "f1", control: "developed", population: 0,
+        buildings: { food: 1 }, yields: unitResourceVector(), slotCap: { ...saturatedSlots },
+        generalSpace: 0, habitableSpace: 0, markets: [],
+      },
+    ];
+    const on = new MemoryDirectedBuildWorld(rows());
     await runDirectedBuildProcessor(on, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
       player: { factionId: "f1", automation: { build: true, colonisation: true } },
     });
-    const off = new MemoryDirectedBuildWorld(scenario(0, 0, 20, 100, { control: "developed", foodCycles: 1 }));
+    const off = new MemoryDirectedBuildWorld(rows());
     await runDirectedBuildProcessor(off, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
       player: { factionId: "f1", automation: { build: false, colonisation: true } },
@@ -388,7 +401,8 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     // …but the Build blocked assessment itself does not: same visited set, same report, on both runs.
     expect(off.buildBlockedVisitedSystemIds.slice().sort()).toEqual(on.buildBlockedVisitedSystemIds.slice().sort());
     expect(off.buildBlockedUpdates).toEqual(on.buildBlockedUpdates);
-    expect(on.buildBlockedUpdates.some((u) => u.systemId === "A" && u.reason === "no-capacity")).toBe(true);
+    expect(on.buildBlockedUpdates.some((u) => u.systemId === "C" && u.reason === "no-capacity")).toBe(true);
+    expect(on.buildBlockedUpdates.some((u) => u.systemId === "A")).toBe(false);
   });
 
   it("Proves 1 — turning build automation off does not blank Build opportunity either; only proposal emission is gated", async () => {
@@ -669,6 +683,35 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
     expect(off.colonyOpportunityVisitedSystemIds.slice().sort()).toEqual(on.colonyOpportunityVisitedSystemIds.slice().sort());
     expect(off.colonyOpportunityUpdates).toEqual(on.colonyOpportunityUpdates);
     expect(on.colonyOpportunityUpdates.some((u) => u.systemId === "c1")).toBe(true);
+  });
+
+  it("maps the planner's own ROI terms onto the update — `value` the numerator, `work` the denominator, never swapped", async () => {
+    // Both terms are plain numbers and interchangeable to the type checker, so swapping them
+    // compiles, passes every existence check, and silently inverts the alert bar's ROI sort. `work`
+    // is the one of the two that is independently computable: the establish-plus-housing
+    // construction denominator the engine's own exported sizing produces from the candidate's land,
+    // with nothing to do with the deficits `value` scores.
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    const habitableBySystem: Record<string, number> = { c1: 100, c2: 40 };
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: {
+        candidateProvider: (f) =>
+          f === "f1" ? [colonyCand("c1", habitableBySystem.c1), colonyCand("c2", habitableBySystem.c2)] : [],
+        params: COLONY_PARAMS,
+      },
+    });
+
+    expect(w.colonyOpportunityUpdates.length).toBeGreaterThan(0);
+    for (const u of w.colonyOpportunityUpdates) {
+      const sizing = sizeColonyEstablish(habitableBySystem[u.systemId], COLONY_PARAMS);
+      if (!sizing) throw new Error(`fixture: ${u.systemId} is not a viable colony site`);
+      expect(u.work, u.systemId).toBeCloseTo(sizing.work, 9);
+      // Non-vacuous on the swap: the two terms are different numbers here, so writing `value` into
+      // `work` could not coincidentally satisfy the assertion above.
+      expect(u.value, u.systemId).toBeGreaterThan(0);
+      expect(Math.abs(u.value - sizing.work), u.systemId).toBeGreaterThan(1);
+    }
   });
 });
 

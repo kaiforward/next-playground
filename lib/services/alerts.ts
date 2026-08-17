@@ -1,40 +1,40 @@
 /**
- * Alert bar read service — all sixteen categories (docs/build-plans/alert-bar.md tier table, lines
- * 98-115): the six state-derived categories (Famine, Deprived worlds, Strike, Unrest rising,
- * Overcrowded, No housing headroom), Survival stock falling, Demand unservable, Build blocked,
- * Industry idle, the faction-level Maintenance unfunded, the two automation-gated opportunity
- * categories (Build opportunity, Colony opportunity), and the three event bands (Crisis, Disruption,
- * Windfall).
+ * Alert bar read service — all sixteen categories: the six state-derived ones (Famine, Deprived
+ * worlds, Strike, Unrest rising, Overcrowded, No housing headroom), Survival stock falling, Demand
+ * unservable, Build blocked, Industry idle, the faction-level Maintenance unfunded, the two
+ * automation-gated opportunity categories (Build opportunity, Colony opportunity), and the three
+ * event bands (Crisis, Disruption, Windfall).
  *
- * Everything is scoped to the player faction's DEVELOPED systems (alert-bar.md:293), which is also
- * `denominator` — the flyout footer's "N of D developed systems" (alert-bar.md:290-291). A world
- * with no player seat has nothing to alert on: reads empty rather than throwing, the same posture
- * `getTrackerData` takes for the same reason (lib/services/tracker.ts:34-37). The event categories and
- * Colony opportunity read a wider scope than `developed` (any system in the pair for a relations-owned
- * event; every player-owned system carrying a persisted candidacy reading for Colony opportunity) —
- * each says so at its own block — but every category still shares the one `denominator`, per
- * `AlertCategory`'s own contract.
+ * The system-scoped categories are scoped to the player faction's DEVELOPED systems, which is also
+ * their `denominator` — the flyout footer's "N of D developed systems". A world with no player seat
+ * has nothing to alert on: reads empty rather than throwing, the same posture `getTrackerData` takes
+ * for the same reason (lib/services/tracker.ts:34-37). Colony opportunity is scoped to a DIFFERENT
+ * population — the player's controlled, not-yet-developed systems — and carries that count as its own
+ * denominator, since a colony candidate is never in the developed set; it says so at its own block.
+ * Two kinds of category count something else and carry no denominator at all: the three event
+ * categories count EVENTS, and the faction-level Maintenance unfunded counts the FACTION — see
+ * `AlertCategory`'s own contract for why neither is a share of any systems total.
  *
- * Categories are emitted in the registry's authored tier + order (alert-bar.md:343-345): every
- * `toCategory(...)` call below carries its own literal id, and the final array sorts on
+ * Categories are emitted in the registry's authored tier + order: every `toSystemCategory(...)` /
+ * `toEventCategory(...)` call below carries its own literal id, and the final array sorts on
  * `ALERT_CATEGORIES[id].tier` then `.order` — so the order is read from the registry, never
  * hand-duplicated here.
  *
  * Within a category, `instances` sort ascending by `sortKey`: smaller sorts first, and every
- * category picks its own `sortKey` so ascending always reads worst-first, per the tier table's own
- * "sorts by …" column — except the two opportunity categories, where "worst" is inverted to "best
- * opportunity first" (negated, the same convention Overcrowded and No housing headroom already use
- * for "biggest number is most urgent"). Build opportunity goes one step further and packs a SECOND
- * key (survival band) ahead of score, following `buildBlockedSortKey`'s own two-key precedent — see
- * `buildOpportunitySortKey`. See each category's block below for its measure and why smaller is worse
- * (or, for opportunities, why smaller is better).
+ * category picks its own `sortKey` so ascending always reads worst-first — except the two
+ * opportunity categories, where "worst" is inverted to "best opportunity first" (negated, the same
+ * convention Overcrowded and No housing headroom already use for "biggest number is most urgent").
+ * Build opportunity goes one step further and packs a SECOND key (survival band) ahead of score,
+ * following `buildBlockedSortKey`'s own two-key precedent — see `buildOpportunitySortKey`. See each
+ * category's block below for its measure and why smaller is worse (or, for opportunities, why
+ * smaller is better).
  *
  * Demand unservable, Build opportunity and Colony opportunity read persisted planner terms
  * (`WorldMarket.unservedShortfall`, `WorldSystem.buildOpportunity`, `WorldSystem.colonyOpportunity`)
- * rather than re-deriving anything: the planner already computed and discarded these every run, and
- * an amendment to this task persisted them instead of the read-service proxies the first cut shipped
- * with (a demand RATE standing in for an unserved LEVEL, an addable-level count standing in for a
- * planner score, and a cost ratio standing in for the planner's own value/work ROI).
+ * rather than re-deriving anything: the planner already computes and discards these every run, and
+ * persisting them is what keeps this service off read-time proxies (a demand RATE standing in for an
+ * unserved LEVEL, an addable-level count standing in for a planner score, and a cost ratio standing
+ * in for the planner's own value/work ROI).
  */
 import { getWorld } from "@/lib/world/store";
 import type { WorldSystem, World } from "@/lib/world/types";
@@ -42,21 +42,24 @@ import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/servic
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import {
-  habitableHousingHeadroom, queuedBuildLevelsAt,
+  habitableHousingHeadroom, queuedBuildLevelsBySystem,
   type BuildSystemState, type BuildDropReason,
 } from "@/lib/engine/directed-build";
-import { buildIndustryReadout } from "@/lib/engine/industry";
-import { useRatesByGood, type UseRate } from "@/lib/engine/honest-demand";
+import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { strikeMultiplier } from "@/lib/engine/population";
 import { readExpectation } from "@/lib/engine/expectation";
+import { bandShortfall } from "@/lib/engine/treasury";
 import { STRIKE_PARAMS, EXPECTATION_PARAMS, ABANDON_POP_FLOOR } from "@/lib/constants/population";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { ALERT_CATEGORIES, BUILD_DROP_SEVERITY } from "@/lib/constants/alerts";
 import { EVENT_BAND } from "@/lib/constants/ui";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
-import type { AlertTier } from "@/lib/types/alerts";
-import type { AlertData, AlertCategory, AlertInstance } from "@/lib/types/api";
+import type { AlertTier, AlertCategoryId } from "@/lib/types/alerts";
+import type {
+  AlertData, AlertCategory, AlertInstance, SystemScopedAlertCategory,
+  ControlledSystemsAlertCategory, EventAlertCategory, FactionAlertCategory,
+} from "@/lib/types/api";
 
 const EMPTY_ALERT_DATA: AlertData = { categories: [] };
 
@@ -68,13 +71,13 @@ const TIER_RANK: Record<AlertTier, number> = { critical: 0, important: 1, info: 
 
 /** Cycles-to-empty threshold for Survival stock falling — authored from remedy time (one logistics
  *  cycle for the matcher to route a haul, one for the goods to land, one of margin for the player to
- *  notice and act), not read off a distribution (alert-bar.md:1039-1067, settled at Gate 1). */
+ *  notice and act), not read off a distribution. */
 const SURVIVAL_STOCK_CYCLES_THRESHOLD = 3;
 
 /**
- * Famine's non-shrinking branch sorts after every shrinking world (alert-bar.md:499-507: "a famine
- * world that is not shrinking carries no countdown at all, and sorts after the shrinking ones, by
- * shortfall depth"). The real countdown (`ln(population / ABANDON_POP_FLOOR) / k`) is unbounded
+ * Famine's non-shrinking branch sorts after every shrinking world: a famine world that is not
+ * shrinking carries no countdown at all, and sorts after the shrinking ones, by shortfall depth.
+ * The real countdown (`ln(population / ABANDON_POP_FLOOR) / k`) is unbounded
  * above as the decline rate k approaches zero, so no additive offset is a mathematical guarantee —
  * this is a practical separation, not a proof: any famine world whose countdown would exceed this
  * (a decline rate below roughly 1e-6 of itself per cycle) sorts as if it were non-shrinking. That is
@@ -87,9 +90,9 @@ const FAMINE_NON_SHRINKING_SORT_BASE = 1_000_000;
  * Build blocked's sortKey packs two numbers into one flat number, honestly, following this file's own
  * `FAMINE_NON_SHRINKING_SORT_BASE` precedent: `BUILD_DROP_SEVERITY[reason]` (1..5, worst first) is
  * the PRIMARY key, and `droppedRoi` is a tiebreak WITHIN one reason only — never comparable across
- * reasons (alert-bar.md:558-584: `droppedRoi` is annotated "Ordering only" at its own definition,
- * summing served quantity over route cost across goods whose `OUTPUT_PER_UNIT` differs by orders of
- * magnitude, so it was never a value comparable between systems, let alone between reasons).
+ * reasons: `droppedRoi` is annotated "Ordering only" at its own definition, summing served quantity
+ * over route cost across goods whose `OUTPUT_PER_UNIT` differs by orders of magnitude, so it was
+ * never a value comparable between systems, let alone between reasons.
  *
  * The tiebreak term squashes `droppedRoi` through `-x / (x + 1)`, monotonic and bounded in `(-1, 0]`
  * for any non-negative `droppedRoi` — so a bigger dropped opportunity (worse) always produces a
@@ -155,18 +158,22 @@ function systemSlotCap(system: WorldSystem) {
 /**
  * No housing headroom's queue-adjusted headroom read. `habitableHousingHeadroom`
  * (lib/engine/directed-build.ts:213) takes a `BuildSystemState`, and its `buildings` here is folded
- * with `queued` — the system's open BUILD-kind project levels (`queuedBuildLevelsAt`) — before the
- * read, the same fold the planner's own `effectiveBuildSystems` applies before its housing pass
+ * with `queued` — the system's open BUILD-kind project levels — before the read, the same fold the
+ * planner's own `effectiveBuildSystems` applies before its housing pass
  * (lib/engine/directed-build.ts:297-333).
  *
  * The fold is monotonically DOWNWARD, never up: `habitableHousingHeadroom` only ever subtracts
  * standing housing from both the habitable and general bounds, and `generalSpaceUsed` only ever
  * adds, so folding queued levels in can only lower headroom — this read can only move a system INTO
- * this category, never out of it (alert-bar.md's "The queued-housing conjunct, and the direction of
- * the queue adjustment"). Queued HOUSING itself is excluded by the caller's separate conjunct before
- * this function is even reached, so what the fold actually earns its keep on here is a committed
- * FACTORY: general space a queued production building has already claimed, which would otherwise
- * still read as free room for the housing this category cares about.
+ * this category, never out of it. Queued HOUSING itself is excluded by the caller's separate
+ * conjunct before this function is even reached, so what the fold actually earns its keep on here is
+ * a committed FACTORY: general space a queued production building has already claimed, which would
+ * otherwise still read as free room for the housing this category cares about.
+ *
+ * The buildings roster is shallow-copied before the fold because the fold WRITES to it — the record
+ * the world index hands back is shared with every other reader this tick (see
+ * `SystemIndustryReadoutResult.buildings`, which is deliberately handed out uncopied precisely
+ * because none of its readers write).
  *
  * `goods: []` and a real `slotCap` (unused by `habitableHousingHeadroom`, but not fabricated either)
  * fill out the rest of the interface honestly.
@@ -191,12 +198,14 @@ function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number
 }
 
 /**
- * Industry idle's per-system idle-capacity read. Calls `buildIndustryReadout` directly — the ONLY
+ * Industry idle's per-system idle-capacity read. Goes through the full industry readout — the ONLY
  * place a producer's `used` folds `inputGate` locally (lib/engine/industry.ts:826-830), which is what
  * lets an input-starved factory read idle here; the infrastructure-decay engine's own `used` cannot
  * see this (its `SystemDecayInput` carries no market stock), so there is no cheaper persisted signal
- * to read instead. Mirrors `getSystemIndustry`'s accessor setup (lib/services/universe.ts:171-256)
- * trimmed to just the `buildings` roster this category needs — no popNeeds/deposits/space.
+ * to read instead. The readout comes from `readSystemIndustry`, the same shared context assembly the
+ * Industry panel's own read uses, so this category and that panel can never disagree about which
+ * levels are running. Only the `buildings` roster of the result is read here — no
+ * popNeeds/deposits/space.
  *
  * Housing is excluded from both the idle-level count and the built-level denominator: this category
  * is "built capacity not running" (production/capacity buildings), not housing vacancy, which reads
@@ -207,60 +216,9 @@ function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number
  * category's convention in this file.
  */
 function industryIdleForSystem(system: WorldSystem): { idleShare: number } | null {
-  const buildings = buildingsBySystem().get(system.id) ?? {};
-  if (Object.keys(buildings).length === 0) return null;
-
-  const marketStock: Record<string, number> = {};
-  const demandRateByGood: Record<string, number> = {};
-  const honestUseRateByGood = new Map<string, number>();
-  const anchorMultByGood = new Map<string, number>();
-  const logisticsFundingBoundByGood: Record<string, boolean> = {};
-  let rowSuppressRate: number | undefined;
-  for (const row of marketsBySystem().get(system.id) ?? []) {
-    marketStock[row.goodId] = row.stock;
-    demandRateByGood[row.goodId] = row.demandRate;
-    if (typeof row.honestUseRate === "number" && Number.isFinite(row.honestUseRate)) {
-      honestUseRateByGood.set(row.goodId, row.honestUseRate);
-    }
-    anchorMultByGood.set(row.goodId, row.anchorMult);
-    rowSuppressRate ??= row.productionSuppressRate;
-    logisticsFundingBoundByGood[row.goodId] = row.logisticsFundingBound ?? false;
-  }
-
-  const yields = resourceVectorFromColumns(
-    {
-      yieldGas: system.yieldGas,
-      yieldMinerals: system.yieldMinerals,
-      yieldOre: system.yieldOre,
-      yieldBiomass: system.yieldBiomass,
-      yieldArable: system.yieldArable,
-      yieldWater: system.yieldWater,
-      yieldRadioactive: system.yieldRadioactive,
-    },
-    "yield",
-  );
-
-  // A row with no persisted use figure (a legacy save, or a fixture that never set it) recomputes
-  // live — never 0, which would misread a real draw as none. Same fallback `getSystemIndustry` uses.
-  let recomputedUse: Map<string, UseRate> | undefined;
-  const honestUseRateOf = (goodKey: string): number => {
-    const persisted = honestUseRateByGood.get(goodKey);
-    if (persisted !== undefined) return persisted;
-    recomputedUse ??= useRatesByGood({
-      buildings,
-      population: system.population,
-      yields,
-      productionSuppress: rowSuppressRate ?? 1,
-    });
-    return recomputedUse.get(goodKey)?.total ?? 0;
-  };
-
-  const readout = buildIndustryReadout(buildings, system.population, marketStock, yields, {
-    demandRateOf: (goodKey) => demandRateByGood[goodKey] ?? 0,
-    honestUseRateOf,
-    anchorMultOf: (goodKey) => anchorMultByGood.get(goodKey) ?? 1,
-    logisticsFundingBoundOf: (goodKey) => logisticsFundingBoundByGood[goodKey] ?? false,
-  });
+  // Cheap index lookup ahead of the readout so a system with nothing built never pays for one.
+  if (Object.keys(buildingsBySystem().get(system.id) ?? {}).length === 0) return null;
+  const { readout } = readSystemIndustry(system);
 
   let idleLevelsTotal = 0;
   let builtLevelsTotal = 0;
@@ -277,8 +235,34 @@ function sortedInstances(instances: AlertInstance[]): AlertInstance[] {
   return [...instances].sort((a, b) => a.sortKey - b.sortKey);
 }
 
-function toCategory(id: AlertCategory["id"], instances: AlertInstance[], denominator: number): AlertCategory {
-  return { id, count: instances.length, denominator, instances: sortedInstances(instances) };
+/** A category whose count is systems, out of the shared developed-systems denominator. */
+function toSystemCategory(
+  id: AlertCategoryId, instances: AlertInstance[], denominator: number,
+): SystemScopedAlertCategory {
+  return { id, unit: "developed_systems", count: instances.length, denominator, instances: sortedInstances(instances) };
+}
+
+/** A category whose count is systems the faction holds but has not developed — its own denominator,
+ *  because those systems are not in the developed set the categories above are a share of. */
+function toControlledSystemCategory(
+  id: AlertCategoryId, instances: AlertInstance[], denominator: number,
+): ControlledSystemsAlertCategory {
+  return { id, unit: "controlled_systems", count: instances.length, denominator, instances: sortedInstances(instances) };
+}
+
+/** A category whose count is EVENTS, with no denominator — an event count is not a share of the
+ *  developed-systems total and can exceed it (a region phase covers many systems from one instance;
+ *  the relations-spawned pair events have no system at all). */
+function toEventCategory(id: AlertCategoryId, instances: AlertInstance[]): EventAlertCategory {
+  return { id, unit: "events", count: instances.length, instances: sortedInstances(instances) };
+}
+
+/** The one faction-level category, counting the FACTION and carrying no denominator — the same bare
+ *  count the event categories take, for the same reason: its count (0 or 1, one settlement per
+ *  faction) is not a share of the developed-systems total, and rendering it against one would read
+ *  "1 of 253 developed systems" about a row that names no system. */
+function toFactionCategory(id: AlertCategoryId, instances: AlertInstance[]): FactionAlertCategory {
+  return { id, unit: "faction", count: instances.length, instances: sortedInstances(instances) };
 }
 
 export function getAlertData(): AlertData {
@@ -287,13 +271,19 @@ export function getAlertData(): AlertData {
   if (!player) return EMPTY_ALERT_DATA;
 
   // Every system-scoped category here is scoped to the player faction's DEVELOPED systems, which is
-  // also the shared `denominator` (alert-bar.md:290-296) — a controlled-but-undeveloped system is
-  // inert (lib/engine/control.ts:4-9) and cannot carry most of these conditions. Colony opportunity
-  // and the event categories read a wider scope; each says so at its own block.
+  // also the shared `denominator` — a controlled-but-undeveloped system is inert
+  // (lib/engine/control.ts:4-9) and cannot carry most of these conditions. Colony opportunity (the
+  // controlled systems, which are exactly the ones this set excludes) and the event categories read
+  // other scopes; each says so at its own block.
   const developed = world.systems.filter(
     (s) => s.factionId === player.controlledFactionId && isEconomicallyActive(s.control),
   );
   const denominator = developed.length;
+
+  // Indexed once, ahead of the loop, the same way `marketsBySystem()`/`buildingsBySystem()` are used
+  // below — the per-system fold would otherwise rescan every construction project in the galaxy for
+  // each overcrowded system.
+  const queuedBuildLevels = queuedBuildLevelsBySystem(world.constructionProjects);
 
   const famine: AlertInstance[] = [];
   const strike: AlertInstance[] = [];
@@ -307,7 +297,7 @@ export function getAlertData(): AlertData {
   const industryIdle: AlertInstance[] = [];
 
   for (const system of developed) {
-    // ── Famine: supplyBand === "famine" (lib/engine/population.ts:174, alert-bar.md:100) ──
+    // ── Famine: supplyBand === "famine" (lib/engine/population.ts:174) ──
     // `provision`/`supplyBand` are written together every economy cycle (lib/world/types.ts:108-126)
     // — never assessed means both are absent, so a famine reading implies `provision` is defined
     // too; this is an invariant check, not a `?? 0` default.
@@ -320,9 +310,9 @@ export function getAlertData(): AlertData {
       let measure: string;
       if (delta !== undefined && delta < 0 && system.population > 0) {
         const k = -delta / system.population; // fractional decline rate per reference cycle
-        // ln(population / floor) / k — the exponential time-to-abandonment, not the linear form
-        // alert-bar.md:499-507 tried and rejected (it collapses to ordering by unrest, not by
-        // collapse speed). Denominated per reference cycle, matching `populationChange`'s own
+        // ln(population / floor) / k — the exponential time-to-abandonment, not the linear form that
+        // was tried and rejected (it collapses to ordering by unrest, not by collapse speed).
+        // Denominated per reference cycle, matching `populationChange`'s own
         // denomination (lib/world/types.ts:143-148).
         const countdown = Math.log(system.population / ABANDON_POP_FLOOR) / k;
         sortKey = countdown;
@@ -360,8 +350,8 @@ export function getAlertData(): AlertData {
       });
     }
 
-    // ── Unrest rising: Provision below the floored expectation, not yet striking
-    // (alert-bar.md:105). Requires a REAL stored memory — a system with no `provisionExpectation`
+    // ── Unrest rising: Provision below the floored expectation, not yet striking.
+    // Requires a REAL stored memory — a system with no `provisionExpectation`
     // is excluded outright, never seeded from its own `provision` the way `readExpectation` would
     // for a genuinely corrupt stored value (lib/engine/expectation.ts:34-41,43-52) — a fresh colony
     // must not report grievance against a floor it has no memory of. ──
@@ -383,7 +373,7 @@ export function getAlertData(): AlertData {
       }
     }
 
-    // ── Overcrowded: population > popCap, definitional (alert-bar.md:960-994) — NOT a rate. The
+    // ── Overcrowded: population > popCap, definitional — NOT a rate. The
     // popCap > 0 guard matches lib/services/tracker.ts:60's own convention: a popCap of 0 reads as
     // not overcrowded here rather than an undefined/infinite utilisation. Sorts by cap utilisation,
     // most over first. ──
@@ -401,7 +391,7 @@ export function getAlertData(): AlertData {
       // which is exactly what this category means is impossible), AND no room to build more
       // (habitableHousingHeadroom < 1, evaluated against queue-adjusted buildings — see
       // hasNoHousingHeadroom). Sorts by population over cap, most over first. ──
-      const queued = queuedBuildLevelsAt(world.constructionProjects, system.id);
+      const queued = queuedBuildLevels.get(system.id) ?? {};
       const hasQueuedHousing = (queued[HOUSING_TYPE] ?? 0) > 0;
       if (!hasQueuedHousing && hasNoHousingHeadroom(system, queued)) {
         const over = system.population - system.popCap;
@@ -420,7 +410,7 @@ export function getAlertData(): AlertData {
     // (stock / -stockChange) is below SURVIVAL_STOCK_CYCLES_THRESHOLD. A rising or flat stock
     // (stockChange >= 0, including absent) never qualifies — only a falling stock has a
     // cycles-to-empty at all, and simply falling is meaningless on its own (stocks oscillate); the
-    // countdown carries the whole condition (alert-bar.md:1039-1067). A system short in BOTH water
+    // countdown carries the whole condition. A system short in BOTH water
     // and food counts once, at its worse (smaller) reading — instances are systems here, same as
     // every other system-scoped category. Sorts by cycles remaining ascending, soonest first — the
     // sortKey IS the measure. ──
@@ -445,18 +435,18 @@ export function getAlertData(): AlertData {
       });
     }
 
-    // ── Demand unservable: any market row with demandUnservable === true (Task 4, written on the
-    // DEFICIT endpoint only — a donor never carries this) AND a persisted unservedShortfall (Task 16,
-    // WorldMarket.unservedShortfall — the deficit's own LEVEL, `max(0, target − stock)`, present iff
-    // the bit is true; a row carrying the bit with no shortfall reads as absent-not-zero here, same
-    // as every other category's convention, rather than assumed to be the row's demandRate or 0). A
-    // system unservable in three goods counts once — the chip counts systems, not (system, good)
-    // pairs (alert-bar.md:546) — at its largest (worst) shortfall, never the sum across goods. Sorts
-    // by that shortfall descending (negated, biggest unserved deficit first). ──
+    // ── Demand unservable: any market row carrying a positive `WorldMarket.unservedShortfall` — the
+    // LEVEL the deficit is left short after every reachable donor's remaining capacity, written on
+    // the DEFICIT endpoint only, so a donor never carries one. The level IS the classification: the
+    // logistics engine only records one where that residue is strictly positive, so absent-or-zero
+    // means servable and there is no separate bit to agree with. A system unservable in three goods
+    // counts once — the chip counts systems, not (system, good) pairs — at its largest (worst)
+    // shortfall, never the sum across goods. Sorts by that shortfall descending (negated, biggest
+    // unserved deficit first). ──
     let worstShortfall: number | undefined;
     let worstUnservableGood: string | undefined;
     for (const row of marketRows) {
-      if (!row.demandUnservable || row.unservedShortfall === undefined) continue;
+      if (row.unservedShortfall === undefined || row.unservedShortfall <= 0) continue;
       if (worstShortfall === undefined || row.unservedShortfall > worstShortfall) {
         worstShortfall = row.unservedShortfall;
         worstUnservableGood = row.goodId;
@@ -471,7 +461,8 @@ export function getAlertData(): AlertData {
       });
     }
 
-    // ── Build blocked: the planner's best-ranked dropped opportunity this run (Task 3). Sorts by
+    // ── Build blocked: the planner's best-ranked dropped opportunity this run
+    // (`WorldSystem.buildBlocked`, written by the directed-build planner). Sorts by
     // authored reason severity, worst first; droppedRoi tiebreaks within one reason only — see
     // buildBlockedSortKey's own docstring for the packing and its limits. ──
     if (system.buildBlocked !== undefined) {
@@ -485,7 +476,7 @@ export function getAlertData(): AlertData {
     }
 
     // ── Industry idle: at least one whole non-housing level idle for any reason — no staff, no
-    // skill licence, or (Task 5) missing inputs. See industryIdleForSystem's own docstring for why
+    // skill licence, or missing recipe inputs. See industryIdleForSystem's own docstring for why
     // this must call buildIndustryReadout directly rather than reading a cheaper persisted signal.
     // Sorts by idle share, most idle first. ──
     const idle = industryIdleForSystem(system);
@@ -499,39 +490,38 @@ export function getAlertData(): AlertData {
     }
   }
 
-  // ── Maintenance unfunded: one faction-level row (systemId: null), present only once the faction
-  // has settled at least once (`lastSettlement` non-null — alert-bar.md:398-399), and only when the
-  // settlement could not pay the maintenance band it was ASKED to pay: paid.maintenance <
-  // maintenanceBill × the CURRENT slider — not the full bill, so a legal slider setting below 1.0
-  // (floored at 0.5) never fires this on its own (lib/engine/treasury.ts:126-131, settleLadder:
-  // charge = bill × slider; pay = min(charge, available); insolvency is pay < charge). Sort order is
-  // vacuous — the count is always 0 or 1. ──
+  // ── Maintenance unfunded: one faction-level row (systemId: null), present only when the last
+  // settlement could not pay the maintenance band it was ASKED to pay. `bandShortfall` owns that
+  // test and its reasoning (both terms frozen at the settlement, never against the live slider; a
+  // legal slider below 1.0 is not insolvency; a faction that has never settled, or a settlement
+  // predating the charge, reads as never-assessed) — this reads the amount and says how big it is.
+  // The same helper backs the "shorted" tag on the treasury and construction cards, so the bar and
+  // those cards cannot disagree about the same faction. Sort order is vacuous — the count is always
+  // 0 or 1, which is also why this category counts the FACTION and carries no developed-systems
+  // denominator (`toFactionCategory`). ──
   const maintenanceUnfunded: AlertInstance[] = [];
-  const treasury = world.treasuries.find((t) => t.factionId === player.controlledFactionId);
-  const settlement = treasury?.lastSettlement;
-  if (treasury !== undefined && settlement !== null && settlement !== undefined) {
-    const charge = settlement.maintenanceBill * treasury.bands.maintenance;
-    if (settlement.paid.maintenance < charge) {
-      const factionName = world.factions.find((f) => f.id === player.controlledFactionId)?.name ?? "Treasury";
-      maintenanceUnfunded.push({
-        systemId: null,
-        name: factionName,
-        measure: `${Math.round(charge - settlement.paid.maintenance)} short of maintenance`,
-        sortKey: 0,
-      });
-    }
+  const settlement = world.treasuries.find((t) => t.factionId === player.controlledFactionId)?.lastSettlement;
+  const maintenanceShort = bandShortfall(settlement, "maintenance");
+  if (maintenanceShort !== null) {
+    const factionName = world.factions.find((f) => f.id === player.controlledFactionId)?.name ?? "Treasury";
+    maintenanceUnfunded.push({
+      systemId: null,
+      name: factionName,
+      measure: `${Math.round(maintenanceShort)} short of maintenance`,
+      sortKey: 0,
+    });
   }
 
   // ── Build opportunity: self-gates on world.player.automation.build, independent of the settings
-  // checkbox (alert-bar.md:113, :415-418) — while automation is ON the planner is already acting on
-  // this domain, so nothing surfaces here regardless of anything else. While OFF, reads Task 17's
+  // checkbox — while automation is ON the planner is already acting on this domain, so nothing
+  // surfaces here regardless of anything else. While OFF, reads
   // WorldSystem.buildOpportunity — the planner's own best-ranked SCORED opportunity this run, already
   // chosen survival-first by the engine's own recordScoredOpportunity (see buildOpportunitySortKey):
   // a system with any survival-serving opportunity persists that one rather than its highest-scoring
   // one, so this service bands a STORED row, never re-deriving the choice from scratch. Absent means
   // the planner scored nothing here this run — absence-not-zero. `score` is documented "Ordering
   // only" (lib/engine/directed-build.ts:596-597) and carries a 13× unit spread across goods
-  // (alert-bar.md's Build opportunity section): never normalised, rescaled or read as a value here,
+  // across goods: never normalised, rescaled or read as a value here,
   // and the measure string says so rather than implying otherwise. ──
   const buildOpportunity: AlertInstance[] = [];
   if (!player.automation.build) {
@@ -548,15 +538,21 @@ export function getAlertData(): AlertData {
   }
 
   // ── Colony opportunity: self-gates on world.player.automation.colonisation, same independence
-  // from the settings checkbox as Build opportunity. Reads Task 17's WorldSystem.colonyOpportunity —
+  // from the settings checkbox as Build opportunity. Reads WorldSystem.colonyOpportunity —
   // the planner's own ColonyProposal terms this run (`value`, the ROI numerator; `work`, the
-  // establish-plus-housing denominator) — a genuine ROI, unlike the build side. Scoped to every
-  // player-owned system (not `developed`: a colony candidate is by definition not developed yet), but
-  // presence of the field already means "a controlled, not-yet-developed candidate the colonisation
-  // planner actually proposed establishing this run" (the field's own docstring), so no separate
-  // control or eligibility re-check belongs here — the alert and the planner's own founding decision
-  // can never disagree about what counts as a candidate. Sorts by value / work descending (negated,
-  // best ROI first).
+  // establish-plus-housing denominator) — a genuine ROI, unlike the build side. Presence of the field
+  // already means "a controlled, not-yet-developed candidate the colonisation planner actually
+  // proposed establishing this run" (the field's own docstring), so no separate eligibility re-check
+  // belongs here — the alert and the planner's own founding decision can never disagree about what
+  // counts as a candidate. Sorts by value / work descending (negated, best ROI first).
+  //
+  // Scoped — and denominated — to the player's CONTROLLED systems, never `developed`: a colony
+  // candidate is by definition not developed yet, so the two populations are disjoint and the shared
+  // denominator would render "Colony opportunity, 3 of 1 developed systems". `controlled` is the same
+  // population the colonisation planner draws its candidates from (lib/world/tick.ts's
+  // `developProvider` filters on exactly this control state), which is what makes this count a share
+  // of it. Walking that list rather than every player-owned system is scoping, not a re-check: it is
+  // what keeps the count a subset of the number it is rendered against.
   //
   // The `work <= 0` guard below is **unreachable against today's constants and deliberately kept**.
   // `sizeColonyEstablish` (lib/engine/directed-build.ts:1301-1319) returns null rather than a
@@ -565,10 +561,13 @@ export function getAlertData(): AlertData {
   // a non-positive `work`. It is a divide-by-zero guard against a constants change, not a live
   // branch, which is why no test pins it: a red-proof here could only be written by breaking the
   // engine's own sizing invariant. Delete it only alongside that invariant. ──
+  const controlled = world.systems.filter(
+    (s) => s.factionId === player.controlledFactionId && s.control === "controlled",
+  );
   const colonyOpportunity: AlertInstance[] = [];
   if (!player.automation.colonisation) {
-    for (const system of world.systems) {
-      if (system.factionId !== player.controlledFactionId || system.colonyOpportunity === undefined) continue;
+    for (const system of controlled) {
+      if (system.colonyOpportunity === undefined) continue;
       const { value, work } = system.colonyOpportunity;
       if (work <= 0) continue;
       const roi = value / work;
@@ -581,7 +580,7 @@ export function getAlertData(): AlertData {
     }
   }
 
-  // ── The three event categories: Crisis / Disruption / Windfall (alert-bar.md:375-389). Scoped
+  // ── The three event categories: Crisis / Disruption / Windfall. Scoped
   // wider than `developed` — events in the player's developed systems, PLUS the relations-owned pair
   // events (border_conflict, pact_under_negotiation, alliance_dissolved — the only WorldEvent rows
   // carrying `metadata`) where the player's faction is one of the pair, regardless of which system
@@ -604,9 +603,12 @@ export function getAlertData(): AlertData {
         : event.systemId !== null && developedIds.has(event.systemId);
     if (!belongsToPlayer) continue;
 
+    // EVENT_DEFINITIONS and EVENT_BAND are both total Records over the event-type union, so both
+    // index bare — only the phase LOOKUP inside a definition can miss (a row carrying a phase name
+    // its definition no longer lists), and that one keeps its guard.
     const def = EVENT_DEFINITIONS[event.type];
-    const phaseLabel = def?.phases.find((p) => p.name === event.phase)?.displayName ?? event.phase;
-    const eventName = def?.name ?? event.type;
+    const phaseLabel = def.phases.find((p) => p.name === event.phase)?.displayName ?? event.phase;
+    const eventName = def.name;
     const name = event.systemId !== null ? (systemNameById().get(event.systemId) ?? event.systemId) : eventName;
     const bandInfo = EVENT_BAND[event.type];
 
@@ -636,26 +638,26 @@ export function getAlertData(): AlertData {
   }
 
   const categories: AlertCategory[] = [
-    toCategory("famine", famine, denominator),
-    toCategory("strike", strike, denominator),
-    toCategory("maintenance_unfunded", maintenanceUnfunded, denominator),
-    toCategory("crisis", crisis, denominator),
-    toCategory("deprived_worlds", deprivedWorlds, denominator),
-    toCategory("unrest_rising", unrestRising, denominator),
-    toCategory("survival_stock_falling", survivalStockFalling, denominator),
-    toCategory("demand_unservable", demandUnservable, denominator),
-    toCategory("overcrowded", overcrowded, denominator),
-    toCategory("no_housing_headroom", noHousingHeadroom, denominator),
-    toCategory("build_blocked", buildBlocked, denominator),
-    toCategory("industry_idle", industryIdle, denominator),
-    toCategory("disruption", disruption, denominator),
-    toCategory("build_opportunity", buildOpportunity, denominator),
-    toCategory("colony_opportunity", colonyOpportunity, denominator),
-    toCategory("windfall", windfall, denominator),
+    toSystemCategory("famine", famine, denominator),
+    toSystemCategory("strike", strike, denominator),
+    toFactionCategory("maintenance_unfunded", maintenanceUnfunded),
+    toEventCategory("crisis", crisis),
+    toSystemCategory("deprived_worlds", deprivedWorlds, denominator),
+    toSystemCategory("unrest_rising", unrestRising, denominator),
+    toSystemCategory("survival_stock_falling", survivalStockFalling, denominator),
+    toSystemCategory("demand_unservable", demandUnservable, denominator),
+    toSystemCategory("overcrowded", overcrowded, denominator),
+    toSystemCategory("no_housing_headroom", noHousingHeadroom, denominator),
+    toSystemCategory("build_blocked", buildBlocked, denominator),
+    toSystemCategory("industry_idle", industryIdle, denominator),
+    toEventCategory("disruption", disruption),
+    toSystemCategory("build_opportunity", buildOpportunity, denominator),
+    toControlledSystemCategory("colony_opportunity", colonyOpportunity, controlled.length),
+    toEventCategory("windfall", windfall),
   ];
 
-  // Registry-driven order: tier first, then the authored `order` within it (alert-bar.md:343-345) —
-  // read from ALERT_CATEGORIES rather than hand-duplicated, so the two can never drift apart.
+  // Registry-driven order: tier first, then the authored `order` within it — read from
+  // ALERT_CATEGORIES rather than hand-duplicated, so the two can never drift apart.
   categories.sort((a, b) => {
     const defA = ALERT_CATEGORIES[a.id];
     const defB = ALERT_CATEGORIES[b.id];

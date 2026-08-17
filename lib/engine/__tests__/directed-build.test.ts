@@ -1375,6 +1375,80 @@ describe("planFactionProposals — Build blocked (blockedBuilds)", () => {
     expect(blocked?.droppedRoi).toBeGreaterThan(0);
   });
 
+  it("records no block for a site with no slot cap at all for the deficit good — only for one whose slots are used up", () => {
+    // Every site is scanned against every good in deficit, so "capacity is 0" is reached both by a
+    // site that filled its deposit slots and by one that never had a deposit. Only the first is a
+    // blocked build; the second was never a plausible builder. The two arms are the same fixture
+    // apart from B's arable slot cap, so nothing else can explain the difference.
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [{ goodId: "food", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const siteWith = (slotCap: ResourceVector, buildings: Record<string, number>): BuildSystemState => ({
+      systemId: "B", factionId: "f1", population: 200, control: "developed",
+      buildings, slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    });
+
+    // No arable deposit anywhere on B: it could never host a food extractor, so it reports nothing.
+    const noDeposit = planFactionProposals(
+      [deficit, siteWith(emptyResourceVector(), {})], () => 1, [], DEV_REFS,
+    );
+    expect(noDeposit.blockedBuilds.some((b) => b.systemId === "B")).toBe(false);
+    // The deficit system itself can build nothing either, and equally reports nothing.
+    expect(noDeposit.blockedBuilds).toEqual([]);
+
+    // Same site, same everything, except its two arable slots exist and are already built out —
+    // now the capacity really is exhausted, and that IS a blocked build.
+    const usedUp = planFactionProposals(
+      [deficit, siteWith(makeResourceVector({ arable: 2 }), { food: 2 })], () => 1, [], DEV_REFS,
+    );
+    expect(usedUp.blockedBuilds.find((b) => b.systemId === "B"))
+      .toEqual({ systemId: "B", reason: "no-capacity", droppedRoi: 0 });
+  });
+
+  it("a system carrying BOTH an unranked and a ranked drop reports the ranked one", () => {
+    // The two maps reduce with ranked winning, which no fixture reached while every system had at
+    // most one class of drop. C gets both in one run: metals (tier-1, no reachable ore surplus)
+    // drops unranked before scoring, and ore drops ranked after B — nearer, so higher-scored —
+    // has already claimed A's whole ore shortfall.
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 10;
+    const deficit: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+      goods: [
+        { goodId: "ore", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 },
+        { goodId: "metals", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 },
+      ],
+    };
+    const near: BuildSystemState = {
+      systemId: "B", factionId: "f1", population: 10_000, control: "developed", buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    };
+    const far: BuildSystemState = {
+      systemId: "C", factionId: "f1", population: 10_000, control: "developed", buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    };
+    const routeCost: RouteCost = (from, to) => {
+      if (from === to) return 0;
+      if ((from === "B" && to === "A") || (from === "A" && to === "B")) return 1;
+      if ((from === "C" && to === "A") || (from === "A" && to === "C")) return 2;
+      return null;
+    };
+    const plan = planFactionProposals([deficit, near, far], routeCost, [], DEV_REFS);
+    // Premise: B took the ore build, and metals reached nobody (no ore surplus to feed a factory).
+    expect(plan.proposals.some((p) => p.systemId === "B" && p.items.some((i) => i.buildingType === "ore"))).toBe(true);
+    expect(plan.proposals.some((p) => p.items.some((i) => i.buildingType === "metals"))).toBe(false);
+    // C's unranked metals drop is real — B, which never gets a ranked drop, reports exactly it.
+    expect(plan.blockedBuilds.find((b) => b.systemId === "B"))
+      .toEqual({ systemId: "B", reason: "no-input-supplier", droppedRoi: 0 });
+    // …and at C the ranked ore drop displaces it, carrying the score the sort actually ranked by.
+    const blocked = plan.blockedBuilds.find((b) => b.systemId === "C");
+    expect(blocked?.reason).toBe("no-consumer");
+    expect(blocked?.droppedRoi).toBeGreaterThan(0);
+  });
+
   it("Proves 6 (regression) — the planner's own decisions are unchanged: an unrelated existing scenario still lands exactly the same proposals", () => {
     // Re-runs one of the file's own pre-existing assertions verbatim. If instrumenting the nine
     // drop sites had touched a real conditional instead of only adding side-channel recording,
@@ -1438,6 +1512,45 @@ describe("planFactionProposals — Build opportunity (buildOpportunities)", () =
     expect(opp?.score).toBe(foodScore);
   });
 
+  it("keeps the HIGHER-scoring of two same-band opportunities — the tiebreak the cross-band case never reaches", () => {
+    // Proves 2 above pairs food (survival) against ore (non-survival), so it exercises only the
+    // band comparison; the score comparison beside it is never the deciding branch there, and a
+    // planner that kept the LOWER-scoring candidate within a band would pass it. Water and food are
+    // both survival goods, so this pair lands in the same band and the score alone decides.
+    const slotCap = emptyResourceVector();
+    for (const k of RESOURCE_TYPES) slotCap[k] = 20;
+    const builder = (): BuildSystemState => ({
+      systemId: "B", factionId: "f1", population: 100_000, control: "developed", buildings: {},
+      slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+    });
+    const sinkWith = (goods: BuildGoodState[]): BuildSystemState => ({
+      systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
+      slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0, goods,
+    });
+    const waterGoods: BuildGoodState[] = [
+      { goodId: "water", stock: 1, demand: 5, capacityProduction: 0, proposalCycles: 1 },
+    ];
+    const foodGoods: BuildGoodState[] = [
+      { goodId: "food", stock: 1, demand: 5000, capacityProduction: 0, proposalCycles: 1 },
+    ];
+
+    // Measured, not assumed: the two survival goods really do score differently on their own, so
+    // the combined case below cannot pass because they tie.
+    const waterOnly = planFactionProposals([sinkWith(waterGoods), builder()], () => 1, [], DEV_REFS);
+    const foodOnly = planFactionProposals([sinkWith(foodGoods), builder()], () => 1, [], DEV_REFS);
+    const waterScore = waterOnly.buildOpportunities.find((o) => o.systemId === "B")?.score ?? 0;
+    const foodScore = foodOnly.buildOpportunities.find((o) => o.systemId === "B")?.score ?? 0;
+    expect(waterScore).toBeGreaterThan(0);
+    expect(foodScore).toBeGreaterThan(waterScore);
+
+    const combined = planFactionProposals(
+      [sinkWith([...waterGoods, ...foodGoods]), builder()], () => 1, [], DEV_REFS,
+    );
+    const opp = combined.buildOpportunities.find((o) => o.systemId === "B");
+    expect(opp?.goodId).toBe("food");
+    expect(opp?.score).toBe(foodScore);
+  });
+
   it("is absent for a system that scored nothing this run", () => {
     // Mirrors "Proves 1" above (fully saturated) — B has no free capacity for anything, so it never
     // reaches a BuildOpportunity at all, let alone a best-ranked one.
@@ -1459,7 +1572,7 @@ describe("planFactionProposals — Build opportunity (buildOpportunities)", () =
   it("Proves 5 — the planner's own decisions are unchanged: an unrelated existing scenario still lands exactly the same proposals", () => {
     // Recording the scored-opportunity side channel must not touch a single conditional in the
     // planner's own decision logic — mirrors Build blocked's own regression smoke test for the same
-    // reason (Task 3), re-run here because this task edits the SAME function (`planFactionBundles`)
+    // reason, re-run here because the opportunity scan edits the SAME function (`planFactionBundles`)
     // a second time.
     const proposals = planFactionProposals(makeElectronicsDeficitWithCapableSite(), selfAndNeighbourRoute, [], DEV_REFS).proposals;
     const bundle = proposals.find((p) => p.items.some((i) => i.buildingType === "electronics"));

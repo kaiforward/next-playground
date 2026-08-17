@@ -36,7 +36,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { InfoIcon } from "@/components/ui/icons";
 import { Tooltip, TooltipTrigger, TooltipTriggerLabel, TooltipContent } from "@/components/ui/tooltip";
 import { useDialog } from "@/components/ui/dialog";
-import { depositRows, depositRowProblems, depositTypeProblems, generalLand, staffedLevels, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
+import { depositRows, depositRowProblems, depositTypeProblems, generalLand, idleLevelSplit, staffedLevels, type DepositRow, type DepositTypeRow, type GeneralLand } from "@/components/system/industry-rows";
 import { classifyGhosts, type GhostGroup, type GhostRow } from "@/components/system/industry-ghosts";
 import { buildProblems, needSeverity, problemGlyph, SEVERITY_GLYPH, SEVERITY_TEXT, type ProblemItem } from "@/components/system/needs-view";
 import { NeedCells, NeedsTable } from "@/components/system/needs-table";
@@ -895,19 +895,9 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
   }
 
   // System health + per-building tally, grounded in the decay engine: a level sheds only under
-  // unrest teardown or when a WHOLE level is idle (floor(built − used) ≥ 1) for a reason decay can
-  // see. A whole level idle only for want of recipe inputs is real but invisible to decay, so it's
-  // counted separately (`inputIdleLevels`) and reads "idle" rather than "contracting" here too —
-  // the system chip must not claim a shed is coming when nothing will shed.
-  let decayIdleLevels = 0;
-  let inputIdleLevels = 0;
-  for (const b of buildings) {
-    const levels = Math.max(0, Math.floor(b.count - b.used));
-    if (levels <= 0) continue;
-    if (b.idleReason === "inputs") inputIdleLevels += levels;
-    else decayIdleLevels += levels;
-  }
-  const sysHealth = industryHealth({ unrest, idleLevels: decayIdleLevels, idleOnlyLevels: inputIdleLevels, unrestDecayThreshold: THRESHOLD });
+  // unrest teardown or when a WHOLE level is idle for a reason decay can see. `idleLevelSplit` owns
+  // that split and returns it under `industryHealth`'s own argument names — see its docstring.
+  const sysHealth = industryHealth({ unrest, ...idleLevelSplit(buildings), unrestDecayThreshold: THRESHOLD });
   const tally: Record<IndustryHealth, number> = { stable: 0, idle: 0, contracting: 0, collapsing: 0 };
   for (const b of buildings) {
     tally[buildingHealth({ used: b.used, built: b.count, unrest, unrestDecayThreshold: THRESHOLD, idleReason: b.idleReason })]++;

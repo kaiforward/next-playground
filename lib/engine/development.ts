@@ -1,7 +1,6 @@
 /**
  * Per-system development stat — a pure 0..1 magnitude of how much a system has actually built and
- * worked, measured against the galaxy's biggest natural potential. Zero I/O. See
- * docs/build-plans/colony-bootstrapping.md §1.
+ * worked, measured against the galaxy's biggest natural potential. Zero I/O.
  *
  * development = w_pop · popTerm + w_ind · indTerm
  *

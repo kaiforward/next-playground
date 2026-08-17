@@ -36,11 +36,9 @@ export interface MarketRowForLogistics {
   /** Structural-deficit persistence clock: advanced by the cycle's reference-time span, saturated at 2. */
   proposalCycles?: number;
   logisticsFundingBound?: boolean;
-  /** The prior assessment, read only so the processor can skip a no-op write; the matcher itself
-   *  never reads it as a decision input. See `WorldMarket.demandUnservable` for the full contract. */
-  demandUnservable?: boolean;
-  /** The prior level, read only so the processor can skip a no-op write when neither the bit nor the
-   *  size changed. See `WorldMarket.unservedShortfall` for the full contract. */
+  /** The prior structural-shortfall level, read only so the processor can skip a no-op write; the
+   *  matcher itself never reads it as a decision input. See `WorldMarket.unservedShortfall` for the
+   *  full contract. */
   unservedShortfall?: number;
 }
 
@@ -65,13 +63,14 @@ export interface LogisticsFundingBoundUpdate {
   logisticsFundingBound: boolean;
 }
 
-export interface DemandUnservableUpdate {
+export interface UnservedShortfallUpdate {
   id: string;
-  demandUnservable: boolean;
-  /** The unclosed deficit's level (`UnservableDeficit.shortfall`) — present iff `demandUnservable` is
-   *  `true` on this same update; a closed row's update carries `demandUnservable: false` and omits
-   *  this key, which is how the world layer clears it back to absent. */
-  unservedShortfall?: number;
+  /** The unclosed part of the deficit (`UnservableDeficit.shortfall`: its want less the capacity its
+   *  reachable donors still held) — strictly positive for a market this run classified structurally
+   *  unservable, and exactly `0` for one it did not. The size is the whole classification: the engine
+   *  only records an entry where that residue is positive, so `0` can only mean servable, and it is
+   *  how the world layer knows to clear the key back to absent. */
+  unservedShortfall: number;
 }
 
 export interface LogisticsFlowInsert {
@@ -92,7 +91,7 @@ export interface DirectedLogisticsWorld {
   /** Apply changed wanted-but-unfunded assessments without rewriting stock. */
   applyFundingBoundUpdates(updates: LogisticsFundingBoundUpdate[]): Promise<void>;
   /** Apply changed structural-unservable assessments without rewriting stock. */
-  applyDemandUnservableUpdates(updates: DemandUnservableUpdate[]): Promise<void>;
+  applyUnservedShortfallUpdates(updates: UnservedShortfallUpdate[]): Promise<void>;
   /** Append directed-logistics flow rows to the world flow log. */
   appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void>;
 }

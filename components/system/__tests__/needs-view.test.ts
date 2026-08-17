@@ -97,7 +97,7 @@ describe("buildProblems", () => {
     expect(atMet[0].severity).toBe("short");
   });
 
-  // ── Task 6: staffing + selling (Proves entries) ──────────────────────────
+  // ── staffing + selling ───────────────────────────────────────
 
   it("Proves 1 — a fully staffed, input-satisfied, freely selling producer yields an empty item list", () => {
     expect(buildProblems({ staffedFraction: 1, idleReason: undefined }, { inputGate: 1, throttledBy: [] }, { satisfaction: 1 }, label)).toEqual([]);
@@ -165,23 +165,28 @@ describe("buildProblems", () => {
 
   it("Proves 2 — a fully staffed, input-starved producer renders no understaffed chip (only the real input chip)", () => {
     // Same fully-staffed factory buildIndustryReadout now names 'inputs' for. staffedFraction stays
-    // 1 (pure staffing ratio, unaffected by the gate — see industry.ts), so severity alone already
-    // keeps this case silent; the marginal-staffing case below is what actually exercises the fix.
+    // 1 (pure staffing ratio, unaffected by the gate — see industry.ts), so the severity number is
+    // what keeps this row's staffing chip away — not the reason. The genuinely-short counterpart
+    // below shows the same reason DOES raise a chip once the staffing number is short.
     const items = buildProblems({ staffedFraction: 1, idleReason: "inputs" }, { inputGate: 0, throttledBy: ["ore"] }, undefined, label);
     expect(items).toEqual([{ kind: "input", label: "ore 0%", severity: "critical" }]);
     expect(items.some((i) => i.kind === "staffing")).toBe(false);
   });
 
-  it("'inputs' never gates a generic understaffed chip, even when staffing is also genuinely short", () => {
-    // Unlike "selling" (which DOES gate a staffing item — see the understaffed-AND-glutting test
-    // above), "inputs" is excluded from buildProblems's binding-reason predicate: an input shortfall
-    // already has its own, more precisely labelled report via the supply/throttledBy argument, so
-    // reporting it again as a generic "Understaffed" would mislabel the real cause. Breaking the
-    // hasBindingReason exclusion (i.e. treating "inputs" like "selling") would push a spurious
-    // { kind: "staffing", label: "Understaffed 50%" } item here.
+  it("a producer that is BOTH input-starved and understaffed shows both chips", () => {
+    // The row shows a chip for every negative state, and `idleReason` names only the tightest one.
+    // "inputs" binding says nothing about labour — `staffedFraction` is the pure staffing ratio, and
+    // 0.5 is genuinely short — so an input chip alone would hide half of what is wrong with this
+    // producer. Exactly the "selling" case one describe above, with the sixth reason in its place.
     const items = buildProblems({ staffedFraction: 0.5, idleReason: "inputs" }, { inputGate: 0, throttledBy: ["ore"] }, undefined, label);
-    expect(items).toEqual([{ kind: "input", label: "ore 0%", severity: "critical" }]);
-    expect(items.some((i) => i.kind === "staffing")).toBe(false);
+    expect(items).toEqual([
+      // Generic, not grade-named: with inputs binding tightest the engine never measured which
+      // labour grade was the wall, the same reason "selling" falls back to the generic chip.
+      { kind: "staffing", label: "Understaffed 50%", severity: "short" },
+      { kind: "input", label: "ore 0%", severity: "critical" },
+    ]);
+    // …and still no Glut: that branch is reserved for idleReason "selling".
+    expect(items.some((i) => i.kind === "selling")).toBe(false);
   });
 
   it("'inputs' never reads Glut either — Glut is reserved for idleReason 'selling'", () => {

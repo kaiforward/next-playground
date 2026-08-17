@@ -4,7 +4,7 @@ import type {
   LogisticsMarketUpdate,
   LogisticsFlowInsert,
   LogisticsFundingBoundUpdate,
-  DemandUnservableUpdate,
+  UnservedShortfallUpdate,
 } from "@/lib/tick/world/directed-logistics-world";
 import { factionShardKeys } from "@/lib/engine/shard-order";
 
@@ -12,7 +12,8 @@ import { factionShardKeys } from "@/lib/engine/shard-order";
 export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
   readonly stockUpdates = new Map<string, number>();
   readonly fundingBoundUpdates = new Map<string, boolean>();
-  readonly demandUnservableUpdates = new Map<string, boolean>();
+  /** Market id → this run's structural-shortfall level: positive means unservable, 0 means the row
+   *  was assessed servable and the world layer should clear the key. Absent means untouched. */
   readonly unservedShortfallUpdates = new Map<string, number>();
   readonly flows: LogisticsFlowInsert[] = [];
 
@@ -35,14 +36,8 @@ export class MemoryDirectedLogisticsWorld implements DirectedLogisticsWorld {
     for (const u of updates) this.fundingBoundUpdates.set(u.id, u.logisticsFundingBound);
   }
 
-  async applyDemandUnservableUpdates(updates: DemandUnservableUpdate[]): Promise<void> {
-    for (const u of updates) {
-      this.demandUnservableUpdates.set(u.id, u.demandUnservable);
-      // Written from the same update record as the bit above, never a separate pass — see
-      // `WorldMarket.unservedShortfall`'s contract. Absent here on a false/unset update, which is
-      // how the world-layer merge below knows to clear rather than carry a stale level forward.
-      if (u.unservedShortfall !== undefined) this.unservedShortfallUpdates.set(u.id, u.unservedShortfall);
-    }
+  async applyUnservedShortfallUpdates(updates: UnservedShortfallUpdate[]): Promise<void> {
+    for (const u of updates) this.unservedShortfallUpdates.set(u.id, u.unservedShortfall);
   }
 
   async appendLogisticsFlows(flows: LogisticsFlowInsert[]): Promise<void> {
