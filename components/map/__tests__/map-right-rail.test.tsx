@@ -1,17 +1,26 @@
-import { useState } from "react";
+import { useReducer, useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MapRightRail } from "@/components/map/map-right-rail";
 import type { AtlasData } from "@/lib/types/game";
 import type { TrackerData } from "@/lib/types/api";
+import type { TrackerSectionInput } from "@/lib/schemas/player-settings";
+import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 
 // Proves the owner-decision-2 wiring: the settings surface is a SIBLING panel toggled from the
-// Tracker's own header (never a popover), and toggling one of its checkboxes actually
-// filters TrackerPanel's own sections — which requires `useTrackerSections()` to be a single
-// hook instance shared via props, not two independent instances that can't see each other's
-// writes. `MapControlsDock` is stubbed out: its own render tree (Pixi colour ramps, tooltips) is
-// unrelated to what's under test here.
+// Tracker's own header (never a popover), and toggling one of its checkboxes actually filters
+// TrackerPanel's own sections. The two panels are separate components reading the same query, so
+// what this catches is TrackerPanel failing to re-read after the write — hence the stateful
+// `useTracker` mock below rather than a fixed object, which would leave the section heading on
+// screen after the write and assert against a state the real app never reaches.
+//
+// What it does NOT catch, stated so nobody reads more into it: a `TrackerSettingsPanel` that kept
+// its own local copy of the flags AND still called the mutation would satisfy both assertions —
+// the checkbox from its local state, the heading from the shared write. Only a panel that stopped
+// writing at all fails here.
+// `MapControlsDock` is stubbed out:
+// its own render tree (Pixi colour ramps, tooltips) is unrelated to what's under test here.
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -39,15 +48,44 @@ vi.mock("@/lib/hooks/use-atlas", () => ({
 }));
 
 function emptyTracker(): TrackerData {
-  return { pinnedSystemIds: [], pinned: [], building: [], waitingCount: 0, colonising: [] };
+  return {
+    pinnedSystemIds: [],
+    pinned: [],
+    building: [],
+    waitingCount: 0,
+    colonising: [],
+    sections: DEFAULT_TRACKER_SECTIONS,
+  };
 }
 
+let trackerData: TrackerData;
+/** Re-renders every component currently reading `useTracker()` — the real hook is a
+ *  `useSuspenseQuery`, so a section write invalidating the cache re-renders both panels at once. */
+const rerenderTrackerReaders = new Set<() => void>();
+
 vi.mock("@/lib/hooks/use-tracker", () => ({
-  useTracker: () => emptyTracker(),
+  useTracker: () => {
+    const [, bump] = useReducer((n: number) => n + 1, 0);
+    rerenderTrackerReaders.add(bump);
+    return trackerData;
+  },
+}));
+
+/** Stands in for the real mutation's cache write: `useSetTrackerSection().mutate` POSTs one flag and
+ *  writes the server's whole returned record back into the tracker query. Both readers see it, which
+ *  is exactly the property this suite exists to prove. */
+vi.mock("@/lib/hooks/use-player-settings", () => ({
+  useSetTrackerSection: () => ({
+    mutate: ({ section, on }: TrackerSectionInput) => {
+      trackerData = { ...trackerData, sections: { ...trackerData.sections, [section]: on } };
+      for (const bump of rerenderTrackerReaders) bump();
+    },
+  }),
 }));
 
 beforeEach(() => {
-  window.localStorage.clear();
+  trackerData = emptyTracker();
+  rerenderTrackerReaders.clear();
 });
 
 // settingsOpen/onToggleSettings are owned by MapRightRail's caller, not by MapRightRail itself. This

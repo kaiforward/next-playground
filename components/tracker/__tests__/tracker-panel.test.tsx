@@ -6,7 +6,8 @@ import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row
 import type { AtlasData } from "@/lib/types/game";
 import type { TrackerBuildRow, TrackerData, TrackerPinnedRow } from "@/lib/types/api";
 import type { PinInput } from "@/lib/schemas/player-pins";
-import { DEFAULT_TRACKER_SECTIONS, type TrackerSections } from "@/lib/hooks/use-tracker-sections";
+import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
+import type { TrackerSections } from "@/lib/types/tracker";
 
 // TrackerPanel owns three suspense-backed hooks (useTracker, useAtlas) and a mutation
 // (useSetSystemPin). All three are mocked directly rather than through a real QueryClient —
@@ -96,6 +97,7 @@ function tracker(fields: Partial<TrackerData> = {}): TrackerData {
     building: [],
     waitingCount: 0,
     colonising: [],
+    sections: DEFAULT_TRACKER_SECTIONS,
     ...fields,
   };
 }
@@ -139,11 +141,12 @@ beforeEach(() => {
   trackerData = tracker();
 });
 
-/** Renders `TrackerPanel` with all sections on and settings closed, unless a test overrides
- *  `sections` — the shared default so section-visibility tests aren't the only ones spelling
- *  out all three props. */
+/** Renders `TrackerPanel` with settings closed. Section visibility is no longer a prop — it rides
+ *  the same `TrackerData` payload as the rows it filters — so a section-visibility test sets it on
+ *  `trackerData` instead, and passes nothing here. */
 function renderPanel(sections: TrackerSections = DEFAULT_TRACKER_SECTIONS) {
-  return render(<TrackerPanel sections={sections} settingsOpen={false} onToggleSettings={vi.fn()} />);
+  trackerData = { ...trackerData, sections };
+  return render(<TrackerPanel settingsOpen={false} onToggleSettings={vi.fn()} />);
 }
 
 describe("TrackerPanel — Tab walks the list of rows", () => {
@@ -223,7 +226,7 @@ describe("TrackerPanel — unpinning from a card takes the row out from under th
     await user.keyboard("{ArrowDown}");
     expect(await screen.findByRole("button", { name: `Unpin ${systemName}` })).toHaveFocus();
     await user.keyboard("{Enter}");
-    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
+    rerender(<TrackerPanel settingsOpen={false} onToggleSettings={vi.fn()} />);
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: `Unpin ${systemName}` })).not.toBeInTheDocument();
     });
@@ -554,7 +557,7 @@ describe("TrackerPanel — a system with several concurrent build projects rende
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.25, nextCycleProgress: 0.05, etaCycles: 4 },
       ],
     });
-    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
+    rerender(<TrackerPanel settingsOpen={false} onToggleSettings={vi.fn()} />);
 
     expect(screen.getByText("Building — 3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sunnyvale · Housing x2/ })).toBeInTheDocument();
@@ -588,7 +591,7 @@ describe("TrackerPanel — re-rendering with fresh data replaces rows, never acc
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.45, nextCycleProgress: 0.05, etaCycles: 3 },
       ],
     });
-    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
+    rerender(<TrackerPanel settingsOpen={false} onToggleSettings={vi.fn()} />);
 
     expect(screen.getByText("Building — 2")).toBeInTheDocument();
     // The total rendered row count must match the NEW list (2), not the sum of old + new (4), and

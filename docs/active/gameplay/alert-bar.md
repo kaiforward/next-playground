@@ -181,9 +181,14 @@ direct "build it" without redesigning the row.
 ## Settings
 
 A per-category panel, opened from the control at the start of the chip run: a checkbox per category,
-grouped by tier, persisted in the browser as a view preference rather than in the save. Toggling a
-category does not close the panel. Critical categories render no control at all — not a disabled one,
-which would still suggest the set is negotiable.
+grouped by tier, **stored in the save on the player seat**. Toggling a category does not close the
+panel. Critical categories render no control at all — not a disabled one, which would still suggest
+the set is negotiable; the write boundary refuses one too, so the tier cannot be hidden by any route.
+
+Every attention-layer setting is per-save, whatever kind of setting it is. A player who has hidden a
+category is describing this game, not the machine they are sitting at: a second save of a different
+empire starts from the authored defaults again, and a save carried to another machine takes its
+settings with it.
 
 The two `info` opportunity categories additionally only ever appear while their domain's automation is
 off, regardless of what their checkbox says — the same posture the opportunity categories take
@@ -243,11 +248,17 @@ the simulation.
 
 ## World state and saves
 
-The alert bar adds no *player* state — category visibility is a browser preference, not a save field.
-What the save gains is the five signals above, all additive and optional, so no `SAVE_FORMAT_VERSION`
-bump was needed: an old save simply loads with every one of them absent, and each category reads that
-the same way it reads a system the economy has never assessed — as not in the category, not as a false
-zero. On a save predating these fields, Survival stock falling shows nothing and Famine's countdown
+Category visibility is player state, stored on the player seat beside the pin list and the automation
+switches, and read back out on the alert payload the bar already fetches. Every key is always present:
+a new world is seeded from the authored defaults table, so no reader has to treat an absent flag as
+anything. It is a **required** field, which is why adding it bumped `SAVE_FORMAT_VERSION` — an older
+save would load a seat with no settings record at all, and the surfaces that index it would throw
+rather than degrade.
+
+The save also carries the five signals above, all additive and optional, so those needed no bump of
+their own: an old save simply loads with every one of them absent, and each category reads that the
+same way it reads a system the economy has never assessed — as not in the category, not as a false
+zero. On a save predating those fields, Survival stock falling shows nothing and Famine's countdown
 sort has nothing to work from until the first economy cycle after load; that is correct, not a bug.
 
 ## Out of scope

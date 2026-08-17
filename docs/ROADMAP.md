@@ -27,28 +27,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[M] Every attention-layer setting lives in the save.** The rule (Kai, 2026-08-17): anything in
-   the Tracker or the alert bar is per-save, whatever kind of setting it is — a toggle, a pin, an
-   expanded section. Pins and `automation` already sit on `world.player`; the two preference hooks do
-   not. `use-alert-categories.ts` (category toggles) and `use-tracker-sections.ts` (section expansion)
-   both move onto `world.player` beside `pinnedSystemIds`, following the `player-pins` pattern —
-   service, Zod schema, a POST on the existing `app/api/game/player/alerts/route.ts`, and the hooks
-   rewritten to call it. Changes the `World` shape, so it breaks saves (fine pre-1.0) and wants the
-   world-integrity lens the alert-bar surface review skipped.
-   Two things fall out rather than needing separate work. `parseCategories`'s sixteen hand-written
-   `in`/`typeof` blocks disappear entirely — the value arrives typed, validated by Zod at the boundary,
-   so there is nothing left to narrow. And the near-identical-hook pair the duplication audit flagged
-   resolves by subtraction, not extraction: both copies leave `localStorage`, so there is no shared
-   helper to write.
-   Nothing genuinely user-level exists yet (no sound, theme or keybindings), so `localStorage` empties
-   out completely. `map-session.ts` stays as it is — `sessionStorage`, deliberately dying with the tab,
-   not a preference.
-   *Next step:* add the field to `WorldPlayer` and copy the `player-pins` service/schema/route shape.
-   *Don't:* key `localStorage` on the save instead. There is no save id — `WorldMeta` carries only
-   `seed`, `systemCount`, `mapSize`, `currentTick` — so it would mean adding one, which is the same
-   `World` shape change at worse semantics, and the settings still would not travel with the save file.
-
-2. **[M] Duplication sweep, and a mechanical check so it stops recurring.** Full audit at
+1. **[M] Duplication sweep, and a mechanical check so it stops recurring.** Full audit at
    `.agent-reviews/duplication-audit-2026-08-17.md` — seven ranked findings, two of which carry
    docstrings that are currently false (`voronoi-cache.ts` claims it replaced triangulations that
    still run; `universe-gen.ts` describes `yieldMult` as a different quantity than `body-gen.ts`
@@ -62,7 +41,7 @@ The attention layer — how the player finds what to do — is two surfaces, bot
    diff of any size ever contained two of them. The missing capability is repo-wide search, which is
    mechanical; route its output into the conventions lens, which already owns the rule.
 
-3. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing

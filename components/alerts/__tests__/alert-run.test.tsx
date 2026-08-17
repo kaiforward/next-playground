@@ -1,10 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { useReducer } from "react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AlertRunContent } from "@/components/alerts/alert-run";
 import { layoutRun, type PlacedItem, type RunChip } from "@/lib/utils/alert-packing";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
+import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { AlertCategory, AlertData, SystemScopedAlertCategory } from "@/lib/types/api";
+import type { AlertCategorySettings } from "@/lib/types/alerts";
+import type { AlertCategoryInput } from "@/lib/schemas/player-settings";
 import type { AtlasData } from "@/lib/types/game";
 
 // AlertRunContent is the half of the run with no DOM measurement anywhere in it or below it — see
@@ -13,9 +17,36 @@ import type { AtlasData } from "@/lib/types/game";
 // doesn't implement, and would render an empty run at width 0 in every test that tried — the exact
 // vacuity AGENTS.md's testing section warns about.
 
-let alertsData: AlertData;
+let alertsData: Pick<AlertData, "categories">;
+/** The stored per-category checkboxes, which now arrive on the same payload as the categories
+ *  themselves (`AlertData.categorySettings`, off `world.player`). Held separately from `alertsData`
+ *  only so the twenty-odd fixtures below can keep naming just the categories they care about. */
+let categorySettings: AlertCategorySettings;
+
+/** Re-renders whatever is currently reading `useAlerts()`. The real hook is a `useSuspenseQuery`, so
+ *  a settings write that updates the cache re-renders every reader; a plain module variable would
+ *  not, and the "filters the run live" tests below would then assert against a screen the mutation
+ *  never reached — passing whether or not the component actually re-read the flag. */
+let rerenderAlertReaders = () => {};
+
 vi.mock("@/lib/hooks/use-alerts", () => ({
-  useAlerts: () => alertsData,
+  useAlerts: () => {
+    const [, bump] = useReducer((n: number) => n + 1, 0);
+    rerenderAlertReaders = bump;
+    return { ...alertsData, categorySettings };
+  },
+}));
+
+/** Stands in for the real mutation's cache write: `useSetAlertCategory().mutate` POSTs one flag and
+ *  writes the server's whole returned record back into the alerts query. Modelled here as an
+ *  immediate local merge plus a re-render, which is what the component observes either way. */
+vi.mock("@/lib/hooks/use-player-settings", () => ({
+  useSetAlertCategory: () => ({
+    mutate: ({ categoryId, on }: AlertCategoryInput) => {
+      categorySettings = { ...categorySettings, [categoryId]: on };
+      rerenderAlertReaders();
+    },
+  }),
 }));
 
 // Only reached once a chip is actually clicked open: `ActiveAlertFlyout`
@@ -63,23 +94,15 @@ function scoped(
   return { id, unit: "developed_systems", count, denominator, instances: [] };
 }
 
-// `useAlertCategories`' own storage key (lib/hooks/use-alert-categories.ts) — inlined rather than
-// imported, the same black-box convention `use-tracker-sections.test.tsx` uses for its own key, so
-// these tests exercise the real round trip rather than a mocked hook.
-const ALERT_CATEGORIES_STORAGE_KEY = "stellarTrader:alertCategories";
-
 /** The settings control's own accessible name (`alert-run.tsx`'s leading gear button) — every test
  *  below renders it, since it mounts unconditionally whatever the chip count. */
 const ALERT_SETTINGS_NAME = "Alert settings";
 
 beforeEach(() => {
   alertsData = { categories: [] };
+  // What a new world starts with — a fresh save's `world.player.alertCategories` (lib/world/gen.ts).
+  categorySettings = { ...DEFAULT_ALERT_CATEGORIES };
   push.mockClear();
-  window.localStorage.clear();
-});
-
-afterEach(() => {
-  window.localStorage.clear();
 });
 
 /** A width comfortably past anything these categories need, for the tests that are about what the
@@ -353,7 +376,7 @@ describe("AlertRunContent — only one flyout is open at a time", () => {
 });
 
 describe("AlertRunContent — a default-off category starts filtered out of the run on a first visit", () => {
-  it("renders no chip for Unrest rising even though it has live instances, with empty storage", async () => {
+  it("renders no chip for Unrest rising even though it has live instances, at a new world's defaults", async () => {
     alertsData = { categories: [scoped("famine", 1), scoped("unrest_rising", 5)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});
@@ -406,10 +429,7 @@ describe("AlertRunContent — the settings checkbox cannot override the automati
     // service self-gates independently of any client setting. This does NOT mock a non-zero count
     // for an automated category (a state the app never reaches); it proves the checkbox has no power
     // over a category whose count never went above zero, which is the only lever the checkbox has.
-    window.localStorage.setItem(
-      ALERT_CATEGORIES_STORAGE_KEY,
-      JSON.stringify({ build_opportunity: true }),
-    );
+    categorySettings = { ...categorySettings, build_opportunity: true };
     alertsData = { categories: [scoped("famine", 1), scoped("build_opportunity", 0)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});
@@ -419,9 +439,12 @@ describe("AlertRunContent — the settings checkbox cannot override the automati
   });
 });
 
-describe("AlertRunContent — a critical category cannot be hidden even by a corrupted stored value", () => {
-  it("still renders Famine's chip when localStorage carries famine: false", async () => {
-    window.localStorage.setItem(ALERT_CATEGORIES_STORAGE_KEY, JSON.stringify({ famine: false }));
+describe("AlertRunContent — a critical category cannot be hidden even by a hand-edited save", () => {
+  it("still renders Famine's chip when the stored settings carry famine: false", async () => {
+    // The write boundary refuses this (lib/services/player-settings.ts), so the only way to reach it
+    // is editing the save by hand — the render must not trust the flag for a non-hideable category
+    // regardless of how the record got that way.
+    categorySettings = { ...categorySettings, famine: false };
     alertsData = { categories: [scoped("famine", 2)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});
@@ -434,15 +457,12 @@ describe("AlertRunContent — the settings control is reachable even when every 
   it("still renders the settings control with an empty run", async () => {
     // The lockout state: a healthy galaxy (no critical category firing) with every hideable category
     // the player owns switched off. A run that rendered nothing here would take its own settings
-    // trigger down with it, leaving no way back into the categories that hid everything short of
-    // clearing localStorage by hand (docs/active/gameplay/alert-bar.md → "Placement and behaviour").
+    // trigger down with it, leaving no way back into the categories that hid everything for the rest
+    // of the save (docs/active/gameplay/alert-bar.md → "Placement and behaviour").
     // Deprived worlds stands in for "a hideable category with a live, nonzero count" — the control
     // has to survive even when there IS something to show and a stored preference is what's hiding
     // it, not just an empty galaxy.
-    window.localStorage.setItem(
-      ALERT_CATEGORIES_STORAGE_KEY,
-      JSON.stringify({ deprived_worlds: false }),
-    );
+    categorySettings = { ...categorySettings, deprived_worlds: false };
     alertsData = { categories: [scoped("deprived_worlds", 3)] };
     render(<AlertRunContent availableWidth={ROOMY} />);
     await act(async () => {});

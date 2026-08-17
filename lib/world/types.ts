@@ -22,6 +22,8 @@ import type {
   TaxLevel,
 } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
+import type { AlertCategorySettings } from "@/lib/types/alerts";
+import type { TrackerSections } from "@/lib/types/tracker";
 import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
@@ -52,6 +54,24 @@ export interface WorldPlayer {
    * on read rather than pruned here, so this list can carry stale ids between reads.
    */
   pinnedSystemIds: string[];
+  /**
+   * Which alert categories the player wants on the bar (docs/active/gameplay/alert-bar.md →
+   * "Settings"). Every attention-layer setting lives in the save, whatever kind of setting it is —
+   * a toggle, a pin or an expanded section — so this sits here beside `pinnedSystemIds` rather than
+   * in browser storage, and a saved game carries the player's own reading of it. Seeded from
+   * `DEFAULT_ALERT_CATEGORIES` at world-gen; every key is always present. A critical category's
+   * flag starts `true` and `setAlertCategory` refuses to change it, so the only way this record can
+   * carry a hidden critical category is a hand-edited save — which the chip run does not honour
+   * either (it short-circuits on the registry's `hideable`). No processor reads this.
+   */
+  alertCategories: AlertCategorySettings;
+  /**
+   * Which Tracker sections the player wants rendered (docs/active/gameplay/tracker.md →
+   * "Settings"). In the save for the same reason `alertCategories` is. Seeded from
+   * `DEFAULT_TRACKER_SECTIONS` at world-gen; all three keys are always present. No processor reads
+   * this.
+   */
+  trackerSections: TrackerSections;
 }
 
 // ── Regions ─────────────────────────────────────────────────────

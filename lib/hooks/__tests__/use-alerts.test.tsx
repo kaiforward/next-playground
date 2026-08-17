@@ -4,6 +4,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { act } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import { useAlerts } from "@/lib/hooks/use-alerts";
 import { makeQueryClient } from "@/lib/query/client";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -56,7 +57,7 @@ describe("useAlerts — a real useSuspenseQuery", () => {
     expect(screen.queryByTestId("alert-count")).not.toBeInTheDocument();
 
     await act(async () => {
-      resolveFetch(jsonResponse({ data: { categories: [] } }));
+      resolveFetch(jsonResponse({ data: { categories: [], categorySettings: DEFAULT_ALERT_CATEGORIES } }));
     });
 
     await waitFor(() => expect(screen.getByTestId("alert-count")).toHaveTextContent("0"));
@@ -70,7 +71,7 @@ describe("useAlerts — a real useSuspenseQuery", () => {
     const queryClient = makeQueryClient();
     const fetchMock = vi
       .fn()
-      .mockImplementation(() => Promise.resolve(jsonResponse({ data: { categories: [] } })));
+      .mockImplementation(() => Promise.resolve(jsonResponse({ data: { categories: [], categorySettings: DEFAULT_ALERT_CATEGORIES } })));
     vi.stubGlobal("fetch", fetchMock);
 
     render(

@@ -10,7 +10,7 @@ import { AlertChip, chip } from "@/components/alerts/alert-chip";
 import { AlertFlyout, type AlertNavigateTarget } from "@/components/alerts/alert-flyout";
 import { AlertSettings } from "@/components/alerts/alert-settings";
 import { useAlerts } from "@/lib/hooks/use-alerts";
-import { useAlertCategories } from "@/lib/hooks/use-alert-categories";
+import { useSetAlertCategory } from "@/lib/hooks/use-player-settings";
 import { useSystemFocus } from "@/lib/hooks/use-system-focus";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { DRAWER_WIDTH, TRACKER_BASE_WIDTH, TRACKER_SETTINGS_SPAN, RAIL_INSET } from "@/lib/constants/layout";
@@ -169,13 +169,16 @@ export function AlertRunContent({
  * and a wrapper carrying the offset would carry the z-index with it and trap an open chip's
  * `aria-expanded` raise inside its own stacking context.
  *
- * Reads `useAlertCategories()` to decide which of the live (nonzero-count) categories actually
- * SHOW: a hideable category with its checkbox off is filtered out here, before `layoutRun` ever sees
- * it, same as a category with no live instances — turning a category off is indistinguishable from
- * it never having fired, which is what keeps the layout above unaware settings exist at all.
+ * Reads `categorySettings` — the same `useAlerts()` payload the categories themselves arrive on,
+ * stored on `world.player` and so carried by the save — to decide which of the live (nonzero-count)
+ * categories actually SHOW: a hideable category with its checkbox off is filtered out here, before
+ * `layoutRun` ever sees it, same as a category with no live instances — turning a category off is
+ * indistinguishable from it never having fired, which is what keeps the layout above unaware
+ * settings exist at all.
  * A non-hideable (critical) category shows regardless of what `categorySettings` says for it —
- * `!hideable` short-circuits the check — so a corrupted or hand-edited `localStorage` value can
- * never hide one, not just the settings panel's own missing control for it. The two `info`
+ * `!hideable` short-circuits the check — so a hand-edited save can never hide one, not just the
+ * settings panel's own missing control for it (the write boundary refuses one too,
+ * `lib/services/player-settings.ts`). The two `info`
  * categories' own automation self-gate (`lib/services/alerts.ts`) needs no mirroring here:
  * automation-on means the category's `count` never went above zero, so the count check above never
  * admits its id regardless of what this filter or the checkbox says.
@@ -191,7 +194,7 @@ export function AlertRunContent({
  * placed UNCONDITIONALLY, whatever else fits: it is the run's only entry point back to its own
  * category checkboxes, so a player who has switched every hideable category off, with nothing
  * critical firing right now, must always have a way back to it rather than losing the run — and with
- * it the only route back into settings — until `localStorage` is cleared by hand (owner decision,
+ * it the only route back into settings — for the rest of that save (owner decision,
  * docs/active/gameplay/alert-bar.md → "Placement and behaviour"). It is the one item exempt from
  * `availableWidth`; chips and the collapsed tail are still the thing that renders nothing rather
  * than overflow.
@@ -212,8 +215,8 @@ function AlertRunChips({
   availableWidth: number;
   runRef?: RefObject<HTMLDivElement | null>;
 }) {
-  const { categories } = useAlerts();
-  const { categories: categorySettings, setCategory } = useAlertCategories();
+  const { categories, categorySettings } = useAlerts();
+  const setCategory = useSetAlertCategory();
 
   const shown = categories.filter((category) => {
     if (category.count <= 0) return false;
@@ -252,7 +255,10 @@ function AlertRunChips({
                   <SettingsIcon aria-hidden="true" className="h-5 w-5" />
                 </button>
               </PopoverTrigger>
-              <AlertSettings categories={categorySettings} onChangeCategory={setCategory} />
+              <AlertSettings
+                categories={categorySettings}
+                onChangeCategory={(categoryId, on) => setCategory.mutate({ categoryId, on })}
+              />
             </Popover>
           );
         }

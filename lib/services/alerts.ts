@@ -37,6 +37,7 @@
  * in for the planner's own value/work ROI).
  */
 import { getWorld } from "@/lib/world/store";
+import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
 import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
 import { resourceVectorFromColumns } from "@/lib/engine/resources";
@@ -61,7 +62,11 @@ import type {
   ControlledSystemsAlertCategory, EventAlertCategory, FactionAlertCategory,
 } from "@/lib/types/api";
 
-const EMPTY_ALERT_DATA: AlertData = { categories: [] };
+// No seat means no stored preference to read; the bar has nothing to show either way.
+const EMPTY_ALERT_DATA: AlertData = {
+  categories: [],
+  categorySettings: DEFAULT_ALERT_CATEGORIES,
+};
 
 /** Band order, worst first, for the final categories array — critical chips lead, then important,
  *  then info. Not the event bands' own `EVENT_BAND_ORDER` (lib/constants/ui.ts): that ranks Crisis /
@@ -664,5 +669,5 @@ export function getAlertData(): AlertData {
     return TIER_RANK[defA.tier] - TIER_RANK[defB.tier] || defA.order - defB.order;
   });
 
-  return { categories };
+  return { categories, categorySettings: player.alertCategories };
 }

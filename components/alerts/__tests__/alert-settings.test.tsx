@@ -4,15 +4,19 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { AlertSettings } from "@/components/alerts/alert-settings";
-import { DEFAULT_ALERT_CATEGORIES, type AlertCategorySettings } from "@/lib/hooks/use-alert-categories";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
-import { ALERT_CATEGORY_IDS, type AlertCategoryId } from "@/lib/types/alerts";
+import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
+import {
+  ALERT_CATEGORY_IDS,
+  type AlertCategoryId,
+  type AlertCategorySettings,
+} from "@/lib/types/alerts";
 
-// AlertSettings is pure props-in: it never calls `useAlertCategories()` itself (mirrors
+// AlertSettings is pure props-in: it never reads the settings itself (mirrors
 // `TrackerSettingsProps`'s own `sections`/`onChangeSection` split), so every test here renders it
-// directly with a `categories` record and spy/stateful callbacks — no localStorage, no router, no
-// QueryBoundary. The boundary/hook-level tests (malformed storage, per-key merge, the automation-
-// independent no-op on a critical id) live in `lib/hooks/__tests__/use-alert-categories.test.tsx`.
+// directly with a `categories` record and spy/stateful callbacks — no router, no QueryBoundary.
+// Where the record actually comes from, and the refusal to hide a critical category, are the write
+// boundary's own (`lib/services/__tests__/player-settings.test.ts`).
 //
 // AlertSettings's own return is now a `PopoverContent` (`components/ui/popover.tsx`), which needs a
 // `Popover` ancestor and starts closed — `renderOpenPanel` below wraps it in a real `Popover`/

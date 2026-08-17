@@ -139,8 +139,14 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 13 (pinned systems on the player seat)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(13);
+  // This is what makes a pre-bump save fail cleanly. A v13 seat carries `controlledFactionId`,
+  // `automation` and `pinnedSystemIds` and nothing else, so `alertCategories`/`trackerSections` would
+  // load as `undefined` — and the spot-checks below the gate never look at `player`, while every
+  // reader of those records indexes them directly, so such a save would throw on the first render
+  // rather than degrade. Nothing but this constant stands between the two, which is why the number
+  // is pinned rather than left to drift.
+  it("is at save format version 14 (attention-layer settings on the player seat)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(14);
   });
 
   it("rejects a prior-version (v11) save — saves break on the shape bump", () => {
@@ -152,6 +158,34 @@ describe("serializeWorld / deserializeWorld", () => {
     const json = JSON.stringify({ formatVersion: 11, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
+  });
+
+  it("round-trips the player seat's attention-layer settings unchanged", () => {
+    // A SEATED world: the settings records hang off `player`, so the shared fixture above (no
+    // `playerFaction`, hence `player: null`) would round-trip nothing at all here.
+    const seated = generateWorld({
+      systemCount: 60,
+      seed: 7,
+      playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
+    });
+    const player = seated.player;
+    expect(player).not.toBeNull();
+    if (!player) return;
+    const edited: World = {
+      ...seated,
+      player: {
+        ...player,
+        alertCategories: { ...player.alertCategories, unrest_rising: true, overcrowded: false },
+        trackerSections: { ...player.trackerSections, building: false },
+      },
+    };
+    const result = deserializeWorld(serializeWorld(edited));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.player?.alertCategories.unrest_rising).toBe(true);
+    expect(result.world.player?.alertCategories.overcrowded).toBe(false);
+    expect(result.world.player?.trackerSections.building).toBe(false);
+    expect(result.world).toStrictEqual(edited);
   });
 
   it("round-trips construction projects + building idleCycles unchanged", () => {

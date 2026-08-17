@@ -5,6 +5,7 @@ import { PinToggle } from "@/components/system/pin-toggle";
 import { Button } from "@/components/ui/button";
 import type { AtlasData } from "@/lib/types/game";
 import type { TrackerData, TrackerPinnedRow } from "@/lib/types/api";
+import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 
 // PinToggle owns two suspense-backed hooks (useTracker, useAtlas) and a mutation
 // (useSetSystemPin). All three are mocked directly, the same approach tracker-panel.test.tsx
@@ -52,7 +53,14 @@ function pinnedRow(systemId: string): TrackerPinnedRow {
 }
 
 function emptyTracker(): TrackerData {
-  return { pinnedSystemIds: [], pinned: [], building: [], waitingCount: 0, colonising: [] };
+  return {
+    pinnedSystemIds: [],
+    pinned: [],
+    building: [],
+    waitingCount: 0,
+    colonising: [],
+    sections: DEFAULT_TRACKER_SECTIONS,
+  };
 }
 
 /** A tracker whose stored pin list and rendered pin rows agree — the ordinary case, where every

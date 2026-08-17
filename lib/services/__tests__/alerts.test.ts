@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
+import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getAlertData } from "@/lib/services/alerts";
 import { getSystemIndustry } from "@/lib/services/universe";
@@ -143,6 +144,24 @@ afterEach(() => {
 });
 
 describe("getAlertData", () => {
+  // A default-shaped world reads the same settings whether this returns the stored record or the
+  // authored default, so the only test that can tell them apart is one that stores something else
+  // first. `categorySettings` is what decides which chips the run draws at all.
+  it("returns the seat's OWN stored category settings, not the authored defaults", () => {
+    const world = seatWorld();
+    setWorld({
+      ...world,
+      player: {
+        ...world.player!,
+        alertCategories: { ...world.player!.alertCategories, unrest_rising: true, overcrowded: false },
+      },
+    });
+
+    const settings = getAlertData().categorySettings;
+    expect(settings.unrest_rising).toBe(true);
+    expect(settings.overcrowded).toBe(false);
+  });
+
   it("returns empty categories rather than throwing on a world with no player seat", () => {
     setWorld(generateWorld({ systemCount: 60, seed: 42 })); // no playerFaction => player is null
     expect(getWorld().player).toBeNull();
@@ -151,7 +170,10 @@ describe("getAlertData", () => {
     expect(() => {
       data = getAlertData();
     }).not.toThrow();
-    expect(data).toEqual({ categories: [] });
+    // No seat means no stored preference to read, so the settings fall back to the authored
+    // defaults rather than being absent — every reader of `categorySettings` can index it
+    // unconditionally.
+    expect(data).toEqual({ categories: [], categorySettings: DEFAULT_ALERT_CATEGORIES });
   });
 
   it("never surfaces a system belonging to another faction, in any category", () => {

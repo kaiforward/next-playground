@@ -13,6 +13,7 @@
  * reads empty rather than throwing, so the panel degrades instead of blanking the shell around it.
  */
 import { getWorld } from "@/lib/world/store";
+import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 import { getSystemVitals } from "@/lib/services/system-vitals";
 import { readoutForFaction } from "@/lib/services/construction";
 import { workShareOf } from "@/lib/engine/construction-readout";
@@ -29,6 +30,8 @@ const EMPTY_TRACKER: TrackerData = {
   building: [],
   waitingCount: 0,
   colonising: [],
+  // No seat means no stored preference to read; the panel has nothing to render either way.
+  sections: DEFAULT_TRACKER_SECTIONS,
 };
 
 export function getTrackerData(): TrackerData {
@@ -109,5 +112,12 @@ export function getTrackerData(): TrackerData {
   const totalBuildProjects = readout.all.filter((row) => row.kind === "build").length;
   const waitingCount = totalBuildProjects - building.length;
 
-  return { pinnedSystemIds, pinned, building, waitingCount, colonising };
+  return {
+    pinnedSystemIds,
+    pinned,
+    building,
+    waitingCount,
+    colonising,
+    sections: player.trackerSections,
+  };
 }
