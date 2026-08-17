@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TrackerSettings } from "@/components/tracker/tracker-settings";
-import type { TrackerSections } from "@/lib/hooks/use-tracker-sections";
+import type { TrackerSections } from "@/lib/types/tracker";
 
 const ALL_ON: TrackerSections = { pinned: true, building: true, colonising: true };
 

@@ -388,6 +388,7 @@ export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
 export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
 
 // ── Tracker (docs/active/gameplay/tracker.md — pinned/building/colonising roll-up) ──
+import type { TrackerSections } from "@/lib/types/tracker";
 /** One pinned system's row + card figures — the same derivations `SystemVitalsData` shows on the
  *  system panel, so there is one definition of how a system is doing rather than a second. */
 export interface TrackerPinnedRow {
@@ -452,8 +453,15 @@ export interface TrackerData {
   waitingCount: number;
   /** Every colony currently forming for the player's faction, funded or not this cycle. */
   colonising: TrackerColonyRow[];
+  /** Which sections the player wants rendered — stored on `world.player`, so it travels with the
+   *  save. It rides this payload rather than having a read of its own, the same split
+   *  `pinnedSystemIds` uses: read here, written on `POST /api/game/player/tracker`. A world with no
+   *  player seat reads `DEFAULT_TRACKER_SECTIONS`. */
+  sections: TrackerSections;
 }
 export type TrackerResponse = ApiResponse<TrackerData>;
+/** A section write's answer: the full record after the merge, never the one flag that was sent. */
+export type TrackerSectionsResponse = ApiResponse<TrackerSections>;
 
 // ── Player build-options surface (per-system verbs: colonise / build) ────────
 import type { BuildOption } from "@/lib/engine/build-options";
@@ -570,7 +578,7 @@ export interface TreasuryPolicyData {
 export type UpdateTreasuryPolicyResponse = ApiResponse<TreasuryPolicyData>;
 
 // ── Alert bar ──────────────────────────────────────────────────────────────
-import type { AlertCategoryId } from "@/lib/types/alerts";
+import type { AlertCategoryId, AlertCategorySettings } from "@/lib/types/alerts";
 
 /**
  * One thing an alert category is naming — the flyout's row. What that thing is depends on the
@@ -665,5 +673,14 @@ export type AlertCategory =
  *  posture `TrackerData` takes for the same reason. */
 export interface AlertData {
   categories: AlertCategory[];
+  /** Which categories the player wants on the bar — stored on `world.player`, so it travels with
+   *  the save. Distinct from `categories` above: that is what each category currently SAYS, this is
+   *  whether the player wants to be shown it at all. It rides this payload rather than having a read
+   *  of its own, the same split `pinnedSystemIds` uses: read here, written on
+   *  `POST /api/game/player/alerts`. A world with no player seat reads
+   *  `DEFAULT_ALERT_CATEGORIES`. */
+  categorySettings: AlertCategorySettings;
 }
 export type AlertResponse = ApiResponse<AlertData>;
+/** A category write's answer: the full record after the merge, never the one flag that was sent. */
+export type AlertCategoriesResponse = ApiResponse<AlertCategorySettings>;

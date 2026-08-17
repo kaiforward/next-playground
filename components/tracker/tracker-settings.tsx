@@ -1,17 +1,16 @@
 "use client";
 
 import { CheckboxInput } from "@/components/form/checkbox-input";
-import type { TrackerSectionKey, TrackerSections } from "@/lib/hooks/use-tracker-sections";
+import { useTracker } from "@/lib/hooks/use-tracker";
+import { useSetTrackerSection } from "@/lib/hooks/use-player-settings";
+import { TRACKER_SECTION_KEYS } from "@/lib/types/tracker";
+import type { TrackerSectionKey, TrackerSections } from "@/lib/types/tracker";
 
 const SECTION_LABELS: Record<TrackerSectionKey, string> = {
   pinned: "Pinned",
   building: "Building",
   colonising: "Colonising",
 };
-
-// Render order matches the Tracker panel's own section order (top to bottom) so a row here maps
-// visually to the section it controls.
-const SECTION_ORDER: readonly TrackerSectionKey[] = ["pinned", "building", "colonising"];
 
 export interface TrackerSettingsProps {
   sections: TrackerSections;
@@ -43,7 +42,9 @@ export function TrackerSettings({ sections, onChangeSection }: TrackerSettingsPr
         </h2>
       </div>
       <div role="group" aria-label="Tracker sections" className="min-h-0 flex-1 overflow-y-auto py-1">
-        {SECTION_ORDER.map((key) => (
+        {/* `TRACKER_SECTION_KEYS` is authored in the panel's own section order (top to bottom), so a
+            row here maps visually to the section it controls — no second copy of that order to drift. */}
+        {TRACKER_SECTION_KEYS.map((key) => (
           <CheckboxInput
             key={key}
             label={SECTION_LABELS[key]}
@@ -53,5 +54,26 @@ export function TrackerSettings({ sections, onChangeSection }: TrackerSettingsPr
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * The settings panel's data half: reads the stored section flags off the Tracker payload they ride
+ * on and writes one flag back per checkbox. Split from `TrackerSettings` itself so that component
+ * stays pure props-in and renderable without a query client — the same split `AlertSettings` has
+ * against `AlertRunChips`.
+ *
+ * It reads `useTracker()` rather than taking `sections` down from `MapRightRail`: this panel and
+ * `TrackerPanel` are siblings that must agree on the same live flags, and sharing one cached query
+ * is what guarantees that now the state lives on the server. Mount inside a `QueryBoundary`.
+ */
+export function TrackerSettingsPanel() {
+  const { sections } = useTracker();
+  const setSection = useSetTrackerSection();
+  return (
+    <TrackerSettings
+      sections={sections}
+      onChangeSection={(section, on) => setSection.mutate({ section, on })}
+    />
   );
 }

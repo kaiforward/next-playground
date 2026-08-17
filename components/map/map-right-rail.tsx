@@ -3,9 +3,9 @@
 import { memo } from "react";
 import type { MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
-import { useTrackerSections } from "@/lib/hooks/use-tracker-sections";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 import { TrackerPanel } from "@/components/tracker/tracker-panel";
-import { TrackerSettings } from "@/components/tracker/tracker-settings";
+import { TrackerSettingsPanel } from "@/components/tracker/tracker-settings";
 import { MapControlsDock } from "@/components/map/map-controls-dock";
 
 interface MapRightRailProps {
@@ -40,14 +40,17 @@ interface MapRightRailProps {
  * height as visual siblings — `items-end` stays on the OUTER column only, right-anchoring the
  * row-plus-dock stack against the map edge.
  *
- * `useTrackerSections()` is called ONCE here, not inside `TrackerPanel` or `TrackerSettings`
- * separately — both need the SAME live state (a checkbox toggled in Settings must immediately
- * filter Tracker's own render), which only one shared hook instance, passed down as props,
- * guarantees. `settingsOpen`/`onToggleSettings` are lifted to `star-map.tsx` rather than owned here
- * (see `MapRightRailProps`) — plain `useState` there, not persisted: it's ephemeral UI state (which
- * panel is open right now), unlike section visibility, which is a standing preference the player
- * expects to hold across sessions — see `useTrackerSections`'s own docstring for why THAT one is
- * `localStorage`-backed.
+ * Section visibility is NOT owned here. Both panels read it off the Tracker payload
+ * (`TrackerData.sections`), each through its own `useTracker()` call — a checkbox toggled in
+ * Settings must immediately filter Tracker's own render, and one shared cached query is what
+ * guarantees that. `settingsOpen`/`onToggleSettings` are lifted to `star-map.tsx` rather than owned
+ * here (see `MapRightRailProps`) — plain `useState` there, not persisted: it's ephemeral UI state
+ * (which panel is open right now), unlike section visibility, which is a standing preference stored
+ * on `world.player` and carried by the save.
+ *
+ * The settings panel gets its own `QueryBoundary` rather than sharing `TrackerPanel`'s: they are
+ * siblings, so a failed read degrades whichever panel is asking rather than blanking the pair, and
+ * the Tracker's own header — the only way to close this panel again — stays outside both.
  *
  * `pointer-events-none` on this column, `pointer-events-auto` on each real panel: the column spans
  * the full map height (`inset-y-2`) so empty space above/below/around the panels — including the
@@ -74,13 +77,15 @@ export const MapRightRail = memo(function MapRightRail({
   settingsOpen,
   onToggleSettings,
 }: MapRightRailProps) {
-  const { sections, setSection } = useTrackerSections();
-
   return (
     <div className="pointer-events-none absolute inset-y-2 right-2 z-20 flex flex-col items-end gap-2">
       <div className="flex min-h-0 flex-1 gap-2">
-        {settingsOpen && <TrackerSettings sections={sections} onChangeSection={setSection} />}
-        <TrackerPanel sections={sections} settingsOpen={settingsOpen} onToggleSettings={onToggleSettings} />
+        {settingsOpen && (
+          <QueryBoundary>
+            <TrackerSettingsPanel />
+          </QueryBoundary>
+        )}
+        <TrackerPanel settingsOpen={settingsOpen} onToggleSettings={onToggleSettings} />
       </div>
       <MapControlsDock mode={mode} setMode={setMode} overlays={overlays} toggle={toggle} />
     </div>

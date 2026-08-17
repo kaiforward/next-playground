@@ -17,18 +17,6 @@ describe("ALERT_CATEGORIES — hideable is exactly the critical tier", () => {
   });
 });
 
-describe("ALERT_CATEGORIES — defaults table", () => {
-  // Independently named from the spec's defaults table, not read back off ALERT_CATEGORIES — a test
-  // that only reflects the object at itself proves nothing.
-  const EXPECTED_OFF = new Set(["unrest_rising", "industry_idle", "build_blocked"]);
-
-  it("defaults exactly the three named important categories off", () => {
-    for (const [id, def] of Object.entries(ALERT_CATEGORIES)) {
-      expect(def.defaultOn, id).toBe(!EXPECTED_OFF.has(id));
-    }
-  });
-});
-
 describe("ALERT_CATEGORIES — order is total within a tier", () => {
   it("gives no two categories in the same tier the same order", () => {
     for (const tier of ["critical", "important", "info"] as const) {

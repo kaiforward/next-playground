@@ -1,5 +1,10 @@
-// Alert bar category registry — the spec's authored tier list in one place, so tier, default,
-// destination and order cannot drift apart across the surfaces that read them.
+// Alert bar category registry — the spec's authored tier list in one place, so tier, destination
+// and order cannot drift apart across the surfaces that read them.
+//
+// A category's authored DEFAULT is the one thing not here: it lives in
+// `lib/constants/attention.ts`, which is icon-free. That record is seeded onto `WorldPlayer` at
+// world-gen, and this module's lucide import cannot follow it there (`lib/world/gen.ts` runs in the
+// node tick harness). One authority either way — nothing in this file states a default.
 
 import {
   WheatOff,
@@ -21,9 +26,10 @@ import type { AlertCategoryId, AlertCategoryDef } from "@/lib/types/alerts";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 /**
- * Tier, icon, default and destination per alert category — the authored table from the alert bar
- * spec's tier list, keyed so the compiler requires all sixteen. `order` is unique within a tier: the
- * authored order is total, so a chip cannot move once ranking runs.
+ * Tier, icon and destination per alert category — the authored table from the alert bar spec's tier
+ * list, keyed so the compiler requires all sixteen. `order` is unique within a tier: the authored
+ * order is total, so a chip cannot move once ranking runs. Each category's default on/off state is
+ * `DEFAULT_ALERT_CATEGORIES` (`lib/constants/attention.ts`) — see this file's header.
  */
 export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
   // ── critical — cannot be turned off ──────────────────────────
@@ -34,7 +40,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Famine",
     conditionLine: "A world can't get enough food or water, and is losing population.",
     destination: { kind: "system", tab: "population" },
-    defaultOn: true,
     hideable: false,
     order: 0,
   },
@@ -45,7 +50,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Strike",
     conditionLine: "Unrest has passed the point where workers walk out.",
     destination: { kind: "system", tab: "population" },
-    defaultOn: true,
     hideable: false,
     order: 1,
   },
@@ -56,7 +60,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Maintenance unfunded",
     conditionLine: "The treasury couldn't pay for maintenance a settlement was asked to fund.",
     destination: { kind: "faction" },
-    defaultOn: true,
     hideable: false,
     order: 2,
   },
@@ -67,7 +70,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Crisis",
     conditionLine: "An event severe enough to threaten a world is underway.",
     destination: { kind: "events" },
-    defaultOn: true,
     hideable: false,
     order: 3,
   },
@@ -80,7 +82,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Deprived worlds",
     conditionLine: "Provision has fallen into the Deprived band.",
     destination: { kind: "system", tab: "population" },
-    defaultOn: true,
     hideable: true,
     order: 0,
   },
@@ -91,7 +92,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Unrest rising",
     conditionLine: "Provision is below what the population expects, before anyone strikes.",
     destination: { kind: "system", tab: "population" },
-    defaultOn: false,
     hideable: true,
     order: 1,
   },
@@ -102,7 +102,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Survival stock falling",
     conditionLine: "A world's food or water reserve is only a few cycles from running out.",
     destination: { kind: "system", tab: "logistics" },
-    defaultOn: true,
     hideable: true,
     order: 2,
   },
@@ -113,7 +112,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Demand unservable",
     conditionLine: "A shortfall no reachable supplier or local production can close.",
     destination: { kind: "system", tab: "logistics" },
-    defaultOn: true,
     hideable: true,
     order: 3,
   },
@@ -124,7 +122,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Overcrowded",
     conditionLine: "Population has outgrown the housing built for it.",
     destination: { kind: "system", tab: "population" },
-    defaultOn: true,
     hideable: true,
     order: 4,
   },
@@ -135,7 +132,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "No housing headroom",
     conditionLine: "Overcrowded, and there's no room left to build more housing.",
     destination: { kind: "system", tab: "population" },
-    defaultOn: true,
     hideable: true,
     order: 5,
   },
@@ -146,7 +142,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Build blocked",
     conditionLine: "The planner wanted to build production here and couldn't.",
     destination: { kind: "system", tab: "industry" },
-    defaultOn: false,
     hideable: true,
     order: 6,
   },
@@ -157,7 +152,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Industry idle",
     conditionLine: "Built capacity that isn't running.",
     destination: { kind: "system", tab: "industry" },
-    defaultOn: false,
     hideable: true,
     order: 7,
   },
@@ -168,7 +162,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Disruption",
     conditionLine: "An event that's costing a world without threatening it.",
     destination: { kind: "events" },
-    defaultOn: true,
     hideable: true,
     order: 8,
   },
@@ -181,7 +174,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Build opportunity",
     conditionLine: "A ranked build the planner recommends, while build automation is off.",
     destination: { kind: "system", tab: "industry" },
-    defaultOn: true,
     hideable: true,
     order: 0,
   },
@@ -192,7 +184,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Colony opportunity",
     conditionLine: "A controlled system worth colonising, while colonisation automation is off.",
     destination: { kind: "system", tab: "" },
-    defaultOn: true,
     hideable: true,
     order: 1,
   },
@@ -203,7 +194,6 @@ export const ALERT_CATEGORIES: Record<AlertCategoryId, AlertCategoryDef> = {
     label: "Windfall",
     conditionLine: "An event worth riding before it ends.",
     destination: { kind: "events" },
-    defaultOn: true,
     hideable: true,
     order: 2,
   },

@@ -184,18 +184,23 @@ Tracker's own header — a sibling panel rather than a floating menu. It carries
 section. Hiding a section removes it entirely, heading and counts included; hiding all three still
 leaves the Tracker's header present so the settings stay reachable.
 
-Section visibility persists in the browser, not in the save: it is a view preference rather than game
-state. A malformed stored value falls back to all sections visible. Whether the settings panel itself
-is open is ephemeral and is not persisted.
+Section visibility is **stored in the save**, on the player seat beside the pin list — every
+attention-layer setting is per-save, whatever kind of setting it is. A new world starts with all three
+sections visible. Whether the settings panel itself is open is ephemeral and is not persisted at
+all.
 
 Nothing here is non-optional. Unlike the alert bar, a Tracker section carries no urgency, so hiding
 one loses nothing the player needs.
 
 ## World state and saves
 
-Pinned systems are player state and live alongside the automation switches on the player seat, as a
-list of system ids — so they are **saved and restored with the world**. Nothing in the tick reads
-them: no processor, adapter or tick body touches the pinned set.
+Pinned systems and section visibility are both player state, living alongside the automation switches
+on the player seat — a list of system ids and a flag per section — so both are **saved and restored
+with the world**. Nothing in the tick reads either: no processor, adapter or tick body touches them.
+
+Section visibility is a **required** field, seeded all-on at world-gen, which is why adding it bumped
+`SAVE_FORMAT_VERSION`. It rides the Tracker payload the panel already fetches rather than having a
+read of its own, and is written one flag at a time — the same split pinning uses.
 
 A pinned system that no longer exists — abandoned back to unclaimed frontier — is filtered out on
 read rather than pruned on write, which is why abandonment needs no tick write. A pinned system

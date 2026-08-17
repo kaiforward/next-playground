@@ -11,6 +11,7 @@ import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/fac
 import { slotColumns, qualColumns, yieldColumns } from "@/lib/engine/resources";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
 import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
+import { DEFAULT_ALERT_CATEGORIES, DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 import type {
   World,
   WorldRegion,
@@ -22,6 +23,7 @@ import type {
   WorldFaction,
   WorldFactionRelation,
   WorldFactionTreasury,
+  WorldPlayer,
 } from "./types";
 
 export interface GenerateWorldOptions {
@@ -216,12 +218,16 @@ export function generateWorld(options: GenerateWorldOptions): World {
     updatedAtTick: 0,
   }));
 
-  const player =
+  // Spread rather than referenced: the two settings records are module-level constants, and a world
+  // holding the constant itself would share one object across every world generated in this process.
+  const player: WorldPlayer | null =
     universe.playerFactionIndex !== null
       ? {
           controlledFactionId: factionIds[universe.playerFactionIndex],
           automation: { build: true, colonisation: true },
           pinnedSystemIds: [],
+          alertCategories: { ...DEFAULT_ALERT_CATEGORIES },
+          trackerSections: { ...DEFAULT_TRACKER_SECTIONS },
         }
       : null;
 

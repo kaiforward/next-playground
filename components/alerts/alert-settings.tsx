@@ -4,7 +4,7 @@ import { PopoverContent } from "@/components/ui/popover";
 import { CheckboxInput } from "@/components/form/checkbox-input";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
 import { ALERT_CATEGORY_IDS, type AlertCategoryId, type AlertTier } from "@/lib/types/alerts";
-import type { AlertCategorySettings } from "@/lib/hooks/use-alert-categories";
+import type { AlertCategorySettings } from "@/lib/types/alerts";
 
 const TIER_ORDER: readonly AlertTier[] = ["critical", "important", "info"];
 
@@ -41,9 +41,9 @@ function categoryIdsInTier(tier: AlertTier): AlertCategoryId[] {
 }
 
 export interface AlertSettingsProps {
-  /** Every category's current checkbox state — `useAlertCategories()`'s own `categories`, owned by
-   *  the caller (mirrors `TrackerSettingsProps`'s own `sections` prop) rather than read by this
-   *  component itself, so it stays a pure render of whatever state its owner hands it. */
+  /** Every category's current checkbox state — `AlertData.categorySettings`, owned by the caller
+   *  (mirrors `TrackerSettingsProps`'s own `sections` prop) rather than read by this component
+   *  itself, so it stays a pure render of whatever state its owner hands it. */
   categories: AlertCategorySettings;
   onChangeCategory: (id: AlertCategoryId, on: boolean) => void;
 }

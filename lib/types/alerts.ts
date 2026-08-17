@@ -11,8 +11,8 @@ export type AlertTier = "critical" | "important" | "info";
  * The sixteen standing alert categories — system warnings, opportunities and the three event bands,
  * per the alert bar's authored tier list. This array, not a separately hand-written union, is the
  * single enumeration: `AlertCategoryId` is derived from it below, so every surface that has to walk
- * every category (the settings panel's checkbox list, the stored-preference merge in
- * `lib/hooks/use-alert-categories.ts`) iterates the same list the type is made of, and a
+ * every category (the settings panel's checkbox list, the write schema in
+ * `lib/schemas/player-settings.ts`) iterates the same list the type is made of, and a
  * seventeenth category cannot be added to one without the other. Use instead of
  * `Object.keys(ALERT_CATEGORIES)`, which widens a `Record<AlertCategoryId, …>`'s keys back to a bare
  * `string` (a standing TypeScript limitation on `Record`) and so would need an `as` cast to hand an
@@ -45,6 +45,12 @@ export const ALERT_CATEGORY_IDS = [
  *  derived from. */
 export type AlertCategoryId = (typeof ALERT_CATEGORY_IDS)[number];
 
+/** Which alert categories the player wants on the bar, one flag per category. Stored on
+ *  `WorldPlayer` (`lib/world/types.ts`), so it travels with the save. A critical category's flag is
+ *  always `true` and the write boundary refuses to change it (`lib/services/player-settings.ts`) —
+ *  the tier cannot be turned off. */
+export type AlertCategorySettings = Record<AlertCategoryId, boolean>;
+
 /** The system tabs an alert row can navigate to — a fixed subset of `SystemTabSegment`. Typed with
  *  `satisfies` (not `as const`-only) so a renamed or removed segment fails to compile here instead
  *  of silently drifting. */
@@ -65,8 +71,9 @@ export type AlertDestination =
   | { kind: "faction" }
   | { kind: "events" };
 
-/** One category's authored entry in the alert bar's tier list — tier, default, destination and
- *  order in one place so they cannot drift apart across the surfaces that read them. */
+/** One category's authored entry in the alert bar's tier list — tier, destination and order in one
+ *  place so they cannot drift apart across the surfaces that read them. The default on/off state is
+ *  deliberately not here; see `lib/constants/alerts.ts`'s header for where it lives and why. */
 export interface AlertCategoryDef {
   tier: AlertTier;
   icon: LucideIcon;
@@ -77,9 +84,6 @@ export interface AlertCategoryDef {
   /** The one line the flyout shows saying what the condition is, in plain player-facing prose. */
   conditionLine: string;
   destination: AlertDestination;
-  /** Whether the category's settings checkbox starts checked. The defaults table is the single
-   *  authority; every critical category is `true` since the tier cannot be turned off anyway. */
-  defaultOn: boolean;
   /** Whether the category can be switched off at all. `false` only for the critical tier. */
   hideable: boolean;
   /** Chip order within its tier. Unique per tier — the authored order is total, so a chip cannot
