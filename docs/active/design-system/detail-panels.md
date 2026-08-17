@@ -39,52 +39,56 @@ star pin toggle, beside the cadence countdown and "Show on Map".
 - **Tooltip** (`components/ui/tooltip.tsx`, Radix Tooltip) — one-line legends and term definitions.
   Non-interactive by design: its content is wired as `aria-describedby`, closes on pointer-leave, and
   is not keyboard-reachable. Carries the app-wide dotted-underline affordance on text triggers.
-- **`RichCard`** (`components/ui/rich-card.tsx`, Radix **Popover**) — the second, richer tier, for
+- **`Popover`** (`components/ui/popover.tsx`, Radix **Popover**) — the second, richer tier, for
   content with a table or a control in it. A popover rather than a hover-card specifically so the
   content is keyboard-reachable; hover-cards are mouse-only by design. Opens on hover after a delay,
-  on keyboard focus, and on click; survives the cursor travelling from trigger to card; one open at a
-  time. Consumers whose trigger click already means something else opt out of click-to-open — the
-  Tracker's rows do, because a row click navigates.
+  on keyboard focus, and on click; survives the cursor travelling from trigger to content; one open
+  at a time. Consumers whose trigger click already means something else opt out of click-to-open —
+  the Tracker's rows do, because a row click navigates. Consumers whose trigger hover already means
+  something else opt out of hover-to-open the same way.
 
   Scoped to one level. Nested, pinnable deep tooltips and the concept glossary behind them are
-  planned, not built; migrating the existing plain tooltips onto `RichCard` is deferred with them.
+  planned, not built; migrating the existing plain tooltips onto `Popover` is deferred with them.
 
 ### The keyboard enter/exit convention
 
-Every rich card in the game obeys one contract, because triggers come in lists and a card is
-portalled to the end of the document — a card that takes focus puts every later trigger behind
+Every popover in the game obeys one contract, because triggers come in lists and a popover is
+portalled to the end of the document — a popover that takes focus puts every later trigger behind
 itself in tab order, and the list stops being walkable.
 
 - **Opening never moves focus.** Hover, click and keyboard focus all leave focus on the trigger.
-  Opening a card and entering it are two separate steps.
-- **ArrowDown on the trigger enters the card**, opening it first if it was closed. Focus lands on the
-  card's first control, or on the card itself when it holds no control, so its content is still
-  reachable by a screen reader. The key is consumed, so the page does not scroll as well — and so
-  the map's window-level pan keys, which stand down on a key another handler has spent, do not drag
-  the galaxy behind the card at the same time. The trigger carries `aria-keyshortcuts`, so the
-  gesture is announced with the trigger's own name rather than left to be discovered; the card is a
-  dialog and **every consumer names it**, or a keyboard user arrives at something announced as bare
-  "dialog".
-- **Escape closes the card and returns focus to the trigger** — the exit, and ArrowDown's
+  Opening a popover and entering it are two separate steps.
+- **ArrowDown on the trigger enters the popover**, opening it first if it was closed. Focus lands on
+  the popover's first control, or on the popover itself when it holds no control, so its content is
+  still reachable by a screen reader. The key is consumed, so the page does not scroll as well — and
+  so the map's window-level pan keys, which stand down on a key another handler has spent, do not
+  drag the galaxy behind the popover at the same time. The trigger carries `aria-keyshortcuts`, so
+  the gesture is announced with the trigger's own name rather than left to be discovered; the
+  popover is a dialog and **every consumer names it**, or a keyboard user arrives at something
+  announced as bare "dialog".
+- **Escape closes the popover and returns focus to the trigger** — the exit, and ArrowDown's
   counterpart.
-- **Tab and Shift+Tab cycle within an entered card**, wrapping at its last and first control rather
-  than tabbing out into the empty document behind it. Escape is the way out, not the last resort.
-- **A card the pointer opened is keyboard-driven once entered**, so it hands focus back on Escape
+- **Tab and Shift+Tab cycle within an entered popover**, wrapping at its last and first control
+  rather than tabbing out into the empty document behind it. Escape is the way out, not the last
+  resort.
+- **A popover the pointer opened is keyboard-driven once entered**, so it hands focus back on Escape
   like any other.
-- **The pointer leaving never closes a card the keyboard has entered.** The pointer-leave grace
-  period stands down for the rest of that card's life; Escape is the way out. What counts is the
-  ArrowDown, not where focus happens to be — clicking a control inside a card with the mouse puts
-  focus in it too, and that card still closes when the pointer leaves.
-- **Opening the next card still closes the one before it**, entered or not — the one-at-a-time rule
-  outranks the rule above, because two cards on screen at once is the worse outcome. Focus then
-  falls to the document body rather than back to the closed card's row: returning it there would
-  land a `focusin` outside the card that just opened, which dismisses it on sight. This is the one
-  case where a keyboard user is left without a place to Tab on from, and it takes a deliberately
-  mixed sequence to reach — enter a card by keyboard, then hover another row with the mouse.
+- **The pointer leaving never closes a popover the keyboard has entered.** The pointer-leave grace
+  period stands down for the rest of that popover's life; Escape is the way out. What counts is the
+  ArrowDown, not where focus happens to be — clicking a control inside a popover with the mouse puts
+  focus in it too, and that popover still closes when the pointer leaves.
+- **Opening the next popover still closes the one before it**, entered or not — the one-at-a-time
+  rule outranks the rule above, because two popovers on screen at once is the worse outcome. Focus
+  then falls to the document body rather than back to the closed popover's row: returning it there
+  would land a `focusin` outside the popover that just opened, which dismisses it on sight. This is
+  the one case where a keyboard user is left without a place to Tab on from, and it takes a
+  deliberately mixed sequence to reach — enter a popover by keyboard, then hover another row with
+  the mouse.
 
-A card whose content carries another card's trigger inherits all of this recursively — one level per
-ArrowDown, one per Escape — but nesting is not built (see above), and the one-open-at-a-time registry
-is what would have to change first: it would close the outer card as the inner one opened.
+A popover whose content carries another popover's trigger inherits all of this recursively — one
+level per ArrowDown, one per Escape — but nesting is not built (see above), and the
+one-open-at-a-time registry is what would have to change first: it would close the outer popover as
+the inner one opened.
 
 ## Vitals grid
 

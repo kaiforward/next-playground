@@ -61,7 +61,7 @@ interface MapRightRailProps {
  *
  * Wrapped in `React.memo`: `StarMap` re-renders this on every throttled pan/zoom tick
  * (`THROTTLE_MS` in `lib/hooks/use-static-tiles.ts`), and without the memo boundary that drags the
- * whole Tracker subtree — one stateful `RichCard` per row — along for a viewport change that never
+ * whole Tracker subtree — one stateful `Popover` per row — along for a viewport change that never
  * touches this component's own props. All six props are stable across those re-renders (`setMode`,
  * `toggle` and `onToggleSettings` are `useCallback`s with empty deps in `star-map.tsx`; `overlays`,
  * `mode` and `settingsOpen` are plain state), so the memo boundary holds.

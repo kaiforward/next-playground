@@ -341,11 +341,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
   as this system's second tier.
-  **The primitive shipped with the Tracker** (`RichCard`) — a Popover-based rich card with hover-to-open, keyboard
-  access and a safe transit area, scoped to one level. What stays here: **nesting** (a parent card must
-  not close while a child is open — neither Radix primitive gives this, so it is custom either way),
-  pinning, the glossary, and **migrating the existing plain Radix tooltips** onto the card, which is
-  deliberately deferred rather than done alongside the Tracker.
+  **The primitive shipped with the Tracker** (`Popover`, `components/ui/popover.tsx`) — a Radix-Popover-based
+  popover with hover-to-open, keyboard access and a safe transit area, scoped to one level. What stays here:
+  **nesting** (a parent popover must not close while a child is open — neither Radix primitive gives this,
+  so it is custom either way), pinning, the glossary, and **migrating the existing plain Radix tooltips**
+  onto the popover, which is deliberately deferred rather than done alongside the Tracker.
   Design input worth not losing: Paradox tooltips **follow the cursor until you hold still, then latch**
   so you can move onto them. That is a legitimate alternative to a grace-area polygon and arguably
   simpler; decide between them at the prototype pass.

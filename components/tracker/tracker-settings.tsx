@@ -22,7 +22,7 @@ export interface TrackerSettingsProps {
  * The Tracker's settings surface (docs/active/gameplay/tracker.md → "Settings") — a checkbox per
  * section, unticked meaning the section (heading included) is filtered out of `TrackerPanel`.
  *
- * A sibling PANEL, not a `RichCard` or a dropdown menu: hiding a section is a standing view
+ * A sibling PANEL, not a `Popover` or a dropdown menu: hiding a section is a standing view
  * preference the player sets once and forgets, not a transient lookup that should vanish on
  * pointer-leave — it earns a persistent surface of its own. Rendered by `MapRightRail`
  * immediately to the LEFT of `TrackerPanel` inside their shared horizontal pair, opened and

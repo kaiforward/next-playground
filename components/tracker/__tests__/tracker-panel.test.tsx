@@ -423,8 +423,8 @@ describe("TrackerPanel — the waiting count is a quiet line, present only when 
 });
 
 describe("TrackerPanel — a pinned row's card carries the figures the row has no room for", () => {
-  /** Opens the first row's rich card by keyboard (Tab past the header's settings toggle onto the
-   *  row, which opens on focus) and returns the card's content region. Hover would work too; the
+  /** Opens the first row's popover by keyboard (Tab past the header's settings toggle onto the
+   *  row, which opens on focus) and returns the popover's content region. Hover would work too; the
    *  keyboard path is the one the spec requires to exist. */
   async function openFirstRowCard(user: ReturnType<typeof userEvent.setup>) {
     await user.tab(); // header settings toggle

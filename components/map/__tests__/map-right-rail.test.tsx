@@ -7,7 +7,7 @@ import type { AtlasData } from "@/lib/types/game";
 import type { TrackerData } from "@/lib/types/api";
 
 // Proves the owner-decision-2 wiring: the settings surface is a SIBLING panel toggled from the
-// Tracker's own header (never a RichCard/popover), and toggling one of its checkboxes actually
+// Tracker's own header (never a popover), and toggling one of its checkboxes actually
 // filters TrackerPanel's own sections — which requires `useTrackerSections()` to be a single
 // hook instance shared via props, not two independent instances that can't see each other's
 // writes. `MapControlsDock` is stubbed out: its own render tree (Pixi colour ramps, tooltips) is
