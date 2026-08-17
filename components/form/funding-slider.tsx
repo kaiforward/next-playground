@@ -10,6 +10,13 @@ export interface FundingSliderProps {
   set: number;
   /** Latched effective fraction from the last settlement (0-1) — drawn as the fill. */
   runs: number;
+  /**
+   * Did that settlement fail to pay this band what it asked for? Passed in rather than inferred from
+   * `set` vs `runs`: the thumb is live policy and the fill is a latched outcome, so they also
+   * diverge the instant the player drags the slider, on a faction that paid in full. Only the
+   * settlement knows, and only the caller can ask it (`bandShortfall`).
+   */
+  shorted: boolean;
   /** Un-slidable lower bound (0-1) — hatched zone; drags below it pin here (e.g. maintenance 0.5). */
   floor?: number;
   /** Sliders render but don't respond on AI factions. */
@@ -20,11 +27,12 @@ export interface FundingSliderProps {
 
 /**
  * One budget band's funding bar: copper fill = what actually runs (last
- * settlement's paid fraction), thumb = the set slider. The two diverge only
- * when the settlement ladder shorts the band — tagged explicitly, since the
- * divergence is the insolvency signal.
+ * settlement's paid fraction), thumb = the set slider. The two diverge both
+ * when the ladder shorts the band and simply when the player moves the slider
+ * ahead of the next settlement, so the insolvency tag comes from `shorted`
+ * rather than from the gap between them.
  */
-export function FundingSlider({ label, set, runs, floor = 0, interactive, onCommit }: FundingSliderProps) {
+export function FundingSlider({ label, set, runs, shorted, floor = 0, interactive, onCommit }: FundingSliderProps) {
   // Draft holds the thumb during a drag; the server value re-adopts on refresh.
   const [draft, setDraft] = useState<number | null>(null);
   // Dedupes the release events (pointerup/keyup/blur can all fire for one gesture)
@@ -38,7 +46,6 @@ export function FundingSlider({ label, set, runs, floor = 0, interactive, onComm
 
   const floorPct = fractionPct(floor);
   const thumb = draft ?? fractionPct(set);
-  const shorted = fractionPct(runs) < fractionPct(set);
 
   const commit = () => {
     if (draft !== null && draft !== fractionPct(set) && draft !== lastSent.current) {

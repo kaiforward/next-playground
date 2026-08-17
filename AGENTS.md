@@ -65,7 +65,7 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 - **Discriminated unions for results** — `{ ok: true; data } | { ok: false; error }`.
 - **Avoid postfix `!`** — use a real check. Exception: `find(...)!` in tests.
 - **Extract on the second occurrence** — UI to `components/ui|form/`, logic to `lib/utils|engine/`, types to `lib/types/`.
-- **Clean up what your change strands.** A field, prop or helper left without readers is part of that change, not a follow-up. `tsc` does not reach object literals typed by inference (a `map` callback return) — finish with a text grep, not a clean typecheck.
+- **Clean up what your change strands.** A field, prop or helper left without readers is part of that change, not a follow-up. `tsc` does not reach object literals typed by inference (a `map` callback return) — finish with a text grep, not a clean typecheck. The same sweep covers references in docs, skills and memory, and it runs **before the PR opens**, not after the merge.
 - **Comments describe the code, not the plan** — never name the plan/phase/PR that produced them.
 - Engine functions are pure — no `fs`/`process.env`/DB imports. World state comes from `getWorld()`.
 - Services own world-state and business logic; routes are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions. Responses use `ApiResponse<T>`.
@@ -138,7 +138,7 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 - Feature branch per feature (`feat/name`), PR to main when complete. Commit after each meaningful unit of work.
 - **The PR unit is the cohesive part/sub-project, not its internal phases.** Phase A/B/C are check-in *pauses* on one branch, never 3 PRs. Split into 2-4 PRs only when one sub-project is genuinely too big; markdown/tooling changes are always one PR.
 - **Multi-PR features use a `shared/<name>` integration branch** — branch off main, sub-PRs merge into shared, one final shared→main PR. **Nothing lands on `shared/*` except sub-feature PR merges** — no direct feature or docs commits; spec amendments ride the sub-branch. The shared→main PR gets only a light pass *because* every sub-feature was reviewed on the way in. A PreToolUse hook (`.claude/hooks/guard-commit-branch.sh`) blocks commits on non-`feat/*` branches.
-- **Merge as squash or fast-forward, never a merge commit** — squash when commit subjects carry build noise, else fast-forward.
+- **Every branch merges as ONE atomic commit — squash, never a merge commit, never a fast-forward of the branch's own history.** A feature or bugfix branch lands as a single commit describing what the thing does; the commits that built it — spec revisions, roadmap bookkeeping, review-finding closures, phase check-ins — are the making of it and do not belong in the target branch's history. That churn is what "noise" means here, not broken builds: this project's pipeline produces it on every branch by design, so the answer is always squash. Merge through a PR (`gh pr merge --squash`), never a local merge onto the target — the commit hook blocks direct commits on `shared/*` and `main`, and a local squash-merge is a direct commit.
 - **Never let `main` diverge from an open `shared/*` branch.** Finish the shared branch before landing independent work on main. If something does land there, **rebase onto main** — never merge main in.
 - **Never open a PR based on another open PR's branch.** Squash-merging the base permanently auto-closes the stacked PR. If already stacked: capture the base head SHA, then `git rebase --onto origin/main <old-base-SHA> <branch>`.
 - **Worktrees are for parallel workstreams, not sequential PRs.** Always `git worktree remove` after.
@@ -159,6 +159,8 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 ## Working Practices
 
 **Short replies. Lead with what needs a decision and stop.** Context, caveats and side-findings are available on request, not volunteered.
+
+**Open a findings report with 1-2 sentences on what it was investigating**, before any results. A report that leads with the answer forces the reader to reverse-engineer the question it came from.
 
 **Verifying changes** (dev has no live universe)
 - **Prove a mechanic works with `npm run simulate` measuring the actual outcome** — isolated engine fixtures pass while the galaxy is broken. Add a sim metric when a symptom hides inside an aggregate.
@@ -181,6 +183,7 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 
 **Executing fix batches**
 - **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched agent**, never inline — inline is for a single trivial edit. Ask first, describing the dispatch's scope in words. Model is your judgment per batch (never Fable). Then verify the agent's claims and make the judgement calls it flags.
+- **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorization to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent.
 
 **Scripts**
 - `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test). One-off diagnostics live in scratch, never committed.

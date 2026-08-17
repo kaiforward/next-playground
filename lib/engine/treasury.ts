@@ -45,6 +45,12 @@ export interface SettlementLadderResult {
    *  consumers run at next cycle. When a band's bill is 0 this is the slider
    *  value (never 0/0). */
   funded: TreasuryBands;
+  /** What each band was ASKED to pay — `bill × the slider in force at this settlement`, after the
+   *  same clamp the ladder applies. Reported because a band is insolvent exactly when `paid` falls
+   *  short of this, and the slider is live player policy that moves between settlements: recovering
+   *  the charge later from `bands` would compare a frozen payment against a slider that has since
+   *  changed. */
+  charged: TreasuryBands;
 }
 
 /** Coerce a money-path value: non-finite → 0, floored at 0. Exported so the
@@ -122,6 +128,7 @@ export function settleLadder(
   let available = safe(balance) + safe(income);
   const paid: TreasuryBands = { maintenance: 0, logistics: 0, construction: 0 };
   const funded: TreasuryBands = { maintenance: 0, logistics: 0, construction: 0 };
+  const charged: TreasuryBands = { maintenance: 0, logistics: 0, construction: 0 };
   for (const band of BAND_LADDER) {
     const bill = safe(bills[band]);
     const slider = clamp(Number.isFinite(sliders[band]) ? sliders[band] : 1, 0, 1);
@@ -130,8 +137,40 @@ export function settleLadder(
     available -= pay;
     paid[band] = pay;
     funded[band] = bill > 0 ? pay / bill : slider;
+    charged[band] = charge;
   }
-  return { balance: available, paid, funded };
+  return { balance: available, paid, funded, charged };
+}
+
+/**
+ * How much a settlement fell short of what it ASKED a band to pay, or `null` when it did not fall
+ * short at all. The single insolvency test — every surface that says "shorted" or "unfunded" reads
+ * it, so no two of them can disagree about the same faction.
+ *
+ * Both terms come from the same frozen settlement, and that is the whole point. The funding sliders
+ * are live player policy: `updateTreasuryPolicy` writes one with no re-settle, so a `paid` figure
+ * latched under the old slider says nothing about the new one. Comparing across that seam — a frozen
+ * `paid` (or the `funded` fraction derived from it) against today's slider — reports a solvent
+ * faction as short the moment the player RAISES a band, which is the very action the badge asks for,
+ * and hides a real shortfall when they lower it. Both readings persist until the next settlement,
+ * indefinitely while the game is paused.
+ *
+ * `null` for a settlement that predates `charged` (an older save) rather than a guess from the live
+ * slider: absence reads as never-assessed here exactly as it does elsewhere, the faction's next
+ * settlement fills it in, and falling back would reinstate the fault this function exists to remove.
+ * `null` too for no settlement at all — a faction that has never settled has not failed to pay
+ * anything. Solvency is exact, not epsilon-guarded: `settleLadder` assigns `pay = min(charge,
+ * available)`, so a band that paid in full holds a value identical to its charge, never a float
+ * residue below it.
+ */
+export function bandShortfall(
+  settlement: { paid: TreasuryBands; charged?: TreasuryBands } | null | undefined,
+  band: keyof TreasuryBands,
+): number | null {
+  const charged = settlement?.charged;
+  if (settlement === null || settlement === undefined || charged === undefined) return null;
+  const short = charged[band] - settlement.paid[band];
+  return short > 0 ? short : null;
 }
 
 /** Effective funding for the curves below: non-finite → 1 (fully funded — the

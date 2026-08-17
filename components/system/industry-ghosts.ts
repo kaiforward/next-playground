@@ -37,7 +37,7 @@ function groupFor(buildingType: string): { group: GhostGroup; resource?: string 
 }
 
 /** Split a system's in-flight BUILD rows into ledger destinations. Colony rows are excluded
- *  (they render on the undeveloped surface, Task 9). */
+ *  (they render on the undeveloped surface). */
 export function classifyGhosts(rows: ConstructionProjectRow[]): Map<GhostGroup, GhostRow[]> {
   const out = new Map<GhostGroup, GhostRow[]>();
   for (const row of rows) {

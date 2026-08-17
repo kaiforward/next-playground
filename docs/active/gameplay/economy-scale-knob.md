@@ -75,7 +75,7 @@ value that is globally constant per run).
   (`industry-panel.tsx` → `BUILDING_TYPES[...].resource`; the cadence countdown → a shard interval), so
   no client reads a scaled value. Exposing the env would only matter for a hypothetical future client
   component that displays a scaled-constant *magnitude* directly — which would itself be a layering smell
-  (read it from the server). See the client-bundle env gotcha in `CLAUDE.md`.
+  (read it from the server). See the client-bundle env gotcha in `AGENTS.md`.
 
 ## Verified seam inventory
 

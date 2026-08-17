@@ -1,23 +1,33 @@
 import { describe, it, expect } from "vitest";
 import { generateWorld } from "../gen";
-import { runWorldTick, toTickSystems, applyBuildingIncreases, marketRowsBySystem } from "../tick";
+import {
+  runWorldTick, toTickSystems, applyBuildingIncreases, applyDevelopments, applyAbandonments,
+  applyBuildBlockedUpdates, applyBuildOpportunityUpdates, applyColonyOpportunityUpdates,
+  marketRowsBySystem, resetAbandonedMarkets,
+} from "../tick";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serializeWorld, deserializeWorld } from "../save";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, resourceVectorFromColumns } from "@/lib/engine/resources";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { computeSystemLabourSnapshot, housingPopCap, inputDemandForGood } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import {
   BUILDING_TYPES, HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, labourTotal,
 } from "@/lib/constants/industry";
-import { CYCLE_LENGTH, type TickCadence } from "@/lib/constants/tick-cadence";
+import {
+  CYCLE_LENGTH, REFERENCE_INTERVAL, LOGISTICS_INTERVAL, type TickCadence,
+} from "@/lib/constants/tick-cadence";
 import { CROWDING, POPULATION_PARAMS, STRIKE_PARAMS, UNREST_PARAMS } from "@/lib/constants/population";
 import { TAX_LEVEL_UNREST_PRESSURE } from "@/lib/constants/treasury";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
+import { EXPANSION } from "@/lib/constants/expansion";
 import type { TaxLevel } from "@/lib/types/game";
+import type { SystemDevelopment } from "@/lib/tick/world/directed-build-world";
+import type { TickSystem } from "@/lib/tick/rows";
 import type {
   World, WorldBuildProject, WorldFactionTreasury, WorldMarket, WorldShip, WorldSystem,
 } from "../types";
@@ -1126,6 +1136,1181 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     );
     expect(reliefLevels).toBeGreaterThan(preGrowthLevels);
   }, 60_000);
+});
+
+// ── the realised per-cycle population change ─────────────────────────
+// `WorldSystem.populationChange` is written by the tick body itself, after directed-build's
+// `applyDevelopments` — not by the population processor, which never sees migration's or
+// colony-founding's effect. These pin the write's migration inclusion, its colony-founding-donor
+// inclusion, its absence convention and its reference-cycle denomination. Whether anything inside
+// the tick reads it back is proven separately (the poisoning test below) rather than by `npm run
+// simulate`'s before/after comparison, which is a broader, owner-run gate.
+
+/** Reads `populationChange` off a system row, failing with a clear message rather than silently
+ *  treating an unassessed system as 0 — the exact distinction these tests exist to pin. */
+function requirePopulationChange(world: World, systemId: string): number {
+  const value = fixtureSystem(world, systemId).populationChange;
+  if (value === undefined) throw new Error(`expected populationChange to be assessed for ${systemId}`);
+  return value;
+}
+
+/** A developed homeworld reduced to housing alone (mirrors `populationFixture`), at a chosen
+ *  occupancy and unrest, with no treasury override — used where the test needs the source system's
+ *  starting row to be byte-identical across two worlds that only then diverge elsewhere. */
+function overshotHomeworld(base: World, systemId: string, occupancy: number, unrest: number): World {
+  return {
+    ...base,
+    systems: base.systems.map((s): WorldSystem =>
+      s.id === systemId
+        ? { ...s, population: occupancy * FIXTURE_POP_CAP, popCap: FIXTURE_POP_CAP, unrest }
+        : s,
+    ),
+    buildings: [
+      ...base.buildings.filter((b) => b.systemId !== systemId),
+      { systemId, buildingType: HOUSING_TYPE, count: FIXTURE_HOUSING_LEVELS, idleCycles: 0 },
+    ],
+    markets: base.markets.map((m) =>
+      m.systemId === systemId ? { ...m, stock: AMPLE_STOCK, satisfaction: 1 } : m,
+    ),
+  };
+}
+
+describe("runWorldTick — the realised per-cycle population change (WorldSystem.populationChange)", () => {
+  it("includes migration: a system whose population falls only through outflow reports a negative change, not the near-0 a pre-migration read would give", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const source = base.factions[0].homeworldId;
+    const destination = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+
+    // Isolated: the source alone, fully crowd-braked (growth pinned to 0) and past its cap
+    // (repulsive), well-fed so d = 0 — its faction owns no other developed system, so migration has
+    // no open edge to move anyone. Its populationChange is therefore exactly the pre-migration
+    // engine read: growth(0) minus a tiny standing-crowding decline.
+    const isolatedWorld = overshotHomeworld(base, source, OVERSHOOT_OCCUPANCY, 0);
+    const isolatedAfter = await runTicks(isolatedWorld, CYCLE_LENGTH, POPULATION_CADENCE);
+    const isolatedChange = requirePopulationChange(isolatedAfter, source);
+
+    // Connected: the same source row (byte-identical starting state), plus a calm, mostly-empty
+    // same-faction destination linked by one hop. The attractiveness gradient (calmer, far roomier)
+    // pulls a real share of the source's population out this cycle.
+    const connectedWorld: World = {
+      ...isolatedWorld,
+      systems: isolatedWorld.systems.map((s): WorldSystem =>
+        s.id === destination
+          ? { ...s, factionId, population: 0.05 * FIXTURE_POP_CAP, popCap: FIXTURE_POP_CAP, unrest: 0 }
+          : s,
+      ),
+      connections: [
+        ...isolatedWorld.connections,
+        { fromId: source, toId: destination, fuelCost: 1 },
+        { fromId: destination, toId: source, fuelCost: 1 },
+      ],
+    };
+    const connectedAfter = await runTicks(connectedWorld, CYCLE_LENGTH, POPULATION_CADENCE);
+    const connectedChange = requirePopulationChange(connectedAfter, source);
+
+    // The isolated run is near-flat (only the tiny standing-crowding decline term); the connected
+    // run is clearly, substantially more negative — the gap is migration's own contribution, which
+    // a write of the pre-migration delta alone could never show.
+    expect(Math.abs(isolatedChange)).toBeLessThan(20);
+    expect(connectedChange).toBeLessThan(-50);
+    expect(connectedChange - isolatedChange).toBeLessThan(-50);
+  }, 30_000);
+
+  it("clears on abandonment and again on redevelopment, so a re-founded colony never inherits its predecessor's reading", () => {
+    const base = toTickSystems(generateWorld({ systemCount: 100, seed: 42 }))[0];
+    const stale: TickSystem = { ...base, populationChange: -42 };
+
+    const [abandoned] = applyAbandonments([stale], [stale.id]);
+    expect(abandoned.populationChange).toBeUndefined();
+
+    // Redevelopment: a fresh establishment lands on the now-unclaimed system, sourced from a
+    // co-located donor with population to spare. Re-staled deliberately before this step — feeding
+    // applyAbandonments' own (already-verified) absence through would let applyDevelopments' clear
+    // go untested vacuously; this isolates that this function clears the field on its own contract,
+    // not merely because the row already happened to arrive absent.
+    const restaled: TickSystem = { ...abandoned, populationChange: -99 };
+    const donor: TickSystem = {
+      ...abandoned, id: `${abandoned.id}-donor`, population: 1000, populationChange: -7,
+    };
+    const development: SystemDevelopment = {
+      systemId: restaled.id, sourceSystemId: donor.id, seedPop: 10, housingLevels: 1, stockManifest: [],
+    };
+    const [redeveloped] = applyDevelopments([restaled, donor], [development]);
+    expect(redeveloped.populationChange).toBeUndefined();
+  });
+
+  it("a never-assessed system reports populationChange absent, and it survives a save round-trip as absent, not 0", async () => {
+    const generated = generateWorld({ systemCount: 100, seed: 42 });
+    const developed = generated.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+    expect(developed.populationChange).toBeUndefined();
+    expect("populationChange" in developed).toBe(false);
+
+    // One real tick — day 1, not a cycle boundary — so the economy/population stages never resolve
+    // and this system is never assessed, but `toTickSystems`/`mergeSystemsIntoWorld` (the join/merge
+    // pair the field's absence has to survive, `lib/world/tick.ts`) still run, unconditionally, on
+    // every tick. This exercises that pair rather than only the type declaration.
+    const after = (await runWorldTick(generated)).world;
+    const untouched = after.systems.find((s) => s.id === developed.id);
+    if (!untouched) throw new Error("expected the ticked world to still carry this system");
+    expect(untouched.populationChange).toBeUndefined();
+    expect("populationChange" in untouched).toBe(false);
+
+    const result = deserializeWorld(serializeWorld(after));
+    if (!result.ok) throw new Error(`expected the save round-trip to succeed: ${result.error}`);
+    const reloaded = result.world.systems.find((s) => s.id === developed.id);
+    if (!reloaded) throw new Error("expected the reloaded world to still carry this system");
+    expect(reloaded.populationChange).toBeUndefined();
+    expect("populationChange" in reloaded).toBe(false);
+  });
+
+  it("a cycle in which population holds steady reports 0, distinguishably from absent", async () => {
+    // occupancy 0 ⇒ population 0 throughout: growth, decline and death all scale with population,
+    // so the pre-migration delta is EXACTLY 0 regardless of d/unrest — and a well-fed (ample-stock)
+    // system never enters famine, so this never risks the abandonment branch despite population
+    // sitting below ABANDON_POP_FLOOR.
+    const { world, systemId } = populationFixture(0, 0);
+    const after = await runTicks(world, CYCLE_LENGTH, POPULATION_CADENCE);
+
+    const change = fixtureSystem(after, systemId).populationChange;
+    expect(change).not.toBeUndefined();
+    expect(change).toBe(0);
+  });
+
+  it("IS the realised change: the figure equals (population after − population before) ÷ catchUpFactor, at both cadences", async () => {
+    // The definitional test. Every other assertion in this describe is directional (a threshold, or
+    // one run against another), so a regression that moved the snapshot to the wrong side of a
+    // stage — measuring migration alone, say, or growth alone — would keep its sign and its rough
+    // size and survive all of them. This one computes the figure from world state the tick itself
+    // committed and admits no other answer.
+    for (const cycle of [CYCLE_LENGTH, CYCLE_LENGTH * 2]) {
+      const { world, systemId } = populationFixture(0.97, TAX_FLOOR);
+      const before = fixtureSystem(world, systemId).population;
+      // One tick, fast-forwarded to its own cycle boundary — the same device the cadence test below
+      // uses, so the two cadences differ in catchUpFactor and nothing else.
+      const cadence: TickCadence = { cycle, construction: NEVER, logistics: NEVER };
+      const atBoundary: World = { ...world, meta: { ...world.meta, currentTick: cycle - 1 } };
+      const after = (await runWorldTick(atBoundary, { cadence })).world;
+
+      const realised = fixtureSystem(after, systemId).population - before;
+      // Non-vacuous: the cycle actually moved population, so the identity is not 0 === 0.
+      expect(Math.abs(realised), `cycle ${cycle}`).toBeGreaterThan(1);
+      expect(requirePopulationChange(after, systemId), `cycle ${cycle}`)
+        .toBeCloseTo(realised / catchUpFactor(cycle), 6);
+    }
+    // …and the two cadences really did denominate differently, or the loop above proved one case
+    // twice: catchUpFactor is 1 at the reference cycle and 2 at twice it.
+    expect(catchUpFactor(CYCLE_LENGTH)).toBe(1);
+    expect(catchUpFactor(CYCLE_LENGTH * 2)).toBe(2);
+  }, 30_000);
+
+  it("denominates per reference cycle: retuning CYCLE_LENGTH away from REFERENCE_INTERVAL leaves the figure unchanged", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const systemId = base.factions[0].homeworldId;
+    const factionId = base.factions[0].id;
+    // Calm, uncrowded, tax-free growth: d = 0 (ample stock), unrest held at exactly 0 by a zero
+    // standing floor (no tax, no crowding at r < 1) — the one scenario where the population
+    // processor's own relaxation-rate scaling (itself catchUp-dependent) can't introduce a
+    // cadence-dependent difference this test isn't about.
+    const world: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem =>
+        s.id === systemId
+          ? { ...s, population: 0.9 * FIXTURE_POP_CAP, popCap: FIXTURE_POP_CAP, unrest: 0 }
+          : s,
+      ),
+      buildings: [
+        ...base.buildings.filter((b) => b.systemId !== systemId),
+        { systemId, buildingType: HOUSING_TYPE, count: FIXTURE_HOUSING_LEVELS, idleCycles: 0 },
+      ],
+      markets: base.markets.map((m) =>
+        m.systemId === systemId ? { ...m, stock: AMPLE_STOCK, satisfaction: 1 } : m,
+      ),
+      treasuries: base.treasuries.map((t): WorldFactionTreasury =>
+        t.factionId === factionId ? { ...t, taxLevel: "very_low" } : t,
+      ),
+    };
+
+    // One real tick each, fast-forwarded to its own cycle boundary via meta.currentTick — avoids
+    // running dozens of intervening ticks (and their independent stochastic event draws) that a
+    // longer cadence would otherwise need, which would confound the comparison this test is about.
+    const referenceCadence: TickCadence = { cycle: REFERENCE_INTERVAL, logistics: NEVER, construction: NEVER };
+    const referenceWorld: World = { ...world, meta: { ...world.meta, currentTick: REFERENCE_INTERVAL - 1 } };
+    const referenceAfter = (await runWorldTick(referenceWorld, { cadence: referenceCadence })).world;
+
+    const retunedCycle = REFERENCE_INTERVAL * 2;
+    const retunedCadence: TickCadence = { cycle: retunedCycle, logistics: NEVER, construction: NEVER };
+    const retunedWorld: World = { ...world, meta: { ...world.meta, currentTick: retunedCycle - 1 } };
+    const retunedAfter = (await runWorldTick(retunedWorld, { cadence: retunedCadence })).world;
+
+    const reference = requirePopulationChange(referenceAfter, systemId);
+    const retuned = requirePopulationChange(retunedAfter, systemId);
+
+    expect(reference).toBeGreaterThan(0); // non-vacuous: real growth happened, not two zeros agreeing
+    expect(retuned).toBeCloseTo(reference, 6);
+  });
+
+  it("nothing inside the tick reads populationChange — poisoning the input changes no other output", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem => ({ ...s, populationChange: -999_999 })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    // populationChange itself legitimately differs run to run (each is a fresh per-cycle read over
+    // the same underlying dynamics) — stripped before comparing; everything else, including every
+    // harness/instrumentation figure, must be byte-identical.
+    const strip = (w: World): World => ({
+      ...w,
+      systems: w.systems.map((s): WorldSystem => ({ ...s, populationChange: undefined })),
+    });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(dirty.markets).toEqual(clean.markets);
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
+
+  // ── colony-founding donation, driven through runWorldTick, not applyDevelopments directly ──
+  // A specific, empirically-verified galaxy (seed 11, 90 systems) funds and completes a real
+  // colony-establish project — system-50 seeding system-40 — at tick 432 under the DEFAULT cadence,
+  // found the same way `lib/world/__tests__/tick-colony-source.test.ts` does: run the real loop
+  // forward and watch `control`/`constructionProjects`. `EXPANSION.COLONY_SEED_POP` fixes the
+  // donation at exactly 2 regardless of fixture size, so "unmistakably different" comes from a
+  // same-tick counterfactual rather than a huge donor: two clones of the identical pre-tick world
+  // (same `meta.currentTick`, so `tickRng(seed, tick)` draws identically in both —
+  // `lib/world/tick.ts:1070`) diverge ONLY in whether directed-build resolves this tick, isolating
+  // the donation's contribution to the donor's populationChange exactly, with no other system's
+  // dynamics free to differ between the two branches.
+  it("includes a colony-founding donation: the donor's populationChange is NOT short by the seed it gave away", async () => {
+    const base = generateWorld({ systemCount: 90, seed: 11 });
+    const preWorld = await runTicks(base, 431);
+
+    const withDonation = (await runWorldTick(preWorld)).world;
+    const withoutDonation = (await runWorldTick(preWorld, {
+      cadence: { cycle: CYCLE_LENGTH, logistics: LOGISTICS_INTERVAL, construction: NEVER },
+    })).world;
+
+    // Premise: the two branches genuinely diverge on founding this exact tick, not on some
+    // unrelated effect — the fixture's colony completes only when directed-build is allowed to run.
+    expect(fixtureSystem(withDonation, "system-40").control).toBe("developed");
+    expect(fixtureSystem(withoutDonation, "system-40").control).toBe("controlled");
+
+    const donationInclusive = requirePopulationChange(withDonation, "system-50");
+    const migrationOnly = requirePopulationChange(withoutDonation, "system-50");
+
+    expect(donationInclusive).toBeLessThan(migrationOnly);
+    // The gap is exactly the seed transfer, denominated per reference cycle (catchUpFactor
+    // (CYCLE_LENGTH) = 1 here, since CYCLE_LENGTH === REFERENCE_INTERVAL) — not a coincidental
+    // drift, since both branches share identical migration/economy/logistics rng draws this tick.
+    expect(migrationOnly - donationInclusive).toBeCloseTo(
+      EXPANSION.COLONY_SEED_POP / catchUpFactor(CYCLE_LENGTH), 6,
+    );
+  }, 30_000);
+
+  it("a system that donates nothing is unaffected by the move — its figure is identical whether or not directed-build resolves this tick", async () => {
+    const base = generateWorld({ systemCount: 90, seed: 11 });
+    const preWorld = await runTicks(base, 431);
+
+    const withDonation = (await runWorldTick(preWorld)).world;
+    const withoutDonation = (await runWorldTick(preWorld, {
+      cadence: { cycle: CYCLE_LENGTH, logistics: LOGISTICS_INTERVAL, construction: NEVER },
+    })).world;
+
+    // Two colonies complete simultaneously in this fixture (system-50→system-40 and
+    // system-85→system-77, both verified above/empirically) — excluded so the bystander really is
+    // uninvolved in either branch's founding.
+    const donors = new Set(["system-50", "system-85"]);
+    const bystander = withDonation.systems.find(
+      (s) => s.control === "developed" && !donors.has(s.id) && s.populationChange !== undefined,
+    );
+    if (!bystander) {
+      throw new Error("expected an uninvolved developed system with an assessed populationChange this cycle");
+    }
+
+    const withDonationValue = requirePopulationChange(withDonation, bystander.id);
+    const withoutDonationValue = requirePopulationChange(withoutDonation, bystander.id);
+    expect(withDonationValue).toBe(withoutDonationValue);
+  }, 30_000);
+
+  it("a system founded, abandoned and later redeveloped reports populationChange absent, not its predecessor's value — driven through runWorldTick across real cycles", async () => {
+    const base = generateWorld({ systemCount: 90, seed: 11 });
+    let world = await runTicks(base, 432); // the colony above (system-40, seeded from system-50) completes here
+
+    const colonyId = "system-40";
+    expect(fixtureSystem(world, colonyId).control).toBe("developed"); // premise: really founded first
+
+    // Force a real famine/abandonment: cut the colony off from any donor haul (no logistics rescue),
+    // drive population and stock to the death line, and let the REAL population processor call it
+    // via runWorldTick — the same technique the stockChange suite uses to reach the death line.
+    const savedConnections = world.connections;
+    world = {
+      ...world,
+      systems: world.systems.map((s): WorldSystem =>
+        s.id === colonyId ? { ...s, unrest: 0.9, population: 1.3, popCap: 20 } : s,
+      ),
+      buildings: world.buildings.filter(
+        (b) => !(b.systemId === colonyId && (b.buildingType === "water" || b.buildingType === "food")),
+      ),
+      markets: world.markets.map((m): WorldMarket =>
+        m.systemId === colonyId && (m.goodId === "water" || m.goodId === "food") ? { ...m, stock: 0 } : m,
+      ),
+      connections: world.connections.filter((c) => c.fromId !== colonyId && c.toId !== colonyId),
+    };
+
+    const KILL_CADENCE: TickCadence = { cycle: 1, logistics: 1, construction: NEVER };
+    let abandoned = false;
+    for (let i = 0; i < 3000 && !abandoned; i++) {
+      world = (await runWorldTick(world, { cadence: KILL_CADENCE })).world;
+      abandoned = fixtureSystem(world, colonyId).control !== "developed";
+    }
+    expect(abandoned).toBe(true); // non-vacuous: the fixture actually reaches the death line
+    expect(fixtureSystem(world, colonyId).control).toBe("unclaimed");
+    expect(fixtureSystem(world, colonyId).populationChange).toBeUndefined();
+
+    // Reclaim: restore connectivity to the original seed source and flip control back to
+    // `controlled` under the same faction, so the real develop provider considers it again — the
+    // claim mechanic itself is not under test here, only the write ordering once redevelopment fires.
+    const sourceFactionId = fixtureSystem(world, "system-50").factionId;
+    world = {
+      ...world,
+      connections: savedConnections,
+      systems: world.systems.map((s): WorldSystem =>
+        s.id === colonyId ? { ...s, control: "controlled", factionId: sourceFactionId } : s,
+      ),
+      treasuries: world.treasuries.map((t): WorldFactionTreasury =>
+        t.factionId === sourceFactionId ? { ...t, balance: t.balance + 1_000_000, pendingFounding: 0 } : t,
+      ),
+    };
+
+    let redeveloped = false;
+    for (let i = 0; i < 500 && !redeveloped; i++) {
+      world = (await runWorldTick(world)).world;
+      redeveloped = fixtureSystem(world, colonyId).control === "developed";
+    }
+    expect(redeveloped).toBe(true); // non-vacuous: the fixture actually re-founds
+
+    const refounded = fixtureSystem(world, colonyId);
+    expect(refounded.populationChange).toBeUndefined();
+    expect("populationChange" in refounded).toBe(false);
+  }, 120_000);
+});
+
+// ── the realised per-cycle survival-good stock change ─────────────────
+// `WorldMarket.stockChange` is written by the tick body itself, after directed logistics has
+// applied its own stock updates — not by the directed-logistics engine or processor, neither of
+// which sees the economy processor's earlier production/consumption write. These pin the write's
+// inclusion of the same-tick logistics haul, its survival-goods-only scope, its absence convention
+// and the abandonment clear. Whether anything inside the tick reads it back is proven separately
+// (the poisoning test below).
+
+/** Reads `stockChange` off a market row, failing with a clear message rather than silently
+ *  treating an unassessed row as 0 — the exact distinction these tests exist to pin. */
+function requireStockChange(world: World, systemId: string, goodId: string): number {
+  const market = world.markets.find((m) => m.systemId === systemId && m.goodId === goodId);
+  if (!market) throw new Error(`expected a market row for ${systemId}/${goodId}`);
+  if (market.stockChange === undefined) {
+    throw new Error(`expected stockChange to be assessed for ${systemId}/${goodId}`);
+  }
+  return market.stockChange;
+}
+
+/** The market row itself, failing loudly rather than letting an absent row read as a silent skip. */
+function marketRow(world: World, systemId: string, goodId: string): WorldMarket {
+  const market = world.markets.find((m) => m.systemId === systemId && m.goodId === goodId);
+  if (!market) throw new Error(`expected a market row for ${systemId}/${goodId}`);
+  return market;
+}
+
+/** Coincident cadence: economy AND directed logistics both resolve on tick 1, construction parked
+ *  so directed-build contributes no noise. */
+const STOCK_CADENCE: TickCadence = { cycle: 1, logistics: 1, construction: 999 };
+/** Same economy cadence, logistics parked — isolates the economy-only (pre-import) figure. */
+const NO_LOGISTICS_CADENCE: TickCadence = { cycle: 1, logistics: NEVER, construction: 999 };
+
+describe("runWorldTick — the realised per-cycle survival-good stock change (WorldMarket.stockChange)", () => {
+  it("includes the import: the same starting deficit reports a materially smaller drain with logistics resolving than with it parked", async () => {
+    const { b, world } = twoSystemWaterGradient((market) => ({ ...market, stock: 500 }));
+
+    // Same starting world, only whether directed logistics resolves this tick differs.
+    const localOnlyAfter = (await runWorldTick(world, { cadence: NO_LOGISTICS_CADENCE })).world;
+    const withHaulAfter = (await runWorldTick(world, { cadence: STOCK_CADENCE })).world;
+
+    const localOnly = requireStockChange(localOnlyAfter, b, "water");
+    const withHaul = requireStockChange(withHaulAfter, b, "water");
+
+    // B has no water producers: a purely local read (no logistics stage to see) is a real drain.
+    expect(localOnly).toBeLessThan(0);
+    // The donor's haul lands before the write on the coincident tick, so the SAME starting deficit
+    // reports a materially smaller drain — the import is inside the figure, not a channel the write
+    // never sees. A write anchored to the economy processor's OWN output alone (before logistics)
+    // would report `localOnly` in both cases.
+    expect(withHaul).toBeGreaterThan(localOnly);
+  });
+
+  it("a system whose local production trails consumption with no reachable donor reports a negative change", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const systemId = base.factions[0].homeworldId;
+    const world: World = {
+      ...base,
+      // Strips the homeworld's own water producers: nothing local replaces what's consumed.
+      buildings: base.buildings.filter(
+        (bl) => !(bl.systemId === systemId && bl.buildingType === "water"),
+      ),
+      markets: base.markets.map((m) =>
+        m.systemId === systemId && m.goodId === "water" ? { ...m, stock: 500 } : m,
+      ),
+    };
+    // This faction's only developed system in a 60-system galaxy at seed 7 has no same-faction
+    // developed neighbour to reach — directed logistics resolves (cadence coincident) but finds no
+    // donor, same as an unfunded deficit with nothing reachable.
+    const after = (await runWorldTick(world, { cadence: STOCK_CADENCE })).world;
+
+    expect(requireStockChange(after, systemId, "water")).toBeLessThan(0);
+  });
+
+  it("carries stockChange on no market row for a non-survival good", async () => {
+    const world = generateWorld({ systemCount: 60, seed: 7 });
+    const after = (await runWorldTick(world, { cadence: STOCK_CADENCE })).world;
+
+    const nonSurvival = after.markets.filter((m) => !SURVIVAL_GOODS.includes(m.goodId));
+    expect(nonSurvival.length).toBeGreaterThan(0); // non-vacuous: real non-survival rows exist
+    for (const m of nonSurvival) expect("stockChange" in m).toBe(false);
+  });
+
+  it("clears on abandonment while `stock` itself is retained — the warehouse survives, the reading does not", () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 }).markets[0];
+    const stale: WorldMarket = { ...base, stockChange: -42, stock: 777 };
+
+    const [reset] = resetAbandonedMarkets([stale], [stale.systemId]);
+
+    expect(reset.stockChange).toBeUndefined();
+    expect(reset.stock).toBe(777);
+  });
+
+  it("excludes a system this SAME cycle abandoned from the write — the write site's own guard, distinct from resetAbandonedMarkets' earlier clear", async () => {
+    // Tiny population with both survival goods cut to zero stock and no local producers: famine
+    // every cycle. Starting population and unrest sit close enough to the death line (famine AND
+    // post-delta population below ABANDON_POP_FLOOR) that unrest-driven decline crosses it partway
+    // through this run — the exact tick the population processor reports this system in
+    // `abandonedSystemIds` is the same tick `stockAtCycleStart` snapshotted its water row while the
+    // system was still developed, so without the write site's own guard that snapshot would be
+    // recomputed against and written back over `resetAbandonedMarkets`' clear, further up this same
+    // tick.
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const systemId = base.factions[0].homeworldId;
+    let world: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem =>
+        s.id === systemId ? { ...s, population: 1.3, popCap: 20, unrest: 0.87 } : s,
+      ),
+      buildings: base.buildings.filter(
+        (b) => !(b.systemId === systemId && (b.buildingType === "water" || b.buildingType === "food")),
+      ),
+      markets: base.markets.map((m) =>
+        m.systemId === systemId && (m.goodId === "water" || m.goodId === "food") ? { ...m, stock: 0 } : m,
+      ),
+    };
+
+    let abandoned = false;
+    for (let i = 0; i < 3000 && !abandoned; i++) {
+      world = (await runWorldTick(world, { cadence: STOCK_CADENCE })).world;
+      abandoned = fixtureSystem(world, systemId).control !== "developed";
+    }
+    expect(abandoned).toBe(true); // non-vacuous: the fixture actually reaches the death line
+    expect(fixtureSystem(world, systemId).control).toBe("unclaimed");
+
+    const water = world.markets.find((m) => m.systemId === systemId && m.goodId === "water");
+    if (!water) throw new Error("expected the water market row to survive abandonment");
+    expect(water.stockChange).toBeUndefined();
+    expect("stockChange" in water).toBe(false);
+  }, 60_000);
+
+  it("a never-assessed survival-good market row reports stockChange absent, and it survives a save round-trip as absent, not 0", async () => {
+    const generated = generateWorld({ systemCount: 60, seed: 7 });
+    const developed = generated.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+    const water = generated.markets.find((m) => m.systemId === developed.id && m.goodId === "water");
+    if (!water) throw new Error("expected a water market row for the developed system");
+    expect(water.stockChange).toBeUndefined();
+    expect("stockChange" in water).toBe(false);
+
+    // One real tick — day 1, not a cycle boundary at the default cadence — so the economy/directed-
+    // logistics stages never resolve and this row is never assessed, but the array still passes
+    // through the tick body unconditionally on every tick.
+    const after = (await runWorldTick(generated)).world;
+    const untouched = after.markets.find((m) => m.systemId === developed.id && m.goodId === "water");
+    if (!untouched) throw new Error("expected the ticked world to still carry this market row");
+    expect(untouched.stockChange).toBeUndefined();
+    expect("stockChange" in untouched).toBe(false);
+
+    const result = deserializeWorld(serializeWorld(after));
+    if (!result.ok) throw new Error(`expected the save round-trip to succeed: ${result.error}`);
+    const reloaded = result.world.markets.find((m) => m.systemId === developed.id && m.goodId === "water");
+    if (!reloaded) throw new Error("expected the reloaded world to still carry this market row");
+    expect(reloaded.stockChange).toBeUndefined();
+    expect("stockChange" in reloaded).toBe(false);
+  });
+
+  it("carries stockChange forward, unchanged, on a survival-good row belonging to a system the economy skipped this cycle", async () => {
+    // The third set-and-clear case, distinct from the two above: not a non-survival good (never gets
+    // the field at all) and not a never-assessed row (never touched at all), but a row that WAS
+    // assessed on a real cycle and then sits through a mid-cycle tick where the economy stage bails
+    // internally — `stockAtCycleStart` is never built, so the write further down this function never
+    // runs at all, and the row's prior reading survives verbatim.
+    const generated = generateWorld({ systemCount: 60, seed: 7 });
+    const developed = generated.systems.find((s) => s.control === "developed");
+    if (!developed) throw new Error("expected at least one developed system in a freshly generated world");
+
+    const afterCycle = await runTicks(generated, CYCLE_LENGTH);
+    const assessed = requireStockChange(afterCycle, developed.id, "water");
+    expect(assessed).not.toBe(0); // non-vacuous: a real reading, not a coincidental zero
+
+    const afterMidCycle = (await runWorldTick(afterCycle)).world;
+    const midCycle = afterMidCycle.markets.find((m) => m.systemId === developed.id && m.goodId === "water");
+    if (!midCycle) throw new Error("expected the water market row to survive the tick");
+    expect(midCycle.stockChange).toBe(assessed);
+  });
+
+  it("denominates per reference cycle: retuning CYCLE_LENGTH away from REFERENCE_INTERVAL leaves the figure unchanged", async () => {
+    const base = generateWorld({ systemCount: 60, seed: 7 });
+    const systemId = base.factions[0].homeworldId;
+    // Net-positive production without moving stock: the default seeded water market already sits
+    // well inside the production brake's knee (lib/engine/tick.ts, brakeKnee/productionCeiling) and
+    // well above the emergency-ration floor, so tripling the building count alone (leaving stock
+    // untouched) keeps the read linear in the interval on both sides — the same floor-avoidance
+    // the population denomination test uses, but avoiding the OPPOSITE clamp here: an
+    // actually "ample" stock (well above the knee) collapses production to 0 via that same brake,
+    // which would make both readings 0 in vacuous agreement rather than proving anything.
+    const world: World = {
+      ...base,
+      buildings: base.buildings.map((b) =>
+        b.systemId === systemId && b.buildingType === "water" ? { ...b, count: b.count * 3 } : b,
+      ),
+    };
+
+    // One real tick each, fast-forwarded to its own cycle boundary via meta.currentTick, mirroring
+    // the population denomination test. Logistics and construction stay parked so only the economy
+    // cycle's own production/consumption feeds the figure.
+    const referenceCadence: TickCadence = { cycle: REFERENCE_INTERVAL, logistics: NEVER, construction: NEVER };
+    const referenceWorld: World = { ...world, meta: { ...world.meta, currentTick: REFERENCE_INTERVAL - 1 } };
+    const referenceAfter = (await runWorldTick(referenceWorld, { cadence: referenceCadence })).world;
+
+    const retunedCycle = REFERENCE_INTERVAL * 2;
+    const retunedCadence: TickCadence = { cycle: retunedCycle, logistics: NEVER, construction: NEVER };
+    const retunedWorld: World = { ...world, meta: { ...world.meta, currentTick: retunedCycle - 1 } };
+    const retunedAfter = (await runWorldTick(retunedWorld, { cadence: retunedCadence })).world;
+
+    const reference = requireStockChange(referenceAfter, systemId, "water");
+    const retuned = requireStockChange(retunedAfter, systemId, "water");
+
+    expect(reference).toBeGreaterThan(0); // non-vacuous: real net production, not two zeros agreeing
+    expect(retuned).toBeCloseTo(reference, 6);
+  });
+
+  // ── colony-founding staging draw, driven through runWorldTick, not applyFoundingStagingDraws ──
+  // The same seed-11/90-system galaxy and the same tick-432 counterfactual the populationChange
+  // suite above uses: two clones of one identical pre-tick world, diverging ONLY in whether
+  // directed-build resolves this tick, so the staging draw's contribution to a founder's own
+  // survival-good rows is isolated exactly. A donor ships food and water out of its warehouse to
+  // stand up a colony (`planStagingDraw` sizes the manifest on the seed's own basket, which at a
+  // 2-pop seed is mostly those two), and that is as real a drain as consumption — the field's one
+  // reader divides `stock` by `−stockChange` for a cycles-to-empty countdown, so a drain outside the
+  // figure would quote the donor a longer runway than it has, on the cycle it can least afford one.
+  it("includes a colony-founding staging draw: the donor's stockChange covers the survival goods it shipped out", async () => {
+    const base = generateWorld({ systemCount: 90, seed: 11 });
+    const preWorld = await runTicks(base, 431);
+
+    const withStaging = (await runWorldTick(preWorld)).world;
+    const withoutStaging = (await runWorldTick(preWorld, {
+      cadence: { cycle: CYCLE_LENGTH, logistics: LOGISTICS_INTERVAL, construction: NEVER },
+    })).world;
+
+    // Premise: the two branches genuinely diverge on founding this exact tick.
+    expect(fixtureSystem(withStaging, "system-40").control).toBe("developed");
+    expect(fixtureSystem(withoutStaging, "system-40").control).toBe("controlled");
+
+    const donorId = "system-50"; // system-40's seed source, per the populationChange suite above
+    for (const goodId of ["water", "food"]) {
+      const drawn = marketRow(withStaging, donorId, goodId);
+      const undrawn = marketRow(withoutStaging, donorId, goodId);
+      // Premise: the draw really left the donor's warehouse on the staging branch.
+      expect(drawn.stock).toBeLessThan(undrawn.stock);
+
+      // Both branches share one pre-tick world, so both figures are diffed against the SAME
+      // cycle-start baseline. The whole stock gap between them therefore has to appear in the gap
+      // between their reported changes, scaled by the one denominator — which is only true if the
+      // draw lands INSIDE the figure. Computed before the draw, the two changes would be equal
+      // while the stocks differ, and this identity is what catches that.
+      const stockGap = undrawn.stock - drawn.stock;
+      const reportedGap =
+        (requireStockChange(withoutStaging, donorId, goodId) - requireStockChange(withStaging, donorId, goodId))
+        * catchUpFactor(CYCLE_LENGTH);
+      expect(reportedGap).toBeCloseTo(stockGap, 9);
+      // …and the donor reads more drained for it, never less.
+      expect(requireStockChange(withStaging, donorId, goodId))
+        .toBeLessThan(requireStockChange(withoutStaging, donorId, goodId));
+    }
+  }, 30_000);
+
+  it("nothing inside the tick reads stockChange — poisoning the input changes no other output", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      markets: base.markets.map((m): WorldMarket => ({ ...m, stockChange: -999_999 })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    // stockChange itself legitimately differs run to run for any market row the runs never both
+    // visit identically (each is a fresh per-cycle read) — stripped before comparing; everything
+    // else, including every harness/instrumentation figure, must be byte-identical.
+    const stripMarkets = (markets: WorldMarket[]): WorldMarket[] =>
+      markets.map((m): WorldMarket => ({ ...m, stockChange: undefined }));
+    const strip = (w: World): World => ({ ...w, markets: stripMarkets(w.markets) });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(stripMarkets(dirty.markets)).toEqual(stripMarkets(clean.markets));
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
+});
+
+// ── Unserved shortfall (WorldMarket.unservedShortfall) ────────────────
+// The classification itself — structural vs. funding-bound, the deficit-endpoint-only rule, and the
+// level (one figure per (system, good), computed from `Deficit.shortfall`) — is pinned directly
+// against `matchFactionTransfers` in `lib/engine/__tests__/directed-logistics.test.ts`, and the
+// write-back skip/clear mechanics against `runDirectedLogisticsProcessor` in
+// `lib/tick/processors/__tests__/directed-logistics.test.ts`. These pin the world layer's half: the
+// market-join / merge-path plumbing, the abandonment clear, the cadence-invariance of a level (as
+// distinct from `stockChange`'s per-cycle denomination), and that nothing inside the tick reads it.
+// A positive level IS the structural reading and absence is servable — there is no separate bit, so
+// nothing here can assert the two agree; what it asserts instead is that a served row's key is
+// DELETED rather than left holding a stale figure.
+
+describe("marketRowsBySystem carries unservedShortfall through the market join", () => {
+  it("carries a present value onto the projected row", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const flagged: WorldMarket = { ...base, unservedShortfall: 38 };
+    const rows = marketRowsBySystem([flagged]).get(flagged.systemId);
+    expect(rows?.find((r) => r.goodId === flagged.goodId)?.unservedShortfall).toBe(38);
+  });
+
+  it("carries absence through as undefined, matching logisticsFundingBound's own projection", () => {
+    // marketRowsBySystem is a plain per-tick projection, not the persisted WorldMarket row — like
+    // every other optional field on it, an absent source reads undefined here rather than a truly
+    // absent key. The true-absence guarantee belongs to WorldMarket itself and is pinned separately
+    // (resetAbandonedMarkets, the poisoning tests).
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const untouched: WorldMarket = { ...base };
+    delete untouched.unservedShortfall;
+    const rows = marketRowsBySystem([untouched]).get(untouched.systemId);
+    const row = rows?.find((r) => r.goodId === untouched.goodId);
+    expect(row?.unservedShortfall).toBeUndefined();
+  });
+});
+
+describe("resetAbandonedMarkets clears unservedShortfall", () => {
+  it("deletes a stale level on abandonment, leaving stock untouched", () => {
+    const base = generateWorld({ systemCount: 20, seed: 3 }).markets[0];
+    const stale: WorldMarket = { ...base, unservedShortfall: 38, stock: 777 };
+
+    const [reset] = resetAbandonedMarkets([stale], [stale.systemId]);
+
+    expect(reset.unservedShortfall).toBeUndefined();
+    expect("unservedShortfall" in reset).toBe(false);
+    expect(reset.stock).toBe(777);
+  });
+});
+
+describe("runWorldTick — the unserved shortfall level end to end", () => {
+  /**
+   * The warehousing target one system's market row is measured against, rebuilt from committed world
+   * state through the same `marketRowsBySystem` → `toGoodMarketStates` seam the logistics processor
+   * itself reads — `DIRECTED_LOGISTICS.WAREHOUSE_COVER × demand × anchorMult`, where `demand` is the
+   * system's USE figure, not its `demandRate` column. Sound to read off the POST-tick world: every
+   * stage that moves the inputs (economy, decay, population, migration) runs before directed
+   * logistics, and construction is parked in the fixtures below.
+   */
+  function logisticsTargetOf(world: World, systemId: string, goodId: string): number {
+    const system = world.systems.find((s) => s.id === systemId);
+    if (!system) throw new Error(`no system ${systemId}`);
+    const buildings: Record<string, number> = {};
+    for (const b of world.buildings) if (b.systemId === systemId) buildings[b.buildingType] = b.count;
+    const rows = marketRowsBySystem(world.markets.filter((m) => m.systemId === systemId)).get(systemId);
+    if (!rows) throw new Error(`no market rows for ${systemId}`);
+    const state = toGoodMarketStates({
+      buildings,
+      population: system.population,
+      yields: resourceVectorFromColumns(
+        {
+          yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
+          yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
+          yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
+        },
+        "yield",
+      ),
+      markets: rows,
+    }).find((g) => g.goodId === goodId);
+    if (!state) throw new Error(`no ${goodId} state at ${systemId}`);
+    return state.logisticsTarget;
+  }
+
+  it("carries the deficit's own shortfall while isolated, and clears the LEVEL along with the bit once a donor becomes reachable — never a stale figure behind a false bit", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const a = base.factions[0].homeworldId;
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const prepared: World = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      buildings: base.buildings.filter((bl) => !(bl.systemId === b && bl.buildingType === "water")),
+      markets: base.markets.map((m) =>
+        m.systemId === b && m.goodId === "water" ? { ...m, stock: 0 } : m,
+      ),
+      connections: base.connections.filter((c) => c.fromId !== b && c.toId !== b),
+    };
+    const cadence = { cycle: 1, logistics: 1, construction: 99 };
+    const unservable = (await runWorldTick(prepared, { cadence })).world;
+    const bWaterBefore = unservable.markets.find((m) => m.systemId === b && m.goodId === "water");
+    // Stock is forced to exactly 0 above, so the level (target − stock) must equal the full
+    // warehousing target — a real, finite, positive figure. It is also the entire classification:
+    // a positive reading here is what "structurally unservable" means on a market row.
+    expect(bWaterBefore?.stock).toBe(0);
+    expect(bWaterBefore?.logisticsFundingBound ?? false).toBe(false); // structural, not budget-stopped
+    // The level is `max(0, logisticsTarget − stock)` and stock is exactly 0 here, so the figure is
+    // computable rather than merely finite-and-positive — the whole warehousing target, rebuilt
+    // independently from committed world state.
+    const expectedShortfall = logisticsTargetOf(unservable, b, "water");
+    expect(expectedShortfall).toBeGreaterThan(0); // premise: this system really does want water
+    expect(bWaterBefore?.unservedShortfall).toBeCloseTo(expectedShortfall, 9);
+
+    const recovered: World = {
+      ...unservable,
+      markets: unservable.markets.map((m) =>
+        m.systemId === a && m.goodId === "water" ? { ...m, stock: 1_000_000 } : m,
+      ),
+      connections: [
+        ...unservable.connections,
+        { fromId: a, toId: b, fuelCost: 1 },
+        { fromId: b, toId: a, fuelCost: 1 },
+      ],
+    };
+    const cleared = (await runWorldTick(recovered, { cadence })).world;
+    const bWaterAfter = cleared.markets.find((m) => m.systemId === b && m.goodId === "water");
+    expect(bWaterAfter?.unservedShortfall).toBeUndefined();
+    expect("unservedShortfall" in bWaterAfter!).toBe(false);
+  });
+
+  it("is a level, not a rate: doubling the logistics cadence interval does not move the figure", async () => {
+    // logisticsTarget (WAREHOUSE_COVER × demand × anchorMult) and shortfall (target − stock) are both
+    // read straight off demand and stock — neither is denominated by the interval the way the haul
+    // BUDGET (generation × catchUpFactor) is. B is cut off from every donor, so logistics never moves
+    // its stock either way; the only variable between the two runs is which tick(s) logistics itself
+    // resolved on, which a level must not affect.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const b = base.factions[1].homeworldId;
+    const factionId = base.factions[0].id;
+    const prepared: World = {
+      ...base,
+      systems: base.systems.map((s) => (s.id === b ? { ...s, factionId } : s)),
+      buildings: base.buildings.filter((bl) => !(bl.systemId === b && bl.buildingType === "water")),
+      markets: base.markets.map((m) =>
+        m.systemId === b && m.goodId === "water" ? { ...m, stock: 0 } : m,
+      ),
+      connections: base.connections.filter((c) => c.fromId !== b && c.toId !== b),
+    };
+    const shortfallAt = (w: World) =>
+      w.markets.find((m) => m.systemId === b && m.goodId === "water")?.unservedShortfall;
+
+    // Interval 1 resolves logistics on every tick; two ticks in, it has assessed twice.
+    const everyTick = await runTicks(prepared, 2, { cycle: 1, logistics: 1, construction: 99 });
+    // Interval 2 resolves logistics only on the second tick (tick 2 % 2 === 0) — economy/population
+    // still run every tick (cycle: 1) in both branches, so B's demand and stock evolve identically;
+    // logistics itself never touches B's stock either way (no reachable donor).
+    const everyOtherTick = await runTicks(prepared, 2, { cycle: 1, logistics: 2, construction: 99 });
+
+    expect(shortfallAt(everyTick)).toBeGreaterThan(0);
+    expect(shortfallAt(everyTick)).toBeCloseTo(shortfallAt(everyOtherTick)!, 6);
+  });
+
+  /**
+   * Re-poisons every market EVERY tick rather than once at the start. A one-shot poisoning cannot
+   * hold the premise for 50 ticks: the first directed-logistics run assesses every market row it
+   * visits and clears the level on the servable ones, so within one logistics cycle the poisoned
+   * world has scrubbed itself clean and the remaining ticks compare two identical worlds. Re-applying
+   * it each tick keeps a live 999_999 in front of every processor for the whole run, which is what
+   * gives "nothing reads it" any teeth.
+   */
+  async function runTicksCapturingLast(world: World, count: number, poison: boolean) {
+    let w = world;
+    let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+    for (let i = 0; i < count; i++) {
+      if (poison) {
+        w = { ...w, markets: w.markets.map((m): WorldMarket => ({ ...m, unservedShortfall: 999_999 })) };
+      }
+      last = await runWorldTick(w);
+      w = last.world;
+    }
+    if (!last) throw new Error("count must be > 0");
+    return last;
+  }
+
+  // The field itself legitimately differs between the two runs (one is being poisoned) — stripped
+  // before comparing; everything else must be byte-identical.
+  const stripMarkets = (markets: WorldMarket[]): WorldMarket[] =>
+    markets.map((m): WorldMarket => ({ ...m, unservedShortfall: undefined }));
+  const strip = (w: World): World => ({ ...w, markets: stripMarkets(w.markets) });
+
+  it("nothing inside the tick reads unservedShortfall — poisoning the input changes no other output, checked on a fixture that actually hauls", async () => {
+    // The galaxy-wide poisoning test below has a blind spot this one covers: `generateWorld({
+    // systemCount: 100, seed: 42 })` produces zero directed-logistics flow events at that horizon, so
+    // a leak that only surfaces through the matcher would be invisible in it. twoSystemWaterGradient
+    // guarantees a real haul every cycle logistics runs.
+    const { world: base } = twoSystemWaterGradient((market) => market);
+
+    const clean = await runTicksCapturingLast(base, 50, false);
+    const dirty = await runTicksCapturingLast(base, 50, true);
+
+    expect(clean.world.flowEvents.length).toBeGreaterThan(0); // premise: this fixture DOES haul
+
+    // This also pins the matcher's own decisions — which hauls it plans, in what order — since
+    // `markets` carries those decisions' downstream effects (stock moved, funding-bound assessments)
+    // and it strips down to identical here.
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(stripMarkets(dirty.markets)).toEqual(stripMarkets(clean.markets));
+  }, 60_000);
+
+  it("nothing inside the tick reads unservedShortfall on a whole galaxy either — abandonment, migration and construction all run over 50 ticks and no other output moves", async () => {
+    // The hauling fixture above is the one that can catch a matcher leak; this one covers the breadth
+    // the two-system fixture cannot — every other processor, over a galaxy that actually abandons,
+    // migrates and builds, plus the harness instrumentation. Both are needed: neither subsumes the
+    // other.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+
+    const clean = await runTicksCapturingLast(base, 50, false);
+    const dirty = await runTicksCapturingLast(base, 50, true);
+
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(stripMarkets(dirty.markets)).toEqual(stripMarkets(clean.markets));
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 60_000);
+});
+
+// ── Build blocked (WorldSystem.buildBlocked) ─────────────────────────
+// The engine's reason mapping and what `droppedRoi` means at a ranked vs. an unranked drop are
+// pinned directly against `planFactionProposals` in `lib/engine/__tests__/directed-build.test.ts`.
+// These pin the world layer's half of the contract: `applyBuildBlockedUpdates`'s visited/clear/set
+// behaviour (a visited system absent from the update list is CLEARED; an unvisited one is left
+// alone), and that nothing inside the tick reads the field back.
+
+describe("applyBuildBlockedUpdates — the visited/clear/set contract", () => {
+  const base = toTickSystems(generateWorld({ systemCount: 20, seed: 3 }));
+
+  it("sets buildBlocked for a visited system present in the update list", () => {
+    const [sys] = base;
+    const [next] = applyBuildBlockedUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, reason: "no-capacity", droppedRoi: 1.5 }],
+    );
+    expect(next.buildBlocked).toEqual({ reason: "no-capacity", droppedRoi: 1.5 });
+  });
+
+  it("clears buildBlocked for a visited system NOT present in the update list — nothing was dropped this run", () => {
+    const [sys] = base;
+    const stale: TickSystem = { ...sys, buildBlocked: { reason: "no-consumer", droppedRoi: 3 } };
+    const [next] = applyBuildBlockedUpdates([stale], [stale.id], []);
+    expect(next.buildBlocked).toBeUndefined();
+    expect("buildBlocked" in next).toBe(false);
+  });
+
+  it("leaves a system the run did not visit untouched, keeping its previous value", () => {
+    const [sys, other] = base;
+    if (!other) throw new Error("expected at least two systems in the fixture");
+    const stale: TickSystem = { ...sys, buildBlocked: { reason: "no-labour", droppedRoi: 2 } };
+    // `other` carries a previous run's reading AND is deliberately absent from visitedSystemIds
+    // (its faction was not due this run) — non-vacuous: were the visited guard dropped, `other`
+    // would be cleared exactly like `stale` is, since it too is absent from `updates`.
+    const otherStale: TickSystem = { ...other, buildBlocked: { reason: "no-whole-level", droppedRoi: 4 } };
+    const [next, untouched] = applyBuildBlockedUpdates([stale, otherStale], [stale.id], []);
+    expect(next.buildBlocked).toBeUndefined();       // visited, absent from updates → cleared
+    expect(untouched).toBe(otherStale);               // not visited → same object, unchanged
+    expect(untouched.buildBlocked).toEqual({ reason: "no-whole-level", droppedRoi: 4 });
+  });
+
+  it("guards a non-finite droppedRoi to 0 rather than writing NaN/Infinity into world state", () => {
+    const [sys] = base;
+    const [next] = applyBuildBlockedUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, reason: "no-capacity", droppedRoi: Number.POSITIVE_INFINITY }],
+    );
+    expect(next.buildBlocked?.droppedRoi).toBe(0);
+  });
+});
+
+/**
+ * A faction whose second developed system is cut off from every route: its builds have nowhere to
+ * send output (the planner's `reachable` filter drops zero-cost self-routes), so the planner drops a
+ * ranked-or-unranked opportunity and the run reports it. This is the whole end-to-end path — planner
+ * → processor → adapter → `applyBuildBlockedUpdates` → `World.systems` — that every other test in
+ * this section covers only one link of.
+ */
+function isolatedSecondSystemWorld(): World {
+  const base = generateWorld({ systemCount: 100, seed: 42 });
+  const cutOff = base.factions[1].homeworldId;
+  const factionId = base.factions[0].id;
+  return {
+    ...base,
+    systems: base.systems.map((s) => (s.id === cutOff ? { ...s, factionId } : s)),
+    buildings: base.buildings.filter((b) => !(b.systemId === cutOff && b.buildingType === "water")),
+    markets: base.markets.map((m) =>
+      m.systemId === cutOff && m.goodId === "water" ? { ...m, stock: 0 } : m,
+    ),
+    connections: base.connections.filter((c) => c.fromId !== cutOff && c.toId !== cutOff),
+  };
+}
+
+describe("runWorldTick — buildBlocked reaches World.systems through the whole real chain", () => {
+  it("lands a reason and a droppedRoi on a system a real tick's planner actually dropped a build at", async () => {
+    // Deleting the applyBuildBlockedUpdates call site leaves every other test in this file green:
+    // the visited/clear/set contract above is a direct call on the fold, the processor tests assert
+    // on the adapter, and the poisoning test strips the field from both worlds before comparing.
+    // This is the only assertion that fails.
+    const world = (await runWorldTick(isolatedSecondSystemWorld(), {
+      cadence: { cycle: 1, logistics: 1, construction: 1 },
+    })).world;
+
+    const blocked = world.systems.filter((s) => s.buildBlocked !== undefined);
+    expect(blocked.length).toBeGreaterThan(0);
+    for (const s of blocked) {
+      // A real reason off the engine's own union, and a finite ordering figure — not a shape the
+      // merge could have fabricated from an absent field.
+      expect(["no-capacity", "no-input-supplier", "no-consumer", "no-labour", "no-whole-level"])
+        .toContain(s.buildBlocked!.reason);
+      expect(Number.isFinite(s.buildBlocked!.droppedRoi)).toBe(true);
+    }
+  }, 30_000);
+});
+
+describe("runWorldTick — colonyOpportunity reaches World.systems through the whole real chain", () => {
+  it("lands the planner's own value/work terms on a controlled candidate a real run proposed establishing", async () => {
+    // Same gap as buildBlocked directly above, at the colonisation planner: nothing else proves the
+    // adapter → applyColonyOpportunityUpdates → World.systems path runs inside a real tick. The
+    // candidate set only fills once the claim phase has run, so this needs several cycles rather
+    // than the single tick the build-side case above takes.
+    let world = generateWorld({ systemCount: 100, seed: 42 });
+    for (let i = 0; i < 48; i++) world = (await runWorldTick(world)).world;
+
+    const candidates = world.systems.filter((s) => s.colonyOpportunity !== undefined);
+    expect(candidates.length).toBeGreaterThan(0);
+    for (const s of candidates) {
+      // The field's own contract: a CONTROLLED, not-yet-developed system the planner proposed
+      // establishing this run, carrying a positive ROI numerator and a positive work denominator.
+      expect(s.control).toBe("controlled");
+      expect(s.colonyOpportunity!.value).toBeGreaterThan(0);
+      expect(s.colonyOpportunity!.work).toBeGreaterThan(0);
+    }
+  }, 30_000);
+});
+
+describe("runWorldTick — nothing inside the tick reads buildBlocked back", () => {
+  it("poisoning the input changes no other output", async () => {
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem => ({
+        ...s, buildBlocked: { reason: "no-capacity", droppedRoi: -999_999 },
+      })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    // buildBlocked itself legitimately differs run to run (a fresh per-run assessment) — stripped
+    // before comparing; everything else, including every harness/instrumentation figure, must be
+    // byte-identical. This also pins the Proves entry that the planner's own decisions (which
+    // proposals it emits, in what order) are unchanged: `systems`/`markets` carry those decisions'
+    // downstream effects, and they strip down to identical here.
+    const strip = (w: World): World => ({
+      ...w,
+      systems: w.systems.map((s): WorldSystem => ({ ...s, buildBlocked: undefined })),
+    });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(dirty.markets).toEqual(clean.markets);
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
+});
+
+// ── Build opportunity / Colony opportunity (WorldSystem.buildOpportunity / .colonyOpportunity) ──
+// The engine's survival-band selection and what `score`/`value`/`work` mean are pinned
+// directly against `planFactionProposals`/`planFactionColonyProposals` in
+// `lib/engine/__tests__/directed-build.test.ts`. These pin the world layer's half of the contract:
+// `applyBuildOpportunityUpdates`/`applyColonyOpportunityUpdates`'s visited/clear/set behaviour — the
+// same shape `applyBuildBlockedUpdates` above uses, over two different visited-set populations — and
+// that nothing inside the tick reads either field back.
+
+describe("applyBuildOpportunityUpdates — the visited/clear/set contract", () => {
+  const base = toTickSystems(generateWorld({ systemCount: 20, seed: 3 }));
+
+  it("sets buildOpportunity for a visited system present in the update list", () => {
+    const [sys] = base;
+    const [next] = applyBuildOpportunityUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, score: 12.5, goodId: "food" }],
+    );
+    expect(next.buildOpportunity).toEqual({ score: 12.5, goodId: "food" });
+  });
+
+  it("Proves 3 — clears buildOpportunity for a visited system that stopped being a candidate (absent from the update list)", () => {
+    const [sys] = base;
+    const stale: TickSystem = { ...sys, buildOpportunity: { score: 4, goodId: "ore" } };
+    const [next] = applyBuildOpportunityUpdates([stale], [stale.id], []);
+    expect(next.buildOpportunity).toBeUndefined();
+    expect("buildOpportunity" in next).toBe(false);
+  });
+
+  it("Proves 4 — leaves a system the run did not visit untouched, keeping its previous value", () => {
+    const [sys, other] = base;
+    if (!other) throw new Error("expected at least two systems in the fixture");
+    const stale: TickSystem = { ...sys, buildOpportunity: { score: 3, goodId: "food" } };
+    // `other` carries a previous run's reading AND is deliberately absent from visitedSystemIds —
+    // non-vacuous: were the visited guard dropped, `other` would be cleared exactly like `stale` is,
+    // since it too is absent from `updates`.
+    const otherStale: TickSystem = { ...other, buildOpportunity: { score: 9, goodId: "metals" } };
+    const [next, untouched] = applyBuildOpportunityUpdates([stale, otherStale], [stale.id], []);
+    expect(next.buildOpportunity).toBeUndefined();       // visited, absent from updates → cleared
+    expect(untouched).toBe(otherStale);                   // not visited → same object, unchanged
+    expect(untouched.buildOpportunity).toEqual({ score: 9, goodId: "metals" });
+  });
+
+  it("guards a non-finite score to 0 rather than writing NaN/Infinity into world state", () => {
+    const [sys] = base;
+    const [next] = applyBuildOpportunityUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, score: Number.POSITIVE_INFINITY, goodId: "food" }],
+    );
+    expect(next.buildOpportunity?.score).toBe(0);
+  });
+});
+
+describe("applyColonyOpportunityUpdates — the visited/clear/set contract (a candidate-scoped visited set)", () => {
+  const base = toTickSystems(generateWorld({ systemCount: 20, seed: 3 }));
+
+  it("sets colonyOpportunity for a visited candidate present in the update list", () => {
+    const [sys] = base;
+    const [next] = applyColonyOpportunityUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, value: 40, work: 84 }],
+    );
+    expect(next.colonyOpportunity).toEqual({ value: 40, work: 84 });
+  });
+
+  it("Proves 3 — clears colonyOpportunity for a visited candidate that stopped being proposed (absent from the update list)", () => {
+    const [sys] = base;
+    const stale: TickSystem = { ...sys, colonyOpportunity: { value: 12, work: 20 } };
+    const [next] = applyColonyOpportunityUpdates([stale], [stale.id], []);
+    expect(next.colonyOpportunity).toBeUndefined();
+    expect("colonyOpportunity" in next).toBe(false);
+  });
+
+  it("Proves 4 — leaves a candidate the run did not visit untouched, keeping its previous value", () => {
+    const [sys, other] = base;
+    if (!other) throw new Error("expected at least two systems in the fixture");
+    const stale: TickSystem = { ...sys, colonyOpportunity: { value: 5, work: 10 } };
+    const otherStale: TickSystem = { ...other, colonyOpportunity: { value: 99, work: 200 } };
+    const [next, untouched] = applyColonyOpportunityUpdates([stale, otherStale], [stale.id], []);
+    expect(next.colonyOpportunity).toBeUndefined();
+    expect(untouched).toBe(otherStale);
+    expect(untouched.colonyOpportunity).toEqual({ value: 99, work: 200 });
+  });
+
+  it("guards a non-finite value/work to 0 rather than writing NaN/Infinity into world state", () => {
+    const [sys] = base;
+    const [next] = applyColonyOpportunityUpdates(
+      [sys], [sys.id], [{ systemId: sys.id, value: Number.NaN, work: Number.POSITIVE_INFINITY }],
+    );
+    expect(next.colonyOpportunity).toEqual({ value: 0, work: 0 });
+  });
+});
+
+describe("runWorldTick — nothing inside the tick reads buildOpportunity or colonyOpportunity back", () => {
+  it("Proves 6 — poisoning the input changes no other output", async () => {
+    // Same fixture Build blocked's own poisoning test above uses (`systemCount: 100, seed: 42`), for
+    // the same reason it works there: this is a build-side signal, not a directed-logistics one, so
+    // this fixture's lack of flow events at this horizon (noted on that test) doesn't blind this test
+    // to a leak — a leak would show up in `systems`/`markets`/`instrumentation`, all covered below.
+    const base = generateWorld({ systemCount: 100, seed: 42 });
+    const poisoned: World = {
+      ...base,
+      systems: base.systems.map((s): WorldSystem => ({
+        ...s,
+        buildOpportunity: { score: -999_999, goodId: "food" },
+        colonyOpportunity: { value: -999_999, work: -999_999 },
+      })),
+    };
+
+    async function runTicksCapturingLast(world: World, count: number) {
+      let w = world;
+      let last: Awaited<ReturnType<typeof runWorldTick>> | undefined;
+      for (let i = 0; i < count; i++) {
+        last = await runWorldTick(w);
+        w = last.world;
+      }
+      if (!last) throw new Error("count must be > 0");
+      return last;
+    }
+
+    const clean = await runTicksCapturingLast(base, 50);
+    const dirty = await runTicksCapturingLast(poisoned, 50);
+
+    // Both fields legitimately differ run to run (a fresh per-run assessment) — stripped before
+    // comparing; everything else, including every harness/instrumentation figure, must be
+    // byte-identical. This also pins the Proves entry that the planner's own decisions (which
+    // proposals it emits, in what order) are unchanged.
+    const strip = (w: World): World => ({
+      ...w,
+      systems: w.systems.map((s): WorldSystem => ({
+        ...s, buildOpportunity: undefined, colonyOpportunity: undefined,
+      })),
+    });
+    expect(strip(dirty.world)).toEqual(strip(clean.world));
+    expect(dirty.markets).toEqual(clean.markets);
+    expect(dirty.events).toEqual(clean.events);
+    expect(dirty.instrumentation).toEqual(clean.instrumentation);
+  }, 30_000);
 });
 
 // ── marketRowsBySystem: the persisted-figure seam ───────────────────

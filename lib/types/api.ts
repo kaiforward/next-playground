@@ -568,3 +568,102 @@ export interface TreasuryPolicyData {
   bands: TreasuryBands;
 }
 export type UpdateTreasuryPolicyResponse = ApiResponse<TreasuryPolicyData>;
+
+// ── Alert bar ──────────────────────────────────────────────────────────────
+import type { AlertCategoryId } from "@/lib/types/alerts";
+
+/**
+ * One thing an alert category is naming — the flyout's row. What that thing is depends on the
+ * category's `unit`: a system for the two system-scoped units, an EVENT for the three event bands,
+ * and the faction itself for Maintenance unfunded.
+ *
+ * `measure` is the row's human-readable figure; `sortKey` is the number instances sort by WITHIN
+ * their category, ascending — smaller sorts first, and each category picks what "smaller" means so
+ * that ordering is always worst-first (see `lib/services/alerts.ts` for each category's convention).
+ *
+ * `systemId` is genuinely nullable and a consumer must handle the null: Maintenance unfunded emits a
+ * faction-level row with no system, and an event row carries whatever `WorldEvent.systemId` holds —
+ * the relations-spawned pair events (`pact_under_negotiation`, `alliance_dissolved`) have no system
+ * at all. A null means the row is not navigable to a system; `name` still names its subject (the
+ * faction, or the event type).
+ */
+export interface AlertInstance {
+  systemId: string | null;
+  name: string;
+  measure: string;
+  sortKey: number;
+}
+
+interface AlertCategoryBase {
+  id: AlertCategoryId;
+  /** Raw instance count — extensive, not a rate; grows with the empire. */
+  count: number;
+  instances: AlertInstance[];
+}
+
+/**
+ * A category counting SYSTEMS out of the player faction's developed-systems total — the flyout
+ * footer's and the chip's accessible name's "N of D developed systems".
+ */
+export interface SystemScopedAlertCategory extends AlertCategoryBase {
+  unit: "developed_systems";
+  /** The player faction's developed-systems count — shared across every category with this unit. */
+  denominator: number;
+}
+
+/**
+ * A category counting the player faction's CONTROLLED (claimed, not yet developed) systems out of
+ * that total — the flyout footer's "N of D controlled systems". Colony opportunity is the one
+ * category scoped this way, and it has to be: a colony candidate is by definition not developed yet,
+ * so counting it against the developed-systems total compares two disjoint populations and can
+ * render "3 of 1 developed systems". `controlled` is the population the colonisation planner draws
+ * its candidates from (`lib/world/tick.ts`'s `developProvider` filters on exactly this control
+ * state), so the count really is a share of this denominator.
+ */
+export interface ControlledSystemsAlertCategory extends AlertCategoryBase {
+  unit: "controlled_systems";
+  /** The player faction's controlled-but-undeveloped systems count. */
+  denominator: number;
+}
+
+/**
+ * A category counting EVENTS (Crisis / Disruption / Windfall) — "N events", with no denominator at
+ * all. Events are the one place the bar departs from its count-of-systems rule and it has to: a
+ * region-target phase applies to a whole region from one instance, and two event types spawn with no
+ * system at all, so there is no systems total these counts are a share OF. A count here can exceed
+ * the developed-systems total, which is why carrying one would misread.
+ */
+export interface EventAlertCategory extends AlertCategoryBase {
+  unit: "events";
+}
+
+/**
+ * The one faction-level category — Maintenance unfunded — counting the FACTION's own treasury
+ * settlement, with no denominator. Its `count` is 0 or 1 by construction (one settlement per
+ * faction), so a developed-systems denominator would render "1 of 253 developed systems" about a row
+ * that names no system at all: the count is not a share of anything, the same reason the event
+ * categories carry none.
+ */
+export interface FactionAlertCategory extends AlertCategoryBase {
+  unit: "faction";
+}
+
+/** One alert category's standing read: the chip's count, what that count counts (and, for the
+ *  system-scoped categories, its denominator — which population it is a share OF depends on `unit`),
+ *  and the instance rows in the category's own sort order. */
+export type AlertCategory =
+  | SystemScopedAlertCategory
+  | ControlledSystemsAlertCategory
+  | EventAlertCategory
+  | FactionAlertCategory;
+
+/** The alert bar's whole read — all sixteen categories, one endpoint rather than one per category.
+ *  With a player seat, `getAlertData()` (lib/services/alerts.ts) always emits every category id,
+ *  tier-then-order sorted; a category with nothing to say still appears, with `count: 0` and an empty
+ *  `instances` array — the chip run is what decides whether an empty category renders anything. A
+ *  world with no player seat (e.g. the calibration harness) reads `categories: []` entirely, the same
+ *  posture `TrackerData` takes for the same reason. */
+export interface AlertData {
+  categories: AlertCategory[];
+}
+export type AlertResponse = ApiResponse<AlertData>;
