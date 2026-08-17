@@ -1,7 +1,7 @@
 # The Tracker
 
-The first of the attention layer's two surfaces. The second, the alert bar, is not built — it is
-specified separately and owns everything condition-shaped.
+The first of the attention layer's two surfaces. The second, [the alert bar](./alert-bar.md), owns
+everything condition-shaped.
 
 ## What it is
 
@@ -86,6 +86,12 @@ unavailable — the system and faction drawers are docked there.
 The rail passes pointer events through to the map everywhere except the panels themselves, so empty
 space above, below and between them never swallows a click. The Tracker never blocks the map: it is
 an overlay the map stays live behind, like the drawers.
+
+The rail sits 8px off the map's own edges — the same inset [the alert bar](./alert-bar.md) uses for its
+own run, off the top of the map and off this same rail, so the two read as one consistent edge. Whether
+the Tracker's own settings panel is open is shared state, not private to this panel: the alert run's
+right inset widens by that panel's width while it is open, the same way it already widens to make room
+for the panel itself.
 
 ## Pinning
 

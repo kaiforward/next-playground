@@ -24,85 +24,10 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 
 ## Queued
 
-The attention layer — how the player finds what to do — is two surfaces. The first, the **Tracker**,
-has shipped: `docs/active/gameplay/tracker.md`. The second, the **alert bar**, is row 1 below.
+The attention layer — how the player finds what to do — is two surfaces, both shipped:
+[the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-The split that separates them: a **Tracker row is a thing** (it persists whether or not anything is
-wrong with it), an **alert-bar row is a condition** (it exists only while true and is cleared by
-fixing it). Settled against how EU5 and Victoria 3 do it — the four design principles, the genre
-sources and the reasoning are in memory `design-attention-layer-inputs`, which the alert-bar row
-starts from.
-
-**A third surface was considered and dropped**: a separate dismissible feed of discrete events (the
-"situation log" of `player-seat-roadmap.md`). Events are conditions the player should act on, so they
-become alert-bar categories rather than a parallel scrolling list — one surface for "look at this",
-not two. Don't re-propose the feed without a case for what it holds that an alert cannot.
-
-1. **[L] The alert bar — the conditions wanting a decision.** A top bar of alert categories ordered by
-   severity, carrying opportunities and decisions as well as faults (EU5's shape: red critical,
-   yellow important, blue informational). **Ranking is by authored category tier, never a computed
-   cross-domain score** — within a class, sort by that class's own natural measure (population pressed
-   against the cap for crowding, unserved demand rate for unmet need). Neither reference game ranks
-   instances across domains; a single global sort is what forces invented weights, and it is why the
-   housing-has-no-ROI problem dissolves here.
-   Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
-   approaching it** (the cue to build housing) and **which systems cannot meet their demand from
-   imports plus production**. Low stability already works as a third and is the proof the approach
-   reads well; strikes and famine already have their data too. A category's instance list needs no
-   host beyond the flyout itself, which is uncapped and scrolls.
-   **A per-category settings screen is load-bearing, not polish.** The most-subscribed EU5 alert mod
-   exists to hide exactly our intended class — buildings missing employees, RGOs missing employees,
-   unprofitable buildings — because those stay continuously true for states the player often cannot
-   fix. Checkbox per category, plus a small non-hideable tier (war declarations and the like).
-   **Opportunity alerts gate on the existing automation switch:** with a domain automated the
-   planner's ranked proposals are already being acted on, so surfacing them is noise — only what it
-   *tried and could not do* surfaces. That is this row's real cost, because those blocked cases leave
-   no trace in code today: an opportunity that does not fit space or labour is dropped by a bare
-   `continue` (`lib/engine/directed-build.ts:824`) or a zero-level binary search (`:848-850`).
-   Emitting the reason is new instrumentation and the bulk of the work. Precedent that it is
-   tractable: one such signal already persists and no UI reads it — `logisticsFundingBound` on the
-   market row (`lib/engine/directed-logistics.ts:174`).
-   **This row absorbs the events surface.** The 12 event types plus the three relations-owned ones
-   become alert categories rather than a separate feed — an event the player should act on is a
-   condition, and a parallel scrolling list is the second "look at this" surface the layer exists to
-   avoid. Supersedes the alert-feed/situation-log section of
-   [player-seat-roadmap.md](./planned/player-seat-roadmap.md).
-   **Undesigned and needed at the planning pass: what clicking an alert does.** In EU5 it varies by
-   category — some jump the camera, some open a panel, some apply the decision directly. Ours will
-   need the same per-category answer, and it interacts with the tier list rather than following from
-   it.
-   **Carries `RATION_EXIT_EPS`**, rehomed here when the situation log was dropped. Two of its three
-   rationales are already dead — the per-good regime chips it was authored for were dropped, and
-   visual flapping does not occur (bands are written once per 24-tick economy cycle, so the fastest a
-   chip or map cell can change is every 4.8s at speed 5, with SSE throttled to 4 emits/sec
-   regardless). The third was log spam, which died with the log. **So it now has no surviving
-   justification at all unless band transitions become an alert category** — if they do, calibrate the
-   hysteresis against a condition flapping on and off the bar; if they don't, delete the constant
-   rather than keep tuning it. **Open question either way:** whether the hysteresis applies to the
-   persisted display band only (presentational) or to the classifier itself (mechanical — the regime
-   feeds the unrest term). Unverified at deferral time; do not assume the first.
-   **In progress on `feat/alert-bar`** — the prototype is approved, and the spec, the filled
-   design-hazards worksheet and the `/measure` evidence all live in
-   [alert-bar.md](./build-plans/alert-bar.md), which supersedes the detail above wherever they
-   disagree. Measured since this row was written: **"rare by construction" is false** — the planner
-   drops an opportunity it wanted at 50.4% of developed systems per run — so Build blocked defaults
-   off; and events became **three** valence-banded categories rather than one per type.
-   **Split into two PRs on a `shared/alert-bar` integration branch.** Stages A+B — the persisted
-   engine signals, the sixteen-category registry, the read service and the route — are the first
-   sub-PR; Stage C, the chip run, flyout and settings, is the second. Both merge into shared, then one
-   shared→main PR. The chip and flyout machinery is shared across all sixteen categories, so the split
-   is by layer and never by deferring a category. A+B is **inert**: nothing renders it, and
-   `npm run simulate` is identical at both horizons before and after.
-   The integration branch is what keeps main from carrying an undocumented half-feature: the doc fold
-   (Task 15) cannot run until Stage C exists, since the spec cannot be promoted to `docs/active/` as
-   current reality while half of what it describes is unbuilt.
-   *Next step:* Stage C — `/implement-plan docs/build-plans/alert-bar.md` from Task 11, on a `feat/*`
-   branch off `shared/alert-bar` once the A+B sub-PR has merged into it.
-   *Don't:* alert on a raw persistent state the player cannot act on. That is the precise EU5 failure
-   — dismissal is pointless because the condition is still true, so the alert returns instantly and
-   crowds out the useful ones.
-
-2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
@@ -252,6 +177,18 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   distance-weighting the autonomic-build spare pool (a possible refinement to the response-pacing
   backstop, noted, not built). No design pass on any of the three; pull individually when its area
   comes forward rather than as a group.
+- **[S] Re-measure Build blocked's real firing rate under the shipped predicate before trusting its
+  default.** The 50.4%-of-developed-systems figure that put this category default OFF (alert bar) was
+  taken with a temporary two-site counter, before the full nine-site instrumentation shipped and before
+  a `hasCapacityCeiling` guard was added that excludes sites which never had a deposit at all from
+  counting as blocked — a guard the old counter did not have, and whose own docstring
+  (`lib/engine/directed-build.ts`) says omitting it "would put a block on nearly every economically
+  active system every run." The true rate under the shipped predicate is unmeasured and could be
+  materially lower.
+  *Next step:* `/measure` Build blocked's incidence with the real shipped code, both horizons, cohorted
+  by developed systems; revisit the default (`lib/constants/alerts.ts`) if it comes back low.
+  *Don't:* quote the old 50.4% figure as current — it was taken under a predicate the shipped code no
+  longer uses.
 
 **Platform**
 - **[XL] Retire Next.js and TanStack Query — this is a single-page game, not a web app.** Packaging
@@ -370,6 +307,23 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[S] Unrest history / recovery forecast** — a per-system chart of unrest over time and a forecast
   of recovery trajectory, beyond the Population tab's current expectation/grievance snapshot.
   Backlog polish, not started.
+- **[S] The Provisioned map mode cannot show Famine.** Famine punches through at any Provision level
+  (`foldSupplyState`'s survival branch, `lib/engine/population.ts`), so it cannot be represented as a
+  step on a Provision ramp the way the other bands are. Surfaced while building the alert bar, unrelated
+  to it. Needs a visual treatment (a distinct marker layered over the ramp, most likely) before Famine
+  is readable from that map mode at all.
+  *Next step:* fold into whichever map-modes pass picks this up next — no design pass yet.
+- **[S] Alert bar: two small follow-ups from launch, neither blocking.** `CHIP_WIDTH`/`PLUS_N_WIDTH`
+  (`lib/utils/alert-packing.ts`) are authored estimates of a chip's rendered footprint, not a live
+  measurement of it, so they drift silently if the chip's padding, icon size or type scale ever change
+  — the run already holds a `ResizeObserver` (`components/alerts/alert-run.tsx`) that could feed
+  `packRun` a real width instead, once wired. And a fit-search failure on a building's *footprint*
+  rather than its labour currently reports as `no-labour` (`lib/engine/directed-build.ts`) for lack of a
+  dedicated sixth `BuildDropReason` — a spec decision, not a bug.
+  *Next step:* either independently, whichever comes up first.
+  *Don't:* let the width drift silently in the meantime — the packing tests derive their expected
+  widths from the same constants they check, so a mismatch would only ever surface as visual overflow,
+  never a red test.
 
 **Audits Kai has asked for**
 - **[M] Trader-hangover audit** — sweep the codebase for leftovers from the old browser space-trading

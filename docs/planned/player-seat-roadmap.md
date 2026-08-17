@@ -75,8 +75,8 @@ either of them.
 - A **conditions** surface — the alert bar, which also absorbs events. An event the player should act
   on is a condition, so there is no separate scrolling log.
 
-Both live on `docs/ROADMAP.md` rows 1 and 2 with their design settled; reasoning and genre sources are
-in memory `design-attention-layer-inputs`. Nothing here is a live plan — the roadmap rows are.
+Both are built: the Tracker and the alert bar, documented in `docs/active/gameplay/`. Reasoning and
+genre sources are in memory `design-attention-layer-inputs`. Nothing here is a live plan.
 
 ---
 
