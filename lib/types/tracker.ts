@@ -1,5 +1,5 @@
 // Tracker panel types — the section enumeration. The authored default lives in
-// `lib/constants/tracker.ts`; the array here exists only to derive types from.
+// `lib/constants/attention.ts`; the array here exists only to derive types from.
 
 /**
  * The Tracker's three sections, in the panel's own top-to-bottom render order. This array, not a

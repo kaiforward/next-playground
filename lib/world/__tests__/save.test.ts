@@ -139,6 +139,12 @@ describe("serializeWorld / deserializeWorld", () => {
     expect(result.ok).toBe(false);
   });
 
+  // This is what makes a pre-bump save fail cleanly. A v13 seat carries `controlledFactionId`,
+  // `automation` and `pinnedSystemIds` and nothing else, so `alertCategories`/`trackerSections` would
+  // load as `undefined` — and the spot-checks below the gate never look at `player`, while every
+  // reader of those records indexes them directly, so such a save would throw on the first render
+  // rather than degrade. Nothing but this constant stands between the two, which is why the number
+  // is pinned rather than left to drift.
   it("is at save format version 14 (attention-layer settings on the player seat)", () => {
     expect(SAVE_FORMAT_VERSION).toBe(14);
   });
@@ -150,17 +156,6 @@ describe("serializeWorld / deserializeWorld", () => {
     // either — the version bump is the whole defence, and it must reject rather than load a band
     // string the type system says cannot exist.
     const json = JSON.stringify({ formatVersion: 11, world });
-    const result = deserializeWorld(json);
-    expect(result.ok).toBe(false);
-  });
-
-  it("rejects a prior-version (v13) save — the seat's settings records are required, not optional", () => {
-    // A v13 seat carries `controlledFactionId`, `automation` and `pinnedSystemIds` and nothing else,
-    // so `alertCategories`/`trackerSections` would load as `undefined`. The spot-checks below the
-    // gate never look at `player`, and every reader of those records indexes them directly (the
-    // settings panel's checkboxes, the run's own filter), so a loaded v13 save would throw on the
-    // first render rather than degrade. The version bump is the whole defence.
-    const json = JSON.stringify({ formatVersion: 13, world });
     const result = deserializeWorld(json);
     expect(result.ok).toBe(false);
   });

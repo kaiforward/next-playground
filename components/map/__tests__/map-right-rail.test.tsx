@@ -11,9 +11,15 @@ import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 // Proves the owner-decision-2 wiring: the settings surface is a SIBLING panel toggled from the
 // Tracker's own header (never a popover), and toggling one of its checkboxes actually filters
 // TrackerPanel's own sections. The two panels are separate components reading the same query, so
-// this is the test that would catch them drifting apart — hence the stateful `useTracker` mock
-// below rather than a fixed object, which would leave the section heading on screen after the
-// write and assert against a state the real app never reaches. `MapControlsDock` is stubbed out:
+// what this catches is TrackerPanel failing to re-read after the write — hence the stateful
+// `useTracker` mock below rather than a fixed object, which would leave the section heading on
+// screen after the write and assert against a state the real app never reaches.
+//
+// What it does NOT catch, stated so nobody reads more into it: a `TrackerSettingsPanel` that kept
+// its own local copy of the flags AND still called the mutation would satisfy both assertions —
+// the checkbox from its local state, the heading from the shared write. Only a panel that stopped
+// writing at all fails here.
+// `MapControlsDock` is stubbed out:
 // its own render tree (Pixi colour ramps, tooltips) is unrelated to what's under test here.
 
 vi.mock("next/navigation", () => ({

@@ -52,6 +52,14 @@ interface MapRightRailProps {
  * siblings, so a failed read degrades whichever panel is asking rather than blanking the pair, and
  * the Tracker's own header — the only way to close this panel again — stays outside both.
  *
+ * `loadingFallback={null}` on it, for the same reason the alert run passes it: this boundary is
+ * constructed FRESH on every open (it is mounted conditionally, so closing unmounts it), and
+ * `QueryBoundary` paints its fallback once before its mounted-guard effect fires — regardless of the
+ * query already being cached by `TrackerPanel` beside it. The default `LoadingFallback` has no width
+ * of its own while this panel is `w-44`, so every open would flash a mis-sized spinner, and announce
+ * a `role="status"`, before the panel snapped to its real width. Nothing is the right loading state
+ * here: the panel simply arrives, as it did when the state was local.
+ *
  * `pointer-events-none` on this column, `pointer-events-auto` on each real panel: the column spans
  * the full map height (`inset-y-2`) so empty space above/below/around the panels — including the
  * thin `gap-2` seams — passes clicks through to the map behind it instead of swallowing them.
@@ -81,7 +89,7 @@ export const MapRightRail = memo(function MapRightRail({
     <div className="pointer-events-none absolute inset-y-2 right-2 z-20 flex flex-col items-end gap-2">
       <div className="flex min-h-0 flex-1 gap-2">
         {settingsOpen && (
-          <QueryBoundary>
+          <QueryBoundary loadingFallback={null}>
             <TrackerSettingsPanel />
           </QueryBoundary>
         )}
