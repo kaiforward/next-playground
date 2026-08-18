@@ -114,7 +114,7 @@ ROI at all, sit on the same bar as an industry proposal without inventing a weig
 | important | Industry idle | Built capacity that isn't running (no staff, no skill licence, or a recipe input never arrived). | Idle share. |
 | important | Disruption | An event that costs a world without threatening it (shortage, storm, embargo, glut, a dissolved alliance, spillover, plague risk, refugee crisis). | Authored impact rank. |
 | info | Build opportunity | A ranked build the planner recommends, only while build automation is off. | Survival-serving builds first, then the planner's own score. |
-| info | Colony opportunity | A controlled system the planner proposed establishing, only while colonisation automation is off. | value ÷ work, descending. |
+| info | Colony opportunity | A controlled system worth establishing a colony at — physically viable and worth more than the labour its seed would drain — whether or not the treasury can currently fund it; only while colonisation automation is off. | value ÷ work, descending. |
 | info | Windfall | An event worth riding before it ends (trade festival, mining boom, tech breakthrough, a pact under negotiation). | Soonest to expire. |
 
 **The critical tier cannot be hidden.** Three important-tier categories default off (Unrest rising,
@@ -221,10 +221,16 @@ reads any of them back — they exist purely for this read surface.
 - **`WorldSystem.buildBlocked`** — the directed-build planner's best-ranked dropped opportunity this
   run: a `BuildDropReason` and the ROI of what was dropped (ordering only, not comparable across
   systems or goods). Housing refusals never appear here — they are *No housing headroom*'s signal.
-- **`WorldSystem.buildOpportunity`** / **`WorldSystem.colonyOpportunity`** — the planner's own
-  best-ranked scored build opportunity and colony-establish terms this run, persisted rather than
-  re-derived so the alert bar and the planner's own decisions can never disagree about what counts as a
-  candidate.
+- **`WorldSystem.buildOpportunity`** — the planner's own best-ranked scored build opportunity this
+  run, persisted rather than re-derived so the alert bar and the planner's own decisions can never
+  disagree about what counts as a candidate.
+- **`WorldSystem.colonyOpportunity`** — the colony planner's **pre-gate assessment** this run: the
+  establish terms for every physically viable candidate worth more than the labour its seed would
+  drain. The funding gates (the treasury's running founding budget and the settler-supply cap) shape
+  only what the planner founds, never this signal — a site the faction cannot yet afford keeps its
+  row, and the system panel quotes the cost the verb is blocked on. The row clears when the
+  assessment itself stops: the site is no longer worth it, a colony starts forming there, or the
+  system leaves the candidate set.
 - **`WorldMarket.unservedShortfall`** — how much of a deficit no reachable same-faction donor and no
   local production could close on the latest directed-logistics run, written on the deficit endpoint
   only. A positive level *is* the classification — there is no separate boolean to keep in step with

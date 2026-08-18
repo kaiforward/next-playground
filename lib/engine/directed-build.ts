@@ -1347,31 +1347,25 @@ export function sizeColonyEstablish(
 }
 
 /**
- * Emit a colony-establish proposal for each controlled candidate above the ROI floor, scored on the same
- * demand-rate axis as a build (docs/active/gameplay/colonisation.md). Faction-level aggregates
+ * The pre-gate colony assessment: score each controlled candidate on the same demand-rate axis as a
+ * build (docs/active/gameplay/colonisation.md), with no funding applied. Faction-level aggregates
  * (territory saturation σ, and the unmet demand each missing resource unblocks) are computed once from the
  * faction's DEVELOPED systems; each candidate is then valued with `colonyValue` and sized to its land —
  * seed capped to the whole-level habitable capacity and housing sized to house it, so the landed colony has
- * `popCap ≥ seedPop` (viable by construction). A candidate already being established (open project) or
- * below the habitable floor / lacking a whole housing level is skipped. The `Map`/`Set` aggregates are
- * transient — nothing here reaches `World` state.
+ * `popCap ≥ seedPop` (viable by construction). A candidate already being established (open project),
+ * below the habitable floor / lacking a whole housing level, or worth less than the labour its seed
+ * drains is skipped. The `Map`/`Set` aggregates are transient — nothing here reaches `World` state.
  *
- * Two budgets then truncate the value-ordered list, and both are prefix truncations of that one order,
- * so composing them is order-independent — the result is the shorter prefix either way. The MONEY gate
- * (`budget`, omitted ⇒ founding is unpriced: the engine-test and independents path) walks the order with
- * a running balance, spending each acceptance's own `charter + headroom × projected material bill` and
- * ending the list at the first candidate it cannot cover. The SETTLER-SUPPLY gate below it caps the
- * count against drawable labour. Beyond those there is no per-cycle cap: every affordable candidate is
- * proposed and the pool decides which advance (a proposal persists as an in-flight project only once
- * funded — enforced by the processor's persist-if-funded).
+ * This assessment is what `WorldSystem.colonyOpportunity` persists — an opportunity the faction
+ * cannot yet afford is still an opportunity — while `planFactionColonyProposals` below applies the
+ * money and settler gates to decide what actually gets founded.
  */
-export function planFactionColonyProposals(
+export function assessColonyCandidates(
   factionId: string,
   developed: BuildSystemState[],
   candidates: ColonyEstablishCandidate[],
   openColonyProjects: WorldColonyEstablishProject[],
   params: ColonyEstablishParams,
-  budget?: ColonyFoundingBudget,
 ): ColonyProposal[] {
   if (candidates.length === 0) return [];
 
@@ -1386,16 +1380,6 @@ export function planFactionColonyProposals(
   const bySystemId = new Map(developed.map((s) => [s.systemId, s]));
 
   const inFlight = new Set(openColonyProjects.map((p) => p.systemId));
-
-  // What committing to each candidate would cost in money, by target system. The charter is the same
-  // for every candidate a faction weighs (it is quoted off the faction's own maintenance bill), so only
-  // the material projection varies. Built during the loop below because it needs the land-capped
-  // `seedPop` and the source's market rows, neither of which exists before sizing.
-  const commitmentCostBySystem = new Map<string, number>();
-  const charter =
-    budget === undefined
-      ? 0
-      : charterFee(budget.maintenanceBill, { mult: params.charterMult, min: params.charterMin });
 
   const proposals: ColonyProposal[] = [];
   for (const c of candidates) {
@@ -1429,25 +1413,53 @@ export function planFactionColonyProposals(
     const value = colonyValue(c, unblocked, sigma, params) - popCost;
     if (value <= 0) continue; // net-negative — the labour it would drain outweighs the colony's worth
 
-    if (budget !== undefined) {
-      // The projection is deliberately the UNCAPPED want: what the founder will actually be able to
-      // spare over the establish's life is not knowable here, and over-reserving is the safe
-      // direction. A source outside the developed set contributes no material projection — its market
-      // rows are not visible — leaving the charter as the whole quote for that candidate.
-      const projectedBill = foundingGoodsValue(
-        projectedManifestWant(source?.goods ?? [], seedPop, params.foundingStockCover),
-        params.economyScale,
-      );
-      commitmentCostBySystem.set(
-        c.systemId,
-        foundingCommitmentCost(charter, projectedBill, params.gateHeadroom),
-      );
-    }
-
     proposals.push({
       kind: "colony_establish", factionId, systemId: c.systemId,
       sourceSystemId: c.sourceSystemId, seedPop, housingLevels, value, work,
     });
+  }
+  return proposals;
+}
+
+/**
+ * What the faction actually founds: the assessment above, truncated by two budgets. Both are prefix
+ * truncations of the one value-descending order, so composing them is order-independent — the result
+ * is the shorter prefix either way. The MONEY gate (`budget`, omitted ⇒ founding is unpriced: the
+ * engine-test and independents path) walks the order with a running balance, spending each
+ * acceptance's own `charter + headroom × projected material bill` and ending the list at the first
+ * candidate it cannot cover. The SETTLER-SUPPLY gate below it caps the count against drawable
+ * labour. Beyond those there is no per-cycle cap: every affordable candidate is proposed and the pool
+ * decides which advance (a proposal persists as an in-flight project only once funded — enforced by
+ * the processor's persist-if-funded).
+ */
+export function planFactionColonyProposals(
+  factionId: string,
+  developed: BuildSystemState[],
+  candidates: ColonyEstablishCandidate[],
+  openColonyProjects: WorldColonyEstablishProject[],
+  params: ColonyEstablishParams,
+  budget?: ColonyFoundingBudget,
+): ColonyProposal[] {
+  const proposals = assessColonyCandidates(factionId, developed, candidates, openColonyProjects, params);
+
+  // What committing to each candidate would cost in money, by target system. The charter is the same
+  // for every candidate a faction weighs (it is quoted off the faction's own maintenance bill), so
+  // only the material projection varies. The projection is deliberately the UNCAPPED want: what the
+  // founder will actually be able to spare over the establish's life is not knowable at commitment,
+  // and over-reserving is the safe direction. A source outside the developed set contributes no
+  // material projection — its market rows are not visible — leaving the charter as the whole quote
+  // for that candidate.
+  const commitmentCostBySystem = new Map<string, number>();
+  if (budget !== undefined && proposals.length > 0) {
+    const bySystemId = new Map(developed.map((s) => [s.systemId, s]));
+    const charter = charterFee(budget.maintenanceBill, { mult: params.charterMult, min: params.charterMin });
+    for (const p of proposals) {
+      const projectedBill = foundingGoodsValue(
+        projectedManifestWant(bySystemId.get(p.sourceSystemId)?.goods ?? [], p.seedPop, params.foundingStockCover),
+        params.economyScale,
+      );
+      commitmentCostBySystem.set(p.systemId, foundingCommitmentCost(charter, projectedBill, params.gateHeadroom));
+    }
   }
 
   // Affordability gate: a candidate is proposed only while the faction's working balance still covers

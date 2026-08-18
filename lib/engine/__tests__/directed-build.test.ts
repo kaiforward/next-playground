@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, factionGoodDeficits, fed, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, assessColonyCandidates, factionGoodDeficits, fed, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import type { WorldConstructionProject, WorldColonyEstablishProject } from "@/lib/world/types";
@@ -2098,6 +2098,56 @@ describe("planFactionColonyProposals: affordability gate", () => {
     // Non-vacuous: the same candidates against a source that DOES have rows carry a material
     // projection, and at this headroom it prices every one of them out.
     expect(planFactionColonyProposals("f1", developed, candidates, [], priced, purse)).toHaveLength(0);
+  });
+});
+
+describe("assessColonyCandidates — the pre-gate assessment the alert bar persists", () => {
+  const developed = [homeState({ housing: 1, habitableSpace: 1000 })];
+
+  it("keeps a viable site the money gate cuts: two same-cost sites, money for one, both assessed", () => {
+    // charterMult 0 + charterMin 100 + headroom 0 ⇒ each site costs exactly 100 to commit to, and a
+    // balance of 100 funds exactly one — the assessment must still carry both.
+    const flatFee = { ...COLONY_PARAMS, charterMult: 0, charterMin: 100, gateHeadroom: 0 };
+    const twins = [
+      candidate({ systemId: "a", habitableSpace: 300 }),
+      candidate({ systemId: "b", habitableSpace: 300 }),
+    ];
+    const funded = planFactionColonyProposals(
+      "f1", developed, twins, [], flatFee, { balance: 100, maintenanceBill: 0 },
+    );
+    expect(funded).toHaveLength(1);
+    const assessed = assessColonyCandidates("f1", developed, twins, [], flatFee);
+    expect(new Set(assessed.map((p) => p.systemId))).toEqual(new Set(["a", "b"]));
+  });
+
+  it("ignores the settler-supply cap — supply gates founding pace, not worth", () => {
+    // Same fixture as the settler-gate cases: 100 spare pops ÷ minSettlerSupply 20 funds 5 of the 10.
+    const supplyCore: BuildSystemState = {
+      systemId: "core", factionId: "f1", control: "developed", population: 100,
+      buildings: { [HOUSING_TYPE]: 100 / POP_CENTRE_DENSITY }, slotCap: emptyResourceVector(),
+      generalSpace: 0, habitableSpace: 0, goods: [],
+    };
+    const candidates = Array.from({ length: 10 }, (_, i) =>
+      candidate({ systemId: `c${i}`, habitableSpace: (i + 1) * 100 }),
+    );
+    const gated = { ...COLONY_PARAMS, minSettlerSupply: 20, employedLeakFraction: 0 };
+    expect(planFactionColonyProposals("f1", [supplyCore], candidates, [], gated)).toHaveLength(5);
+    expect(assessColonyCandidates("f1", [supplyCore], candidates, [], gated)).toHaveLength(10);
+  });
+
+  it("still drops what is not an opportunity at all: in flight, or below the habitable floor", () => {
+    const inFlight: WorldColonyEstablishProject[] = [{
+      kind: "colony_establish", id: "e1", origin: "auto", factionId: "f1",
+      systemId: "a", sourceSystemId: "home", seedPop: 2, housingLevels: 1,
+      workTotal: 68, workDone: 10, stagedManifest: [], charterPaid: true, stalledCycles: 0,
+    }];
+    const mixed = [
+      candidate({ systemId: "a", habitableSpace: 300 }), // already being established
+      candidate({ systemId: "b", habitableSpace: 0 }),   // below the habitable floor
+      candidate({ systemId: "c", habitableSpace: 300 }), // the one real opportunity
+    ];
+    const assessed = assessColonyCandidates("f1", developed, mixed, inFlight, COLONY_PARAMS);
+    expect(assessed.map((p) => p.systemId)).toEqual(["c"]);
   });
 });
 

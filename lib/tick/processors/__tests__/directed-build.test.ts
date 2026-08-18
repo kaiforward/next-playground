@@ -773,6 +773,23 @@ describe("runDirectedBuildProcessor: the charter", () => {
     expect(r.foundingDebitsByFaction?.get("f1") ?? 0).toBeLessThanOrEqual(250);
   });
 
+  it("persists a Colony opportunity for the candidate the money gate cut from founding", async () => {
+    // Money for exactly one charter and two same-priced candidates: the planner commits one colony,
+    // but BOTH carry the pre-gate assessment — the alert-bar signal must not shrink with the
+    // treasury, or two equal sites show as one the moment the purse covers only the first.
+    const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
+    await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
+      interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
+      develop: {
+        candidateProvider: (f) => (f === "f1" ? [colonyCand("c1"), colonyCand("c2")] : []),
+        params: FLAT_FEE_PARAMS,
+      },
+      treasuryByFaction: purse(FEE),
+    });
+    expect(w.constructionProjects.filter((p) => p.kind === "colony_establish")).toHaveLength(1);
+    expect(new Set(w.colonyOpportunityUpdates.map((u) => u.systemId))).toEqual(new Set(["c1", "c2"]));
+  });
+
   it("leaves founding unpriced when the faction has no purse (the build-only path)", async () => {
     const w = new MemoryDirectedBuildWorld([saturatedHome(1000)]);
     const r = await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {

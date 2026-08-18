@@ -528,12 +528,14 @@ export function getAlertData(): AlertData {
 
   // ── Colony opportunity: self-gates on world.player.automation.colonisation, same independence
   // from the settings checkbox as Build opportunity. Reads WorldSystem.colonyOpportunity —
-  // the planner's own ColonyProposal terms this run (`value`, the ROI numerator; `work`, the
+  // the planner's pre-gate assessment terms this run (`value`, the ROI numerator; `work`, the
   // establish-plus-housing denominator) — a genuine ROI, unlike the build side. Presence of the field
-  // already means "a controlled, not-yet-developed candidate the colonisation planner actually
-  // proposed establishing this run" (the field's own docstring), so no separate eligibility re-check
-  // belongs here — the alert and the planner's own founding decision can never disagree about what
-  // counts as a candidate. Sorts by value / work descending (negated, best ROI first).
+  // already means "a controlled, not-yet-developed candidate the pre-gate assessment kept this run"
+  // (the field's own docstring): the money and settler-supply gates shape only what gets founded, so
+  // a site the treasury cannot yet cover keeps its row here and the system panel quotes the cost the
+  // verb is blocked on. No separate eligibility re-check belongs here — the alert and the planner's
+  // assessment can never disagree about what counts as a candidate. Sorts by value / work descending
+  // (negated, best ROI first).
   //
   // Scoped — and denominated — to the player's CONTROLLED systems, never `developed`: a colony
   // candidate is by definition not developed yet, so the two populations are disjoint and the shared
