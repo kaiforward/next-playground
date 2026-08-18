@@ -217,10 +217,12 @@ export interface WorldSystem {
    *  (`lib/engine/directed-build.ts`). Written directly by the directed-build processor's world
    *  adapter (`applyColonyOpportunityUpdates`, `lib/tick/world/directed-build-world.ts`), applied in
    *  `lib/world/tick.ts` — not by the generic per-system row-mutation path. Absent means never
-   *  proposed: written for every CANDIDATE (a controlled, not-yet-developed system) the colonisation
-   *  planner actually proposed establishing this run, absent for one it considered but did not
-   *  propose (below the habitable floor, already in flight, net-negative value, or truncated by the
-   *  money/settler-supply gates), untouched for a candidate the planner did not consider this run
+   *  assessed as worth it: written for every CANDIDATE (a controlled, not-yet-developed system) the
+   *  colonisation planner's PRE-GATE assessment kept this run (`assessColonyCandidates`), absent for
+   *  one it considered and dropped (below the habitable floor, already in flight, net-negative
+   *  value). The money/settler-supply gates truncate only what gets FOUNDED, never this field — a
+   *  site the faction cannot yet afford keeps its reading. Untouched for a candidate the planner did
+   *  not consider this run
    *  (its faction was not due, or the `develop` param was absent), and cleared — not carried forward —
    *  on abandonment or redevelopment so a founded colony never inherits its own candidacy reading.
    *  Nothing inside the tick reads it. */

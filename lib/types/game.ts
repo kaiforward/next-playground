@@ -233,6 +233,9 @@ export interface OwnershipEntry {
   factionId: string | null;
   /** True when the system's control tier is `developed` (an open build-gate / filled marker). */
   developed: boolean;
+  /** True while a colony-establish project is open at this (controlled) system — the map's
+   *  pulsing "colony forming" mark. Disjoint from `developed`: a forming site is `controlled`. */
+  forming: boolean;
 }
 
 export interface UniverseData {

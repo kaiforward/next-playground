@@ -96,10 +96,10 @@ describe("resolveAlertTarget — the row's destination, resolved off the categor
     });
   });
 
-  it("Maintenance unfunded resolves to the faction route regardless of the instance's systemId", () => {
+  it("Maintenance unfunded resolves to the player faction's Overview regardless of the instance's systemId", () => {
     expect(resolveAlertTarget(maintenanceUnfunded, maintenanceUnfunded.instances[0])).toEqual({
-      kind: "route",
-      path: "/factions",
+      kind: "faction",
+      tab: "",
     });
   });
 
@@ -112,11 +112,11 @@ describe("resolveAlertTarget — the row's destination, resolved off the categor
     });
   });
 
-  it("an event with NO systemId resolves to the events route — no map focus attempted", () => {
+  it("an event with NO systemId resolves to the faction panel's Events tab — no map focus attempted", () => {
     const regionLevel = crisisWith([instance("Alliance dissolved", "2 ticks left", null)]);
     expect(resolveAlertTarget(regionLevel, regionLevel.instances[0])).toEqual({
-      kind: "route",
-      path: "/events",
+      kind: "faction",
+      tab: "events",
     });
   });
 });
@@ -199,13 +199,13 @@ describe("AlertFlyout — row activation", () => {
     expect(screen.getAllByRole("button")).toHaveLength(3);
   });
 
-  it("an event row with no systemId calls onNavigate with the events route, never a system target", async () => {
+  it("an event row with no systemId calls onNavigate with the faction Events tab, never a system target", async () => {
     const onNavigate = vi.fn();
     const regionLevel = crisisWith([instance("Alliance dissolved", "2 ticks left", null)]);
     const { user } = await renderOpenFlyout(regionLevel, onNavigate);
 
     await user.click(screen.getByRole("button", { name: /Alliance dissolved/ }));
 
-    expect(onNavigate).toHaveBeenCalledWith({ kind: "route", path: "/events" });
+    expect(onNavigate).toHaveBeenCalledWith({ kind: "faction", tab: "events" });
   });
 });

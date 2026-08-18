@@ -9,13 +9,15 @@ import type { OwnershipEntry } from "@/lib/types/game";
 export interface SystemOwnership {
   factionId: string | null;
   developed: boolean;
+  /** An open colony-establish project at this (controlled) system — the pulsing map mark. */
+  forming: boolean;
 }
 
 /**
- * All-systems ownership (faction + developed tier), keyed by systemId. Tick-scoped: claims and
- * developments move ownership on the cycle start, so this rides a tick-invalidated path (see
- * useTickInvalidation) rather than the static atlas. Always enabled — the political territory layer
- * and the filled/hollow system markers both read ownership regardless of the selected map mode.
+ * All-systems ownership (faction + developed tier + forming colony), keyed by systemId. Tick-scoped:
+ * claims and developments move ownership on the cycle start, so this rides a tick-invalidated path
+ * (see useTickInvalidation) rather than the static atlas. Always enabled — the political territory
+ * layer and the settlement marks both read ownership regardless of the selected map mode.
  *
  * TanStack's structural sharing keeps `data` referentially stable across refetches that return the
  * same ownership, so the derived Map (and the map's re-sync) only churns when ownership actually changes.
@@ -32,7 +34,9 @@ export function useOwnership(): Map<string, SystemOwnership> {
   return useMemo(() => {
     const m = new Map<string, SystemOwnership>();
     if (data) {
-      for (const s of data.systems) m.set(s.systemId, { factionId: s.factionId, developed: s.developed });
+      for (const s of data.systems) {
+        m.set(s.systemId, { factionId: s.factionId, developed: s.developed, forming: s.forming });
+      }
     }
     return m;
   }, [data]);

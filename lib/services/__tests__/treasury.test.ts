@@ -62,6 +62,20 @@ describe("getFactionTreasury", () => {
     expect(data.net).toBe(0);
   });
 
+  it("surfaces pendingFounding as foundingCommitted — the money founding has called for", () => {
+    // The balance stays whole until settlement, so this is the only number that can tell the player
+    // their ordered colony's charter is already spoken for.
+    const factionId = playerFactionId();
+    const w = getWorld();
+    setWorld({
+      ...w,
+      treasuries: w.treasuries.map((t) =>
+        t.factionId === factionId ? { ...t, pendingFounding: 1234 } : t,
+      ),
+    });
+    expect(getFactionTreasury(factionId).foundingCommitted).toBe(1234);
+  });
+
   it("computes net as settlement income minus money paid", () => {
     const factionId = playerFactionId();
     const w = getWorld();

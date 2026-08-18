@@ -3,7 +3,8 @@ import type { SystemNodeData } from "@/lib/hooks/use-map-data";
 import type { SunClass, SystemVisibility } from "@/lib/types/game";
 import { isValueMapMode, type MapMode } from "@/lib/types/map";
 import type { LODState } from "../lod";
-import { SUN_CLASS_COLORS_PIXI, SIZES, TEXT_COLORS, GLYPH, LABEL, TEXT_RESOLUTION } from "../theme";
+import { SUN_CLASS_COLORS_PIXI, SIZES, TEXT_COLORS, GLYPH, LABEL, SETTLEMENT_MARK, TEXT_RESOLUTION } from "../theme";
+import type { SettlementMark } from "@/lib/types/map";
 import { getGlowTexture, GLOW_TEXTURE_SIZE } from "./glow-texture";
 
 // Scale that maps the shared glow texture down to the bloom's world diameter.
@@ -35,6 +36,9 @@ export class SystemObject extends Container {
   private core: Graphics;         // crisp bright core disc
   private hoverRing: Graphics;    // star-coloured ring, shown only on hover
   private selectionRing: Graphics;
+  private markRoot: Container;    // settlement mark (badge + pulse) — scaled as one by LOD
+  private markBadge: Graphics;
+  private markPulse: Sprite;      // the forming ping — glow texture expanding from the badge centre
   private nameBg: Graphics;
   private nameLabel: Text;
 
@@ -47,6 +51,7 @@ export class SystemObject extends Container {
   private currentMode: MapMode = "none";
   private currentVisibility: SystemVisibility = "unknown";
   private currentSelected = false;
+  private currentMark: SettlementMark | null = null;
 
   // Hover state — drives the hover ring (see drawStar / setLOD).
   private isHovered = false;
@@ -80,6 +85,24 @@ export class SystemObject extends Container {
     this.hoverRing.visible = false;
     this.addChild(this.hoverRing);
 
+    // Settlement mark — badge at the star's NE shoulder, pulse behind it. One
+    // sub-container so LOD scales badge + pulse together while the pulse's own
+    // per-frame scale (tickSettlementPulse) composes underneath.
+    this.markRoot = new Container();
+    this.markPulse = new Sprite(getGlowTexture());
+    this.markPulse.anchor.set(0.5);
+    this.markPulse.tint = SETTLEMENT_MARK.formingColor;
+    this.markPulse.visible = false;
+    this.markPulse.position.set(
+      SETTLEMENT_MARK.offsetX + SETTLEMENT_MARK.size / 2,
+      SETTLEMENT_MARK.offsetY + SETTLEMENT_MARK.size / 2,
+    );
+    this.markRoot.addChild(this.markPulse);
+    this.markBadge = new Graphics();
+    this.markRoot.addChild(this.markBadge);
+    this.markRoot.visible = false;
+    this.addChild(this.markRoot);
+
     // Name label, over a semi-transparent backing for legibility against the
     // ring/halo behind it. Backing is added first so it sits behind the text.
     this.nameBg = new Graphics();
@@ -108,6 +131,7 @@ export class SystemObject extends Container {
     const sunClassChanged = data.sunClass !== this.currentSunClass;
     const visibilityChanged = data.visibility !== this.currentVisibility;
     const selectedChanged = isSelected !== this.currentSelected;
+    const markChanged = data.settlementMark !== this.currentMark;
 
     const isUnknown = data.visibility === "unknown";
 
@@ -115,6 +139,11 @@ export class SystemObject extends Container {
       this.currentSunClass = data.sunClass;
       this.currentVisibility = data.visibility;
       this.drawStar();
+    }
+
+    if (markChanged || visibilityChanged) {
+      this.currentMark = data.settlementMark;
+      this.drawSettlementMark();
     }
 
     if (selectedChanged || visibilityChanged) {
@@ -164,7 +193,49 @@ export class SystemObject extends Container {
     if (this.currentMode === mode) return;
     this.currentMode = mode;
     this.drawStar();
+    this.drawSettlementMark();
     this.lodDirty = true;
+  }
+
+  /** Draw the settlement badge from the tracked mark / mode. Hollow slate =
+   *  claimed, hollow amber = colony forming (the pulse rides per-frame in
+   *  tickSettlementPulse), solid copper = developed. Subdued under value modes
+   *  so the Voronoi cell keeps carrying the value, same as the star dot. */
+  private drawSettlementMark() {
+    const mark = this.currentMark;
+    this.markRoot.visible = mark !== null;
+    if (mark === null) {
+      this.markPulse.visible = false;
+      return;
+    }
+    const M = SETTLEMENT_MARK;
+    this.markBadge.clear();
+    this.markBadge.roundRect(M.offsetX, M.offsetY, M.size, M.size, M.cornerRadius);
+    if (mark === "developed") {
+      this.markBadge.fill({ color: M.developedColor });
+    } else {
+      this.markBadge.fill({ color: M.backingColor, alpha: M.backingAlpha });
+      this.markBadge.stroke({
+        color: mark === "forming" ? M.formingColor : M.controlledColor,
+        width: M.strokeWidth,
+      });
+    }
+    this.markRoot.alpha = isValueMapMode(this.currentMode) ? 0.5 : 1;
+    if (mark !== "forming") this.markPulse.visible = false;
+  }
+
+  /** Per-frame pulse for a forming colony: a soft glow expanding from the badge
+   *  centre and fading as it reaches the frame (the approved prototype's ping).
+   *  Cheap no-op for every other mark — called only for in-frustum objects. */
+  tickSettlementPulse(timeMs: number) {
+    if (this.currentMark !== "forming") return;
+    const M = SETTLEMENT_MARK;
+    const phase = (timeMs % M.pulsePeriodMs) / M.pulsePeriodMs;
+    const radius = 1.5 + (M.pulseMaxRadius - 1.5) * phase;
+    this.markPulse.scale.set((radius * 2) / GLOW_TEXTURE_SIZE);
+    this.markPulse.alpha =
+      phase < M.pulseFadeStart ? 1 : 1 - (phase - M.pulseFadeStart) / (1 - M.pulseFadeStart);
+    this.markPulse.visible = true;
   }
 
   /** Hovering shows the hover ring (see drawStar / setLOD). Marks LOD dirty. */
@@ -210,6 +281,7 @@ export class SystemObject extends Container {
     this.hoverRing.scale.set(lod.systemDotScale);
     this.hoverRing.visible = this.isHovered;
     this.bloom.scale.set(BLOOM_BASE_SCALE * lod.systemDotScale);
+    this.markRoot.scale.set(lod.systemDotScale);
   }
 
   /** Stroke a dashed ring as a series of short arcs (Pixi v12 has no native

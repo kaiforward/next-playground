@@ -29,6 +29,33 @@ describe("getOwnershipBySystem", () => {
     }
   });
 
+  it("flags forming on exactly the systems holding an open colony-establish project", () => {
+    const target = world.systems.find((s) => s.control === "controlled") ?? world.systems[0];
+    const other = world.systems.find((s) => s.id !== target.id)!;
+    setWorld({
+      ...world,
+      constructionProjects: [
+        {
+          kind: "colony_establish", id: "e1", origin: "auto", factionId: "f1",
+          systemId: target.id, sourceSystemId: other.id, seedPop: 2, housingLevels: 1,
+          workTotal: 100, workDone: 0, stagedManifest: [], charterPaid: false, stalledCycles: 0,
+        },
+        // A plain build at another system must not read as a forming colony.
+        {
+          kind: "build", id: "b1", origin: "auto", factionId: "f1",
+          systemId: other.id, buildingType: "housing", levels: 1, workTotal: 10, workDone: 0,
+        },
+      ],
+    });
+
+    const byId = new Map(getOwnershipBySystem().map((e) => [e.systemId, e] as const));
+    expect(byId.get(target.id)?.forming).toBe(true);
+    expect(byId.get(other.id)?.forming).toBe(false);
+    for (const [id, e] of byId) {
+      if (id !== target.id) expect(e.forming).toBe(false);
+    }
+  });
+
   it("marks exactly the faction homeworlds as developed at world-gen", () => {
     const entries = getOwnershipBySystem();
     const developed = entries.filter((e) => e.developed);

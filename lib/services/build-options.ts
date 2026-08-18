@@ -12,6 +12,8 @@ import {
 } from "@/lib/engine/construction";
 import { buildingLabel, foundingCeilings } from "@/lib/engine/construction-readout";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
+import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
+import { COLONISATION } from "@/lib/constants/colonisation";
 import { foundingReadoutInputs } from "@/lib/services/construction";
 import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
@@ -30,23 +32,28 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
 
   if (system.control === "controlled") {
     const check = colonyEligibility(world, player.controlledFactionId, system);
-    if (!check.eligible) return { mode: "colony", colony: { state: "ineligible", reason: check.reason } };
-    const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
-    if (sizing === null) {
-      return { mode: "colony", colony: { state: "ineligible", reason: "below_habitable_floor" } };
+    // The money block is the one ineligible reason that still carries a quote, so the preview is
+    // assembled for it exactly as for the eligible branch — same fields, same sizing.
+    const priced = check.eligible || check.reason === "insufficient_funds" ? check : null;
+    const sizing = priced === null ? null : sizeColonyEstablish(system.habitableSpace, sizingParams());
+    const preview =
+      priced === null || sizing === null
+        ? null
+        : {
+            sourceSystemId: priced.sourceSystemId,
+            sourceSystemName:
+              world.systems.find((s) => s.id === priced.sourceSystemId)?.name ?? priced.sourceSystemId,
+            seedPop: sizing.seedPop, housingLevels: sizing.housingLevels, work: sizing.work,
+            charter: priced.charter, projectedBill: priced.projectedBill,
+            commitment: foundingCommitmentCost(
+              priced.charter, priced.projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM,
+            ),
+          };
+    if (!check.eligible) return { mode: "colony", colony: { state: "ineligible", reason: check.reason, preview } };
+    if (preview === null) {
+      return { mode: "colony", colony: { state: "ineligible", reason: "below_habitable_floor", preview: null } };
     }
-    const sourceName = world.systems.find((s) => s.id === check.sourceSystemId)?.name ?? check.sourceSystemId;
-    return {
-      mode: "colony",
-      colony: {
-        state: "eligible",
-        preview: {
-          sourceSystemId: check.sourceSystemId, sourceSystemName: sourceName,
-          seedPop: sizing.seedPop, housingLevels: sizing.housingLevels, work: sizing.work,
-          charter: check.charter, projectedBill: check.projectedBill,
-        },
-      },
-    };
+    return { mode: "colony", colony: { state: "eligible", preview } };
   }
   if (system.control !== "developed") return { mode: "none" };
 

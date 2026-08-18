@@ -473,27 +473,37 @@ export interface BuildOptionData extends BuildOption {
   /** ≈cycles until a 1-level order placed NOW would land (player queue position); null = stalled pool. */
   etaCycles: number | null;
 }
+/** The founding quote rendered under the Establish verb: seed sizing plus what committing costs. */
+export interface ColonyPreviewData {
+  sourceSystemId: string;
+  sourceSystemName: string;
+  seedPop: number;
+  housingLevels: number;
+  work: number;
+  /** One-off fee charged when the establish first draws funding. */
+  charter: number;
+  /** Upper bound on the materials bill — the uncapped want, hence "up to" in the UI. */
+  projectedBill: number;
+  /** The affordability gate's whole threshold — charter + headroom × projectedBill, the same
+   *  `foundingCommitmentCost` the order boundary checks. What must be AVAILABLE before the verb
+   *  is accepted; only the charter is actually spent at the click. */
+  commitment: number;
+}
 /** Per-system verb surface: which construction verb applies here and its feasibility. */
 export type SystemBuildOptionsData =
   | { mode: "none" } // not the player's system (or no seat)
   | {
       mode: "colony";
       colony:
+        | { state: "eligible"; preview: ColonyPreviewData }
         | {
-            state: "eligible";
-            preview: {
-              sourceSystemId: string;
-              sourceSystemName: string;
-              seedPop: number;
-              housingLevels: number;
-              work: number;
-              /** One-off fee charged when the establish first draws funding. */
-              charter: number;
-              /** Upper bound on the materials bill — the uncapped want, hence "up to" in the UI. */
-              projectedBill: number;
-            };
-          }
-        | { state: "ineligible"; reason: ColonyBlockReason };
+            state: "ineligible";
+            reason: ColonyBlockReason;
+            /** The same quote the eligible branch shows, when the block still has one. Only
+             *  `insufficient_funds` is priced; the physical blocks bail before a source or
+             *  sizing exists, so they carry null. */
+            preview: ColonyPreviewData | null;
+          };
     }
   | { mode: "build"; options: BuildOptionData[] };
 export type SystemBuildOptionsResponse = ApiResponse<SystemBuildOptionsData>;
@@ -566,6 +576,9 @@ export interface FactionTreasuryData {
   funded: TreasuryBands;
   /** Last settlement's income − money paid; 0 before the first settlement. */
   net: number;
+  /** Money already committed to founding (paid charters + staged materials) awaiting settlement —
+   *  still inside `balance` until the settlement charges it off, but no longer spendable. */
+  foundingCommitted: number;
   lastSettlement: WorldTreasurySettlement | null;
 }
 export type FactionTreasuryResponse = ApiResponse<FactionTreasuryData>;

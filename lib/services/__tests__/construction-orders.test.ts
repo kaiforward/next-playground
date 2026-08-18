@@ -318,8 +318,8 @@ describe("construction order services", () => {
       getWorld().constructionProjects.some((p) => p.kind === "colony_establish" && p.systemId === target.id),
     ).toBe(false);
 
-    // Exactly affordable: the same order goes through, and the row opens owing both its charter and
-    // its whole manifest.
+    // Exactly affordable: the same order goes through, its charter bought at the click, and the row
+    // opens owing its whole manifest.
     fundPlayer(cost);
     const placed = orderColony({ systemId: target.id });
     expect(placed.ok).toBe(true);
@@ -328,9 +328,56 @@ describe("construction order services", () => {
       (p): p is WorldColonyEstablishProject =>
         p.kind === "colony_establish" && p.id === placed.data.projectId,
     )!;
-    expect(row.charterPaid).toBe(false);
+    expect(row.charterPaid).toBe(true);
     expect(row.stagedManifest).toEqual([]);
     expect(row.stalledCycles).toBe(0);
+  });
+
+  it("commits the charter at the click, so a second colony is priced against what is genuinely left", () => {
+    // Money for exactly one commitment and two eligible candidates: the first order accrues its
+    // charter into pendingFounding immediately, so the second order's gate sees the reduced working
+    // balance and refuses — closing the window where an unpaid charter let the same money commit
+    // two colonies. Cancelling does not refund it: a charter is lost by design.
+    const { target, home } = controlledNeighbour(50);
+    const w = getWorld();
+    const pid = w.player!.controlledFactionId;
+    const secondConn = w.connections.find((c) => {
+      if (c.fromId !== home.id && c.toId !== home.id) return false;
+      const otherId = c.fromId === home.id ? c.toId : c.fromId;
+      return otherId !== target.id;
+    });
+    if (!secondConn) throw new Error("fixture: expected the homeworld to have a second neighbour");
+    const secondId = secondConn.fromId === home.id ? secondConn.toId : secondConn.fromId;
+    const second = w.systems.find((s) => s.id === secondId)!;
+    second.factionId = pid;
+    second.control = "controlled";
+    second.habitableSpace = 50;
+
+    fundPlayer(Number.MAX_SAFE_INTEGER);
+    const quote = colonyEligibility(getWorld(), pid, target);
+    expect(quote.eligible).toBe(true);
+    if (!quote.eligible) return;
+    const cost = foundingCommitmentCost(
+      quote.charter, quote.projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM,
+    );
+    expect(quote.charter).toBeGreaterThan(0);
+
+    fundPlayer(cost); // exactly one commitment's worth
+    expect(orderColony({ systemId: target.id }).ok).toBe(true);
+    const treasury = () => getWorld().treasuries.find((t) => t.factionId === pid)!;
+    expect(treasury().pendingFounding).toBeCloseTo(quote.charter, 9);
+
+    const refused = orderColony({ systemId: second.id });
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(refused.error).toBe(COLONY_BLOCK_COPY.insufficient_funds);
+
+    // The charter survives a cancel — the commitment was spent, not reserved.
+    const project = getWorld().constructionProjects.find(
+      (p) => p.kind === "colony_establish" && p.systemId === target.id,
+    )!;
+    expect(cancelOrder({ projectId: project.id }).ok).toBe(true);
+    expect(treasury().pendingFounding).toBeCloseTo(quote.charter, 9);
   });
 
   it("quotes the charter as the spend multiple of the settled bill, and charges exactly that", async () => {

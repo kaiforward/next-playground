@@ -7,9 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { EventIcon } from "@/components/events/event-icon";
-import { RelationTierBadge } from "@/components/factions/relation-tier-badge";
+import {
+  RelationTierBadge,
+  getRelationTierColor,
+  getRelationTierLabel,
+} from "@/components/factions/relation-tier-badge";
+import { RelationsMatrix } from "@/components/factions/relations-matrix";
 import { useFaction } from "@/lib/hooks/use-faction";
+import { useRelations } from "@/lib/hooks/use-relations";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
+import { RELATION_TIERS, RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
 import type { FactionRelatedEvent } from "@/lib/services/factions";
 
@@ -111,7 +118,7 @@ function FactionDiplomacyContent({ factionId }: { factionId: string }) {
         </CardContent>
       </Card>
 
-      <Card variant="bordered" padding="md">
+      <Card variant="bordered" padding="md" className="mb-6">
         <CardHeader title="Recent Diplomatic Events" />
         <CardContent>
           {faction.recentEvents.length === 0 ? (
@@ -125,7 +132,43 @@ function FactionDiplomacyContent({ factionId }: { factionId: string }) {
           )}
         </CardContent>
       </Card>
+
+      <GalaxyRelationsCard />
     </>
+  );
+}
+
+/** The galaxy-wide pair-score matrix — every faction against every other, not just this panel's.
+ *  Lives on this tab since the standalone Diplomacy destination folded into the faction panel. */
+function GalaxyRelationsCard() {
+  const { relations } = useRelations();
+
+  return (
+    <Card variant="bordered" padding="md">
+      <CardHeader
+        title="Galaxy Relations"
+        subtitle={`Pair scores across every faction, drifting every ${RELATIONS_FREQUENCY} ticks. Click a faction name to inspect it.`}
+      />
+      <CardContent>
+        {relations.factions.length === 0 ? (
+          <EmptyState message="No factions present. Reseed the universe to populate the political layer." />
+        ) : (
+          <>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-text-tertiary font-display uppercase tracking-wider">
+                Legend
+              </span>
+              {RELATION_TIERS.map((t) => (
+                <Badge key={t.tier} color={getRelationTierColor(t.tier)}>
+                  {getRelationTierLabel(t.tier)} ({t.minScore} … {t.maxScore})
+                </Badge>
+              ))}
+            </div>
+            <RelationsMatrix data={relations} />
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

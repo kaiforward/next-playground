@@ -2,7 +2,7 @@ import type {
   FoundingStagingEvent, FoundingStallEvent, TickContext, TickProcessorResult,
 } from "../types";
 import { cycleStartShard, catchUpFactor } from "@/lib/tick/shard";
-import { planFactionProposals, planFactionColonyProposals, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
+import { planFactionProposals, planFactionColonyProposals, assessColonyCandidates, type BuildSystemState, type ColonyProposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { fundQueueWithFloor, developmentFloorShare, factionConstructionPool, orderProposals, orderOpenProjects } from "@/lib/engine/construction";
 import { planCentreProposal } from "@/lib/engine/construction-centre";
 import { CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
@@ -507,8 +507,16 @@ export async function runDirectedBuildProcessor(
         factionId, developedStates, candidates, openColonies, params.develop.params,
         purse === undefined ? undefined : { balance: workingBalance, maintenanceBill: purse.maintenanceBill },
       );
+      // Colony opportunity persists the PRE-GATE assessment, not the funded list: a site worth
+      // colonising stays on the alert bar while the treasury or settler supply can't yet cover it —
+      // the money and settler gates shape only what gets founded. The assessment re-runs inside
+      // `planFactionColonyProposals` too; it is a cheap pass over a faction's few controlled
+      // candidates, priced against aggregates it computes once.
+      const opportunities = assessColonyCandidates(
+        factionId, developedStates, candidates, openColonies, params.develop.params,
+      );
       for (const c of candidates) colonyOpportunityVisitedSystemIds.push(c.systemId);
-      for (const p of allColonyProposals) {
+      for (const p of opportunities) {
         colonyOpportunityUpdates.push({ systemId: p.systemId, value: p.value, work: p.work });
       }
     }

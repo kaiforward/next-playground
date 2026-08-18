@@ -288,7 +288,7 @@ export function PixiMapCanvas({
         systemLayer.setActive(lod.systemObjectsActive);
         systemLayer.container.alpha = lod.systemLayerAlpha;
         if (lod.systemObjectsActive) {
-          systemLayer.updateVisibility(frustum, lod);
+          systemLayer.updateVisibility(frustum, lod, dtMs);
         }
 
         // Connections follow system layer alpha

@@ -16,6 +16,7 @@ import { useFaction } from "@/lib/hooks/use-faction";
 import { useFactionVitals } from "@/lib/hooks/use-faction-vitals";
 import { useFactionTreasury } from "@/lib/hooks/use-faction-treasury";
 import { formatPeople, formatUnitsShort, splitCompactNumber } from "@/lib/utils/format";
+import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { GRADE } from "@/lib/constants/ui";
 
 function FactionOverviewContent({ factionId }: { factionId: string }) {
@@ -67,7 +68,9 @@ function FactionOverviewContent({ factionId }: { factionId: string }) {
         <VitalTile
           label="Treasury"
           dotColor="var(--color-accent)"
-          value={formatUnitsShort(treasury.balance)}
+          // Available money, matching the TreasuryCard headline — the raw balance holds committed
+          // founding until settlement, and two surfaces quoting two numbers reads as a bug.
+          value={formatUnitsShort(foundingWorkingBalance(treasury.balance, treasury.foundingCommitted))}
           hint={`net ${treasury.net < 0 ? "−" : "+"}${formatUnitsShort(Math.abs(treasury.net))} / cycle`}
         />
         <GhostVitalTile

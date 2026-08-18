@@ -8,6 +8,7 @@ import { orderBuild } from "@/lib/services/construction-orders";
 import { ServiceError } from "@/lib/services/errors";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
+import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
 import type { WorldConstructionProject } from "@/lib/world/types";
 
 /** Comfortably above the habitable floor — every colony case below wants an unconstrained site. */
@@ -304,10 +305,11 @@ describe("getSystemBuildOptions", () => {
     expect(etaOf(withColony)).toBe(etaOf(alone));
   });
 
-  it("reads a penniless faction's colony verb as insufficient_funds", () => {
+  it("reads a penniless faction's colony verb as insufficient_funds, still carrying the quote", () => {
     // The read surface and the mutation boundary quote one price; here the purse is short of it and
-    // the same reason the order would refuse with is what the verb displays.
-    const { target } = controlledNeighbour(AMPLE_HABITABLE);
+    // the same reason the order would refuse with is what the verb displays. The quote it was
+    // refused against rides along, so the UI can show what the verb WOULD cost.
+    const { target, home } = controlledNeighbour(AMPLE_HABITABLE);
     fundPlayer(0);
 
     const data = getSystemBuildOptions(target.id);
@@ -316,5 +318,43 @@ describe("getSystemBuildOptions", () => {
     expect(data.colony.state).toBe("ineligible");
     if (data.colony.state !== "ineligible") return;
     expect(data.colony.reason).toBe("insufficient_funds");
+    expect(data.colony.preview).not.toBeNull();
+    if (data.colony.preview === null) return;
+    expect(data.colony.preview.sourceSystemId).toBe(home.id);
+    expect(data.colony.preview.sourceSystemName).toBe(home.name);
+    expect(data.colony.preview.seedPop).toBeGreaterThan(0);
+    expect(data.colony.preview.housingLevels).toBeGreaterThanOrEqual(1);
+    expect(data.colony.preview.charter).toBeGreaterThanOrEqual(COLONISATION.CHARTER_FEE_MIN);
+    expect(data.colony.preview.projectedBill).toBeGreaterThan(0);
+    // The quoted commitment is the gate's own threshold, from the same pricing function.
+    expect(data.colony.preview.commitment).toBeCloseTo(
+      foundingCommitmentCost(
+        data.colony.preview.charter, data.colony.preview.projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM,
+      ),
+      9,
+    );
+  });
+
+  it("carries no quote on a physical block — no seed source means nothing to price against", () => {
+    // The material projection is quoted off the seed source's own market rows, so with no developed
+    // system in range there is no bill to project and the ineligible branch carries a null preview.
+    const { target } = controlledNeighbour(AMPLE_HABITABLE);
+    fundPlayer(1_000_000);
+    const w = getWorld();
+    const f = w.factions.find((x) => x.id === w.player?.controlledFactionId)!;
+    setWorld({
+      ...w,
+      systems: w.systems.map((s) =>
+        s.factionId === f.id && s.control === "developed" ? { ...s, control: "controlled" } : s,
+      ),
+    });
+
+    const data = getSystemBuildOptions(target.id);
+    expect(data.mode).toBe("colony");
+    if (data.mode !== "colony") return;
+    expect(data.colony.state).toBe("ineligible");
+    if (data.colony.state !== "ineligible") return;
+    expect(data.colony.reason).toBe("no_seed_source");
+    expect(data.colony.preview).toBeNull();
   });
 });

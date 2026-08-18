@@ -528,12 +528,14 @@ export function getAlertData(): AlertData {
 
   // ── Colony opportunity: self-gates on world.player.automation.colonisation, same independence
   // from the settings checkbox as Build opportunity. Reads WorldSystem.colonyOpportunity —
-  // the planner's own ColonyProposal terms this run (`value`, the ROI numerator; `work`, the
+  // the planner's pre-gate assessment terms this run (`value`, the ROI numerator; `work`, the
   // establish-plus-housing denominator) — a genuine ROI, unlike the build side. Presence of the field
-  // already means "a controlled, not-yet-developed candidate the colonisation planner actually
-  // proposed establishing this run" (the field's own docstring), so no separate eligibility re-check
-  // belongs here — the alert and the planner's own founding decision can never disagree about what
-  // counts as a candidate. Sorts by value / work descending (negated, best ROI first).
+  // already means "a controlled, not-yet-developed candidate the pre-gate assessment kept this run"
+  // (the field's own docstring): the money and settler-supply gates shape only what gets founded, so
+  // a site the treasury cannot yet cover keeps its row here and the system panel quotes the cost the
+  // verb is blocked on. No separate eligibility re-check belongs here — the alert and the planner's
+  // assessment can never disagree about what counts as a candidate. Sorts by value / work descending
+  // (negated, best ROI first).
   //
   // Scoped — and denominated — to the player's CONTROLLED systems, never `developed`: a colony
   // candidate is by definition not developed yet, so the two populations are disjoint and the shared
@@ -553,10 +555,19 @@ export function getAlertData(): AlertData {
   const controlled = world.systems.filter(
     (s) => s.factionId === player.controlledFactionId && s.control === "controlled",
   );
+  // A colony starting to form CLEARS the row (the spec's own clearing condition), and the stored
+  // signal only learns that at the next planner run — so the forming exclusion is derived here, at
+  // read time, from the projects themselves. That makes the row drop the moment the player orders
+  // the colony and return the moment a cancel deletes the project, with no cycle lag either way.
+  const formingColonyAt = new Set<string>();
+  for (const p of world.constructionProjects) {
+    if (p.kind === "colony_establish") formingColonyAt.add(p.systemId);
+  }
   const colonyOpportunity: AlertInstance[] = [];
   if (!player.automation.colonisation) {
     for (const system of controlled) {
       if (system.colonyOpportunity === undefined) continue;
+      if (formingColonyAt.has(system.id)) continue;
       const { value, work } = system.colonyOpportunity;
       if (work <= 0) continue;
       const roi = value / work;
