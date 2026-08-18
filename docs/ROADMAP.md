@@ -31,12 +31,13 @@ The attention layer — how the player finds what to do — is two surfaces, bot
    every duration is then audited against (cycle length, pop growth, travel, event lengths, decay).
    Direction (Kai, 2026-08-18): a few ticks per day, EU5/Vicky3 style (Vicky3 runs 4 ticks/day with a
    week-long economic cycle = 28 ticks; ours is 24 — resolve that discrepancy deliberately); match
-   pop growth to real-world data. Worlds currently hit max pop by ~tick 12K, so the likely shape is
-   fine-grained ticks with much slower rates, not a different tick count — but that is the design's
-   call, made against numbers. Affects the colonisation-pacing row below: its speed measure and this
-   row's time-facts measure are one instrument run, do them together.
-   *Next step:* `/measure` the time facts in ticks, both horizons — pop-to-max, colonisation pace,
-   travel durations, event lengths, decay half-lives — before choosing the anchor.
+   pop growth to real-world data. Measured (2026-08-19, evidence in
+   [the working file](./build-plans/timescale.md)): galaxy population plateaus at ~tick 11,500 —
+   seeded developed worlds are born at max, so the shape is fine-grained ticks with much slower
+   rates, growth ~30× the real-world anchor. Colonisation-pacing's speed measure (row below) was
+   taken in the same instrument run.
+   *Next step:* `/feature-spec` from the working file's evidence — anchor chosen (1 tick = 6 h,
+   cycle = 24 ticks = a fictionally-named 6-day week), duration audit next.
    *Don't:* tune any rate before the anchor is defined. The calendar is a definition set from
    external reference; a rate can fail the definition, never set it.
 2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
