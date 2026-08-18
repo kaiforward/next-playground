@@ -32,10 +32,10 @@ export default defineConfig({
         extends: true,
         test: {
           name: "unit",
-          // Every `__tests__` file under lib, components and app is covered by exactly one
-          // project, split by extension (see the comment on "component" below) — `.test.ts`
-          // here, `.test.tsx` there — so a file can never match both, and none of the three
-          // directories can silently match neither.
+          // Every `__tests__` file under lib, components, app and scripts is covered by
+          // exactly one project, split by extension (see the comment on "component" below)
+          // — `.test.ts` here, `.test.tsx` there — so a file can never match both, and none
+          // of the four directories can silently match neither.
           include: [
             "lib/**/__tests__/**/*.test.ts",
             "components/**/__tests__/**/*.test.ts",
@@ -55,12 +55,13 @@ export default defineConfig({
           name: "component",
           environment: "jsdom",
           setupFiles: ["./vitest.setup.component.ts"],
-          // lib and app are included though nothing there is tested yet: a test file that
-          // silently matches no project reads exactly like a passing one.
+          // lib, app and scripts are included though nothing there renders yet: a test file
+          // that silently matches no project reads exactly like a passing one.
           include: [
             "lib/**/__tests__/**/*.test.tsx",
             "components/**/__tests__/**/*.test.tsx",
             "app/**/__tests__/**/*.test.tsx",
+            "scripts/**/__tests__/**/*.test.tsx",
           ],
         },
       },

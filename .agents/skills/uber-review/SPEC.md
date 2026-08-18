@@ -244,7 +244,7 @@ The orchestrator logs which reviewers skipped each chunk and why, so the user ca
 
 ## Output
 
-**Terminal**: severity-grouped summary (blocker → major → minor → info), color-coded if the terminal supports it. Each finding shows file:line, agent(s), category, message in one line. Footer notes the number of validated, filtered, and skipped findings.
+**Terminal**: severity-grouped summary (blocker → major → minor → info), colour-coded if the terminal supports it. Each finding shows file:line, agent(s), category, message in one line. Footer notes the number of validated, filtered, and skipped findings.
 
 **Markdown report**: saved to `.agent-reviews/<branch-or-pr>-<YYYY-MM-DD-HHmmss>.md`. Contains:
 1. Header — PR/branch identifier, timestamp, effort level, threshold

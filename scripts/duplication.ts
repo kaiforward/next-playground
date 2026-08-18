@@ -4,10 +4,11 @@
  * Usage:
  *   npm run duplication                          Compare the branch's changed files against the repo
  *   npm run duplication -- lib/services/atlas.ts Compare the named files against the repo
+ *   npm run duplication -- "a.ts b.ts,c.tsx"     Paths split on whitespace or commas, quoted or not
  *   npm run duplication -- --all                 Every tracked file against every other (the baseline sweep)
  *
  * Reports pairs of the form `changed-file:line <-> existing-file:line` where the same
- * prose or the same code shape already exists somewhere else in the tracked tree.
+ * prose or the same code shape already exists somewhere else in the tree.
  *
  * It exists because the review pipeline is chunk-scoped and duplication is not. Every
  * reviewer sees a slice of one diff, and the copy is almost always in a file that diff
@@ -18,10 +19,11 @@
  *
  * Two detectors, both anchored on the changed files:
  *
- *   Textual    Every comment sentence of >=45 characters that appears verbatim in another
- *              file. Copied code usually arrives with its docstring still attached, so
- *              this is cheap, has near-zero false positives, and on its own catches the
- *              class of miss that motivated the instrument.
+ *   Textual    Every comment sentence of >=45 characters that appears verbatim elsewhere,
+ *              in another file or further down the same one. Copied code usually arrives
+ *              with its docstring still attached, so this is cheap, has near-zero false
+ *              positives, and on its own catches the class of miss that motivated the
+ *              instrument.
  *   Structural Lines normalised (comments removed, string contents blanked, whitespace
  *              collapsed), hashed in sliding 6-line windows, indexed repo-wide. Catches
  *              copies whose comments were reworded, which the textual pass cannot see.
@@ -37,6 +39,10 @@
  * script does not know that and does not try to. It emits every candidate it finds; the
  * reader decides which ones are the same decision expressed twice.
  *
+ * The one thing it will not do quietly is nothing: if every path it was handed turns out
+ * to be unreadable or not source, it says so on stderr instead of printing an empty
+ * report, because an empty report from a misuse is indistinguishable from a clean repo.
+ *
  * Options:
  *   --all             Treat every tracked file as changed (repo-wide baseline sweep)
  *   --min-lines <n>   Structural window size in normalised lines (default 6)
@@ -44,8 +50,11 @@
  *   --quiet           Pairs only; omit the matched text
  *   --help            Show this message
  *
- * Searches tracked files only (via `git ls-files`), because `.gitignore` makes the working
- * tree an unreliable guide to what is actually in the repo.
+ * The corpus searched is the tracked tree (via `git ls-files`), because `.gitignore` makes
+ * the working tree an unreliable guide to what is in the repo — plus any file the caller
+ * names and any source file the branch has added but not yet committed. A new uncommitted
+ * file is the highest-value thing this instrument can be pointed at, so it is compared
+ * both ways: against the tracked tree, and as part of the corpus everything else sees.
  */
 
 import { execFileSync } from "node:child_process";
@@ -81,32 +90,50 @@ interface Options {
   readonly files: readonly string[];
 }
 
+/** How wide and how dense a window has to be before it is worth reporting. */
+export interface ScanOptions {
+  readonly minLines: number;
+  readonly minChars: number;
+}
+
 /** One normalised line, carrying the 1-based line number it came from. */
-interface CodeLine {
+export interface CodeLine {
   readonly line: number;
   readonly text: string;
 }
 
 /** A sentence lifted out of a comment, with where it was found. */
-interface Sentence {
+export interface Sentence {
   readonly file: string;
   readonly line: number;
   readonly text: string;
 }
 
 /** A run of consecutive normalised lines that hashes identically in two places. */
-interface Window {
+export interface Window {
   readonly file: string;
   readonly startLine: number;
   readonly endLine: number;
   readonly index: number;
-  readonly chars: number;
 }
 
-interface StructuralPair {
+export interface StructuralPair {
   readonly changed: Window;
   readonly other: Window;
   readonly lines: number;
+}
+
+export interface TextualPair {
+  readonly a: Sentence;
+  readonly b: Sentence;
+  readonly text: string;
+}
+
+/** Everything the detectors found, before any of it is formatted for a terminal. */
+export interface ScanResult {
+  readonly textual: readonly TextualPair[];
+  readonly structural: readonly StructuralPair[];
+  readonly normalised: ReadonlyMap<string, readonly CodeLine[]>;
 }
 
 function parseArgs(argv: readonly string[]): Options {
@@ -134,8 +161,10 @@ function parseArgs(argv: readonly string[]): Options {
       printHelp();
       process.exit(0);
     } else {
-      // A comma-separated list is accepted too, to match `npm run mutation --mutate`.
-      files.push(...arg.split(",").filter((f) => f.length > 0));
+      // Paths arrive space-separated, comma-separated, or as one quoted argument holding
+      // several — `npm run duplication -- "a.ts b.ts"` is a single argv entry, and it is
+      // how the review pipeline calls this. Splitting on commas alone made that a no-op.
+      files.push(...arg.split(/[\s,]+/).filter((f) => f.length > 0));
     }
   }
 
@@ -153,7 +182,8 @@ function parseArgs(argv: readonly string[]): Options {
 
 function printHelp(): void {
   const header = readFileSync(new URL(import.meta.url), "utf8").split("*/")[0];
-  console.log(header.replace(/^\/\*\*\n/, "").replace(/^ \* ?/gm, ""));
+  // `\r?` because a CRLF checkout otherwise leaves the opening `/**` on the first line.
+  console.log(header.replace(/^\/\*\*\r?\n/, "").replace(/^ \* ?/gm, ""));
 }
 
 function git(args: readonly string[]): string {
@@ -181,8 +211,9 @@ function trackedSourceFiles(): string[] {
 }
 
 /**
- * Files the current branch touches, against its merge-base with main. Used when the
- * caller names no files, so the common case is a bare `npm run duplication`.
+ * Files the current branch touches, against its merge-base with main — committed, working
+ * tree and not-yet-added alike. Used when the caller names no files, so the common case is
+ * a bare `npm run duplication`.
  */
 function changedAgainstMain(): string[] {
   let base: string;
@@ -200,50 +231,87 @@ function changedAgainstMain(): string[] {
 }
 
 /**
+ * Index just past the literal opened at `start`, or -1 when its closing quote is not on
+ * this line. Backslash escapes are skipped, so `"a\"b"` closes at the second real quote.
+ */
+function closeQuote(raw: string, start: number): number {
+  const quote = raw[start];
+  for (let i = start + 1; i < raw.length; i++) {
+    if (raw[i] === "\\") {
+      i++;
+      continue;
+    }
+    if (raw[i] === quote) return i + 1;
+  }
+  return -1;
+}
+
+/**
  * Strip comments and blank the contents of string literals, so two copies that were
  * reworded or had their identifiers left alone still hash alike.
  *
- * Comments go first and strings second: an apostrophe in English prose would otherwise
- * open a phantom string literal and swallow the rest of the line.
+ * One left-to-right pass per line, because `//`, `/*`, `'`, `"` and `` ` `` all shadow
+ * each other and no ordering of separate regex passes gets that right: strings hide
+ * comment openers (`"(experiments/*.json)"`), comments hide string openers (`// the
+ * layer's own copy`). The scan tracks which of code, line comment, block comment or the
+ * three string kinds it is in and honours escapes; only the block-comment state carries
+ * to the next line.
+ *
+ * A quote with no partner on its own line is emitted as an ordinary character rather than
+ * opening a literal that swallows everything after it — an apostrophe in JSX text and a
+ * `'` inside a character class are both far commoner than a string broken across lines.
+ * The cost is that the body of a multi-line template reads as code; that matches what the
+ * quotes actually say, and the alternative reads a stray backtick as a template opener
+ * and blanks the rest of the file.
+ *
+ * Returns one entry per non-empty line, carrying the original 1-based line number.
  */
 export function normalise(source: string): CodeLine[] {
   const out: CodeLine[] = [];
   let inBlockComment = false;
 
-  source.split("\n").forEach((raw, i) => {
-    let code = raw;
+  source.split("\n").forEach((raw, index) => {
+    let code = "";
+    let i = 0;
 
-    if (inBlockComment) {
-      const close = code.indexOf("*/");
-      if (close === -1) return;
-      code = code.slice(close + 2);
-      inBlockComment = false;
-    }
-
-    // Block comments opening on this line; a `/*` with no `*/` runs on to later lines.
-    for (;;) {
-      const open = code.indexOf("/*");
-      if (open === -1) break;
-      const close = code.indexOf("*/", open + 2);
-      if (close === -1) {
-        code = code.slice(0, open);
-        inBlockComment = true;
-        break;
+    while (i < raw.length) {
+      if (inBlockComment) {
+        const close = raw.indexOf("*/", i);
+        if (close === -1) break;
+        inBlockComment = false;
+        // A space, so `a/* why */b` reads as two tokens rather than one.
+        code += " ";
+        i = close + 2;
+        continue;
       }
-      code = code.slice(0, open) + " " + code.slice(close + 2);
+
+      const char = raw[i];
+      const next = raw[i + 1];
+
+      if (char === "/" && next === "/") break;
+
+      if (char === "/" && next === "*") {
+        inBlockComment = true;
+        i += 2;
+        continue;
+      }
+
+      if (char === "'" || char === '"' || char === "`") {
+        const end = closeQuote(raw, i);
+        if (end !== -1) {
+          // The quotes stay and the contents go, so a renamed URL keeps its shape.
+          code += char + char;
+          i = end;
+          continue;
+        }
+      }
+
+      code += char;
+      i++;
     }
-
-    const lineComment = code.indexOf("//");
-    if (lineComment !== -1) code = code.slice(0, lineComment);
-
-    // Blank what is inside quotes; the quotes themselves stay, so shape is preserved.
-    code = code
-      .replace(/'(?:[^'\\]|\\.)*'/g, "''")
-      .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-      .replace(/`(?:[^`\\]|\\.)*`/g, "``");
 
     const text = code.replace(/\s+/g, " ").trim();
-    if (text.length > 0) out.push({ line: i + 1, text });
+    if (text.length > 0) out.push({ line: index + 1, text });
   });
 
   return out;
@@ -356,71 +424,170 @@ export function mergeRuns(pairs: readonly StructuralPair[], size: number): Struc
   return merged;
 }
 
-function main(): void {
-  const options = parseArgs(process.argv.slice(2));
-  const tracked = trackedSourceFiles();
-  const trackedSet = new Set(tracked);
-
-  const requested = options.all
-    ? tracked
-    : options.files.length > 0
-      ? options.files.filter(isSource)
-      : changedAgainstMain();
-
-  const changed = requested.filter((f) => trackedSet.has(f));
-  const skipped = requested.filter((f) => !trackedSet.has(f));
-
-  if (changed.length === 0) {
-    console.log("No tracked .ts/.tsx files to compare — nothing to do.");
-    if (skipped.length > 0) console.log(`Untracked or missing: ${skipped.join(", ")}`);
-    return;
-  }
-
-  const sources = new Map<string, string>();
-  for (const file of tracked) {
-    try {
-      sources.set(file, readFileSync(file, "utf8"));
-    } catch {
-      // A file listed by git but absent from the working tree (mid-rebase, sparse checkout).
+/** Comment sentences that appear verbatim somewhere else, with one side a changed file. */
+function textualPairs(
+  sources: ReadonlyMap<string, string>,
+  changed: ReadonlySet<string>,
+): TextualPair[] {
+  const index = new Map<string, Sentence[]>();
+  for (const [file, source] of sources) {
+    for (const sentence of commentSentences(file, source)) {
+      const bucket = index.get(sentence.text);
+      if (bucket) bucket.push(sentence);
+      else index.set(sentence.text, [sentence]);
     }
   }
 
-  const changedSet = new Set(changed);
+  const seen = new Set<string>();
+  const pairs: TextualPair[] = [];
+  for (const [text, occurrences] of index) {
+    if (occurrences.length < 2) continue;
+    for (const a of occurrences) {
+      if (!changed.has(a.file)) continue;
+      for (const b of occurrences) {
+        if (a === b) continue;
+        // Same-file repetition counts — that is where most of this repo's real
+        // duplication lived. What does not count is one comment block matching itself:
+        // every sentence lifted from a block carries that block's start line.
+        if (a.file === b.file && a.line === b.line) continue;
+        // Order the two ends by (file, line) as a tuple. Sorting a mixed string/number
+        // array instead compared "12" against "3" lexicographically, so the two
+        // orderings of one pair produced different keys — and the second was dropped.
+        const [first, second] =
+          a.file < b.file || (a.file === b.file && a.line <= b.line) ? [a, b] : [b, a];
+        const key = `${first.file}:${first.line}|${second.file}:${second.line}|${text}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        pairs.push({ a, b, text });
+      }
+    }
+  }
+  return pairs;
+}
+
+/** Identical normalised windows, with one side a changed file. */
+function structuralPairs(
+  normalised: ReadonlyMap<string, readonly CodeLine[]>,
+  changed: ReadonlySet<string>,
+  options: ScanOptions,
+): StructuralPair[] {
+  const windowIndex = new Map<string, Window[]>();
+  for (const [file, lines] of normalised) {
+    for (let i = 0; i + options.minLines <= lines.length; i++) {
+      const slice = lines.slice(i, i + options.minLines);
+      const chars = slice.reduce((sum, l) => sum + l.text.length, 0);
+      if (chars < options.minChars) continue;
+      const window: Window = {
+        file,
+        index: i,
+        startLine: slice[0].line,
+        endLine: slice[slice.length - 1].line,
+      };
+      const hash = hashWindow(lines, i, options.minLines);
+      const bucket = windowIndex.get(hash);
+      if (bucket) bucket.push(window);
+      else windowIndex.set(hash, [window]);
+    }
+  }
+
+  const raw: StructuralPair[] = [];
+  const seen = new Set<string>();
+  for (const windows of windowIndex.values()) {
+    if (windows.length < 2) continue;
+    for (const a of windows) {
+      if (!changed.has(a.file)) continue;
+      for (const b of windows) {
+        if (a === b) continue;
+        // Same-file repetition counts, but only between windows that do not overlap.
+        if (a.file === b.file && Math.abs(a.index - b.index) < options.minLines) continue;
+        const key =
+          a.file < b.file || (a.file === b.file && a.index < b.index)
+            ? `${a.file}:${a.index}|${b.file}:${b.index}`
+            : `${b.file}:${b.index}|${a.file}:${a.index}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        raw.push({ changed: a, other: b, lines: options.minLines });
+      }
+    }
+  }
+
+  return mergeRuns(raw, options.minLines).sort((a, b) => b.lines - a.lines);
+}
+
+/**
+ * Both detectors over an in-memory corpus. Pure: `main` does the git and filesystem work
+ * and the formatting, this does the finding, and the tests drive it from inline fixtures.
+ */
+export function scan(
+  sources: ReadonlyMap<string, string>,
+  changed: ReadonlySet<string>,
+  options: ScanOptions,
+): ScanResult {
+  const normalised = new Map<string, readonly CodeLine[]>();
+  for (const [file, source] of sources) normalised.set(file, normalise(source));
+
+  return {
+    textual: textualPairs(sources, changed),
+    structural: structuralPairs(normalised, changed, options),
+    normalised,
+  };
+}
+
+function main(): void {
+  const options = parseArgs(process.argv.slice(2));
+  const tracked = trackedSourceFiles();
+
+  const named = options.all
+    ? tracked
+    : options.files.length > 0
+      ? options.files
+      : changedAgainstMain();
+  const requested = named.filter(isSource);
+
+  // The corpus is the tracked tree plus whatever was named, so an uncommitted file is
+  // compared against everything and everything is compared against it.
+  const sources = new Map<string, string>();
+  for (const file of [...tracked, ...requested]) {
+    if (sources.has(file)) continue;
+    try {
+      sources.set(file, readFileSync(file, "utf8"));
+    } catch {
+      // Listed by git but absent from the working tree (mid-rebase, sparse checkout), or
+      // a path the caller mistyped. Either way it is reported below, never swallowed.
+    }
+  }
+
+  const changed = requested.filter((f) => sources.has(f));
+  const discarded = named.filter((f) => !sources.has(f));
+
+  if (changed.length === 0) {
+    if (named.length === 0) {
+      console.log("No changed .ts/.tsx files against main — nothing to do.");
+      return;
+    }
+    // Every path the caller gave was thrown away. That is a misuse, not a clean result,
+    // and an empty report reads exactly like a clean one — so this goes to stderr and
+    // the report is not printed at all.
+    console.error("");
+    console.error("!! DUPLICATION SCAN COMPARED NOTHING.");
+    console.error(`!! All ${named.length} path(s) given were unreadable or not .ts/.tsx:`);
+    for (const file of discarded) console.error(`!!   ${file}`);
+    console.error("!! Paths are relative to the repo root and split on spaces or commas:");
+    console.error('!!   npm run duplication -- "lib/services/atlas.ts components/ui/popover.tsx"');
+    console.error("");
+    console.log("# Duplication scan\n\nNot run — see stderr. No files were compared.");
+    return;
+  }
+
+  const { textual, structural, normalised } = scan(sources, new Set(changed), options);
 
   console.log("# Duplication scan\n");
   console.log(
     `Compared ${changed.length} changed file${changed.length === 1 ? "" : "s"} against ` +
-      `${tracked.length} tracked source files.`,
+      `${sources.size} source files.`,
   );
-  if (skipped.length > 0) console.log(`Skipped (untracked): ${skipped.join(", ")}`);
+  if (discarded.length > 0) console.log(`Skipped (unreadable or not source): ${discarded.join(", ")}`);
   console.log("");
-
-  // --- Textual: comment sentences repeated verbatim elsewhere ---------------------
-
-  const sentenceIndex = new Map<string, Sentence[]>();
-  for (const [file, source] of sources) {
-    for (const sentence of commentSentences(file, source)) {
-      const bucket = sentenceIndex.get(sentence.text);
-      if (bucket) bucket.push(sentence);
-      else sentenceIndex.set(sentence.text, [sentence]);
-    }
-  }
-
-  const textualSeen = new Set<string>();
-  const textual: { a: Sentence; b: Sentence; text: string }[] = [];
-  for (const [text, occurrences] of sentenceIndex) {
-    if (occurrences.length < 2) continue;
-    for (const a of occurrences) {
-      if (!changedSet.has(a.file)) continue;
-      for (const b of occurrences) {
-        if (a === b || a.file === b.file) continue;
-        const key = [a.file, a.line, b.file, b.line].sort().join("|") + text;
-        if (textualSeen.has(key)) continue;
-        textualSeen.add(key);
-        textual.push({ a, b, text });
-      }
-    }
-  }
 
   console.log(`## Repeated comment sentences (${textual.length})\n`);
   if (textual.length === 0) {
@@ -433,53 +600,6 @@ function main(): void {
     console.log("");
   }
 
-  // --- Structural: identical normalised windows -----------------------------------
-
-  const normalised = new Map<string, CodeLine[]>();
-  for (const [file, source] of sources) normalised.set(file, normalise(source));
-
-  const windowIndex = new Map<string, Window[]>();
-  for (const [file, lines] of normalised) {
-    for (let i = 0; i + options.minLines <= lines.length; i++) {
-      const slice = lines.slice(i, i + options.minLines);
-      const chars = slice.reduce((sum, l) => sum + l.text.length, 0);
-      if (chars < options.minChars) continue;
-      const hash = hashWindow(lines, i, options.minLines);
-      const window: Window = {
-        file,
-        index: i,
-        startLine: slice[0].line,
-        endLine: slice[slice.length - 1].line,
-        chars,
-      };
-      const bucket = windowIndex.get(hash);
-      if (bucket) bucket.push(window);
-      else windowIndex.set(hash, [window]);
-    }
-  }
-
-  const rawPairs: StructuralPair[] = [];
-  const pairSeen = new Set<string>();
-  for (const windows of windowIndex.values()) {
-    if (windows.length < 2) continue;
-    for (const a of windows) {
-      if (!changedSet.has(a.file)) continue;
-      for (const b of windows) {
-        if (a === b) continue;
-        // Same-file repetition counts, but only between windows that do not overlap.
-        if (a.file === b.file && Math.abs(a.index - b.index) < options.minLines) continue;
-        const key =
-          a.file < b.file || (a.file === b.file && a.index < b.index)
-            ? `${a.file}:${a.index}|${b.file}:${b.index}`
-            : `${b.file}:${b.index}|${a.file}:${a.index}`;
-        if (pairSeen.has(key)) continue;
-        pairSeen.add(key);
-        rawPairs.push({ changed: a, other: b, lines: options.minLines });
-      }
-    }
-  }
-
-  const structural = mergeRuns(rawPairs, options.minLines).sort((a, b) => b.lines - a.lines);
   const inSource = structural.filter((p) => !isTest(p.changed.file) && !isTest(p.other.file));
   const inTests = structural.filter((p) => isTest(p.changed.file) || isTest(p.other.file));
 

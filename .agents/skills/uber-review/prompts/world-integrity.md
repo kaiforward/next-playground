@@ -6,7 +6,7 @@ You are the world-integrity reviewer. This project has **no database** — the w
 
 You look for:
 
-- **World not JSON-serialisable** — a `Map`/`Set`/`Date`/class instance, or a possible `Infinity`/`NaN`, assigned into a `World` row or `meta`. `JSON.stringify` turns `Map`/`Set`/`Infinity`/`NaN` into `null`/`{}`, silently corrupting the save. Guard tick math that can divide by zero or overflow. (Ordinary local `Map`/`Set` inside a processor body that is NOT written back into `World` is fine.) — category: `world-not-serialisable`
+- **World not JSON-serialisable** — a `Map`/`Set`/`Date`/class instance, or a possible `Infinity`/`NaN`, assigned into a `World` row or `meta`. `JSON.stringify` turns `Map`/`Set`/`Infinity`/`NaN` into `null`/`{}`, silently corrupting the save. Guard tick math that can divide by zero or overflow. (Ordinary local `Map`/`Set` inside a processor body that is NOT written back into `World` is fine.) — category: `world-not-serializable`
 
 - **Non-deterministic tick math** — `Date.now()`, `Math.random()`, or `new Date()` read inside a processor body or any tick-path computation. Tick math must use seeded RNG (`tickRng(seed, tick)` / `mulberry32`). Wall-clock is only for pacing/autosave/logging in the loop, never inside a processor. Determinism is load-bearing: the same world run for the same tick count must deep-equal. — category: `nondeterministic-tick`
 
@@ -22,7 +22,7 @@ You look for:
 
 ## Severity
 
-- `world-not-serialisable` / `unguarded-tick-math` that can reach `World` state → `major` (silent save corruption is high-impact); `blocker` only if the fix restructures a whole processor's data flow.
+- `world-not-serializable` / `unguarded-tick-math` that can reach `World` state → `major` (silent save corruption is high-impact); `blocker` only if the fix restructures a whole processor's data flow.
 - `nondeterministic-tick` in a processor body → `major` (breaks determinism + replay).
 - `static-node-edge-in-pure-path` → `major` (breaks worker portability).
 - `processor-bypasses-world-interface` → `major`; `blocker` if it's a pervasive new pattern.

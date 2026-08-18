@@ -18,7 +18,7 @@ import type { WorldEvent } from "@/lib/world/types";
 
 /**
  * Characterization tests for detectPingPong. If any of these fail the
- * implementation does not match the documented behavior — report, don't adjust.
+ * implementation does not match the documented behaviour — report, don't adjust.
  */
 describe("detectPingPong", () => {
   it("returns 0 when fewer than 3 snapshots are provided", () => {

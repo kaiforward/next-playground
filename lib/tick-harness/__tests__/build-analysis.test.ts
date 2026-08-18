@@ -31,7 +31,7 @@ import type { ResourceVector } from "@/lib/types/game";
  * calibration instrument that surfaces a broken build loop (colonies developed but never
  * built out) which aggregate market health hides — so its own tier classification, stranded
  * flags, class split, and queue math must be pinned. If any of these fail the implementation
- * no longer matches the documented behavior — report, don't adjust.
+ * no longer matches the documented behaviour — report, don't adjust.
  */
 
 function devSys(

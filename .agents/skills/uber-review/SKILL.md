@@ -194,10 +194,12 @@ the effort dial's escalation) and record the fallback in the report.
 
 ### 1.9. Duplication scan — input for the conventions lens
 
-Run `npm run duplication -- "<space-separated changed .ts/.tsx files>"` once for the whole diff, before
-dispatching reviewers (seconds; it always exits 0). Pass its output into the **conventions** reviewer's
-payload under a `## Duplication candidates` heading, filtered to the pairs whose changed-side file is in
-that reviewer's chunk.
+Run `npm run duplication -- "<changed .ts/.tsx files, space- or comma-separated>"` once for the whole
+diff, before dispatching reviewers (seconds; it always exits 0, and one quoted argument holding several
+paths is fine). Pass its output into the **conventions** reviewer's payload under a
+`## Duplication candidates` heading, filtered to the pairs whose changed-side file is in that
+reviewer's chunk. If it prints `DUPLICATION SCAN COMPARED NOTHING` on stderr, none of the paths reached
+it — fix the invocation and rerun rather than passing the empty section on.
 
 This is the one input that is deliberately not chunk-scoped. Every reviewer sees a slice of one diff, and
 the copy is almost always in a file the diff never touched — five byte-identical map hooks landed across
@@ -272,7 +274,7 @@ Otherwise:
 Skip this section if:
 - Architect returned `blocker` (pipeline already halted; only architect's findings get validated)
 - `--only=architect` was passed
-- `--skip-architect` was passed AND `--only` excludes downstream reviewers (rare; default behavior is "skip architect but run everyone else")
+- `--skip-architect` was passed AND `--only` excludes downstream reviewers (rare; default behaviour is "skip architect but run everyone else")
 
 **For each chunk** (computed in step 1.6), determine which reviewers run based on the chunk's file classification:
 

@@ -10,7 +10,7 @@ interface ResourceVectorBarsProps {
 }
 
 /**
- * Renders a ResourceVector as a labeled mini-bar strip. Bars normalise to the
+ * Renders a ResourceVector as a labelled mini-bar strip. Bars normalise to the
  * vector's own max; the raw value is always shown so magnitude isn't lost.
  */
 export function ResourceVectorBars({

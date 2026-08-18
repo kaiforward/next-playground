@@ -40,7 +40,7 @@ export const DRIFT_COEFFICIENTS = {
 /**
  * Persistent per-tick delta from the doctrine pair. Positive = compatibility,
  * negative = clash. Symmetric: `[A][B] === [B][A]` by construction. Low
- * magnitudes — doctrine biases behavior; it doesn't dominate it.
+ * magnitudes — doctrine biases behaviour; it doesn't dominate it.
  *
  * Sourced from faction-system.md §2 ("Doctrine incompatibility" / "Doctrine
  * compatibility" drivers).
