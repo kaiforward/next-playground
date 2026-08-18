@@ -2,13 +2,13 @@
 
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { getDangerInfo } from "@/lib/utils/system";
+import { dangerBand } from "@/lib/utils/system";
 import { Badge } from "@/components/ui/badge";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 
 function DangerBadge({ danger }: { danger: number }) {
-  const info = getDangerInfo(danger);
-  return <Badge color={info.color}>{info.label}</Badge>;
+  const band = dangerBand(danger);
+  return <Badge color={band.color}>{band.label}</Badge>;
 }
 
 /**

@@ -41,7 +41,7 @@ describe("infrastructure-decay processor", () => {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -57,7 +57,7 @@ describe("infrastructure-decay processor", () => {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -70,7 +70,7 @@ describe("infrastructure-decay processor", () => {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map(), // no selling factor recorded for s1 → defaults to 1
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -95,7 +95,7 @@ describe("infrastructure-decay processor", () => {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     for (const expected of [0.3, 0.6, 0.9]) {
@@ -117,7 +117,7 @@ describe("infrastructure-decay processor", () => {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map([["s1", new Map([["ore", 1]])]]),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -143,7 +143,7 @@ describe("infrastructure-decay processor", () => {
       dissatisfactionBySystem: new Map([["s-starved", 0], ["s-funded", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map(),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), {
@@ -170,7 +170,7 @@ describe("infrastructure-decay processor", () => {
         ["protected", new Map([["ore", 0]])],
         ["ordinary", new Map([["ore", 0]])],
       ]),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     await runInfrastructureDecayProcessor(world, ctxWith(signals), {
@@ -197,7 +197,7 @@ describe("infrastructure-decay processor: teardown instrumentation", () => {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map(),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     const result = await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -216,7 +216,7 @@ describe("infrastructure-decay processor: teardown instrumentation", () => {
       dissatisfactionBySystem: new Map([["s1", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map(),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     const result = await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });
@@ -239,7 +239,7 @@ describe("infrastructure-decay processor: teardown instrumentation", () => {
       dissatisfactionBySystem: new Map([["decaying", 0], ["steady", 0]]),
       supplyStateBySystem: new Map(),
       sellingFactorBySystem: new Map(),
-      realizedProductionBySystem: new Map(),
+      realisedProductionBySystem: new Map(),
       productionSuppressBySystem: new Map(),
     };
     const result = await runInfrastructureDecayProcessor(world, ctxWith(signals), { decay: DECAY, interval: 24 });

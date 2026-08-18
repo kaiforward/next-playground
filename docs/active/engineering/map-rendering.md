@@ -163,11 +163,22 @@ gradient and the dot is **subdued** (bloom alpha dropped) so it doesn't fight th
 modes the star-type colour carries the dot. Star colouring is **zoomed-in only** (`SystemObject`); the far-zoom
 point cloud stays neutral slate.
 
+**Settlement marks** — a square badge at the star's north-east shoulder shows the **player's** systems' control
+tier in every mode: hollow slate = claimed (`controlled`), hollow amber with a soft pulse expanding from its
+centre = colony forming (an open colony-establish project), solid copper = `developed`. Data rides the same
+tick-scoped ownership payload the political layer reads (`OwnershipEntry.forming`); the mark decision is the pure
+`settlementMarkFor` (`lib/types/map.ts`) — widening marks beyond the player's faction is a change to that one
+gate. Geometry and colours live in `SETTLEMENT_MARK` (`theme.ts`); the pulse clock is shared per layer so every
+forming colony pulses in phase, and marks subdue with the dot under value modes. Like all star-glyph detail the
+marks are zoomed-in only — the point cloud stays status-blind.
+
 ## Rendering architecture
 
-- **Compute the Voronoi once.** `buildSystemCells(systems, mapSize)` builds one Delaunay/Voronoi from the system
-  point set and hands per-system cells (`Map<systemId, MultiPolygon>`) + centroids + analytic hit-testing to every
-  consumer, replacing what used to be independent triangulations per value layer.
+- **Compute the Voronoi once.** `buildSystemCells(systems, mapSize)` builds the map's only Delaunay/Voronoi from
+  the system point set, clips every cell once, and hands the result to every consumer: per-system cells
+  (`Map<systemId, MultiPolygon>`), centroids, analytic hit-testing, and `groupBy(key)`. The region and political
+  layers union their territories out of those cached cells rather than triangulating for themselves — a layer that
+  builds its own is the regression, since the per-cell disc clip, not the triangulation, is where the cost sits.
 - **One generic value-choropleth layer.** `ValueChoroplethLayer` is parameterised by (value map, reference map,
   mode); it draws per-cell fills, hosts the pooled number sublayer, applies scope re-normalisation + de-emphasis,
   and strokes the faction-union outline. It replaced three near-identical stability/population/development layers.

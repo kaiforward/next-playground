@@ -52,7 +52,7 @@ Does the code actually deliver what the change set out to do? This lens checks t
 2. **Downgrade to `major` if:**
    - The fix is "edit one line per affected file" — even across 20 files
    - The fix is contained to a single file, even if that file needs a complete rewrite. Other files in the diff remain sound and reviewable independently.
-   - The fix is otherwise localized to a small portion of the diff
+   - The fix is otherwise localised to a small portion of the diff
 3. **Reserve `blocker` for findings meeting BOTH criteria:**
    - **Qualitative**: fix requires *rewriting the approach from scratch* — redesigning the abstraction, restructuring control flow across layers, changing function signatures whose callers cascade
    - **Quantitative**: rework cascades through a substantial portion of the diff. Rule of thumb: ~half the changed files, or roughly 10+ files in a typical PR. Even a complete rewrite of one file while 19 others are sound is **not** a blocker.
@@ -60,7 +60,7 @@ Does the code actually deliver what the change set out to do? This lens checks t
 
 ### `major` — pipeline continues; finding goes into the pool
 
-Clear architectural drift but localized:
+Clear architectural drift but localised:
 - 20 `as` casts across files — each is a one-line fix
 - One stray static `fs`/`process.env` import in a pure-path module that just needs the dynamic-`import()` escape hatch
 - Single hand-rolled utility duplicating one in `lib/utils/`

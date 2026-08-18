@@ -1,8 +1,8 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
-import { Delaunay } from "d3-delaunay";
 import type { LODState } from "../lod";
 import { TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
-import { computeTerritoryPolygons } from "../territory-utils";
+import type { MultiPolygon } from "../territory-utils";
+import type { SystemCells } from "../voronoi-cache";
 import type { AtlasSystem } from "@/lib/types/game";
 
 const REGION_NAME_STYLE = new TextStyle({
@@ -22,9 +22,9 @@ interface RegionInfo {
 /**
  * Pixi layer that draws region territory outlines: a uniform neutral-slate
  * border per region, no fill. Same Voronoi-union approach as the other
- * territory-band layers, but cells are grouped by `regionId` and the border
- * carries no economy or faction tint — it's a plain spatial outline. Region
- * name labels sit at each region's system centroid.
+ * territory-band layers — the shared `SystemCells` grouped by `regionId` — and
+ * the border carries no economy or faction tint, it's a plain spatial outline.
+ * Region name labels sit at each region's system centroid.
  */
 export class TerritoryLayer {
   readonly container = new Container();
@@ -32,8 +32,8 @@ export class TerritoryLayer {
   private labelContainer = new Container();
   private regionLabels = new Map<string, Text>();
 
-  // Cached Voronoi results for lightweight border-only redraws
-  private cachedTerritories: Map<string, [number, number][][][]> | null = null;
+  // Cached region unions for lightweight border-only redraws
+  private cachedTerritories: Map<string, MultiPolygon> | null = null;
   private lastRegionIds: string[] = [];
 
   constructor() {
@@ -42,29 +42,18 @@ export class TerritoryLayer {
   }
 
   /**
-   * Compute and render region border polygons.
+   * Render region border polygons from the shared cell diagram.
    * Called when system data changes (not per frame).
    */
-  sync(systems: AtlasSystem[], regions: RegionInfo[], mapSize: number) {
+  sync(cells: SystemCells, regions: RegionInfo[]) {
+    const systems = cells.systems;
     if (systems.length < 3) {
       this.clear();
       return;
     }
 
-    // Build Delaunay triangulation from system positions
-    const points: [number, number][] = systems.map((s) => [s.x, s.y]);
-    const delaunay = Delaunay.from(points);
-    const voronoi = delaunay.voronoi([0, 0, mapSize, mapSize]);
-
-    // Compute territory polygons by unioning Voronoi cells per region
-    const territories = computeTerritoryPolygons(
-      systems.length,
-      voronoi,
-      (i) => systems[i].regionId,
-    );
-
-    // Cache for lightweight border redraws
-    this.cachedTerritories = territories;
+    // Cache the region unions for lightweight border redraws
+    this.cachedTerritories = cells.groupBy((s) => s.regionId);
 
     // Draw borders
     this.drawBorders();

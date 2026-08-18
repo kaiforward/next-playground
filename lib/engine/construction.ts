@@ -303,6 +303,11 @@ export function orderProposals(proposals: Proposal[]): Proposal[] {
   });
 }
 
+/** A pool or per-project cap that is zero, negative or non-finite funds nothing — everything stalls. */
+function fundsNothing(pool: number, cap: number): boolean {
+  return !Number.isFinite(pool) || pool <= 0 || !Number.isFinite(cap) || cap <= 0;
+}
+
 /**
  * Forward-simulate `fundQueue` at a CONSTANT pool + cap to find the cycle each project lands on.
  * Returns an array aligned to `projects` by index: the 1-based cycle count until that project
@@ -318,8 +323,8 @@ export function forecastEtaCycles(
   maxCycles = 999,
   capFor?: ProjectCap,
 ): (number | null)[] {
-  // A zero/invalid pool funds nothing — everything is stalled (also avoids a maxCycles spin).
-  if (!Number.isFinite(pool) || pool <= 0 || !Number.isFinite(cap) || cap <= 0) {
+  // Everything is stalled (this also avoids a maxCycles spin).
+  if (fundsNothing(pool, cap)) {
     return projects.map(() => null);
   }
   // Keyed by project id — unique per queue (minted from the world's nextId counter), so each
@@ -354,7 +359,7 @@ export function forecastIndependentEtaCycles(
   maxCycles = 999,
   capFor?: ProjectCap,
 ): (number | null)[] {
-  if (!Number.isFinite(pool) || pool <= 0 || !Number.isFinite(cap) || cap <= 0) {
+  if (fundsNothing(pool, cap)) {
     return hypotheticals.map(() => null);
   }
   let queue = committed.map((p) => ({ ...p }));

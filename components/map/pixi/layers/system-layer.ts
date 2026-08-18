@@ -73,12 +73,17 @@ export class SystemLayer {
     }
   }
 
+  // Accumulated clock for the settlement-mark pulse — shared so every forming
+  // colony pulses in phase rather than each drifting from its creation time.
+  private pulseTime = 0;
+
   /**
    * Per-frame: frustum culling + LOD + on-demand object creation.
    * Only creates SystemObjects for systems in the viewport, capped per frame.
    */
-  updateVisibility(frustum: Frustum, lod: LODState) {
+  updateVisibility(frustum: Frustum, lod: LODState, dtMs: number) {
     let createdThisFrame = 0;
+    this.pulseTime += dtMs;
 
     for (const [id, data] of this.systemData) {
       const inView = frustum.contains(data.x, data.y);
@@ -99,6 +104,7 @@ export class SystemLayer {
         obj.visible = inView;
         if (inView) {
           obj.setLOD(lod);
+          obj.tickSettlementPulse(this.pulseTime);
         }
       }
     }

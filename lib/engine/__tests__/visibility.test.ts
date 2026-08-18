@@ -1,33 +1,33 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildAdjacencyList,
+  buildHopAdjacency,
   bfsReachable,
   computeVisibilitySet,
   SENSOR_RANGE,
 } from "../visibility";
 
-// ── buildAdjacencyList ──────────────────────────────────────────
+// ── buildHopAdjacency ──────────────────────────────────────────
 
-describe("buildAdjacencyList", () => {
+describe("buildHopAdjacency", () => {
   it("returns empty map for empty connections", () => {
-    const adj = buildAdjacencyList([]);
+    const adj = buildHopAdjacency([]);
     expect(adj.size).toBe(0);
   });
 
   it("creates entries for a single connection", () => {
-    const adj = buildAdjacencyList([{ fromSystemId: "A", toSystemId: "B" }]);
+    const adj = buildHopAdjacency([{ fromSystemId: "A", toSystemId: "B" }]);
     expect(adj.get("A")).toEqual(["B"]);
     expect(adj.get("B")).toEqual(["A"]);
   });
 
   it("is bidirectional", () => {
-    const adj = buildAdjacencyList([{ fromSystemId: "X", toSystemId: "Y" }]);
+    const adj = buildHopAdjacency([{ fromSystemId: "X", toSystemId: "Y" }]);
     expect(adj.get("X")).toContain("Y");
     expect(adj.get("Y")).toContain("X");
   });
 
   it("handles multiple connections from a single node", () => {
-    const adj = buildAdjacencyList([
+    const adj = buildHopAdjacency([
       { fromSystemId: "A", toSystemId: "B" },
       { fromSystemId: "A", toSystemId: "C" },
       { fromSystemId: "A", toSystemId: "D" },
@@ -39,7 +39,7 @@ describe("buildAdjacencyList", () => {
   });
 
   it("handles chain topology", () => {
-    const adj = buildAdjacencyList([
+    const adj = buildHopAdjacency([
       { fromSystemId: "A", toSystemId: "B" },
       { fromSystemId: "B", toSystemId: "C" },
       { fromSystemId: "C", toSystemId: "D" },
@@ -55,7 +55,7 @@ describe("buildAdjacencyList", () => {
 
 describe("bfsReachable", () => {
   // A -- B -- C -- D -- E (linear chain)
-  const chainAdj = buildAdjacencyList([
+  const chainAdj = buildHopAdjacency([
     { fromSystemId: "A", toSystemId: "B" },
     { fromSystemId: "B", toSystemId: "C" },
     { fromSystemId: "C", toSystemId: "D" },
@@ -88,7 +88,7 @@ describe("bfsReachable", () => {
     // C-A-D
     //   |
     //   E
-    const starAdj = buildAdjacencyList([
+    const starAdj = buildHopAdjacency([
       { fromSystemId: "A", toSystemId: "B" },
       { fromSystemId: "A", toSystemId: "C" },
       { fromSystemId: "A", toSystemId: "D" },
@@ -100,7 +100,7 @@ describe("bfsReachable", () => {
 
   it("handles cycle without infinite loop", () => {
     // A -- B -- C -- A (triangle)
-    const cycleAdj = buildAdjacencyList([
+    const cycleAdj = buildHopAdjacency([
       { fromSystemId: "A", toSystemId: "B" },
       { fromSystemId: "B", toSystemId: "C" },
       { fromSystemId: "C", toSystemId: "A" },
@@ -111,7 +111,7 @@ describe("bfsReachable", () => {
 
   it("disconnected systems are not reached", () => {
     // A -- B    C -- D (two separate components)
-    const adj = buildAdjacencyList([
+    const adj = buildHopAdjacency([
       { fromSystemId: "A", toSystemId: "B" },
       { fromSystemId: "C", toSystemId: "D" },
     ]);
@@ -136,7 +136,7 @@ describe("bfsReachable", () => {
 
 describe("computeVisibilitySet", () => {
   // A -- B -- C -- D -- E -- F -- G (linear chain)
-  const adj = buildAdjacencyList([
+  const adj = buildHopAdjacency([
     { fromSystemId: "A", toSystemId: "B" },
     { fromSystemId: "B", toSystemId: "C" },
     { fromSystemId: "C", toSystemId: "D" },

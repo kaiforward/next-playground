@@ -1,22 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type ReactNode, type RefObject } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { useTracker } from "@/lib/hooks/use-tracker";
-import { useAtlas } from "@/lib/hooks/use-atlas";
+import { useSystemFocus } from "@/lib/hooks/use-system-focus";
 import { useSetSystemPin } from "@/lib/hooks/use-player-pins";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { StatList, StatRow } from "@/components/ui/stat-row";
-import { progressWidthPct } from "@/lib/utils/math";
+import { barWidthPct } from "@/lib/utils/math";
 import { PersonIcon, SettingsIcon } from "@/components/ui/icons";
 import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row";
 import { stabilityRampColor } from "@/lib/utils/stability";
 import { formatPeople } from "@/lib/utils/format";
 import type { TrackerPinnedRow, TrackerRowBase } from "@/lib/types/api";
-import type { TrackerSections } from "@/lib/hooks/use-tracker-sections";
 
 /** Building-row display cap (docs/active/gameplay/tracker.md → "Rows and the card": a dozen rows are
  *  scannable, hundreds are not). The funded front can run to dozens of parallel projects in a real
@@ -25,10 +23,6 @@ import type { TrackerSections } from "@/lib/hooks/use-tracker-sections";
 const BUILDING_ROW_CAP = 10;
 
 export interface TrackerPanelProps {
-  /** Which of the three sections to render — a section's rows AND its heading disappear
-   *  together when off (`components/tracker/tracker-settings.tsx`'s checkboxes write this via
-   *  `useTrackerSections()`, owned by `MapRightRail`). */
-  sections: TrackerSections;
   /** Pressed-state for the header's settings toggle — the settings panel itself is a sibling
    *  `MapRightRail` mounts conditionally, not something this component renders. */
   settingsOpen: boolean;
@@ -40,8 +34,9 @@ export interface TrackerPanelProps {
  * funded construction front, and its forming colonies. Owns `useTracker()` inside a
  * `QueryBoundary` so a fetch failure here degrades the panel, not the map behind it.
  *
- * The header — title plus the settings toggle button — always renders regardless of `sections`,
- * so the settings surface stays reachable even with every section hidden.
+ * The header — title plus the settings toggle button — renders OUTSIDE the `QueryBoundary`, so it
+ * stays reachable both with every section hidden and with the read itself failing: it is the only
+ * way back into the settings panel.
  *
  * Mounted from `components/map/map-right-rail.tsx`, as the right-hand member of the horizontal
  * pair it shares with `TrackerSettings` (rendered as its sibling to the left, when open) inside
@@ -50,7 +45,7 @@ export interface TrackerPanelProps {
  * see the layout note on `MapRightRail` — with `TrackerPanelContent`'s own `overflow-y-auto`
  * taking over from that point, no measured/guessed max-height.
  */
-export function TrackerPanel({ sections, settingsOpen, onToggleSettings }: TrackerPanelProps) {
+export function TrackerPanel({ settingsOpen, onToggleSettings }: TrackerPanelProps) {
   // Where focus goes when unpinning empties the Pinned section — see `TrackerPanelContent`'s
   // unpin handling. The header is the one control that is always here whatever the sections do.
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -72,7 +67,7 @@ export function TrackerPanel({ sections, settingsOpen, onToggleSettings }: Track
         </Button>
       </div>
       <QueryBoundary>
-        <TrackerPanelContent sections={sections} fallbackFocusRef={settingsButtonRef} />
+        <TrackerPanelContent fallbackFocusRef={settingsButtonRef} />
       </QueryBoundary>
     </div>
   );
@@ -88,37 +83,22 @@ interface PendingUnpinFocus {
 }
 
 function TrackerPanelContent({
-  sections,
   fallbackFocusRef,
 }: {
-  sections: TrackerSections;
   fallbackFocusRef: RefObject<HTMLButtonElement | null>;
 }) {
+  // `sections` rides the same payload as the rows it filters, so this component reads its own
+  // visibility rather than taking it as a prop — and `TrackerSettings`, which is mounted as a
+  // sibling one level up, reads the same cached query. The two cannot disagree: TanStack's cache is
+  // the single instance the old shared-hook-instance rule was standing in for.
   const data = useTracker();
-  const { atlas } = useAtlas();
-  const router = useRouter();
+  const { sections } = data;
+  const activate = useSystemFocus();
   const setPin = useSetSystemPin();
   // Scoped to the Pinned list on purpose: a system can appear in Pinned AND in Building at the
   // same time, and both rows carry the same `data-system-id`.
   const pinnedListRef = useRef<HTMLUListElement>(null);
   const pendingUnpinFocusRef = useRef<PendingUnpinFocus | null>(null);
-  // Monotonic per-panel nonce for `?loc=` — only needs to differ from its own previous value so
-  // the map's focus effect (keyed on `focus|loc`, see star-map.tsx) re-fires even when locating
-  // the same system twice in a row.
-  const locRef = useRef(0);
-
-  const coordsById = useMemo(
-    () => new Map(atlas.systems.map((s) => [s.id, { x: s.x, y: s.y }] as const)),
-    [atlas.systems],
-  );
-
-  function activate(systemId: string, segment: "" | "industry") {
-    const coords = coordsById.get(systemId);
-    if (!coords) return; // stale id (shouldn't happen — the service filters abandoned pins)
-    locRef.current += 1;
-    const path = segment ? `/system/${systemId}/${segment}` : `/system/${systemId}`;
-    router.push(`${path}?focus=${coords.x},${coords.y}&loc=${locRef.current}`);
-  }
 
   /**
    * Unpinning from a row's own card deletes the thing the user is standing on: the mutation
@@ -392,7 +372,7 @@ function ProjectCard({ row, kind }: { row: TrackerRowBase; kind: "Building" | "C
         <StatRow label="Progress">
           {/* Same tested helper the bar's width uses — one definition of fraction → percent, so the
               card's number and the bar it describes can never drift apart or repeat the units bug. */}
-          <span className="font-mono text-text-primary">{Math.round(progressWidthPct(row.progress))}%</span>
+          <span className="font-mono text-text-primary">{Math.round(barWidthPct(row.progress))}%</span>
         </StatRow>
         <StatRow label="ETA">
           <span className="font-mono text-text-primary">{etaLabel(row.etaCycles)}</span>

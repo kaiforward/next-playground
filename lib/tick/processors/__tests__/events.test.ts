@@ -262,6 +262,42 @@ describe("runEventsProcessor", () => {
     expect(dissolutionAfter?.phase).toBe("dissolving");
     expect(dissolutionAfter?.phaseStartTick).toBe(0);
   });
+
+  it("stamps a spread child with its parent's id and the tick it was created on", async () => {
+    const parent: TickEvent = {
+      id: "event-parent",
+      type: "plague",
+      phase: "outbreak",
+      systemId: "s1",
+      regionId: "r1",
+      startTick: 0,
+      phaseStartTick: 0,
+      phaseDuration: 5,
+      severity: 1,
+      sourceEventId: null,
+    };
+    const world = makeWorld({
+      // Same region, so plague's `sameRegion` spread filter admits s2.
+      systems: [makeSystem("s1", "r1"), makeSystem("s2", "r1")],
+      connections: [{ fromSystemId: "s1", toSystemId: "s2", fuelCost: 1 }],
+      events: [parent],
+    });
+
+    // Tick 9 is past outbreak's duration, so the parent advances into `spreading` (the phase
+    // carrying the spread rule); the fixed rng sits below that rule's 0.4 probability.
+    await runEventsProcessor(world, makeCtx(9), makeParams({ rng: () => 0.1 }));
+
+    const child = world.events.find((e) => e.type === "plague_risk");
+    expect(child).toBeDefined();
+    // The child is the parent's, born now — never the parent's own start tick, and never rootless.
+    expect(child?.sourceEventId).toBe("event-parent");
+    expect(child?.systemId).toBe("s2");
+    expect(child?.startTick).toBe(9);
+    expect(child?.phaseStartTick).toBe(9);
+    expect(child?.phase).toBe(EVENT_DEFINITIONS.plague_risk.phases[0].name);
+    // Spread rule severity 0.3 × the parent's own 1.
+    expect(child?.severity).toBeCloseTo(0.3);
+  });
 });
 
 describe("InMemoryEventsWorld.applyShocks", () => {

@@ -21,7 +21,7 @@ world its missing counterweight.
 > **Built capacity is a whole-level ratchet: a level that sits idle past a hysteresis buffer sheds as a
 > whole level, and unrest above a threshold tears down a whole level outright.**
 
-Built capacity is an **integer level count** (`WorldBuilding.count`). Utilization floats continuously
+Built capacity is an **integer level count** (`WorldBuilding.count`). Utilisation floats continuously
 underneath; while a *whole* level's worth of capacity sits unused, a per-`(system, type)` idle countdown
 ticks up, and only after a sustained-idle buffer does the marginal idle level tear down — the countdown
 resetting the moment the level refills, so a brief dip costs nothing. That rule, applied to a seeded
@@ -42,7 +42,7 @@ and needs **no treasury**.
 
 The capstone is a **rework of the Industry panel** so the three quantities the decay loop runs on —
 **available** (shared land headroom), **built** (`count`), and **in-use** (occupancy for housing,
-staffed-and-selling `count × min(labourFulfillment, sellingFactor)` for production) — read clearly at a glance,
+staffed-and-selling `count × min(labourFulfilment, sellingFactor)` for production) — read clearly at a glance,
 per land pool and per building, health-coloured. The panel was deferred until the economy *moved*; this slice
 is what makes it move.
 
@@ -81,7 +81,7 @@ only thing that can reverse it is later faction treasury spend (build-out + unre
 `WorldBuilding.count` is a whole-integer **level count**, mutated **downward only** and always by whole
 levels. Decay runs on the existing economy-shard cadence (the same fixed-interval shard as the economy and
 population processors, every `ECONOMY_UPDATE_INTERVAL` ticks ≈ one cycle) and reads the freshly-computed
-`labourFulfillment` and market state. Writes apply batched `count` + `idleCycles` deltas across the shard in
+`labourFulfilment` and market state. Writes apply batched `count` + `idleCycles` deltas across the shard in
 one pass, never per-row.
 
 ### "Used" depends on the building's role
@@ -89,9 +89,9 @@ one pass, never per-row.
 | Building class | "Used" level | Decays toward | Maintained by |
 |---|---|---|---|
 | **Housing** | occupancy | `population / POP_CENTRE_DENSITY` (units the current population fills) | the people living in it — full housing never rots |
-| **Production / extraction** | staffed *and* selling | `count × min(labourFulfillment, sellingFactor)` | active workers + a market for the output |
+| **Production / extraction** | staffed *and* selling | `count × min(labourFulfilment, sellingFactor)` | active workers + a market for the output |
 
-- **`labourFulfillment`** is the existing system-wide `min(1, pop / labourDemand)` ratio.
+- **`labourFulfilment`** is the existing system-wide `min(1, pop / labourDemand)` ratio.
 - **`sellingFactor`** (`signals.sellingFactorBySystem`) is the production brake's knee ceiling at
   start-of-cycle stock: 1 while stock sits at or below the knee (cycles of the use figure or of the
   system's own working inventory, whichever sizes the larger band), tapering linearly to 0 by the
@@ -112,7 +112,7 @@ if idle ≥ idleBufferCycles:  count ← count − 1;  idle ← 0
 
 The buffer *is* the hysteresis — a transient labour dip or a single unsold run costs nothing, because the
 countdown resets the moment the level refills; only a *sustained* idle level compounds down, one whole level
-per buffer period. The countdown state (`WorldBuilding.idleCycles`) is persisted; utilization itself is
+per buffer period. The countdown state (`WorldBuilding.idleCycles`) is persisted; utilisation itself is
 derived each run (no stored "abandonment" integral).
 
 **(2) Unrest teardown — catastrophic, the snowball.** Above an unrest threshold, a whole level is *torn down
@@ -211,21 +211,24 @@ scattered:
 
 **Goal:** one at-a-glance view of the three quantities, per land-type and per building, plus a **decay/health
 read** now that the substrate moves — is this system holding at equilibrium (built ≈ used), sitting on idle
-capacity that will shed, or torn down under unrest? The panel should make "this world is stable / contracting /
-collapsing" obvious without reading numbers.
+capacity that will shed, stuck on idle capacity a recipe input is starving (which won't shed on its own), or
+torn down under unrest? The panel should make "this world is stable / idle / contracting / collapsing" obvious
+without reading numbers.
 
 **Shipped design** (collaborative, prototype-first — not an agent invoking `frontend-design` blind). The panel
 groups buildings by the two physical land **pools** — **Deposit land** (extractors, a per-resource table) and
 **General land** (housing + factories, a housing/factory/free magnitude bar whose free tail two-tones the
-**habitable** sub-cap in units). A system **health strip** (`stable / contracting / collapsing` via
+**habitable** sub-cap in units). A system **health strip** (`stable / idle / contracting / collapsing` via
 `industryHealth`) carries a per-building tally and an info-icon legend popover. The pool tables read
 **worked/slots** (staffing keeps a decimal; slot and output counts are whole, `≥1K` abbreviated) with a
 health glyph per row, gold-when-rich yield, and per-input `needs` lines for producers. Health is grounded in
 the decay engine's exact triggers via `buildingHealth`/`industryHealth` (`lib/engine/industry.ts`): a row is
-**collapsing** under unrest teardown, **contracting** when a WHOLE level is idle (`floor(built − used) ≥ 1`,
-the marginal level the engine sheds), else **stable** — so the label can never contradict what actually
-decays. Fed by live `used` + `sellingFactor`. Honours the Foundry theme and reuses `components/ui` primitives.
-It landed **last**, so it renders the finished, moving substrate.
+**collapsing** under unrest teardown, **contracting** when a WHOLE level is idle (`floor(built − used) ≥ 1`)
+for a reason decay can act on (the marginal level the engine sheds), **idle** when that same whole-level gap
+is bound only by a recipe input decay can't see (a producer's readout `used` folds the input gate, but
+`computeSystemDecay` carries no market stock to compute one from), else **stable** — so the label can never
+contradict what actually decays. Fed by live `used` + `sellingFactor`. Honours the Foundry theme and reuses
+`components/ui` primitives. It landed **last**, so it renders the finished, moving substrate.
 
 ---
 
@@ -233,7 +236,7 @@ It landed **last**, so it renders the finished, moving substrate.
 
 1. **Decay engine (pure).** `lib/engine/` functions: `used` per building class, disuse decay, unrest decay —
    pure, total, Vitest-tested in isolation (no DB import in the test graph).
-2. **Tick wiring.** A decay step on the economy-shard cadence: read building set + `labourFulfillment` +
+2. **Tick wiring.** A decay step on the economy-shard cadence: read building set + `labourFulfilment` +
    market uptake, compute batched downward `count` deltas, apply them, recompute `popCap` live.
    The pure body runs against the in-memory world.
 3. **Population coupling.** Housing-overshoot → unrest-weighted **migration ⊕ death** displacement term.

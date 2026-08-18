@@ -50,7 +50,7 @@ describe("DOCTRINES", () => {
     expect(min[0]).toBe("protectionist");
   });
 
-  it("isDoctrine recognizes every key in DOCTRINES", () => {
+  it("isDoctrine recognises every key in DOCTRINES", () => {
     for (const key of Object.keys(DOCTRINES)) {
       expect(isDoctrine(key)).toBe(true);
     }

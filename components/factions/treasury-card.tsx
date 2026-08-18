@@ -9,17 +9,15 @@ import { TaxLevelStepper } from "@/components/factions/tax-level-stepper";
 import { useFactionTreasury, useUpdateTreasuryPolicy } from "@/lib/hooks/use-faction-treasury";
 import { TREASURY } from "@/lib/constants/treasury";
 import { buildingLabel } from "@/lib/engine/construction-readout";
-import { formatMagnitude } from "@/lib/utils/format";
+import { formatMagnitude, formatSignedMagnitude } from "@/lib/utils/format";
 import type { TaxLevel } from "@/lib/types/game";
-import type { TreasuryBands } from "@/lib/engine/treasury";
+import { bandShortfall, foundingWorkingBalance, type TreasuryBands } from "@/lib/engine/treasury";
 
 function money(n: number): string {
   return formatMagnitude(n);
 }
 
-function signedMoney(n: number): string {
-  return `${n < 0 ? "−" : "+"}${money(Math.abs(n))}`;
-}
+const signedMoney = formatSignedMagnitude;
 
 function LedgerRow({ label, amount, indent = false }: { label: string; amount: string; indent?: boolean }) {
   return (
@@ -58,12 +56,24 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
     <Card variant="bordered" padding="md" className="mb-6">
       <CardHeader title="Treasury" />
       <CardContent>
+        {/* The headline is what the player can actually spend: balance minus what founding has
+            already called for. The stored balance only falls at settlement (the single balance
+            writer), so mid-cycle the two differ — the footnote reconciles them the moment a colony
+            order commits money, and disappears when nothing is committed. */}
         <div className="mb-3 flex items-baseline justify-between">
-          <span className="font-mono text-[22px] leading-none text-text-primary">{money(data.balance)}</span>
+          <span className="font-mono text-[22px] leading-none text-text-primary">
+            {money(foundingWorkingBalance(data.balance, data.foundingCommitted))}
+          </span>
           <span className={`font-mono text-xs ${data.net < 0 ? "text-status-red-light" : "text-status-green-light"}`}>
             net {signedMoney(data.net)} / cycle
           </span>
         </div>
+        {data.foundingCommitted > 0 && (
+          <div className="-mt-2 mb-3 flex items-baseline justify-between text-xs text-text-tertiary">
+            <span>committed to founding {signedMoney(-data.foundingCommitted)}</span>
+            <span className="font-mono">total {money(data.balance)}</span>
+          </div>
+        )}
         {!s ? (
           <EmptyState
             className="mb-4"
@@ -111,6 +121,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
           label="Maintenance"
           set={data.bands.maintenance}
           runs={data.funded.maintenance}
+          shorted={bandShortfall(data.lastSettlement, "maintenance") !== null}
           floor={TREASURY.MAINTENANCE_SLIDER_FLOOR}
           interactive={interactive}
           onCommit={commitBand("maintenance")}
@@ -119,6 +130,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
           label="Logistics"
           set={data.bands.logistics}
           runs={data.funded.logistics}
+          shorted={bandShortfall(data.lastSettlement, "logistics") !== null}
           interactive={interactive}
           onCommit={commitBand("logistics")}
         />
@@ -126,6 +138,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
           label="Construction"
           set={data.bands.construction}
           runs={data.funded.construction}
+          shorted={bandShortfall(data.lastSettlement, "construction") !== null}
           interactive={interactive}
           onCommit={commitBand("construction")}
         />

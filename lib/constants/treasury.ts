@@ -1,7 +1,7 @@
 /**
  * Faction treasury constants. ALL values here are ECONOMY_SCALE-invariant by
  * definition (money never rides S): heads, building levels, and construction
- * work points are unscaled counts, and the two S-scaled tax bases (realized
+ * work points are unscaled counts, and the two S-scaled tax bases (realised
  * production, logistics work) are divided by the scale at collection.
  *
  * Rate magnitudes are harness-calibrated (`npm run simulate` — early-game
@@ -16,7 +16,7 @@ export const TREASURY = {
   HEADS_TAX_PER_CYCLE: 0.01,
   /** Per-head weights by labour grade — skilled cores out-earn frontier headcount. */
   HEADS_WEIGHTS: { unskilled: 1, technicians: 3, engineers: 9 },
-  /** Share of reference value collected per realized unit (at S=1), before the tax-level multiplier. */
+  /** Share of reference value collected per realised unit (at S=1), before the tax-level multiplier. */
   PRODUCTION_TAX_RATE: 0.05,
   /** A processed good's reference value never falls below this share of its own base price. */
   REFERENCE_VALUE_FLOOR_SHARE: 0.25,

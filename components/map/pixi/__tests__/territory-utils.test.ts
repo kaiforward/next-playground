@@ -1,18 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { Delaunay } from "d3-delaunay";
 import {
-  computeTerritoryPolygons,
+  clipVoronoiCells,
+  unionCellsByGroup,
   clipPolygonToDisc,
 } from "@/components/map/pixi/territory-utils";
 
-describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
+describe("Voronoi cell clipping and grouping", () => {
   it("produces one polygon group per system when keyed by id", () => {
     const pts: [number, number][] = [
       [100, 100], [900, 100], [500, 900], [500, 500],
     ];
     const ids = ["a", "b", "c", "d"];
     const voronoi = Delaunay.from(pts).voronoi([0, 0, 1000, 1000]);
-    const cells = computeTerritoryPolygons(pts.length, voronoi, (i) => ids[i]);
+    const cells = unionCellsByGroup(clipVoronoiCells(pts.length, voronoi), (i) => ids[i]);
     expect(cells.size).toBe(4);
     for (const id of ids) {
       const poly = cells.get(id);
@@ -34,7 +35,7 @@ describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
     ];
     const keys = ["left", "left", "right", "right"];
     const voronoi = Delaunay.from(pts).voronoi([0, 0, 1000, 1000]);
-    const cells = computeTerritoryPolygons(pts.length, voronoi, (i) => keys[i]);
+    const cells = unionCellsByGroup(clipVoronoiCells(pts.length, voronoi), (i) => keys[i]);
 
     expect(cells.size).toBe(2);
     const left = cells.get("left");
@@ -76,7 +77,7 @@ describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
       }
     }
     const voronoi = Delaunay.from(pts).voronoi([0, 0, 10000, 10000]);
-    const cells = computeTerritoryPolygons(pts.length, voronoi, (i) => ids[i]);
+    const cells = unionCellsByGroup(clipVoronoiCells(pts.length, voronoi), (i) => ids[i]);
 
     // Median nearest-neighbour spacing is 500; with any sane radius factor the
     // clipped territory stays well inside this window and clear of the corners.
@@ -111,7 +112,7 @@ describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
     ids.push("lone");
 
     const voronoi = Delaunay.from(pts).voronoi([0, 0, 100000, 100000]);
-    const cells = computeTerritoryPolygons(pts.length, voronoi, (i) => ids[i]);
+    const cells = unionCellsByGroup(clipVoronoiCells(pts.length, voronoi), (i) => ids[i]);
 
     for (let i = 0; i < pts.length; i++) {
       const [sx, sy] = pts[i];
@@ -130,12 +131,31 @@ describe("computeTerritoryPolygons (per-system Voronoi grouping)", () => {
     ];
     const keys = ["a", null, "c"];
     const voronoi = Delaunay.from(pts).voronoi([0, 0, 1000, 1000]);
-    const cells = computeTerritoryPolygons(pts.length, voronoi, (i) => keys[i]);
+    const cells = unionCellsByGroup(clipVoronoiCells(pts.length, voronoi), (i) => keys[i]);
 
     // The middle system (null key) is excluded; only "a" and "c" produce groups.
     expect(cells.size).toBe(2);
     expect(cells.has("a")).toBe(true);
     expect(cells.has("c")).toBe(true);
     expect(cells.has("b")).toBe(false);
+  });
+
+  it("leaves the clipped cells intact so one set backs several groupings", () => {
+    // One clipped-cell set feeds every grouping on the map (ids, regions, factions). If a union
+    // wrote back into its inputs, whichever grouping ran second would union corrupted geometry.
+    const pts: [number, number][] = [
+      [200, 300], [200, 700], [800, 300], [800, 700],
+    ];
+    const ids = ["a", "b", "c", "d"];
+    const voronoi = Delaunay.from(pts).voronoi([0, 0, 1000, 1000]);
+    const clipped = clipVoronoiCells(pts.length, voronoi);
+    const before = JSON.stringify(clipped);
+
+    const firstPass = unionCellsByGroup(clipped, (i) => (i < 2 ? "left" : "right"));
+    unionCellsByGroup(clipped, (i) => ids[i]);
+    const secondPass = unionCellsByGroup(clipped, (i) => (i < 2 ? "left" : "right"));
+
+    expect(JSON.stringify(clipped)).toBe(before);
+    expect(JSON.stringify([...secondPass])).toBe(JSON.stringify([...firstPass]));
   });
 });

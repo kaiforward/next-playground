@@ -165,7 +165,7 @@ Per the no-archive rule, superseded docs are **deleted** (git is history). Execu
 | `planned/event-ideas.md` | Feeds the events re-point. |
 | `planned/economy-specialisation.md` + `economy-specialisation-s4-guardrails.md` | S4 calibration pauses; resume inside the post-pivot economy pass (goods rework + flow merge will reopen calibration anyway — do it once). |
 | `docs/SPEC.md` | Overview + core-loop sections rewrite to this concept; active-system sections update as systems are cut/re-pointed during the build. |
-| `docs/BACKLOG.md` | Needs a purge pass (trade-rework, mini-game, smuggling, reputation items die). |
+| `docs/BACKLOG.md` | **Deleted.** The single ordered queue is `docs/ROADMAP.md`. |
 
 ### Active docs
 
@@ -177,7 +177,7 @@ Active docs describe shipped code and stay accurate until the code changes: each
 
 Order of operations, not a build plan. Each phase gets its own spec → plan → build; earlier phases are deliberately playable.
 
-- **Phase 0 — Adopt the pivot (docs only).** Commit this doc; execute the doc dispositions; purge BACKLOG; rewrite SPEC.md's overview.
+- **Phase 0 — Adopt the pivot (docs only). ✅ Shipped.** This doc committed, the doc dispositions executed, the backlog replaced by `docs/ROADMAP.md`, SPEC.md's overview rewritten.
 - **Phase 1 — Teardown. ✅ Shipped.** Deleted the §4 cut systems from the code: UI, routes, services, hooks, tick processors, Prisma models, tests — and each system's active doc in the same PR. Done *before* engine extraction so the migration surface shrank (nothing dead got migrated). Entanglements were called per-piece (ship *travel* survived for fleets while the danger pipeline died; the market screen died as a trading surface but survived as an economy inspection view; auth stayed load-bearing through Phase 1 and deleted wholesale in Phase 2). Build plan deleted on ship per the doc lifecycle.
 - **Phase 2 — The ant farm (engine extraction). ✅ Shipped (2026-07).** Single-player runtime: in-memory world, services re-pointed off Prisma, auth deleted, save/load, pause/speed, world-gen replacing the seed script. Milestone reached: the living galaxy runs locally as an observable simulation with the full map — no Postgres, no login. Shipped state: [active/engineering/single-player-runtime.md](../active/engineering/single-player-runtime.md).
 - **Phase 3 — The player seat (v1 of the game).** Pick a faction; treasury/budget bands + build orders (the SP5 "full agency" design, built player-facing and AI-shared); manual placement with fractional allocations; per-domain automation toggles; new world-gen (small cores, open galaxy) + colonisation; alert feed. Milestone: you can *play* — develop a small faction against AI rivals.

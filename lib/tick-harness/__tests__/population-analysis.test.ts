@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   computeTrailingProvisionVariance, detectPingPong, newEpisodeCostTotals, perSystemSupplyState,
-  recordEpisodeCosts, sampleProvisionBySystem, summarizeInfrastructure, summarizePopulation,
-  summarizeSupplyRegimes, worstGoodSatisfaction,
+  recordEpisodeCosts, sampleProvisionBySystem, summariseInfrastructure, summarisePopulation,
+  summariseSupplyRegimes, worstGoodSatisfaction,
 } from "../population-analysis";
 import type { SystemSupplyState } from "../population-analysis";
 import { EXPECTATION_PARAMS } from "@/lib/constants/population";
@@ -18,7 +18,7 @@ import type { WorldEvent } from "@/lib/world/types";
 
 /**
  * Characterization tests for detectPingPong. If any of these fail the
- * implementation does not match the documented behavior — report, don't adjust.
+ * implementation does not match the documented behaviour — report, don't adjust.
  */
 describe("detectPingPong", () => {
   it("returns 0 when fewer than 3 snapshots are provided", () => {
@@ -103,14 +103,14 @@ function infraSys(id: string, buildings: Record<string, number>, popCap: number)
   };
 }
 
-describe("summarizeInfrastructure", () => {
+describe("summariseInfrastructure", () => {
   it("reports total built, decay %, and counts collapsed systems", () => {
     // Started with 100 built; now 60 → 40% decayed. s2 fully collapsed.
     const systems = [
       infraSys("s1", { [HOUSING_TYPE]: 30, ore: 30 }, 600),
       infraSys("s2", { [HOUSING_TYPE]: 0, ore: 0 }, 0),
     ];
-    const summary = summarizeInfrastructure(systems, 100);
+    const summary = summariseInfrastructure(systems, 100);
     expect(summary.builtStart).toBe(100);
     expect(summary.builtEnd).toBe(60);
     expect(summary.decayedPct).toBeCloseTo(40, 6);
@@ -128,7 +128,7 @@ describe("summarizeInfrastructure", () => {
       infraSys("working", { ore: 5, [HOUSING_TYPE]: 3 }, 100),
       { ...infraSys("rock", {}, 0), control: "unclaimed" as const },
     ];
-    const summary = summarizeInfrastructure(systems, 20);
+    const summary = summariseInfrastructure(systems, 20);
     expect(summary.collapsedCount).toBe(1);
     expect(summary.builtEnd).toBe(9);
   });
@@ -136,7 +136,7 @@ describe("summarizeInfrastructure", () => {
   it("reports 0 decayed, never a division by the start total, for a galaxy that began with nothing", () => {
     // A world-gen that shipped no buildings has no baseline to decay from. JSON renders both
     // Infinity and NaN as null, which prints as "not measured" rather than "measured, and broken".
-    const summary = summarizeInfrastructure([infraSys("s1", { ore: 4 }, 100)], 0);
+    const summary = summariseInfrastructure([infraSys("s1", { ore: 4 }, 100)], 0);
     expect(summary.decayedPct).toBe(0);
     expect(Number.isFinite(summary.decayedPct)).toBe(true);
   });
@@ -151,7 +151,7 @@ function popSys(id: string, population: number, popCap: number, unrest = 0): Tic
   };
 }
 
-describe("summarizePopulation", () => {
+describe("summarisePopulation", () => {
   const BRAKE_END = CROWDING.BRAKE_END; // 1.15 — growth brakes to 0 at r = BRAKE_END
 
   it("counts saturatedCount unchanged: population >= 98% of popCap, popCap > 0 only", () => {
@@ -160,7 +160,7 @@ describe("summarizePopulation", () => {
       popSys("below", 970, 1000),    // r = 0.97 → not saturated
       popSys("no-housing", 500, 0),  // popCap 0 → excluded regardless of population
     ];
-    const summary = summarizePopulation(systems, 1000, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 1000, 0.65, BRAKE_END);
     expect(summary.saturatedCount).toBe(1);
   });
 
@@ -173,7 +173,7 @@ describe("summarizePopulation", () => {
       // otherwise every unhoused system would misread as "braked" rather than "no housing at all".
       popSys("no-housing", 500, 0),
     ];
-    const summary = summarizePopulation(systems, 1000, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 1000, 0.65, BRAKE_END);
     expect(summary.brakedCount).toBe(1);
   });
 
@@ -183,19 +183,19 @@ describe("summarizePopulation", () => {
       popSys("b", 750, 1000),       // 0.75
       popSys("no-housing", 999, 0), // excluded from both sum and count
     ];
-    const summary = summarizePopulation(systems, 1000, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 1000, 0.65, BRAKE_END);
     expect(summary.meanOccupancy).toBeCloseTo(0.625, 6);
   });
 
   it("guards meanOccupancy to 0 (never NaN) when no system has popCap > 0", () => {
     const systems = [popSys("a", 500, 0), popSys("b", 10, 0)];
-    const summary = summarizePopulation(systems, 100, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 100, 0.65, BRAKE_END);
     expect(summary.meanOccupancy).toBe(0);
     expect(Number.isFinite(summary.meanOccupancy)).toBe(true);
   });
 });
 
-describe("summarizePopulation — striking share and stranded population", () => {
+describe("summarisePopulation — striking share and stranded population", () => {
   const BRAKE_END = CROWDING.BRAKE_END;
 
   it("reports striking as a share of systems alongside the raw count", () => {
@@ -207,13 +207,13 @@ describe("summarizePopulation — striking share and stranded population", () =>
       popSys("calm-c", 100, 1000, 0.65),  // exactly at the threshold — still produces, so not striking
       popSys("striking", 100, 1000, 0.66), // above it
     ];
-    const summary = summarizePopulation(systems, 400, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 400, 0.65, BRAKE_END);
     expect(summary.strikingCount).toBe(1);
     expect(summary.strikingShare).toBeCloseTo(0.25, 6);
   });
 
   it("reports 0 share, not NaN, for an empty galaxy", () => {
-    const summary = summarizePopulation([], 0, 0.65, BRAKE_END);
+    const summary = summarisePopulation([], 0, 0.65, BRAKE_END);
     expect(summary.strikingShare).toBe(0);
     expect(Number.isFinite(summary.strikingShare)).toBe(true);
     expect(summary.strandedCount).toBe(0);
@@ -229,7 +229,7 @@ describe("summarizePopulation — striking share and stranded population", () =>
       popSys("abandoned", 0, 0),         // no housing AND nobody home — not stranded, just empty
       popSys("healthy", 500, 1000),
     ];
-    const summary = summarizePopulation(systems, 800, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 800, 0.65, BRAKE_END);
     expect(summary.strandedCount).toBe(2);
     expect(summary.strandedPopulation).toBe(300);
   });
@@ -242,7 +242,7 @@ describe("summarizePopulation — striking share and stranded population", () =>
       popSys("residue", 100, 5e-7),   // stranded: below the epsilon, effectively no housing
       popSys("sliver", 100, 1e-3),    // not stranded: a real, if tiny, cap
     ];
-    const summary = summarizePopulation(systems, 200, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 200, 0.65, BRAKE_END);
     expect(summary.strandedCount).toBe(1);
     expect(summary.strandedPopulation).toBe(100);
   });
@@ -254,13 +254,13 @@ describe("summarizePopulation — striking share and stranded population", () =>
       popSys("overcrowded", 1200, 1000),
       popSys("tiny-cap", 100, 20),
     ];
-    const summary = summarizePopulation(systems, 1300, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 1300, 0.65, BRAKE_END);
     expect(summary.strandedCount).toBe(0);
     expect(summary.strandedPopulation).toBe(0);
   });
 });
 
-describe("summarizePopulation — the settled denominator and the unrest reads", () => {
+describe("summarisePopulation — the settled denominator and the unrest reads", () => {
   const BRAKE_END = CROWDING.BRAKE_END;
 
   /** An unclaimed rock: no people, no housing, no opinion — and no business in any denominator. */
@@ -277,7 +277,7 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
       voidSys("rock-a"),
       voidSys("rock-b"),
     ];
-    const summary = summarizePopulation(systems, 200, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 200, 0.65, BRAKE_END);
 
     expect(summary.meanUnrest).toBeCloseTo(0.5, 9);
     expect(summary.maxUnrest).toBeCloseTo(0.8, 9);
@@ -294,7 +294,7 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
       popSys("peak", 100, 1000, 0.9),
       popSys("quiet", 100, 1000, 0.1),
     ];
-    const summary = summarizePopulation(systems, 300, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 300, 0.65, BRAKE_END);
     expect(summary.maxUnrest).toBeCloseTo(0.9, 9);
   });
 
@@ -305,7 +305,7 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
       popSys("last-resident", 1, 1000),
       popSys("alive", 100, 1000),
     ];
-    const summary = summarizePopulation(systems, 101.5, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 101.5, 0.65, BRAKE_END);
     expect(summary.emptiedCount).toBe(2);
   });
 
@@ -317,7 +317,7 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
       popSys("near", 970, 1000),
       popSys("far", 500, 1000),
     ];
-    const summary = summarizePopulation(systems, 2450, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 2450, 0.65, BRAKE_END);
     expect(summary.saturatedCount).toBe(1);
   });
 
@@ -327,7 +327,7 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
       popSys("exactly-epsilon", 100, 1e-6),
       popSys("just-above", 100, 2e-6),
     ];
-    const summary = summarizePopulation(systems, 200, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 200, 0.65, BRAKE_END);
     expect(summary.strandedCount).toBe(1);
     expect(summary.strandedPopulation).toBe(100);
   });
@@ -335,10 +335,10 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
   it("reports 0 growth and 0 mean unrest, never NaN, for a galaxy that started empty", () => {
     // Both guards divide by a run-start quantity: a zero denominator has to print as "no growth",
     // because JSON renders Infinity and NaN alike as null, which reads as "not measured".
-    const fromNothing = summarizePopulation([popSys("seed", 10, 100, 0.3)], 0, 0.65, BRAKE_END);
+    const fromNothing = summarisePopulation([popSys("seed", 10, 100, 0.3)], 0, 0.65, BRAKE_END);
     expect(fromNothing.growthPct).toBe(0);
 
-    const empty = summarizePopulation([], 0, 0.65, BRAKE_END);
+    const empty = summarisePopulation([], 0, 0.65, BRAKE_END);
     expect(empty.meanUnrest).toBe(0);
     expect(Number.isFinite(empty.meanUnrest)).toBe(true);
     expect(empty.growthPct).toBe(0);
@@ -346,13 +346,13 @@ describe("summarizePopulation — the settled denominator and the unrest reads",
 
   it("measures growth against the run's own start total", () => {
     const systems = [popSys("a", 120, 1000), popSys("b", 60, 1000)];
-    const summary = summarizePopulation(systems, 150, 0.65, BRAKE_END);
+    const summary = summarisePopulation(systems, 150, 0.65, BRAKE_END);
     expect(summary.totalEnd).toBe(180);
     expect(summary.growthPct).toBeCloseTo(20, 9);
   });
 });
 
-describe("summarizeSupplyRegimes", () => {
+describe("summariseSupplyRegimes", () => {
   const mkt = (systemId: string, goodId: string, satisfaction: number) => ({ systemId, goodId, satisfaction });
   /** An absolute-scale reference only, at the retired escalation cut's old magnitude — used below to
    *  pin "mild" against "near-total basket collapse" shortfalls. Not tied to any live mechanism
@@ -361,7 +361,7 @@ describe("summarizeSupplyRegimes", () => {
 
   it("classifies settled systems and reports shares that sum to 1", () => {
     const systems = [popSys("fed", 100, 1000), popSys("thirsty", 100, 1000)];
-    const summary = summarizeSupplyRegimes(systems, [
+    const summary = summariseSupplyRegimes(systems, [
       mkt("fed", "water", 1), mkt("fed", "food", 1),
       mkt("thirsty", "water", 0), mkt("thirsty", "food", 1),
     ]);
@@ -380,7 +380,7 @@ describe("summarizeSupplyRegimes", () => {
     // RATIONING_PROVISION (0.70) and SUPPLIED_PROVISION (0.90), and no survival good is touched, so
     // this system must read Strained — and every other bucket must read zero.
     const systems = [popSys("strained", 100, 1000)];
-    const summary = summarizeSupplyRegimes(systems, [mkt("strained", "water", 0.8)]);
+    const summary = summariseSupplyRegimes(systems, [mkt("strained", "water", 0.8)]);
     expect(summary.strained).toBe(1);
     expect(summary.supplied).toBe(0);
     expect(summary.rationing).toBe(0);
@@ -393,10 +393,10 @@ describe("summarizeSupplyRegimes", () => {
     // the old D-scale cut read it: both demanded goods at 0.6 gives Provision exactly 0.6 (uniform
     // satisfaction, so the weights cancel out) — below RATIONING_PROVISION (0.70), above both
     // DEPRIVED_PROVISION (0.50) and the SHORTAGE_SATISFACTION survival floor, so this must read
-    // Rationing and nothing else. Without this, a summarizer that mis-routed the rationing branch
+    // Rationing and nothing else. Without this, a summariser that mis-routed the rationing branch
     // would still pass the suite.
     const systems = [popSys("peckish", 100, 1000)];
-    const summary = summarizeSupplyRegimes(systems, [
+    const summary = summariseSupplyRegimes(systems, [
       mkt("peckish", "water", 0.6), mkt("peckish", "food", 0.6),
     ]);
     expect(summary.rationing).toBe(1);
@@ -416,7 +416,7 @@ describe("summarizeSupplyRegimes", () => {
     // shape, one band lower, and it must not read as the same word.
     const nonSurvival = GOOD_NAMES.filter((g) => !SURVIVAL_GOODS.includes(g));
     const systems = [popSys("stripped", 100, 1000)];
-    const summary = summarizeSupplyRegimes(systems, nonSurvival.map((g) => mkt("stripped", g, 0.3)));
+    const summary = summariseSupplyRegimes(systems, nonSurvival.map((g) => mkt("stripped", g, 0.3)));
     expect(summary.deprived).toBe(1);
     expect(summary.deprivedShare).toBeCloseTo(1, 10);
     expect(summary.supplied).toBe(0);
@@ -435,7 +435,7 @@ describe("summarizeSupplyRegimes", () => {
     // real tables (GOOD_NAMES, SURVIVAL_GOODS) so it re-verifies itself if any weight moves.
     const nonSurvival = GOOD_NAMES.filter((g) => !SURVIVAL_GOODS.includes(g));
     const systems = [popSys("squeezed", 100, 1000)];
-    const summary = summarizeSupplyRegimes(systems, [
+    const summary = summariseSupplyRegimes(systems, [
       ...SURVIVAL_GOODS.map((g) => mkt("squeezed", g, SHORTAGE_SATISFACTION)),
       ...nonSurvival.map((g) => mkt("squeezed", g, 0)),
     ]);
@@ -461,12 +461,12 @@ describe("summarizeSupplyRegimes", () => {
       systemId: "thirsty", regionId: "r1", startTick: 0, phaseStartTick: 0, phaseDuration: 10,
       severity: 1, sourceEventId: null, metadata: null,
     };
-    expect(summarizeSupplyRegimes(systems, markets, [event]))
-      .toEqual(summarizeSupplyRegimes(systems, markets));
+    expect(summariseSupplyRegimes(systems, markets, [event]))
+      .toEqual(summariseSupplyRegimes(systems, markets));
   });
 
   it("counts only settled systems and never reports NaN for an empty galaxy", () => {
-    const summary = summarizeSupplyRegimes([], []);
+    const summary = summariseSupplyRegimes([], []);
     expect(summary.counted).toBe(0);
     expect(Number.isFinite(summary.suppliedShare)).toBe(true);
     expect(summary.meanShortfall).toBe(0);
@@ -479,7 +479,7 @@ describe("summarizeSupplyRegimes", () => {
     const unclaimed = { ...popSys("unclaimed", 100, 1000), control: "unclaimed" as const };
     const markets = [mkt("claimed", "water", 0.5), mkt("unclaimed", "water", 0)];
 
-    const summary = summarizeSupplyRegimes([claimed, unclaimed], markets);
+    const summary = summariseSupplyRegimes([claimed, unclaimed], markets);
 
     expect(summary.counted).toBe(1);
     // Water is the only demanded good on "claimed", so both its Provision and its (only, hence
@@ -500,7 +500,7 @@ describe("summarizeSupplyRegimes", () => {
       ...starved.map((s) => mkt(s.id, "water", 0)),
     ];
 
-    const summary = summarizeSupplyRegimes(systems, markets);
+    const summary = summariseSupplyRegimes(systems, markets);
 
     expect(summary.provisionLevels.p10).toBeCloseTo(0, 6);
     expect(summary.provisionLevels.p90).toBeCloseTo(1, 6);
@@ -512,7 +512,7 @@ describe("summarizeSupplyRegimes", () => {
     const systems = [popSys("a", 100, 1000), popSys("b", 100, 1000), popSys("c", 100, 1000)];
     const markets = systems.map((s) => mkt(s.id, "water", 0.6));
 
-    const summary = summarizeSupplyRegimes(systems, markets);
+    const summary = summariseSupplyRegimes(systems, markets);
 
     expect(summary.provisionLevels.p10).toBeCloseTo(summary.provisionLevels.median, 10);
     expect(summary.provisionLevels.median).toBeCloseTo(summary.provisionLevels.p90, 10);
@@ -554,7 +554,7 @@ describe("perSystemSupplyState", () => {
     ];
 
     const states = perSystemSupplyState(systems, markets);
-    const summary = summarizeSupplyRegimes(systems, markets);
+    const summary = summariseSupplyRegimes(systems, markets);
 
     const meanD = [...states.values()].reduce((a, s) => a + s.d, 0) / states.size;
     expect(meanD).toBeCloseTo(summary.meanShortfall, 10);
@@ -637,7 +637,7 @@ describe("perSystemSupplyState — adaptive expectation", () => {
   });
 });
 
-describe("summarizeSupplyRegimes — expectation & grievance distributions, and the stale flag", () => {
+describe("summariseSupplyRegimes — expectation & grievance distributions, and the stale flag", () => {
   it("flags an emptyBasket system as stale rather than folding its stored memory into the mean", () => {
     // "stale" carries no market rows at all -> an empty goods basket -> emptyBasket: true. Its
     // stored memory (0.9) must be EXCLUDED from expectationLevels, not blended into the mean with
@@ -649,7 +649,7 @@ describe("summarizeSupplyRegimes — expectation & grievance distributions, and 
       sys("normal", { provisionExpectation: 0.6 }),
     ];
     const markets = [{ systemId: "normal", goodId: "water", satisfaction: 0.6 }];
-    const summary = summarizeSupplyRegimes(systems, markets);
+    const summary = summariseSupplyRegimes(systems, markets);
     expect(summary.staleExpectationCount).toBe(1);
     // Only "normal" contributes — median must land exactly on its own stored value, not a blend.
     expect(summary.expectationLevels.median).toBeCloseTo(0.6, 6);
@@ -658,7 +658,7 @@ describe("summarizeSupplyRegimes — expectation & grievance distributions, and 
 
   it("reports 0/empty distributions, never NaN, when every system is stale", () => {
     const systems = [sys("stale", { provisionExpectation: 0.9 })];
-    const summary = summarizeSupplyRegimes(systems, []); // no markets -> empty basket
+    const summary = summariseSupplyRegimes(systems, []); // no markets -> empty basket
     expect(summary.staleExpectationCount).toBe(1);
     expect(summary.expectationLevels).toEqual({ median: 0, p10: 0, p90: 0 });
     expect(summary.grievanceLevels).toEqual({ median: 0, p10: 0, p90: 0 });

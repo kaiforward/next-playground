@@ -260,7 +260,7 @@ function spendShareWindow(
  * says what THIS arm's founding era cost; the fixed window is the same ticks for every arm and is
  * the only one two arms may be compared on.
  */
-export function summarizeFoundingEra(
+export function summariseFoundingEra(
   records: ReadonlyArray<FactionCycleRecord>,
   startupTailEndTick: number = FOUNDING_ERA_START_TICK,
   fixedWindowEndTick: number = FOUNDING_FIXED_WINDOW_END_TICK,
@@ -360,7 +360,7 @@ export function sampleTreasuries(tick: number, treasuries: WorldFactionTreasury[
   };
 }
 
-export function summarizeTreasuries(
+export function summariseTreasuries(
   treasuries: WorldFactionTreasury[],
   snapshots: TreasurySnapshot[],
 ): TreasurySummary {

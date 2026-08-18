@@ -33,7 +33,7 @@ describe("game lifecycle services (save/load)", () => {
       }
     });
 
-    it("writes the current world and reports the sanitized name + tick", async () => {
+    it("writes the current world and reports the sanitised name + tick", async () => {
       setWorld(world);
       const result = await saveGame("My Save! #1");
       expect(result).toEqual({

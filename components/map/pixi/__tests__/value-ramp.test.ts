@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  valueRampColorPixi, rampFloorPixi, rampTopPixi, ABSENT_COLOR, rampCssStops, ABSENT_CSS, deEmphasize,
+  valueRampColorPixi, rampFloorPixi, rampTopPixi, ABSENT_COLOR, rampCssStops, ABSENT_CSS, deEmphasise,
   provisionLegendStops,
 } from "@/components/map/pixi/value-ramp";
 import { SUPPLIED_PROVISION, RATIONING_PROVISION, DEPRIVED_PROVISION } from "@/lib/constants/economy";
@@ -172,22 +172,22 @@ describe("provisionLegendStops — stepped legend carries stop POSITIONS, not ev
   });
 });
 
-describe("deEmphasize — out-of-scope de-emphasis treatments", () => {
+describe("deEmphasise — out-of-scope de-emphasis treatments", () => {
   it("'both' greys and darkens: never ABSENT_COLOR, summed channels strictly lower", () => {
     const input = rampTopPixi("population");
-    const out = deEmphasize(input, "both");
+    const out = deEmphasise(input, "both");
     expect(out).not.toBe(ABSENT_COLOR);
     expect(sum(out)).toBeLessThan(sum(input));
   });
   it("'dim' darkens without erasing colour: summed channels strictly lower", () => {
     const input = rampTopPixi("stability");
-    const out = deEmphasize(input, "dim");
+    const out = deEmphasise(input, "dim");
     expect(out).not.toBe(ABSENT_COLOR);
     expect(sum(out)).toBeLessThan(sum(input));
   });
   it("'desat' pulls channels toward each other (less saturated)", () => {
     const input = rampTopPixi("population"); // a saturated green, channels far apart
-    const out = deEmphasize(input, "desat");
+    const out = deEmphasise(input, "desat");
     const [r, g, b] = channels(out);
     const spread = Math.max(r, g, b) - Math.min(r, g, b);
     const [ir, ig, ib] = channels(input);
@@ -195,7 +195,7 @@ describe("deEmphasize — out-of-scope de-emphasis treatments", () => {
     expect(spread).toBeLessThan(inputSpread);
   });
   it("is idempotent-safe on an already-dark development floor colour (still not ABSENT_COLOR)", () => {
-    const out = deEmphasize(rampFloorPixi("development"), "both");
+    const out = deEmphasise(rampFloorPixi("development"), "both");
     expect(out).not.toBe(ABSENT_COLOR);
   });
 });

@@ -17,7 +17,7 @@ import type {
 } from "@/lib/world/types";
 import type { TreasuryWorld, TreasuryProcessorParams } from "@/lib/tick/world/treasury-world";
 
-const EMPTY_REALIZED: ReadonlyMap<string, ReadonlyMap<string, number>> = new Map();
+const EMPTY_REALISED: ReadonlyMap<string, ReadonlyMap<string, number>> = new Map();
 
 /**
  * Per-cycle treasury settlement: collect both tax lines from the cycle just
@@ -31,9 +31,9 @@ const EMPTY_REALIZED: ReadonlyMap<string, ReadonlyMap<string, number>> = new Map
  * maintenance floor.
  *
  * Heads tax and maintenance are per-cycle rates → scaled by catchUpFactor here;
- * realized production and work quantities arrive already catchUp-scaled from
+ * realised production and work quantities arrive already catchUp-scaled from
  * their own cycles and are never rescaled. Logistics work is S-scaled and is
- * normalised by economyScale at accrual; realized production at collection.
+ * normalised by economyScale at accrual; realised production at collection.
  */
 export async function runTreasuryProcessor(
   world: TreasuryWorld,
@@ -56,8 +56,8 @@ export async function runTreasuryProcessor(
     Number.isFinite(params.economyScale) && params.economyScale > 0 ? params.economyScale : 1;
   const rawCatchUp = catchUpFactor(params.interval);
   const catchUp = Number.isFinite(rawCatchUp) && rawCatchUp > 0 ? rawCatchUp : 1;
-  const realizedBySystem =
-    ctx.results.get("economy")?.economySignals?.realizedProductionBySystem ?? EMPTY_REALIZED;
+  const realisedBySystem =
+    ctx.results.get("economy")?.economySignals?.realisedProductionBySystem ?? EMPTY_REALISED;
 
   const systemsByFaction = new Map<string, { systemId: string; population: number; buildings: Record<string, number> }[]>();
   if (settles) {
@@ -115,7 +115,7 @@ export async function runTreasuryProcessor(
         headsTaxIncome(alloc, params.rates.headsWeights, params.rates.headsTaxPerCycle, rateMult) *
         catchUp;
       const production = productionTaxIncome(
-        realizedBySystem.get(s.systemId) ?? new Map<string, number>(),
+        realisedBySystem.get(s.systemId) ?? new Map<string, number>(),
         params.rates.referenceValues,
         params.rates.productionTaxRate,
         rateMult,
@@ -159,6 +159,7 @@ export async function runTreasuryProcessor(
       logisticsBill: bills.logistics,
       constructionBill: bills.construction,
       paid: settled.paid,
+      charged: settled.charged,
       foundingExpense: pendingFounding,
     };
 

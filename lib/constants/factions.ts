@@ -118,7 +118,7 @@ export const MINOR_NOUNS: readonly string[] = [
  * Homeworlds are the only seeded ownership under emergent world-gen: one decent,
  * well-spaced home per faction, chosen from raw substrate. Weights + spacing are a
  * coarse first-cut (simulator-validated for coherence, not tuned — SP3 moves the
- * calibration target). Score terms are normalized to [0,1] across the candidate
+ * calibration target). Score terms are normalised to [0,1] across the candidate
  * pool so the weights are directly comparable.
  */
 export const HOMEWORLD_PLACEMENT = {
@@ -128,6 +128,6 @@ export const HOMEWORLD_PLACEMENT = {
   RELAX_RATE: 0.85,
   /** Relaxation steps before falling back to pure quality order (spacing ignored). */
   MAX_RELAX_STEPS: 12,
-  /** Seed-bias weights over the three normalized substrate terms. */
+  /** Seed-bias weights over the three normalised substrate terms. */
   SCORE_WEIGHTS: { habitable: 1.0, diversity: 0.8, danger: 0.7 },
 } as const;

@@ -519,7 +519,7 @@ describe("economy processor: supply-chain input-gating", () => {
    * Each system has 2 metals buildings + 1 vocational_school (licenses the
    * metals buildings' skill1 demand: 2×7=14 ≪ 150, so metals isn't skill-gated)
    * and 65 population (= labour demand at 25/metals-building + 15/school), so
-   * labourFulfillment = 1 and production is purely input-gated. No ore-producing
+   * labourFulfilment = 1 and production is purely input-gated. No ore-producing
    * buildings are included — ore stock is set directly and does not grow.
    */
   it("throttles metals production when local ore is scarce", async () => {
@@ -593,8 +593,8 @@ describe("economy processor: supply-chain input-gating", () => {
 
 // ── selling factor signal ───────────────────────────────────────────
 
-describe("economy processor: realized production signal", () => {
-  it("exports realized production per (system, good) in economySignals", async () => {
+describe("economy processor: realised production signal", () => {
+  it("exports realised production per (system, good) in economySignals", async () => {
     const systems = [makeProducerSystem("sys-1", 0)];
     // Active-production zone (below the brake knee, ≥ 40) — same reasoning as the
     // strike-suppression tests above. Stock at the fixture's default 100 sits past
@@ -602,19 +602,19 @@ describe("economy processor: realized production signal", () => {
     const markets = [makeMarket("sys-1", "food", FIXTURE_BAND.targetStock - 2)];
     const world = new InMemoryEconomyWorld({ systems, markets, modifiers: [] });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    const realized = result.economySignals!.realizedProductionBySystem;
-    expect(realized.get("sys-1")).toBeDefined();
-    expect(realized.get("sys-1")!.get("food")).toBeGreaterThan(0);
+    const realised = result.economySignals!.realisedProductionBySystem;
+    expect(realised.get("sys-1")).toBeDefined();
+    expect(realised.get("sys-1")!.get("food")).toBeGreaterThan(0);
   });
 
-  it("records no realized entry for a pure consumer (produces nothing)", async () => {
+  it("records no realised entry for a pure consumer (produces nothing)", async () => {
     const world = new InMemoryEconomyWorld({
       systems: [makeConsumerSystem("c", 0)],
       markets: [makeMarket("c", "food", 100)],
       modifiers: [],
     });
     const r = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    expect(r.economySignals!.realizedProductionBySystem.get("c")).toBeUndefined();
+    expect(r.economySignals!.realisedProductionBySystem.get("c")).toBeUndefined();
   });
 });
 
@@ -721,7 +721,7 @@ describe("economy processor: selling factor signal", () => {
     });
     const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
     expect(requireSellingFactor(result.economySignals, "p-zero", "food")).toBe(1);
-    expect(result.economySignals!.realizedProductionBySystem.get("p-zero")).toBeUndefined();
+    expect(result.economySignals!.realisedProductionBySystem.get("p-zero")).toBeUndefined();
   });
 
   it("emits a low selling factor at the ceiling and a high factor below the anchor", async () => {
@@ -763,7 +763,7 @@ describe("economy processor: selling factor signal", () => {
 describe("maintenance output malus", () => {
   it("suppresses production like a sibling of the strike multiplier, per system", async () => {
     // Two identical calm producers; only p2 carries a malus. Same start stock →
-    // p2 must end the tick with strictly less stock and less realized output.
+    // p2 must end the tick with strictly less stock and less realised output.
     const startStock = FIXTURE_BAND.minStock + 5;
     const world = new InMemoryEconomyWorld({
       systems: [makeProducerSystem("p1", 0), makeProducerSystem("p2", 0)],
@@ -777,8 +777,8 @@ describe("maintenance output malus", () => {
     const stock = (systemId: string) =>
       world.markets.find((m) => m.systemId === systemId && m.goodId === "food")!.stock;
     expect(stock("p2")).toBeLessThan(stock("p1"));
-    const realized = result.economySignals?.realizedProductionBySystem;
-    expect(realized?.get("p2")?.get("food") ?? 0).toBeLessThan(realized?.get("p1")?.get("food") ?? 0);
+    const realised = result.economySignals?.realisedProductionBySystem;
+    expect(realised?.get("p2")?.get("food") ?? 0).toBeLessThan(realised?.get("p1")?.get("food") ?? 0);
   });
 });
 
@@ -863,7 +863,7 @@ describe("satisfaction — measured flow, persisted", () => {
 });
 
 describe("economy processor: persisted planner assessment", () => {
-  it("normalizes the persisted realized rate while retaining raw cycle quantity for treasury", async () => {
+  it("normalises the persisted realised rate while retaining raw cycle quantity for treasury", async () => {
     const rates: number[] = [];
     for (const interval of [12, 24, 48]) {
       const world = new InMemoryEconomyWorld({
@@ -873,10 +873,10 @@ describe("economy processor: persisted planner assessment", () => {
       });
       const result = await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS, interval });
       const market = world.markets[0];
-      const rawQuantity = result.economySignals?.realizedProductionBySystem.get("producer")?.get("food") ?? 0;
-      expect(market.realizedProductionRate).toBeGreaterThan(0);
-      const persistedRate = market.realizedProductionRate;
-      if (persistedRate === undefined) throw new Error("Expected persisted realized rate");
+      const rawQuantity = result.economySignals?.realisedProductionBySystem.get("producer")?.get("food") ?? 0;
+      expect(market.realisedProductionRate).toBeGreaterThan(0);
+      const persistedRate = market.realisedProductionRate;
+      if (persistedRate === undefined) throw new Error("Expected persisted realised rate");
       expect(rawQuantity).toBeCloseTo(persistedRate * (interval / 24), 8);
       rates.push(persistedRate);
     }
@@ -894,8 +894,8 @@ describe("economy processor: persisted planner assessment", () => {
       modifiers: [],
     });
     await runEconomyProcessor(world, makeCtx(0), { ...ECON_PARAMS });
-    expect(world.markets.find((market) => market.systemId === "producer")?.realizedProductionRate).toBe(0);
-    expect(world.markets.find((market) => market.systemId === "consumer")?.realizedProductionRate).toBe(0);
+    expect(world.markets.find((market) => market.systemId === "producer")?.realisedProductionRate).toBe(0);
+    expect(world.markets.find((market) => market.systemId === "consumer")?.realisedProductionRate).toBe(0);
   });
 
   it("records only strike or maintenance as production suppression", async () => {
@@ -1282,11 +1282,11 @@ describe("economy processor: the guards on what it writes to a market row", () =
     modifiers: [],
   });
 
-  it("never writes a non-finite realized rate, however degenerate the cadence", async () => {
-    // A zero cadence divides the cycle's realized output by a zero catch-up factor. World state must
-    // stay JSON-serializable: a NaN written here becomes `null` in the save file.
+  it("never writes a non-finite realised rate, however degenerate the cadence", async () => {
+    // A zero cadence divides the cycle's realised output by a zero catch-up factor. World state must
+    // stay JSON-serialisable: a NaN written here becomes `null` in the save file.
     const update = await capture(producerWorld(), { ...ECON_PARAMS, interval: 0 });
-    expect(update.realizedProductionRate).toBe(0);
+    expect(update.realisedProductionRate).toBe(0);
   });
 
   it("writes a usable suppression scalar for a corrupt, negative or total maintenance malus", async () => {

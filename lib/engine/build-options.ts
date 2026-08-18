@@ -7,6 +7,7 @@
  * the player may overbuild what their pops can staff and staffing dilution + idle-decay punish it.
  */
 import type { ResourceVector } from "@/lib/types/game";
+import type { WorldSystem } from "@/lib/world/types";
 import {
   BUILDING_TYPES, HOUSING_TYPE, effectiveSpaceCost,
 } from "@/lib/constants/industry";
@@ -14,6 +15,7 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { extractorsOnResource } from "@/lib/engine/directed-build";
 import { generalSpaceUsed, labourParts, labourStateFromParts } from "@/lib/engine/industry";
+import { slotCapOf } from "@/lib/engine/resources";
 
 export interface BuildOptionSystem {
   population: number;
@@ -23,14 +25,33 @@ export interface BuildOptionSystem {
   habitableSpace: number;
 }
 
-export type BuildBlockReason = "no_space" | "no_deposit_slots";
+/**
+ * The one adapter from a world system row to this function's input. Both the planner read and the
+ * order verbs go through it, so the ceilings the UI quotes and the ceilings the mutation enforces
+ * cannot be assembled from different fields. `buildings` is passed in because its owner is the
+ * shared per-version index, not the system row.
+ */
+export function buildSiteFromSystem(
+  system: WorldSystem,
+  buildings: Record<string, number>,
+): BuildOptionSystem {
+  return {
+    population: system.population,
+    buildings,
+    slotCap: slotCapOf(system),
+    generalSpace: system.generalSpace,
+    habitableSpace: system.habitableSpace,
+  };
+}
+
+export type BuildOptionBlockReason = "no_space" | "no_deposit_slots";
 
 export interface BuildOption {
   buildingType: string;
   /** Whole levels physically addable now, net of built + committed (in-flight) levels. */
   maxLevels: number;
   /** Non-null = hard-blocked (maxLevels 0). */
-  blocked: BuildBlockReason | null;
+  blocked: BuildOptionBlockReason | null;
   workPerLevel: number;
   /** Heads one level adds, by grade. */
   labourAdded: { unskilled: number; skill1: number; skill2: number };
@@ -61,7 +82,7 @@ export function computeBuildOptions(
     const isExtractor = GOOD_TIER_BY_KEY[buildingType] === 0 && def.resource !== undefined;
 
     let maxLevels: number;
-    let blocked: BuildBlockReason | null = null;
+    let blocked: BuildOptionBlockReason | null = null;
     if (isExtractor && def.resource !== undefined) {
       const remaining = sys.slotCap[def.resource] - extractorsOnResource(effective, def.resource);
       maxLevels = Math.max(0, Math.floor(remaining));

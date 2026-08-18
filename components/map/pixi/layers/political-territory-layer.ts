@@ -1,8 +1,8 @@
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
-import { Delaunay } from "d3-delaunay";
 import type { LODState } from "../lod";
 import { BG_COLOR, TERRITORY, TEXT_COLORS, TEXT_RESOLUTION } from "../theme";
-import { computeTerritoryPolygons, type MultiPolygon } from "../territory-utils";
+import type { MultiPolygon } from "../territory-utils";
+import type { SystemCells } from "../voronoi-cache";
 import type { AtlasFaction, AtlasSystem } from "@/lib/types/game";
 
 const FACTION_NAME_STYLE = new TextStyle({
@@ -56,7 +56,7 @@ export class PoliticalTerritoryLayer {
   }
 
   /** Faction-union polygons keyed by factionId, from the last `sync()`. Shared with the value
-   *  choropleth layer so its faction-outline overlay reuses this triangulation instead of recomputing it. */
+   *  choropleth layer so its faction-outline overlay reuses these unions instead of recomputing them. */
   getFactionUnions(): Map<string, MultiPolygon> | null {
     return this.cachedTerritories;
   }
@@ -66,22 +66,15 @@ export class PoliticalTerritoryLayer {
     return this.cachedColors;
   }
 
-  /** Recompute territory polygons keyed by factionId. Call on system/faction data changes. */
-  sync(systems: AtlasSystem[], factions: AtlasFaction[], mapSize: number) {
+  /** Re-union territory polygons keyed by factionId. Call on system/faction data changes. */
+  sync(cells: SystemCells, factions: AtlasFaction[]) {
+    const systems = cells.systems;
     if (systems.length < 3 || factions.length === 0) {
       this.clear();
       return;
     }
 
-    const points: [number, number][] = systems.map((s) => [s.x, s.y]);
-    const delaunay = Delaunay.from(points);
-    const voronoi = delaunay.voronoi([0, 0, mapSize, mapSize]);
-
-    const territories = computeTerritoryPolygons(
-      systems.length,
-      voronoi,
-      (i) => systems[i].factionId ?? null,
-    );
+    const territories = cells.groupBy((s) => s.factionId);
 
     const colors = new Map<string, number>();
     for (const f of factions) {

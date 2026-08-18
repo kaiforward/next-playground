@@ -1,7 +1,6 @@
 /**
  * Per-system development stat — a pure 0..1 magnitude of how much a system has actually built and
- * worked, measured against the galaxy's biggest natural potential. Zero I/O. See
- * docs/build-plans/colony-bootstrapping.md §1.
+ * worked, measured against the galaxy's biggest natural potential. Zero I/O.
  *
  * development = w_pop · popTerm + w_ind · indTerm
  *
@@ -31,7 +30,7 @@
 import { DEVELOPMENT } from "@/lib/constants/development";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, BUILDING_TYPES } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
-import { generalSpaceUsed, labourDemand, labourFulfillment } from "@/lib/engine/industry";
+import { generalSpaceUsed, labourDemand, labourFulfilment } from "@/lib/engine/industry";
 
 /** The built + physical inputs `systemDevelopment` reads (a structural subset of a build/world system). */
 export interface DevelopmentInput {
@@ -131,7 +130,7 @@ export function systemDevelopment(input: DevelopmentInput, refs: DevelopmentRefs
   const extraction = extractorLevels(buildings) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
   const housingSpace = (buildings[HOUSING_TYPE] ?? 0) * effectiveSpaceCost(HOUSING_TYPE);
   const factory = Math.max(0, generalSpaceUsed(buildings) - housingSpace);
-  const staffing = labourFulfillment(population, labourDemand(buildings));
+  const staffing = labourFulfilment(population, labourDemand(buildings));
   const staffedIndustry = (extraction + factory) * staffing;
   const indTerm = softSaturate(staffedIndustry, refs.industryRef);
 

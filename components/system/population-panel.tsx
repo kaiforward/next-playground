@@ -6,7 +6,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StabilityBadge } from "@/components/ui/stability-badge";
 import { ContributorBars } from "@/components/ui/contributor-bars";
-import { TrackRule } from "@/components/ui/track-rule";
+import { TrackMarker } from "@/components/ui/track-marker";
 import { PopulationSummary } from "@/components/system/population-summary";
 import { ProvisionBlock } from "@/components/system/provision-block";
 import {
@@ -35,14 +35,14 @@ export function populationPanelView(pop: {
 }
 
 /**
- * The Stability track — the fill is stability now, a dashed rule marks where it is heading, and a
- * solid red rule marks the strike line. Same visual vocabulary as the Provisioned track (a level
- * plus rules that say "and here is the other number that matters"), built from the same
- * `TrackRule`, so the two blocks read as one language rather than two inventions.
+ * The Stability track — the fill is stability now, a dashed marker shows where it is heading, and a
+ * solid red marker shows the strike line. Same visual vocabulary as the Provisioned track (a level
+ * plus markers that say "and here is the other number that matters"), built from the same
+ * `TrackMarker`, so the two blocks read as one language rather than two inventions.
  *
- * The heading-to and strike rules can land on the same position — a world whose causes have
- * settled right at the strike line — so they overhang opposite edges: the projected rule sticks up
- * out of the track, the strike rule down. At an identical position they still read as two marks,
+ * The heading-to and strike markers can land on the same position — a world whose causes have
+ * settled right at the strike line — so they overhang opposite edges: the projected marker sticks
+ * up out of the track, the strike marker down. At an identical position they still read as two marks,
  * with dash-vs-solid and grey-vs-red separating them further.
  *
  * Nothing here computes: every number arrives from `stabilityView` already on the stability scale.
@@ -52,9 +52,9 @@ function StabilityTrack({ view }: { view: StabilityView }) {
     <div className="relative my-2 h-2.5 bg-surface-active">
       <span aria-hidden className="block h-full" style={{ width: `${view.pct}%`, background: view.color }} />
       {view.outlook.known && (
-        <TrackRule pct={view.outlook.pct} color="var(--color-text-secondary)" dashed overhang="up" />
+        <TrackMarker pct={view.outlook.pct} color="var(--color-text-secondary)" dashed overhang="up" />
       )}
-      <TrackRule pct={view.strikePct} color="var(--color-status-red)" overhang="down" />
+      <TrackMarker pct={view.strikePct} color="var(--color-status-red)" overhang="down" />
     </div>
   );
 }
@@ -65,7 +65,7 @@ function StabilityTrack({ view }: { view: StabilityView }) {
  *
  * Every quantity comes from `stabilityView` (`components/system/stability-view.ts`), the single
  * place unrest becomes stability; this component performs no arithmetic of its own. The panel
- * shows **two moments** — the fill is stability now, the dashed rule is where it is heading — and
+ * shows **two moments** — the fill is stability now, the dashed marker is where it is heading — and
  * says so in its key, because the whole defect this layout replaces was a headline and a set of
  * bars silently describing different moments as if they were one.
  *
@@ -122,7 +122,7 @@ export function StabilityBlock({
       </div>
 
       <div className="mt-3">
-        <ContributorBars segments={view.causes} total={1} />
+        <ContributorBars contributors={view.causes} total={1} />
       </div>
 
       {view.causesIncomplete && (

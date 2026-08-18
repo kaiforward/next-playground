@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { generateWorld } from "../gen";
-import { serializeWorld, deserializeWorld, sanitizeSaveName, SAVE_FORMAT_VERSION } from "../save";
+import { serialiseWorld, deserialiseWorld, sanitiseSaveName, SAVE_FORMAT_VERSION } from "../save";
 import type { World } from "../types";
 import { runWorldTick } from "../tick";
 import { setWorld, clearWorld } from "../store";
@@ -16,41 +16,41 @@ afterEach(() => {
   clearWorld();
 });
 
-describe("sanitizeSaveName", () => {
+describe("sanitiseSaveName", () => {
   it("lowercases and strips everything but [a-z0-9-_]", () => {
-    expect(sanitizeSaveName("My Save! #1")).toBe("mysave1");
+    expect(sanitiseSaveName("My Save! #1")).toBe("mysave1");
   });
 
   it("preserves hyphens and underscores (they don't collide)", () => {
-    expect(sanitizeSaveName("Run-A_2")).toBe("run-a_2");
+    expect(sanitiseSaveName("Run-A_2")).toBe("run-a_2");
   });
 
   it("returns empty string for a name with no [a-z0-9-_] characters", () => {
     // The exact edge case saveGameSchema.refine() guards against — a name that
-    // sanitizes to "" would otherwise collide on saves/.json.
-    expect(sanitizeSaveName("???")).toBe("");
-    expect(sanitizeSaveName("   ")).toBe("");
+    // sanitises to "" would otherwise collide on saves/.json.
+    expect(sanitiseSaveName("???")).toBe("");
+    expect(sanitiseSaveName("   ")).toBe("");
   });
 });
 
-describe("serializeWorld / deserializeWorld", () => {
+describe("serialiseWorld / deserialiseWorld", () => {
   const world = generateWorld({ systemCount: 60, seed: 7 });
 
   it("round-trips a generated world unchanged", () => {
-    const result = deserializeWorld(serializeWorld(world));
+    const result = deserialiseWorld(serialiseWorld(world));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world).toStrictEqual(world);
   });
 
   it("rejects malformed JSON", () => {
-    const result = deserializeWorld("{ not valid json");
+    const result = deserialiseWorld("{ not valid json");
     expect(result.ok).toBe(false);
   });
 
   it("rejects a well-formed JSON object missing world.meta", () => {
     const json = JSON.stringify({ formatVersion: 2, world: { systems: [] } });
-    const result = deserializeWorld(json);
+    const result = deserialiseWorld(json);
     expect(result.ok).toBe(false);
   });
 
@@ -60,7 +60,7 @@ describe("serializeWorld / deserializeWorld", () => {
       formatVersion: 2,
       world: { ...world, meta: { seed, systemCount, currentTick } },
     });
-    const result = deserializeWorld(json);
+    const result = deserialiseWorld(json);
     expect(result.ok).toBe(false);
   });
 
@@ -78,7 +78,7 @@ describe("serializeWorld / deserializeWorld", () => {
       return badWorld({ ...world, meta });
     }
     function expectRejected(json: string, error: string) {
-      const result = deserializeWorld(json);
+      const result = deserialiseWorld(json);
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error).toBe(error);
@@ -129,29 +129,63 @@ describe("serializeWorld / deserializeWorld", () => {
     }
 
     it("accepts a meta carrying all four numeric fields (the guards are not rejecting everything)", () => {
-      expect(deserializeWorld(badMeta({ ...world.meta })).ok).toBe(true);
+      expect(deserialiseWorld(badMeta({ ...world.meta })).ok).toBe(true);
     });
   });
 
   it("rejects a save with an unsupported formatVersion", () => {
     const json = JSON.stringify({ formatVersion: 99, world });
-    const result = deserializeWorld(json);
+    const result = deserialiseWorld(json);
     expect(result.ok).toBe(false);
   });
 
-  it("is at save format version 13 (pinned systems on the player seat)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(13);
+  // This is what makes a pre-bump save fail cleanly. A v14 market row spells the persisted rate
+  // `realizedProductionRate`, so on today's shape it loads as `undefined` — and because the field is
+  // optional with a `?? capacity` fallback in the good-market-state processor, such a save would
+  // NOT throw: every market would silently price against nameplate capacity instead of realised
+  // output. Nothing but this constant stands between the two, which is why the number is pinned
+  // rather than left to drift.
+  it("is at save format version 15 (the persisted realised production rate's spelling)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(15);
   });
 
   it("rejects a prior-version (v11) save — saves break on the shape bump", () => {
     // v11 systems carry `supplyBand: "shortage"`, a value `SupplyRegime` no longer has, and a
-    // `"rationing"` that meant `[0, 0.7)` rather than today's `[0.5, 0.7)`. `deserializeWorld` runs
+    // `"rationing"` that meant `[0, 0.7)` rather than today's `[0.5, 0.7)`. `deserialiseWorld` runs
     // structural spot-checks, not per-field validation, so nothing below this gate would notice
     // either — the version bump is the whole defence, and it must reject rather than load a band
     // string the type system says cannot exist.
     const json = JSON.stringify({ formatVersion: 11, world });
-    const result = deserializeWorld(json);
+    const result = deserialiseWorld(json);
     expect(result.ok).toBe(false);
+  });
+
+  it("round-trips the player seat's attention-layer settings unchanged", () => {
+    // A SEATED world: the settings records hang off `player`, so the shared fixture above (no
+    // `playerFaction`, hence `player: null`) would round-trip nothing at all here.
+    const seated = generateWorld({
+      systemCount: 60,
+      seed: 7,
+      playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
+    });
+    const player = seated.player;
+    expect(player).not.toBeNull();
+    if (!player) return;
+    const edited: World = {
+      ...seated,
+      player: {
+        ...player,
+        alertCategories: { ...player.alertCategories, unrest_rising: true, overcrowded: false },
+        trackerSections: { ...player.trackerSections, building: false },
+      },
+    };
+    const result = deserialiseWorld(serialiseWorld(edited));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world.player?.alertCategories.unrest_rising).toBe(true);
+    expect(result.world.player?.alertCategories.overcrowded).toBe(false);
+    expect(result.world.player?.trackerSections.building).toBe(false);
+    expect(result.world).toStrictEqual(edited);
   });
 
   it("round-trips construction projects + building idleCycles unchanged", () => {
@@ -172,7 +206,7 @@ describe("serializeWorld / deserializeWorld", () => {
       ],
       buildings: world.buildings.map((b, i) => ({ ...b, idleCycles: i === 0 ? 3 : 0 })),
     };
-    const result = deserializeWorld(serializeWorld(withConstruction));
+    const result = deserialiseWorld(serialiseWorld(withConstruction));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world).toStrictEqual(withConstruction);
@@ -185,7 +219,7 @@ describe("serializeWorld / deserializeWorld", () => {
         index === 0 ? { ...market, logisticsFundingBound: true } : market,
       ),
     };
-    const result = deserializeWorld(serializeWorld(marked));
+    const result = deserialiseWorld(serialiseWorld(marked));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world.markets[0].logisticsFundingBound).toBe(true);
@@ -193,10 +227,10 @@ describe("serializeWorld / deserializeWorld", () => {
 
   it("accepts generated rows without a logistics funding marker", () => {
     expect(world.markets[0].logisticsFundingBound).toBeUndefined();
-    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+    expect(deserialiseWorld(serialiseWorld(world)).ok).toBe(true);
   });
 
-  it("round-trips a colony-establish project unchanged (serializable, no lost fields)", () => {
+  it("round-trips a colony-establish project unchanged (serialisable, no lost fields)", () => {
     // The staged manifest is real in-transit inventory sitting in no market row at either end —
     // lose it on save and the founder is debited for goods the colony never receives.
     const withColony: World = {
@@ -222,7 +256,7 @@ describe("serializeWorld / deserializeWorld", () => {
         },
       ],
     };
-    const result = deserializeWorld(serializeWorld(withColony));
+    const result = deserialiseWorld(serialiseWorld(withColony));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world).toStrictEqual(withColony);
@@ -237,7 +271,7 @@ describe("serializeWorld / deserializeWorld", () => {
         index === 0
           ? {
               ...market,
-              realizedProductionRate: 0,
+              realisedProductionRate: 0,
               productionSuppressed: true,
               squeezeCycles: 2,
               proposalCycles: 1,
@@ -245,11 +279,11 @@ describe("serializeWorld / deserializeWorld", () => {
           : market,
       ),
     };
-    const result = deserializeWorld(serializeWorld(assessed));
+    const result = deserialiseWorld(serialiseWorld(assessed));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world.markets[0]).toMatchObject({
-      realizedProductionRate: 0,
+      realisedProductionRate: 0,
       productionSuppressed: true,
       squeezeCycles: 2,
       proposalCycles: 1,
@@ -264,7 +298,7 @@ describe("serializeWorld / deserializeWorld", () => {
         index === 0 ? { ...market, squeezeCycles: 1.5, proposalCycles: 0.5 } : market,
       ),
     };
-    const result = deserializeWorld(serializeWorld(fractional));
+    const result = deserialiseWorld(serialiseWorld(fractional));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world.markets[0].squeezeCycles).toBe(1.5);
@@ -278,7 +312,7 @@ describe("serializeWorld / deserializeWorld", () => {
         index === 0 ? { ...system, provisionExpectation: 0.42 } : system,
       ),
     };
-    const result = deserializeWorld(serializeWorld(marked));
+    const result = deserialiseWorld(serialiseWorld(marked));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world.systems[0].provisionExpectation).toBe(0.42);
@@ -286,7 +320,7 @@ describe("serializeWorld / deserializeWorld", () => {
 
   it("accepts generated systems without a provisionExpectation (never seeded)", () => {
     expect(world.systems[0].provisionExpectation).toBeUndefined();
-    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+    expect(deserialiseWorld(serialiseWorld(world)).ok).toBe(true);
   });
 
   it("round-trips the optional provision and supplyBand fields", () => {
@@ -295,7 +329,7 @@ describe("serializeWorld / deserializeWorld", () => {
       systems: world.systems.map((system, index) =>
         index === 0 ? { ...system, provision: 0.73, supplyBand: "rationing" } : system),
     };
-    const result = deserializeWorld(serializeWorld(marked));
+    const result = deserialiseWorld(serialiseWorld(marked));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world.systems[0].provision).toBe(0.73);
@@ -308,7 +342,7 @@ describe("serializeWorld / deserializeWorld", () => {
     // here would render as "0% Provisioned" for a system nobody has ever measured.
     expect(world.systems[0].provision).toBeUndefined();
     expect(world.systems[0].supplyBand).toBeUndefined();
-    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+    expect(deserialiseWorld(serialiseWorld(world)).ok).toBe(true);
   });
 
   it("round-trips the optional criticalWeight field UN-CLAMPED — unlike provision, it carries no [0,1] ceiling", () => {
@@ -321,7 +355,7 @@ describe("serializeWorld / deserializeWorld", () => {
       systems: world.systems.map((system, index) =>
         index === 0 ? { ...system, provision: 0.4, supplyBand: "rationing", criticalWeight: 1.3 } : system),
     };
-    const result = deserializeWorld(serializeWorld(marked));
+    const result = deserialiseWorld(serialiseWorld(marked));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world.systems[0].criticalWeight).toBe(1.3);
@@ -329,19 +363,19 @@ describe("serializeWorld / deserializeWorld", () => {
 
   it("accepts generated systems without criticalWeight (never assessed)", () => {
     expect(world.systems[0].criticalWeight).toBeUndefined();
-    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+    expect(deserialiseWorld(serialiseWorld(world)).ok).toBe(true);
   });
 
   it("keeps new optional assessment values omitted in an old-shaped save", () => {
     const world = generateWorld({ systemCount: 60, seed: 7 });
     const oldShaped: World = {
       ...world,
-      markets: world.markets.map(({ realizedProductionRate, productionSuppressed, squeezeCycles, proposalCycles, ...market }) => market),
+      markets: world.markets.map(({ realisedProductionRate, productionSuppressed, squeezeCycles, proposalCycles, ...market }) => market),
     };
-    const result = deserializeWorld(serializeWorld(oldShaped));
+    const result = deserialiseWorld(serialiseWorld(oldShaped));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.world.markets[0].realizedProductionRate).toBeUndefined();
+    expect(result.world.markets[0].realisedProductionRate).toBeUndefined();
     expect(result.world.markets[0].productionSuppressed).toBeUndefined();
     expect(result.world.markets[0].squeezeCycles).toBeUndefined();
     expect(result.world.markets[0].proposalCycles).toBeUndefined();
@@ -355,14 +389,14 @@ describe("save format — player seat", () => {
       seed: 7,
       playerFaction: { name: "Testers Guild", governmentType: "corporate", doctrine: "hegemonic" },
     });
-    const back = deserializeWorld(serializeWorld(world));
+    const back = deserialiseWorld(serialiseWorld(world));
     expect(back.ok).toBe(true);
     if (back.ok) expect(back.world.player).toEqual(world.player);
   });
 
   it("rejects a pre-6 save cleanly", () => {
     const stale = JSON.stringify({ formatVersion: 5, world: { meta: {} } });
-    const result = deserializeWorld(stale);
+    const result = deserialiseWorld(stale);
     expect(result.ok).toBe(false);
   });
 
@@ -378,7 +412,7 @@ describe("save format — player seat", () => {
       ...world,
       player: { ...world.player, pinnedSystemIds: [c.id, a.id, b.id] },
     };
-    const result = deserializeWorld(serializeWorld(withPins));
+    const result = deserialiseWorld(serialiseWorld(withPins));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.world.player?.pinnedSystemIds).toEqual([c.id, a.id, b.id]);
@@ -397,14 +431,14 @@ describe("save format — player seat", () => {
     if (!world.player) throw new Error("fixture: expected a player seat");
     const { pinnedSystemIds: _dropped, ...v12Player } = world.player;
     const json = JSON.stringify({ formatVersion: 12, world: { ...world, player: v12Player } });
-    const result = deserializeWorld(json);
+    const result = deserialiseWorld(json);
     expect(result.ok).toBe(false);
   });
 
   it("a CURRENT-version save whose player seat lacks pinnedSystemIds loads, then breaks the first read that touches it", () => {
-    // deserializeWorld's structural spot-checks cover only `meta` (see isWorldShaped's doc comment) —
+    // deserialiseWorld's structural spot-checks cover only `meta` (see isWorldShaped's doc comment) —
     // they were never going to notice a missing `pinnedSystemIds` on a save stamped with today's
-    // SAVE_FORMAT_VERSION. Every save `serializeWorld` actually produces always carries the field
+    // SAVE_FORMAT_VERSION. Every save `serialiseWorld` actually produces always carries the field
     // (it's a required, non-optional column on WorldPlayer), so this shape can only arise from a
     // hand-edited or corrupted file, not from any real version transition — but the module's own
     // contract is deliberately non-exhaustive, so it is worth pinning what that gap actually does.
@@ -420,7 +454,7 @@ describe("save format — player seat", () => {
       world: { ...world, player: v13PlayerMissingPins },
     });
 
-    const result = deserializeWorld(json);
+    const result = deserialiseWorld(json);
     // Loads successfully — the spot-check has nothing to say about a missing player field.
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -460,14 +494,14 @@ describe("save compatibility — collapseDebt moved from building rows to system
   }
 
   it("loads, and every system's missing collapseDebt reads 0", () => {
-    const result = deserializeWorld(preMigrationSave());
+    const result = deserialiseWorld(preMigrationSave());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     for (const s of result.world.systems) expect(s.collapseDebt ?? 0).toBe(0);
   });
 
   it("runs a tick without NaN or Infinity entering world state, and drops the stale field", async () => {
-    const result = deserializeWorld(preMigrationSave());
+    const result = deserialiseWorld(preMigrationSave());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
@@ -489,8 +523,8 @@ describe("save compatibility — collapseDebt moved from building rows to system
       expect(Number.isFinite(s.unrest)).toBe(true);
     }
     for (const m of world.markets) expect(Number.isFinite(m.stock)).toBe(true);
-    // And it still survives a full serialize round-trip after the migration.
-    expect(deserializeWorld(serializeWorld(world)).ok).toBe(true);
+    // And it still survives a full serialise round-trip after the migration.
+    expect(deserialiseWorld(serialiseWorld(world)).ok).toBe(true);
   });
 });
 
@@ -525,7 +559,7 @@ describe("save compatibility — provisionExpectation seeds from Provision, not 
     for (const s of prepared.systems) expect(s.provisionExpectation).toBeUndefined();
 
     const legacy = JSON.stringify({ formatVersion: SAVE_FORMAT_VERSION, world: prepared });
-    const loaded = deserializeWorld(legacy);
+    const loaded = deserialiseWorld(legacy);
     expect(loaded.ok).toBe(true);
     if (!loaded.ok) return;
 

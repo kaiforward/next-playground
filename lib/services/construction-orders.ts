@@ -8,11 +8,10 @@
  * open set they append to is exactly what the next directed-build cycle funds.
  */
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
-import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldMarket } from "@/lib/world/types";
-import { computeBuildOptions } from "@/lib/engine/build-options";
-import { sizeColonyEstablish } from "@/lib/engine/directed-build";
+import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldConstructionProject, WorldMarket } from "@/lib/world/types";
+import { computeBuildOptions, buildSiteFromSystem } from "@/lib/engine/build-options";
+import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
 import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
@@ -38,14 +37,17 @@ function mintProjectId(world: World): string {
   return `construction-${world.nextId}`;
 }
 
-/** In-flight build levels by type at one system (the committed state feasibility nets against). */
-function committedAt(world: World, systemId: string): Record<string, number> {
-  const committed: Record<string, number> = {};
-  for (const p of world.constructionProjects) {
-    if (p.kind !== "build" || p.systemId !== systemId) continue;
-    committed[p.buildingType] = (committed[p.buildingType] ?? 0) + p.levels;
-  }
-  return committed;
+/**
+ * Swap in a world carrying one newly minted project. Appending it and advancing `nextId` are the
+ * same act — the id came from that counter, so a caller that appended without bumping would hand
+ * the next order the same id.
+ */
+function commitNewProject(seat: Seat, project: WorldConstructionProject): void {
+  setWorld({
+    ...seat.world,
+    constructionProjects: [...seat.world.constructionProjects, project],
+    nextId: seat.world.nextId + 1,
+  });
 }
 
 export type OrderBuildResult =
@@ -63,25 +65,8 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
   }
 
   const options = computeBuildOptions(
-    {
-      population: system.population,
-      buildings: buildingsBySystem().get(system.id) ?? {},
-      slotCap: resourceVectorFromColumns(
-        {
-          slotGas: system.slotGas,
-          slotMinerals: system.slotMinerals,
-          slotOre: system.slotOre,
-          slotBiomass: system.slotBiomass,
-          slotArable: system.slotArable,
-          slotWater: system.slotWater,
-          slotRadioactive: system.slotRadioactive,
-        },
-        "slot",
-      ),
-      generalSpace: system.generalSpace,
-      habitableSpace: system.habitableSpace,
-    },
-    committedAt(seat.world, system.id),
+    buildSiteFromSystem(system, buildingsBySystem().get(system.id) ?? {}),
+    queuedBuildLevelsAt(seat.world.constructionProjects, system.id),
   );
   const option = options.find((o) => o.buildingType === input.buildingType);
   if (!option) return { ok: false, error: `Unknown building type: ${input.buildingType}` };
@@ -122,11 +107,7 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
     workTotal: input.levels * option.workPerLevel,
     workDone: 0,
   };
-  setWorld({
-    ...seat.world,
-    constructionProjects: [...seat.world.constructionProjects, project],
-    nextId: seat.world.nextId + 1,
-  });
+  commitNewProject(seat, project);
   return { ok: true, data: { projectId: project.id, levels: project.levels } };
 }
 
@@ -150,6 +131,12 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
   const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
   if (sizing === null) return { ok: false, error: "Below the habitable floor — this world cannot hold a colony." };
 
+  // The order buys its charter at the click: the same fee the eligibility quote carried, accrued
+  // into `pendingFounding` exactly as the tick's charter phase pays (that phase skips paid
+  // charters, so nothing charges twice, and the settlement stays the single `balance` writer).
+  // This is what makes the working balance fall immediately — a second order is priced against
+  // what is genuinely left, instead of seeing money the first colony already called for. Lost on
+  // cancel by design, like every charter.
   const project: WorldColonyEstablishProject = {
     kind: "colony_establish",
     id: mintProjectId(seat.world),
@@ -162,13 +149,18 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
     workTotal: sizing.work,
     workDone: 0,
     stagedManifest: [],
-    charterPaid: false,
+    charterPaid: true,
     stalledCycles: 0,
   };
   setWorld({
     ...seat.world,
     constructionProjects: [...seat.world.constructionProjects, project],
     nextId: seat.world.nextId + 1,
+    treasuries: seat.world.treasuries.map((t) =>
+      t.factionId === seat.factionId
+        ? { ...t, pendingFounding: t.pendingFounding + check.charter }
+        : t,
+    ),
   });
   return { ok: true, data: { projectId: project.id } };
 }

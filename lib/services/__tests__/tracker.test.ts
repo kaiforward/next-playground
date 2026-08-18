@@ -1,25 +1,35 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
+import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getTrackerData } from "@/lib/services/tracker";
+import { seatWorld } from "./seat-world";
 import { getSystemVitals } from "@/lib/services/system-vitals";
 import { GET } from "@/app/api/game/player/tracker/route";
 import type { World } from "@/lib/world/types";
-
-/** A player-seat world: the player faction owns a developed homeworld with automation defaults. */
-function seatWorld(): World {
-  return generateWorld({
-    systemCount: 60,
-    seed: 42,
-    playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
-  });
-}
 
 afterEach(() => {
   clearWorld();
 });
 
 describe("getTrackerData", () => {
+  // A default-shaped world reads the same sections whether this returns the stored record or a
+  // hardcoded all-on literal, so the only test that can tell them apart is one that stores
+  // something OTHER than the default first.
+  it("returns the seat's OWN stored sections, not the authored default", () => {
+    const world = seatWorld();
+    setWorld({
+      ...world,
+      player: { ...world.player!, trackerSections: { pinned: false, building: true, colonising: false } },
+    });
+
+    expect(getTrackerData().sections).toEqual({
+      pinned: false,
+      building: true,
+      colonising: false,
+    });
+  });
+
   it("filters a pinned system that has been abandoned back to unclaimed, rather than returning zeroed vitals", () => {
     const world = seatWorld();
     const pid = world.player!.controlledFactionId;
@@ -104,6 +114,9 @@ describe("getTrackerData", () => {
       building: [],
       waitingCount: 0,
       colonising: [],
+      // No seat means no stored preference to read, so the sections fall back to the authored
+      // default rather than being absent — every reader of `sections` can index it unconditionally.
+      sections: DEFAULT_TRACKER_SECTIONS,
     });
   });
 

@@ -25,5 +25,5 @@ export const INFRASTRUCTURE_DECAY_PARAMS: DecayParams = {
 /** Slack on the isolated selling factor before a whole producer level can read idle. */
 export const USED_SLACK = 0.15;
 
-/** Healthy housing vacancy allowance used only by utilization and decay. */
+/** Healthy housing vacancy allowance used only by utilisation and decay. */
 export const VACANCY_SLACK = 0.10;

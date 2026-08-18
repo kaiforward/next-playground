@@ -20,7 +20,7 @@ function shipArrived(shipId: string): ShipArrivedPayload {
 }
 
 describe("mergeGlobalEvents", () => {
-  it("initializes and then appends economyTick entries in order", () => {
+  it("initialises and then appends economyTick entries in order", () => {
     const target: Partial<GlobalEventMap> = {};
 
     mergeGlobalEvents(target, { globalEvents: { economyTick: [economyTick(0)] } });
@@ -30,7 +30,7 @@ describe("mergeGlobalEvents", () => {
     expect(target.economyTick).toEqual([economyTick(0), economyTick(1)]);
   });
 
-  it("initializes and then appends eventNotifications entries in order", () => {
+  it("initialises and then appends eventNotifications entries in order", () => {
     const target: Partial<GlobalEventMap> = {};
 
     mergeGlobalEvents(target, { globalEvents: { eventNotifications: [eventNotification("first")] } });
@@ -40,7 +40,7 @@ describe("mergeGlobalEvents", () => {
     expect(target.eventNotifications).toEqual([eventNotification("first"), eventNotification("second")]);
   });
 
-  it("initializes and then appends shipArrived entries in order", () => {
+  it("initialises and then appends shipArrived entries in order", () => {
     const target: Partial<GlobalEventMap> = {};
 
     mergeGlobalEvents(target, { globalEvents: { shipArrived: [shipArrived("ship-1")] } });

@@ -64,7 +64,7 @@ describe("brakeKnee — the warehouse knee", () => {
     expect(productionCeiling(1, knee)).toBe(0);
   });
 
-  it("sanitizes a NaN-fed input instead of propagating NaN through the whole knee", () => {
+  it("sanitises a NaN-fed input instead of propagating NaN through the whole knee", () => {
     // A corrupt useRate must not weld every market's brake shut via a NaN knee/rampEnd — it drops
     // out of its own term (reads as 0) while the output term still sets a usable knee.
     const useCorrupt = brakeKnee({ useRate: NaN, capacityProduction: 10, anchorMult: 1 }, PARAMS);

@@ -10,7 +10,7 @@ The project's UI baseline:
 - **Hydration safety** — `"use client"` components still render on the server for initial HTML. `useSuspenseQuery` fires during render, not in an effect — `QueryBoundary` uses a mounted guard to defer children until after hydration. Don't introduce data fetching that would fire on the server.
 - **Native `<dialog>` modals** use the `Dialog` component (`components/ui/dialog.tsx`). `showModal()` centers via UA styles — never `m-0` / `inset-auto` on modal dialogs.
 - **Form controls** are from `components/form/` (`TextInput`, `NumberInput`, etc.). Never raw `<input>` or `<select>`.
-- **Existing components** — use `Button`, `Card`, `Badge`, `EmptyState`, `ErrorFallback`, `LoadingFallback`, `DataTable`, `StatList`, `StatDisplay`. Don't reinvent.
+- **Existing components** — use `Button`, `Card`, `Badge`, `EmptyState`, `ErrorFallback`, `LoadingFallback`, `DataTable`, `StatList`, `Popover`, `Tooltip`. Don't reinvent, and read `components/ui/` rather than this list: a name that describes a component's content instead of its behaviour is how `Popover` went unfound and got reimplemented twice.
 - **Accessibility** — actionable elements use semantic HTML (`<button>` for actions, `<a>` for navigation). Keyboard focus traps in modals (handled by `<dialog>` modal mode). ARIA labels on icon-only buttons.
 - **Loading & error boundaries** — every data-fetching section wraps in `QueryBoundary` (Suspense + ErrorBoundary + QueryErrorResetBoundary).
 - **Foundry theme** — industrial, sharp-edged: **no rounded corners** on cards/buttons/badges (only the DetailPanel modal and FilterBar chips get rounding); numeric values in `font-mono`; headings in `font-display`. Reference: `docs/active/design-system/theme.md`.

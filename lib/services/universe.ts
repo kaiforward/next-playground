@@ -1,22 +1,19 @@
 import { getWorld } from "@/lib/world/store";
-import { buildingsBySystem, governmentByFactionId, marketsBySystem } from "./world-index";
+import { regionInfos } from "./world-index";
 import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
+import type { UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { slotCapOf, qualityOf } from "@/lib/engine/resources";
 import {
   capacityGoodRates,
-  buildIndustryReadout,
   extractorsByResource,
   summariseSpace,
   summariseDeposits,
 } from "@/lib/engine/industry";
 import { systemPopNeeds } from "@/lib/services/pop-needs";
-import { useRatesByGood } from "@/lib/engine/honest-demand";
-import type { UseRate } from "@/lib/engine/honest-demand";
+import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { deriveRegionDominantFaction } from "@/lib/utils/region";
 
 /**
  * Get all regions, star systems, and connections.
@@ -27,38 +24,8 @@ import { deriveRegionDominantFaction } from "@/lib/utils/region";
 export function getUniverse(): UniverseData {
   const world = getWorld();
 
-  const factionGovById = governmentByFactionId();
-  const factionNameById = new Map<string, string>(world.factions.map((f) => [f.id, f.name]));
-
-  const systemFactionsByRegion = new Map<string, string[]>();
-  for (const s of world.systems) {
-    if (!s.factionId) continue;
-    const list = systemFactionsByRegion.get(s.regionId) ?? [];
-    list.push(s.factionId);
-    systemFactionsByRegion.set(s.regionId, list);
-  }
-
-  const regionInfos: RegionInfo[] = world.regions.map((r) => {
-    const dominantFactionId = deriveRegionDominantFaction(
-      systemFactionsByRegion.get(r.id) ?? [],
-      factionNameById,
-    );
-    const dominantGov: GovernmentType = dominantFactionId
-      ? factionGovById.get(dominantFactionId) ?? "frontier"
-      : "frontier";
-    return {
-      id: r.id,
-      name: r.name,
-      dominantEconomy: r.dominantEconomy,
-      dominantFactionId,
-      dominantGovernmentType: dominantGov,
-      x: r.x,
-      y: r.y,
-    };
-  });
-
   return {
-    regions: regionInfos,
+    regions: regionInfos(),
     systems: world.systems.map((s) => ({
       id: s.id,
       name: s.name,
@@ -136,22 +103,8 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       archetypeName: BODY_ARCHETYPES[b.bodyType].name,
       habitable: b.habitable,
       size: b.size,
-      slots: resourceVectorFromColumns(
-        {
-          slotGas: b.slotGas, slotMinerals: b.slotMinerals, slotOre: b.slotOre,
-          slotBiomass: b.slotBiomass, slotArable: b.slotArable,
-          slotWater: b.slotWater, slotRadioactive: b.slotRadioactive,
-        },
-        "slot",
-      ),
-      quality: resourceVectorFromColumns(
-        {
-          qualGas: b.qualGas, qualMinerals: b.qualMinerals, qualOre: b.qualOre,
-          qualBiomass: b.qualBiomass, qualArable: b.qualArable,
-          qualWater: b.qualWater, qualRadioactive: b.qualRadioactive,
-        },
-        "qual",
-      ),
+      slots: slotCapOf(b),
+      quality: qualityOf(b),
     }));
 
   return {
@@ -176,70 +129,16 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   }
   if (!isEconomicallyActive(system.control)) return { visibility: "unknown" };
 
-  const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
+  // The shared readout context (buildings roster, yields, the four per-good market accessors) —
+  // assembled once in system-industry-readout.ts so this panel read and the alert bar's idle-capacity
+  // read can never disagree about what a building's `used` is. yields are inert for the supply-chain
+  // readout (tier-1+ goods are yield-independent), but feed the deposit-fill rows and the
+  // production/consumption profile below.
+  const { buildings, yields, readout } = readSystemIndustry(system);
 
-  // marketStock + per-good brake inputs keyed by good KEY (world market rows
-  // already use good keys as goodId).
-  const marketStock: Record<string, number> = {};
-  const demandRateByGood: Record<string, number> = {};
-  // Map, not Record: key absence (no persisted/no market row) must be type-visible to its readers
-  // rather than resolving through an implicit `undefined` index.
-  const honestUseRateByGood = new Map<string, number>();
-  const anchorMultByGood = new Map<string, number>();
-  const logisticsFundingBoundByGood: Record<string, boolean> = {};
-  let rowSuppressRate: number | undefined;
-  for (const row of marketsBySystem().get(systemId) ?? []) {
-    marketStock[row.goodId] = row.stock;
-    demandRateByGood[row.goodId] = row.demandRate;
-    if (typeof row.honestUseRate === "number" && Number.isFinite(row.honestUseRate)) {
-      honestUseRateByGood.set(row.goodId, row.honestUseRate);
-    }
-    anchorMultByGood.set(row.goodId, row.anchorMult);
-    rowSuppressRate ??= row.productionSuppressRate;
-    logisticsFundingBoundByGood[row.goodId] = row.logisticsFundingBound ?? false;
-  }
-
-  const slotCap = resourceVectorFromColumns(
-    {
-      slotGas: system.slotGas, slotMinerals: system.slotMinerals, slotOre: system.slotOre,
-      slotBiomass: system.slotBiomass, slotArable: system.slotArable,
-      slotWater: system.slotWater, slotRadioactive: system.slotRadioactive,
-    },
-    "slot",
-  );
-  const yields = resourceVectorFromColumns(
-    {
-      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
-      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
-      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
-    },
-    "yield",
-  );
+  const slotCap = slotCapOf(system);
   const worked = extractorsByResource(buildings);
 
-  // A row with no persisted use figure (a legacy save) recomputes live — never 0, which
-  // would weld its brake knee to the output term alone. Same fallback the tick adapters use.
-  let recomputedUse: Map<string, UseRate> | undefined;
-  const honestUseRateOf = (goodKey: string): number => {
-    const persisted = honestUseRateByGood.get(goodKey);
-    if (persisted !== undefined) return persisted;
-    recomputedUse ??= useRatesByGood({
-      buildings,
-      population: system.population,
-      yields,
-      productionSuppress: rowSuppressRate ?? 1,
-    });
-    return recomputedUse.get(goodKey)?.total ?? 0;
-  };
-
-  // yields are inert for the supply-chain readout (tier-1+ goods are yield-independent),
-  // but feed the deposit-fill rows and the production/consumption profile below.
-  const readout = buildIndustryReadout(buildings, system.population, marketStock, yields, {
-    demandRateOf: (goodKey) => demandRateByGood[goodKey] ?? 0,
-    honestUseRateOf,
-    anchorMultOf: (goodKey) => anchorMultByGood.get(goodKey) ?? 1,
-    logisticsFundingBoundOf: (goodKey) => logisticsFundingBoundByGood[goodKey] ?? false,
-  });
   // The readout's labourAllocation IS the civilian demand basis — reuse it
   // rather than running a second labour pass for the needs read.
   const popNeeds = systemPopNeeds(systemId, readout.labourAllocation);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isMapMode, isValueMapMode, isFactionInteractiveMode, MAP_MODES } from "@/lib/types/map";
+import { isMapMode, isValueMapMode, isFactionInteractiveMode, settlementMarkFor, MAP_MODES } from "@/lib/types/map";
 
 describe("MapMode", () => {
   it("includes the territory modes in the mode set and ordering", () => {
@@ -49,5 +49,33 @@ describe("isFactionInteractiveMode", () => {
   it("is false for modes with no faction territory (a zoomed-out click falls through to the system)", () => {
     expect(isFactionInteractiveMode("regions")).toBe(false);
     expect(isFactionInteractiveMode("none")).toBe(false);
+  });
+});
+
+describe("settlementMarkFor", () => {
+  // `factionId` defaults only when ABSENT — an explicit null (unclaimed) must survive, so no `??`.
+  const own = (o: { factionId?: string | null; developed?: boolean; forming?: boolean }) => ({
+    factionId: o.factionId === undefined ? "player" : o.factionId,
+    developed: o.developed ?? false,
+    forming: o.forming ?? false,
+  });
+
+  it("maps a player system's control tier onto the three marks", () => {
+    expect(settlementMarkFor(own({}), "player")).toBe("controlled");
+    expect(settlementMarkFor(own({ forming: true }), "player")).toBe("forming");
+    expect(settlementMarkFor(own({ developed: true }), "player")).toBe("developed");
+  });
+
+  it("marks no system that is not the player's — foreign, unclaimed, ownership not yet loaded, or no seat", () => {
+    expect(settlementMarkFor(own({ factionId: "rival", developed: true }), "player")).toBeNull();
+    expect(settlementMarkFor(own({ factionId: null }), "player")).toBeNull();
+    expect(settlementMarkFor(undefined, "player")).toBeNull();
+    expect(settlementMarkFor(own({ developed: true }), null)).toBeNull();
+  });
+
+  it("lets developed win over a stale forming pairing", () => {
+    // The two never co-occur in real data (a forming site is `controlled`), but the tiebreak is
+    // pinned so a transient payload can't flash a developed system back to a pulsing mark.
+    expect(settlementMarkFor(own({ developed: true, forming: true }), "player")).toBe("developed");
   });
 });

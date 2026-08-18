@@ -26,7 +26,7 @@ The war system has two fundamentally different layers that share thematic space 
 Small-scale tension at faction borders. These use the **existing event system** — they are events with economy modifiers, danger increases, and phase progressions, just like plagues or pirate raids.
 
 - Trigger when inter-faction relations are in the unfriendly range (-25 to -74)
-- Localized to 1-3 border systems
+- Localised to 1-3 border systems
 - Disrupt trade, increase danger, apply economy modifiers (similar to current War event phases)
 - Accelerate relation deterioration (pushing toward war threshold)
 - No formal war exhaustion, no battles, no territory changes
@@ -52,7 +52,7 @@ Full-scale wars between factions. These are **not** events — they operate thro
 
 ## 2. War Declaration — What Starts Wars
 
-Wars are triggered by a combination of relation thresholds, events, and faction behavior. They don't happen randomly — they build from visible tension that players can see coming.
+Wars are triggered by a combination of relation thresholds, events, and faction behaviour. They don't happen randomly — they build from visible tension that players can see coming.
 
 ### Prerequisites for War Declaration
 1. **Relations at -75 or below** (hostile threshold)
@@ -154,7 +154,7 @@ Wars are persistent features of the game landscape, not quick skirmishes. Player
 
 | War type | Approximate real-time duration | Scope |
 |---|---|---|
-| Border skirmish (pre-war) | 1-3 days | 1-3 border systems. No formal war, just localized events and tension |
+| Border skirmish (pre-war) | 1-3 days | 1-3 border systems. No formal war, just localised events and tension |
 | Small war | 1-2 weeks | A few systems contested. Limited stakes, between smaller factions or limited objectives |
 | Major war | 2-4 weeks | Significant territory at stake. Multiple contested systems, full economic mobilization |
 | Existential war (homeworld threatened) | 1 month+ | Highest stakes. Both sides fully committed. Only happens when a faction is already weakened |
@@ -634,7 +634,7 @@ The economy table above is the concrete implementation of the asymmetry describe
 
 ## 11. Alliance Behavior in War
 
-How allied factions participate when their ally is attacked. Alliance **formation** (pacts, relation thresholds, conditions) is defined in [faction-system.md](../active/gameplay/faction-system.md). This section covers wartime behavior only.
+How allied factions participate when their ally is attacked. Alliance **formation** (pacts, relation thresholds, conditions) is defined in [faction-system.md](../active/gameplay/faction-system.md). This section covers wartime behaviour only.
 
 ### Joining a Defensive War
 
@@ -647,7 +647,7 @@ When a faction is attacked, allied factions may join as **co-defenders**:
 
 ### Co-Defender Contributions
 
-| Aspect | Co-Defender behavior |
+| Aspect | Co-Defender behaviour |
 |---|---|
 | **Military output** | Commits a fraction (~30–50%) of their military output to the ally's battle strength. They're helping, not going all-in |
 | **Fleet battles** | Co-defender's committed strength is added to the defender's side in fleet battles at contested systems |
@@ -669,7 +669,7 @@ Co-defenders accumulate exhaustion at a **reduced rate (~0.5×)** — it's not t
 - **Deterrence**: The threat of allied intervention makes attacking a well-allied faction riskier. The attacker must account for 1–2 co-defenders potentially joining, which changes the effective power ratio
 - **Alliance strain**: Long wars drain co-defenders. An attacker can try to outlast the alliance — keep fighting until co-defenders withdraw, then press the advantage against the isolated defender
 - **Opportunistic exploitation**: When a co-defender commits forces to an ally's war, their own borders are weaker. Opportunistic factions (see faction-system.md doctrine) may seize the moment to attack the co-defender's undefended territory
-- **Player diplomacy**: Players can influence alliance behavior through reputation. High reputation with a potential co-defender makes them more likely to join. Players invested in multiple factions have a personal stake in alliance decisions
+- **Player diplomacy**: Players can influence alliance behaviour through reputation. High reputation with a potential co-defender makes them more likely to join. Players invested in multiple factions have a personal stake in alliance decisions
 
 ---
 

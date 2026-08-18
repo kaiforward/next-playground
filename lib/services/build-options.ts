@@ -6,16 +6,17 @@
  */
 import { getWorld, hasWorld } from "@/lib/world/store";
 import { ServiceError } from "@/lib/services/errors";
-import { computeBuildOptions } from "@/lib/engine/build-options";
+import { computeBuildOptions, buildSiteFromSystem } from "@/lib/engine/build-options";
 import {
   factionConstructionPool, forecastIndependentEtaCycles, orderOpenProjects,
 } from "@/lib/engine/construction";
 import { buildingLabel, foundingCeilings } from "@/lib/engine/construction-readout";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
+import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
+import { COLONISATION } from "@/lib/constants/colonisation";
 import { foundingReadoutInputs } from "@/lib/services/construction";
-import { sizeColonyEstablish } from "@/lib/engine/directed-build";
+import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import type { SystemBuildOptionsData, BuildOptionData } from "@/lib/types/api";
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -31,23 +32,28 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
 
   if (system.control === "controlled") {
     const check = colonyEligibility(world, player.controlledFactionId, system);
-    if (!check.eligible) return { mode: "colony", colony: { state: "ineligible", reason: check.reason } };
-    const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
-    if (sizing === null) {
-      return { mode: "colony", colony: { state: "ineligible", reason: "below_habitable_floor" } };
+    // The money block is the one ineligible reason that still carries a quote, so the preview is
+    // assembled for it exactly as for the eligible branch — same fields, same sizing.
+    const priced = check.eligible || check.reason === "insufficient_funds" ? check : null;
+    const sizing = priced === null ? null : sizeColonyEstablish(system.habitableSpace, sizingParams());
+    const preview =
+      priced === null || sizing === null
+        ? null
+        : {
+            sourceSystemId: priced.sourceSystemId,
+            sourceSystemName:
+              world.systems.find((s) => s.id === priced.sourceSystemId)?.name ?? priced.sourceSystemId,
+            seedPop: sizing.seedPop, housingLevels: sizing.housingLevels, work: sizing.work,
+            charter: priced.charter, projectedBill: priced.projectedBill,
+            commitment: foundingCommitmentCost(
+              priced.charter, priced.projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM,
+            ),
+          };
+    if (!check.eligible) return { mode: "colony", colony: { state: "ineligible", reason: check.reason, preview } };
+    if (preview === null) {
+      return { mode: "colony", colony: { state: "ineligible", reason: "below_habitable_floor", preview: null } };
     }
-    const sourceName = world.systems.find((s) => s.id === check.sourceSystemId)?.name ?? check.sourceSystemId;
-    return {
-      mode: "colony",
-      colony: {
-        state: "eligible",
-        preview: {
-          sourceSystemId: check.sourceSystemId, sourceSystemName: sourceName,
-          seedPop: sizing.seedPop, housingLevels: sizing.housingLevels, work: sizing.work,
-          charter: check.charter, projectedBill: check.projectedBill,
-        },
-      },
-    };
+    return { mode: "colony", colony: { state: "eligible", preview } };
   }
   if (system.control !== "developed") return { mode: "none" };
 
@@ -56,33 +62,10 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
   const factionProjects = orderOpenProjects(
     world.constructionProjects.filter((p) => p.factionId === factionId),
   );
-  const committed: Record<string, number> = {};
-  for (const p of factionProjects) {
-    if (p.kind === "build" && p.systemId === system.id) {
-      committed[p.buildingType] = (committed[p.buildingType] ?? 0) + p.levels;
-    }
-  }
 
   const options = computeBuildOptions(
-    {
-      population: system.population,
-      buildings: buildings.get(system.id) ?? {},
-      slotCap: resourceVectorFromColumns(
-        {
-          slotGas: system.slotGas,
-          slotMinerals: system.slotMinerals,
-          slotOre: system.slotOre,
-          slotBiomass: system.slotBiomass,
-          slotArable: system.slotArable,
-          slotWater: system.slotWater,
-          slotRadioactive: system.slotRadioactive,
-        },
-        "slot",
-      ),
-      generalSpace: system.generalSpace,
-      habitableSpace: system.habitableSpace,
-    },
-    committed,
+    buildSiteFromSystem(system, buildings.get(system.id) ?? {}),
+    queuedBuildLevelsAt(world.constructionProjects, system.id),
   );
 
   // Queue-aware ETA: a 1-level order placed NOW joins the queue behind everything committed (it is

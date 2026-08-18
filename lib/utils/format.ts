@@ -40,6 +40,14 @@ export function formatMagnitude(value: number): string {
 }
 
 /**
+ * A signed delta (a per-cycle net) with an explicit sign either way: "+" or a
+ * true minus ("−", not a hyphen), then the magnitude via `formatMagnitude`.
+ */
+export function formatSignedMagnitude(value: number): string {
+  return `${value < 0 ? "−" : "+"}${formatMagnitude(Math.abs(value))}`;
+}
+
+/**
  * Compact whole-unit magnitude for tight numeric columns: a whole number below
  * 1000, then k / M abbreviated above (999 → "999", 1240 → "1.2k", 12400 → "12k",
  * 3_400_000 → "3.4M"). One decimal only below ×10 of each suffix, whole above.
@@ -76,21 +84,8 @@ export function formatHeadcount(pop: number): string {
 }
 
 /**
- * Compact headcount for tight labels (e.g. the utilisation bar). Rounds to a
- * whole abstract unit first so 141.8 -> "142M" (not "141.8M"), then formats with
- * Intl compact notation: "142M", "3.4B".
- */
-export function formatHeadcountShort(pop: number): string {
-  const people = Math.round(pop) * PEOPLE_PER_UNIT;
-  return new Intl.NumberFormat("en", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(people);
-}
-
-/**
- * Compact people count from an abstract population Float WITHOUT the whole-unit
- * pre-round formatHeadcountShort does — so sub-million quantities keep K precision:
+ * Compact people count from an abstract population Float, with no whole-unit pre-round, so
+ * sub-million quantities keep K precision:
  * 198 -> "198M", 3.8 -> "3.8M", 0.98 -> "980K", 0.011 -> "11K". Use where small
  * magnitudes matter (e.g. the Labour card's skill pools, which are often < 1 unit).
  */
@@ -103,11 +98,12 @@ export function formatPeople(pop: number): string {
 }
 
 /**
- * Splits a compact magnitude string (e.g. "2.42M", "980K", "0") into its numeric value and unit
- * suffix, so a VitalTile can render the unit small. Matches the shape `formatPeople`'s Intl
- * compact-notation output always takes.
+ * Splits an Intl compact-notation string (e.g. "2.42M", "980K", "0") into its numeric value and
+ * unit suffix, so a VitalTile can render the unit small. Built for the shape `formatPeople`'s
+ * output always takes — NOT for `formatMagnitude`, which produces a different string family
+ * ("<0.1", "3.4", "42") and only survives this by falling through the no-match branch.
  */
-export function splitMagnitude(formatted: string): { value: string; unit?: string } {
+export function splitCompactNumber(formatted: string): { value: string; unit?: string } {
   const match = formatted.match(/^([\d.,]+)([A-Za-z]*)$/);
   if (!match) return { value: formatted };
   const [, value, unit] = match;

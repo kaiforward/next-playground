@@ -75,7 +75,7 @@ value that is globally constant per run).
   (`industry-panel.tsx` → `BUILDING_TYPES[...].resource`; the cadence countdown → a shard interval), so
   no client reads a scaled value. Exposing the env would only matter for a hypothetical future client
   component that displays a scaled-constant *magnitude* directly — which would itself be a layering smell
-  (read it from the server). See the client-bundle env gotcha in `CLAUDE.md`.
+  (read it from the server). See the client-bundle env gotcha in `AGENTS.md`.
 
 ## Verified seam inventory
 
@@ -88,7 +88,7 @@ Audited against current code. `file:line` are the definition sites.
 | `GOOD_CONSUMPTION` (all entries) | `lib/constants/physical-economy.ts` | `consRate = need × population`, applied every tick. |
 | `OUTPUT_PER_UNIT` map | `lib/constants/industry.ts` | Single `Object.fromEntries`; also feeds `BUILDING_TYPES[g].outputPerUnit`, so scaling here propagates to all production reads. |
 | `MIN_DEMAND` | `lib/constants/market-economy.ts` | Demand-rate floor; applied live every shard via `rewriteDemandRates`, not just at seed. |
-| `EXTRACTOR_STORAGE_PER_UNIT` (40) | `lib/constants/industry.ts` | Additive in `maxStock` via `facilityStorageForGood`. |
+| `EXTRACTOR_STORAGE_PER_UNIT` (40) | `lib/constants/industry.ts` | Additive in `maxStock` via `buildingStorageForGood`. |
 | `PRODUCTION_STORAGE_PER_UNIT` (15) | `lib/constants/industry.ts` | Additive in `maxStock`. |
 | `POP_CENTRE_STORAGE_DEFAULT` (2) | `lib/constants/industry.ts` | Per pop-centre default storage. |
 | `POP_CENTRE_STORAGE` (**every entry**) | `lib/constants/industry.ts` | Absolute per-good overrides, **not** ratios — each entry scales. |

@@ -14,7 +14,7 @@ import type {
 } from "@/lib/engine/events";
 import type { EventTypeId } from "@/lib/constants/events";
 
-/** Event + denormalized system name (for notifications/logging). */
+/** Event + denormalised system name (for notifications/logging). */
 export interface EventWithName extends EventSnapshot {
   systemName: string | null;
 }

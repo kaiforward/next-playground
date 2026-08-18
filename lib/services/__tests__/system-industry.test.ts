@@ -50,8 +50,8 @@ describe("getSystemIndustry", () => {
 
     // Readout core: building roster present, labour ratio bounded, supply chain present.
     expect(data.buildings.length).toBeGreaterThan(0);
-    expect(data.labourFulfillment).toBeGreaterThanOrEqual(0);
-    expect(data.labourFulfillment).toBeLessThanOrEqual(1);
+    expect(data.labourFulfilment).toBeGreaterThanOrEqual(0);
+    expect(data.labourFulfilment).toBeLessThanOrEqual(1);
     expect(Array.isArray(data.supplyChain)).toBe(true);
 
     // Production/consumption profile resolves through the world market rows

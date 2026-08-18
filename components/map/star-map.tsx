@@ -5,7 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { AtlasData, UniverseData, StarSystemInfo } from "@/lib/types/game";
 import { MapRightRail } from "@/components/map/map-right-rail";
+import { AlertRun } from "@/components/alerts/alert-run";
 import { MapZoomDebug } from "@/components/map/map-zoom-debug";
+import { DRAWER_WIDTH } from "@/lib/constants/layout";
 import { useDevOverlay } from "@/components/dev-tools/dev-overlay-context";
 import { PixiMapCanvas } from "@/components/map/pixi/pixi-map-canvas";
 import { useMapData } from "@/lib/hooks/use-map-data";
@@ -59,6 +61,12 @@ export function StarMap({
   // ── Map mode (single-select tint) + additive overlay toggles ──
   const { mode: mapMode, setMode: setMapMode } = useMapMode();
   const { overlays, toggle } = useMapOverlays();
+  // Lifted here rather than owned inside MapRightRail — the same pattern as mapMode/overlays above —
+  // because AlertRun needs it too, for its own right inset (see AlertRun's docstring). A single
+  // source of truth passed down to both siblings, instead of MapRightRail owning it and echoing a
+  // copy upward through an effect.
+  const [alertRunSettingsOpen, setAlertRunSettingsOpen] = useState(false);
+  const toggleAlertRunSettings = useCallback(() => setAlertRunSettingsOpen((open) => !open), []);
   const { logisticsEdges } = useTradeFlow(overlays.logistics);
   const stabilityBySystem = useStability(mapMode === "stability");
   // Population is fetched for its own choropleth AND as the weights for stability's population-weighted
@@ -227,6 +235,8 @@ export function StarMap({
     selectedSystem,
     systemRegionMap,
     regionMap,
+    ownership,
+    playerFactionId: atlas.player?.controlledFactionId ?? null,
   });
 
   // ── Click handlers — navigate by id; the panel loads its own detail ──
@@ -288,19 +298,26 @@ export function StarMap({
   // Hide the map until the first centre settles so a deep-link/focus doesn't flash the fitView.
   const [mapReady, setMapReadyState] = useState(() => centerTarget === undefined);
 
-  // Post-mount "locate on the map": recentre when the ?focus / ?systemId query changes (a "Show on
-  // Map" jump or any future locate action). Adjusted during render — the React idiom for resetting
-  // state on an input change — and keyed on the query string, so a per-tick atlas refresh (which
-  // churns universe.systems) never recentres, and a click (which changes only the pathname, not
-  // these params) never recentres. Leaving centerTarget untouched keeps its reference stable, so
-  // the canvas's centre effect no-ops on ticks. `loc` is a monotonic click-nonce a locate action
-  // bumps so re-locating to the SAME coordinates (unchanged ?focus) still re-fires the recentre.
-  const focusKey = `${searchParams.get("focus") ?? ""}|${searchParams.get("loc") ?? ""}|${initialSelectedSystemId ?? ""}`;
+  // Post-mount "locate on the map": recentre when the ?focus query changes (a "Show on Map" jump or
+  // any future locate action). Adjusted during render — the React idiom for resetting state on an
+  // input change — and keyed on the query string, so a per-tick atlas refresh (which churns
+  // universe.systems) never recentres, and a click (which changes only the pathname, not these
+  // params) never recentres. Leaving centerTarget untouched keeps its reference stable, so the
+  // canvas's centre effect no-ops on ticks. `loc` is a monotonic click-nonce a locate action bumps
+  // so re-locating to the SAME coordinates (unchanged ?focus) still re-fires the recentre.
+  //
+  // No fallback to `initialSelectedSystemId` here — that fallback belongs to the initial-mount
+  // `useState` above only. A plain map click routes to `/system/<id>` with neither `focus` nor `loc`
+  // set: if a prior focus navigation had set either, clearing them changes `focusKey` too, and
+  // resolving that "no focus" state back to the page-load-time initial system is what used to fly
+  // the camera back there on the click AFTER a focus navigation, not just on mount. With no
+  // fallback, a key change with an unparseable `?focus` leaves `centerTarget` exactly where it was,
+  // matching the intent already stated above: a click never recentres.
+  const focusKey = `${searchParams.get("focus") ?? ""}|${searchParams.get("loc") ?? ""}`;
   const [appliedFocusKey, setAppliedFocusKey] = useState(focusKey);
   if (focusKey !== appliedFocusKey) {
     setAppliedFocusKey(focusKey);
-    const target =
-      parseFocusParam(searchParams.get("focus")) ?? resolveSystemTarget(initialSelectedSystemId);
+    const target = parseFocusParam(searchParams.get("focus"));
     if (target) setCenterTarget(target);
   }
 
@@ -311,15 +328,15 @@ export function StarMap({
   // ── Camera recenter offset — clear the docked drawer ────────────
   // The drawer renders for any non-root panel route (root "/" shows no panel — see selectedSystemId /
   // selectedFactionId above). When docked, shift the centerTarget point right so a focused system
-  // lands in the visible ~70% of the viewport instead of under the drawer (EU5/Vic3 behaviour). Width
-  // must track detail-panel.tsx's `w-[clamp(400px,30vw,560px)]` — no shared constant across the CSS
-  // class and this JS value, so keep them in sync by hand if that clamp changes. Plain consts (not
-  // memoised) so a live resize self-corrects on the next render; the value stays numerically stable
-  // when nothing changed, so it won't spuriously re-fire the centerTarget effect.
+  // lands in the visible ~70% of the viewport instead of under the drawer (EU5/Vic3 behaviour). The
+  // width is `DRAWER_WIDTH`, capped by the viewport for the `max-w-full` half of detail-panel.tsx's
+  // `w-[560px] max-w-full`. Plain consts (not memoised) so a live resize self-corrects on the next
+  // render; the value stays numerically stable when nothing changed, so it won't spuriously re-fire
+  // the centerTarget effect.
   const drawerDocked = pathname !== "/";
   const drawerWidthPx =
     drawerDocked && typeof window !== "undefined"
-      ? Math.min(560, Math.max(400, 0.3 * window.innerWidth))
+      ? Math.min(DRAWER_WIDTH, window.innerWidth)
       : 0;
   const centerOffsetX = drawerWidthPx / 2;
 
@@ -349,10 +366,21 @@ export function StarMap({
       {/* Zoom/LOD readout for tuning pixi/lod.ts thresholds — toggled via Dev Tools → Map. */}
       {showMapDebug && <MapZoomDebug zoom={zoom} />}
 
+      {/* The alert run's own left/right insets are pure CSS (see its docstring), so it needs no
+          layout data from this component beyond whether the Tracker's settings panel is open. */}
+      <AlertRun settingsOpen={alertRunSettingsOpen} />
+
       {/* Right-edge column: Tracker (with its settings panel to its left when open) above the map
           controls dock — see map-right-rail.tsx for why they share one real container instead of
           independently-positioned overlays. */}
-      <MapRightRail mode={mapMode} setMode={setMapMode} overlays={overlays} toggle={toggle} />
+      <MapRightRail
+        mode={mapMode}
+        setMode={setMapMode}
+        overlays={overlays}
+        toggle={toggle}
+        settingsOpen={alertRunSettingsOpen}
+        onToggleSettings={toggleAlertRunSettings}
+      />
     </div>
   );
 }

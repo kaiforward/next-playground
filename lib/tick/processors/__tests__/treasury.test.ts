@@ -42,7 +42,7 @@ function makeTreasury(overrides: Partial<WorldFactionTreasury> = {}): WorldFacti
   };
 }
 
-function ctxWithRealized(tick: number, realized: Map<string, Map<string, number>>): TickContext {
+function ctxWithRealised(tick: number, realised: Map<string, Map<string, number>>): TickContext {
   return {
     tick,
     results: new Map([
@@ -51,7 +51,7 @@ function ctxWithRealized(tick: number, realized: Map<string, Map<string, number>
           dissatisfactionBySystem: new Map(),
           supplyStateBySystem: new Map(),
           sellingFactorBySystem: new Map(),
-          realizedProductionBySystem: realized,
+          realisedProductionBySystem: realised,
           productionSuppressBySystem: new Map(),
         },
       }],
@@ -66,7 +66,7 @@ describe("treasury processor", () => {
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
     await runTreasuryProcessor(
       world,
-      ctxWithRealized(24, new Map([["sys-1", new Map([["food", 10]])]])),
+      ctxWithRealised(24, new Map([["sys-1", new Map([["food", 10]])]])),
       makeParams(),
     );
     const t = world.treasuries[0];
@@ -77,6 +77,35 @@ describe("treasury processor", () => {
     expect(settled.maintenanceBill).toBeGreaterThan(0);
     expect(t.balance).toBeGreaterThanOrEqual(0);
     expect(t.updatedAtTick).toBe(24);
+  });
+
+  it("persists the maintenance the settlement asked for, frozen at the slider then in force", async () => {
+    // The alert bar's Maintenance unfunded reading is `paid[band] < charged[band]`, and it
+    // is only honest if the charge is captured at settlement — the player can move the slider at any
+    // time, with no re-settle. Two identical worlds settled at different sliders: the bill is the
+    // same, the charge tracks the slider, and both are half of the bill at 0.5.
+    const seed = () => new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
+    const full = seed();
+    await runTreasuryProcessor(full, ctxWithRealised(24, new Map()), makeParams());
+    const halved = new InMemoryTreasuryWorld({
+      treasuries: [makeTreasury({ bands: { maintenance: 0.5, logistics: 1, construction: 1 } })],
+      systems: [SYSTEM],
+    });
+    await runTreasuryProcessor(halved, ctxWithRealised(24, new Map()), makeParams());
+
+    const a = full.treasuries[0].lastSettlement;
+    const b = halved.treasuries[0].lastSettlement;
+    if (a === null || b === null) throw new Error("expected settlements on both worlds");
+    const chargeA = a.charged?.maintenance;
+    const chargeB = b.charged?.maintenance;
+    if (chargeA === undefined || chargeB === undefined) throw new Error("expected a recorded charge");
+    expect(a.maintenanceBill).toBeGreaterThan(0);
+    expect(chargeA).toBeCloseTo(a.maintenanceBill);
+    expect(b.maintenanceBill).toBeCloseTo(a.maintenanceBill);
+    expect(chargeB).toBeCloseTo(a.maintenanceBill * 0.5);
+    // A settlement that paid what it was asked for is solvent, at either slider.
+    expect(a.paid.maintenance).toBeCloseTo(chargeA);
+    expect(b.paid.maintenance).toBeCloseTo(chargeB);
   });
 
   it("accrues work mid-cycle without settling, and bills it at the next settlement", async () => {
@@ -90,7 +119,7 @@ describe("treasury processor", () => {
     expect(world.treasuries[0].pendingWork.construction).toBe(8);
     expect(world.treasuries[0].pendingWork.logistics).toBeCloseTo(0.4); // 40 / S=100
 
-    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams({ economyScale: 100 }));
+    await runTreasuryProcessor(world, ctxWithRealised(24, new Map()), makeParams({ economyScale: 100 }));
     const settled = world.treasuries[0].lastSettlement;
     if (settled === null) throw new Error("expected a settlement on the cycle start");
     expect(settled.constructionBill).toBeCloseTo(8 * 0.5);
@@ -100,18 +129,18 @@ describe("treasury processor", () => {
 
   it("scales the per-cycle rates by catchUpFactor but never the per-cycle quantities", async () => {
     // Identical worlds settled at tick 24 under interval 24 (catchUp 1) vs 12 (catchUp 0.5):
-    // heads tax and maintenance are per-cycle rates and must halve; realized production and
+    // heads tax and maintenance are per-cycle rates and must halve; realised production and
     // accrued band work arrive already cycle-scaled and must not be rescaled.
     const seed = () =>
       new InMemoryTreasuryWorld({
         treasuries: [makeTreasury({ pendingWork: { logistics: 2, construction: 8 } })],
         systems: [SYSTEM],
       });
-    const realized = () => ctxWithRealized(24, new Map([["sys-1", new Map([["food", 10]])]]));
+    const realised = () => ctxWithRealised(24, new Map([["sys-1", new Map([["food", 10]])]]));
     const ref = seed();
-    await runTreasuryProcessor(ref, realized(), makeParams());
+    await runTreasuryProcessor(ref, realised(), makeParams());
     const half = seed();
-    await runTreasuryProcessor(half, realized(), makeParams({ interval: 12 }));
+    await runTreasuryProcessor(half, realised(), makeParams({ interval: 12 }));
 
     const a = ref.treasuries[0].lastSettlement;
     const b = half.treasuries[0].lastSettlement;
@@ -133,7 +162,7 @@ describe("treasury processor", () => {
     }));
     expect(world.treasuries[0].pendingWork).toEqual({ logistics: 0, construction: 0 });
 
-    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams({
+    await runTreasuryProcessor(world, ctxWithRealised(24, new Map()), makeParams({
       constructionWorkByFaction: new Map([["faction-1", NaN]]),
     }));
     const settled = world.treasuries[0].lastSettlement;
@@ -148,7 +177,7 @@ describe("treasury processor", () => {
       treasuries: [makeTreasury({ pendingWork: { logistics: 0, construction: 100 } })],
       systems: [],
     });
-    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams());
+    await runTreasuryProcessor(world, ctxWithRealised(24, new Map()), makeParams());
     const t = world.treasuries[0];
     expect(t.funded.construction).toBe(0); // billed 50, paid 0
     expect(t.funded.maintenance).toBe(1);  // zero-bill guard: slider value
@@ -194,7 +223,7 @@ describe("treasury processor", () => {
     expect(world.treasuries[0].pendingFounding).toBe(120);
     expect(world.treasuries[0].lastSettlement).toBeNull();
 
-    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams());
+    await runTreasuryProcessor(world, ctxWithRealised(24, new Map()), makeParams());
     const settled = world.treasuries[0].lastSettlement;
     if (settled === null) throw new Error("expected a settlement on the cycle start");
     expect(settled.foundingExpense).toBe(120);
@@ -209,7 +238,7 @@ describe("treasury processor", () => {
     });
     await runTreasuryProcessor(
       world,
-      ctxWithRealized(24, new Map([["sys-1", new Map([["food", 10]])]])),
+      ctxWithRealised(24, new Map([["sys-1", new Map([["food", 10]])]])),
       makeParams({ foundingDebitsByFaction: new Map([["faction-1", 200]]) }),
     );
     const t = world.treasuries[0];
@@ -232,11 +261,11 @@ describe("treasury processor", () => {
         systems: [],
       });
     const free = seed();
-    await runTreasuryProcessor(free, ctxWithRealized(24, new Map()), makeParams());
+    await runTreasuryProcessor(free, ctxWithRealised(24, new Map()), makeParams());
     const charged = seed();
     await runTreasuryProcessor(
       charged,
-      ctxWithRealized(24, new Map()),
+      ctxWithRealised(24, new Map()),
       makeParams({ foundingDebitsByFaction: new Map([["faction-1", 40]]) }),
     );
 
@@ -281,7 +310,7 @@ describe("treasury processor: reads and writes made for nothing", () => {
     // The system fetch is the expensive read here — a settlement with nobody to settle for must
     // not pay for it.
     const world = new RecordingTreasuryWorld({ treasuries: [], systems: [SYSTEM] });
-    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams());
+    await runTreasuryProcessor(world, ctxWithRealised(24, new Map()), makeParams());
     expect(world.calls).toEqual(["getTreasuries"]);
   });
 
@@ -347,7 +376,7 @@ describe("treasury processor: fallbacks for unusable inputs", () => {
     const settle = async (interval: number) => {
       const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
       await runTreasuryProcessor(
-        world, ctxWithRealized(24, new Map([["sys-1", new Map([["food", 10]])]])),
+        world, ctxWithRealised(24, new Map([["sys-1", new Map([["food", 10]])]])),
         makeParams({ interval }),
       );
       return settlementOf(world);
@@ -362,7 +391,7 @@ describe("treasury processor: fallbacks for unusable inputs", () => {
 
   it("settles with no production income when the economy stage emitted no signals", async () => {
     // The economy stage is skipped off its own cycle boundary, so its result carries no signals at
-    // all. Reaching through that for the realized-production map is a crash mid-tick — which hard-
+    // all. Reaching through that for the realised-production map is a crash mid-tick — which hard-
     // pauses the loop and discards the whole tick.
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
     await runTreasuryProcessor(world, { tick: 24, results: new Map([["economy", {}]]) }, makeParams());
@@ -388,7 +417,7 @@ describe("treasury processor: the per-system income lines", () => {
     });
     await runTreasuryProcessor(
       world,
-      ctxWithRealized(24, new Map([
+      ctxWithRealised(24, new Map([
         ["both", new Map([["food", 10]])],
         ["production-only", new Map([["food", 10]])],
       ])),
@@ -404,7 +433,7 @@ describe("treasury processor: the per-system income lines", () => {
     // The per-type breakdown is what the UI renders the maintenance bill from. Scaled the other
     // way, the lines would read four times the bill at half the cadence and still look plausible.
     const world = new InMemoryTreasuryWorld({ treasuries: [makeTreasury()], systems: [SYSTEM] });
-    await runTreasuryProcessor(world, ctxWithRealized(24, new Map()), makeParams({ interval: 12 }));
+    await runTreasuryProcessor(world, ctxWithRealised(24, new Map()), makeParams({ interval: 12 }));
     const settled = settlementOf(world);
     const summed = settled.maintenanceByType.reduce((total, l) => total + l.amount, 0);
     expect(settled.maintenanceBill).toBeGreaterThan(0);

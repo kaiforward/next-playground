@@ -28,10 +28,10 @@ import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER } from "@/lib/constants/recipes";
 /** Good → processing rank, derived once from the static recipe-topological order. */
 const PRODUCTION_ORDER_INDEX = new Map(PRODUCTION_GOOD_ORDER.map((g, i) => [g, i]));
 
-/** A market entry after simulation: post-tick stock plus the flows realized this run. */
+/** A market entry after simulation: post-tick stock plus the flows realised this run. */
 export interface SimulatedMarketEntry extends MarketTickEntry {
   /** Output actually produced this run — post input-gate and operating-ceiling. 0 for non-producers. */
-  realized: number;
+  realised: number;
   /** Civilian consumption actually delivered this run (≤ demanded). 0 for non-consumers. */
   delivered: number;
 }
@@ -85,9 +85,9 @@ export function simulateSystemEconomyTick(
 ): SimulatedMarketEntry[] {
   const { rationCover } = params;
 
-  // Realized (actually produced, post input-gate and operating-ceiling) output
+  // Realised (actually produced, post input-gate and operating-ceiling) output
   // per good this run — the production-tax base. Absent good ⇒ produced nothing.
-  const realizedByGood = new Map<string, number>();
+  const realisedByGood = new Map<string, number>();
 
   // Civilian consumption delivered per good this run — the satisfaction
   // numerator downstream. Absent good ⇒ delivered nothing.
@@ -131,7 +131,7 @@ export function simulateSystemEconomyTick(
       );
       const ceiling = productionCeiling(s, knee);
       const actualOutput = effectiveProduction * gate * ceiling;
-      realizedByGood.set(entry.goodId, (realizedByGood.get(entry.goodId) ?? 0) + actualOutput);
+      realisedByGood.set(entry.goodId, (realisedByGood.get(entry.goodId) ?? 0) + actualOutput);
       s += actualOutput;
       // Drain inputs proportional to actual output. Because gate ≤ each input's
       // inputDrawRatio (ramp- and availability-capped), the actual draw never
@@ -162,7 +162,7 @@ export function simulateSystemEconomyTick(
   return entries.map((e) => ({
     ...e,
     stock: stockOf(e.goodId),
-    realized: realizedByGood.get(e.goodId) ?? 0,
+    realised: realisedByGood.get(e.goodId) ?? 0,
     delivered: deliveredByGood.get(e.goodId) ?? 0,
   }));
 }

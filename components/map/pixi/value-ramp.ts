@@ -140,7 +140,7 @@ function dimChannels(r: number, g: number, b: number): [number, number, number] 
  * colour so the focused faction's cells read as clearly brighter. Never returns `ABSENT_COLOR` for a
  * ramp colour (every ramp stop sits well above rgb(8,9,12), so desat+dim can't collide with it).
  */
-export function deEmphasize(color: number, treatment: DeEmphasis): number {
+export function deEmphasise(color: number, treatment: DeEmphasis): number {
   const r0 = (color >> 16) & 0xff;
   const g0 = (color >> 8) & 0xff;
   const b0 = color & 0xff;

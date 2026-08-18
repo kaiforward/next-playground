@@ -6,27 +6,29 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 /**
- * Percentage width for a progress-bar fill, from a workDone/workTotal fraction in [0,1] — the same
- * convention every progress consumer in the codebase uses (`progressOf` in
- * `lib/engine/construction-readout.ts`, `ConstructionRow`'s `valueText`). The ×100 conversion
- * belongs here, at render time, rather than upstream: a component that stored progress pre-scaled
- * to 0-100 would be the one value in the codebase reading differently from every other consumer of
- * the same field, which is exactly the trap `TrackerRow` used to fall into (its track rendered a
- * fraction straight as a percentage, so a project at 55% drew a 0.55%-wide sliver). Out-of-range
- * input is clamped so a bad upstream value can't draw a fill past 100% or a negative width.
+ * Percentage width for any bar's fill, from a [0,1] fraction — construction progress
+ * (workDone/workTotal), staffing fulfilment, or anything else a bar spans. Not progress-specific:
+ * the only thing it knows is that a fill is a fraction of its track.
+ *
+ * The ×100 conversion belongs here, at render time, rather than upstream: a component that stored
+ * its fraction pre-scaled to 0-100 would be the one value in the codebase reading differently from
+ * every other consumer of the same field, which is exactly the trap `TrackerRow` used to fall into
+ * (its track rendered a fraction straight as a percentage, so a project at 55% drew a 0.55%-wide
+ * sliver). Out-of-range input is clamped so a bad upstream value can't draw a fill past 100% or a
+ * negative width.
  */
-export function progressWidthPct(fraction: number): number {
+export function barWidthPct(fraction: number): number {
   return clamp(fraction * 100, 0, 100);
 }
 
 /**
  * Percentage width for the lighter "next step" segment drawn ahead of a progress fill, from the
- * same [0,1] fractions as `progressWidthPct`. It is clamped to the room the fill leaves, so a
+ * same [0,1] fractions as `barWidthPct`. It is clamped to the room the fill leaves, so a
  * forecast larger than the work remaining finishes the bar rather than overflowing it — a
  * near-complete project is forecast its remaining work, not a full cycle's cap.
  */
 export function projectedWidthPct(doneFraction: number, projectedFraction: number): number {
-  return clamp(progressWidthPct(projectedFraction), 0, 100 - progressWidthPct(doneFraction));
+  return clamp(barWidthPct(projectedFraction), 0, 100 - barWidthPct(doneFraction));
 }
 
 /**
@@ -54,7 +56,7 @@ export function weightedMean(values: number[], weights: number[]): number {
 /**
  * Middle value of `xs`, averaging the two middle entries for an even-length list.
  * Empty input is 0 rather than NaN — harness cohorts can legitimately be empty, and
- * NaN must never reach serialized output.
+ * NaN must never reach serialised output.
  */
 export function median(xs: number[]): number {
   if (xs.length === 0) return 0;

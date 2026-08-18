@@ -5,15 +5,16 @@ description: Execute a committed build plan task-by-task with dispatched impleme
 
 # /implement-plan — the plan, executed without leaks
 
-This stage turns a build plan into a PR. The generic execution skills it replaces have never heard
-of `Proves`, red-proof, the SDD ledger or the per-task review gate — and that seam is where ~278
-unpinned behaviours once leaked through a fully filled plan. The two leaks this skill exists to
-close: **tests that were never seen red** pin nothing, and **issues noted per-task and not fixed
-per-task** are forgotten by the time implementation ends, then expensively re-found at review.
+This stage turns a build plan into a PR. Generic execution skills have never heard of `Proves`,
+red-proof, the SDD ledger or the per-task review gate — a plan executed without them leaks. The two
+leaks this skill exists to close: **tests that were never seen red** pin nothing, and **issues noted
+per-task and not fixed per-task** are forgotten by the time implementation ends, then expensively
+re-found at review.
 
 **Entry condition: the plan exists and is committed** — `docs/build-plans/<feature>.md` with
-four-field tasks (`Files / Interface / Proves / Consumes`, `Proves` a detection list) and its
-gates. No plan → that is `/build-plan`; go back. Work happens on the feature branch per `AGENTS.md` —
+four-field tasks (`Files / Interface / Proves / Consumes`, `Proves` a detection list; UI tasks also
+carry `Reuse`) and its gates. **If the plan has a Net-new UI section, the owner's approval of that
+list is part of the entry condition** — do not dispatch the first UI task without it. No plan → that is `/build-plan`; go back. Work happens on the feature branch per `AGENTS.md` —
 and **if the target branch is a `shared/*` integration branch, create `feat/<sub-feature>` off it
 before the first dispatch**: task commits land on the sub-branch, which PRs into shared when the
 feature completes (the commit-branch hook blocks commits anywhere but `feat/*`).
@@ -30,7 +31,9 @@ having happened. Two required sections:
 
 **Per task** — status; model + effort dispatched (and why, if not the default); the **red-proof
 record**: one line per detection-list entry naming the test that pins it and how it was seen red;
-one line stating **what this task's tests do not prove**; the review verdict; the commit sha.
+one line stating **what this task's tests do not prove**; the `Files` deviations (any file touched
+beyond the plan's list, any listed file left unchanged — the list is a floor, and deviations are
+recorded, never hidden); the review verdict; the commit sha.
 
 **`## Issues`** — every finding, from any source (the per-task review, the implementer, the
 session's own reading), that was not fixed before that task's commit. One row each: severity ·
@@ -38,11 +41,21 @@ source task · `file:line` · one-line claim. There are exactly two dispositions
 **fixed now** or **ledgered here**. A finding that is neither is dropped work, and dropping it
 silently is the failure this file exists to prevent. "Minor" is a severity, not a disposition.
 
+**Edit the ledger with exact anchors, never a scripted find-and-replace.** A scripted replace whose
+anchor has drifted no-ops silently and reports success — a dropped ledger row is the one loss this
+file exists to prevent, and it is invisible by construction. Use an edit that errors on no-match or
+assert the match count, and re-read `## Issues` end to end before every fix wave rather than
+trusting it accreted correctly.
+
 ## Per task
 
-1. **Dispatch one implementer per task.** The prompt is the task verbatim (all four fields), the
-   spec sections it implements, and the gates reference — not a paraphrase; the plan was written to
-   be executed from. Model and effort per the tiers below, always explicit.
+1. **Dispatch one implementer per task, serially by default.** The prompt is the task verbatim
+   (every field), the spec sections it implements, and the gates reference — not a paraphrase; the
+   plan was written to be executed from. Model and effort per the tiers below, always explicit.
+   Parallel dispatch of disjoint-file tasks is allowed, but a full-suite run mid-flight attributes
+   to no one task, so the session cannot verify the gate it owns: record in the ledger which task's
+   checks-green is deferred and to which run. And never run a red-proof re-execution while another
+   task's suite is in flight — the temporary break reads as that suite's false red.
 2. **TDD, where the red run is the detection list executed item by item.** Tests come from the
    `Proves` entries before implementation; each entry is seen red once — break the listed
    behaviour, watch the named test fail, restore. The implementer returns the red-proof record,
@@ -60,8 +73,8 @@ silently is the failure this file exists to prevent. "Minor" is a severity, not 
 5. **The session verifies the claims.** Run the suite and build yourself (red-proof re-execution
    is the reviewer's job in step 3 — the session does not re-break tests itself); and treat
    **"the instrument prints X" as a claim verified only by running the instrument** and matching
-   its output against the plan — a plan once asserted its gate reads were "all now printed" while
-   two had never been implemented, and nothing caught it until the gate ran.
+   its output against the plan — an unimplemented read looks identical to an implemented one in
+   prose, and nothing else catches it before the gate runs.
 6. **Commit per task**, message naming the task. Update the ledger before moving on.
 
 ## Gates
@@ -89,7 +102,9 @@ already caught and how it was resolved.
 
 ## Models
 
-Resolve tiers through `.agents/model-tiers.md`; effort explicit on every dispatch, never inherited.
+Resolve tiers through `.agents/model-tiers.md`; effort explicit on every dispatch, never inherited —
+knowing that the dispatch tool has no effort parameter: "effort" is prompt text and only prompt
+text, so write it into the prompt and record it in the ledger rather than assuming it is enforced.
 
 - **Implementer: `strong` by default.** A task with a written Interface and detection list is
   bounded implementation — the pipeline already spent the judgment upstream in the spec and plan,

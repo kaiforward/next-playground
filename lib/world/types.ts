@@ -5,7 +5,7 @@
  * `JSON.parse(JSON.stringify(world))` (save/load round-trips through this).
  *
  * Entities are stored as flat top-level arrays keyed by id (or a natural
- * composite key), not nested — the same normalized shape as the relational
+ * composite key), not nested — the same normalised shape as the relational
  * schema this superseded. A row keeps its own synthetic `id` only when
  * something else references it by id; rows with a natural composite key
  * that nothing else points to (buildings, connections, markets,
@@ -22,8 +22,11 @@ import type {
   TaxLevel,
 } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
+import type { AlertCategorySettings } from "@/lib/types/alerts";
+import type { TrackerSections } from "@/lib/types/tracker";
 import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
 import type { SupplyRegime } from "@/lib/engine/population";
+import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 // ── Meta ────────────────────────────────────────────────────────
 
@@ -51,6 +54,24 @@ export interface WorldPlayer {
    * on read rather than pruned here, so this list can carry stale ids between reads.
    */
   pinnedSystemIds: string[];
+  /**
+   * Which alert categories the player wants on the bar (docs/active/gameplay/alert-bar.md →
+   * "Settings"). Every attention-layer setting lives in the save, whatever kind of setting it is —
+   * a toggle, a pin or an expanded section — so this sits here beside `pinnedSystemIds` rather than
+   * in browser storage, and a saved game carries the player's own reading of it. Seeded from
+   * `DEFAULT_ALERT_CATEGORIES` at world-gen; every key is always present. A critical category's
+   * flag starts `true` and `setAlertCategory` refuses to change it, so the only way this record can
+   * carry a hidden critical category is a hand-edited save — which the chip run does not honour
+   * either (it short-circuits on the registry's `hideable`). No processor reads this.
+   */
+  alertCategories: AlertCategorySettings;
+  /**
+   * Which Tracker sections the player wants rendered (docs/active/gameplay/tracker.md →
+   * "Settings"). In the save for the same reason `alertCategories` is. Seeded from
+   * `DEFAULT_TRACKER_SECTIONS` at world-gen; all three keys are always present. No processor reads
+   * this.
+   */
+  trackerSections: TrackerSections;
 }
 
 // ── Regions ─────────────────────────────────────────────────────
@@ -139,6 +160,73 @@ export interface WorldSystem {
    *  instead of where the engine already bounds it. Written once per economy cycle, alongside
    *  `provision`/`supplyBand`. */
   criticalWeight?: number;
+  /** The realised change in `population` across one economy cycle, including both migration and
+   *  colony-founding transfers — `population_after_this_cycle's_transfers − population_at_cycle_start`,
+   *  denominated per reference cycle (dividing the realised change by this cycle's own
+   *  `catchUpFactor`, mirroring `populationDelta`'s own denomination in lib/engine/population.ts
+   *  rather than the scaled figure a single run actually applies) so the reading is unchanged if
+   *  `CYCLE_LENGTH` is retuned away from `REFERENCE_INTERVAL`. Written by the tick body
+   *  (`lib/world/tick.ts`), AFTER the directed-build stage — not by the population processor:
+   *  `populationDelta` (lib/engine/population.ts) carries no migration term, and on a dying colony
+   *  chosen as a founding donor the colony-seed debit is often the dominant drain, so persisting
+   *  the migration-inclusive-but-pre-founding figure would still systematically understate the
+   *  collapse. A donor therefore reads more pessimistic for the single cycle it founds a colony,
+   *  self-correcting the next — accepted, because the field means realised change and erring toward
+   *  warning beats erring toward reassurance. Same absence convention as `provision`/`supplyBand`/
+   *  `criticalWeight` above: absent means never assessed, written for every system the population
+   *  processor visited this cycle (0 included, distinct from absent), untouched for one it did not,
+   *  and cleared — not carried forward — on abandonment or redevelopment (`applyAbandonments`,
+   *  `applyDevelopments`, both `lib/world/tick.ts`) so a re-founded colony never inherits its
+   *  predecessor's reading. Authored for one job — the Famine alert sorts by time to abandonment,
+   *  and this is the decay rate that countdown extrapolates from; a reader wanting a different shape
+   *  (a trailing average, a longer window) adds its own field rather than redefining this one.
+   *  Nothing inside the tick reads it. */
+  populationChange?: number;
+  /** This run's best-ranked dropped production opportunity from the directed-build planner — the
+   *  alert bar's Build blocked category. See `BuildDropReport` (`lib/engine/directed-build.ts`) for
+   *  the reasons and for what `droppedRoi` is (and is not) at each drop site. Written directly by
+   *  the directed-build processor's world adapter
+   *  (`applyBuildBlockedUpdates`, `lib/tick/world/directed-build-world.ts`), applied in
+   *  `lib/world/tick.ts` — not by the generic per-system row-mutation path. Same absence convention
+   *  as `provision`/`supplyBand`/`criticalWeight`/`populationChange` above: absent means never
+   *  assessed, written for every system the directed-build planner visited this run that had
+   *  something dropped, absent for one that landed everything or wanted nothing, untouched for one
+   *  the planner did not visit this run (its faction was not due), and cleared — not carried
+   *  forward — on abandonment or redevelopment (`applyAbandonments`, `applyDevelopments`, both
+   *  `lib/world/tick.ts`) so a re-founded colony never inherits its predecessor's reading. Housing
+   *  refusals never appear here — they are *No housing headroom*'s signal, not this one. Nothing
+   *  inside the tick reads it. */
+  buildBlocked?: { reason: BuildDropReason; droppedRoi: number };
+  /** This run's best-ranked SCORED production opportunity from the directed-build planner — the alert
+   *  bar's Build opportunity category. `score` is `BuildOpportunity.score` verbatim (Ordering only,
+   *  not comparable between systems); `goodId` is the good it would serve, carried along because the
+   *  read service bands the category on it against `SURVIVAL_GOODS` — a system with any
+   *  survival-serving opportunity is represented by that one rather than its highest-scoring one; see
+   *  `BuildOpportunityReport` (`lib/engine/directed-build.ts`) for the full selection rule. Written
+   *  directly by the directed-build processor's world adapter (`applyBuildOpportunityUpdates`,
+   *  `lib/tick/world/directed-build-world.ts`), applied in `lib/world/tick.ts` — not by the generic
+   *  per-system row-mutation path. Same absence convention as `buildBlocked` above: absent means never
+   *  scored, written for every system the directed-build planner visited this run that scored
+   *  anything, absent for one that scored nothing, untouched for one the planner did not visit this
+   *  run, and cleared — not carried forward — on abandonment or redevelopment. Nothing inside the tick
+   *  reads it. */
+  buildOpportunity?: { score: number; goodId: string };
+  /** This run's best-ranked colony-establish terms from the directed-build planner — the alert bar's
+   *  Colony opportunity category. `value` is `colonyValue(c, …) − popCost` (the ROI numerator) and
+   *  `work` the establish-plus-housing denominator — the same terms `ColonyProposal` carries
+   *  (`lib/engine/directed-build.ts`). Written directly by the directed-build processor's world
+   *  adapter (`applyColonyOpportunityUpdates`, `lib/tick/world/directed-build-world.ts`), applied in
+   *  `lib/world/tick.ts` — not by the generic per-system row-mutation path. Absent means never
+   *  assessed as worth it: written for every CANDIDATE (a controlled, not-yet-developed system) the
+   *  colonisation planner's PRE-GATE assessment kept this run (`assessColonyCandidates`), absent for
+   *  one it considered and dropped (below the habitable floor, already in flight, net-negative
+   *  value). The money/settler-supply gates truncate only what gets FOUNDED, never this field — a
+   *  site the faction cannot yet afford keeps its reading. Untouched for a candidate the planner did
+   *  not consider this run
+   *  (its faction was not due, or the `develop` param was absent), and cleared — not carried forward —
+   *  on abandonment or redevelopment so a founded colony never inherits its own candidacy reading.
+   *  Nothing inside the tick reads it. */
+  colonyOpportunity?: { value: number; work: number };
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** SPACE_PER_SIZE × Σ size. */
@@ -318,8 +406,8 @@ export interface WorldMarket {
    * missing (pre-change save) reads as 1.
    */
   satisfaction?: number;
-  /** Reference-cycle realized output; missing uses capacity until first assessment. */
-  realizedProductionRate?: number;
+  /** Reference-cycle realised output; missing uses capacity until first assessment. */
+  realisedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers are deliberately excluded. Missing reads as false. */
   productionSuppressed?: boolean;
   /**
@@ -346,6 +434,89 @@ export interface WorldMarket {
    * absent reachable supply. Missing => false.
    */
   logisticsFundingBound?: boolean;
+  /**
+   * The realised change in `stock` across one economy cycle, after directed logistics has applied
+   * its hauls as stock deltas and after directed build has drawn this cycle's colony staging
+   * materials — production minus consumption, net of imports/exports and of what a founding donor
+   * shipped out to stand up a colony, denominated
+   * per reference cycle (dividing the realised change by this cycle's own `catchUpFactor`, the same
+   * denomination `WorldSystem.populationChange` uses) so the reading is unchanged if `CYCLE_LENGTH`
+   * is retuned. Written ONLY for `SURVIVAL_GOODS` (lib/constants/physical-economy.ts:153 — water and
+   * food); every other good's market row never carries this key, present or absent.
+   *
+   * Written by the tick body (lib/world/tick.ts), not by the directed-logistics engine or
+   * processor: snapshotted immediately BEFORE the economy processor mutates `stock` this cycle, and
+   * computed after the last stage of the same tick that moves it — directed build's founding
+   * staging draw and staged manifest delivery, which run after directed logistics' own stock
+   * updates. A founding donor's draw is a real loss from its warehouse, and this figure's one reader
+   * divides `stock` by `−stockChange` for a cycles-to-empty countdown, so leaving the draw out would
+   * report a longer runway than the donor has. Same absence convention as
+   * `logisticsFundingBound` above: absent means never assessed, written for every survival-good
+   * market row belonging to a system the economy processor visited this cycle (0 included, distinct
+   * from absent), untouched for a market row it did not visit, and cleared — not carried forward —
+   * on abandonment (`resetAbandonedMarkets`, lib/world/tick.ts) so a resettled colony's warehouse
+   * does not inherit its predecessor's drain rate. `stock` itself is deliberately left untouched by
+   * that same reset — the warehouse is real.
+   *
+   * Cadence caveat: this figure is exact only while `cadence.logistics` coincides with
+   * `cadence.cycle` — the live game's constants (LOGISTICS_INTERVAL === CYCLE_LENGTH === 24) always
+   * do. Directed logistics runs on its OWN independently-tunable cadence
+   * (lib/constants/tick-cadence.ts); if that cadence is retuned away from the economy cycle's, this
+   * figure captures only the logistics application (if any) that happens to land on the SAME tick as
+   * the economy cycle boundary — a haul applied on any other tick is folded into `stock` without ever
+   * appearing in a reported change, and a cycle boundary with no coincident logistics run reports
+   * production-minus-consumption alone, with no import/export correction that cycle. Authored for one
+   * job — the Survival stock falling alert's `stock / −stockChange` cycles-to-empty measure. Nothing
+   * inside the tick reads it.
+   */
+  stockChange?: number;
+  /**
+   * How much of this row's demand no reachable same-faction donor and no local production could close
+   * on the latest directed-logistics run — the deficit's `max(0, target − stock)` LESS the drawable
+   * capacity its reachable donors still held (`UnservableDeficit.shortfall`,
+   * `lib/engine/directed-logistics.ts`), for a deficit whose remaining gap is STRUCTURAL, not a
+   * matter of this cycle's haul budget. The part a donor did cover is not in here. A LEVEL, not a
+   * rate: unlike `stockChange` it carries no per-cycle denomination, so retuning `CYCLE_LENGTH` does
+   * not move it.
+   *
+   * **The size IS the classification.** A structurally-unservable deficit always has a strictly
+   * positive level — the engine only queues a deficit at all when `shortfall > 0`
+   * (`lib/engine/directed-logistics.ts`, the deficit classification's own guard) and only records
+   * one here when reachable capacity falls strictly short of that — so it carries no separate "is
+   * unservable" bit that could drift out of step with the number. A row reading absent, or reading
+   * 0, is servable.
+   *
+   * Written by the directed-logistics ENGINE (`matchFactionTransfers`'s `unservable` result),
+   * threaded out through the processor (`lib/tick/processors/directed-logistics.ts`) exactly as
+   * `logisticsFundingBound` is.
+   *
+   * Deliberately unlike `logisticsFundingBound`, which the matcher writes to BOTH endpoints of a
+   * funding-bound haul (including the donor): this is written on the DEFICIT endpoint only. A donor
+   * carries no reading about its own local demand being unservable — that would put an exporting
+   * system in a category about unmet local demand, which is not what a donor is.
+   *
+   * Distinct from, and not exclusive with, `logisticsFundingBound`: that field means "the WORK
+   * BUDGET stopped a fill that had enough reachable capacity to succeed" — served next run with no
+   * change to the world. This field means "the shortfall would persist even with unlimited budget,
+   * because reachable donors and local production together cannot supply it" — the world itself
+   * would have to change (new capacity, a new route, a fresh donor). A deficit can carry both at
+   * once: reachable capacity can be jointly too small AND the budget can also run out before
+   * reaching even that insufficient capacity. See the engine type's own docstring for the exact test.
+   *
+   * Same conventions as `logisticsFundingBound` above — and note that is the closer of the two
+   * precedents: every deficit row the run visits is assessed, but the key is written only where the
+   * reading CHANGES, so a never-structural deficit stays absent rather than becoming a present 0.
+   * (`stockChange` differs — it writes unconditionally every visit.) A deficit that gains a donor or
+   * a local producer therefore has this key DELETED on the next run, a row the run did not visit is
+   * untouched, and it refreshes whenever the level moves — a shortfall that widens or narrows while
+   * the market stays structurally unservable never goes stale. Cleared (deleted,
+   * `resetAbandonedMarkets`) on abandonment so a resettled colony does not inherit its predecessor's
+   * structural reading: that reading named a shortfall the PREVIOUS colony's donors and production
+   * could not close, and a fresh one has neither yet. Authored for one job — the Demand unservable
+   * alert and its within-category sort (largest shortfall first). Nothing inside the tick reads it
+   * back.
+   */
+  unservedShortfall?: number;
 }
 
 // ── Factions ────────────────────────────────────────────────────
@@ -412,6 +583,22 @@ export interface WorldTreasurySettlement {
   logisticsBill: number;
   constructionBill: number;
   paid: TreasuryBands;
+  /**
+   * What each band was ASKED to pay at this settlement — `bill × the slider in force at that
+   * instant` (`settleLadder`'s own `charge`, after its clamp). Frozen alongside `paid`, and that
+   * pairing is the point: a band is insolvent exactly when `paid[band] < charged[band]`, and the
+   * sliders are live player policy the player can move at any moment with no re-settle. Comparing a
+   * frozen `paid` against today's slider reports insolvency for moving the slider — which is the
+   * corrective action — and hides it for moving the slider the other way. Every reading of "this
+   * settlement could not pay what it was asked for" therefore takes both terms from this one row;
+   * `bandShortfall` (`lib/engine/treasury.ts`) is the single place that does it.
+   *
+   * All three bands rather than only the one a category reads today: it is the same `TreasuryBands`
+   * shape as `paid` beside it, and a per-band charge is exactly what that type is for. Optional so a
+   * save written before the field existed loads without it; absent reads as never-assessed (readers
+   * skip rather than guess), and the faction's next settlement fills it in.
+   */
+  charged?: TreasuryBands;
   /**
    * Colony charter fees and staged founding materials settled this cycle. Its own field, never a
    * fourth band: `TreasuryBands` is shared by the sliders, the bills and the latched funding

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatNumber, formatHeadcount, formatHeadcountShort, formatMagnitude, formatPeople, formatUnitsShort, splitMagnitude } from "../format";
+import { formatNumber, formatHeadcount, formatMagnitude, formatPeople, formatUnitsShort, splitCompactNumber } from "../format";
 
 describe("formatNumber", () => {
   it("rounds to the nearest integer", () => {
@@ -46,21 +46,9 @@ describe("formatHeadcount", () => {
   });
 });
 
-describe("formatHeadcountShort", () => {
-  it("rounds to a whole unit before scaling (141.8 -> 142M)", () => {
-    expect(formatHeadcountShort(141.8)).toBe("142M");
-  });
-  it("formats billions with at most one fractional digit", () => {
-    expect(formatHeadcountShort(3400)).toBe("3.4B");
-  });
-  it("renders zero", () => {
-    expect(formatHeadcountShort(0)).toBe("0");
-  });
-});
-
 describe("formatPeople", () => {
   it("keeps K precision for sub-million quantities (no whole-unit pre-round)", () => {
-    // the differentiator from formatHeadcountShort: a < 1 abstract unit must not collapse to 0.
+    // A < 1 abstract unit must not collapse to 0 — the whole point of this formatter.
     expect(formatPeople(0.98)).toBe("980K");
     expect(formatPeople(0.011)).toBe("11K");
   });
@@ -95,17 +83,17 @@ describe("formatMagnitude", () => {
   });
 });
 
-describe("splitMagnitude", () => {
+describe("splitCompactNumber", () => {
   it("splits a compact magnitude into value + unit suffix", () => {
-    expect(splitMagnitude("2.42M")).toEqual({ value: "2.42", unit: "M" });
-    expect(splitMagnitude("980K")).toEqual({ value: "980", unit: "K" });
-    expect(splitMagnitude("3.8M")).toEqual({ value: "3.8", unit: "M" });
+    expect(splitCompactNumber("2.42M")).toEqual({ value: "2.42", unit: "M" });
+    expect(splitCompactNumber("980K")).toEqual({ value: "980", unit: "K" });
+    expect(splitCompactNumber("3.8M")).toEqual({ value: "3.8", unit: "M" });
   });
   it("returns an undefined unit (not '') when there is no suffix", () => {
-    expect(splitMagnitude("0")).toEqual({ value: "0", unit: undefined });
-    expect(splitMagnitude("1,234")).toEqual({ value: "1,234", unit: undefined });
+    expect(splitCompactNumber("0")).toEqual({ value: "0", unit: undefined });
+    expect(splitCompactNumber("1,234")).toEqual({ value: "1,234", unit: undefined });
   });
   it("returns the raw string unsplit when the input doesn't match the magnitude shape", () => {
-    expect(splitMagnitude("N/A")).toEqual({ value: "N/A" });
+    expect(splitCompactNumber("N/A")).toEqual({ value: "N/A" });
   });
 });

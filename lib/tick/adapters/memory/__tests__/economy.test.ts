@@ -23,7 +23,7 @@ const market = (goodId: string): WorldMarket => ({
 });
 
 describe("InMemoryEconomyWorld — capacity-driven production", () => {
-  it("derives baseProductionRate from buildings × outputPerUnit × labourFulfillment", async () => {
+  it("derives baseProductionRate from buildings × outputPerUnit × labourFulfilment", async () => {
     const world = new InMemoryEconomyWorld(
       { systems: [sys({})], markets: [market("ore")], modifiers: [] },
     );
@@ -107,14 +107,14 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       stock: 1,
       anchorMult: 1,
       satisfaction: 1,
-      realizedProductionRate: Number.NaN,
+      realisedProductionRate: Number.NaN,
       productionSuppressed: false,
       productionSuppressRate: Number.NaN,
       productionMult: Number.NaN,
       squeezeCycles: 4.8,
     }]);
-    expect(world.markets[0].realizedProductionRate).toBe(0);
-    // Opposite polarities, both deliberate: a corrupt realized rate reads as "produced nothing",
+    expect(world.markets[0].realisedProductionRate).toBe(0);
+    // Opposite polarities, both deliberate: a corrupt realised rate reads as "produced nothing",
     // but a corrupt gate reads as "no gate" — a NaN scalar must never stop a factory's draw.
     expect(world.markets[0].productionSuppressRate).toBe(1);
     expect(world.markets[0].productionMult).toBe(1);
@@ -167,7 +167,7 @@ describe("InMemoryEconomyWorld — capacity-driven production", () => {
       stock: 1,
       anchorMult: 1,
       satisfaction: 1,
-      realizedProductionRate: 0,
+      realisedProductionRate: 0,
       productionSuppressed: false,
       productionSuppressRate: 1,
       productionMult: 1,

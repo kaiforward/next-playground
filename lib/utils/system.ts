@@ -1,6 +1,7 @@
 // ── Danger bucketing ───────────────────────────────────────────
 
-export function getDangerInfo(rawDanger: number): { label: string; color: "green" | "amber" | "red" } {
+/** Bins a raw danger float into its display band — the label a badge prints and the tone it takes. */
+export function dangerBand(rawDanger: number): { label: string; color: "green" | "amber" | "red" } {
   if (rawDanger <= 0) return { label: "None", color: "green" };
   if (rawDanger < 0.1) return { label: "Low", color: "green" };
   if (rawDanger < 0.2) return { label: "Moderate", color: "amber" };

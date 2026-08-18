@@ -1,7 +1,7 @@
 # The Tracker
 
-The first of the attention layer's two surfaces. The second, the alert bar, is not built — it is
-specified separately and owns everything condition-shaped.
+The first of the attention layer's two surfaces. The second, [the alert bar](./alert-bar.md), owns
+everything condition-shaped.
 
 ## What it is
 
@@ -87,6 +87,12 @@ The rail passes pointer events through to the map everywhere except the panels t
 space above, below and between them never swallows a click. The Tracker never blocks the map: it is
 an overlay the map stays live behind, like the drawers.
 
+The rail sits 8px off the map's own edges — the same inset [the alert bar](./alert-bar.md) uses for its
+own run, off the top of the map and off this same rail, so the two read as one consistent edge. Whether
+the Tracker's own settings panel is open is shared state, not private to this panel: the alert run's
+right inset widens by that panel's width while it is open, the same way it already widens to make room
+for the panel itself.
+
 ## Pinning
 
 A **star toggle** in the system panel header pins and unpins the current system, in the header's
@@ -137,7 +143,7 @@ colony both open Overview (where a colony's founding entry lives), a building ro
 (where its in-flight ghost row lives). This reuses the same focus mechanism the "Show on Map" button
 drives, including its counter, so locating the same system twice still re-centres the map.
 
-Hovering a row opens a **rich card**, and **a card describes its row's subject**. A pinned row's
+Hovering a row opens a **popover**, and **a card describes its row's subject**. A pinned row's
 subject is a system, so its card carries that system's vitals — the same figures the system panel's
 vitals grid shows, so there is one definition of how a system is doing rather than a second — plus
 the unpin control. A build or colony row's subject is a *project*, so its card carries the project:
@@ -147,19 +153,19 @@ belong in a card about a project.
 Everything in a card is a shortcut to something reachable another way, which is what makes the card a
 convenience rather than a place information hides.
 
-## The rich-card primitive
+## The popover primitive
 
-The card is a shared component built on a **popover** rather than a hover-card. Hover-cards are
-mouse-only by design — their content is unreachable by keyboard — and there is no reason to exclude
-keyboard users when the accessible primitive is available. The plain tooltip remains the first tier
-for one-line legends; the card is the second, richer tier.
+The card renders inside a shared `Popover` component built on Radix's Popover, whose content is
+reachable by keyboard as well as the mouse — there is no reason to exclude keyboard users when the
+accessible primitive is available. The plain tooltip remains the first tier for one-line legends;
+the popover is the second, richer tier.
 
 It opens on hover after a delay, on keyboard focus, and on click, and **no open path moves focus** —
-focus stays on the row, so a card opening never interrupts a keyboard user walking the list and never
-makes the rows below it unreachable. Entering a card is a separate, deliberate press: **ArrowDown**
-goes in, **Escape** comes back out to the row. Tab inside a card cycles within it. The card stays
-open while the cursor travels from row to card, and only one card is open at a time. The full
-contract, which every popover in the game shares, is in
+focus stays on the row, so a popover opening never interrupts a keyboard user walking the list and
+never makes the rows below it unreachable. Entering a popover is a separate, deliberate press:
+**ArrowDown** goes in, **Escape** comes back out to the row. Tab inside a popover cycles within it.
+The popover stays open while the cursor travels from row to card, and only one popover is open at a
+time. The full contract, which every popover in the game shares, is in
 [detail-panels.md](../design-system/detail-panels.md).
 
 A consumer can **opt out of click-to-open** where the trigger's click already means something else.
@@ -178,18 +184,23 @@ Tracker's own header — a sibling panel rather than a floating menu. It carries
 section. Hiding a section removes it entirely, heading and counts included; hiding all three still
 leaves the Tracker's header present so the settings stay reachable.
 
-Section visibility persists in the browser, not in the save: it is a view preference rather than game
-state. A malformed stored value falls back to all sections visible. Whether the settings panel itself
-is open is ephemeral and is not persisted.
+Section visibility is **stored in the save**, on the player seat beside the pin list — every
+attention-layer setting is per-save, whatever kind of setting it is. A new world starts with all three
+sections visible. Whether the settings panel itself is open is ephemeral and is not persisted at
+all.
 
 Nothing here is non-optional. Unlike the alert bar, a Tracker section carries no urgency, so hiding
 one loses nothing the player needs.
 
 ## World state and saves
 
-Pinned systems are player state and live alongside the automation switches on the player seat, as a
-list of system ids — so they are **saved and restored with the world**. Nothing in the tick reads
-them: no processor, adapter or tick body touches the pinned set.
+Pinned systems and section visibility are both player state, living alongside the automation switches
+on the player seat — a list of system ids and a flag per section — so both are **saved and restored
+with the world**. Nothing in the tick reads either: no processor, adapter or tick body touches them.
+
+Section visibility is a **required** field, seeded all-on at world-gen, which is why adding it bumped
+`SAVE_FORMAT_VERSION`. It rides the Tracker payload the panel already fetches rather than having a
+read of its own, and is written one flag at a time — the same split pinning uses.
 
 A pinned system that no longer exists — abandoned back to unclaimed frontier — is filtered out on
 read rather than pruned on write, which is why abandonment needs no tick write. A pinned system

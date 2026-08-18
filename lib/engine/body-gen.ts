@@ -45,7 +45,12 @@ export interface GeneratedSubstrate {
   habitableSpace: number;
   /** Σ body deposit slots — total extractor capacity per resource across the system. */
   slotCap: ResourceVector;
-  /** Effective per-resource yield multiplier — mean quality of the filled deposit slots (1.0 where none filled). */
+  /**
+   * Effective per-resource yield multiplier — the slot-capacity-weighted mean quality of the system's
+   * deposits, Σ(slots·quality) / Σ slots (1.0 where the system has no slots for that resource). The
+   * grade a fully-worked field realises; independent of how many extractors are actually placed
+   * (`depositGrade`).
+   */
   yieldMult: ResourceVector;
 }
 

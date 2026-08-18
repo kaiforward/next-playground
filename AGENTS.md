@@ -24,6 +24,7 @@ Design-stage hazard worksheet: `.agents/skills/shared/design-hazards.md` — fil
 - `npx vitest run` — unit tests
 - `npm run simulate` — headless run of the real tick at two horizons: 1000 ticks (founding) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`. **Exits 1 on a failed conservation identity** — read the report anyway; a failed identity means the founding ledger is out, not mistuned.
 - `npm run impact -- <SYMBOL>` — every module reading a constant/field/signal, which processors declare vs. silently write it, and run-order position. Run before leaning on any shared quantity.
+- `npm run duplication` — repo-wide search for prose or code shapes your changed files already share with a file elsewhere in the tree. Bare form uses the branch's diff against main; `--all` sweeps everything. Emits candidates, never findings — judge each against the bar (same decision, same medium, same lifecycle, same posture) before extracting.
 - `npm run mutation -- --mutate "<changed lib files>"` — scoped StrykerJS. **Always scoped, never bare.** Periodic overnight batch, not an in-session gate.
 
 ## Tech Stack
@@ -64,8 +65,9 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 - **Generics stay generic** — never intersect `T` with `Record<string, unknown>` or index it by string key. Require explicit accessors (`render(row: T)`, `getValue(row: T)`).
 - **Discriminated unions for results** — `{ ok: true; data } | { ok: false; error }`.
 - **Avoid postfix `!`** — use a real check. Exception: `find(...)!` in tests.
-- **Extract on the second occurrence** — UI to `components/ui|form/`, logic to `lib/utils|engine/`, types to `lib/types/`.
-- **Clean up what your change strands.** A field, prop or helper left without readers is part of that change, not a follow-up. `tsc` does not reach object literals typed by inference (a `map` callback return) — finish with a text grep, not a clean typecheck.
+- **Extract on the second occurrence** — UI to `components/ui|form/`, logic to `lib/utils|engine/`, types to `lib/types/`. `npm run duplication` finds the first occurrence when it sits in a file your change never touched.
+- **The name is the bug.** A thing named for something other than what it does gets reimplemented by whoever needs what it actually does, because searching for the real behaviour never finds it — `RichCard` was a popover, so two components hand-rolled popover mechanics. Name for the behaviour, not the role the thing was introduced for (`RichCard`) or the half of it that prompted the name (`disableClickOpen`, which also suppressed click-to-close, now `clickInert`). When you meet a name that doesn't match its behaviour, renaming it is part of the change that touched it, not a follow-up.
+- **Clean up what your change strands.** A field, prop or helper left without readers is part of that change, not a follow-up. `tsc` does not reach object literals typed by inference (a `map` callback return) — finish with a text grep, not a clean typecheck. The same sweep covers references in docs, skills and memory, and it runs **before the PR opens**, not after the merge.
 - **Comments describe the code, not the plan** — never name the plan/phase/PR that produced them.
 - Engine functions are pure — no `fs`/`process.env`/DB imports. World state comes from `getWorld()`.
 - Services own world-state and business logic; routes are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions. Responses use `ApiResponse<T>`.
@@ -83,7 +85,7 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` m
 
 **In-memory world & saves**
 - The world is **process state** — a dev-server restart loses unsaved progress; HMR survives (`globalThis` singleton). `TickLoop` autosaves every 60 s and on pause. If boot behaviour looks stale, `rm -rf .next`.
-- `World` must stay **JSON-serializable**: no `Map`/`Set`/`Date`/class instances, no `Infinity`/`NaN` — `JSON.stringify` turns those into `null` and silently corrupts the save.
+- `World` must stay **JSON-serialisable**: no `Map`/`Set`/`Date`/class instances, no `Infinity`/`NaN` — `JSON.stringify` turns those into `null` and silently corrupts the save.
 - `save-files.ts` is the only `fs` importer in `lib/` — reach it (and any Node-edge code) via **dynamic** `import()`. Static `fs`/`process.env` imports in `lib/engine|services|world` break worker portability.
 - A failing tick hard-pauses the loop; the store only accepts a fully-successful tick.
 - Determinism: use seeded `tickRng(seed, tick)`. Never `Date.now`/`Math.random`/`new Date()` in a processor body.
@@ -138,7 +140,7 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 - Feature branch per feature (`feat/name`), PR to main when complete. Commit after each meaningful unit of work.
 - **The PR unit is the cohesive part/sub-project, not its internal phases.** Phase A/B/C are check-in *pauses* on one branch, never 3 PRs. Split into 2-4 PRs only when one sub-project is genuinely too big; markdown/tooling changes are always one PR.
 - **Multi-PR features use a `shared/<name>` integration branch** — branch off main, sub-PRs merge into shared, one final shared→main PR. **Nothing lands on `shared/*` except sub-feature PR merges** — no direct feature or docs commits; spec amendments ride the sub-branch. The shared→main PR gets only a light pass *because* every sub-feature was reviewed on the way in. A PreToolUse hook (`.claude/hooks/guard-commit-branch.sh`) blocks commits on non-`feat/*` branches.
-- **Merge as squash or fast-forward, never a merge commit** — squash when commit subjects carry build noise, else fast-forward.
+- **Every branch merges as ONE atomic commit — squash, never a merge commit, never a fast-forward of the branch's own history.** A feature or bugfix branch lands as a single commit describing what the thing does; the commits that built it — spec revisions, roadmap bookkeeping, review-finding closures, phase check-ins — are the making of it and do not belong in the target branch's history. That churn is what "noise" means here, not broken builds: this project's pipeline produces it on every branch by design, so the answer is always squash. Merge through a PR (`gh pr merge --squash`), never a local merge onto the target — the commit hook blocks direct commits on `shared/*` and `main`, and a local squash-merge is a direct commit.
 - **Never let `main` diverge from an open `shared/*` branch.** Finish the shared branch before landing independent work on main. If something does land there, **rebase onto main** — never merge main in.
 - **Never open a PR based on another open PR's branch.** Squash-merging the base permanently auto-closes the stacked PR. If already stacked: capture the base head SHA, then `git rebase --onto origin/main <old-base-SHA> <branch>`.
 - **Worktrees are for parallel workstreams, not sequential PRs.** Always `git worktree remove` after.
@@ -159,6 +161,8 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 ## Working Practices
 
 **Short replies. Lead with what needs a decision and stop.** Context, caveats and side-findings are available on request, not volunteered.
+
+**Open a findings report with 1-2 sentences on what it was investigating**, before any results. A report that leads with the answer forces the reader to reverse-engineer the question it came from.
 
 **Verifying changes** (dev has no live universe)
 - **Prove a mechanic works with `npm run simulate` measuring the actual outcome** — isolated engine fixtures pass while the galaxy is broken. Add a sim metric when a symptom hides inside an aggregate.
@@ -181,6 +185,7 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 
 **Executing fix batches**
 - **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched agent**, never inline — inline is for a single trivial edit. Ask first, describing the dispatch's scope in words. Model is your judgment per batch (never Fable). Then verify the agent's claims and make the judgement calls it flags.
+- **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorisation to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent.
 
 **Scripts**
 - `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test). One-off diagnostics live in scratch, never committed.

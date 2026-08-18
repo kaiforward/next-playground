@@ -58,8 +58,8 @@ describe("Camera keyboard pan — whose keypress was it", () => {
   it("does not pan on an ArrowDown a handler nearer the user already consumed", () => {
     const subject = attachCamera();
     // A Tracker row: an ordinary `<button>`, so no typing-target guard applies to it, whose own
-    // ArrowDown handler enters its rich card and calls `preventDefault()`. Before this was
-    // honoured the same press entered the card AND started a pan that ran until keyup.
+    // ArrowDown handler enters its popover and calls `preventDefault()`. Before this was
+    // honoured the same press entered the popover AND started a pan that ran until keyup.
     const row = document.createElement("button");
     row.addEventListener("keydown", (event) => event.preventDefault());
     document.body.appendChild(row);

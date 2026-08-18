@@ -6,7 +6,8 @@ import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row
 import type { AtlasData } from "@/lib/types/game";
 import type { TrackerBuildRow, TrackerData, TrackerPinnedRow } from "@/lib/types/api";
 import type { PinInput } from "@/lib/schemas/player-pins";
-import { DEFAULT_TRACKER_SECTIONS, type TrackerSections } from "@/lib/hooks/use-tracker-sections";
+import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
+import type { TrackerSections } from "@/lib/types/tracker";
 
 // TrackerPanel owns three suspense-backed hooks (useTracker, useAtlas) and a mutation
 // (useSetSystemPin). All three are mocked directly rather than through a real QueryClient —
@@ -96,6 +97,7 @@ function tracker(fields: Partial<TrackerData> = {}): TrackerData {
     building: [],
     waitingCount: 0,
     colonising: [],
+    sections: DEFAULT_TRACKER_SECTIONS,
     ...fields,
   };
 }
@@ -139,11 +141,12 @@ beforeEach(() => {
   trackerData = tracker();
 });
 
-/** Renders `TrackerPanel` with all sections on and settings closed, unless a test overrides
- *  `sections` — the shared default so section-visibility tests aren't the only ones spelling
- *  out all three props. */
+/** Renders `TrackerPanel` with settings closed. Section visibility is no longer a prop — it rides
+ *  the same `TrackerData` payload as the rows it filters — so a section-visibility test sets it on
+ *  `trackerData` instead, and passes nothing here. */
 function renderPanel(sections: TrackerSections = DEFAULT_TRACKER_SECTIONS) {
-  return render(<TrackerPanel sections={sections} settingsOpen={false} onToggleSettings={vi.fn()} />);
+  trackerData = { ...trackerData, sections };
+  return render(<TrackerPanel settingsOpen={false} onToggleSettings={vi.fn()} />);
 }
 
 describe("TrackerPanel — Tab walks the list of rows", () => {
@@ -223,7 +226,7 @@ describe("TrackerPanel — unpinning from a card takes the row out from under th
     await user.keyboard("{ArrowDown}");
     expect(await screen.findByRole("button", { name: `Unpin ${systemName}` })).toHaveFocus();
     await user.keyboard("{Enter}");
-    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
+    rerender(<TrackerPanel settingsOpen={false} onToggleSettings={vi.fn()} />);
     await waitFor(() => {
       expect(screen.queryByRole("button", { name: `Unpin ${systemName}` })).not.toBeInTheDocument();
     });
@@ -354,15 +357,26 @@ describe("TrackerPanel — row activation routes by kind, not to one shared path
     renderPanel();
 
     await user.click(screen.getByRole("button", { name: /Sunnyvale/ }));
-    expect(push).toHaveBeenLastCalledWith("/system/sys-a?focus=10,20&loc=1");
+    expect(push).toHaveBeenLastCalledWith(expect.stringMatching(/^\/system\/sys-a\?focus=10,20&loc=\d+$/));
 
     await user.click(screen.getByRole("button", { name: /Rigel Yards/ }));
-    expect(push).toHaveBeenLastCalledWith("/system/sys-b/industry?focus=30,40&loc=2");
+    expect(push).toHaveBeenLastCalledWith(
+      expect.stringMatching(/^\/system\/sys-b\/industry\?focus=30,40&loc=\d+$/),
+    );
   });
 });
 
 describe("TrackerPanel — the locate nonce advances on every activation", () => {
-  it("locating the same system twice produces two different `loc` values", async () => {
+  /** The `loc` nonce off a pushed locate URL. Read rather than pinned to a literal: the counter is
+   *  shared by every `useSystemFocus()` caller in the process (`lib/hooks/use-system-focus.ts`), so
+   *  its absolute value is whatever has already been handed out, and only the fact that it MOVES is
+   *  the hook's actual contract. */
+  function locOf(url: unknown): number {
+    const match = typeof url === "string" ? /&loc=(\d+)$/.exec(url) : null;
+    return match ? Number(match[1]) : NaN;
+  }
+
+  it("locating the same system twice produces two different, ascending `loc` values", async () => {
     const user = userEvent.setup();
     trackerData = tracker({ pinned: [pinnedRow("sys-a", "Sunnyvale")] });
     renderPanel();
@@ -371,8 +385,14 @@ describe("TrackerPanel — the locate nonce advances on every activation", () =>
     await user.click(row);
     await user.click(row);
 
-    expect(push).toHaveBeenNthCalledWith(1, "/system/sys-a?focus=10,20&loc=1");
-    expect(push).toHaveBeenNthCalledWith(2, "/system/sys-a?focus=10,20&loc=2");
+    expect(push).toHaveBeenCalledTimes(2);
+    const first = locOf(push.mock.calls[0]?.[0]);
+    const second = locOf(push.mock.calls[1]?.[0]);
+    expect(Number.isFinite(first)).toBe(true);
+    expect(second).toBeGreaterThan(first);
+    // Everything but the nonce is identical — which is the whole reason the nonce has to move.
+    expect(push).toHaveBeenNthCalledWith(1, `/system/sys-a?focus=10,20&loc=${first}`);
+    expect(push).toHaveBeenNthCalledWith(2, `/system/sys-a?focus=10,20&loc=${second}`);
   });
 });
 
@@ -423,8 +443,8 @@ describe("TrackerPanel — the waiting count is a quiet line, present only when 
 });
 
 describe("TrackerPanel — a pinned row's card carries the figures the row has no room for", () => {
-  /** Opens the first row's rich card by keyboard (Tab past the header's settings toggle onto the
-   *  row, which opens on focus) and returns the card's content region. Hover would work too; the
+  /** Opens the first row's popover by keyboard (Tab past the header's settings toggle onto the
+   *  row, which opens on focus) and returns the popover's content region. Hover would work too; the
    *  keyboard path is the one the spec requires to exist. */
   async function openFirstRowCard(user: ReturnType<typeof userEvent.setup>) {
     await user.tab(); // header settings toggle
@@ -537,7 +557,7 @@ describe("TrackerPanel — a system with several concurrent build projects rende
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.25, nextCycleProgress: 0.05, etaCycles: 4 },
       ],
     });
-    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
+    rerender(<TrackerPanel settingsOpen={false} onToggleSettings={vi.fn()} />);
 
     expect(screen.getByText("Building — 3")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sunnyvale · Housing x2/ })).toBeInTheDocument();
@@ -571,7 +591,7 @@ describe("TrackerPanel — re-rendering with fresh data replaces rows, never acc
         { projectId: "p2", systemId: "sys-a", systemName: "Sunnyvale", label: "Foundry x1", progress: 0.45, nextCycleProgress: 0.05, etaCycles: 3 },
       ],
     });
-    rerender(<TrackerPanel sections={DEFAULT_TRACKER_SECTIONS} settingsOpen={false} onToggleSettings={vi.fn()} />);
+    rerender(<TrackerPanel settingsOpen={false} onToggleSettings={vi.fn()} />);
 
     expect(screen.getByText("Building — 2")).toBeInTheDocument();
     // The total rendered row count must match the NEW list (2), not the sum of old + new (4), and
@@ -604,7 +624,7 @@ describe("TrackerRow — a zero-progress row still shows its track", () => {
     // Existence only, which is the whole claim: a falsy `progress &&` guard would render neither
     // element at progress 0. The fill's WIDTH is deliberately not asserted — jsdom has no layout
     // engine, so a width assertion would prove only that a string reached a style attribute. The
-    // width maths lives in `progressWidthPct`, tested in node.
+    // width maths lives in `barWidthPct`, tested in node.
     expect(fill).not.toBeNull();
   });
 });

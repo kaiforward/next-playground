@@ -1,7 +1,7 @@
 import { clamp } from "@/lib/utils/math";
 
 /** One contributor's raw value plus its display label and paint colour. */
-export interface ContributorSegment {
+export interface Contributor {
   label: string;
   value: number;
   color: string;
@@ -20,17 +20,17 @@ export interface ContributorBarWidth {
 /**
  * Each contributor's share of the shared scale.
  *
- * Two figures per segment, deliberately: the track has a finite width, the reading does not. A
+ * Two figures per contributor, deliberately: the track has a finite width, the reading does not. A
  * contributor at 2.4× the scale fills its bar completely but still prints 240%, so it cannot be
- * mistaken for one sitting exactly at the ceiling. `total <= 0` yields 0 for every segment rather
+ * mistaken for one sitting exactly at the ceiling. `total <= 0` yields 0 for every contributor rather
  * than dividing by zero — a scale of nothing gives nothing to be a share of.
  */
 export function contributorBarWidths(
-  segments: ReadonlyArray<ContributorSegment>,
+  contributors: ReadonlyArray<Contributor>,
   total: number,
 ): ContributorBarWidth[] {
-  return segments.map((segment) => {
-    const pct = total > 0 ? (segment.value / total) * 100 : 0;
-    return { label: segment.label, color: segment.color, pct, barPct: clamp(pct, 0, 100) };
+  return contributors.map((contributor) => {
+    const pct = total > 0 ? (contributor.value / total) * 100 : 0;
+    return { label: contributor.label, color: contributor.color, pct, barPct: clamp(pct, 0, 100) };
   });
 }

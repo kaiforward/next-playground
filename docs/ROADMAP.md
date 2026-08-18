@@ -17,78 +17,17 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   premises far too early, and output Kai can't parse. Direction: drop superpowers for this project,
   write project-specific skills built around interconnected game systems (events is the recurring
   miss), make evidence the deliverable rather than a design.
-  *Next step:* finish the instruction-mass cut (AGENTS.md done, docs + memory in flight), then design
-  the replacement skills.
+  *Next step:* the instruction-mass cut is done (AGENTS.md is the single home for rules, memory and
+  doc pointers repointed at it); design the replacement skills.
 
 ---
 
 ## Queued
 
-The attention layer — how the player finds what to do — is two surfaces. The first, the **Tracker**,
-has shipped: `docs/active/gameplay/tracker.md`. The second, the **alert bar**, is row 1 below.
+The attention layer — how the player finds what to do — is two surfaces, both shipped:
+[the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-The split that separates them: a **Tracker row is a thing** (it persists whether or not anything is
-wrong with it), an **alert-bar row is a condition** (it exists only while true and is cleared by
-fixing it). Settled against how EU5 and Victoria 3 do it — the four design principles, the genre
-sources and the reasoning are in memory `design-attention-layer-inputs`, which the alert-bar row
-starts from.
-
-**A third surface was considered and dropped**: a separate dismissible feed of discrete events (the
-"situation log" of `player-seat-roadmap.md`). Events are conditions the player should act on, so they
-become alert-bar categories rather than a parallel scrolling list — one surface for "look at this",
-not two. Don't re-propose the feed without a case for what it holds that an alert cannot.
-
-1. **[L] The alert bar — the conditions wanting a decision.** A top bar of alert categories ordered by
-   severity, carrying opportunities and decisions as well as faults (EU5's shape: red critical,
-   yellow important, blue informational). **Ranking is by authored category tier, never a computed
-   cross-domain score** — within a class, sort by that class's own natural measure (population pressed
-   against the cap for crowding, unserved demand rate for unmet need). Neither reference game ranks
-   instances across domains; a single global sort is what forces invented weights, and it is why the
-   housing-has-no-ROI problem dissolves here.
-   Two reads wanted by name, neither of which exists today: **which systems are overcrowded or
-   approaching it** (the cue to build housing) and **which systems cannot meet their demand from
-   imports plus production**. Low stability already works as a third and is the proof the approach
-   reads well; strikes and famine already have their data too. A category expanding into its instance
-   list needs a host — today's faction **Territory** tab is a flat name + economy-type list
-   (`app/(game)/@panel/factions/[factionId]/territory/page.tsx`) and is the natural candidate.
-   **A per-category settings screen is load-bearing, not polish.** The most-subscribed EU5 alert mod
-   exists to hide exactly our intended class — buildings missing employees, RGOs missing employees,
-   unprofitable buildings — because those stay continuously true for states the player often cannot
-   fix. Checkbox per category, plus a small non-hideable tier (war declarations and the like).
-   **Opportunity alerts gate on the existing automation switch:** with a domain automated the
-   planner's ranked proposals are already being acted on, so surfacing them is noise — only what it
-   *tried and could not do* surfaces. That is this row's real cost, because those blocked cases leave
-   no trace in code today: an opportunity that does not fit space or labour is dropped by a bare
-   `continue` (`lib/engine/directed-build.ts:824`) or a zero-level binary search (`:848-850`).
-   Emitting the reason is new instrumentation and the bulk of the work. Precedent that it is
-   tractable: one such signal already persists and no UI reads it — `logisticsFundingBound` on the
-   market row (`lib/engine/directed-logistics.ts:174`).
-   **This row absorbs the events surface.** The 12 event types plus the three relations-owned ones
-   become alert categories rather than a separate feed — an event the player should act on is a
-   condition, and a parallel scrolling list is the second "look at this" surface the layer exists to
-   avoid. Supersedes the alert-feed/situation-log section of
-   [player-seat-roadmap.md](./planned/player-seat-roadmap.md).
-   **Undesigned and needed at the planning pass: what clicking an alert does.** In EU5 it varies by
-   category — some jump the camera, some open a panel, some apply the decision directly. Ours will
-   need the same per-category answer, and it interacts with the tier list rather than following from
-   it.
-   **Carries `RATION_EXIT_EPS`**, rehomed here when the situation log was dropped. Two of its three
-   rationales are already dead — the per-good regime chips it was authored for were dropped, and
-   visual flapping does not occur (bands are written once per 24-tick economy cycle, so the fastest a
-   chip or map cell can change is every 4.8s at speed 5, with SSE throttled to 4 emits/sec
-   regardless). The third was log spam, which died with the log. **So it now has no surviving
-   justification at all unless band transitions become an alert category** — if they do, calibrate the
-   hysteresis against a condition flapping on and off the bar; if they don't, delete the constant
-   rather than keep tuning it. **Open question either way:** whether the hysteresis applies to the
-   persisted display band only (presentational) or to the classifier itself (mechanical — the regime
-   feeds the unrest term). Unverified at deferral time; do not assume the first.
-   *Next step:* author the category and tier list, then design the blocked-reason instrumentation the
-   planner must emit.
-   *Don't:* alert on a raw persistent state the player cannot act on. That is the precise EU5 failure
-   — dismissal is pointless because the condition is still true, so the alert returns instantly and
-   crowds out the useful ones.
-
-2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
@@ -136,6 +75,24 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   active relief order suspend the death line, or is the race accepted?
   *Don't:* let relief spend delete unrest directly, or buy haul capacity without a stated
   exception to the money-is-fuel invariant.
+- **[M] Necessity weighting in the build planner** — the autonomic planner ranks opportunities by
+  `BuildOpportunity.score` (`lib/engine/directed-build.ts:596-597, 850-856`): units of unmet demand it
+  could serve, divided by route cost. That carries no necessity at all — a hundred units of unmet food
+  and a hundred of unmet luxuries score identically, and nothing in the planner consults
+  `SURVIVAL_GOODS`. **The alert bar shipped the fix on the read side only**, banding survival-serving
+  builds above the rest on its Build opportunity chip, which exists only while build automation is
+  off. So the player gets survival-first advice by hand and the planner does not follow it when
+  automated — same data, two answers depending on a switch. This row closes that.
+  Two things already established, so nobody re-derives them: `score` **is** demand-gated (`take` is
+  bounded by the real shortfall), so the planner is not necessity-blind in effect — a food shortage
+  raises food builds on its own, and what is missing is the *tiebreak* when several goods are short at
+  once. And the unit bias that skews the ranking toward bulk goods is **13×** (`ship_frames` 0.6 →
+  `gas` 8.0 across all 26 goods), not the "orders of magnitude" an earlier finding claimed.
+  *Next step:* `/measure` how often survival and non-survival opportunities actually compete inside one
+  planner run, both horizons, cohorted by developed systems — the weighting's value depends entirely on
+  that rate, and Kai's prior is that it is often.
+  *Don't:* copy the alert bar's band across without a sim reading. That band is a presentation
+  ordering with no simulation consequence; this one changes what every faction builds at every horizon.
 - **[L] Physical warehouse model — storage as a real, brake-relevant limit.** Today's storage
   constants (`EXTRACTOR/PRODUCTION_STORAGE_PER_UNIT`, `POP_CENTRE_STORAGE`) only deepen `maxStock`;
   they are authored per *producing* building while the brake knee is 40 cycles of *system-wide*
@@ -220,7 +177,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   distance-weighting the autonomic-build spare pool (a possible refinement to the response-pacing
   backstop, noted, not built). No design pass on any of the three; pull individually when its area
   comes forward rather than as a group.
-
 **Platform**
 - **[XL] Retire Next.js and TanStack Query — this is a single-page game, not a web app.** Packaging
   path B from [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §6: the engine in a Web
@@ -264,12 +220,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[M] Type `goodId` as a `GoodId` union instead of `string`** — `GOODS` is `Record<string, GoodDefinition>`,
   so `GOODS[goodId]` type-checks and never narrows to `undefined`. Not a live bug (world-gen seeds every id
   from `Object.keys`), but load-bearing at ~10 point-of-use sites since the market round-trip was deleted.
-  89 declaration sites across 96 files — its own PR. *Blocked on a decision:* the save-file `deserialize`
+  89 declaration sites across 96 files — its own PR. *Blocked on a decision:* the save-file `deserialise`
   boundary needs a guard narrowing `string` → `GoodId` with a decided failure mode (reject the save, or drop
   the row). Don't start without settling that.
-- **[S] Two build-ceiling checks assume monotonic system ownership** — the read service nets committed levels
-  from the player *faction's* rows; the mutation service nets *all* rows at the system. They agree only
-  because a system's owner can't change yet. Unify behind one helper before conquest or rebellion ships.
 - **[S] `estStaffing` and `buildingUsed` read staffing differently for support types** — `min` over the
   grades a building actually draws, vs `count × labourFulfil` (unskilled only). Display-consistency, not
   correctness; worth one shared staffing-estimate helper.
@@ -291,8 +244,7 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   which is the full list. Wanted: a sortable, filterable view of every open project across the faction
   with its progress, funding rate and ETA. Surfaced by the owner while running the Tracker in a real
   game (2026-08-12).
-  *Next step:* decide whether it is a faction-panel tab or its own route before any layout work —
-  it competes with the Territory tab, which the alert bar also wants as a host.
+  *Next step:* decide whether it is a faction-panel tab or its own route before any layout work.
   *Don't:* rebuild it as a second Tracker. The Tracker answers "where is my pool going right now";
   this answers "show me everything", and the two want different orderings and different densities.
 - **[S] Funding sliders: show the set value immediately, shorted-only exception** — today's "set X% · runs Y%"
@@ -310,11 +262,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   pinnable for comparison, backed by a cross-linking concept glossary. Needs a design doc + collaborative
   HTML-prototype pass. Core genre UI post-pivot, not polish. The theme already reserves a copper treatment
   as this system's second tier.
-  **The primitive shipped with the Tracker** (`RichCard`) — a Popover-based rich card with hover-to-open, keyboard
-  access and a safe transit area, scoped to one level. What stays here: **nesting** (a parent card must
-  not close while a child is open — neither Radix primitive gives this, so it is custom either way),
-  pinning, the glossary, and **migrating the existing plain Radix tooltips** onto the card, which is
-  deliberately deferred rather than done alongside the Tracker.
+  **The primitive shipped with the Tracker** (`Popover`, `components/ui/popover.tsx`) — a Radix-Popover-based
+  popover with hover-to-open, keyboard access and a safe transit area, scoped to one level. What stays here:
+  **nesting** (a parent popover must not close while a child is open — neither Radix primitive gives this,
+  so it is custom either way), pinning, the glossary, and **migrating the existing plain Radix tooltips**
+  onto the popover, which is deliberately deferred rather than done alongside the Tracker.
   Design input worth not losing: Paradox tooltips **follow the cursor until you hold still, then latch**
   so you can move onto them. That is a legitimate alternative to a grace-area polygon and arguably
   simpler; decide between them at the prototype pass.
@@ -339,6 +291,19 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[S] Unrest history / recovery forecast** — a per-system chart of unrest over time and a forecast
   of recovery trajectory, beyond the Population tab's current expectation/grievance snapshot.
   Backlog polish, not started.
+- **[S] The Provisioned map mode cannot show Famine.** Famine punches through at any Provision level
+  (`foldSupplyState`'s survival branch, `lib/engine/population.ts`), so it cannot be represented as a
+  step on a Provision ramp the way the other bands are. Surfaced while building the alert bar, unrelated
+  to it. Needs a visual treatment (a distinct marker layered over the ramp, most likely) before Famine
+  is readable from that map mode at all.
+  *Next step:* fold into whichever map-modes pass picks this up next — no design pass yet.
+- **[S] A build fit-search failure on *footprint* reports as `no-labour`.** There is no dedicated sixth
+  `BuildDropReason` (`lib/engine/directed-build.ts`), so a site rejected for lack of space is attributed
+  to lack of workers. A spec decision, not a bug.
+  *Next step:* decide whether the sixth reason is worth its own band before adding it.
+  *Don't:* let the width drift silently in the meantime — the packing tests derive their expected
+  widths from the same constants they check, so a mismatch would only ever surface as visual overflow,
+  never a red test.
 
 **Audits Kai has asked for**
 - **[M] Trader-hangover audit** — sweep the codebase for leftovers from the old browser space-trading
@@ -359,6 +324,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships on the map, and designing a second flow view before this pass changes what flows is
   backwards. Its approved HTML prototype survives as an input —
   [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md), memory `project-ws2-map-modes`.
+  **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
+  planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
+  unmet food ranks alongside a unit of unmet luxuries. Sibling of the necessity-weighting row under
+  Economy — settle the two together so survival goods are not privileged in one pillar and not the
+  other. The concrete place it lands is the **good-allocation cliff** row above, which owns the
+  allocation policy; this line exists so the pillar pass does not design that policy necessity-blind.
 - **[S] §3.5 player-directed colony founding** — the mechanism (`employedGradientThreshold` speed-dial)
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 

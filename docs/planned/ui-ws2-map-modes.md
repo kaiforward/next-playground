@@ -146,7 +146,7 @@ because directed arcs fight map density (the exact problem the logistics overlay
 - **Richer EU5-style system-hover tooltips across all modes** — the whole hover→data channel is net-new (none
   exists today), so it is a cross-cutting follow-up, not P1.
 - **Events as a map mode + rich event tooltip** — rides the upcoming events rework, not WS2.
-- **Realized-flow *numbers*** (net migration per cell) — derivable for free once P2's per-edge log exists;
+- **Realised-flow *numbers*** (net migration per cell) — derivable for free once P2's per-edge log exists;
   surfaced only if the arrows read leaves a gap.
 
 ## Decisions log
@@ -156,7 +156,7 @@ because directed arcs fight map density (the exact problem the logistics overlay
   deal-quality framing is a trader hangover with no consuming player mechanic in the current grand-strategy form;
   the useful reframe (scarcity/surplus, or faction-aggregate "who has good X") needs a faction-trading mechanic
   first. Migration mode + the population red→green ramp shipped; market data stays on the per-system Market panel.
-- **Migration mode = the attractiveness heatmap (the pull), not realized flow** — matches Vic3/EU5, where
+- **Migration mode = the attractiveness heatmap (the pull), not realised flow** — matches Vic3/EU5, where
   attraction *is* the migration map mode and actual movement is a separate surface.
 - Both new modes: **colour-first, red → green bad → good; no printed cell numbers** (reserved for the pop/dev
   magnitude modes).

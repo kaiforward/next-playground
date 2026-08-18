@@ -35,3 +35,22 @@ export function isValueMapMode(mode: MapMode): boolean {
 export function isFactionInteractiveMode(mode: MapMode): boolean {
   return mode === "political" || isValueMapMode(mode);
 }
+
+/** The settlement mark drawn at a player system's star: hollow slate = claimed, hollow amber with a
+ *  pulse = colony forming, solid copper = developed. `null` = no mark (foreign or unclaimed). */
+export type SettlementMark = "controlled" | "forming" | "developed";
+
+/**
+ * Which settlement mark a system carries, from its live ownership reading. Marks are player-only
+ * for now — the point is running your own colonisation — so any other faction's system returns
+ * null; widening to all factions is a change to this one gate. `developed` wins over a stale
+ * `forming` pairing (they never co-occur in real data: a forming site is `controlled`).
+ */
+export function settlementMarkFor(
+  own: { factionId: string | null; developed: boolean; forming: boolean } | undefined,
+  playerFactionId: string | null,
+): SettlementMark | null {
+  if (own === undefined || playerFactionId === null || own.factionId !== playerFactionId) return null;
+  if (own.developed) return "developed";
+  return own.forming ? "forming" : "controlled";
+}

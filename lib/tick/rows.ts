@@ -6,7 +6,7 @@
  * from `World` via the `toTick*` joins — inlining catalog/derived data `World`
  * omits — then merges the mutated rows back into the next `World`. They live
  * apart from `World` (`lib/world/types.ts`), which is the persisted,
- * JSON-serializable contract, because a row here saves nothing by itself.
+ * JSON-serialisable contract, because a row here saves nothing by itself.
  *
  * A row type earns its place here only by differing from its `World` row. There
  * is no tick market row: markets carry no per-tick join, so the adapters read
@@ -19,6 +19,7 @@ import type { EventTypeId } from "@/lib/constants/events";
 import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/game";
 import type { SystemControl } from "@/lib/world/types";
 import type { SupplyRegime } from "@/lib/engine/population";
+import type { BuildDropReason } from "@/lib/engine/directed-build";
 
 export interface TickSystem {
   id: string;
@@ -59,6 +60,30 @@ export interface TickSystem {
   /** This cycle's critical-good override weight, optional — passed through uncoerced alongside
    *  `provision`/`supplyBand`, un-clamped (see `lib/world/types.ts` for why). */
   criticalWeight?: number;
+  /** The realised per-cycle population change, optional — the `toTickSystems` join passes
+   *  `WorldSystem.populationChange` through UNCOERCED, same absence convention as `provision`/
+   *  `supplyBand`/`criticalWeight` above. No processor writes this field via the row-mutation path:
+   *  the tick body (`lib/world/tick.ts`) computes and writes it directly, after the migration stage,
+   *  from this row's own `population` before and after — the field lives on the row purely so it
+   *  round-trips through the join/merge and survives untouched for a system this economy cycle did
+   *  not visit. */
+  populationChange?: number;
+  /** This run's best-ranked dropped production opportunity, optional — the `toTickSystems` join
+   *  passes `WorldSystem.buildBlocked` through UNCOERCED, same absence convention as `provision`/
+   *  `supplyBand`/`criticalWeight`/`populationChange` above. No processor writes this field via the
+   *  row-mutation path: the directed-build processor's world adapter writes it directly through its
+   *  own `applyBuildBlockedUpdates` (`lib/tick/world/directed-build-world.ts`), applied in
+   *  `lib/world/tick.ts` alongside its other writes — the field lives on the row purely so it
+   *  round-trips through the join/merge and survives untouched for a system this run did not visit. */
+  buildBlocked?: { reason: BuildDropReason; droppedRoi: number };
+  /** This run's best-ranked SCORED production opportunity, optional — same pass-through-uncoerced
+   *  treatment as `buildBlocked` above, written directly by the directed-build processor's own
+   *  `applyBuildOpportunityUpdates` (`lib/tick/world/directed-build-world.ts`). */
+  buildOpportunity?: { score: number; goodId: string };
+  /** This run's best-ranked colony-establish terms, optional — same pass-through-uncoerced treatment
+   *  as `buildBlocked` above, written directly by the directed-build processor's own
+   *  `applyColonyOpportunityUpdates` (`lib/tick/world/directed-build-world.ts`). */
+  colonyOpportunity?: { value: number; work: number };
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */

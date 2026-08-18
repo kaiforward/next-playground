@@ -42,6 +42,7 @@ import { ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { MODIFIER_CAPS } from "@/lib/constants/events";
 import { STRIKE_PARAMS, UNREST_PARAMS, POPULATION_PARAMS, EXPECTATION_PARAMS, MIGRATION_PARAMS, COLONY_DELIVERY_PARAMS } from "@/lib/constants/population";
 import { MIN_DEMAND } from "@/lib/constants/market-economy";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { INFRASTRUCTURE_DECAY_PARAMS } from "@/lib/constants/infrastructure";
 import { CYCLE_LENGTH, CONSTRUCTION_INTERVAL, LOGISTICS_INTERVAL, type TickCadence } from "@/lib/constants/tick-cadence";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -50,7 +51,7 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
-import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { slotCapOf, yieldsOf, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -94,7 +95,7 @@ import { InMemoryTreasuryWorld } from "@/lib/tick/adapters/memory/treasury";
 
 import { mergeGlobalEvents } from "@/lib/tick/helpers";
 import { referenceMaintenanceBill } from "@/lib/engine/founding-cost";
-import { isCycleStart } from "@/lib/tick/shard";
+import { isCycleStart, catchUpFactor } from "@/lib/tick/shard";
 import type {
   TickContext,
   TickBroadcastRaw,
@@ -110,6 +111,9 @@ import type {
   SystemClaim,
   SystemDevelopment,
   FoundingStagingDraw,
+  BuildBlockedUpdate,
+  BuildOpportunityUpdate,
+  ColonyOpportunityUpdate,
 } from "@/lib/tick/world/directed-build-world";
 
 import type {
@@ -146,7 +150,7 @@ export function tickRng(seed: number, tick: number): RNG {
 /**
  * Exported alongside `toTickSystems` — the calibration harness
  * (`lib/tick-harness/runner.ts`) reuses these same joins to build the
- * tick-row views its (pre-existing) health analyzers read.
+ * tick-row views its (pre-existing) health analysers read.
  */
 export function toTickConnections(world: World): TickConnection[] {
   return world.connections.map((c) => ({
@@ -214,22 +218,21 @@ export function toTickSystems(world: World): TickSystem[] {
       provision: s.provision,
       supplyBand: s.supplyBand,
       criticalWeight: s.criticalWeight,
-      yields: resourceVectorFromColumns(
-        {
-          yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
-          yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
-          yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
-        },
-        "yield",
-      ),
-      slotCap: resourceVectorFromColumns(
-        {
-          slotGas: s.slotGas, slotMinerals: s.slotMinerals, slotOre: s.slotOre,
-          slotBiomass: s.slotBiomass, slotArable: s.slotArable,
-          slotWater: s.slotWater, slotRadioactive: s.slotRadioactive,
-        },
-        "slot",
-      ),
+      // Same pass-through-uncoerced treatment: nothing in this join computes it, the tick body
+      // writes it directly after the migration stage (see the field's own docstring,
+      // lib/world/types.ts), so this row purely carries forward whatever the previous World held.
+      populationChange: s.populationChange,
+      // Same pass-through-uncoerced treatment: nothing in this join computes it, the directed-build
+      // processor's world adapter writes it directly (see the field's own docstring,
+      // lib/world/types.ts), so this row purely carries forward whatever the previous World held.
+      buildBlocked: s.buildBlocked,
+      // Same pass-through-uncoerced treatment, same reason, written by the directed-build processor's
+      // own applyBuildOpportunityUpdates/applyColonyOpportunityUpdates (see the fields' own docstrings,
+      // lib/world/types.ts).
+      buildOpportunity: s.buildOpportunity,
+      colonyOpportunity: s.colonyOpportunity,
+      yields: yieldsOf(s),
+      slotCap: slotCapOf(s),
       generalSpace: s.generalSpace,
       habitableSpace: s.habitableSpace,
     };
@@ -270,6 +273,25 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     else merged.supplyBand = tickSystem.supplyBand;
     if (tickSystem.criticalWeight === undefined) delete merged.criticalWeight;
     else merged.criticalWeight = tickSystem.criticalWeight;
+    // Same delete/assign treatment, same reason: written directly onto `tickSystem` by the tick
+    // body after the migration stage, never by a processor — a true absence (never assessed this
+    // cycle, or cleared by abandonment/redevelopment) must not become a present key holding
+    // `undefined`.
+    if (tickSystem.populationChange === undefined) delete merged.populationChange;
+    else merged.populationChange = tickSystem.populationChange;
+    // Same delete/assign treatment, same reason: written directly onto `tickSystem` by
+    // `applyBuildBlockedUpdates` below (the directed-build processor's world adapter), never by a
+    // processor via the generic row-mutation path — a true absence (never assessed this run, or
+    // cleared by abandonment/redevelopment) must not become a present key holding `undefined`.
+    if (tickSystem.buildBlocked === undefined) delete merged.buildBlocked;
+    else merged.buildBlocked = tickSystem.buildBlocked;
+    // Same delete/assign treatment, same reason, for the two other directed-build side-channel
+    // writes — independent guards so a system whose only change was one of these three fields never
+    // has the other two stamped as a present key holding `undefined`.
+    if (tickSystem.buildOpportunity === undefined) delete merged.buildOpportunity;
+    else merged.buildOpportunity = tickSystem.buildOpportunity;
+    if (tickSystem.colonyOpportunity === undefined) delete merged.colonyOpportunity;
+    else merged.colonyOpportunity = tickSystem.colonyOpportunity;
     return merged;
   });
 }
@@ -307,13 +329,14 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       honestUseRate: m.honestUseRate,
       storageCapacity: m.storageCapacity,
       satisfaction: m.satisfaction,
-      realizedProductionRate: m.realizedProductionRate,
+      realisedProductionRate: m.realisedProductionRate,
       productionSuppressed: m.productionSuppressed,
       productionSuppressRate: m.productionSuppressRate,
       productionMult: m.productionMult,
       squeezeCycles: m.squeezeCycles,
       proposalCycles: m.proposalCycles,
       logisticsFundingBound: m.logisticsFundingBound,
+      unservedShortfall: m.unservedShortfall,
     };
     const list = bySystem.get(m.systemId);
     if (list) list.push(row);
@@ -354,23 +377,85 @@ function buildBuildRows(
   }));
 }
 
+/** The three fields directed-logistics writes back, present in both market row shapes it reaches. */
+interface LogisticsWritableRow {
+  stock: number;
+  logisticsFundingBound?: boolean;
+  unservedShortfall?: number;
+}
+
+/** Clear through the constraint, so the generic patch below can delete an optional key. */
+function clearUnservedShortfall(row: LogisticsWritableRow): void {
+  delete row.unservedShortfall;
+}
+
+/**
+ * Apply one run's directed-logistics writes to one market row, in whichever row shape holds it —
+ * the persisted `WorldMarket` and the tick's `MarketRowForLogistics` view take the identical patch,
+ * and this is the single place that decides it. Returns the row itself when nothing addressed it,
+ * so an untouched market keeps its identity.
+ *
+ * stock and logisticsFundingBound stay coupled exactly as they always were: either one changing
+ * rewrites both together (`?? next.field` on the untouched one), which is what stamps an
+ * explicit-undefined logisticsFundingBound key onto a market whose stock alone moved. That quirk
+ * predates unservedShortfall and is deliberately left alone. unservedShortfall is applied as an
+ * entirely separate, independently-conditioned spread — never folded into the branch above — so a
+ * market whose ONLY change this run is the shortfall does not also pick up a spurious
+ * logisticsFundingBound key it never earned, and vice versa.
+ */
+function patchLogisticsRow<T extends LogisticsWritableRow>(
+  row: T,
+  key: string,
+  stockUpdates: Map<string, number>,
+  fundingBoundUpdates: Map<string, boolean>,
+  unservedShortfallUpdates: Map<string, number>,
+): T {
+  const newStock = stockUpdates.get(key);
+  const logisticsFundingBound = fundingBoundUpdates.get(key);
+  const unservedShortfall = unservedShortfallUpdates.get(key);
+  const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
+  if (!stockOrFundingChanged && unservedShortfall === undefined) return row;
+  let next: T = row;
+  if (stockOrFundingChanged) {
+    next = {
+      ...next,
+      stock: newStock ?? next.stock,
+      logisticsFundingBound: logisticsFundingBound ?? next.logisticsFundingBound,
+    };
+  }
+  if (unservedShortfall !== undefined) {
+    // A positive level is the structural reading; 0 is this run saying the row is servable, which
+    // deletes the key rather than persisting a zero — absence, not a falsy number, is what "not
+    // unservable" looks like on a market row.
+    next = { ...next };
+    if (unservedShortfall > 0) next.unservedShortfall = unservedShortfall;
+    else clearUnservedShortfall(next);
+  }
+  return next;
+}
+
 function applyLogisticsMarketUpdates(
   markets: WorldMarket[],
   stockUpdates: Map<string, number>,
   fundingBoundUpdates: Map<string, boolean>,
+  unservedShortfallUpdates: Map<string, number>,
 ): WorldMarket[] {
-  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0) return markets;
-  return markets.map((m) => {
-    const id = `${m.systemId}|${m.goodId}`;
-    const newStock = stockUpdates.get(id);
-    const logisticsFundingBound = fundingBoundUpdates.get(id);
-    if (newStock === undefined && logisticsFundingBound === undefined) return m;
-    return {
-      ...m,
-      stock: newStock ?? m.stock,
-      logisticsFundingBound: logisticsFundingBound ?? m.logisticsFundingBound,
-    };
-  });
+  if (
+    stockUpdates.size === 0
+    && fundingBoundUpdates.size === 0
+    && unservedShortfallUpdates.size === 0
+  ) {
+    return markets;
+  }
+  return markets.map((m) =>
+    patchLogisticsRow(
+      m,
+      `${m.systemId}|${m.goodId}`,
+      stockUpdates,
+      fundingBoundUpdates,
+      unservedShortfallUpdates,
+    ),
+  );
 }
 
 /**
@@ -384,13 +469,23 @@ function patchLogisticsMarketRows(
   bySystem: Map<string, MarketRowForLogistics[]>,
   stockUpdates: Map<string, number>,
   fundingBoundUpdates: Map<string, boolean>,
+  unservedShortfallUpdates: Map<string, number>,
 ): Map<string, MarketRowForLogistics[]> {
-  if (stockUpdates.size === 0 && fundingBoundUpdates.size === 0) return bySystem;
+  if (
+    stockUpdates.size === 0
+    && fundingBoundUpdates.size === 0
+    && unservedShortfallUpdates.size === 0
+  ) {
+    return bySystem;
+  }
   const touchedSystems = new Set<string>();
   for (const key of stockUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   for (const key of fundingBoundUpdates.keys()) {
+    touchedSystems.add(key.slice(0, key.indexOf("|")));
+  }
+  for (const key of unservedShortfallUpdates.keys()) {
     touchedSystems.add(key.slice(0, key.indexOf("|")));
   }
   const patched = new Map(bySystem);
@@ -399,16 +494,9 @@ function patchLogisticsMarketRows(
     if (!rows) continue;
     patched.set(
       systemId,
-      rows.map((r) => {
-        const newStock = stockUpdates.get(r.id);
-        const logisticsFundingBound = fundingBoundUpdates.get(r.id);
-        if (newStock === undefined && logisticsFundingBound === undefined) return r;
-        return {
-          ...r,
-          stock: newStock ?? r.stock,
-          logisticsFundingBound: logisticsFundingBound ?? r.logisticsFundingBound,
-        };
-      }),
+      rows.map((r) =>
+        patchLogisticsRow(r, r.id, stockUpdates, fundingBoundUpdates, unservedShortfallUpdates),
+      ),
     );
   }
   return patched;
@@ -417,7 +505,7 @@ function patchLogisticsMarketRows(
 /**
  * Fold directed-build's proposal-pressure counters back into the world market rows. Changes ONLY
  * `proposalCycles` (spread preserves every field the same-tick economy and logistics stages already
- * wrote — satisfaction, squeeze, realized rate, stock, funding-bound). `updates` keys are
+ * wrote — satisfaction, squeeze, realised rate, stock, funding-bound). `updates` keys are
  * `${systemId}|${goodId}`, the same composite key the market row groups are built by. The counter is
  * fractional reference-time, so it is clamped to a finite [0,2] on the way into world state (NaN/Infinity
  * guarded like every other persisted numeric field). No-op writes (the clamped value already equals what
@@ -457,6 +545,121 @@ export function applyBuildingIncreases(systems: TickSystem[], updates: BuildBuil
   });
 }
 
+/**
+ * The set-and-clear fold every directed-build planner report shares. `visitedSystemIds` is the
+ * population the run actually considered: a visited system NOT in `updates` is CLEARED (the run
+ * looked and found nothing to report for it), and a system the run never visited is left untouched,
+ * carrying forward whatever reading it already had. Clearing is delete-on-a-copy, not
+ * `field: undefined` in the object literal — see `mergeSystemsIntoWorld`'s own comment on the same
+ * pattern for why a present key holding `undefined` is not the same thing as a true absence.
+ *
+ * `reads` answers "does this row already carry the field", so an unchanged row keeps its identity;
+ * `writes` builds the row carrying the new reading. Both are passed explicitly rather than derived
+ * from a key so each caller's own non-finite guards stay at its own site.
+ */
+function applyVisitedSystemReports<U extends { systemId: string }>(
+  systems: TickSystem[],
+  visitedSystemIds: string[],
+  updates: U[],
+  reads: (s: TickSystem) => boolean,
+  clears: (s: TickSystem) => void,
+  writes: (s: TickSystem, update: U) => TickSystem,
+): TickSystem[] {
+  if (visitedSystemIds.length === 0) return systems;
+  const visited = new Set(visitedSystemIds);
+  const bySystem = new Map(updates.map((u) => [u.systemId, u]));
+  return systems.map((s): TickSystem => {
+    if (!visited.has(s.id)) return s;
+    const update = bySystem.get(s.id);
+    if (!update) {
+      if (!reads(s)) return s;
+      const next = { ...s };
+      clears(next);
+      return next;
+    }
+    return writes(s, update);
+  });
+}
+
+/**
+ * Fold directed-build's Build blocked report back into the system rows. `visitedSystemIds` is every
+ * system belonging to a due faction this run (the planner's own "visited" set, captured by the
+ * processor regardless of the build-automation switch — see the processor for why): a visited system
+ * NOT in `updates` is CLEARED, because nothing was dropped for it this run (it landed everything or
+ * wanted nothing).
+ */
+export function applyBuildBlockedUpdates(
+  systems: TickSystem[],
+  visitedSystemIds: string[],
+  updates: BuildBlockedUpdate[],
+): TickSystem[] {
+  return applyVisitedSystemReports(
+    systems,
+    visitedSystemIds,
+    updates,
+    (s) => s.buildBlocked !== undefined,
+    (s) => { delete s.buildBlocked; },
+    // An unreadable ROI reads as 0 rather than poisoning the world: `buildBlocked` is world state,
+    // and `JSON.stringify` turns a NaN into null.
+    (s, u) => ({
+      ...s,
+      buildBlocked: { reason: u.reason, droppedRoi: Number.isFinite(u.droppedRoi) ? u.droppedRoi : 0 },
+    }),
+  );
+}
+
+/**
+ * Fold directed-build's Build opportunity report back into the system rows. Same visited/clear/set
+ * contract as `applyBuildBlockedUpdates` above, over the same "every system belonging to a due
+ * faction this run" set — a visited system NOT in `updates` scored nothing this run.
+ */
+export function applyBuildOpportunityUpdates(
+  systems: TickSystem[],
+  visitedSystemIds: string[],
+  updates: BuildOpportunityUpdate[],
+): TickSystem[] {
+  return applyVisitedSystemReports(
+    systems,
+    visitedSystemIds,
+    updates,
+    (s) => s.buildOpportunity !== undefined,
+    (s) => { delete s.buildOpportunity; },
+    // Same non-finite guard as buildBlocked's droppedRoi: world state must never carry a
+    // NaN/Infinity `JSON.stringify` would turn into null.
+    (s, u) => ({
+      ...s,
+      buildOpportunity: { score: Number.isFinite(u.score) ? u.score : 0, goodId: u.goodId },
+    }),
+  );
+}
+
+/**
+ * Fold directed-build's Colony opportunity report back into the system rows. Same visited/clear/set
+ * contract again, but over a DIFFERENT population: `visitedSystemIds` is every colony-establish
+ * CANDIDATE the colonisation planner considered this run (a candidate is a CONTROLLED,
+ * not-yet-developed system), captured regardless of the colonisation-automation switch.
+ */
+export function applyColonyOpportunityUpdates(
+  systems: TickSystem[],
+  visitedSystemIds: string[],
+  updates: ColonyOpportunityUpdate[],
+): TickSystem[] {
+  return applyVisitedSystemReports(
+    systems,
+    visitedSystemIds,
+    updates,
+    (s) => s.colonyOpportunity !== undefined,
+    (s) => { delete s.colonyOpportunity; },
+    (s, u) => ({
+      ...s,
+      colonyOpportunity: {
+        value: Number.isFinite(u.value) ? u.value : 0,
+        work: Number.isFinite(u.work) ? u.work : 0,
+      },
+    }),
+  );
+}
+
 /** Count of resources this system has any deposit slot for — a claim/develop score input. */
 function countResourceDiversity(s: TickSystem): number {
   let n = 0;
@@ -475,6 +678,31 @@ function applyClaims(systems: TickSystem[], claims: SystemClaim[]): TickSystem[]
     if (factionId === undefined) return s;
     return { ...s, factionId, control: "controlled" };
   });
+}
+
+/**
+ * The resettlement rule, in one place: a reading from a system's PREVIOUS life must not survive into
+ * its new one. Every optional per-life reading a system row carries clears together — the stored
+ * Provision memory, this cycle's Provisioned reading, its band and its critical-good weight, the
+ * realised population change, and directed-build's three planner readings. Only the expectation is a
+ * memory; the rest are fresh readings, but a stale reading from a previous life is exactly as false
+ * as a stale expectation would be, so they clear the same way: absent reads as "not yet assessed in
+ * this life", never as a lie.
+ *
+ * Deleted, never assigned `undefined` — a present key holding `undefined` is not a true absence (see
+ * `mergeSystemsIntoWorld`). Both life transitions clear the identical set, a colony being founded
+ * (`applyDevelopments`) and one dying (`applyAbandonments`), so a new per-life reading added to
+ * `TickSystem` is cleared on both or on neither.
+ */
+function clearPreviousLifeReadings(next: TickSystem): void {
+  delete next.provisionExpectation;
+  delete next.provision;
+  delete next.supplyBand;
+  delete next.criticalWeight;
+  delete next.populationChange;
+  delete next.buildBlocked;
+  delete next.buildOpportunity;
+  delete next.colonyOpportunity;
 }
 
 /**
@@ -526,16 +754,13 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
       buildings,
       popCap: nowDeveloped ? Math.max(s.popCap, housingPopCap(buildings)) : s.popCap,
     };
-    // The resettlement rule: a stored memory from a previous life must not survive into a system's
-    // new one — see the docstring above. `provision`/`supplyBand` are not a memory, but a stale
-    // reading from a previous life is exactly as false as a stale expectation would be, so they
-    // clear the same way: absent reads as "not yet assessed in this life", never as a lie.
-    if (nowDeveloped) {
-      delete next.provisionExpectation;
-      delete next.provision;
-      delete next.supplyBand;
-      delete next.criticalWeight;
-    }
+    // The resettlement rule (`clearPreviousLifeReadings`): every reading on this row belongs to the
+    // colony that just ended, not the one that just started. The three planner readings were already
+    // cleared earlier in this same tick — a system still `controlled` when directed-build captured
+    // its visited set can only have been cleared there, never freshly assigned, and a just-developed
+    // system is no longer a colony candidate — but they clear here too, so a system that survives
+    // untouched to a LATER run is covered as well.
+    if (nowDeveloped) clearPreviousLifeReadings(next);
     return next;
   });
 }
@@ -572,10 +797,23 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
       buildings: {},
       buildingIdleCycles: {},
     };
-    delete next.provisionExpectation;
-    delete next.provision;
-    delete next.supplyBand;
-    delete next.criticalWeight;
+    // The resettlement rule (`clearPreviousLifeReadings`). Two of the fields it clears carry weight
+    // at this site in particular:
+    //  • populationChange — the tick body writes it AFTER this function runs (post-migration), so
+    //    without the clear a naive later write would re-populate a stale reading on the system this
+    //    same cycle just reset; see the write site below for how that's avoided. The clear is the
+    //    defense that matters once the system survives untouched to a LATER cycle instead.
+    //  • the three planner readings — this is the ONLY thing that ever clears them for an abandoned
+    //    system, and the reason is the opposite of what it looks like. An abandoned system flips to
+    //    `unclaimed` above, so `isEconomicallyActive` drops it out of the planner's working set and
+    //    it is never VISITED again — and the clear-visited-then-assign writes below
+    //    (`applyBuildBlockedUpdates` and its two siblings) only touch systems inside their visited
+    //    set, by design, because set-and-clear says an entity a run did not visit keeps its previous
+    //    value. So "the write path naturally excludes it" is precisely why clearing here is
+    //    load-bearing rather than a backstop: without it a dead colony would advertise its last
+    //    blocked build and its last opportunity indefinitely, which is the present-but-false reading
+    //    the absence convention exists to prevent.
+    clearPreviousLifeReadings(next);
     return next;
   });
 }
@@ -588,7 +826,12 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
  * `logisticsFundingBound` are all optional fields whose absence already reads as "not yet
  * assessed" — cleared (deleted) rather than zeroed, exactly as a freshly-created market row would
  * be. `productionSuppressed` has no such absent-reads-as-fresh convention, so it is explicitly set
- * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above.
+ * false, mirroring `collapseDebt`'s explicit zero in `applyAbandonments` above. `stockChange` joins
+ * the same clear for the same reason as `logisticsFundingBound`: it is a reading from a previous
+ * life and must not survive into the next — a re-founded colony's warehouse is real, but its
+ * predecessor's drain rate is not. `unservedShortfall` joins the same clear for the same reason: a
+ * structural reading names a shortfall THIS colony's donors and production could not close, and a
+ * resettled colony has neither yet — its own local-supply story starts over.
  */
 export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds: string[]): WorldMarket[] {
   if (abandonedSystemIds.length === 0) return markets;
@@ -599,6 +842,8 @@ export function resetAbandonedMarkets(markets: WorldMarket[], abandonedSystemIds
     delete next.honestUseRate;
     delete next.squeezeCycles;
     delete next.logisticsFundingBound;
+    delete next.stockChange;
+    delete next.unservedShortfall;
     return next;
   });
 }
@@ -950,7 +1195,23 @@ export async function runWorldTick(
   // is pure waste. The gate emits the same mid-cycle broadcast the body would have,
   // so a gated tick is indistinguishable from an ungated one from the outside.
   let economySignals: EconomySignals | undefined;
+  // The realised per-cycle survival-good stock change's opening snapshot — captured here, BEFORE
+  // the economy processor mutates `stock` via production/consumption, so the write below (after
+  // directed logistics, further down this function) reads the true cycle-start value. Scoped to
+  // SURVIVAL_GOODS market rows belonging to a system that is developed AS OF THIS INSTANT — the
+  // same population the economy processor's own `getSystemIds` selects
+  // (`isEconomicallyActive`) — so "visited this cycle" at the write site means exactly "the economy
+  // processor assessed this system", nothing more, nothing less.
+  let stockAtCycleStart: Map<string, number> | undefined;
   if (isCycleStart(tick, cadence.cycle)) {
+    const developedNow = new Set(
+      systems.filter((s) => isEconomicallyActive(s.control)).map((s) => s.id),
+    );
+    stockAtCycleStart = new Map(
+      markets
+        .filter((m) => SURVIVAL_GOODS.includes(m.goodId) && developedNow.has(m.systemId))
+        .map((m) => [`${m.systemId}|${m.goodId}`, m.stock]),
+    );
     const economyWorld = new InMemoryEconomyWorld({ systems, markets, modifiers: rebuildWorldModifiers(events, scaled.definitions) });
     const economyResult = await runEconomyProcessor(economyWorld, newTickCtx(), {
       interval: cadence.cycle,
@@ -1017,7 +1278,20 @@ export async function runWorldTick(
   // post-delta population below ABANDON_POP_FLOOR this cycle. Applied just below, outside the
   // gate — the tick body is the sole owner of the control-flip/reset the processor only reports.
   let abandonedSystemIds: string[] = [];
+  // The realised per-cycle population change's opening snapshot — captured here, BEFORE the
+  // population processor mutates `population`, so the write below (after migration) reads the true
+  // cycle-start value rather than an already-grown/declined one. Keyed by every system in this
+  // cycle's dissatisfaction set (`signals.dissatisfactionBySystem`, the same set the population
+  // processor itself iterates), so "visited this cycle" below means exactly "the population
+  // processor assessed it" — nothing more, nothing less.
+  let populationAtCycleStart: Map<string, number> | undefined;
   if (economySignals) {
+    // Local const alias: a closure below can't see the narrowing `if (economySignals)` gives the
+    // outer `let`, since it's reassigned elsewhere in this function.
+    const signals = economySignals;
+    populationAtCycleStart = new Map(
+      systems.filter((s) => signals.dissatisfactionBySystem.has(s.id)).map((s) => [s.id, s.population]),
+    );
     const popWorld = new InMemoryPopulationWorld({ systems, markets });
     const popResult = await runPopulationProcessor(
       popWorld,
@@ -1143,6 +1417,7 @@ export async function runWorldTick(
     const logisticsMarketRows = marketRowsBySystem(markets);
     let dlStockUpdates: Map<string, number> = new Map();
     let dlFundingBoundUpdates: Map<string, boolean> = new Map();
+    let dlUnservedShortfallUpdates: Map<string, number> = new Map();
 
     // ── directed-logistics ──
     {
@@ -1170,9 +1445,11 @@ export async function runWorldTick(
         markets,
         dlWorld.stockUpdates,
         dlWorld.fundingBoundUpdates,
+        dlWorld.unservedShortfallUpdates,
       );
       dlStockUpdates = dlWorld.stockUpdates;
       dlFundingBoundUpdates = dlWorld.fundingBoundUpdates;
+      dlUnservedShortfallUpdates = dlWorld.unservedShortfallUpdates;
       const newLogisticsFlows: WorldFlowEvent[] = dlWorld.flows;
       flowEvents = [...flowEvents, ...newLogisticsFlows];
       logisticsWorkByFaction = dlResult.workPerformedByFaction;
@@ -1260,6 +1537,7 @@ export async function runWorldTick(
           logisticsMarketRows,
           dlStockUpdates,
           dlFundingBoundUpdates,
+          dlUnservedShortfallUpdates,
         ),
       );
       const dbWorld = new MemoryDirectedBuildWorld(rows, constructionProjects);
@@ -1331,6 +1609,14 @@ export async function runWorldTick(
       });
       systems = applyBuildingIncreases(systems, dbWorld.buildingUpdates);
       systems = applyClaims(systems, dbWorld.claims);
+      // Before applyDevelopments: a system founded this very run was still `controlled` when
+      // directed-build's own visited set was captured, so it is cleared here (nothing dropped for a
+      // system that was never economically active) rather than picking up a fresh reading.
+      systems = applyBuildBlockedUpdates(systems, dbWorld.buildBlockedVisitedSystemIds, dbWorld.buildBlockedUpdates);
+      // Same ordering reason as buildBlocked directly above — both must land before applyDevelopments
+      // so a system founded this very run clears rather than picking up a fresh reading.
+      systems = applyBuildOpportunityUpdates(systems, dbWorld.buildOpportunityVisitedSystemIds, dbWorld.buildOpportunityUpdates);
+      systems = applyColonyOpportunityUpdates(systems, dbWorld.colonyOpportunityVisitedSystemIds, dbWorld.colonyOpportunityUpdates);
       systems = applyDevelopments(systems, dbWorld.developments);
       constructionProjects = dbWorld.constructionProjects;
       // Persist the construction proposal-pressure counters into the market rows (proposalCycles only —
@@ -1351,6 +1637,103 @@ export async function runWorldTick(
       foundingStalls = dbResult.foundingStalls;
       strikeSuppressedProposals = dbResult.strikeSuppressedProposals;
       processorsRun.push("directed-build");
+    }
+
+    // ── realised per-cycle survival-good stock change (persisted; read by nothing else in the
+    // tick) ── Written HERE — after directed logistics has applied its own stock updates AND after
+    // directed-build's founding staging draws and staged manifest delivery above, still inside this
+    // outer cycle-start block. The interface is the realised change across the whole cycle: a
+    // founding donor's survival-good draw (`applyFoundingStagingDraws`) leaves its warehouse exactly
+    // as really as consumption does, so it belongs inside this figure rather than after it — and the
+    // polarity makes that load-bearing rather than cosmetic. The one reader divides `stock` by
+    // `−stockChange` for a cycles-to-empty countdown, so a drain left outside the figure reports a
+    // longer runway than the donor actually has: the reading would err toward reassurance on exactly
+    // the system that just gave its stores away. A donor that stages a manifest this cycle therefore
+    // reads more pessimistic for this one cycle than a mid-cycle read would show — accepted, the same
+    // way `populationChange` below accepts it, and it self-corrects next cycle from a fresh baseline.
+    //
+    // Gated on `stockAtCycleStart`: absent whenever this tick was not an economy-cycle boundary
+    // (the snapshot is only taken then), so this skips cleanly on a tick where only logistics
+    // or build resolves, rather than diffing against a stale or absent snapshot.
+    //
+    // Cadence caveat (see the field's own docstring, lib/world/types.ts): directed logistics runs
+    // on its OWN independently-tunable cadence (`cadence.logistics`). While it coincides with
+    // `cadence.cycle` — the live game's constants always do — this write captures the full
+    // production-minus-consumption-net-of-hauls figure the interface describes. If the two cadences
+    // are retuned apart, this only ever captures a logistics application that happens to land on
+    // THIS tick; a haul on any other tick is folded into `stock` without ever appearing in a
+    // reported change, and a cycle boundary with no coincident logistics run reports
+    // production-minus-consumption alone. Accepted rather than solved: capturing every haul
+    // regardless of cadence alignment needs a cross-tick accumulator carrying its own persisted
+    // baseline, which is a larger shape than this reading is worth.
+    //
+    // Placement is safe against resurrecting a row a colony founding just created or cleared, for
+    // the mirror of `populationChange`'s reason below. A founding TARGET is `controlled` right up to
+    // `applyDevelopments` this same run, so none of its rows are in `stockAtCycleStart` (keyed by
+    // the systems that were developed when the snapshot was taken) — its fresh rows from
+    // `addMarketsForSettledSystems`, and the manifest `applyStagedManifestDelivery` lands on them,
+    // are left untouched at `before === undefined`, absent as a never-assessed row should be. A
+    // founding SOURCE is `developed` throughout, so it was already in the snapshot and simply reads
+    // its post-draw `stock` here instead of its pre-draw one.
+    //
+    // Abandoned systems are excluded even though their survival-good rows sit in the snapshot:
+    // `resetAbandonedMarkets` already cleared this field above (before migration ran), and this
+    // system's control just flipped away from "developed" — writing a computed reading here would
+    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
+    // exists.
+    if (stockAtCycleStart) {
+      const snapshot = stockAtCycleStart;
+      const cycleCatchUp = catchUpFactor(cadence.cycle);
+      const abandonedThisCycle = new Set(abandonedSystemIds);
+      markets = markets.map((m): WorldMarket => {
+        if (abandonedThisCycle.has(m.systemId)) return m;
+        const before = snapshot.get(`${m.systemId}|${m.goodId}`);
+        if (before === undefined) return m;
+        return { ...m, stockChange: (m.stock - before) / cycleCatchUp };
+      });
+    }
+
+    // ── realised per-cycle population change (persisted; read by nothing else in the tick) ──
+    // Written HERE — after directed-build's `applyDevelopments` above, still inside this outer
+    // cycle-start block — because the interface is the realised change across the whole cycle,
+    // "including migration and colony-founding transfers": a colony founding's source-system debit
+    // (`applyDevelopments`, `popDelta.set(d.sourceSystemId, … − moved)` above) is exactly as real a
+    // population loss for the donor as migration is, so it must land inside this figure, not after
+    // it. A donor that founds a colony this cycle therefore reads more pessimistic for this one
+    // cycle than a mid-cycle read would show — accepted: the field means realised change, and this
+    // reading self-corrects next cycle once the donor's own population processor run picks a fresh
+    // baseline.
+    //
+    // Placement is still safe against resurrecting a value `applyDevelopments` just deleted: a
+    // colony-founding TARGET is always a `controlled` system immediately before this run
+    // (`lib/engine/directed-build.ts:1141`), never `developed`, so it can never be a key in
+    // `populationAtCycleStart` (keyed by `economySignals.dissatisfactionBySystem`, developed systems
+    // only) — the map below leaves it untouched (`before === undefined`), so `applyDevelopments`'
+    // own delete of a fresh target's `populationChange` stands. A colony-founding SOURCE is always a
+    // `developed` system throughout (`lib/engine/directed-build.ts:1189-1192` — it stays the seed
+    // source, never flips status), so it was already in the snapshot and simply reads its post-drain
+    // `population` here instead of its pre-drain one.
+    //
+    // Gated on `economySignals` (equivalently `migrationResolves`, since both share
+    // `isCycleStart(tick, cadence.cycle)`): this whole outer block also runs when only logistics or
+    // build resolve, on a tick the population processor never touched — `populationAtCycleStart` is
+    // `undefined` there, so this skips cleanly rather than dividing by a stale snapshot.
+    //
+    // Abandoned systems are excluded even though they sit in the cycle-start visited set:
+    // `applyAbandonments` already cleared this field above (before migration ran), and this
+    // system's control just flipped away from "developed" — writing a computed reading here would
+    // silently undo that clear with a stale figure from a colony that, as of this tick, no longer
+    // exists.
+    if (economySignals && populationAtCycleStart) {
+      const cycleCatchUp = catchUpFactor(cadence.cycle);
+      const snapshot = populationAtCycleStart;
+      const abandonedThisCycle = new Set(abandonedSystemIds);
+      systems = systems.map((s): TickSystem => {
+        if (abandonedThisCycle.has(s.id)) return s;
+        const before = snapshot.get(s.id);
+        if (before === undefined) return s;
+        return { ...s, populationChange: (s.population - before) / cycleCatchUp };
+      });
     }
 
   } // ── end cycle start ──

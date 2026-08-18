@@ -1,6 +1,6 @@
 import { getWorld } from "@/lib/world/store";
-import type { AtlasData, GovernmentType, RegionInfo } from "@/lib/types/game";
-import { deriveRegionDominantFaction } from "@/lib/utils/region";
+import type { AtlasData } from "@/lib/types/game";
+import { regionInfos } from "@/lib/services/world-index";
 
 /**
  * Lightweight map data: positions, economies, regions, connections.
@@ -13,38 +13,6 @@ export function getAtlas(): AtlasData {
   const world = getWorld();
   const factions = [...world.factions].sort((a, b) => a.name.localeCompare(b.name));
 
-  const factionGovById = new Map<string, GovernmentType>(
-    factions.map((f) => [f.id, f.governmentType]),
-  );
-  const factionNameById = new Map<string, string>(factions.map((f) => [f.id, f.name]));
-
-  const systemFactionsByRegion = new Map<string, string[]>();
-  for (const s of world.systems) {
-    if (!s.factionId) continue;
-    const list = systemFactionsByRegion.get(s.regionId) ?? [];
-    list.push(s.factionId);
-    systemFactionsByRegion.set(s.regionId, list);
-  }
-
-  const regionInfos: RegionInfo[] = world.regions.map((r) => {
-    const dominantFactionId = deriveRegionDominantFaction(
-      systemFactionsByRegion.get(r.id) ?? [],
-      factionNameById,
-    );
-    const dominantGov: GovernmentType = dominantFactionId
-      ? factionGovById.get(dominantFactionId) ?? "frontier"
-      : "frontier";
-    return {
-      id: r.id,
-      name: r.name,
-      dominantEconomy: r.dominantEconomy,
-      dominantFactionId,
-      dominantGovernmentType: dominantGov,
-      x: r.x,
-      y: r.y,
-    };
-  });
-
   const playerFactionId = world.player?.controlledFactionId ?? null;
   const playerHomeworldId = playerFactionId
     ? world.factions.find((f) => f.id === playerFactionId)?.homeworldId ?? null
@@ -56,7 +24,7 @@ export function getAtlas(): AtlasData {
       systemCount: world.meta.systemCount,
       seed: world.meta.seed,
     },
-    regions: regionInfos,
+    regions: regionInfos(),
     systems: world.systems.map((s) => ({
       id: s.id,
       x: s.x,

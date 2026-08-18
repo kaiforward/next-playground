@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
-  summarizeColonisation, summarizeConstructionPool, summarizeBuildBursts,
-  trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summarizeFoundingStock,
+  summariseColonisation, summariseConstructionPool, summariseBuildBursts,
+  trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample, summariseFoundingStock,
   recordFoundingManifest, newFoundingStallTotals, recordFoundingStall, newInFlightEstablishTotals,
-  sampleOpenColonies, summarizeFoundingLifecycle, summarizeFounderCohort,
+  sampleOpenColonies, summariseFoundingLifecycle, summariseFounderCohort,
   foundingCadenceMarkTick, FOUNDING_CADENCE_MARK_SHARE, CONSTRUCTION_WARMUP_TICKS,
-  newFoundingTrajectoryTotals, sampleFoundingTrajectory, summarizeFoundingTrajectory,
+  newFoundingTrajectoryTotals, sampleFoundingTrajectory, summariseFoundingTrajectory,
   hasColonyInTrajectoryWindow, FOUNDING_TRAJECTORY_BUCKET_CYCLES, FOUNDING_TRAJECTORY_BUCKET_COUNT,
 } from "../build-analysis";
 import { CONSTRUCTION_INTERVAL } from "@/lib/constants/tick-cadence";
@@ -31,7 +31,7 @@ import type { ResourceVector } from "@/lib/types/game";
  * calibration instrument that surfaces a broken build loop (colonies developed but never
  * built out) which aggregate market health hides — so its own tier classification, stranded
  * flags, class split, and queue math must be pinned. If any of these fail the implementation
- * no longer matches the documented behavior — report, don't adjust.
+ * no longer matches the documented behaviour — report, don't adjust.
  */
 
 function devSys(
@@ -67,7 +67,7 @@ function project(
   return { kind: "build", id: `${systemId}:${buildingType}`, origin: "auto", factionId: "f1", systemId, buildingType, levels, workTotal, workDone };
 }
 
-describe("summarizeColonisation — per-class build-out", () => {
+describe("summariseColonisation — per-class build-out", () => {
   it("splits developed systems into homeworld vs colony and classifies their built base", () => {
     // A fully built-out homeworld: extraction (tier0), a factory (tier1), an advanced factory
     // (tier2), housing, both academy kinds, a complex, plus an unknown building type (ignored)
@@ -103,7 +103,7 @@ describe("summarizeColonisation — per-class build-out", () => {
     // Non-developed system → excluded from both classes entirely.
     const outpost = devSys("cc", { control: "controlled", population: 999, buildings: { ore: 5 } });
 
-    const summary = summarizeColonisation(
+    const summary = summariseColonisation(
       [homeworld, stranded, housingOnly, tiny, outpost],
       new Set(["hw"]),
       [],
@@ -140,7 +140,7 @@ describe("summarizeColonisation — per-class build-out", () => {
       buildings: { ore: 0, metals: -2, [HOUSING_TYPE]: 0 },
       slotCap: makeResourceVector({ ore: 5 }),
     });
-    const summary = summarizeColonisation([ghostBuilt], new Set(), []);
+    const summary = summariseColonisation([ghostBuilt], new Set(), []);
 
     expect(summary.colony.withTier0).toBe(0);
     expect(summary.colony.withHousing).toBe(0);
@@ -149,7 +149,7 @@ describe("summarizeColonisation — per-class build-out", () => {
   });
 });
 
-describe("summarizeColonisation — the tier fold", () => {
+describe("summariseColonisation — the tier fold", () => {
   it("adds every tier into one industry total, and counts tier1-or-better as present", () => {
     // tier1 and tier2 are equal-sized so any fold that subtracts one from the other reads exactly
     // zero industry — a fully built colony reported as populated-but-no-industry.
@@ -157,7 +157,7 @@ describe("summarizeColonisation — the tier fold", () => {
       population: 300,
       buildings: { metals: 2, electronics: 2 },
     });
-    const summary = summarizeColonisation([built], new Set(), []);
+    const summary = summariseColonisation([built], new Set(), []);
 
     expect(summary.colony.populatedButNoIndustry).toBe(0);
     expect(summary.colony.withTier1Plus).toBe(1);
@@ -169,7 +169,7 @@ describe("summarizeColonisation — the tier fold", () => {
     // tier 0, and a bare rock of a colony has none at all.
     const tier0Only = devSys("c1", { population: 300, buildings: { ore: 4 } });
     const nothing = devSys("c2", { population: 300, buildings: {} });
-    const summary = summarizeColonisation([tier0Only, nothing], new Set(), []);
+    const summary = summariseColonisation([tier0Only, nothing], new Set(), []);
 
     expect(summary.colony.withTier1Plus).toBe(0);
     expect(summary.colony.withTier0).toBe(1);
@@ -188,7 +188,7 @@ describe("summarizeColonisation — the tier fold", () => {
     // report an idle colony as producing.
     const unknown = devSys("u1", { population: 300, buildings: { mystery: 9 } });
 
-    const summary = summarizeColonisation([t1, t2a, t2b, unknown], new Set(), []);
+    const summary = summariseColonisation([t1, t2a, t2b, unknown], new Set(), []);
     expect(summary.colony.withTier1Plus).toBe(3);
     expect(summary.colony.populatedButNoIndustry).toBe(1); // the unknown type only
   });
@@ -200,7 +200,7 @@ describe("summarizeColonisation — the tier fold", () => {
       population: 300,
       buildings: { metals: 5, electronics: -5 },
     });
-    const summary = summarizeColonisation([mixed], new Set(), []);
+    const summary = summariseColonisation([mixed], new Set(), []);
     expect(summary.colony.withTier1Plus).toBe(1);
     expect(summary.colony.populatedButNoIndustry).toBe(0);
   });
@@ -214,12 +214,12 @@ describe("summarizeColonisation — the tier fold", () => {
       devSys("one-resident", { population: 1, popCap: 0 }),
       devSys("one-level", { population: 300, popCap: 1 }),
     ];
-    const summary = summarizeColonisation(systems, new Set(), []);
+    const summary = summariseColonisation(systems, new Set(), []);
     expect(summary.colony.popCapStarved).toBe(1);
   });
 });
 
-describe("summarizeColonisation — construction queue split", () => {
+describe("summariseColonisation — construction queue split", () => {
   it("splits open projects by target class and sums levels + colony progress", () => {
     const homeworldIds = new Set(["hw"]);
     const projects: WorldConstructionProject[] = [
@@ -229,7 +229,7 @@ describe("summarizeColonisation — construction queue split", () => {
       project("c2", "metals", { levels: 1, workTotal: 0, workDone: 0 }),        // colony, workTotal 0 → 0 progress
     ];
 
-    const summary = summarizeColonisation([], homeworldIds, projects);
+    const summary = summariseColonisation([], homeworldIds, projects);
 
     expect(summary.queue.homeworldProjects).toBe(1);
     expect(summary.queue.homeworldLevels).toBe(4);
@@ -251,7 +251,7 @@ describe("summarizeColonisation — construction queue split", () => {
       project("c", "electronics"),            // tier2
       project("c", "mystery"),                // unknown → other
     ];
-    const summary = summarizeColonisation([], new Set(), projects);
+    const summary = summariseColonisation([], new Set(), projects);
 
     expect(summary.queue.colonyByKind).toEqual({
       housing: 1, academy: 2, complex: 1, tier0: 1, tier1: 1, tier2: 1, other: 1,
@@ -261,7 +261,7 @@ describe("summarizeColonisation — construction queue split", () => {
   it("keeps tier2 and untiered projects apart when both are in the queue at once", () => {
     // One of each reads the same totals whichever way the tier2 test points — the two buckets
     // simply swap names. Two tier2 projects against one unknown breaks the symmetry.
-    const summary = summarizeColonisation([], new Set(), [
+    const summary = summariseColonisation([], new Set(), [
       project("c", "electronics"),
       project("c", "electronics"),
       project("c", "mystery"),
@@ -270,7 +270,7 @@ describe("summarizeColonisation — construction queue split", () => {
   });
 
   it("counts open centre projects under kind 'centre'", () => {
-    const summary = summarizeColonisation([], new Set(), [
+    const summary = summariseColonisation([], new Set(), [
       { kind: "build", id: "c1", origin: "auto", factionId: "f1", systemId: "x",
         buildingType: CONSTRUCTION_CENTRE_TYPE, levels: 1,
         workTotal: workCostPerLevel(CONSTRUCTION_CENTRE_TYPE), workDone: 0 },
@@ -279,7 +279,7 @@ describe("summarizeColonisation — construction queue split", () => {
   });
 
   it("reports zero colony progress when there are no colony projects (division guard)", () => {
-    const summary = summarizeColonisation([], new Set(["hw"]), [project("hw", "ore")]);
+    const summary = summariseColonisation([], new Set(["hw"]), [project("hw", "ore")]);
     expect(summary.queue.colonyProjects).toBe(0);
     expect(summary.queue.colonyMeanProgress).toBe(0);
     expect(summary.queue.colonyByKind).toEqual({});
@@ -291,7 +291,7 @@ describe("summarizeColonisation — construction queue split", () => {
       sourceSystemId: "hw", seedPop: 50, housingLevels: 3, workTotal: 84, workDone: 40,
       stagedManifest: [], charterPaid: true, stalledCycles: 0,
     };
-    const summary = summarizeColonisation([], new Set(["hw"]), [
+    const summary = summariseColonisation([], new Set(["hw"]), [
       project("hw", "ore", { levels: 4, workTotal: 100, workDone: 50 }),
       colony,
     ]);
@@ -303,7 +303,7 @@ describe("summarizeColonisation — construction queue split", () => {
   });
 });
 
-describe("summarizeConstructionPool", () => {
+describe("summariseConstructionPool", () => {
   it("splits base vs centre points and derives the queue ETA", () => {
     // One developed system, 200 pop, 1 staffed centre + school (matches the engine test's fixture).
     const sys = devSys("s1", {
@@ -314,7 +314,7 @@ describe("summarizeConstructionPool", () => {
       { kind: "build", id: "p1", origin: "auto", factionId: "f1", systemId: sys.id, buildingType: "metals",
         levels: 2, workTotal: 40, workDone: 10 },
     ];
-    const s = summarizeConstructionPool([sys], projects);
+    const s = summariseConstructionPool([sys], projects);
     expect(s.poolCentres).toBeCloseTo(CONSTRUCTION.POINTS_PER_LEVEL);
     expect(s.poolBase).toBeCloseTo((200 - 7) * CONSTRUCTION.THROUGHPUT_PER_POP);
     expect(s.centreShare).toBeCloseTo(s.poolCentres / (s.poolBase + s.poolCentres));
@@ -324,7 +324,7 @@ describe("summarizeConstructionPool", () => {
   });
 
   it("reports a null ETA when nothing funds the queue", () => {
-    const s = summarizeConstructionPool([], [
+    const s = summariseConstructionPool([], [
       { kind: "build", id: "p1", origin: "auto", factionId: "f1", systemId: "x", buildingType: "metals",
         levels: 1, workTotal: 20, workDone: 0 },
     ]);
@@ -336,7 +336,7 @@ describe("summarizeConstructionPool", () => {
     // Mirrors the outpost fixture pattern above: a controlled (non-developed) system holding a
     // Construction Centre shouldn't count toward built centre levels.
     const outpost = devSys("cc", { control: "controlled", buildings: { [CONSTRUCTION_CENTRE_TYPE]: 1 } });
-    const s = summarizeConstructionPool([outpost], []);
+    const s = summariseConstructionPool([outpost], []);
     expect(s.centreLevels).toBe(0);
   });
 
@@ -355,7 +355,7 @@ describe("summarizeConstructionPool", () => {
       project("s3", "metals", { workTotal: 40, workDone: 40 }),
       establish,
     ];
-    const s = summarizeConstructionPool([], projects);
+    const s = summariseConstructionPool([], projects);
 
     expect(s.centreProjects).toBe(2);
     // Non-vacuous: the queue really does hold work of all three shapes.
@@ -365,7 +365,7 @@ describe("summarizeConstructionPool", () => {
   it("reports a zero centre share, never a division by an empty pool", () => {
     // An empty galaxy funds nothing. JSON renders NaN as null, which reads as "not measured"
     // rather than "measured, and the pool is empty".
-    const s = summarizeConstructionPool([], []);
+    const s = summariseConstructionPool([], []);
     expect(s.centreShare).toBe(0);
     expect(Number.isFinite(s.centreShare)).toBe(true);
   });
@@ -383,7 +383,7 @@ describe("summarizeConstructionPool", () => {
   });
 });
 
-describe("summarizeBuildBursts", () => {
+describe("summariseBuildBursts", () => {
   function rec(tick: number, goodId: string, levels: number): BuildCommitmentRecord {
     return { tick, goodId, levels };
   }
@@ -395,7 +395,7 @@ describe("summarizeBuildBursts", () => {
       rec(72, "food", 5),
       rec(24, "metals", 10), // metals' (only, and worst) cycle
     ];
-    const summary = summarizeBuildBursts(records);
+    const summary = summariseBuildBursts(records);
     const food = summary.byGood.find((g) => g.goodId === "food");
     const metals = summary.byGood.find((g) => g.goodId === "metals");
     expect(food).toEqual({ goodId: "food", maxLevelsPerCycle: 7, tick: 48 });
@@ -408,7 +408,7 @@ describe("summarizeBuildBursts", () => {
       rec(24, "metals", 5), // tied with food — alphabetical tiebreak
       rec(24, "electronics", 9),
     ];
-    const summary = summarizeBuildBursts(records);
+    const summary = summariseBuildBursts(records);
     expect(summary.byGood.map((g) => g.goodId)).toEqual(["electronics", "food", "metals"]);
   });
 
@@ -418,14 +418,14 @@ describe("summarizeBuildBursts", () => {
       rec(48, "metals", 12),
       rec(72, "electronics", 8),
     ];
-    const summary = summarizeBuildBursts(records);
+    const summary = summariseBuildBursts(records);
     expect(summary.globalMax).toBe(12);
     expect(summary.worstGood).toBe("metals");
     expect(summary.worstTick).toBe(48);
   });
 
   it("reports zero/null for an empty run (no builds committed) — no NaN, no crash", () => {
-    const summary = summarizeBuildBursts([]);
+    const summary = summariseBuildBursts([]);
     expect(summary.byGood).toEqual([]);
     expect(summary.globalMax).toBe(0);
     expect(summary.worstGood).toBeNull();
@@ -436,7 +436,7 @@ describe("summarizeBuildBursts", () => {
     // The max is 7 at tick 24; later ticks propose fewer levels, so the tick pinned must stay 24 —
     // proving the summary tracks the cycle the maximum happened at, not just the final observation.
     const records: BuildCommitmentRecord[] = [rec(24, "food", 7), rec(48, "food", 2), rec(72, "food", 1)];
-    const summary = summarizeBuildBursts(records);
+    const summary = summariseBuildBursts(records);
     expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerCycle: 7, tick: 24 }]);
   });
 
@@ -444,7 +444,7 @@ describe("summarizeBuildBursts", () => {
     // Two cycles commit the SAME max levels; the strict `>` means the first-seen tick (24) must be pinned,
     // not overwritten by the later equal cycle (48). A `>=` regression would pin 48 instead.
     const records: BuildCommitmentRecord[] = [rec(24, "food", 5), rec(48, "food", 5)];
-    const summary = summarizeBuildBursts(records);
+    const summary = summariseBuildBursts(records);
     expect(summary.byGood).toEqual([{ goodId: "food", maxLevelsPerCycle: 5, tick: 24 }]);
   });
 });
@@ -455,7 +455,7 @@ describe("summarizeBuildBursts", () => {
  * right systems at the right moment, weights goods by what the colony actually needs, and does not
  * quietly read a colony as fed.
  */
-describe("trackFoundedColonies / summarizeFoundingStock", () => {
+describe("trackFoundedColonies / summariseFoundingStock", () => {
   /** A seed-sized colony: no buildings, so its basket is pure per-capita civilian demand. */
   const sys = (id: string, control: SystemControl): FoundedColonySystem => ({
     id, control, population: EXPANSION.COLONY_SEED_POP, buildings: {},
@@ -625,7 +625,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["c", rec("c", null, null)],
     ]);
 
-    const summary = summarizeFoundingStock(tracker);
+    const summary = summariseFoundingStock(tracker);
     expect(summary.foundedCount).toBe(3);
     expect(summary.sampledCount).toBe(2);       // 'c' never reached a cycle — not a zero in the mean
     expect(summary.meanOpeningSatisfaction).toBeCloseTo(0.5, 6);
@@ -644,7 +644,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["no-provision", rec("no-provision", 0.8, 0.2, null)],
     ]);
 
-    const summary = summarizeFoundingStock(tracker);
+    const summary = summariseFoundingStock(tracker);
     expect(summary.foundedCount).toBe(3);
     expect(summary.sampledCount).toBe(0);
     expect(summary.meanOpeningProvision).toBeNull();
@@ -658,7 +658,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["at-mark", rec("at-mark", 0.5, 0.5)],
       ["over", rec("over", 0.9, 0.1)],
     ]);
-    expect(summarizeFoundingStock(tracker).openingDeprivedCount).toBe(1);
+    expect(summariseFoundingStock(tracker).openingDeprivedCount).toBe(1);
   });
 
   it("takes the Provision decile from the sampled colonies alone", () => {
@@ -671,7 +671,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["d", rec("d", 0.8, 0.2, 0.8)],
       ["e", rec("e", 0.8, 0.2, 1.0)],
     ]);
-    const summary = summarizeFoundingStock(tracker);
+    const summary = summariseFoundingStock(tracker);
     expect(summary.meanOpeningProvision).toBeCloseTo(0.6, 9);
     // Five readings 0.2…1.0: the 10th percentile sits between the lowest two, well under the mean.
     expect(summary.p10OpeningProvision).not.toBeNull();
@@ -693,7 +693,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["h", rec("h", 0.3, 0.7, 0.3)], ["i", rec("i", 0.3, 0.7, 0.3)],
       ["j", rec("j", 0.9, 0.1, 0.9)],
     ]);
-    const summary = summarizeFoundingStock(tracker);
+    const summary = summariseFoundingStock(tracker);
     expect(summary.p10OpeningProvision).toBeCloseTo(0.3, 9);
     expect(summary.minOpeningProvision).toBeCloseTo(0.05, 9);
     expect(summary.minOpeningProvision).not.toBeCloseTo(summary.p10OpeningProvision ?? -1, 3);
@@ -712,7 +712,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["c", rec("c", 0.5, 0.25, 0.7)],
     ]);
 
-    const summary = summarizeFoundingStock(tracker);
+    const summary = summariseFoundingStock(tracker);
     expect(summary.meanOpeningSatisfaction).toBeCloseTo((0.9 + 0.1 + 0.5) / 3, 9);   // 0.5
     expect(summary.meanOpeningProvision).toBeCloseTo((0.5 + 0.9 + 0.7) / 3, 9);      // 0.7
     expect(summary.meanOpeningProvision).not.toBeCloseTo(summary.meanOpeningSatisfaction, 3);
@@ -722,7 +722,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
     // The cover median must be null, not 0: a printed "0.00×" reads as founders drained flat
     // when the truth is that nothing was measured. Provision is null for the same reason: a run
     // that founds nothing has no founding Provision to report, not a Provision of 0%.
-    const summary = summarizeFoundingStock(new Map());
+    const summary = summariseFoundingStock(new Map());
     expect(summary).toEqual({
       foundedCount: 0, sampledCount: 0, meanOpeningSatisfaction: 0,
       meanOpeningShortfall: 0, meanOpeningProvision: null, p10OpeningProvision: null,
@@ -745,7 +745,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["g", rec("g", 0.9, 0.01, 0.9)], ["h", rec("h", 0.9, 0.01, 0.9)],
       ["i", rec("i", 0.9, 0.01, 0.9)], ["j", rec("j", 0.9, 0.01, 0.9)],
     ]);
-    const summary = summarizeFoundingStock(tracker);
+    const summary = summariseFoundingStock(tracker);
     if (summary.meanOpeningProvision === null || summary.p10OpeningProvision === null) {
       throw new Error("fixture: expected both readings on a founded cohort");
     }
@@ -820,7 +820,7 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["c", { ...rec("c", 0.5, 0.25), manifestTonnage: 200, foundingMoneyCost: 60, founderCoverAfter: 0.6 }],
     ]);
 
-    const summary = summarizeFoundingStock(tracker);
+    const summary = summariseFoundingStock(tracker);
     expect(summary.meanManifestTonnage).toBeCloseTo(200, 9);
     expect(summary.meanFoundingMoneyCost).toBeCloseTo(60, 9);
     expect(summary.medianFounderCoverAfter).toBeCloseTo(0.6, 9);
@@ -834,13 +834,13 @@ describe("trackFoundedColonies / summarizeFoundingStock", () => {
       ["b", rec("b", 0.9, 0.01)], // never staged a draw
     ]);
 
-    const summary = summarizeFoundingStock(tracker);
+    const summary = summariseFoundingStock(tracker);
     expect(summary.medianFounderCoverAfter).toBeCloseTo(0.8, 9);
     expect(summary.meanManifestTonnage).toBeCloseTo(50, 9); // 100 over both founded colonies
   });
 });
 
-describe("sampleFoundingTrajectory / summarizeFoundingTrajectory", () => {
+describe("sampleFoundingTrajectory / summariseFoundingTrajectory", () => {
   const trajSys = (id: string, unrest: number): FoundingTrajectorySystem => ({
     id, population: EXPANSION.COLONY_SEED_POP, buildings: {}, unrest,
   });
@@ -860,7 +860,7 @@ describe("sampleFoundingTrajectory / summarizeFoundingTrajectory", () => {
     sampleFoundingTrajectory(
       [trajSys("c1", 0.1)], [mkt("c1", "water", 0.5)], oneCycleOld, 24, tracker, totals,
     );
-    const summary = summarizeFoundingTrajectory(totals);
+    const summary = summariseFoundingTrajectory(totals);
     expect(summary.buckets[0].n).toBe(1);
     expect(summary.buckets[1].n).toBe(0);
     expect(summary.buckets[0].meanUnrest).toBeCloseTo(0.1, 9);
@@ -873,7 +873,7 @@ describe("sampleFoundingTrajectory / summarizeFoundingTrajectory", () => {
     sampleFoundingTrajectory(
       [trajSys("c1", 0.5)], [mkt("c1", "water", 0.5)], windowEdgeTick, 24, tracker, totals,
     );
-    const summary = summarizeFoundingTrajectory(totals);
+    const summary = summariseFoundingTrajectory(totals);
     expect(summary.buckets.every((b) => b.n === 0)).toBe(true);
   });
 
@@ -882,7 +882,7 @@ describe("sampleFoundingTrajectory / summarizeFoundingTrajectory", () => {
     const totals = newFoundingTrajectoryTotals();
     sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.4)], 24, 24, tracker, totals); // age 1 cycle
     sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.8)], 5 * 24, 24, tracker, totals); // age 5 cycles — still bucket 0
-    const summary = summarizeFoundingTrajectory(totals);
+    const summary = summariseFoundingTrajectory(totals);
     expect(summary.buckets[0].n).toBe(2);
     expect(summary.buckets[0].meanProvision).toBeCloseTo(0.6, 6);
   });
@@ -893,12 +893,12 @@ describe("sampleFoundingTrajectory / summarizeFoundingTrajectory", () => {
     // Same tick as founding: age 0. This is provision()'s market-seeding placeholder (1.0), not a
     // lived cycle — must contribute nothing to bucket 0.
     sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 1)], 0, 24, tracker, totals);
-    let summary = summarizeFoundingTrajectory(totals);
+    let summary = summariseFoundingTrajectory(totals);
     expect(summary.buckets[0].n).toBe(0);
 
     // The very next cycle: a real reading, now counted.
     sampleFoundingTrajectory([trajSys("c1", 0)], [mkt("c1", "water", 0.5)], 24, 24, tracker, totals);
-    summary = summarizeFoundingTrajectory(totals);
+    summary = summariseFoundingTrajectory(totals);
     expect(summary.buckets[0].n).toBe(1);
     expect(summary.buckets[0].meanProvision).toBeCloseTo(0.5, 6);
   });
@@ -950,8 +950,8 @@ describe("founding cadence mark", () => {
 
   it("reports no mark for a run that founded nothing, never a zero tick", () => {
     expect(foundingCadenceMarkTick(new Map())).toBeNull();
-    // JSON-safe: a NaN or Infinity would serialize to null and read as "not founded" instead.
-    const summary = summarizeFoundingStock(trackerOf(48));
+    // JSON-safe: a NaN or Infinity would serialise to null and read as "not founded" instead.
+    const summary = summariseFoundingStock(trackerOf(48));
     expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
   });
 
@@ -960,7 +960,7 @@ describe("founding cadence mark", () => {
   });
 
   it("carries the mark and its share into the founding-stock summary", () => {
-    const summary = summarizeFoundingStock(trackerOf(100, 200, 300, 400, 5000));
+    const summary = summariseFoundingStock(trackerOf(100, 200, 300, 400, 5000));
     expect(summary.cadenceMarkShare).toBe(FOUNDING_CADENCE_MARK_SHARE);
     expect(summary.cadenceMarkTick).toBe(400);
   });
@@ -1047,7 +1047,7 @@ describe("founding lifecycle — commitment, completion and concurrency", () => 
       ["c3", colony("c3", 200)],  // committed and completed inside one cycle — never in the queue
     ]);
 
-    const summary = summarizeFoundingLifecycle(
+    const summary = summariseFoundingLifecycle(
       tracker, commitments, inFlight, newFoundingStallTotals(), 24,
     );
 
@@ -1081,7 +1081,7 @@ describe("founding lifecycle — commitment, completion and concurrency", () => 
       ["slow", colony("slow", 240)], // 10 cycles
       ["fast", colony("fast", 24)],  // 1 cycle — iterated last
     ]);
-    const summary = summarizeFoundingLifecycle(
+    const summary = summariseFoundingLifecycle(
       tracker, commitments, newInFlightEstablishTotals(), newFoundingStallTotals(), 24,
     );
     expect(summary.maxCycles).toBeCloseTo(10, 9);
@@ -1096,7 +1096,7 @@ describe("founding lifecycle — commitment, completion and concurrency", () => 
     sampleOpenColonies([establish("c1"), establish("c2"), establish("c3")], 24, commitments, inFlight);
     sampleOpenColonies([establish("c1")], 48, commitments, inFlight);
     sampleOpenColonies([], 72, commitments, inFlight);
-    const summary = summarizeFoundingLifecycle(
+    const summary = summariseFoundingLifecycle(
       new Map(), commitments, inFlight, newFoundingStallTotals(), 24,
     );
     expect(summary.inFlight.sampledCycles).toBe(3);
@@ -1106,7 +1106,7 @@ describe("founding lifecycle — commitment, completion and concurrency", () => 
   it("reports durations in ticks rather than dividing by a cadence of zero", () => {
     // An Infinity in a duration would print as the report's headline figure and survive the JSON
     // round-trip as null.
-    const summary = summarizeFoundingLifecycle(
+    const summary = summariseFoundingLifecycle(
       new Map<string, FoundedColonyRecord>([["c1", colony("c1", 96)]]),
       new Map([["c1", 24]]),
       newInFlightEstablishTotals(), newFoundingStallTotals(), 0,
@@ -1117,7 +1117,7 @@ describe("founding lifecycle — commitment, completion and concurrency", () => 
   });
 
   it("reports a run that founded nothing as zeroes, not NaN", () => {
-    const summary = summarizeFoundingLifecycle(
+    const summary = summariseFoundingLifecycle(
       new Map(), new Map(), newInFlightEstablishTotals(), newFoundingStallTotals(), 24,
     );
     expect(summary.sampledCount).toBe(0);
@@ -1130,12 +1130,12 @@ describe("founding lifecycle — commitment, completion and concurrency", () => 
   });
 });
 
-describe("summarizeFounderCohort", () => {
+describe("summariseFounderCohort", () => {
   const sys = (id: string, control: SystemControl, idle: Record<string, number> = {}) =>
     ({ id, control, buildingIdleCycles: idle });
   const mkt = (
-    systemId: string, realizedProductionRate?: number, productionSuppressed?: boolean,
-  ) => ({ systemId, realizedProductionRate, productionSuppressed });
+    systemId: string, realisedProductionRate?: number, productionSuppressed?: boolean,
+  ) => ({ systemId, realisedProductionRate, productionSuppressed });
 
   it("splits developed systems by whether they supplied a founding, each with its own denominator", () => {
     const systems = [
@@ -1153,12 +1153,12 @@ describe("summarizeFounderCohort", () => {
       mkt("c1", 999),                      // undeveloped — excluded entirely
     ];
 
-    const summary = summarizeFounderCohort(systems, markets, new Set(["f1", "f2"]));
+    const summary = summariseFounderCohort(systems, markets, new Set(["f1", "f2"]));
 
     expect(summary.founder.systemCount).toBe(2);
     expect(summary.other.systemCount).toBe(1);
-    expect(summary.founder.meanRealizedProduction).toBeCloseTo(30, 9); // (10+30+20)/2 systems
-    expect(summary.other.meanRealizedProduction).toBeCloseTo(6, 9);    // (4+2)/1 system
+    expect(summary.founder.meanRealisedProduction).toBeCloseTo(30, 9); // (10+30+20)/2 systems
+    expect(summary.other.meanRealisedProduction).toBeCloseTo(6, 9);    // (4+2)/1 system
     expect(summary.founder.producingMarkets).toBe(3);
     // Neither the unassessed row nor the assessed zero counts. By run end almost every row in the
     // galaxy is assessed, so counting a real 0 as a producer would put the whole basket in this
@@ -1176,7 +1176,7 @@ describe("summarizeFounderCohort", () => {
     // `buildingIdleCycles` carries a counter per type, and a running type sits at 0 rather than
     // being absent. Counting a present-but-zero entry would report every developed system in the
     // galaxy as idle on everything it has built.
-    const summary = summarizeFounderCohort(
+    const summary = summariseFounderCohort(
       [sys("f1", "developed", { ore: 0, food: 0 }), sys("o1", "developed", { ore: 0, food: 2 })],
       [mkt("f1", 5), mkt("o1", 5)],
       new Set(["f1"]),
@@ -1188,11 +1188,11 @@ describe("summarizeFounderCohort", () => {
   });
 
   it("reports an empty founder cohort as zeroes that survive JSON, never NaN", () => {
-    const summary = summarizeFounderCohort(
+    const summary = summariseFounderCohort(
       [sys("o1", "developed")], [mkt("o1", 5)], new Set(),
     );
     expect(summary.founder.systemCount).toBe(0);
-    expect(summary.founder.meanRealizedProduction).toBe(0);
+    expect(summary.founder.meanRealisedProduction).toBe(0);
     expect(summary.founder.productionSuppressedShare).toBe(0);
     expect(summary.founder.idleSystemShare).toBe(0);
     expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);

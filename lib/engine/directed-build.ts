@@ -23,6 +23,7 @@ import {
   FAMILY_BY_GOOD, COMPLEX_TYPES, ANCHOR_CAP, ANCHOR_RATED_COVERAGE, ANCHOR_MIN_THROUGHPUT,
 } from "@/lib/constants/industry";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
+import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { charterFee, foundingCommitmentCost, foundingGoodsValue, projectedManifestWant } from "@/lib/engine/founding-cost";
 import {
@@ -58,7 +59,7 @@ export interface BuildGoodState {
    * supplies it via toGoodMarketStates (a GoodMarketState, which carries production).
    */
   production?: number;
-  /** Current building capacity. The tick path always supplies this separately from realized production. */
+  /** Current building capacity. The tick path always supplies this separately from realised production. */
   capacityProduction: number;
   /**
    * Persisted consumption satisfaction from the last economy cycle (delivered ÷ demanded, ∈
@@ -101,6 +102,85 @@ export interface PlannedBuild {
   systemId: string;
   buildingType: string;
   count: number;
+}
+
+/**
+ * Why the industry pass's own two-pass allocator dropped a production opportunity it wanted, at the
+ * site named in each comment below (`planFactionBundles`). Housing refusals (`plannedHousingUnits`)
+ * are a separate pass with a separate category (No housing headroom) and never produce one of these.
+ * - "no-capacity" — the site's footprint/deposit slots for the good are used up, checked before
+ *   ranking (`:capUnits <= 0`, first loop) and again after (capacity another opportunity at the same
+ *   site already claimed, second loop). USED UP, not merely absent: the pre-ranking check records
+ *   this only for a site with a gross ceiling for the good (`hasCapacityCeiling`), so a system with
+ *   no deposit for a good — never a plausible builder of it — reports nothing rather than a block.
+ * - "no-input-supplier" — a tier-1+ recipe input has no reachable surplus source.
+ * - "no-consumer" — no reachable system still wants this good: none is reachable at all, or every
+ *   reachable one's remaining shortfall was already claimed by a higher-ranked opportunity.
+ * - "no-whole-level" — capacity floors to fewer than one whole production level.
+ * - "no-labour" — the space/labour fit search found no level count (1..maxLevels) the site could
+ *   both house and staff. This is also where a gate's (academy/complex) OWN space requirement can
+ *   fail even though production alone would have fit — there is no separate "no-gate-space" reason,
+ *   so that case reads as "no-labour" too.
+ */
+export type BuildDropReason =
+  | "no-capacity"
+  | "no-input-supplier"
+  | "no-consumer"
+  | "no-labour"
+  | "no-whole-level";
+
+/**
+ * One system's best-ranked dropped production opportunity from a `planFactionBundles` run — the
+ * alert bar's Build blocked category. Absent (never constructed) for a system with nothing dropped:
+ * nothing was wanted this run, or everything landed.
+ *
+ * `droppedRoi` is the planner's own allocation-priority signal at the point of the drop, not the
+ * `value ÷ work` ROI a landed `BuildProposal` carries — that figure only exists once a bundle's
+ * items, and so its `work`, are fully decided, which a dropped candidate by definition never
+ * reaches. Two shapes:
+ * - A drop AFTER `opportunities.sort()` (capacity/consumer/whole-level/labour, once a candidate has
+ *   been scored and ranked against every other site×good) carries that candidate's own `score` —
+ *   the Σ(served ÷ route cost) figure the sort itself ranked by. It is a real, comparable priority
+ *   signal, just not the value/work ratio the word "ROI" means elsewhere in this file.
+ * - A drop BEFORE ranking — `capUnits <= 0` is the common case, firing before a `BuildOpportunity` is
+ *   even constructed for that site×good, so nothing was ever scored to report. There is no honest
+ *   number to put here: `droppedRoi` is `0`, the additive identity, not a claim that the missed
+ *   opportunity was worthless. A fully saturated system (blocked at every good, always this way) is
+ *   the case this matters for, and it is worth flagging plainly: sorting the category by `droppedRoi`
+ *   puts that system last within it, which is a real tension with "fully saturated" being one of the
+ *   worse things Build blocked can mean.
+ */
+export interface BuildDropReport {
+  systemId: string;
+  reason: BuildDropReason;
+  droppedRoi: number;
+}
+
+/**
+ * One system's best-ranked SCORED production opportunity from a `planFactionBundles` run — the alert
+ * bar's Build opportunity category. It and Build blocked (`BuildDropReport` above) read different
+ * systems on different cycles. `score` is
+ * `BuildOpportunity.score` verbatim — see that interface's own docstring for what it is ("Ordering
+ * only", not comparable between systems, a 13× unit-spread bias across goods) and is NOT normalised,
+ * rescaled or improved here.
+ *
+ * "Best-ranked" bands survival-serving goods (`SURVIVAL_GOODS`, `lib/constants/physical-economy.ts`)
+ * above every other good, then orders by `score` within a band — the same rule the read service
+ * applies when it bands the category for display (`buildOpportunitySortKey`,
+ * `lib/services/alerts.ts`). A single stored score cannot be re-banded after the fact, so
+ * the choice of which one candidate's terms to keep is made here, not downstream: a system whose
+ * highest score belongs to a non-survival good, but which also has ANY survival-serving opportunity,
+ * persists the survival one. On an exact tie (same band, same score) the first one scored in this
+ * run's scan order wins — the deterministic order `remainingByGood` (goods) × `working` (sites) walks.
+ *
+ * Absent for a system with nothing scored this run: every (site, good) pair it was a candidate for
+ * failed one of `BuildOpportunity`'s own gates (no capacity, no input supplier, no reachable consumer,
+ * or a non-positive score) before a `BuildOpportunity` was ever constructed for it.
+ */
+export interface BuildOpportunityReport {
+  systemId: string;
+  goodId: string;
+  score: number;
 }
 
 /**
@@ -227,8 +307,14 @@ interface StructuralAssessment {
   strikeSuppressedProposals: { suppressed: number; eligible: number };
 }
 
-/** Open build levels folded into one system's effective construction state. */
-function queuedLevelsBySystem(openProjects: WorldConstructionProject[]): Map<string, Record<string, number>> {
+/**
+ * Open BUILD-kind project levels, summed by building type — the shared fold behind every "what's
+ * already queued here" read: this module's own `effectiveBuildSystems` (below), the player build
+ * verbs' feasibility check (`lib/services/construction-orders.ts`), and the alert bar's No housing
+ * headroom read (`lib/services/alerts.ts`). `colony_establish` projects never contribute — they
+ * carry no `buildingType`/`levels` in this shape.
+ */
+export function queuedBuildLevelsBySystem(openProjects: WorldConstructionProject[]): Map<string, Record<string, number>> {
   const queued = new Map<string, Record<string, number>>();
   for (const project of openProjects) {
     if (project.kind !== "build") continue;
@@ -239,8 +325,19 @@ function queuedLevelsBySystem(openProjects: WorldConstructionProject[]): Map<str
   return queued;
 }
 
+/** Same fold as `queuedBuildLevelsBySystem`, scoped to one system — for a caller that only ever
+ *  wants a single system's queue rather than the whole faction's. */
+export function queuedBuildLevelsAt(openProjects: WorldConstructionProject[], systemId: string): Record<string, number> {
+  const levels: Record<string, number> = {};
+  for (const project of openProjects) {
+    if (project.kind !== "build" || project.systemId !== systemId) continue;
+    levels[project.buildingType] = (levels[project.buildingType] ?? 0) + project.levels;
+  }
+  return levels;
+}
+
 /**
- * Fold all committed build levels into the planner's effective state. The standing realized rate is
+ * Fold all committed build levels into the planner's effective state. The standing realised rate is
  * preserved; committed capacity can only add its non-negative delta, never rewrite an assessment.
  * Queued consumers also expose their input draw before they land, keeping the supply chain honest.
  */
@@ -248,7 +345,7 @@ function effectiveBuildSystems(
   systems: BuildSystemState[],
   openProjects: WorldConstructionProject[],
 ): BuildSystemState[] {
-  const queuedBySystem = queuedLevelsBySystem(openProjects);
+  const queuedBySystem = queuedBuildLevelsBySystem(openProjects);
   return systems.map((system) => {
     const queued = queuedBySystem.get(system.systemId);
     if (!queued) return system;
@@ -295,7 +392,7 @@ function effectiveBuildSystems(
  * Cancellation is flow-aware: a deficit is cancelled only to the extent reachable exporters' spare
  * surplus actually covers it, netted against other consumers already drawing on that surplus, rather
  * than by the mere presence of any surplus anywhere reachable. An exporter's spare
- * is its sustainable export RATE (`production − demand`) measured on REALIZED output, so capacity
+ * is its sustainable export RATE (`production − demand`) measured on REALISED output, so capacity
  * idled by a strike never cancels someone else's gap — it is not a stock pile either, so a neighbour
  * merely holding and draining stock never cancels a gap. Per good,
  * the reachable exporters' total spare is netted across all reachable gaps at once —
@@ -466,6 +563,24 @@ export function buildableUnits(sys: BuildSystemState, goodId: string): number {
   if (cost <= 0) return 0;
   const remainingGeneral = sys.generalSpace - generalSpaceUsed(sys.buildings);
   return Math.max(0, remainingGeneral / cost);
+}
+
+/**
+ * Could this system host a unit of `goodId` AT ALL — its gross ceiling, ignoring everything already
+ * built? Tier-0 needs at least one deposit slot for the good's resource; tier-1+ needs some general
+ * space and a positive footprint. This is what separates the two states `buildableUnits` returns 0
+ * for alike: a site whose capacity for the good is USED UP (a real, reportable obstacle) and a site
+ * that never had any (a good it was never a plausible builder of — most goods at most systems).
+ */
+function hasCapacityCeiling(sys: BuildSystemState, goodId: string): boolean {
+  const tier = GOOD_TIER_BY_KEY[goodId];
+  if (tier === undefined) return false;
+  if (tier === 0) {
+    const resource = BUILDING_TYPES[goodId]?.resource;
+    if (!resource) return false;
+    return sys.slotCap[resource] > 0;
+  }
+  return effectiveSpaceCost(goodId) > 0 && sys.generalSpace > 0;
 }
 
 /** Additional output of `goodId` a system can host = buildable units × per-unit output. */
@@ -645,7 +760,7 @@ function planFactionBundles(
   routeCost: RouteCost,
   refs: DevelopmentRefs,
   structural: StructuralDeficit[],
-): PlannedBundle[] {
+): { bundles: PlannedBundle[]; blocked: BuildDropReport[]; topOpportunities: BuildOpportunityReport[] } {
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
   // systems are skipped here, gating both the housing and industry passes in one place.
@@ -657,6 +772,40 @@ function planFactionBundles(
   }
 
   const bundles: PlannedBundle[] = [];
+
+  // Per-system best-ranked dropped opportunity this run (BuildDropReport docstring above has the
+  // full reasoning). A ranked drop always wins over an unranked one for the same system — a scored
+  // candidate is strictly more informative than one that was never scored — and within one class the
+  // FIRST one recorded wins: for ranked drops that is the highest-scored, because `opportunities`
+  // (below) is iterated in descending-score order; for unranked drops there is no ranking to prefer
+  // among, so it is whichever the deterministic scan order reaches first.
+  const rankedBlockBySystem = new Map<string, BuildDropReport>();
+  const unrankedBlockBySystem = new Map<string, BuildDropReport>();
+  const recordUnrankedDrop = (systemId: string, reason: BuildDropReason): void => {
+    if (unrankedBlockBySystem.has(systemId)) return;
+    unrankedBlockBySystem.set(systemId, { systemId, reason, droppedRoi: 0 });
+  };
+  const recordRankedDrop = (systemId: string, reason: BuildDropReason, droppedRoi: number): void => {
+    if (rankedBlockBySystem.has(systemId)) return;
+    rankedBlockBySystem.set(systemId, { systemId, reason, droppedRoi });
+  };
+
+  // Per-system best-ranked SCORED opportunity this run (BuildOpportunityReport docstring above has
+  // the full reasoning) — survival-serving goods band above every other good, highest score wins
+  // within a band, first-scored wins an exact tie. Recorded as each candidate is scored below, not
+  // reduced afterward, so it needs no second pass over `opportunities`.
+  const bestOpportunityBySystem = new Map<string, BuildOpportunityReport & { survival: boolean }>();
+  const recordScoredOpportunity = (systemId: string, goodId: string, score: number): void => {
+    const survival = SURVIVAL_GOODS.includes(goodId);
+    const current = bestOpportunityBySystem.get(systemId);
+    if (current) {
+      // A survival-serving current always outranks a non-survival candidate, whatever the scores.
+      if (current.survival && !survival) return;
+      // Same band: keep the higher (or equal — first-scored wins the tie) score.
+      if (current.survival === survival && current.score >= score) return;
+    }
+    bestOpportunityBySystem.set(systemId, { systemId, goodId, score, survival });
+  };
 
   // ── Pass 1: housing relief (housing follows crowding). ──
   // Wherever a fed system's occupancy has outrun its housing, build the levels that bring it
@@ -704,7 +853,7 @@ function planFactionBundles(
     }
   }
 
-  if (remainingByGood.size === 0) return bundles;
+  if (remainingByGood.size === 0) return { bundles, blocked: [], topOpportunities: [] };
 
   // Surplus-holding systems per good — the input-supply side of the tier-1+ gate. A factory's
   // recipe inputs arrive via route-cost-bounded logistics, so the gate checks for a surplus
@@ -734,14 +883,34 @@ function planFactionBundles(
 
     for (const site of working.values()) {
       const capUnits = buildableUnits(site, goodId);
-      if (capUnits <= 0) continue;
-      if (!isTier0 && !inputsAvailable(goodId, site, surplusSystemsByGood, routeCost)) continue;
+      if (capUnits <= 0) {
+        // The literal "no capacity" case, and the one that fires BEFORE a BuildOpportunity is ever
+        // constructed for this site×good — see BuildDropReport's docstring for what droppedRoi means
+        // here (nothing: no rank exists yet).
+        //
+        // Recorded only where the site HAS a ceiling for this good to have exhausted. Every site is
+        // scanned against every good in deficit — food and water always among them — so without this
+        // gate a system with no arable deposit at all would report a blocked food build, and nearly
+        // every economically-active system in the faction would carry a block every run for goods it
+        // could never have built. That is the opposite of what the report means, and it would break
+        // the absence convention the write path relies on: a visited system with no entry landed
+        // everything or wanted nothing.
+        if (hasCapacityCeiling(site, goodId)) recordUnrankedDrop(site.systemId, "no-capacity");
+        continue;
+      }
+      if (!isTier0 && !inputsAvailable(goodId, site, surplusSystemsByGood, routeCost)) {
+        recordUnrankedDrop(site.systemId, "no-input-supplier");
+        continue;
+      }
 
       const reachable = deficitSystemIds
         .map((sysId) => ({ sysId, cost: routeCost(site.systemId, sysId) }))
         .filter((r): r is { sysId: string; cost: number } => r.cost !== null && r.cost > 0)
         .sort((a, b) => a.cost - b.cost);
-      if (reachable.length === 0) continue;
+      if (reachable.length === 0) {
+        recordUnrankedDrop(site.systemId, "no-consumer");
+        continue;
+      }
 
       // Score family goods at their buffed per-unit so a seeded-complex site already ranks
       // higher (the snowball): buffed output means more served demand per unit of capacity.
@@ -759,9 +928,22 @@ function planFactionBundles(
         score += take / r.cost;
         capOutput -= take;
       }
-      if (score <= 0) continue;
+      if (score <= 0) {
+        // Every entry `deficitSystemIds` contains carries a strictly positive shortfall by
+        // construction (see remainingByGood above), `perUnit` is bounded below by `baseUnit > 0` via
+        // familyAnchorBuff (never < 1), and `reachable` is non-empty here — so `score` reaching 0
+        // should not be possible given today's invariants. Guarded rather than assumed, and recorded
+        // as "no-consumer" (the closest fit of the five) rather than forcing a new reason for a state
+        // that should be unreachable.
+        recordUnrankedDrop(site.systemId, "no-consumer");
+        continue;
+      }
 
       opportunities.push({ systemId: site.systemId, goodId, perUnit, reachable, score });
+      // Build opportunity's own signal (distinct from the blocked-drop reports above): every scored
+      // candidate is a real opportunity whether or not it goes on to land, so this records BEFORE the
+      // ranked-consumption loop below decides what actually builds.
+      recordScoredOpportunity(site.systemId, goodId, score);
     }
   }
 
@@ -772,10 +954,23 @@ function planFactionBundles(
     if (!site) continue;
 
     const capUnits = buildableUnits(site, opp.goodId);
-    if (capUnits <= 0) continue;
+    if (capUnits <= 0) {
+      // Post-ranking: a higher-scored opportunity at this same site (a different good) already
+      // claimed the capacity this one needed. `opp.score` is a real, ranked figure here — see
+      // BuildDropReport's docstring.
+      recordRankedDrop(opp.systemId, "no-capacity", opp.score);
+      continue;
+    }
 
     const deficitMap = remainingByGood.get(opp.goodId);
-    if (!deficitMap) continue;
+    if (!deficitMap) {
+      // `opp.goodId` is one of `remainingByGood`'s own keys (opportunities are only ever built from
+      // its entries, and nothing in this function deletes a key from it), so this should not be
+      // reachable given today's invariants. Guarded rather than assumed; recorded as "no-consumer"
+      // (no demand map for this good is, at least, in that family) rather than forcing a new reason.
+      recordRankedDrop(opp.systemId, "no-consumer", opp.score);
+      continue;
+    }
 
     // Output we can usefully place = Σ over reachable remaining shortfalls, capped by capacity.
     let capOutput = capUnits * opp.perUnit;
@@ -788,7 +983,12 @@ function planFactionBundles(
       servedOutput += take;
       capOutput -= take;
     }
-    if (servedOutput <= 0) continue;
+    if (servedOutput <= 0) {
+      // Every reachable system's remaining shortfall was already claimed by a higher-scored
+      // opportunity processed earlier this pass.
+      recordRankedDrop(opp.systemId, "no-consumer", opp.score);
+      continue;
+    }
 
     // Buffed output per unit against the live working copy (reflects any complex already here) —
     // used to convert served demand into produced output when decrementing the deficit.
@@ -821,7 +1021,11 @@ function planFactionBundles(
     // fills the passive buffer). Flooring here would build NOTHING whenever a system's per-tick demand
     // is below a single building's output, stranding every small consumer. Still capped by physical capacity.
     const maxLevels = Math.min(Math.floor(capUnits), Math.ceil(servedOutput / opp.perUnit));
-    if (maxLevels < 1) continue;
+    if (maxLevels < 1) {
+      // Capacity is real (capUnits > 0, checked above) but too small for even one whole level.
+      recordRankedDrop(opp.systemId, "no-whole-level", opp.score);
+      continue;
+    }
 
     const fitFor = (levels: number) => {
       const a = academyLift(site, opp.goodId, levels);
@@ -871,7 +1075,12 @@ function planFactionBundles(
         hi = mid - 1;
       }
     }
-    if (prodLevels < 1) continue;
+    if (prodLevels < 1) {
+      // The space/labour fit search found no level count in [1, maxLevels] the site could both
+      // house (production + any gate it would need) and staff.
+      recordRankedDrop(opp.systemId, "no-labour", opp.score);
+      continue;
+    }
 
     // Apply the complex first (any later opportunity at this site sees the buff it grants), then
     // academies (raise the ceiling on the working copy), then the production — gate before production
@@ -915,7 +1124,20 @@ function planFactionBundles(
     bundles.push({ systemId: site.systemId, role: "industry", items, value, work });
   }
 
-  return bundles;
+  // A ranked drop always outranks an unranked one for the same system (see the docstring on the two
+  // maps above); a system with neither simply has nothing to report.
+  const blocked: BuildDropReport[] = [];
+  const blockedSystemIds = new Set([...rankedBlockBySystem.keys(), ...unrankedBlockBySystem.keys()]);
+  for (const systemId of blockedSystemIds) {
+    const report = rankedBlockBySystem.get(systemId) ?? unrankedBlockBySystem.get(systemId);
+    if (report) blocked.push(report);
+  }
+
+  const topOpportunities: BuildOpportunityReport[] = [...bestOpportunityBySystem.values()].map(
+    ({ systemId, goodId, score }) => ({ systemId, goodId, score }),
+  );
+
+  return { bundles, blocked, topOpportunities };
 }
 
 /**
@@ -932,7 +1154,10 @@ export function planFactionBuilds(
   advance = 1,
 ): PlannedBuild[] {
   const assessment = assessStructuralDeficits(systems, [], routeCost, false, advance);
-  return planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits).flatMap((bundle) =>
+  // The blocked-drop report is Build blocked's alert-bar signal, scoped to the tick path
+  // (`planFactionProposals` below) — this engine-test surface deliberately discards it.
+  const { bundles } = planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits);
+  return bundles.flatMap((bundle) =>
     bundle.items.map((item) => ({ systemId: bundle.systemId, buildingType: item.buildingType, count: item.levels })),
   );
 }
@@ -944,6 +1169,12 @@ export interface FactionBuildPlan {
   /** Carried through from `assessStructuralDeficits` unchanged — see `StructuralAssessment`'s
    *  docstring. Calibration instrumentation only. */
   strikeSuppressedProposals: { suppressed: number; eligible: number };
+  /** This run's best-ranked dropped production opportunity per system that had one — see
+   *  `BuildDropReport`. Persisted world state, unlike `strikeSuppressedProposals` above. */
+  blockedBuilds: BuildDropReport[];
+  /** This run's best-ranked SCORED production opportunity per system that had one — see
+   *  `BuildOpportunityReport`. Persisted world state, alongside `blockedBuilds` above. */
+  buildOpportunities: BuildOpportunityReport[];
 }
 
 /**
@@ -965,7 +1196,8 @@ export function planFactionProposals(
   const assessment = assessStructuralDeficits(systems, openProjects, routeCost, true, advance);
   const factionBySystem = new Map(systems.map((system) => [system.systemId, system.factionId]));
   const proposals: BuildProposal[] = [];
-  for (const bundle of planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits)) {
+  const { bundles, blocked, topOpportunities } = planFactionBundles(assessment.systems, routeCost, refs, assessment.deficits);
+  for (const bundle of bundles) {
     const factionId = factionBySystem.get(bundle.systemId);
     if (factionId === null || factionId === undefined) continue;
     proposals.push({
@@ -981,6 +1213,8 @@ export function planFactionProposals(
   return {
     proposals, persistenceUpdates: assessment.persistenceUpdates,
     strikeSuppressedProposals: assessment.strikeSuppressedProposals,
+    blockedBuilds: blocked,
+    buildOpportunities: topOpportunities,
   };
 }
 /** A controlled system a faction could settle: its substrate + the developed seed source (from hop data). */
@@ -1113,31 +1347,25 @@ export function sizeColonyEstablish(
 }
 
 /**
- * Emit a colony-establish proposal for each controlled candidate above the ROI floor, scored on the same
- * demand-rate axis as a build (docs/active/gameplay/colonisation.md). Faction-level aggregates
+ * The pre-gate colony assessment: score each controlled candidate on the same demand-rate axis as a
+ * build (docs/active/gameplay/colonisation.md), with no funding applied. Faction-level aggregates
  * (territory saturation σ, and the unmet demand each missing resource unblocks) are computed once from the
  * faction's DEVELOPED systems; each candidate is then valued with `colonyValue` and sized to its land —
  * seed capped to the whole-level habitable capacity and housing sized to house it, so the landed colony has
- * `popCap ≥ seedPop` (viable by construction). A candidate already being established (open project) or
- * below the habitable floor / lacking a whole housing level is skipped. The `Map`/`Set` aggregates are
- * transient — nothing here reaches `World` state.
+ * `popCap ≥ seedPop` (viable by construction). A candidate already being established (open project),
+ * below the habitable floor / lacking a whole housing level, or worth less than the labour its seed
+ * drains is skipped. The `Map`/`Set` aggregates are transient — nothing here reaches `World` state.
  *
- * Two budgets then truncate the value-ordered list, and both are prefix truncations of that one order,
- * so composing them is order-independent — the result is the shorter prefix either way. The MONEY gate
- * (`budget`, omitted ⇒ founding is unpriced: the engine-test and independents path) walks the order with
- * a running balance, spending each acceptance's own `charter + headroom × projected material bill` and
- * ending the list at the first candidate it cannot cover. The SETTLER-SUPPLY gate below it caps the
- * count against drawable labour. Beyond those there is no per-cycle cap: every affordable candidate is
- * proposed and the pool decides which advance (a proposal persists as an in-flight project only once
- * funded — enforced by the processor's persist-if-funded).
+ * This assessment is what `WorldSystem.colonyOpportunity` persists — an opportunity the faction
+ * cannot yet afford is still an opportunity — while `planFactionColonyProposals` below applies the
+ * money and settler gates to decide what actually gets founded.
  */
-export function planFactionColonyProposals(
+export function assessColonyCandidates(
   factionId: string,
   developed: BuildSystemState[],
   candidates: ColonyEstablishCandidate[],
   openColonyProjects: WorldColonyEstablishProject[],
   params: ColonyEstablishParams,
-  budget?: ColonyFoundingBudget,
 ): ColonyProposal[] {
   if (candidates.length === 0) return [];
 
@@ -1152,16 +1380,6 @@ export function planFactionColonyProposals(
   const bySystemId = new Map(developed.map((s) => [s.systemId, s]));
 
   const inFlight = new Set(openColonyProjects.map((p) => p.systemId));
-
-  // What committing to each candidate would cost in money, by target system. The charter is the same
-  // for every candidate a faction weighs (it is quoted off the faction's own maintenance bill), so only
-  // the material projection varies. Built during the loop below because it needs the land-capped
-  // `seedPop` and the source's market rows, neither of which exists before sizing.
-  const commitmentCostBySystem = new Map<string, number>();
-  const charter =
-    budget === undefined
-      ? 0
-      : charterFee(budget.maintenanceBill, { mult: params.charterMult, min: params.charterMin });
 
   const proposals: ColonyProposal[] = [];
   for (const c of candidates) {
@@ -1195,25 +1413,53 @@ export function planFactionColonyProposals(
     const value = colonyValue(c, unblocked, sigma, params) - popCost;
     if (value <= 0) continue; // net-negative — the labour it would drain outweighs the colony's worth
 
-    if (budget !== undefined) {
-      // The projection is deliberately the UNCAPPED want: what the founder will actually be able to
-      // spare over the establish's life is not knowable here, and over-reserving is the safe
-      // direction. A source outside the developed set contributes no material projection — its market
-      // rows are not visible — leaving the charter as the whole quote for that candidate.
-      const projectedBill = foundingGoodsValue(
-        projectedManifestWant(source?.goods ?? [], seedPop, params.foundingStockCover),
-        params.economyScale,
-      );
-      commitmentCostBySystem.set(
-        c.systemId,
-        foundingCommitmentCost(charter, projectedBill, params.gateHeadroom),
-      );
-    }
-
     proposals.push({
       kind: "colony_establish", factionId, systemId: c.systemId,
       sourceSystemId: c.sourceSystemId, seedPop, housingLevels, value, work,
     });
+  }
+  return proposals;
+}
+
+/**
+ * What the faction actually founds: the assessment above, truncated by two budgets. Both are prefix
+ * truncations of the one value-descending order, so composing them is order-independent — the result
+ * is the shorter prefix either way. The MONEY gate (`budget`, omitted ⇒ founding is unpriced: the
+ * engine-test and independents path) walks the order with a running balance, spending each
+ * acceptance's own `charter + headroom × projected material bill` and ending the list at the first
+ * candidate it cannot cover. The SETTLER-SUPPLY gate below it caps the count against drawable
+ * labour. Beyond those there is no per-cycle cap: every affordable candidate is proposed and the pool
+ * decides which advance (a proposal persists as an in-flight project only once funded — enforced by
+ * the processor's persist-if-funded).
+ */
+export function planFactionColonyProposals(
+  factionId: string,
+  developed: BuildSystemState[],
+  candidates: ColonyEstablishCandidate[],
+  openColonyProjects: WorldColonyEstablishProject[],
+  params: ColonyEstablishParams,
+  budget?: ColonyFoundingBudget,
+): ColonyProposal[] {
+  const proposals = assessColonyCandidates(factionId, developed, candidates, openColonyProjects, params);
+
+  // What committing to each candidate would cost in money, by target system. The charter is the same
+  // for every candidate a faction weighs (it is quoted off the faction's own maintenance bill), so
+  // only the material projection varies. The projection is deliberately the UNCAPPED want: what the
+  // founder will actually be able to spare over the establish's life is not knowable at commitment,
+  // and over-reserving is the safe direction. A source outside the developed set contributes no
+  // material projection — its market rows are not visible — leaving the charter as the whole quote
+  // for that candidate.
+  const commitmentCostBySystem = new Map<string, number>();
+  if (budget !== undefined && proposals.length > 0) {
+    const bySystemId = new Map(developed.map((s) => [s.systemId, s]));
+    const charter = charterFee(budget.maintenanceBill, { mult: params.charterMult, min: params.charterMin });
+    for (const p of proposals) {
+      const projectedBill = foundingGoodsValue(
+        projectedManifestWant(bySystemId.get(p.sourceSystemId)?.goods ?? [], p.seedPop, params.foundingStockCover),
+        params.economyScale,
+      );
+      commitmentCostBySystem.set(p.systemId, foundingCommitmentCost(charter, projectedBill, params.gateHeadroom));
+    }
   }
 
   // Affordability gate: a candidate is proposed only while the faction's working balance still covers

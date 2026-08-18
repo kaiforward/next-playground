@@ -2,7 +2,7 @@
  * Cohorted harness metrics — the report's supply readings split by which role a market
  * plays for a good, and what kind of world a system is.
  *
- * Every galaxy-wide analyzer beside this one keeps its own definition; this module is
+ * Every galaxy-wide analyser beside this one keeps its own definition; this module is
  * additive, so a figure measured against the aggregate stays comparable.
  */
 
@@ -305,14 +305,14 @@ export function computeWorldCohorts(
       if (s.unrest > strikeThreshold) a.striking += 1;
       // A stale (emptyBasket) system's stored memory is a skipped-update artifact, not a current
       // reading — excluded from the distributions and counted instead, exactly like the
-      // galaxy-wide fold in summarizeSupplyRegimes.
+      // galaxy-wide fold in summariseSupplyRegimes.
       if (state.emptyBasket) {
         a.staleExpectationCount++;
       } else {
         a.expectations.push(state.expectationStored);
         a.grievances.push(state.grievance);
       }
-      // Exhaustive over every member — see population-analysis.ts's summarizeSupplyRegimes,
+      // Exhaustive over every member — see population-analysis.ts's summariseSupplyRegimes,
       // which this fold must never diverge from (both read the same perSystemSupplyState map).
       switch (state.regime) {
         case "supplied": a.supplied += 1; break;
@@ -366,7 +366,7 @@ export function computeWorldCohorts(
  * `totalTeardownLevels`/`totalOvershootDeaths` are summed once over the settled galaxy, never as a
  * sum of `byCohort`'s rows.
  */
-export function summarizeEpisodeCostsByCohort(
+export function summariseEpisodeCostsByCohort(
   totals: EpisodeCostTotals,
   systems: TickSystem[],
   homeworldIds: Set<string>,
@@ -422,7 +422,7 @@ function quartileBucket(rank: number, n: number): number {
  * `population-analysis.ts`'s `computeTrailingProvisionVariance` output; a system absent from it
  * (too few trailing samples) is excluded from every bucket, not folded into bucket 0.
  */
-export function summarizeRatchetCheck(
+export function summariseRatchetCheck(
   varianceBySystem: ReadonlyMap<string, number>,
   window: number,
   systems: TickSystem[],

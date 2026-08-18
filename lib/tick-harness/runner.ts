@@ -1,6 +1,6 @@
 /**
  * Calibration harness runner — generate a world, loop `runWorldTick`,
- * snapshot/analyze. A thin wrapper over the shared tick pipeline
+ * snapshot/analyse. A thin wrapper over the shared tick pipeline
  * (`lib/world/tick.ts`): `runTickHarness` exists to drive the real engine for
  * calibration health checks, not to simulate player trading. There is no bot
  * layer; it runs the same code constants the live game does, except for an
@@ -11,21 +11,21 @@ import { generateWorld } from "@/lib/world/gen";
 import { runWorldTick, toTickSystems } from "@/lib/world/tick";
 import {
   takeMarketSnapshot, computeMarketHealth, computeKneeBinding, SNAPSHOT_INTERVAL,
-  newDemandHuntingAccumulator, sampleDemandHunting, summarizeDemandHunting,
+  newDemandHuntingAccumulator, sampleDemandHunting, summariseDemandHunting,
 } from "./market-analysis";
 import {
   trackEventLifecycles,
   flushActiveEvents,
   computeEventImpacts,
 } from "./event-analysis";
-import { summarizeLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
+import { summariseLogistics, fundingBoundCensus, LOGISTICS_WARMUP_TICKS } from "./logistics-analysis";
 import type { LogisticsBudgetTotals } from "./logistics-analysis";
 import {
-  summarizeBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
-  summarizeFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
-  newInFlightEstablishTotals, sampleOpenColonies, summarizeFoundingLifecycle, summarizeFounderCohort,
+  summariseBuildBursts, trackFoundedColonies, sampleFoundedColonies, hasColonyAwaitingSample,
+  summariseFoundingStock, recordFoundingManifest, newFoundingStallTotals, recordFoundingStall,
+  newInFlightEstablishTotals, sampleOpenColonies, summariseFoundingLifecycle, summariseFounderCohort,
   newFoundingTrajectoryTotals, sampleFoundingTrajectory, hasColonyInTrajectoryWindow,
-  summarizeFoundingTrajectory,
+  summariseFoundingTrajectory,
 } from "./build-analysis";
 import type {
   BuildCommitmentRecord, FoundedColonyRecord, FoundingStagingRecord, FoundingStagingTotals,
@@ -33,16 +33,16 @@ import type {
 } from "./build-analysis";
 import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import {
-  sampleTreasuries, summarizeTreasuries, recordSettledCycles, summarizeFoundingEra,
+  sampleTreasuries, summariseTreasuries, recordSettledCycles, summariseFoundingEra,
 } from "./treasury-analysis";
 import type { FactionCycleRecord, TreasurySnapshot } from "./treasury-analysis";
 import {
   newCharterCensus, recordCharterCensus, newStagedLedgerCensus, recordStagedLedger,
-  summarizeConservation,
+  summariseConservation,
 } from "./conservation-analysis";
 import {
   computeRoleCoverLevels, computeWorldCohorts, logisticsTargetsByKey, marketRolesByKey,
-  summarizeEpisodeCostsByCohort, summarizeRatchetCheck,
+  summariseEpisodeCostsByCohort, summariseRatchetCheck,
 } from "./cohort-analysis";
 import {
   newEpisodeCostTotals, recordEpisodeCosts, computeTrailingProvisionVariance,
@@ -434,10 +434,10 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     ratePerEligible: strikeEligibleTotal > 0 ? strikeSuppressedTotal / strikeEligibleTotal : 0,
   };
 
-  const episodeCosts = summarizeEpisodeCostsByCohort(episodeCostTotals, finalTickSystems, homeworldIds);
-  const foundingTrajectory = summarizeFoundingTrajectory(foundingTrajectoryTotals);
+  const episodeCosts = summariseEpisodeCostsByCohort(episodeCostTotals, finalTickSystems, homeworldIds);
+  const foundingTrajectory = summariseFoundingTrajectory(foundingTrajectoryTotals);
   const provisionVarianceBySystem = computeTrailingProvisionVariance(provisionSnapshots, RATCHET_TRAILING_WINDOW);
-  const provisionRatchet = summarizeRatchetCheck(
+  const provisionRatchet = summariseRatchetCheck(
     provisionVarianceBySystem, RATCHET_TRAILING_WINDOW, finalTickSystems, currentMarkets, homeworldIds,
     world.events,
   );
@@ -450,11 +450,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     roleCoverLevels,
     kneeBinding,
     marketRoles,
-    demandHunting: summarizeDemandHunting(demandHunting, logisticsFlows),
+    demandHunting: summariseDemandHunting(demandHunting, logisticsFlows),
     worldCohorts,
     eventImpacts,
-    logisticsActivity: summarizeLogistics(logisticsFlows, logisticsBudgetTotals, fundingBoundFlags),
-    buildBurstSummary: summarizeBuildBursts(buildCommitments),
+    logisticsActivity: summariseLogistics(logisticsFlows, logisticsBudgetTotals, fundingBoundFlags),
+    buildBurstSummary: summariseBuildBursts(buildCommitments),
     regionOverview,
     label,
     elapsedMs: performance.now() - start,
@@ -464,15 +464,15 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     populationSnapshots,
     migrationThroughput,
     strikeSuppression,
-    foundingStock: summarizeFoundingStock(foundedColonies),
-    foundingLifecycle: summarizeFoundingLifecycle(
+    foundingStock: summariseFoundingStock(foundedColonies),
+    foundingLifecycle: summariseFoundingLifecycle(
       foundedColonies, colonyCommitments, inFlightEstablishes, foundingStalls, constructionInterval,
     ),
-    founderCohort: summarizeFounderCohort(finalTickSystems, currentMarkets, founderSystemIds),
-    treasurySummary: summarizeTreasuries(world.treasuries, treasurySnapshots),
-    foundingEra: summarizeFoundingEra(factionCycles),
+    founderCohort: summariseFounderCohort(finalTickSystems, currentMarkets, founderSystemIds),
+    treasurySummary: summariseTreasuries(world.treasuries, treasurySnapshots),
+    foundingEra: summariseFoundingEra(factionCycles),
     treasurySnapshots,
-    conservation: summarizeConservation({
+    conservation: summariseConservation({
       charters: charterCensus,
       factionCycles,
       startingBalances,

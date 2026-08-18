@@ -12,7 +12,7 @@ import { QueryBoundary } from "@/components/ui/query-boundary";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StarGlyph } from "@/components/system/star-glyph";
 import { SystemDangerBadge } from "@/components/system/system-danger-badge";
-import { formatPeople, splitMagnitude } from "@/lib/utils/format";
+import { formatPeople, splitCompactNumber } from "@/lib/utils/format";
 import { SUN_CLASSES } from "@/lib/constants/bodies";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { useSystemVitals } from "@/lib/hooks/use-system-vitals";
@@ -23,8 +23,8 @@ import {
   VitalTile,
   VitalGrid,
   GhostVitalTile,
-  CompositionBar,
 } from "@/components/ui/vital-tile";
+import { CompositionBar } from "@/components/ui/composition-bar";
 import { BADGE_COLOR_VAR } from "@/components/ui/badge";
 import { bandLabel, bandTone } from "@/components/system/provision-view";
 import type { GovernmentType } from "@/lib/types/game";
@@ -78,7 +78,7 @@ function SystemOverviewContent({ systemId }: { systemId: string }) {
     vitals.visibility === "visible" ? (
       (() => {
         const { stability, development, population, provision } = vitals;
-        const pop = splitMagnitude(formatPeople(population.headcount));
+        const pop = splitCompactNumber(formatPeople(population.headcount));
         return (
           <VitalGrid columns={4}>
             <VitalTile

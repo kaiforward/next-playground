@@ -185,6 +185,15 @@ cannot reach.
   spec-authored formula is not deriving one; `file:line` verified by reading, not grepping;
   the spec's impact table is the licence; **booked at a gate** as a third Not-covered state.
 
+- **`/build-plan` + `/implement-plan` second revision (2026-08-18)** — the six dogfood frictions
+  from the alert-bar run folded in (serial-by-default dispatch with a ledgered deferral when
+  parallelised; exact-anchor ledger edits; `Files` declared a floor with deviations recorded;
+  contradiction and authored-values checks named in the self-review; the effort-dial honesty note),
+  plus duplication prevention moved to plan time: UI tasks carry a `Reuse` field surveyed against
+  the real component files, and a plan-level **Net-new UI** section is an owner gate before
+  `/implement-plan` — decided after the duplication sweep showed the catch-at-review backstop
+  firing on copies the plans had quietly authorised.
+
 ## Left to do
 
 1. **`/brainstorm`** — prose discussion, no forced-choice lists, terminal state is `/measure` rather

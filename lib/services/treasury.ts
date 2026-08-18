@@ -33,6 +33,7 @@ export function getFactionTreasury(factionId: string): FactionTreasuryData {
     bands: treasury.bands,
     funded: treasury.funded,
     net,
+    foundingCommitted: treasury.pendingFounding,
     lastSettlement: s,
   };
 }

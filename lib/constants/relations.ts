@@ -40,7 +40,7 @@ export const DRIFT_COEFFICIENTS = {
 /**
  * Persistent per-tick delta from the doctrine pair. Positive = compatibility,
  * negative = clash. Symmetric: `[A][B] === [B][A]` by construction. Low
- * magnitudes — doctrine biases behavior; it doesn't dominate it.
+ * magnitudes — doctrine biases behaviour; it doesn't dominate it.
  *
  * Sourced from faction-system.md §2 ("Doctrine incompatibility" / "Doctrine
  * compatibility" drivers).
@@ -192,7 +192,7 @@ export const RELATION_HISTORY_MAX = 10;
  * `RELATIONS_OWNED_LIFECYCLE` guard, so the value never actually drives a
  * transition — but it must stay an ordinary finite integer, since `World` is
  * persisted through `JSON.stringify` and a sentinel like `Infinity` would
- * serialize to `null` and silently corrupt the save.
+ * serialise to `null` and silently corrupt the save.
  *
  * Two billion ticks ≈ 63 years at one tick/second, so this is "forever" for
  * any conceivable game lifetime.

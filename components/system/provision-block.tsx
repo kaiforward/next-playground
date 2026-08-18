@@ -7,7 +7,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { Badge, BADGE_COLOR_VAR } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { TrackRule } from "@/components/ui/track-rule";
+import { TrackMarker } from "@/components/ui/track-marker";
 import { bandLabel, bandTone, provisionScaleSegments, provisionTrackTone } from "@/components/system/provision-view";
 import type { SupplyRegime } from "@/lib/engine/population";
 import { splitNeedsLedger } from "@/components/system/needs-view";
@@ -51,14 +51,14 @@ function NeedsLedger({ needs }: { needs: PopNeedData[] }) {
 /**
  * The Provisioned track — the four axis segments from `provisionScaleSegments` (deprived /
  * rationing / strained / supplied, derived from the same constants the classifier bins on), a solid
- * rule at today's level and a dashed rule at the remembered level. Deliberate restraint from the
+ * marker at today's level and a dashed marker at the remembered level. Deliberate restraint from the
  * design pass, whose earlier over-laboured version was rejected: no band-name labels on the track
- * (the chip above already names the current band) and no inline captions on the two rules (the "Now
+ * (the chip above already names the current band) and no inline captions on the two markers (the "Now
  * X% / Used to Y%" key underneath carries both numbers).
  *
  * Under Famine the whole track takes the famine tone (`provisionTrackTone`) and its segment dividers
  * come off, so it reads as one unbroken emergency bar rather than four bands that happen to share a
- * colour. The rules stay where they are: a famine world's delivery really can sit high on the axis,
+ * colour. The markers stay where they are: a famine world's delivery really can sit high on the axis,
  * and the track saying so while the chip says Famine is exactly the contradiction the recolour
  * removes.
  */
@@ -77,16 +77,16 @@ function ProvisionTrack({ band, pct, expectationPct }: { band: SupplyRegime; pct
           />
         ))}
       </div>
-      {/* Solid rule — today's level. */}
-      <TrackRule pct={pct} color="var(--color-text-primary)" />
-      {/* Dashed rule — the remembered level. */}
-      <TrackRule pct={expectationPct} color="var(--color-text-secondary)" dashed />
+      {/* Solid marker — today's level. */}
+      <TrackMarker pct={pct} color="var(--color-text-primary)" />
+      {/* Dashed marker — the remembered level. */}
+      <TrackMarker pct={expectationPct} color="var(--color-text-secondary)" dashed />
     </div>
   );
 }
 
 /**
- * Provisioned — band chip, the percentage, the band track with today's/remembered rules and their
+ * Provisioned — band chip, the percentage, the band track with today's/remembered markers and their
  * key, then the existing needs ledger directly beneath as its per-good decomposition. Composes the
  * exact per-good ledger `population-panel.tsx` used to own; unmoved logic, relocated presentation.
  * `"use client"` because the ledger's met-tail toggle is stateful.
