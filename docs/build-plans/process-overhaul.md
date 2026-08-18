@@ -196,8 +196,15 @@ cannot reach.
 
 ## Left to do
 
-1. **`/brainstorm`** — prose discussion, no forced-choice lists, terminal state is `/measure` rather
-   than a spec.
+1. **`/brainstorm` (done 2026-08-18)** — shipped at `.agents/skills/brainstorm/`: prose only with
+   forced-choice lists banned outright (Kai's correction: a selection list railroads the decision),
+   one decision at a time; a brainstorm-depth sweep of the hazard-worksheet system list (events
+   always written, never mentally checked) so ideas die on contact with shipped mechanics before
+   anything is measured; premises classified checkable / definitional / hypothesis, with the
+   definitional class carrying the rates-never-set-definitions rule; terminal state is a working
+   file whose `## Idea` section ends in a committed falsifier (mechanism A). **Dogfood owed: the
+   timescale queue item is its first outing** — same bar as the other skills, frictions folded back
+   same-day.
 2. **`/feature-spec`** — four-field header, hazard worksheet, refuses to start without evidence.
 3. **`/implement-plan` (done 2026-08-07)** — the execution stage, previously the only unnamed step
    in the sequence and the last superpowers dependency (executing-plans / subagent-driven-development
