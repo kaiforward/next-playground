@@ -1464,6 +1464,35 @@ describe("getAlertData", () => {
 
       expect(category("colony_opportunity").instances.map((i) => i.systemId)).not.toContain(target);
     });
+
+    it("drops the row the moment a colony-establish project opens at the system, stored signal or not", () => {
+      // The stored colonyOpportunity only clears at the next planner run, but a forming colony is
+      // the spec's own clearing condition — derived at read time so ordering drops the row
+      // immediately and cancelling returns it, with no cycle lag either way.
+      const world = seatWorld();
+      const pid = world.player!.controlledFactionId;
+      const [target] = spareSystemIds(world, 1);
+      const withTarget = withSystems(
+        world,
+        new Map([[target, candidatePatch(pid, { colonyOpportunity: { value: 100, work: 10 } })]]),
+      );
+      const forming = withAutomation(withTarget, { colonisation: false });
+      setWorld({
+        ...forming,
+        constructionProjects: [
+          {
+            kind: "colony_establish", id: "e1", origin: "player", factionId: pid,
+            systemId: target, sourceSystemId: "src", seedPop: 2, housingLevels: 1,
+            workTotal: 100, workDone: 0, stagedManifest: [], charterPaid: false, stalledCycles: 0,
+          },
+        ],
+      });
+      expect(category("colony_opportunity").instances.map((i) => i.systemId)).not.toContain(target);
+
+      // Cancel (project removed) → the row is back, from the same stored signal.
+      setWorld({ ...getWorld(), constructionProjects: [] });
+      expect(category("colony_opportunity").instances.map((i) => i.systemId)).toContain(target);
+    });
   });
 
   describe("Build opportunity — banding and within-band sort", () => {

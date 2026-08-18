@@ -555,10 +555,19 @@ export function getAlertData(): AlertData {
   const controlled = world.systems.filter(
     (s) => s.factionId === player.controlledFactionId && s.control === "controlled",
   );
+  // A colony starting to form CLEARS the row (the spec's own clearing condition), and the stored
+  // signal only learns that at the next planner run — so the forming exclusion is derived here, at
+  // read time, from the projects themselves. That makes the row drop the moment the player orders
+  // the colony and return the moment a cancel deletes the project, with no cycle lag either way.
+  const formingColonyAt = new Set<string>();
+  for (const p of world.constructionProjects) {
+    if (p.kind === "colony_establish") formingColonyAt.add(p.systemId);
+  }
   const colonyOpportunity: AlertInstance[] = [];
   if (!player.automation.colonisation) {
     for (const system of controlled) {
       if (system.colonyOpportunity === undefined) continue;
+      if (formingColonyAt.has(system.id)) continue;
       const { value, work } = system.colonyOpportunity;
       if (work <= 0) continue;
       const roi = value / work;

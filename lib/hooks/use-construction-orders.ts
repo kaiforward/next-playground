@@ -4,11 +4,18 @@ import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-q
 import { apiMutate, apiDelete } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
 
-/** Every order verb dirties the same three surfaces: queues, the faction summary, and feasibility. */
+/** Every order verb dirties the same surfaces: queues, the faction summary, feasibility, the
+ *  Tracker (forming colonies / funded builds), the alert bar (a colony order consumes its Colony
+ *  opportunity row, a cancel returns it), and ownership (the map's forming settlement mark).
+ *  Refreshing them here is what makes a player action land on every surface immediately instead of
+ *  at the next tick broadcast. */
 function invalidateOrderSurfaces(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.systemConstructionAll });
   void queryClient.invalidateQueries({ queryKey: queryKeys.factionConstructionAll });
   void queryClient.invalidateQueries({ queryKey: queryKeys.systemBuildOptionsAll });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
+  void queryClient.invalidateQueries({ queryKey: queryKeys.ownership });
 }
 
 /** Queue a build/upgrade order for one building type at a system (`POST .../build-orders`). */
