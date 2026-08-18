@@ -75,7 +75,8 @@ export function colonyEligibility(
   world: World, factionId: string, system: WorldSystem,
 ):
   | { eligible: true; sourceSystemId: string; charter: number; projectedBill: number }
-  | { eligible: false; reason: ColonyBlockReason } {
+  | { eligible: false; reason: "insufficient_funds"; sourceSystemId: string; charter: number; projectedBill: number }
+  | { eligible: false; reason: Exclude<ColonyBlockReason, "insufficient_funds"> } {
   if (world.constructionProjects.some((p) => p.kind === "colony_establish" && p.systemId === system.id)) {
     return { eligible: false, reason: "already_forming" };
   }
@@ -107,7 +108,12 @@ export function colonyEligibility(
   const workingBalance =
     treasury === undefined ? 0 : foundingWorkingBalance(treasury.balance, treasury.pendingFounding);
   const cost = foundingCommitmentCost(charter, projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM);
-  if (cost > workingBalance) return { eligible: false, reason: "insufficient_funds" };
+  if (cost > workingBalance) {
+    // The money block still carries the quote it was refused against — the one ineligible reason
+    // that is priced, so the UI can show what the verb WOULD cost. The physical blocks above bail
+    // before a source or sizing exists, so there is nothing to quote on those branches.
+    return { eligible: false, reason: "insufficient_funds", sourceSystemId: source, charter, projectedBill };
+  }
 
   return { eligible: true, sourceSystemId: source, charter, projectedBill };
 }
