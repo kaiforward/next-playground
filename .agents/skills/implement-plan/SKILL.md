@@ -5,11 +5,11 @@ description: Execute a committed build plan task-by-task with dispatched impleme
 
 # /implement-plan — the plan, executed without leaks
 
-This stage turns a build plan into a PR. The generic execution skills it replaces have never heard
-of `Proves`, red-proof, the SDD ledger or the per-task review gate — and that seam is where ~278
-unpinned behaviours once leaked through a fully filled plan. The two leaks this skill exists to
-close: **tests that were never seen red** pin nothing, and **issues noted per-task and not fixed
-per-task** are forgotten by the time implementation ends, then expensively re-found at review.
+This stage turns a build plan into a PR. Generic execution skills have never heard of `Proves`,
+red-proof, the SDD ledger or the per-task review gate — a plan executed without them leaks. The two
+leaks this skill exists to close: **tests that were never seen red** pin nothing, and **issues noted
+per-task and not fixed per-task** are forgotten by the time implementation ends, then expensively
+re-found at review.
 
 **Entry condition: the plan exists and is committed** — `docs/build-plans/<feature>.md` with
 four-field tasks (`Files / Interface / Proves / Consumes`, `Proves` a detection list; UI tasks also
@@ -41,11 +41,11 @@ source task · `file:line` · one-line claim. There are exactly two dispositions
 **fixed now** or **ledgered here**. A finding that is neither is dropped work, and dropping it
 silently is the failure this file exists to prevent. "Minor" is a severity, not a disposition.
 
-**Edit the ledger with exact anchors, never a scripted find-and-replace.** A scripted replace
-no-op'd twice on one feature — the anchor text had drifted since the previous edit — and silently
-dropped two recorded findings, which is the one loss the ledger exists to prevent and is invisible
-by construction. Use an edit that errors on no-match or assert the match count, and re-read
-`## Issues` end to end before every fix wave rather than trusting it accreted correctly.
+**Edit the ledger with exact anchors, never a scripted find-and-replace.** A scripted replace whose
+anchor has drifted no-ops silently and reports success — a dropped ledger row is the one loss this
+file exists to prevent, and it is invisible by construction. Use an edit that errors on no-match or
+assert the match count, and re-read `## Issues` end to end before every fix wave rather than
+trusting it accreted correctly.
 
 ## Per task
 
@@ -73,8 +73,8 @@ by construction. Use an edit that errors on no-match or assert the match count, 
 5. **The session verifies the claims.** Run the suite and build yourself (red-proof re-execution
    is the reviewer's job in step 3 — the session does not re-break tests itself); and treat
    **"the instrument prints X" as a claim verified only by running the instrument** and matching
-   its output against the plan — a plan once asserted its gate reads were "all now printed" while
-   two had never been implemented, and nothing caught it until the gate ran.
+   its output against the plan — an unimplemented read looks identical to an implemented one in
+   prose, and nothing else catches it before the gate runs.
 6. **Commit per task**, message naming the task. Update the ledger before moving on.
 
 ## Gates

@@ -40,20 +40,17 @@ Reuse:      <the existing components/ui|form pieces, hooks and helpers this task
 
 **`Reuse` is where duplication is prevented — at the source, not at review.** The survey AGENTS.md
 requires before building any component happens here, once per feature against the real files,
-instead of once per implementer, chunk-scoped and alone — which is how five byte-identical hooks
-landed across five PRs and a track marker got hand-rolled twelve lines from the component that
-already drew it. Each named component is verified by **reading its props**, not remembered. A task
-that finds nothing to compose writes `New: <name>` with the reason — and the search that failed is
-run in the words a *user* of the behaviour would type, because the name-is-the-bug rule cuts both
-ways: search for what it does, and name the new thing for what it does. `npm run duplication` at
-review is the backstop, never the plan.
+instead of once per implementer, chunk-scoped and alone — the copy an implementer cannot see is the
+one that gets rewritten. Each named component is verified by **reading its props**, not remembered.
+A task that finds nothing to compose writes `New: <name>` with the reason — and the search that
+failed is run in the words a *user* of the behaviour would type, because the name-is-the-bug rule
+cuts both ways: search for what it does, and name the new thing for what it does. `npm run
+duplication` at review is the backstop, never the plan.
 
 **`Files` is a floor, not a contract.** The implementer reports in the ledger any file touched
 beyond the list and any listed file that turned out to need no change; neither is a defect, both are
-recorded. One feature's lists were wrong in both directions — a named file the engine never read,
-two omitted test files the detection list could not be pinned without — so treating the list as
-exhaustive under-delivers and treating it as a ceiling over-delivers. The floor semantic is the
-contract.
+recorded. An implementer treating the list as exhaustive under-delivers; one treating it as a
+ceiling over-delivers — the floor semantic is the contract, so neither reading is left to guess.
 
 The `Interface` field is the plan's actual content. "Add the donor gate" plans nothing;
 "`donorDrawable(market, good): number`, replacing the `surplusDrawable` read in
@@ -64,9 +61,8 @@ true if the task were built wrong — a boundary that doesn't hold, a contention
 branch arm that never fires, a test that passes against an empty implementation (the vacuity check).
 At implementation the red-proof gate executes this list item by item: break the listed behaviour,
 watch the named test fail, restore. A task that pins one premise leaves every other behaviour
-unpinned — a filled plan in the old one-premise format let hundreds of unpinned behaviours through
-to the mutation sweep. The list is 3-6 entries: fewer means the task's failure modes weren't
-enumerated; more means the task is too big.
+unpinned. The list is 3-6 entries: fewer means the task's failure modes weren't enumerated; more
+means the task is too big.
 
 Entries are behaviours in words — "a donor at exactly its reserve gives nothing", never test code
 or assertions. The no-code rule holds in this field like every other.
@@ -97,13 +93,10 @@ mid-implementation rewrite.
 
 **The trap this exists for: a measure written as a concept has no identifier to grep.** The
 self-review's grep-verified check below catches names the *plan* wrote down; it never fires on nouns
-the *spec* used, because there is nothing to search for. One feature shipped four of these — "sorts
-by ROI" twice, "sorts by the ROI of what was dropped", and "clears by decay" — against a codebase
-with no ROI figure in either named service and a decay path structurally unable to see the condition.
-Every one of them passed a full spec review, got copied into an `Interface` line unchanged, and was
-found by the implementer. Measures that were already field names (`supplyBand`, `popCap`,
-`STRIKE_PARAMS.threshold`) had a receipt in the spec and none of them failed. The split is exact:
-what could be grepped was checked, what was phrased as a concept never was.
+the *spec* used, because there is nothing to search for. A measure that is already a field name
+carries its own receipt and gets checked; "sorts by impact" or "clears by decay" reads as real,
+passes every review unchanged, and fails at the implementer's desk. What can be grepped gets
+checked; what is phrased as a concept never is.
 
 So the resolution pass runs on the spec's **prose**, noun by noun, not on the plan's citations.
 "Ranked by value", "worst first", "sorts by impact", "clears when the world resolves it" are all
@@ -126,7 +119,7 @@ any new harness metric needed because the symptom would otherwise hide inside an
 
 **Doc fold** — which active docs this feature makes stale, which planned docs it supersedes, and the
 note that this working file is deleted at ship. The fold happens on the branch, before the final
-review. Seven of fourteen planned docs rotted because this was left to "later".
+review — a fold left to "later" is how a planned doc ends up describing shipped code.
 
 **Not covered** — the negative statement, in the same breath as the plan. What the plan deliberately
 leaves out, and for each item: **booked** (a roadmap row, named), **dropped** (a reason, written),
@@ -137,10 +130,9 @@ because producing text beats doing the check — this way the check is the text.
 
 **Net-new UI** — every `New:` from the tasks' `Reuse` fields, collected into one list. This list
 goes to the owner **before `/implement-plan` starts**: a new component is a decision he redirects
-cheaply here and expensively after it ships, and "we need some UI to show X" has never been enough
-direction to prevent the second copy. Where the feature is UI-heavy, AGENTS.md's approved-prototype
-rule rides on this list — the prototype shows exactly these pieces. An empty list is stated, not
-omitted, so its absence is a claim the review can check.
+cheaply here and expensively after it ships. Where the feature is UI-heavy, AGENTS.md's
+approved-prototype rule rides on this list — the prototype shows exactly these pieces. An empty
+list is stated, not omitted, so its absence is a claim the review can check.
 
 ## Self-review — the final step, not a second gate
 
@@ -148,10 +140,9 @@ Minutes, by the author, before committing the plan. No agent dispatch.
 
 - **Every named identifier, grep-verified.** Each existing file, function, constant or field the plan
   references exists (`grep` / `npm run impact`); each `(new)` name does not already exist. A plan
-  naming things that aren't there is hazard 5 at plan level — a whole roadmap item was once written
-  against a threshold that did not exist. A `file:line` citation is verified by **reading the
-  range** — grep proves the name exists somewhere, not that the line is where the plan says (two
-  same-named engine/processor files have already produced wrong-directory citations).
+  naming things that aren't there is hazard 5 at plan level. A `file:line` citation is verified by
+  **reading the range** — grep proves the name exists somewhere, not that the line is where the
+  plan says, and same-named files in sibling directories make the wrong-directory citation easy.
 - **Every measure in the resolution table still resolves.** Re-read the table against the finished
   tasks: each `new` names a task that exists in the order and sits before its consumer, and no
   `Interface` line names a measure the table does not carry. This is the cheap re-check of the pass
@@ -159,11 +150,11 @@ Minutes, by the author, before committing the plan. No agent dispatch.
 - **Files lists are walked against a sibling, not imagined.** For any task adding to a shape that
   already has members — a persisted field, a map mode, a response type, a processor signal — find
   the nearest existing member and grep every file *it* touches; that set is the floor. Verifying the
-  named files exist is not the same check and will not catch the omission. Three tasks in one plan
-  were short this way: a persisted field needs the tick joins and the resettlement clears, not just
-  the type and the writer; a value map mode needs the zoomed-out aggregation, formatting, layer,
-  canvas, shell and tick invalidation, not just a ramp and a service. Each omission surfaces
-  mid-build, where the implementer either expands scope unreviewed or stops and costs a round trip.
+  named files exist is not the same check and will not catch the omission: a persisted field needs
+  the tick joins and the resettlement clears, not just the type and the writer; a value map mode
+  needs the zoomed-out aggregation, formatting, layer, canvas, shell and tick invalidation, not
+  just a ramp and a service. Each omission surfaces mid-build, where the implementer either expands
+  scope unreviewed or stops and costs a round trip.
 - **Nothing dropped between spec and plan.** Every interaction row and accepted amendment in the spec
   lands in some task. The difference between spec scope and plan scope is either empty or listed in
   **Not covered**.
@@ -178,11 +169,10 @@ Minutes, by the author, before committing the plan. No agent dispatch.
 - **Each detection list read back against its own Interface.** Every branch arm, boundary and
   contention the interface implies has an entry; a list of happy-path restatements is an unfilled
   field wearing a filled one's clothes. Two named checks inside this read-back: no entry
-  **contradicts** the Interface it tests — three tasks in one stage shipped exactly that, and the
-  implementer paid for it — and every value the task **authors** (writes, computes, exposes) is
-  pinned by some entry, not only the values it categorises. One task's four entries all covered
-  which band each event landed in, and none covered `impactRank`, the sort key the consuming task
-  read.
+  **contradicts** the Interface it tests, and every value the task **authors** (writes, computes,
+  exposes) is pinned by some entry, not only the values it categorises — a list that pins which
+  band a value lands in but never the sort key the consuming task reads leaves that key free to be
+  wrong.
 - **Every `Reuse` entry opened, every `New:` searched.** A reused component's props were read this
   session, not remembered from an earlier one; a `New:` name must not already exist under a name
   the search missed — grep the behaviour's words, not the proposed name.
