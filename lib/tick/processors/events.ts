@@ -13,6 +13,7 @@ import {
   rollPhaseDuration,
   type SystemSnapshot,
   type ShockRow,
+  type SpawnDecision,
 } from "@/lib/engine/events";
 
 /**
@@ -37,6 +38,37 @@ import type {
 } from "@/lib/tick/world/events-world";
 
 const DEBUG = process.env.DEBUG_EVENTS === "1";
+
+/**
+ * The `EventCreate` a spawn decision becomes. Both paths that create an event build the identical
+ * row from a decision plus its type's first phase — a fresh spawn (`sourceEventId` null) and a
+ * spread child (its parent's id) differ in that one field and nothing else. Both start the event
+ * and its first phase on the current tick.
+ */
+function eventCreateFor(
+  decision: SpawnDecision,
+  firstPhase: EventPhaseDefinition,
+  tick: number,
+  sourceEventId: string | null,
+): EventCreate {
+  return {
+    type: decision.type,
+    phase: decision.phase,
+    systemId: decision.systemId,
+    regionId: decision.regionId,
+    startTick: tick,
+    phaseStartTick: tick,
+    phaseDuration: decision.phaseDuration,
+    severity: decision.severity,
+    sourceEventId,
+    modifiers: buildModifiersForPhase(
+      firstPhase,
+      decision.systemId,
+      decision.regionId,
+      decision.severity,
+    ),
+  };
+}
 
 /**
  * Expand a system's ShockRow[] into SystemShock[], preserving each row's shock
@@ -197,28 +229,10 @@ export async function runEventsProcessor(
         );
 
         for (const d of decisions) {
-          const childDef = definitions[d.type]!;
-          const childPhase = childDef.phases[0];
           const neighborName =
             neighbors.find((n) => n.id === d.systemId)?.name ?? "Unknown";
           spreadCreates.push({
-            create: {
-              type: d.type,
-              phase: d.phase,
-              systemId: d.systemId,
-              regionId: d.regionId,
-              startTick: ctx.tick,
-              phaseStartTick: ctx.tick,
-              phaseDuration: d.phaseDuration,
-              severity: d.severity,
-              sourceEventId: snap.id,
-              modifiers: buildModifiersForPhase(
-                childPhase,
-                d.systemId,
-                d.regionId,
-                d.severity,
-              ),
-            },
+            create: eventCreateFor(d, definitions[d.type].phases[0], ctx.tick, snap.id),
             nameForLog: neighborName,
             parentName: snap.systemName ?? "Unknown",
           });
@@ -294,27 +308,9 @@ export async function runEventsProcessor(
 
     if (decisions.length > 0) {
       const createStart = performance.now();
-      const spawnCreates: EventCreate[] = decisions.map((d) => {
-        const def = definitions[d.type]!;
-        const firstPhase = def.phases[0];
-        return {
-          type: d.type,
-          phase: d.phase,
-          systemId: d.systemId,
-          regionId: d.regionId,
-          startTick: ctx.tick,
-          phaseStartTick: ctx.tick,
-          phaseDuration: d.phaseDuration,
-          severity: d.severity,
-          sourceEventId: null,
-          modifiers: buildModifiersForPhase(
-            firstPhase,
-            d.systemId,
-            d.regionId,
-            d.severity,
-          ),
-        };
-      });
+      const spawnCreates: EventCreate[] = decisions.map((d) =>
+        eventCreateFor(d, definitions[d.type].phases[0], ctx.tick, null),
+      );
 
       await world.createEvents(spawnCreates);
 

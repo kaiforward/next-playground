@@ -34,8 +34,7 @@ describe("GET /api/game/player/tracker", () => {
 
     const res = await GET();
 
-    // Never `immutable` or a long max-age — New game replaces the world, so cached ids mismatch
-    // (AGENTS.md → Caching / data shapes).
+    // AGENTS.md → Caching / data shapes states why this header and no other.
     expect(res.headers.get("Cache-Control")).toBe("private, no-cache");
     // The sections ride this payload rather than having a read of their own; both panels index the
     // record directly, so it must be present and complete, not merely well-typed.

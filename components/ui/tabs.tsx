@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { tv, type VariantProps } from "tailwind-variants";
 import { TabCountBadge } from "./tab-count-badge";
+import { resolvePanelTabs, type PanelTabDef } from "./tabs-helpers";
 
 // ── TabList ─────────────────────────────────────────────────────
 
@@ -133,5 +135,36 @@ export function TabLink({
         <TabCountBadge count={count} />
       )}
     </Link>
+  );
+}
+
+// ── PanelTabs (route-backed tab strip for a detail panel) ───────
+
+interface PanelTabsProps {
+  /** The panel's own URL — the index tab's href, and the prefix every other tab appends to. */
+  basePath: string;
+  tabs: readonly PanelTabDef[];
+  /** Accessible name for the strip, e.g. "System tabs". */
+  label: string;
+}
+
+/**
+ * A detail panel's tab strip, where each tab is a route under the panel's own path. Owns both the
+ * href a tab links to and which tab counts as current (`resolvePanelTabs`), so two panels can't
+ * answer either question differently — the callers supply only their base path and their tab list.
+ *
+ * Reads the pathname itself rather than taking it as a prop: it is the only input a caller would
+ * have no other use for.
+ */
+export function PanelTabs({ basePath, tabs, label }: PanelTabsProps) {
+  const pathname = usePathname();
+  return (
+    <TabList aria-label={label}>
+      {resolvePanelTabs(basePath, tabs, pathname).map((tab) => (
+        <TabLink key={tab.href} href={tab.href} active={tab.active}>
+          {tab.label}
+        </TabLink>
+      ))}
+    </TabList>
   );
 }

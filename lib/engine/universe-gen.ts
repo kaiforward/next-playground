@@ -141,6 +141,19 @@ export class UnionFind {
 
 // ── Region generation ───────────────────────────────────────────
 
+/**
+ * Take region `i`'s name sequentially from the flat pool, suffixing it when the pool wraps onto a
+ * name already claimed. Records the claim in `usedNames`.
+ */
+function claimRegionName(names: string[], usedNames: Set<string>, i: number): string {
+  let name = names[i % names.length];
+  if (usedNames.has(name)) {
+    name = `${name}-${i + 1}`;
+  }
+  usedNames.add(name);
+  return name;
+}
+
 export function generateRegions(
   rng: RNG,
   params: GenParams,
@@ -166,14 +179,7 @@ export function generateRegions(
       );
       if (tooClose) continue;
 
-      // Pick a name sequentially from the flat pool
-      let name = names[i % names.length];
-      if (usedNames.has(name)) {
-        name = `${name}-${i + 1}`;
-      }
-      usedNames.add(name);
-
-      regions.push({ index: i, name, x, y });
+      regions.push({ index: i, name: claimRegionName(names, usedNames, i), x, y });
       placed = true;
       break;
     }
@@ -187,13 +193,7 @@ export function generateRegions(
       const x = padding + col * cellSize + cellSize / 2 + (rng() - 0.5) * cellSize * 0.3;
       const y = padding + row * cellSize + cellSize / 2 + (rng() - 0.5) * cellSize * 0.3;
 
-      let name = names[i % names.length];
-      if (usedNames.has(name)) {
-        name = `${name}-${i + 1}`;
-      }
-      usedNames.add(name);
-
-      regions.push({ index: i, name, x, y });
+      regions.push({ index: i, name: claimRegionName(names, usedNames, i), x, y });
     }
   }
 
@@ -387,6 +387,52 @@ interface Edge {
 }
 
 /**
+ * Candidate extra edges for route variety: every local-index pair NOT already joined by `mst`,
+ * nearest first.
+ */
+function extraEdgeCandidates(points: { x: number; y: number }[], mst: Edge[]): Edge[] {
+  const inMst = new Set(mst.map((e) => `${Math.min(e.a, e.b)}-${Math.max(e.a, e.b)}`));
+  const candidates: Edge[] = [];
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      if (inMst.has(`${i}-${j}`)) continue;
+      candidates.push({
+        a: i,
+        b: j,
+        dist: distance(points[i].x, points[i].y, points[j].x, points[j].y),
+      });
+    }
+  }
+  candidates.sort((a, b) => a.dist - b.dist);
+  return candidates;
+}
+
+/**
+ * Fuel cost of one lane, normalised against the average intra-region hop and rounded to 0.1.
+ * `multiplier` prices a lane class above the intra-region baseline (gateways cost more).
+ */
+function laneFuelCost(
+  dist: number,
+  avgIntraDist: number,
+  baseFuel: number,
+  multiplier: number,
+): number {
+  return Math.max(1, Math.round((dist / avgIntraDist) * baseFuel * multiplier * 10) / 10);
+}
+
+/** Record a lane as the two directed rows the connection table stores it as. */
+function pushLane(
+  connections: GeneratedConnection[],
+  aIndex: number,
+  bIndex: number,
+  fuelCost: number,
+  isGateway: boolean,
+): void {
+  connections.push({ fromSystemIndex: aIndex, toSystemIndex: bIndex, fuelCost, isGateway });
+  connections.push({ fromSystemIndex: bIndex, toSystemIndex: aIndex, fuelCost, isGateway });
+}
+
+/**
  * Build MST edges using Kruskal's algorithm within a set of systems.
  * Returns local-index edges (indices into the provided array).
  */
@@ -456,47 +502,22 @@ export function generateConnections(
     if (regionSys.length < 2) continue;
 
     const mstEdges = kruskalMST(regionSys);
+    /** An intra-region lane at the baseline fuel rate, between two systems of THIS region. */
+    const addIntraLane = (edge: Edge): void =>
+      pushLane(
+        connections,
+        regionSys[edge.a].index,
+        regionSys[edge.b].index,
+        laneFuelCost(edge.dist, avgIntraDist, intraRegionBaseFuel, 1),
+        false,
+      );
 
     // MST edges (guaranteed connectivity)
-    for (const edge of mstEdges) {
-      const fuel = Math.round(
-        (edge.dist / avgIntraDist) * intraRegionBaseFuel * 10,
-      ) / 10;
-      // Bidirectional
-      connections.push({
-        fromSystemIndex: regionSys[edge.a].index,
-        toSystemIndex: regionSys[edge.b].index,
-        fuelCost: Math.max(1, fuel),
-        isGateway: false,
-      });
-      connections.push({
-        fromSystemIndex: regionSys[edge.b].index,
-        toSystemIndex: regionSys[edge.a].index,
-        fuelCost: Math.max(1, fuel),
-        isGateway: false,
-      });
-    }
+    for (const edge of mstEdges) addIntraLane(edge);
 
     // Extra edges for route variety
     const extraCount = Math.floor(mstEdges.length * extraEdgeFraction);
-    const mstSet = new Set(
-      mstEdges.map((e) => `${Math.min(e.a, e.b)}-${Math.max(e.a, e.b)}`),
-    );
-
-    // Build candidate extra edges (non-MST, sorted by distance)
-    const candidates: Edge[] = [];
-    for (let i = 0; i < regionSys.length; i++) {
-      for (let j = i + 1; j < regionSys.length; j++) {
-        const key = `${i}-${j}`;
-        if (mstSet.has(key)) continue;
-        candidates.push({
-          a: i,
-          b: j,
-          dist: distance(regionSys[i].x, regionSys[i].y, regionSys[j].x, regionSys[j].y),
-        });
-      }
-    }
-    candidates.sort((a, b) => a.dist - b.dist);
+    const candidates = extraEdgeCandidates(regionSys, mstEdges);
 
     // Pick random extras from the shorter-distance candidates
     const pool = candidates.slice(0, Math.min(candidates.length, extraCount * 3));
@@ -506,22 +527,7 @@ export function generateConnections(
       const idx = randInt(rng, 0, pool.length - 1);
       if (picked.has(idx)) continue;
       picked.add(idx);
-      const edge = pool[idx];
-      const fuel = Math.round(
-        (edge.dist / avgIntraDist) * intraRegionBaseFuel * 10,
-      ) / 10;
-      connections.push({
-        fromSystemIndex: regionSys[edge.a].index,
-        toSystemIndex: regionSys[edge.b].index,
-        fuelCost: Math.max(1, fuel),
-        isGateway: false,
-      });
-      connections.push({
-        fromSystemIndex: regionSys[edge.b].index,
-        toSystemIndex: regionSys[edge.a].index,
-        fuelCost: Math.max(1, fuel),
-        isGateway: false,
-      });
+      addIntraLane(pool[idx]);
       added++;
     }
   }
@@ -530,22 +536,7 @@ export function generateConnections(
   const regionMST = kruskalMST(regions);
 
   // Add ~2 extra inter-region edges for variety
-  const regionMSTSet = new Set(
-    regionMST.map((e) => `${Math.min(e.a, e.b)}-${Math.max(e.a, e.b)}`),
-  );
-  const regionExtras: Edge[] = [];
-  for (let i = 0; i < regions.length; i++) {
-    for (let j = i + 1; j < regions.length; j++) {
-      const key = `${i}-${j}`;
-      if (regionMSTSet.has(key)) continue;
-      regionExtras.push({
-        a: i,
-        b: j,
-        dist: distance(regions[i].x, regions[i].y, regions[j].x, regions[j].y),
-      });
-    }
-  }
-  regionExtras.sort((a, b) => a.dist - b.dist);
+  const regionExtras = extraEdgeCandidates(regions, regionMST);
   const allRegionPairs = [...regionMST, ...regionExtras.slice(0, 2)];
 
   // ── Phase 3: Gateway designation + inter-region connections ──
@@ -593,21 +584,13 @@ export function generateConnections(
       cp.sb.isGateway = true;
 
       // Inter-region connection with higher fuel cost
-      const fuel = Math.round(
-        (cp.dist / avgIntraDist) * intraRegionBaseFuel * gatewayFuelMultiplier * 10,
-      ) / 10;
-      connections.push({
-        fromSystemIndex: cp.sa.index,
-        toSystemIndex: cp.sb.index,
-        fuelCost: Math.max(1, fuel),
-        isGateway: true,
-      });
-      connections.push({
-        fromSystemIndex: cp.sb.index,
-        toSystemIndex: cp.sa.index,
-        fuelCost: Math.max(1, fuel),
-        isGateway: true,
-      });
+      pushLane(
+        connections,
+        cp.sa.index,
+        cp.sb.index,
+        laneFuelCost(cp.dist, avgIntraDist, intraRegionBaseFuel, gatewayFuelMultiplier),
+        true,
+      );
     }
   }
 

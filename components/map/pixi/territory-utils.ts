@@ -42,6 +42,12 @@ function ensurePrecision() {
  * to round off the unbounded edge cells of a Voronoi diagram — see
  * clipVoronoiCells. Returns a MultiPolygon (the intersection can in
  * principle split, though a convex disc rarely does).
+ *
+ * Falls back to the unclipped ring when the clip throws. polyclip fails on some
+ * degenerate inputs ("Unable to complete output ring"), and this runs per cell inside
+ * the map's build effect: one unrounded cell at the galaxy edge is a blemish, while an
+ * escaping throw takes every territory on the map down with it. `unionCellsByGroup`
+ * degrades the same way for the same reason.
  */
 export function clipPolygonToDisc(
   ring: Ring,
@@ -51,7 +57,11 @@ export function clipPolygonToDisc(
   segments: number,
 ): MultiPolygon {
   ensurePrecision();
-  return intersection([ring], [discRing(cx, cy, radius, segments)]);
+  try {
+    return intersection([ring], [discRing(cx, cy, radius, segments)]);
+  } catch {
+    return [[ring]];
+  }
 }
 
 /** Build a closed regular-polygon ring inscribed in a circle of `radius`. */

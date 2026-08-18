@@ -2,15 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
 import { generateWorld } from "@/lib/world/gen";
 import { setSystemPin } from "@/lib/services/player-pins";
-
-/** A small authored world: the player faction owns a developed homeworld. */
-function seatWorld() {
-  return generateWorld({
-    systemCount: 60,
-    seed: 42,
-    playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
-  });
-}
+import { seatWorld } from "./seat-world";
 
 describe("setSystemPin", () => {
   beforeEach(() => {

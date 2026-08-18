@@ -7,7 +7,7 @@ import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { TabList, TabLink } from "@/components/ui/tabs";
+import { PanelTabs } from "@/components/ui/tabs";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { MapPinIcon } from "@/components/ui/icons";
 import { SystemCadenceCountdown } from "@/components/system/system-cadence-countdown";
@@ -35,16 +35,6 @@ function SystemPanelContent({
     (tab) => isDeveloped || tab.segment === "" || tab.segment === "astrography",
   );
 
-  const basePath = `/system/${systemId}`;
-  const tabs = visibleTabs.map((tab) => {
-    const href = tab.segment ? `${basePath}/${tab.segment}` : basePath;
-    return {
-      label: tab.label,
-      href,
-      active: tab.segment ? pathname.startsWith(href) : pathname === basePath,
-    };
-  });
-
   const subtitle = (
     <span className="inline-flex items-center gap-2">
       {systemInfo?.isGateway && <Badge color="amber">Gateway</Badge>}
@@ -62,7 +52,8 @@ function SystemPanelContent({
   const showOnMap = () => {
     if (!systemInfo) return;
     const loc = Number(searchParams.get("loc") ?? 0) + 1;
-    // Recentre from the CURRENT path (not basePath) so locating never resets the active sub-tab.
+    // Recentre from the CURRENT path, not the panel's base path, so locating never resets the
+    // active sub-tab.
     router.replace(`${pathname}?focus=${systemInfo.x},${systemInfo.y}&loc=${loc}`);
   };
 
@@ -90,17 +81,11 @@ function SystemPanelContent({
       headerAction={headerAction}
       scrollResetKey={systemId}
       subHeader={
-        <TabList aria-label="System tabs">
-          {tabs.map((tab) => (
-            <TabLink
-              key={tab.href}
-              href={tab.href}
-              active={tab.active}
-            >
-              {tab.label}
-            </TabLink>
-          ))}
-        </TabList>
+        <PanelTabs
+          basePath={`/system/${systemId}`}
+          tabs={visibleTabs}
+          label="System tabs"
+        />
       }
     >
       {/* Active tab content */}

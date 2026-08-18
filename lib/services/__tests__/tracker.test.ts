@@ -3,18 +3,10 @@ import { generateWorld } from "@/lib/world/gen";
 import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getTrackerData } from "@/lib/services/tracker";
+import { seatWorld } from "./seat-world";
 import { getSystemVitals } from "@/lib/services/system-vitals";
 import { GET } from "@/app/api/game/player/tracker/route";
 import type { World } from "@/lib/world/types";
-
-/** A player-seat world: the player faction owns a developed homeworld with automation defaults. */
-function seatWorld(): World {
-  return generateWorld({
-    systemCount: 60,
-    seed: 42,
-    playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
-  });
-}
 
 afterEach(() => {
   clearWorld();

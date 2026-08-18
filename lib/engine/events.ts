@@ -198,116 +198,13 @@ export function rollPhaseDuration(
 }
 
 /**
- * Select an event to spawn (or null if nothing should spawn).
- *
- * Checks: global cap, per-type cap, per-system cap, cooldown.
- * Filters systems by economy type. Weighted random selection among eligible
- * (definition, system) pairs.
- */
-export function selectEventToSpawn(
-  definitions: Record<string, EventDefinition>,
-  activeEvents: EventSnapshot[],
-  systems: SystemSnapshot[],
-  tick: number,
-  caps: SpawnCaps,
-  rng: () => number,
-): SpawnDecision | null {
-  // Global cap check
-  if (activeEvents.length >= caps.maxEventsGlobal) return null;
-
-  // Build per-type count and per-system count
-  const typeCount = new Map<string, number>();
-  const systemCount = new Map<string, number>();
-  const systemTypeLastEnd = new Map<string, number>(); // "systemId:type" → latest startTick
-
-  for (const ev of activeEvents) {
-    typeCount.set(ev.type, (typeCount.get(ev.type) ?? 0) + 1);
-    if (ev.systemId) {
-      systemCount.set(ev.systemId, (systemCount.get(ev.systemId) ?? 0) + 1);
-    }
-    // Track last start tick for cooldown checking (rough proxy — events that
-    // started most recently are most relevant for cooldown)
-    if (ev.systemId) {
-      const key = `${ev.systemId}:${ev.type}`;
-      const prev = systemTypeLastEnd.get(key) ?? 0;
-      if (ev.startTick > prev) systemTypeLastEnd.set(key, ev.startTick);
-    }
-  }
-
-  // Build eligible (definition, system) candidates
-  interface Candidate {
-    definition: EventDefinition;
-    system: SystemSnapshot;
-    weight: number;
-  }
-  const candidates: Candidate[] = [];
-
-  for (const def of Object.values(definitions)) {
-    // Skip non-spawnable definitions (child events with weight 0)
-    if (def.weight <= 0) continue;
-
-    // Per-type cap
-    if ((typeCount.get(def.type) ?? 0) >= def.maxActive) continue;
-
-    for (const sys of systems) {
-      // Economy type filter
-      if (def.targetFilter?.economyTypes) {
-        if (!def.targetFilter.economyTypes.some((t) => t === sys.economyType)) continue;
-      }
-
-      // Per-system cap
-      if ((systemCount.get(sys.id) ?? 0) >= caps.maxEventsPerSystem) continue;
-
-      // Cooldown: no same event type at same system within cooldown ticks
-      const cooldownKey = `${sys.id}:${def.type}`;
-      const lastStart = systemTypeLastEnd.get(cooldownKey);
-      if (lastStart !== undefined && tick - lastStart < def.cooldown) continue;
-
-      candidates.push({ definition: def, system: sys, weight: def.weight });
-    }
-  }
-
-  if (candidates.length === 0) return null;
-
-  // Weighted random selection
-  const totalWeight = candidates.reduce((sum, c) => sum + c.weight, 0);
-  let roll = rng() * totalWeight;
-
-  for (const candidate of candidates) {
-    roll -= candidate.weight;
-    if (roll <= 0) {
-      const firstPhase = candidate.definition.phases[0];
-      return {
-        type: candidate.definition.type,
-        systemId: candidate.system.id,
-        regionId: candidate.system.regionId,
-        phase: firstPhase.name,
-        phaseDuration: rollPhaseDuration(firstPhase.durationRange, rng),
-        severity: 1.0,
-      };
-    }
-  }
-
-  // Fallback (shouldn't reach here, but handle floating-point edge cases)
-  const last = candidates[candidates.length - 1];
-  const firstPhase = last.definition.phases[0];
-  return {
-    type: last.definition.type,
-    systemId: last.system.id,
-    regionId: last.system.regionId,
-    phase: firstPhase.name,
-    phaseDuration: rollPhaseDuration(firstPhase.durationRange, rng),
-    severity: 1.0,
-  };
-}
-
-/**
  * Select up to `batchSize` events to spawn in a single tick.
  *
- * Iteratively picks weighted-random candidates, updating running type/system
- * counts between picks so caps are respected within the batch. Cooldown tracking
- * uses `systemTypeLastEnd` to prevent the same event type re-spawning on a system
- * too soon after expiry.
+ * Each pick checks the global cap, the per-type cap, the per-system cap and the per-(system, type)
+ * cooldown, and filters systems by economy type; selection is weighted-random among the eligible
+ * (definition, system) pairs. Running type/system counts are updated between picks so the caps are
+ * respected within the batch. Cooldown tracking uses `systemTypeLastEnd` to prevent the same event
+ * type re-spawning on a system too soon after expiry.
  */
 export function selectEventsToSpawn(
   definitions: Record<string, EventDefinition>,

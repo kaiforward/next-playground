@@ -775,6 +775,18 @@ export function buildIndustryReadout(
   // among gate, canSell and fulfil; a tie cascades to the next check (inputs, then selling, then the
   // skill/labour split), the same convention the pre-existing selling/skill/labour chain already used.
   const buildingEntries: SystemIndustryReadout["buildings"] = [];
+  // A row for a building with no market output of its own: the bar is simply its shared
+  // buildingUsed reading over its count, and there is no tier or production to report.
+  const pushUtilisationOnlyRow = (buildingType: string, count: number): void => {
+    const used = buildingUsed(buildingType, count, ctx);
+    buildingEntries.push({
+      buildingType,
+      tier: 0,
+      count,
+      used,
+      staffedFraction: count > 0 ? used / count : 0,
+    });
+  };
   for (const [buildingType, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
@@ -789,9 +801,7 @@ export function buildIndustryReadout(
     if (COMPLEX_BY_TYPE[buildingType]) {
       // A complex produces no good of its own — its "used" is family-utilisation
       // (built factories vs rated coverage), not labour/selling like a producer.
-      const used = buildingUsed(buildingType, count, ctx);
-      const staffedFraction = count > 0 ? used / count : 0;
-      buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
+      pushUtilisationOnlyRow(buildingType, count);
       continue;
     }
     const def = BUILDING_TYPES[buildingType];
@@ -799,17 +809,13 @@ export function buildIndustryReadout(
       // Academy (housing handled above) — a capacity building whose utilisation is its licence draw
       // (skill demand vs the licensed ceiling). Displayed like a complex (staffedFraction = used/count,
       // no market output), so an over-licensed academy reads as idle exactly as decay measures it.
-      const used = buildingUsed(buildingType, count, ctx);
-      const staffedFraction = count > 0 ? used / count : 0;
-      buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
+      pushUtilisationOnlyRow(buildingType, count);
       continue;
     }
     if (def?.output.kind === "none") {
       // A support building (e.g. the Construction Centre) — draws labour like a producer but sells
       // nothing. Displayed like an academy/complex: staffedFraction = used/count, no market output.
-      const used = buildingUsed(buildingType, count, ctx);
-      const staffedFraction = count > 0 ? used / count : 0;
-      buildingEntries.push({ buildingType, tier: 0, count, used, staffedFraction });
+      pushUtilisationOnlyRow(buildingType, count);
       continue;
     }
     const outputGood = def?.outputGood;

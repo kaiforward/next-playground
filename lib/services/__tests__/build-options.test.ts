@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
 import { generateWorld } from "@/lib/world/gen";
 import { getSystemBuildOptions } from "@/lib/services/build-options";
+import { seatWorld, controlledNeighbour } from "./seat-world";
 import { getSystemConstruction } from "@/lib/services/construction";
 import { orderBuild } from "@/lib/services/construction-orders";
 import { ServiceError } from "@/lib/services/errors";
@@ -9,12 +10,8 @@ import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import type { WorldConstructionProject } from "@/lib/world/types";
 
-function seatWorld() {
-  return generateWorld({
-    systemCount: 60, seed: 42,
-    playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
-  });
-}
+/** Comfortably above the habitable floor — every colony case below wants an unconstrained site. */
+const AMPLE_HABITABLE = 100;
 
 /** World-gen starts every treasury at zero, and founding is priced — a colony preview needs a purse. */
 function fundPlayer(balance: number) {
@@ -25,20 +22,6 @@ function fundPlayer(balance: number) {
       t.factionId === w.player?.controlledFactionId ? { ...t, balance } : t,
     ),
   });
-}
-
-/** A controlled, amply-landed player system next to the homeworld — eligibility manufactured, not rolled. */
-function controlledNeighbour() {
-  const w = getWorld();
-  const faction = w.factions.find((x) => x.id === w.player?.controlledFactionId)!;
-  const home = w.systems.find((s) => s.id === faction.homeworldId)!;
-  const conn = w.connections.find((c) => c.fromId === home.id || c.toId === home.id)!;
-  const otherId = conn.fromId === home.id ? conn.toId : conn.fromId;
-  const target = w.systems.find((s) => s.id === otherId)!;
-  target.factionId = faction.id;
-  target.control = "controlled";
-  target.habitableSpace = 100; // comfortably above the habitable floor
-  return { target, home };
 }
 
 describe("getSystemBuildOptions", () => {
@@ -245,7 +228,7 @@ describe("getSystemBuildOptions", () => {
     // Always manufacture the eligible case from home's direct neighbour rather than trusting
     // whatever "controlled" system world-gen happened to produce — a pre-existing one could sit
     // outside the seed-source hop radius, making the eligible/ineligible branch nondeterministic.
-    const { target, home } = controlledNeighbour();
+    const { target, home } = controlledNeighbour(AMPLE_HABITABLE);
     fundPlayer(1_000_000);
     // Move `home` off index 0 so a resolver that just grabs the FIRST system in the array (instead of
     // matching on id) reads a different system's name here.
@@ -274,7 +257,7 @@ describe("getSystemBuildOptions", () => {
     // With the treasury unable to buy its next materials the tick holds its absorption at zero and
     // funds the queue behind it as if it were not there — so the ETA quoted for a fresh order must
     // not be pushed back by pool that colony will never consume.
-    const { target, home } = controlledNeighbour();
+    const { target, home } = controlledNeighbour(AMPLE_HABITABLE);
     fundPlayer(0);
     const w = getWorld();
     const gated: WorldConstructionProject = {
@@ -324,7 +307,7 @@ describe("getSystemBuildOptions", () => {
   it("reads a penniless faction's colony verb as insufficient_funds", () => {
     // The read surface and the mutation boundary quote one price; here the purse is short of it and
     // the same reason the order would refuse with is what the verb displays.
-    const { target } = controlledNeighbour();
+    const { target } = controlledNeighbour(AMPLE_HABITABLE);
     fundPlayer(0);
 
     const data = getSystemBuildOptions(target.id);

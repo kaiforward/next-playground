@@ -29,6 +29,7 @@ import type { GoodTier } from "@/lib/types/game";
 import type { BuildOptionData, PopNeedData } from "@/lib/types/api";
 import { formatMagnitude, formatPeople, formatUnitsShort } from "@/lib/utils/format";
 import { formatEta } from "@/lib/utils/construction-format";
+import { progressWidthPct } from "@/lib/utils/math";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -327,7 +328,7 @@ function GhostNameCell({
         )}
       </span>
       <span className="mt-0.5 block h-1 max-w-[180px] bg-surface-active">
-        <span aria-hidden className="block h-full bg-status-amber/75" style={{ width: `${Math.round(ghost.progress * 100)}%` }} />
+        <span aria-hidden className="block h-full bg-status-amber/75" style={{ width: `${progressWidthPct(ghost.progress)}%` }} />
       </span>
     </td>
   );
@@ -340,7 +341,7 @@ function DepositGhostRow({
   return (
     <tr className="border-b border-border/40 last:border-b-0">
       <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(progressWidthPct(ghost.progress))}%</td>
       <td />
       <td />
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
@@ -356,7 +357,7 @@ function BuildingGhostRow({
   return (
     <tr className="border-b border-border/40 last:border-b-0">
       <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(ghost.progress * 100)}%</td>
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(progressWidthPct(ghost.progress))}%</td>
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
       {showActionColumn && <td />}
     </tr>

@@ -3,6 +3,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getFactionConstruction, getSystemConstruction } from "@/lib/services/construction";
 import { orderBuild } from "@/lib/services/construction-orders";
+import { seatWorld } from "./seat-world";
 import { ServiceError } from "@/lib/services/errors";
 import { CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE, HOUSING_TYPE } from "@/lib/constants/industry";
 import type { World, WorldSystem } from "@/lib/world/types";
@@ -144,13 +145,6 @@ describe("getFactionConstruction", () => {
 });
 
 describe("getFactionConstruction — command summary", () => {
-  // A player-seat world: the player faction owns a developed homeworld with automation defaults.
-  function seatWorld() {
-    return generateWorld({
-      systemCount: 60, seed: 42,
-      playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
-    });
-  }
   beforeEach(() => { setWorld(seatWorld()); });
 
   it("summarises the queue as link lists and surfaces the player's switches", () => {

@@ -8,7 +8,7 @@
  * open set they append to is exactly what the next directed-build cycle funds.
  */
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
-import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldMarket } from "@/lib/world/types";
+import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldConstructionProject, WorldMarket } from "@/lib/world/types";
 import { computeBuildOptions, buildSiteFromSystem } from "@/lib/engine/build-options";
 import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
@@ -35,6 +35,19 @@ function playerSystem(seat: Seat, systemId: string): WorldSystem | { error: stri
 /** Mints a fresh construction-project id from the world's shared counter (matches the tick's own minting namespace). */
 function mintProjectId(world: World): string {
   return `construction-${world.nextId}`;
+}
+
+/**
+ * Swap in a world carrying one newly minted project. Appending it and advancing `nextId` are the
+ * same act — the id came from that counter, so a caller that appended without bumping would hand
+ * the next order the same id.
+ */
+function commitNewProject(seat: Seat, project: WorldConstructionProject): void {
+  setWorld({
+    ...seat.world,
+    constructionProjects: [...seat.world.constructionProjects, project],
+    nextId: seat.world.nextId + 1,
+  });
 }
 
 export type OrderBuildResult =
@@ -94,11 +107,7 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
     workTotal: input.levels * option.workPerLevel,
     workDone: 0,
   };
-  setWorld({
-    ...seat.world,
-    constructionProjects: [...seat.world.constructionProjects, project],
-    nextId: seat.world.nextId + 1,
-  });
+  commitNewProject(seat, project);
   return { ok: true, data: { projectId: project.id, levels: project.levels } };
 }
 
@@ -137,11 +146,7 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
     charterPaid: false,
     stalledCycles: 0,
   };
-  setWorld({
-    ...seat.world,
-    constructionProjects: [...seat.world.constructionProjects, project],
-    nextId: seat.world.nextId + 1,
-  });
+  commitNewProject(seat, project);
   return { ok: true, data: { projectId: project.id } };
 }
 
