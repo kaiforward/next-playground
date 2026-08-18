@@ -572,6 +572,9 @@ export interface FactionTreasuryData {
   funded: TreasuryBands;
   /** Last settlement's income − money paid; 0 before the first settlement. */
   net: number;
+  /** Money already committed to founding (paid charters + staged materials) awaiting settlement —
+   *  still inside `balance` until the settlement charges it off, but no longer spendable. */
+  foundingCommitted: number;
   lastSettlement: WorldTreasurySettlement | null;
 }
 export type FactionTreasuryResponse = ApiResponse<FactionTreasuryData>;

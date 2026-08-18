@@ -41,7 +41,7 @@ function renderCard(treasury: Partial<FactionTreasuryData>) {
   };
   treasuryValue.current = {
     factionId: "f1", balance: 1000, taxLevel: "normal",
-    bands: bands(1, 1, 1), funded: bands(1, 1, 1), net: 0, lastSettlement: null,
+    bands: bands(1, 1, 1), funded: bands(1, 1, 1), net: 0, foundingCommitted: 0, lastSettlement: null,
     ...treasury,
   };
   return render(<FactionConstructionCard factionId="f1" />);

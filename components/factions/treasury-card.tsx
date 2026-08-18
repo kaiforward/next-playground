@@ -64,6 +64,14 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
             net {signedMoney(data.net)} / cycle
           </span>
         </div>
+        {/* Money founding has already called for — inside the balance above until the settlement
+            charges it off, but no longer spendable, so the ledger says so the moment it happens. */}
+        {data.foundingCommitted > 0 && (
+          <div className="-mt-2 mb-3 flex items-baseline justify-between text-xs text-text-tertiary">
+            <span>committed to founding</span>
+            <span className="font-mono">{signedMoney(-data.foundingCommitted)}</span>
+          </div>
+        )}
         {!s ? (
           <EmptyState
             className="mb-4"

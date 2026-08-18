@@ -16,6 +16,8 @@ function invalidateOrderSurfaces(queryClient: QueryClient) {
   void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
   void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
   void queryClient.invalidateQueries({ queryKey: queryKeys.ownership });
+  // A colony order pays its charter at the click — the treasury's committed line moves with it.
+  void queryClient.invalidateQueries({ queryKey: queryKeys.factionTreasuryAll });
 }
 
 /** Queue a build/upgrade order for one building type at a system (`POST .../build-orders`). */
