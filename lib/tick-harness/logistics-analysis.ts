@@ -65,7 +65,7 @@ export function fundingBoundCensus(
   };
 }
 
-export function summarizeLogistics(
+export function summariseLogistics(
   flows: WorldFlowEvent[],
   budget: LogisticsBudgetTotals,
   flags: FundingBoundFlagCensus,

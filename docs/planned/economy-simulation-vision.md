@@ -102,7 +102,7 @@ The world is **seeded partially developed, varied by habitability** — not empt
 
 - **Maxed** would leave no growth headroom (the development engine is invisible; factions have nothing to build).
 - **Empty** would mean a slow, boring bootstrap and an inconsistent experience for players joining a months-old galaxy.
-- **Partial, varied** → the economy is immediately rich enough to *play in*, still *visibly* evolving (boomtowns/ghost towns have headroom both ways), and produces **instant economic geography** — a developed core vs a raw frontier — which is the regional-specialization payoff *and* gives factions a turn-1 agenda (develop the frontier).
+- **Partial, varied** → the economy is immediately rich enough to *play in*, still *visibly* evolving (boomtowns/ghost towns have headroom both ways), and produces **instant economic geography** — a developed core vs a raw frontier — which is the regional-specialisation payoff *and* gives factions a turn-1 agenda (develop the frontier).
 
 Seed *below* carrying capacity but at a *locally sustainable* level, so there's no violent settling crash on launch. The simulator's remit therefore extends from "find equilibrium" to "find a **seedable, stable-but-growing** start state."
 
@@ -260,7 +260,7 @@ These are the payoffs the model should produce without scripting:
 - **Industrialize-vs-feed**: paving a garden world's arable land with factories starves it.
 - **Lane-cut cascade**: a war/event severing a trade lane starves downstream systems in sequence.
 - **Population geography**: migration produces boomtowns and ghost towns.
-- **Emergent faction economies**: doctrine/government-weighted build planning (see §12) gives each faction a distinct economic character, and regional specialization arises from agents building to local resource base + neighbour demand.
+- **Emergent faction economies**: doctrine/government-weighted build planning (see §12) gives each faction a distinct economic character, and regional specialisation arises from agents building to local resource base + neighbour demand.
 - **Faction value**: resource-rich and high-population systems become obviously worth fighting over.
 
 ---
@@ -301,7 +301,7 @@ Two things move goods between systems, and they have opposite characters. The di
 
 **Legibility — nothing vanishes while you watch.** Because changes are **bounded per tick** ([§6](#6-pricing--cycles-of-supply-no-global-anchor)) and the agency clock is **slow** ([§5.3](#53-the-tick-loop)), the faction is a big, slow, *predictable* current — a market drifts (1000 → 980 → 960), it never teleports to 0, and a player always transacts at the live visible price (plus their own slippage). The only risk carried is the normal trader's risk — the spread may narrow by arrival because the faction (and other players) also supplied the site, which **rewards getting there first.** v1 legibility comes Elite-style from a **published development / economic-state overlay** + the price signal, *not* from visible cargo.
 
-**Phase 2 — visible convoys (Mount & Blade-style), deferred.** Later, render the *same virtual routes* the v1 model already simulates as visible NPC haulers. Because the simulation substrate is unchanged, this is a **pure presentation upgrade** — and it pays for itself by maximizing legibility *and* unlocking **convoy-raiding** as real war gameplay (we already render in-transit ship markers). Earmarked, not built.
+**Phase 2 — visible convoys (Mount & Blade-style), deferred.** Later, render the *same virtual routes* the v1 model already simulates as visible NPC haulers. Because the simulation substrate is unchanged, this is a **pure presentation upgrade** — and it pays for itself by maximising legibility *and* unlocking **convoy-raiding** as real war gameplay (we already render in-transit ship markers). Earmarked, not built.
 
 How much an agent leans command vs market is **flavoured by government** (Authoritarian / Militarist post aggressive pulls that override civilian needs; Corporate / Frontier let the gradient work) — reusing the existing government axis as a planned-vs-free-market dial, implemented as *how strong a directed pull a faction is willing to post*.
 
@@ -310,7 +310,7 @@ How much an agent leans command vs market is **flavoured by government** (Author
 A faction (and the autonomic baseline) scores candidate builds, roughly in priority order:
 
 1. **Subsistence** — chronic *local* shortage of a consumed good → build production/extraction for it (resource base permitting) or import capacity. Don't starve your own population.
-2. **Resource base → export** — a rich, unexploited resource base + demand among neighbours/faction-wide → build it for export. Drives emergent **regional specialization**.
+2. **Resource base → export** — a rich, unexploited resource base + demand among neighbours/faction-wide → build it for export. Drives emergent **regional specialisation**.
 3. **Bottleneck relief** — faction-wide scarcity of a chokepoint good (Components) → build it somewhere suitable.
 4. **Strategic / doctrine** — war footing → military production; growth ambition → housing to raise the pop cap.
 

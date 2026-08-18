@@ -1216,7 +1216,7 @@ describe("buildIndustryReadout — support row (kind 'none')", () => {
   });
 });
 
-describe("buildingUsed + computeUtilisation (unified per-output-kind utilization)", () => {
+describe("buildingUsed + computeUtilisation (unified per-output-kind utilisation)", () => {
   // One mixed base exercised across every output kind. Each expectation is computed from the SAME
   // helpers the old per-type branches used, so these are coherence witnesses, not magic numbers.
   const buildings: Record<string, number> = {

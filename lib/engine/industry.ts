@@ -385,7 +385,7 @@ export function housingUsed(population: number): number {
 }
 
 /**
- * Everything a per-`output.kind` utilization needs, computed once per system by the caller. Both the
+ * Everything a per-`output.kind` utilisation needs, computed once per system by the caller. Both the
  * decay engine and the industry read service already have every field in hand (a single labourParts
  * pass + the population + a seller-side selling signal), so this just names the bundle.
  */
@@ -446,7 +446,7 @@ export function buildingUsed(buildingType: string, count: number, ctx: Utilisati
 }
 
 /**
- * Utilization u ∈ [0,1] = min(1, buildingUsed / count); 0 at non-positive count. An
+ * Utilisation u ∈ [0,1] = min(1, buildingUsed / count); 0 at non-positive count. An
  * over-occupied housing level reads as fully utilised, not greater than one.
  */
 export function computeUtilisation(buildingType: string, count: number, ctx: UtilisationContext): number {
@@ -791,7 +791,7 @@ export function buildIndustryReadout(
     if (count <= 0) continue;
     if (buildingType === HOUSING_TYPE) {
       const used = buildingUsed(HOUSING_TYPE, count, ctx);
-      // Housing deliberately carries two utilization readings. `used` includes the healthy-vacancy
+      // Housing deliberately carries two utilisation readings. `used` includes the healthy-vacancy
       // allowance because decay and the row's health must agree about protected capacity;
       // `staffedFraction` remains literal occupancy so the player never sees empty homes as residents.
       const staffedFraction = count > 0 ? housingUsed(population) / count : 0;

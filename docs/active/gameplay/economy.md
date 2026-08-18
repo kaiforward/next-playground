@@ -8,7 +8,7 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 ## Goods
 
-26 goods organized in 3 tiers. The tiers form a **production chain**: tier-0 raw materials are extracted from body resource deposits, and each tier-1/2 good is manufactured from a recipe of lower-tier inputs (see [Supply Chain & Input-Gating](#supply-chain--input-gating)). The chain also drives the trade progression — cheap, deep-market raw goods for early game; expensive, thin-market manufactured goods for late game.
+26 goods organised in 3 tiers. The tiers form a **production chain**: tier-0 raw materials are extracted from body resource deposits, and each tier-1/2 good is manufactured from a recipe of lower-tier inputs (see [Supply Chain & Input-Gating](#supply-chain--input-gating)). The chain also drives the trade progression — cheap, deep-market raw goods for early game; expensive, thin-market manufactured goods for late game.
 
 ### Tier 0 — Raw Materials (8)
 

@@ -53,7 +53,7 @@ describe("generateWorld", () => {
       expect(m.anchorMult).toBe(1);
       expect(m.squeezeCycles).toBe(0);
       expect(m.proposalCycles).toBe(0);
-      expect(m.realizedProductionRate).toBeUndefined();
+      expect(m.realisedProductionRate).toBeUndefined();
       expect(m.productionSuppressed).toBeUndefined();
     }
   });

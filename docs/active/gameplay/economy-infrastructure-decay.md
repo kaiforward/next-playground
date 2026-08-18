@@ -21,7 +21,7 @@ world its missing counterweight.
 > **Built capacity is a whole-level ratchet: a level that sits idle past a hysteresis buffer sheds as a
 > whole level, and unrest above a threshold tears down a whole level outright.**
 
-Built capacity is an **integer level count** (`WorldBuilding.count`). Utilization floats continuously
+Built capacity is an **integer level count** (`WorldBuilding.count`). Utilisation floats continuously
 underneath; while a *whole* level's worth of capacity sits unused, a per-`(system, type)` idle countdown
 ticks up, and only after a sustained-idle buffer does the marginal idle level tear down — the countdown
 resetting the moment the level refills, so a brief dip costs nothing. That rule, applied to a seeded
@@ -112,7 +112,7 @@ if idle ≥ idleBufferCycles:  count ← count − 1;  idle ← 0
 
 The buffer *is* the hysteresis — a transient labour dip or a single unsold run costs nothing, because the
 countdown resets the moment the level refills; only a *sustained* idle level compounds down, one whole level
-per buffer period. The countdown state (`WorldBuilding.idleCycles`) is persisted; utilization itself is
+per buffer period. The countdown state (`WorldBuilding.idleCycles`) is persisted; utilisation itself is
 derived each run (no stored "abandonment" integral).
 
 **(2) Unrest teardown — catastrophic, the snowball.** Above an unrest threshold, a whole level is *torn down

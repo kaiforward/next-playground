@@ -4,7 +4,7 @@
  * `controlled`, then may develop one of its controlled systems to `developed` (seeding a small
  * conserved colony population). Magnitudes are a coarse first-cut (simulator-validated for coherent
  * growth, not tuned — later phases move the calibration target). Scores are ABSOLUTE (not
- * pool-normalized) so two factions' proposals for the same system compare directly in resolution.
+ * pool-normalised) so two factions' proposals for the same system compare directly in resolution.
  *
  * Claims are cheap and near-instant this phase (bounded by MAX_CLAIMS_PER_CYCLE + the reach radius +
  * the score floor). Developing a controlled system is NO longer instant or capped here — it is a

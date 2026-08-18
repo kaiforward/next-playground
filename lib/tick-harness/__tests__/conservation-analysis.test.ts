@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   newCharterCensus, recordCharterCensus, checkCharterDebits, checkFoundingWithinBalance,
   newStagedLedgerCensus, recordStagedLedger, checkStagedLedger, checkNetReconciliation,
-  summarizeConservation, CONSERVATION_TOLERANCE, withinTolerance, conservationGateFailure,
+  summariseConservation, CONSERVATION_TOLERANCE, withinTolerance, conservationGateFailure,
 } from "../conservation-analysis";
 import type {
   CharterProjectRow, StagedProjectRow, IdentityCheck, ConservationSummary,
@@ -535,7 +535,7 @@ describe("balance delta vs net", () => {
   });
 });
 
-describe("summarizeConservation", () => {
+describe("summariseConservation", () => {
   const emptyInputs = {
     charters: newCharterCensus(),
     factionCycles: [],
@@ -544,7 +544,7 @@ describe("summarizeConservation", () => {
   };
 
   it("reports all four identities, in the order the spec lists them", () => {
-    const summary = summarizeConservation(emptyInputs);
+    const summary = summariseConservation(emptyInputs);
     expect(summary.checks).toHaveLength(4);
     expect(summary.checks.map((c) => c.name)).toEqual([
       "charter debits == chartered colonies",
@@ -562,15 +562,15 @@ describe("summarizeConservation", () => {
     recordCharterCensus([establish("p1", false)], charters);
     recordCharterCensus([establish("p1", true)], charters);
 
-    const summary = summarizeConservation({ ...emptyInputs, charters });
+    const summary = summariseConservation({ ...emptyInputs, charters });
     expect(summary.allPass).toBe(false);
     expect(summary.checks.filter((c) => !c.pass)).toHaveLength(1);
   });
 
-  it("stays JSON-serializable — no Set, no NaN, no Infinity", () => {
+  it("stays JSON-serialisable — no Set, no NaN, no Infinity", () => {
     // The results document is saved as JSON for arm-to-arm comparison; a Set or an Infinity
     // becomes {} or null on the way out and reads as an absent identity.
-    const summary = summarizeConservation(emptyInputs);
+    const summary = summariseConservation(emptyInputs);
     expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
   });
 });

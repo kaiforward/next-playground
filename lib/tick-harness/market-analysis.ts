@@ -360,7 +360,7 @@ export function sampleDemandHunting(
 }
 
 /** Fold the sampled flips and the run's whole flow log into the two hunting readings. */
-export function summarizeDemandHunting(
+export function summariseDemandHunting(
   acc: DemandHuntingAccumulator,
   flows: ReadonlyArray<Pick<WorldFlowEvent, "fromSystemId" | "toSystemId" | "goodId" | "quantity">>,
 ): DemandHuntingSummary {

@@ -45,7 +45,7 @@ interface SeedResult {
 
 // ── Generation ───────────────────────────────────────────────────
 
-function analyzeSeed(seed: number): SeedResult {
+function analyseSeed(seed: number): SeedResult {
   const params: GenParams = { ...DEFAULT_PARAMS, seed };
   const universe: GeneratedUniverse = generateUniverse(params, REGION_NAMES);
 
@@ -104,7 +104,7 @@ function run() {
   const start = Date.now();
 
   for (const seed of SEEDS) {
-    results.push(analyzeSeed(seed));
+    results.push(analyseSeed(seed));
   }
 
   const elapsed = Date.now() - start;

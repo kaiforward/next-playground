@@ -31,7 +31,7 @@ async function unwrap<T>(res: Response): Promise<T> {
 }
 
 /**
- * The body-carrying half of the wrappers (POST/PATCH/DELETE): JSON serialization,
+ * The body-carrying half of the wrappers (POST/PATCH/DELETE): JSON serialisation,
  * then the shared unwrap. An omitted body sends no `Content-Type` header and no
  * payload at all — a bodyless DELETE must not advertise a JSON body it isn't sending.
  */
@@ -54,7 +54,7 @@ export async function apiFetch<T>(url: string): Promise<T> {
 
 /**
  * Typed POST wrapper for mutation API routes that return `ApiResponse<T>`.
- * Handles JSON serialization, error unwrapping, and typed response.
+ * Handles JSON serialisation, error unwrapping, and typed response.
  */
 export function apiMutate<T>(url: string, body?: unknown): Promise<T> {
   return apiSend<T>("POST", url, body);

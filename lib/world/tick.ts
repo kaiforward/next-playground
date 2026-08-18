@@ -150,7 +150,7 @@ export function tickRng(seed: number, tick: number): RNG {
 /**
  * Exported alongside `toTickSystems` — the calibration harness
  * (`lib/tick-harness/runner.ts`) reuses these same joins to build the
- * tick-row views its (pre-existing) health analyzers read.
+ * tick-row views its (pre-existing) health analysers read.
  */
 export function toTickConnections(world: World): TickConnection[] {
   return world.connections.map((c) => ({
@@ -329,7 +329,7 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       honestUseRate: m.honestUseRate,
       storageCapacity: m.storageCapacity,
       satisfaction: m.satisfaction,
-      realizedProductionRate: m.realizedProductionRate,
+      realisedProductionRate: m.realisedProductionRate,
       productionSuppressed: m.productionSuppressed,
       productionSuppressRate: m.productionSuppressRate,
       productionMult: m.productionMult,
@@ -505,7 +505,7 @@ function patchLogisticsMarketRows(
 /**
  * Fold directed-build's proposal-pressure counters back into the world market rows. Changes ONLY
  * `proposalCycles` (spread preserves every field the same-tick economy and logistics stages already
- * wrote — satisfaction, squeeze, realized rate, stock, funding-bound). `updates` keys are
+ * wrote — satisfaction, squeeze, realised rate, stock, funding-bound). `updates` keys are
  * `${systemId}|${goodId}`, the same composite key the market row groups are built by. The counter is
  * fractional reference-time, so it is clamped to a finite [0,2] on the way into world state (NaN/Infinity
  * guarded like every other persisted numeric field). No-op writes (the clamped value already equals what

@@ -23,7 +23,7 @@ describe("save-files", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  describe("name sanitization (via the public writeSave/listSaves API)", () => {
+  describe("name sanitisation (via the public writeSave/listSaves API)", () => {
     it("strips path-traversal sequences so a save can never escape saves/", async () => {
       await writeSave("../../etc/passwd", world);
       const names = (await listSaves()).map((s) => s.name);

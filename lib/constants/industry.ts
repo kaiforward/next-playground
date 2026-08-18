@@ -141,7 +141,7 @@ export type CapacityKind = "pop_cap" | "skill1_licence" | "skill2_licence";
  * What a building produces — one uniform skeleton, typed output. A `market_good` is priced and sold
  * (extractors, factories); a `capacity` is an un-priced running balance (housing pop-cap, an academy
  * skill licence); a `modifier` is a %-buff (a specialisation complex, keyed by its complex-type id);
- * `none` is employment/holding only. The utilization dispatch (`buildingUsed`) keys off `kind`.
+ * `none` is employment/holding only. The utilisation dispatch (`buildingUsed`) keys off `kind`.
  */
 export type BuildingOutput =
   | { kind: "market_good"; goodId: string }
@@ -150,7 +150,7 @@ export type BuildingOutput =
   | { kind: "none" };
 
 export interface BuildingTypeDef {
-  /** Typed output — the discriminant every utilization/decay/read path dispatches on. */
+  /** Typed output — the discriminant every utilisation/decay/read path dispatches on. */
   output: BuildingOutput;
   /** Good this type produces (=== type id in this model). Undefined for housing. */
   outputGood?: string;

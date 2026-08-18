@@ -89,7 +89,7 @@ The Voronoi-centric rewrite the rest of the map leans on.
 
 - **`[Map 6]` Migration mode** → the **attractiveness heatmap** (the *pull*, reusing `migrationAttractiveness`),
   colour-only red→green — matching Vic3/EU5, where attraction *is* the migration map mode. **P1 — SHIPPED.** The
-  realized **movement arrows** (built *inside* the mode, EU4-trade model) are the flow-viz half → **P2**.
+  realised **movement arrows** (built *inside* the mode, EU4-trade model) are the flow-viz half → **P2**.
 - **`[Map 7]` Price map mode** → **CUT (premature).** Built in P1, then removed: the buy/sell deal-quality framing
   is a **trader hangover** with no consuming mechanic in the current grand-strategy form. The pre-existing price
   **pill + overlay were removed too**; market data stays on the per-system Market panel. Revisit — as a

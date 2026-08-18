@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  sampleTreasuries, summarizeTreasuries, recordSettledCycles, summarizeFoundingEra,
+  sampleTreasuries, summariseTreasuries, recordSettledCycles, summariseFoundingEra,
   FOUNDING_ERA_START_TICK,
 } from "../treasury-analysis";
 import type { FactionCycleRecord } from "../treasury-analysis";
@@ -36,7 +36,7 @@ describe("treasury analysis", () => {
     expect(snap.minBalance).toBe(0);
     expect(snap.shortedFactions).toBe(1);
 
-    const summary = summarizeTreasuries([solvent, shorted], [snap]);
+    const summary = summariseTreasuries([solvent, shorted], [snap]);
     expect(summary.factionCount).toBe(2);
     expect(summary.meanBalance).toBeCloseTo(10);
     expect(summary.minBalance).toBe(0);
@@ -61,7 +61,7 @@ describe("treasury analysis", () => {
     const snap = sampleTreasuries(24, [rich, poorest, middling]);
     expect(snap.minBalance).toBe(30);
 
-    const summary = summarizeTreasuries([rich, poorest, middling], [snap]);
+    const summary = summariseTreasuries([rich, poorest, middling], [snap]);
     expect(summary.minBalance).toBe(30);
     expect(summary.maxBalance).toBe(900);
   });
@@ -93,7 +93,7 @@ describe("treasury analysis", () => {
 
   it("counts non-finite or negative balances as invalid rows", () => {
     const bad = makeTreasury({ factionId: "f3", balance: NaN });
-    expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);
+    expect(summariseTreasuries([bad], []).invalidRows).toBe(1);
   });
 
   it("counts non-finite settlement money values as invalid rows", () => {
@@ -106,7 +106,7 @@ describe("treasury analysis", () => {
         foundingExpense: 0,
       },
     });
-    expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);
+    expect(summariseTreasuries([bad], []).invalidRows).toBe(1);
   });
 
   it("counts a non-finite founding expense as an invalid row", () => {
@@ -119,18 +119,18 @@ describe("treasury analysis", () => {
         foundingExpense: NaN,
       },
     });
-    expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);
+    expect(summariseTreasuries([bad], []).invalidRows).toBe(1);
   });
 
   it("counts a negative pending-founding accumulator as an invalid row", () => {
     const bad = makeTreasury({ factionId: "f7", pendingFounding: -5 });
-    expect(summarizeTreasuries([bad], []).invalidRows).toBe(1);
+    expect(summariseTreasuries([bad], []).invalidRows).toBe(1);
   });
 
   it("reports an empty roster as zeroes, not NaN", () => {
     const snap = sampleTreasuries(0, []);
     expect(snap).toEqual({ tick: 0, meanBalance: 0, minBalance: 0, shortedFactions: 0 });
-    const summary = summarizeTreasuries([], []);
+    const summary = summariseTreasuries([], []);
     expect(summary.meanBalance).toBe(0);
     expect(summary.maxBalance).toBe(0);
     expect(summary.headsShare).toBe(0);
@@ -187,7 +187,7 @@ describe("treasury analysis", () => {
   });
 });
 
-describe("summarizeFoundingEra", () => {
+describe("summariseFoundingEra", () => {
   const cycle = (
     tick: number,
     {
@@ -203,7 +203,7 @@ describe("summarizeFoundingEra", () => {
   it("shares founding spend against the income of the SAME faction-cycles", () => {
     // Both halves come off one set of rows. A cumulative spend divided by an income accumulated
     // over a different window is the way this reading goes quietly wrong.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(100, { income: 1000, foundingExpense: 500 }), // startup tail — excluded from the share
       cycle(500, { income: 200, foundingExpense: 40 }),
       cycle(500, { income: 300, foundingExpense: 10 }),
@@ -222,7 +222,7 @@ describe("summarizeFoundingEra", () => {
     // The equilibrium horizon is nine thousand ticks of post-founding income. Left unbounded, the
     // same galaxy's share falls simply because the run was longer, and the two horizons could not
     // be read against each other at all.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(500, { income: 100, foundingExpense: 25 }),
       cycle(600, { income: 100, foundingExpense: 25 }),
       cycle(9000, { income: 100_000 }),  // long after the burst — not the era's income
@@ -237,7 +237,7 @@ describe("summarizeFoundingEra", () => {
   });
 
   it("runs the era to the end of the run when nothing was ever charged for a founding", () => {
-    const summary = summarizeFoundingEra([cycle(500, { income: 100 }), cycle(9000, { income: 300 })]);
+    const summary = summariseFoundingEra([cycle(500, { income: 100 }), cycle(9000, { income: 300 })]);
     expect(summary.eraEndTick).toBeNull();
     expect(summary.factionCycles).toBe(2);
     expect(summary.spendShare).toBe(0);
@@ -252,7 +252,7 @@ describe("summarizeFoundingEra", () => {
     // Ticks are real settlement ticks and the windows are half-open at both ends, so a row sitting
     // exactly on a boundary is the common case rather than an edge: the tail's last tick, the era's
     // first, and the fixed window's last are all boundaries a report is read across.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(FOUNDING_ERA_START_TICK, { income: 70, foundingExpense: 7 }),       // the tail's last tick
       cycle(FOUNDING_ERA_START_TICK + 1, { income: 100, foundingExpense: 10 }), // the era's first
       cycle(1000, { income: 100, foundingExpense: 10 }),                        // the fixed window's last
@@ -271,7 +271,7 @@ describe("summarizeFoundingEra", () => {
     // Records are folded per settled faction-cycle across the whole roster, so they arrive grouped
     // by faction, not sorted by tick. Keeping a running maximum is what makes the era's end the
     // era's end rather than whichever charge the fold happened to see last.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(900, { income: 100, foundingExpense: 10 }),
       cycle(500, { income: 100, foundingExpense: 10 }),
       cycle(600, { income: 100 }),
@@ -285,7 +285,7 @@ describe("summarizeFoundingEra", () => {
   it("closes the era on a founding charged in the very first settled cycle", () => {
     // Tick 0 is a real settlement tick, and 0 is not "no era end" — a comparison that leaned on a
     // null reading as zero would lose the whole era of a galaxy that founded on its first cycle.
-    const summary = summarizeFoundingEra([cycle(0, { income: 100, foundingExpense: 10 })]);
+    const summary = summariseFoundingEra([cycle(0, { income: 100, foundingExpense: 10 })]);
     expect(summary.eraEndTick).toBe(0);
     expect(summary.eraCensored).toBe(true);
   });
@@ -299,8 +299,8 @@ describe("summarizeFoundingEra", () => {
       cycle(900, { income: 100, foundingExpense: 20 }),
       cycle(2000, { income: 900 }),
     ];
-    const baseline = summarizeFoundingEra(shared);
-    const treatment = summarizeFoundingEra([...shared, cycle(2000, { income: 900, foundingExpense: 4 })]);
+    const baseline = summariseFoundingEra(shared);
+    const treatment = summariseFoundingEra([...shared, cycle(2000, { income: 900, foundingExpense: 4 })]);
 
     expect(baseline.eraEndTick).toBe(900);
     expect(treatment.eraEndTick).toBe(2000);
@@ -315,13 +315,13 @@ describe("summarizeFoundingEra", () => {
   it("flags an era still open at run end as censored, not bounded", () => {
     // The startup horizon reads this way whenever founding is still going at t=1000: the window
     // stopped because the run did, so its share is "spend so far", not a closed era's figure.
-    const censored = summarizeFoundingEra([
+    const censored = summariseFoundingEra([
       cycle(500, { foundingExpense: 10 }),
       cycle(984, { foundingExpense: 10 }),
     ]);
     expect(censored.eraCensored).toBe(true);
 
-    const closed = summarizeFoundingEra([
+    const closed = summariseFoundingEra([
       cycle(500, { foundingExpense: 10 }),
       cycle(984, { foundingExpense: 10 }),
       cycle(9984),
@@ -332,7 +332,7 @@ describe("summarizeFoundingEra", () => {
   it("reports post-era faction-cycles in their own slice, in no bar", () => {
     // They are in `totalFoundingSpend`'s span but in none of the shorted slices. Unreported, a
     // post-era shortfall would simply be missing from a report whose counts otherwise add up.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(100, { shorted: true }),
       cycle(500, { foundingExpense: 10 }),
       cycle(2000, { shorted: true }),
@@ -343,7 +343,7 @@ describe("summarizeFoundingEra", () => {
     // The slice is the rows AFTER the era, and reading it off the wrong side of the boundary would
     // report the tail's shortfalls as post-era ones — same count, opposite meaning.
     expect(
-      summarizeFoundingEra([
+      summariseFoundingEra([
         cycle(100),
         cycle(500, { foundingExpense: 10 }),
         cycle(2000, { shorted: true }),
@@ -360,7 +360,7 @@ describe("summarizeFoundingEra", () => {
   it("takes the construction minimum over BILLED cycles, so a slider at 0 is not starvation", () => {
     // `settleLadder` latches the SLIDER when a band is billed nothing. A faction with nothing to
     // build therefore reads 0.000 while being perfectly funded, and would fail the ≥0.5 bar for it.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(500, { construction: 0, constructionBill: 0 }),  // nothing to build — not starvation
       cycle(600, { construction: 0.8, constructionBill: 5 }),
       cycle(700, { construction: 1, constructionBill: 5 }),
@@ -375,7 +375,7 @@ describe("summarizeFoundingEra", () => {
     // A minimum of 0 is either one outlier cycle or a routine drain, and the two want opposite
     // responses. The median and p10 are what tell them apart — and they must be taken over the
     // same billed set, or the distribution describes a different population from its own floor.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(450, { construction: 0, constructionBill: 0 }),   // unbilled — in no construction figure
       cycle(500, { construction: 0, constructionBill: 5 }),   // the outlier
       cycle(600, { construction: 1, constructionBill: 5 }),
@@ -394,12 +394,12 @@ describe("summarizeFoundingEra", () => {
   it("separates a routine construction drain from a single starved cycle", () => {
     // The same minimum, a completely different reading — this is the pair the distribution exists
     // to distinguish, and a min-only report gives them the identical answer.
-    const routine = summarizeFoundingEra([
+    const routine = summariseFoundingEra([
       cycle(500, { construction: 0.2, constructionBill: 5 }),
       cycle(600, { construction: 0.2, constructionBill: 5 }),
       cycle(700, { construction: 0.2, constructionBill: 5 }),
     ]);
-    const outlier = summarizeFoundingEra([
+    const outlier = summariseFoundingEra([
       cycle(500, { construction: 0.2, constructionBill: 5 }),
       cycle(600, { construction: 1, constructionBill: 5 }),
       cycle(700, { construction: 1, constructionBill: 5 }),
@@ -411,7 +411,7 @@ describe("summarizeFoundingEra", () => {
   });
 
   it("reports no billed construction cycle as null, not as a starved zero", () => {
-    const summary = summarizeFoundingEra([cycle(500, { construction: 0, constructionBill: 0 })]);
+    const summary = summariseFoundingEra([cycle(500, { construction: 0, constructionBill: 0 })]);
     expect(summary.fundedConstruction).toBeNull();
     expect(summary.billedConstructionCycles).toBe(0);
   });
@@ -419,7 +419,7 @@ describe("summarizeFoundingEra", () => {
   it("splits shorted faction-cycles by whether the cycle carried a founding charge", () => {
     // The whole point of the split: a charter-caused shortfall must be distinguishable from the
     // ambient rate, and from a startup tail that shorts before any founding has happened at all.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(100, { shorted: true }),                        // tail
       cycle(200, { shorted: true }),                        // tail
       cycle(500, { foundingExpense: 30, shorted: true }),
@@ -436,7 +436,7 @@ describe("summarizeFoundingEra", () => {
   });
 
   it("reads funded fractions as a distribution over founding-era cycles, not a roster mean", () => {
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(100, { maintenance: 0.1, construction: 0.1 }), // tail — must not set the era's minima
       cycle(500, { maintenance: 1, construction: 1 }),
       cycle(600, { maintenance: 1, construction: 0.7 }),
@@ -453,7 +453,7 @@ describe("summarizeFoundingEra", () => {
     // The bar is a minimum over the era, and the worst cycle is not usually the last one. A running
     // minimum that latched every row would report the run's final cycle and pass a bar the galaxy's
     // actual trough failed.
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(500, { maintenance: 1, construction: 1, constructionBill: 5 }),
       cycle(600, { maintenance: 0.6, construction: 0.7, constructionBill: 5 }),
       cycle(700, { maintenance: 1, construction: 1, constructionBill: 5 }),
@@ -464,7 +464,7 @@ describe("summarizeFoundingEra", () => {
   });
 
   it("excludes a non-finite or negative row from every figure, and counts it", () => {
-    const summary = summarizeFoundingEra([
+    const summary = summariseFoundingEra([
       cycle(500, { income: 100, foundingExpense: 10 }),
       cycle(600, { income: Number.NaN, foundingExpense: 10 }),
       cycle(700, { income: 100, foundingExpense: -5 }),
@@ -478,7 +478,7 @@ describe("summarizeFoundingEra", () => {
   });
 
   it("reports a run with no founding-era cycles as nulls and zeroes, never NaN", () => {
-    const summary = summarizeFoundingEra([]);
+    const summary = summariseFoundingEra([]);
     expect(summary.spendShare).toBe(0);
     // No era at all is not a censored one — an era that never began cannot have been cut short.
     expect(summary.eraEndTick).toBeNull();
@@ -496,7 +496,7 @@ describe("treasury analysis — roster reads", () => {
     const fresh = makeTreasury({ factionId: "f5", lastSettlement: null });
     const snap = sampleTreasuries(0, [fresh]);
     expect(snap.shortedFactions).toBe(0);
-    const summary = summarizeTreasuries([fresh], [snap]);
+    const summary = summariseTreasuries([fresh], [snap]);
     expect(summary.headsShare).toBe(0);
     expect(summary.invalidRows).toBe(0);
     expect(summary.firstShortfallTick).toBeNull();

@@ -105,7 +105,7 @@ describe("prepareResourceBars", () => {
     expect(trace).toEqual([]);
   });
 
-  it("normalizes fractions to the vector max", () => {
+  it("normalises fractions to the vector max", () => {
     const { entries } = prepareResourceBars(makeResourceVector({ gas: 1, ore: 4 }));
     const byType = Object.fromEntries(entries.map((e) => [e.type, e.fraction]));
     expect(byType.ore).toBe(1);

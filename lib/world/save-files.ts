@@ -8,7 +8,7 @@
 
 import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import * as path from "node:path";
-import { deserializeWorld, sanitizeSaveName, serializeWorld } from "./save";
+import { deserialiseWorld, sanitiseSaveName, serialiseWorld } from "./save";
 import type { World } from "./types";
 
 export interface SaveInfo {
@@ -33,7 +33,7 @@ export function setSavesDirForTesting(dir: string): void {
 }
 
 function saveFilePath(name: string): string {
-  return path.join(SAVES_DIR, `${sanitizeSaveName(name)}${SAVE_EXTENSION}`);
+  return path.join(SAVES_DIR, `${sanitiseSaveName(name)}${SAVE_EXTENSION}`);
 }
 
 /**
@@ -45,7 +45,7 @@ export async function writeSave(name: string, world: World): Promise<void> {
   await mkdir(SAVES_DIR, { recursive: true });
   const finalPath = saveFilePath(name);
   const tempPath = `${finalPath}.tmp`;
-  await writeFile(tempPath, serializeWorld(world), "utf-8");
+  await writeFile(tempPath, serialiseWorld(world), "utf-8");
   await rename(tempPath, finalPath);
 }
 
@@ -74,7 +74,7 @@ export async function listSaves(): Promise<SaveInfo[]> {
       readFile(filePath, "utf-8"),
       stat(filePath),
     ]);
-    const parsed = deserializeWorld(content);
+    const parsed = deserialiseWorld(content);
     if (!parsed.ok) continue;
     infos.push({
       name: fileName.slice(0, -SAVE_EXTENSION.length),

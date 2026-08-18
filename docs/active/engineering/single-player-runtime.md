@@ -14,7 +14,7 @@ The whole world is a single in-memory object held by a globalThis-cached store (
 - The store is `globalThis.__world`, so dev-server module reloads don't spawn a second world.
 - `version` is a plain change counter (used to key caches / detect new-game swaps), **not** a tick-level optimistic lock. Ticks don't contend: one in-process loop owns advancement.
 
-`World` (`lib/world/types.ts`) is **hand-owned and JSON-serializable**: flat arrays of plain rows (`WorldSystem`, `WorldMarket`, `WorldBuilding`, `WorldEvent`, …) plus a `meta` block (`{ currentTick, systemCount, seed, mapSize }`) and a `player` seat (`{ controlledFactionId } | null`). No `Map`/`Set`/`Date`/class instances ever enter world state — that keeps it structured-clone-able (save files, and a future path-B worker boundary) and schema-faithful to the pre-pivot relational shape.
+`World` (`lib/world/types.ts`) is **hand-owned and JSON-serialisable**: flat arrays of plain rows (`WorldSystem`, `WorldMarket`, `WorldBuilding`, `WorldEvent`, …) plus a `meta` block (`{ currentTick, systemCount, seed, mapSize }`) and a `player` seat (`{ controlledFactionId } | null`). No `Map`/`Set`/`Date`/class instances ever enter world state — that keeps it structured-clone-able (save files, and a future path-B worker boundary) and schema-faithful to the pre-pivot relational shape.
 
 ## World generation
 
@@ -27,10 +27,10 @@ The whole world is a single in-memory object held by a globalThis-cached store (
 
 A save is **one JSON snapshot of the whole world**, written under a local `saves/` directory.
 
-- `lib/world/save.ts` is pure and client-importable: `serialize` wraps the world in a `{ formatVersion: 1, world }` envelope; `deserialize` narrows an untrusted parse honestly (guard-predicate style, no `as`) and returns `null` on any shape mismatch. `sanitizeSaveName` and `AUTOSAVE_NAME` live here too so the start-screen form and the disk layer share one definition.
-- `lib/world/save-files.ts` is the **only `fs` importer in `lib/`** — the thin Node edge. Writes are atomic (temp file + rename); names are sanitized to `[a-z0-9-_]`; `saves/` is git-ignored. It is loaded via dynamic `import()` from anything on the pure path so the static graph stays Node-free.
+- `lib/world/save.ts` is pure and client-importable: `serialise` wraps the world in a `{ formatVersion: 1, world }` envelope; `deserialise` narrows an untrusted parse honestly (guard-predicate style, no `as`) and returns `null` on any shape mismatch. `sanitiseSaveName` and `AUTOSAVE_NAME` live here too so the start-screen form and the disk layer share one definition.
+- `lib/world/save-files.ts` is the **only `fs` importer in `lib/`** — the thin Node edge. Writes are atomic (temp file + rename); names are sanitised to `[a-z0-9-_]`; `saves/` is git-ignored. It is loaded via dynamic `import()` from anything on the pure path so the static graph stays Node-free.
 - **One rolling autosave** (`autosave`) plus manual named saves. The autosave is written every 60 s of wall-clock while running, and once on pause.
-- **Pre-1.0 rule: saves break on upgrade.** There is no migration — when world shape changes, `deserialize` rejects the old snapshot as invalid. No compression until file size proves it necessary.
+- **Pre-1.0 rule: saves break on upgrade.** There is no migration — when world shape changes, `deserialise` rejects the old snapshot as invalid. No compression until file size proves it necessary.
 
 ## The tick loop & speed
 

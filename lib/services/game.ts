@@ -1,6 +1,6 @@
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
-import { deserializeWorld, sanitizeSaveName } from "@/lib/world/save";
+import { deserialiseWorld, sanitiseSaveName } from "@/lib/world/save";
 import { tickLoop, type Speed } from "@/lib/world/tick-loop";
 import type { SaveInfo } from "@/lib/world/save-files";
 import type { WorldMeta } from "@/lib/world/types";
@@ -44,7 +44,7 @@ export type SaveGameResult =
   | { ok: true; data: { name: string; tick: number } }
   | { ok: false; error: string };
 
-/** Write the current world to `saves/<sanitized name>.json`. */
+/** Write the current world to `saves/<sanitised name>.json`. */
 export async function saveGame(name: string): Promise<SaveGameResult> {
   if (!hasWorld()) {
     return { ok: false, error: "No world loaded to save" };
@@ -54,7 +54,7 @@ export async function saveGame(name: string): Promise<SaveGameResult> {
   await writeSave(name, world);
   return {
     ok: true,
-    data: { name: sanitizeSaveName(name), tick: world.meta.currentTick },
+    data: { name: sanitiseSaveName(name), tick: world.meta.currentTick },
   };
 }
 
@@ -75,7 +75,7 @@ export async function loadGame(name: string): Promise<LoadGameResult> {
     return { ok: false, error: `Save "${name}" not found` };
   }
 
-  const parsed = deserializeWorld(json);
+  const parsed = deserialiseWorld(json);
   if (!parsed.ok) {
     return { ok: false, error: `Incompatible save: ${parsed.error}` };
   }

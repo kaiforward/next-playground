@@ -73,7 +73,7 @@ interface MemoryRelationEvent {
  * each tick from `World`'s factions/relations/alliancePacts/systems).
  *
  * Pair convention: factionAId < factionBId. Stored canonical; reads/writes
- * normalize input on every call.
+ * normalise input on every call.
  */
 export class InMemoryRelationsWorld implements RelationsWorld {
   factions: FactionView[];

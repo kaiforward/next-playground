@@ -2,7 +2,7 @@ import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import type { LODState } from "../lod";
 import type { Frustum } from "../frustum";
 import { TERRITORY, TEXT_RESOLUTION } from "../theme";
-import { valueRampColorPixi, deEmphasize, ABSENT_COLOR, type ValueMode } from "../value-ramp";
+import { valueRampColorPixi, deEmphasise, ABSENT_COLOR, type ValueMode } from "../value-ramp";
 import { formatValueNumber } from "../number-format";
 import {
   buildAggregationGroups, pickTier, DEFAULT_TIER_THRESHOLDS,
@@ -219,7 +219,7 @@ export class ValueChoroplethLayer {
       // Faction focus dims every out-of-scope cell, in every mode — independent of whether the mode
       // rescales its reference max. The absent check above always wins: never dim a black cell.
       if (color !== ABSENT_COLOR && this.scopeFaction != null && this.factionBySystemId.get(id) !== this.scopeFaction) {
-        color = deEmphasize(color, "both");
+        color = deEmphasise(color, "both");
       }
       for (const poly of multiPoly) {
         const exterior = poly[0];

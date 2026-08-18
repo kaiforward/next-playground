@@ -161,7 +161,7 @@ export function getEconomySnapshot(): ServiceResult<{ systems: EconomySnapshotSy
 /**
  * Reset every market to its fresh-world state and clear all events/modifiers. Each row returns to its
  * capacity-driven seed stock with a neutral anchor, and the tick-persisted flow-state fields are returned
- * to their world-gen seed: satisfaction 1, the squeeze/proposal persistence counters 0, and the realized
+ * to their world-gen seed: satisfaction 1, the squeeze/proposal persistence counters 0, and the realised
  * rate, suppression and logistics-binding flags dropped (so the row reads exactly as a freshly generated
  * market). anchorMult resets to 1 alongside stock: all events (and their anchor_shift modifiers) are being
  * cleared, so the neutral anchor is the correct clean-slate value.

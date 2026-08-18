@@ -163,7 +163,7 @@ The player authors a faction on New Game (name/government/doctrine); world-gen s
 
 ## Planned Changes
 
-The configurable universe and tile-based map renderer are in place — scale ceiling is a performance target, not a design constraint. The faction foundation has also shipped: systems belong to factions with colored territory visualization, and government type is sourced per-faction rather than per-region (see [faction-system.md](./faction-system.md)). Remaining planned changes are war- and facility-oriented:
+The configurable universe and tile-based map renderer are in place — scale ceiling is a performance target, not a design constraint. The faction foundation has also shipped: systems belong to factions with colored territory visualisation, and government type is sourced per-faction rather than per-region (see [faction-system.md](./faction-system.md)). Remaining planned changes are war- and facility-oriented:
 
 - **Dynamic borders**: Territory changes hands through wars, visually reflected on the map
 - **Faction influence on economy**: Controlling faction's government can nudge economy derivation on close calls

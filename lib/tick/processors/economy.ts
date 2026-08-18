@@ -60,7 +60,7 @@ export async function runEconomyProcessor(
 ): Promise<TickProcessorResult> {
   const { interval, simParams, modifierCaps, strikeParams, maintenanceMalusBySystem } = params;
 
-  // Normalize the interval the same way cycleStartShard does so the reported shard
+  // Normalise the interval the same way cycleStartShard does so the reported shard
   // index/count can't diverge from the actual cycle boundary for a non-integer interval.
   const iv = Math.max(1, Math.floor(interval));
   const shardIndex = ((ctx.tick % iv) + iv) % iv;
@@ -172,7 +172,7 @@ export async function runEconomyProcessor(
   // anchorMult comes straight off the resolved tick — the builder already
   // aggregated the system's modifiers, so there's no second aggregation pass.
   const marketUpdates: MarketUpdate[] = markets.map((m, i) => {
-    const realizedProductionRate = simulated[i].realized / catchUp;
+    const realisedProductionRate = simulated[i].realised / catchUp;
     const productionSuppressRate = productionSuppressBySystem.get(m.systemId) ?? 1;
     const productionMult = resolved[i].entry.productionMult ?? 1;
     // Advance by this cycle's reference-time (catchUpFactor), not a flat +1, so "two reference cycles
@@ -185,12 +185,12 @@ export async function runEconomyProcessor(
       stock: simulated[i].stock,
       anchorMult: resolved[i].anchorMult,
       satisfaction: satisfactionByIndex[i],
-      realizedProductionRate: Number.isFinite(realizedProductionRate) && realizedProductionRate >= 0
-        ? realizedProductionRate
+      realisedProductionRate: Number.isFinite(realisedProductionRate) && realisedProductionRate >= 0
+        ? realisedProductionRate
         : 0,
       productionSuppressed: marketSuppressed(m),
       // Both are draw-figure inputs the logistics read derives urgency from, so they carry the same
-      // finite guard as the realized rate above; a non-finite scalar reads as "no gate", never 0.
+      // finite guard as the realised rate above; a non-finite scalar reads as "no gate", never 0.
       productionSuppressRate: Number.isFinite(productionSuppressRate) && productionSuppressRate >= 0
         ? productionSuppressRate
         : 1,
@@ -202,10 +202,10 @@ export async function runEconomyProcessor(
   await world.applyMarketUpdates(marketUpdates);
 
   // The producer signal is the isolated start-stock ceiling term. It deliberately
-  // excludes labour, recipe gates, strikes, maintenance, events, and realized flow.
+  // excludes labour, recipe gates, strikes, maintenance, events, and realised flow.
   const goodsBySystem = new Map<string, GoodSatisfaction[]>();
   const sellingFactorBySystem = new Map<string, Map<string, number>>();
-  const realizedProductionBySystem = new Map<string, Map<string, number>>();
+  const realisedProductionBySystem = new Map<string, Map<string, number>>();
   markets.forEach((m, i) => {
     const consumptionRate = tickEntries[i].consumptionRate;
     if (consumptionRate != null && consumptionRate > 0) {
@@ -230,11 +230,11 @@ export async function runEconomyProcessor(
       map.set(m.goodId, factor);
       sellingFactorBySystem.set(m.systemId, map);
     }
-    const realized = simulated[i].realized;
-    if (realized > 0) {
-      const bySystem = realizedProductionBySystem.get(m.systemId) ?? new Map<string, number>();
-      bySystem.set(m.goodId, (bySystem.get(m.goodId) ?? 0) + realized);
-      realizedProductionBySystem.set(m.systemId, bySystem);
+    const realised = simulated[i].realised;
+    if (realised > 0) {
+      const bySystem = realisedProductionBySystem.get(m.systemId) ?? new Map<string, number>();
+      bySystem.set(m.goodId, (bySystem.get(m.goodId) ?? 0) + realised);
+      realisedProductionBySystem.set(m.systemId, bySystem);
     }
   });
   // Two folds of the same per-good satisfactions: D is the magnitude of the shortfall, the supply
@@ -251,7 +251,7 @@ export async function runEconomyProcessor(
     dissatisfactionBySystem,
     supplyStateBySystem,
     sellingFactorBySystem,
-    realizedProductionBySystem,
+    realisedProductionBySystem,
     productionSuppressBySystem,
   };
 

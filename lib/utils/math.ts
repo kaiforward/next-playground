@@ -56,7 +56,7 @@ export function weightedMean(values: number[], weights: number[]): number {
 /**
  * Middle value of `xs`, averaging the two middle entries for an even-length list.
  * Empty input is 0 rather than NaN — harness cohorts can legitimately be empty, and
- * NaN must never reach serialized output.
+ * NaN must never reach serialised output.
  */
 export function median(xs: number[]): number {
   if (xs.length === 0) return 0;

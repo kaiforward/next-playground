@@ -5,7 +5,7 @@
  * `JSON.parse(JSON.stringify(world))` (save/load round-trips through this).
  *
  * Entities are stored as flat top-level arrays keyed by id (or a natural
- * composite key), not nested — the same normalized shape as the relational
+ * composite key), not nested — the same normalised shape as the relational
  * schema this superseded. A row keeps its own synthetic `id` only when
  * something else references it by id; rows with a natural composite key
  * that nothing else points to (buildings, connections, markets,
@@ -404,8 +404,8 @@ export interface WorldMarket {
    * missing (pre-change save) reads as 1.
    */
   satisfaction?: number;
-  /** Reference-cycle realized output; missing uses capacity until first assessment. */
-  realizedProductionRate?: number;
+  /** Reference-cycle realised output; missing uses capacity until first assessment. */
+  realisedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers are deliberately excluded. Missing reads as false. */
   productionSuppressed?: boolean;
   /**

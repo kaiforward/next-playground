@@ -69,7 +69,7 @@ export interface IdentityCheck {
  * increments `debits` while leaving `everPaid` where it was, which is the only way the two sides can
  * disagree — and the exact failure the identity exists to catch.
  *
- * Not JSON-serializable and never returned in the results: this is a runner-side collector, folded
+ * Not JSON-serialisable and never returned in the results: this is a runner-side collector, folded
  * into plain numbers by `checkCharterDebits`.
  */
 export interface CharterCensus {
@@ -458,7 +458,7 @@ export function conservationGateFailure(
 }
 
 /** Check all four identities, in the order the spec's acceptance section lists them. */
-export function summarizeConservation(inputs: ConservationInputs): ConservationSummary {
+export function summariseConservation(inputs: ConservationInputs): ConservationSummary {
   const checks = [
     checkCharterDebits(inputs.charters),
     checkFoundingWithinBalance(inputs.factionCycles, inputs.startingBalances),

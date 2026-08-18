@@ -157,7 +157,7 @@ export function yieldsOf(row: YieldColumns): ResourceVector {
 }
 
 /**
- * Turn a ResourceVector into renderable bars. Bars normalize to the vector's
+ * Turn a ResourceVector into renderable bars. Bars normalise to the vector's
  * own max (so the dominant resource reads full-width); the raw value is kept
  * for display. With `sort`, entries read rich-first. With `collapseTrace`,
  * zero / near-zero resources move into `trace` instead of rendering a bar.

@@ -101,7 +101,7 @@ describe("inputGate — scarcity ramp", () => {
     const out = simulateSystemEconomyTick([entry("ore", 3), entry("metals", 50, 20)], PARAMS);
     const ore = out.find((e) => e.goodId === "ore")!;
     const metals = out.find((e) => e.goodId === "metals")!;
-    // Output realized despite scarcity, and the input drained toward empty past the old floor.
+    // Output realised despite scarcity, and the input drained toward empty past the old floor.
     expect(metals.stock).toBeGreaterThan(50);
     expect(ore.stock).toBeLessThan(3);
     expect(ore.stock).toBeLessThan(5); // below the old minStock — no reserve floor
@@ -226,16 +226,16 @@ describe("simulateSystemEconomyTick — event multipliers + immutability", () =>
   });
 });
 
-describe("simulateSystemEconomyTick — realized output", () => {
-  it("reports realized output per entry — input-starved production realizes less than capacity", () => {
+describe("simulateSystemEconomyTick — realised output", () => {
+  it("reports realised output per entry — input-starved production realises less than capacity", () => {
     // ore: tier-0 (no recipe), stock below the anchor so the production ceiling is 1 →
-    // realized equals effectiveProduction exactly (gate is always 1 for a no-recipe good).
+    // realised equals effectiveProduction exactly (gate is always 1 for a no-recipe good).
     const tier0 = entry("ore", 5, 20);
     // chemicals: recipe { gas: 0.5, minerals: 0.5 }; neither input is in this entry set,
-    // so stockOf defaults to 0 and comfortOf defaults to 0 ⇒ ramp 0 ⇒ gate 0 ⇒ realized 0.
+    // so stockOf defaults to 0 and comfortOf defaults to 0 ⇒ ramp 0 ⇒ gate 0 ⇒ realised 0.
     const starved = entry("chemicals", 50, 20);
     // water: pure consumer, no productionRate at all ⇒ never enters the production
-    // branch ⇒ realized reports 0, not undefined.
+    // branch ⇒ realised reports 0, not undefined.
     const consumerOnly = entry("water", 100, undefined, 8);
 
     const simulated = simulateSystemEconomyTick([tier0, starved, consumerOnly], PARAMS);
@@ -243,9 +243,9 @@ describe("simulateSystemEconomyTick — realized output", () => {
     const starvedResult = simulated.find((e) => e.goodId === "chemicals")!;
     const consumerResult = simulated.find((e) => e.goodId === "water")!;
 
-    expect(tier0Result.realized).toBeCloseTo(20, 6);
-    expect(starvedResult.realized).toBe(0);
-    expect(consumerResult.realized).toBe(0);
+    expect(tier0Result.realised).toBeCloseTo(20, 6);
+    expect(starvedResult.realised).toBe(0);
+    expect(consumerResult.realised).toBe(0);
   });
 });
 

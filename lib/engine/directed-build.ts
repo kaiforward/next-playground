@@ -59,7 +59,7 @@ export interface BuildGoodState {
    * supplies it via toGoodMarketStates (a GoodMarketState, which carries production).
    */
   production?: number;
-  /** Current building capacity. The tick path always supplies this separately from realized production. */
+  /** Current building capacity. The tick path always supplies this separately from realised production. */
   capacityProduction: number;
   /**
    * Persisted consumption satisfaction from the last economy cycle (delivered ÷ demanded, ∈
@@ -337,7 +337,7 @@ export function queuedBuildLevelsAt(openProjects: WorldConstructionProject[], sy
 }
 
 /**
- * Fold all committed build levels into the planner's effective state. The standing realized rate is
+ * Fold all committed build levels into the planner's effective state. The standing realised rate is
  * preserved; committed capacity can only add its non-negative delta, never rewrite an assessment.
  * Queued consumers also expose their input draw before they land, keeping the supply chain honest.
  */
@@ -392,7 +392,7 @@ function effectiveBuildSystems(
  * Cancellation is flow-aware: a deficit is cancelled only to the extent reachable exporters' spare
  * surplus actually covers it, netted against other consumers already drawing on that surplus, rather
  * than by the mere presence of any surplus anywhere reachable. An exporter's spare
- * is its sustainable export RATE (`production − demand`) measured on REALIZED output, so capacity
+ * is its sustainable export RATE (`production − demand`) measured on REALISED output, so capacity
  * idled by a strike never cancels someone else's gap — it is not a stock pile either, so a neighbour
  * merely holding and draining stock never cancels a gap. Per good,
  * the reachable exporters' total spare is netted across all reachable gaps at once —

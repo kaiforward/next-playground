@@ -52,8 +52,8 @@ export interface MarketUpdate {
   anchorMult: number;
   /** Consumption satisfaction actually applied this cycle (delivered ÷ demanded; 1 for non-consumers). */
   satisfaction: number;
-  /** Realized output normalized to the reference economy interval. */
-  realizedProductionRate: number;
+  /** Realised output normalised to the reference economy interval. */
+  realisedProductionRate: number;
   /** Whether strike or maintenance reduced production during this assessment. */
   productionSuppressed: boolean;
   /** The system's strike × maintenance production scalar this assessment, ∈ (0,1] — the same value on
@@ -99,6 +99,6 @@ export interface EconomyProcessorParams {
   strikeParams: StrikeParams;
   /** Per-system maintenance output malus (production multiplier, 1 = none) from the
    *  owning faction's latched maintenance funding. Missing system or omitted map → 1.
-   *  Rides productionSuppress — flow-only, must never feed buildingUsed utilization. */
+   *  Rides productionSuppress — flow-only, must never feed buildingUsed utilisation. */
   maintenanceMalusBySystem?: ReadonlyMap<string, number>;
 }

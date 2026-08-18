@@ -23,8 +23,8 @@ export interface MarketRowForLogistics {
   storageCapacity: number;
   /** Persisted consumption satisfaction from the last economy cycle (missing ⇒ 1). */
   satisfaction?: number;
-  /** Reference-cycle realized output; missing falls back to current capacity for old saves only. */
-  realizedProductionRate?: number;
+  /** Reference-cycle realised output; missing falls back to current capacity for old saves only. */
+  realisedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers deliberately excluded. */
   productionSuppressed?: boolean;
   /** The owning system's strike × maintenance production scalar, ∈ (0,1]; missing ⇒ 1. */

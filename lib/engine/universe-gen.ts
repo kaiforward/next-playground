@@ -483,7 +483,7 @@ export function generateConnections(
     regionSystems.get(sys.regionIndex)!.push(sys);
   }
 
-  // Compute average intra-region distance for fuel normalization
+  // Compute average intra-region distance for fuel normalisation
   // (replaces the old fixed systemScatterRadius divisor)
   let totalIntraDist = 0;
   let totalIntraEdges = 0;

@@ -85,7 +85,7 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` m
 
 **In-memory world & saves**
 - The world is **process state** — a dev-server restart loses unsaved progress; HMR survives (`globalThis` singleton). `TickLoop` autosaves every 60 s and on pause. If boot behaviour looks stale, `rm -rf .next`.
-- `World` must stay **JSON-serializable**: no `Map`/`Set`/`Date`/class instances, no `Infinity`/`NaN` — `JSON.stringify` turns those into `null` and silently corrupts the save.
+- `World` must stay **JSON-serialisable**: no `Map`/`Set`/`Date`/class instances, no `Infinity`/`NaN` — `JSON.stringify` turns those into `null` and silently corrupts the save.
 - `save-files.ts` is the only `fs` importer in `lib/` — reach it (and any Node-edge code) via **dynamic** `import()`. Static `fs`/`process.env` imports in `lib/engine|services|world` break worker portability.
 - A failing tick hard-pauses the loop; the store only accepts a fully-successful tick.
 - Determinism: use seeded `tickRng(seed, tick)`. Never `Date.now`/`Math.random`/`new Date()` in a processor body.
@@ -185,7 +185,7 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 
 **Executing fix batches**
 - **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched agent**, never inline — inline is for a single trivial edit. Ask first, describing the dispatch's scope in words. Model is your judgment per batch (never Fable). Then verify the agent's claims and make the judgement calls it flags.
-- **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorization to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent.
+- **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorisation to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent.
 
 **Scripts**
 - `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test). One-off diagnostics live in scratch, never committed.

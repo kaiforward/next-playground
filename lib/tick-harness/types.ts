@@ -1,6 +1,6 @@
 /**
  * Calibration-harness types — the config it takes, the results it returns, and
- * the market/event/region health shapes its analyzers compute.
+ * the market/event/region health shapes its analysers compute.
  *
  * The tick's own row types live in `lib/tick/rows.ts`; the one world model is
  * `World` (`lib/world/types.ts`) and the one tick pipeline is `runWorldTick`

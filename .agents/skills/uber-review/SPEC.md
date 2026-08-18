@@ -6,7 +6,7 @@
 
 ## Purpose
 
-A project-local code review skill that uses a team of specialized agents to review a PR or local branch in parallel. Each agent reviews through a single narrow lens (boundary-safety, world/tick integrity, data contract, conventions, etc.). An architect agent runs first and can halt the pipeline if it detects an architectural problem severe enough to require approach-level rework.
+A project-local code review skill that uses a team of specialised agents to review a PR or local branch in parallel. Each agent reviews through a single narrow lens (boundary-safety, world/tick integrity, data contract, conventions, etc.). An architect agent runs first and can halt the pipeline if it detects an architectural problem severe enough to require approach-level rework.
 
 The goal: catch more issues than a single general-purpose reviewer, with cost controlled by per-agent model selection, file-pattern skip-gates, and tiered LLM validation of findings.
 
@@ -52,7 +52,7 @@ The goal: catch more issues than a single general-purpose reviewer, with cost co
    Each reviewer returns a JSON array of structured findings (see "Finding schema").
 
 5. DEDUP (orchestrator, deterministic)
-   Pass 1: collapse findings sharing (file, normalized-line, category). Keep highest
+   Pass 1: collapse findings sharing (file, normalised-line, category). Keep highest
            severity; concatenate messages; record co-flagging agents.
    Pass 2 (only when triggered): same (file, line-overlap) with different categories
            from different agents → fire one `fast` call: "are these the same underlying
@@ -90,13 +90,13 @@ agents'.
 |---|-------|------|---------------|
 | 0 | **Architect** | Approach-level / pattern drift / library misuse / module-boundary violations, **plus spec conformance** — does the code deliver the design/spec doc riding in the diff, and was any doc-fold faithful. Gates pipeline. | `frontier` |
 | 1 | **Conventions** | Project guardrails: no `as` casts, no `unknown`, no non-null `!`, generics stay generic, form components used instead of raw `<input>`, `"use client"` only where needed | `fast` |
-| 2 | **World integrity** | In-memory world & tick integrity: JSON-serialization safety (no `Map`/`Set`/`Date`/`Infinity`/`NaN` in `World`), deterministic seeded tick math, atomic tick, the `save-files.ts` dynamic-import guardrail, processors going through the `World` interface + adapter | `strong` |
+| 2 | **World integrity** | In-memory world & tick integrity: JSON-serialisation safety (no `Map`/`Set`/`Date`/`Infinity`/`NaN` in `World`), deterministic seeded tick math, atomic tick, the `save-files.ts` dynamic-import guardrail, processors going through the `World` interface + adapter | `strong` |
 | 3 | **Data contract** | Types flowing store/adapter → service → API → hook → component. Guards used only at the boundary. Service-returned types not re-validated downstream. | `strong` |
 | 4 | **Boundary safety** | Zod validation at API/form boundaries, never trusting client state for writes, save-name path safety, no `immutable` cache on APIs, server-only env not leaking to the client bundle | `strong` |
 | 5 | **Silent failures** | Swallowed errors, missing `await`, async callbacks typed as `() => void`, `.sort()` on render, throttle-vs-debounce traps, SSE-driven state without REST seed | `fast` |
 | 6 | **User journey (UI/UX)** | Hydration safety, `QueryBoundary` usage, accessibility on actionable elements, loading/error boundaries, navigation flow | `strong` |
 | 7 | **Tests** | Engine/service/processor changes have appropriate Vitest coverage and meaningful assertions. Flags missing coverage. | `strong` |
-| 8 | **Performance** | Expensive per-tick work / peak-latency concentration, missing memoization, expensive renders, viewport-keyed queries causing flicker, Pixi callbacks debounced where throttle is needed | `strong` |
+| 8 | **Performance** | Expensive per-tick work / peak-latency concentration, missing memoisation, expensive renders, viewport-keyed queries causing flicker, Pixi callbacks debounced where throttle is needed | `strong` |
 
 ## Architect severity rubric
 
@@ -106,7 +106,7 @@ agents'.
 2. **Downgrade to `major` if:**
    - The fix is "edit one line per affected file" — even across 20 files
    - The fix is contained to a single file, even if that file needs a complete rewrite. Other files in the diff remain sound and reviewable independently.
-   - The fix is otherwise localized to a small portion of the diff
+   - The fix is otherwise localised to a small portion of the diff
 3. **Reserve `blocker` for findings meeting BOTH criteria:**
    - **Qualitative**: fix requires *rewriting the approach from scratch* — redesigning the abstraction, restructuring control flow across layers, changing function signatures whose callers cascade
    - **Quantitative**: rework cascades through a substantial portion of the diff. Rule of thumb: ~half the changed files, or roughly 10+ files in a typical PR
@@ -125,7 +125,7 @@ agents'.
 - Single hand-rolled utility duplicating one in `lib/utils/`
 - Inconsistent error shape in one route
 
-**`major`** — clear bug, contract violation, or convention break, but the fix is localized. Other reviewers proceed.
+**`major`** — clear bug, contract violation, or convention break, but the fix is localised. Other reviewers proceed.
 
 **`minor`** — nit / cleanup / style note. Doesn't gate anything.
 
@@ -151,7 +151,7 @@ If PR > 20 files:
          lib/tick/processors/ships.ts       → "ships"
          lib/tick/world/ships.ts            → "ships"
 
-       Recognized layer prefixes:
+       Recognised layer prefixes:
          lib/services/, lib/hooks/, lib/engine/, lib/tick/processors/,
          lib/tick/world/, lib/tick/adapters/memory/,
          app/api/game/, app/(game)/, components/
@@ -287,7 +287,7 @@ No inline per-line comments — too noisy, too slow.
 │   ├── user-journey.md
 │   ├── tests.md
 │   ├── performance.md
-│   └── validator.md           # shared validator prompt (parameterized by severity tier)
+│   └── validator.md           # shared validator prompt (parameterised by severity tier)
 └── rules/
     ├── code-standards.md       # dedup-slug catalog + flagging nuance (review projection of AGENTS.md)
     └── severity-rubric.md      # shared severity scale (other agents reference this)

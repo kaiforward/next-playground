@@ -26,7 +26,7 @@ The war system has two fundamentally different layers that share thematic space 
 Small-scale tension at faction borders. These use the **existing event system** — they are events with economy modifiers, danger increases, and phase progressions, just like plagues or pirate raids.
 
 - Trigger when inter-faction relations are in the unfriendly range (-25 to -74)
-- Localized to 1-3 border systems
+- Localised to 1-3 border systems
 - Disrupt trade, increase danger, apply economy modifiers (similar to current War event phases)
 - Accelerate relation deterioration (pushing toward war threshold)
 - No formal war exhaustion, no battles, no territory changes
@@ -154,7 +154,7 @@ Wars are persistent features of the game landscape, not quick skirmishes. Player
 
 | War type | Approximate real-time duration | Scope |
 |---|---|---|
-| Border skirmish (pre-war) | 1-3 days | 1-3 border systems. No formal war, just localized events and tension |
+| Border skirmish (pre-war) | 1-3 days | 1-3 border systems. No formal war, just localised events and tension |
 | Small war | 1-2 weeks | A few systems contested. Limited stakes, between smaller factions or limited objectives |
 | Major war | 2-4 weeks | Significant territory at stake. Multiple contested systems, full economic mobilization |
 | Existential war (homeworld threatened) | 1 month+ | Highest stakes. Both sides fully committed. Only happens when a faction is already weakened |

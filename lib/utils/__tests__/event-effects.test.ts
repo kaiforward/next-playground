@@ -122,7 +122,7 @@ describe("summarisePhaseEffects", () => {
       ).toBe("Fuel demand up · Production slowed");
     });
 
-    it("returns 'Minor market effects' when no recognized modifiers are present", () => {
+    it("returns 'Minor market effects' when no recognised modifiers are present", () => {
       expect(summarisePhaseEffects(phase([]))).toBe("Minor market effects");
     });
 

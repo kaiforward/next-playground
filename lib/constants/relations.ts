@@ -192,7 +192,7 @@ export const RELATION_HISTORY_MAX = 10;
  * `RELATIONS_OWNED_LIFECYCLE` guard, so the value never actually drives a
  * transition — but it must stay an ordinary finite integer, since `World` is
  * persisted through `JSON.stringify` and a sentinel like `Infinity` would
- * serialize to `null` and silently corrupt the save.
+ * serialise to `null` and silently corrupt the save.
  *
  * Two billion ticks ≈ 63 years at one tick/second, so this is "forever" for
  * any conceivable game lifetime.

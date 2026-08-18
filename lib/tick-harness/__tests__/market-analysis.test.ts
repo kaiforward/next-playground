@@ -5,7 +5,7 @@ import {
   computeKneeBinding,
   newDemandHuntingAccumulator,
   sampleDemandHunting,
-  summarizeDemandHunting,
+  summariseDemandHunting,
 } from "../market-analysis";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { marketBandForRow } from "@/lib/engine/market-pricing";
@@ -360,7 +360,7 @@ describe("demand hunting", () => {
   it("reads no flips on a market that never crosses the dead band", () => {
     const acc = newDemandHuntingAccumulator();
     for (let i = 0; i < 6; i++) sampleDemandHunting(acc, [deep("s1")]);
-    expect(summarizeDemandHunting(acc, []).flipRate).toBe(0);
+    expect(summariseDemandHunting(acc, []).flipRate).toBe(0);
   });
 
   it("counts a market oscillating between deficit and surplus on every reversal", () => {
@@ -372,7 +372,7 @@ describe("demand hunting", () => {
     sampleDemandHunting(acc, [deep("s1")]);
     sampleDemandHunting(acc, [full("s1")]);
     expect(acc.decidedReadings).toBe(4);
-    expect(summarizeDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
+    expect(summariseDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
   });
 
   it("excludes each market's first decided reading from the denominator", () => {
@@ -381,11 +381,11 @@ describe("demand hunting", () => {
     const acc = newDemandHuntingAccumulator();
     sampleDemandHunting(acc, [deep("s1"), full("s2")]);
     expect(acc.decidedReadings).toBe(2);
-    expect(summarizeDemandHunting(acc, []).flipRate).toBe(0);
+    expect(summariseDemandHunting(acc, []).flipRate).toBe(0);
 
     // One of them reverses once: 1 reversal over exactly 1 comparable reading, not over 3.
     sampleDemandHunting(acc, [full("s1")]);
-    expect(summarizeDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
+    expect(summariseDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
   });
 
   it("registers an oscillation THROUGH the dead band as a reversal", () => {
@@ -399,7 +399,7 @@ describe("demand hunting", () => {
     sampleDemandHunting(acc, [mid]);
     sampleDemandHunting(acc, [full("s1")]);
     expect(acc.decidedReadings).toBe(2); // the balanced sample decided nothing
-    expect(summarizeDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
+    expect(summariseDemandHunting(acc, []).flipRate).toBeCloseTo(1, 9);
   });
 
   it("ignores goods no recipe consumes — hunting is an industrial-input pathology", () => {
@@ -410,7 +410,7 @@ describe("demand hunting", () => {
     });
     sampleDemandHunting(acc, [luxuries(0)]);
     sampleDemandHunting(acc, [luxuries(WAREHOUSE * 2)]);
-    expect(summarizeDemandHunting(acc, []).flipRate).toBe(0);
+    expect(summariseDemandHunting(acc, []).flipRate).toBe(0);
   });
 
   it("skips a row with no use figure rather than classifying it against a zero target", () => {
@@ -436,7 +436,7 @@ describe("demand hunting", () => {
       { tick: 1, fromSystemId: "a", toSystemId: "b", goodId: "ore", quantity: 100 },
       { tick: 2, fromSystemId: "a", toSystemId: "c", goodId: "ore", quantity: 50 },
     ];
-    expect(summarizeDemandHunting(newDemandHuntingAccumulator(), flows).haulChurnRatio).toBe(0);
+    expect(summariseDemandHunting(newDemandHuntingAccumulator(), flows).haulChurnRatio).toBe(0);
   });
 
   it("counts tonnage delivered and then donated straight back out as churn", () => {
@@ -447,7 +447,7 @@ describe("demand hunting", () => {
       { tick: 2, fromSystemId: "a", toSystemId: "c", goodId: "ore", quantity: 50 },
       { tick: 3, fromSystemId: "b", toSystemId: "d", goodId: "ore", quantity: 40 },
     ];
-    expect(summarizeDemandHunting(newDemandHuntingAccumulator(), flows).haulChurnRatio)
+    expect(summariseDemandHunting(newDemandHuntingAccumulator(), flows).haulChurnRatio)
       .toBeCloseTo(40 / 190, 9);
   });
 
@@ -459,7 +459,7 @@ describe("demand hunting", () => {
       { tick: 1, fromSystemId: "a", toSystemId: "b", goodId: "ore", quantity: 10 },
       { tick: 2, fromSystemId: "b", toSystemId: "c", goodId: "ore", quantity: 900 },
     ];
-    const { haulChurnRatio } = summarizeDemandHunting(newDemandHuntingAccumulator(), flows);
+    const { haulChurnRatio } = summariseDemandHunting(newDemandHuntingAccumulator(), flows);
     expect(haulChurnRatio).toBeCloseTo(10 / 910, 9);
     expect(haulChurnRatio).toBeLessThan(0.05);
   });

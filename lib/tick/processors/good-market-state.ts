@@ -177,7 +177,7 @@ export function toGoodMarketStates(
       civilianDemand: civ,
       // An explicit zero is a completed assessment and must remain a sink. Capacity is
       // only a legacy-save fallback while the persisted rate is genuinely absent.
-      production: m.realizedProductionRate ?? (prodByKey.get(m.goodId) ?? 0),
+      production: m.realisedProductionRate ?? (prodByKey.get(m.goodId) ?? 0),
       capacityProduction: prodByKey.get(m.goodId) ?? 0,
       satisfaction: m.satisfaction,
       productionSuppressed: m.productionSuppressed,

@@ -9,9 +9,9 @@ import {
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
 import { generateWorld } from "@/lib/world/gen";
 import { newFoundingStallTotals } from "../build-analysis";
-import { summarizeFoundingEra } from "../treasury-analysis";
+import { summariseFoundingEra } from "../treasury-analysis";
 import {
-  newCharterCensus, newStagedLedgerCensus, summarizeConservation,
+  newCharterCensus, newStagedLedgerCensus, summariseConservation,
 } from "../conservation-analysis";
 import type { HarnessResults } from "../types";
 
@@ -175,11 +175,11 @@ describe("ExperimentConfig", () => {
         },
         founderCohort: {
           founder: {
-            systemCount: 0, meanRealizedProduction: 0, productionSuppressedShare: 0,
+            systemCount: 0, meanRealisedProduction: 0, productionSuppressedShare: 0,
             producingMarkets: 0, meanIdleTypes: 0, idleSystemShare: 0,
           },
           other: {
-            systemCount: 0, meanRealizedProduction: 0, productionSuppressedShare: 0,
+            systemCount: 0, meanRealisedProduction: 0, productionSuppressedShare: 0,
             producingMarkets: 0, meanIdleTypes: 0, idleSystemShare: 0,
           },
         },
@@ -189,9 +189,9 @@ describe("ExperimentConfig", () => {
           fundedMeans: { maintenance: 0, logistics: 0, construction: 0 },
           invalidRows: 0, firstShortfallTick: null,
         },
-        foundingEra: summarizeFoundingEra([]),
+        foundingEra: summariseFoundingEra([]),
         treasurySnapshots: [],
-        conservation: summarizeConservation({
+        conservation: summariseConservation({
           charters: newCharterCensus(),
           factionCycles: [],
           startingBalances: new Map(),
@@ -310,7 +310,7 @@ describe("ExperimentConfig", () => {
       results.foundingLifecycle.medianCycles = 8;
       results.foundingLifecycle.stalls.funds = 3;
       results.founderCohort.founder.systemCount = 12;
-      results.foundingEra = summarizeFoundingEra([
+      results.foundingEra = summariseFoundingEra([
         { tick: 500, factionId: "f1", income: 100, foundingExpense: 20, shorted: false,
           fundedMaintenance: 1, fundedConstruction: 1, constructionBill: 5,
           paidTotal: 60, balance: 200 },

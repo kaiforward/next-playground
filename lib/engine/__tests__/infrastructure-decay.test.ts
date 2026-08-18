@@ -39,7 +39,7 @@ describe("idleLevels", () => {
     expect(idleLevels(5, 5)).toBe(0);
   });
 
-  it("is negative (never idle) when utilization exceeds count — housing over-crowding", () => {
+  it("is negative (never idle) when utilisation exceeds count — housing over-crowding", () => {
     expect(idleLevels(3, 5)).toBe(-2);
   });
 });
@@ -300,7 +300,7 @@ describe("computeSystemDecay — proportionate unrest collapse", () => {
   });
 
   it("picks the least-used level first", () => {
-    // Both types are fully staffed, so utilization differs only by how well each SELLS: water
+    // Both types are fully staffed, so utilisation differs only by how well each SELLS: water
     // moves a fifth of its output, ore all of it. The collapse level must land on water — the
     // levels a system is failing to keep busy go before the ones it still leans on.
     const buildings = { ore: 2, water: 2 };
@@ -320,7 +320,7 @@ describe("computeSystemDecay — proportionate unrest collapse", () => {
     expect(result.newCounts.ore).toBeUndefined(); // the busy one survives
   });
 
-  it("breaks an exact utilization tie on ascending type id", () => {
+  it("breaks an exact utilisation tie on ascending type id", () => {
     // Identical staffing and identical selling leaves nothing to choose between them, so the
     // ordering falls back to the type id — the outcome must not depend on key insertion order.
     const buildings = { water: 2, ore: 2 };

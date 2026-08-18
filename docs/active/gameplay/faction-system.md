@@ -44,7 +44,7 @@ Factions are hand-crafted named entities with distinct identity and behavior.
 | doctrine | Doctrine | Political identity — drives foreign policy and war behavior |
 | homeworld | system_id | Capital system. Very hard to capture (see [war-system.md](../../planned/war-system.md) §5) |
 | territory | [system_ids] | Derived from systems that have `factionId` |
-| color | string | Map/UI color for territory visualization |
+| color | string | Map/UI color for territory visualisation |
 
 Implementation note: there is also a `createdAtTick` field on the `Faction` row, populated at seed time (0) and used by any future faction-spawning event to record when a new faction came into being.
 
@@ -122,11 +122,11 @@ Two factions can share a government type and still be bitter enemies. A federati
 | Government | Character |
 |---|---|
 | Federation | Balanced, regulated, stable |
-| Corporate | Pro-trade, low regulation, profit-maximizing |
+| Corporate | Pro-trade, low regulation, profit-maximising |
 | Authoritarian | State-controlled, price-fixed, rigid |
 | Frontier | Lawless, unregulated, dangerous |
 | Cooperative | Worker-owned, egalitarian, community-focused |
-| Technocratic | Innovation-driven, high-tier specialization |
+| Technocratic | Innovation-driven, high-tier specialisation |
 | Militarist | War economy, resource-hungry, mobilized |
 | Theocratic | Ideological, community-driven, insular |
 
@@ -357,7 +357,7 @@ Rivalries are not hard-coded. They emerge naturally from the relation system (§
 
 ### Starting Relation Scores (Implemented as zero-init)
 
-All faction-pair relations are seeded at score 0 at world-gen time, *not* pre-nudged by doctrine compatibility or government opposition. The relations processor then immediately starts drifting them — within the first few hundred ticks the doctrine + government + border drivers produce a recognizable political landscape without needing a hand-tuned starting matrix. This was the simpler implementation choice and gives processor tuning a clean baseline.
+All faction-pair relations are seeded at score 0 at world-gen time, *not* pre-nudged by doctrine compatibility or government opposition. The relations processor then immediately starts drifting them — within the first few hundred ticks the doctrine + government + border drivers produce a recognisable political landscape without needing a hand-tuned starting matrix. This was the simpler implementation choice and gives processor tuning a clean baseline.
 
 All faction names, lore, and color choices are provisional. The roster will grow as the game scales.
 
