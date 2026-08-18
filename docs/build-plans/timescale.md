@@ -68,6 +68,28 @@ definition, never set it.
 - H2. Combat, when built, can resolve sub-tick internally if the 6-hour floor proves too coarse.
 - H3. The directed build/planner defines no durations of its own — it only reads rates.
 
+## Measure plan
+
+Committed before any instrument runs.
+
+**Claim A (the rates-too-fast premise — C1, C2):** read at 1 tick = 6 h, current population growth
+and colonisation pace run at least 10× faster than real-world anchors — pop-to-max ≈ 12,000 ticks
+≈ 8.2 in-world years, and charter→viable colonisation well under a decade. This is the premise
+behind "fine-grained ticks with much slower rates".
+*Falsifier:* if median pop-to-max for the seeded developed cohort exceeds 150,000 ticks (~100
+years) — i.e. growth is already real-world-plausible — the rate-audit premise is false and the
+direction's shape changes (anchor may stand, but "slow everything down" dies). Read at whatever
+horizon reaches max; if 10,000 ticks does not, extend the run rather than extrapolate.
+
+**Claim B (C6, the terminal falsifier's input):** the tick loop sustains ≥ 3 ticks/s at the
+equilibrium-horizon galaxy. *Falsifier:* measured ms/tick at the 10,000-tick horizon implies
+sustained throughput below 3 ticks/s → the 4-ticks/day anchor is dead (see Terminal falsifier).
+
+**Descriptive readings, no prior on record (C3, C4, C5):** travel-duration distribution, event-length
+distribution, decay half-life. These feed the spec's duration-audit table; each gets the six-field
+frame but has no kill-line — there is nothing on record for them to contradict. C5 is likely
+analytic (a constant-derived half-life), instrumented by reading the producer, not the sim.
+
 ### Terminal falsifier
 
 **If C6 measures sustained tick throughput below 3 ticks/s at the 10,000-tick equilibrium horizon,
