@@ -10,6 +10,7 @@ import { AlertChip, chip } from "@/components/alerts/alert-chip";
 import { AlertFlyout, type AlertNavigateTarget } from "@/components/alerts/alert-flyout";
 import { AlertSettings } from "@/components/alerts/alert-settings";
 import { useAlerts } from "@/lib/hooks/use-alerts";
+import { useAtlas } from "@/lib/hooks/use-atlas";
 import { useSetAlertCategory } from "@/lib/hooks/use-player-settings";
 import { useSystemFocus } from "@/lib/hooks/use-system-focus";
 import { ALERT_CATEGORIES } from "@/lib/constants/alerts";
@@ -313,8 +314,10 @@ function AlertRunChips({
  *
  * Resolves an `AlertFlyout` row's already-decided target (`resolveAlertTarget`,
  * `components/alerts/alert-flyout.tsx`) into the actual navigation: `focusSystem` for a system
- * destination, a plain `router.push` for a faction/events route, nothing for the one combination
- * the destination table never produces.
+ * destination, a `router.push` onto the player faction's panel for a faction destination (the
+ * player id comes off the same already-resolved atlas read `useSystemFocus` relies on; a world
+ * with no player seat never emits a faction-destination alert, so the null branch is a no-op,
+ * not a route), nothing for the one combination the destination table never produces.
  */
 function ActiveAlertFlyout({
   category,
@@ -325,10 +328,14 @@ function ActiveAlertFlyout({
 }) {
   const router = useRouter();
   const focusSystem = useSystemFocus();
+  const { atlas } = useAtlas();
 
   function handleNavigate(target: AlertNavigateTarget) {
     if (target.kind === "system") focusSystem(target.systemId, target.tab);
-    else if (target.kind === "route") router.push(target.path);
+    else if (target.kind === "faction") {
+      const factionId = atlas.player?.controlledFactionId;
+      if (factionId) router.push(`/factions/${factionId}${target.tab ? `/${target.tab}` : ""}`);
+    }
   }
 
   return <AlertFlyout category={category} onNavigate={handleNavigate} runRef={runRef} />;

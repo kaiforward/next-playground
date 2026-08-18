@@ -228,14 +228,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   correctness; worth one shared staffing-estimate helper.
 
 **UI**
-- **[M] Top bar becomes the game's persistent readout — stats + faction flag area; the menu entries
-  move out.** First stat: credits as AVAILABLE money (`foundingWorkingBalance`, the number every
-  treasury surface now quotes) with net/cycle. The Factions / Diplomacy / Events menu options cannot
-  stay on the bar once stats land — candidate home: additional tabs on the faction screen for now.
-  Temporary row: this lands next session on `feat/colony-cost-visibility` with the rest of that
-  branch's UI work, and the row is deleted on that branch's PR.
-  *Next step:* wireframe the placement first — the bar shares the space over the map with the
-  alert-bar run (`lib/constants/layout.ts` insets), so the two must be designed together.
 - **[M] Dedicated goods tab** — a per-system goods surface with more depth than the Population or
   Industry tabs carry: per-good cycles of cover against the anchor, the regime (Supplied / Low
   reserve / Rationing / Shortage / Glut), civilian versus industrial draw, local production against

@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { QueryBoundary } from "@/components/ui/query-boundary";
@@ -48,6 +47,7 @@ function sortFactions(factions: FactionSummary[], sortBy: string): FactionSummar
   });
 }
 
+/** The galaxy-wide faction list — every power, filterable, each card linking to its own panel. */
 function FactionsContent() {
   const { factions } = useFactions();
   const { activeChips, toggleChip, searchValue, setSearchValue, activeSort, setActiveSort } =
@@ -111,15 +111,10 @@ function FactionsContent() {
   );
 }
 
-export default function FactionsPanelPage() {
+export default function FactionFactionsTabPage() {
   return (
-    <DetailPanel
-      title="Factions"
-      subtitle="Powers of the known galaxy — governments, doctrines, and territory."
-    >
-      <QueryBoundary>
-        <FactionsContent />
-      </QueryBoundary>
-    </DetailPanel>
+    <QueryBoundary>
+      <FactionsContent />
+    </QueryBoundary>
   );
 }

@@ -7,6 +7,7 @@ import { AlertRow } from "@/components/alerts/alert-row";
 import { TIER_COLOR } from "@/components/alerts/alert-chip";
 import { CHIP_HEIGHT, RAIL_INSET } from "@/lib/constants/layout";
 import type { AlertDestinationTab } from "@/lib/types/alerts";
+import type { FactionTabSegment } from "@/lib/constants/faction-tabs";
 import type { AlertCategory, AlertInstance } from "@/lib/types/api";
 
 /** The flyout's own 5px clearance below its chip — passed to `PopoverContent` as `sideOffset`
@@ -44,16 +45,18 @@ export function alertFooterText(category: AlertCategory): string | null {
 /**
  * Where a row's activation resolves to — either a fly-to-system-and-open-tab (deferred to
  * `useSystemFocus()`, which needs live atlas coordinates this pure function has no access to) or a
- * plain route push with no map focus at all. `tab` carries `AlertDestinationTab`, the four-tab
- * subset `lib/types/alerts.ts` pins with `satisfies` — never the full `SystemTabSegment`, which
- * would re-widen here exactly what the destination table narrowed. `none` covers the one combination
+ * tab on the PLAYER faction's panel (the caller resolves the faction id — again atlas data this
+ * pure function has no access to). `tab` on the system kind carries `AlertDestinationTab`, the
+ * four-tab subset `lib/types/alerts.ts` pins with `satisfies` — never the full `SystemTabSegment`,
+ * which would re-widen here exactly what the destination table narrowed; on the faction kind it is
+ * the two faction-panel tabs alerts actually target. `none` covers the one combination
  * the destination table never actually produces (a `system`-kind category whose instance carries no `systemId`) —
  * `AlertInstance.systemId` is typed nullable across the whole union, so this function still has to
  * return something for it rather than assume the impossible away.
  */
 export type AlertNavigateTarget =
   | { kind: "system"; systemId: string; tab: AlertDestinationTab }
-  | { kind: "route"; path: string }
+  | { kind: "faction"; tab: Extract<FactionTabSegment, "" | "events"> }
   | { kind: "none" };
 
 /**
@@ -78,14 +81,16 @@ export function resolveAlertTarget(category: AlertCategory, instance: AlertInsta
         ? { kind: "system", systemId: instance.systemId, tab: destination.tab }
         : { kind: "none" };
     case "faction":
-      // Maintenance unfunded — the faction panel, whatever the instance's own systemId says (it is
-      // always null for this category: the row is faction-level, not per-system).
-      return { kind: "route", path: "/factions" };
+      // Maintenance unfunded — the player faction's Overview (where the treasury card lives),
+      // whatever the instance's own systemId says (it is always null for this category: the row is
+      // faction-level, not per-system).
+      return { kind: "faction", tab: "" };
     case "events":
-      // The three event bands: the event's own system when it has one, else the events panel.
+      // The three event bands: the event's own system when it has one, else the faction panel's
+      // Events tab (the events feed's home since the standalone events destination folded in).
       return instance.systemId
         ? { kind: "system", systemId: instance.systemId, tab: "" }
-        : { kind: "route", path: "/events" };
+        : { kind: "faction", tab: "events" };
   }
 }
 

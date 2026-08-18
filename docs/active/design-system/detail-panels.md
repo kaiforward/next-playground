@@ -26,8 +26,10 @@ panel (system, faction, faction list, diplomacy, events, styleguide).
 - The header is pinned; an optional `subHeader` slot carries the tab strip; the body scrolls internally
   with Foundry-themed custom scrollbars (`scrollbar-gutter: stable`).
 
-Navigation (Events / Factions / Diplomacy), game speed + tick, and Save / Exit live in the top bar —
-there is no separate sidebar, and the top bar's center-left is left roomy for the future treasury strip.
+The top bar carries the player faction's flag (full-bleed against the bar's left edge; opens the
+faction panel) and headline stats — available credits with net/cycle, then owned-system count — plus
+game speed + tick and Save / Exit. There is no separate sidebar and no menu links: the galaxy-level
+surfaces (faction list, events feed, relations matrix) live as faction-panel tabs.
 
 The **right** edge is the Tracker's rail — a flex column holding the Tracker panel above the map
 controls dock, with the Tracker's own settings panel opening to its left. See

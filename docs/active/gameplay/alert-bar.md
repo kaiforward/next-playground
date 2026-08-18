@@ -172,8 +172,8 @@ walk a long category one instance at a time without the flyout closing between c
 | Industry idle, Build blocked, Build opportunity | system → Industry tab |
 | Demand unservable, Survival stock falling | system → Logistics tab |
 | Colony opportunity | system → Overview |
-| Maintenance unfunded | the faction panel — the row is faction-level, not a system |
-| Crisis, Disruption, Windfall | the system when the event has one, else the events panel |
+| Maintenance unfunded | the player faction panel's Overview (the treasury card's home) — the row is faction-level, not a system |
+| Crisis, Disruption, Windfall | the system when the event has one, else the player faction panel's Events tab |
 
 A row's right-hand edge is left free for a later secondary action, so an opportunity row could grow a
 direct "build it" without redesigning the row.

@@ -40,6 +40,14 @@ export function formatMagnitude(value: number): string {
 }
 
 /**
+ * A signed delta (a per-cycle net) with an explicit sign either way: "+" or a
+ * true minus ("−", not a hyphen), then the magnitude via `formatMagnitude`.
+ */
+export function formatSignedMagnitude(value: number): string {
+  return `${value < 0 ? "−" : "+"}${formatMagnitude(Math.abs(value))}`;
+}
+
+/**
  * Compact whole-unit magnitude for tight numeric columns: a whole number below
  * 1000, then k / M abbreviated above (999 → "999", 1240 → "1.2k", 12400 → "12k",
  * 3_400_000 → "3.4M"). One decimal only below ×10 of each suffix, whole above.

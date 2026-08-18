@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { withCounts } from "@/lib/utils/filter";
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +64,7 @@ function sortEvents(events: ActiveEvent[], sortBy: string): ActiveEvent[] {
   });
 }
 
+/** The galaxy-wide active-events feed — not scoped to the faction whose panel hosts it. */
 function EventsContent() {
   const { events } = useEvents();
   const { activeChips, toggleChip, activeSort, setActiveSort } =
@@ -142,12 +142,10 @@ function EventsContent() {
   );
 }
 
-export default function EventsPanelPage() {
+export default function FactionEventsTabPage() {
   return (
-    <DetailPanel title="Events">
-      <QueryBoundary>
-        <EventsContent />
-      </QueryBoundary>
-    </DetailPanel>
+    <QueryBoundary>
+      <EventsContent />
+    </QueryBoundary>
   );
 }

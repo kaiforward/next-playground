@@ -1,45 +1,85 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Radio, Landmark, Network, Save, DoorOpen } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Save, DoorOpen, Coins, Hexagon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDialog } from "@/components/ui/dialog";
+import { QueryBoundary } from "@/components/ui/query-boundary";
 import { SaveGameDialog } from "@/components/save-game-dialog";
 import { SpeedControls } from "@/components/speed-controls";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
+import { useAtlas } from "@/lib/hooks/use-atlas";
+import { useFactionTreasury } from "@/lib/hooks/use-faction-treasury";
+import { useFactionVitals } from "@/lib/hooks/use-faction-vitals";
+import { foundingWorkingBalance } from "@/lib/engine/treasury";
+import { formatMagnitude, formatSignedMagnitude } from "@/lib/utils/format";
 
 /* ------------------------------------------------------------------ */
-/*  Primary nav                                                       */
+/*  Player faction flag + stats                                       */
 /* ------------------------------------------------------------------ */
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: LucideIcon;
+/**
+ * The player faction's presence on the bar: a flag button (a solid colour
+ * rectangle for now — no flag art exists yet) opening the faction panel, then
+ * the headline stats beside it. The flag is full-bleed against the header's
+ * top/left/bottom edges, which is why `TopBar` carries no left padding of its
+ * own. Renders nothing when the world has no player seat.
+ */
+export function PlayerFactionSummary() {
+  const { atlas } = useAtlas();
+  const factionId = atlas.player?.controlledFactionId;
+  const faction = atlas.factions.find((f) => f.id === factionId);
+  if (!faction) return null;
+
+  return (
+    <>
+      <Link
+        href={`/factions/${faction.id}`}
+        aria-label={`${faction.name} — open faction panel`}
+        title={faction.name}
+        className="h-full w-14 shrink-0 transition-[filter] hover:brightness-125"
+        style={{ backgroundColor: faction.color }}
+      />
+      <PlayerFactionStats factionId={faction.id} />
+    </>
+  );
 }
 
-const TOP_NAV: NavItem[] = [
-  { href: "/events", label: "Events", icon: Radio },
-  { href: "/factions", label: "Factions", icon: Landmark },
-  { href: "/diplomacy", label: "Diplomacy", icon: Network },
-];
+/**
+ * The stat run — credits first: the AVAILABLE number (balance minus money
+ * committed to founding, same figure every treasury surface quotes) with the
+ * last settlement's net beside it, then owned-system count. Both reads are
+ * tick-invalidated keys shared with the faction panel's own cards, so
+ * co-rendering costs no extra fetch.
+ */
+function PlayerFactionStats({ factionId }: { factionId: string }) {
+  const treasury = useFactionTreasury(factionId);
+  const vitals = useFactionVitals(factionId);
+  const available = foundingWorkingBalance(treasury.balance, treasury.foundingCommitted);
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
-  const Icon = item.icon;
   return (
-    <Link
-      href={item.href}
-      className={`flex items-center gap-1.5 h-[var(--topbar-height)] px-3 text-sm border-b-2 transition-colors ${
-        active
-          ? "border-b-accent bg-surface-active text-text-primary"
-          : "border-b-transparent text-text-secondary hover:text-text-primary hover:bg-surface-hover"
-      }`}
-    >
-      <Icon className="w-4 h-4 shrink-0" />
-      <span>{item.label}</span>
-    </Link>
+    <div className="flex items-center gap-4">
+      <span
+        className="flex items-center gap-1.5 whitespace-nowrap"
+        title="Credits available · net per cycle"
+      >
+        <Coins aria-hidden className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
+        <span className="sr-only">Credits available</span>
+        <span className="font-mono text-sm text-text-primary">{formatMagnitude(available)}</span>
+        <span
+          className={`font-mono text-xs ${
+            treasury.net < 0 ? "text-status-red-light" : "text-status-green-light"
+          }`}
+        >
+          {formatSignedMagnitude(treasury.net)}/cy
+        </span>
+      </span>
+      <span className="flex items-center gap-1.5 whitespace-nowrap" title="Systems owned">
+        <Hexagon aria-hidden className="h-3.5 w-3.5 shrink-0 text-text-tertiary" />
+        <span className="sr-only">Systems owned</span>
+        <span className="font-mono text-sm text-text-primary">{vitals.territorySize}</span>
+      </span>
+    </div>
   );
 }
 
@@ -68,32 +108,19 @@ function TickReadout() {
 /* ------------------------------------------------------------------ */
 
 export function TopBar() {
-  const pathname = usePathname();
   const saveDialog = useDialog();
 
-  // Longest-prefix match across nav hrefs so nested entries (e.g. /factions
-  // + /factions/[id]) don't both highlight.
-  const activeHref = TOP_NAV.map((n) => n.href)
-    .filter((h) => pathname === h || pathname.startsWith(h + "/"))
-    .reduce((best, h) => (h.length > best.length ? h : best), "");
-
   return (
-    <header className="h-[var(--topbar-height)] flex items-center gap-5 px-3.5 bg-background border-b border-border shrink-0">
+    // No left padding: the faction flag sits full-bleed against the header's edges.
+    <header className="h-[var(--topbar-height)] flex items-center gap-5 pr-3.5 bg-background border-b border-border shrink-0">
       <h1 className="sr-only">Stellar Trader</h1>
 
-      {/* Left: logo + primary nav */}
-      <Link href="/" className="shrink-0">
-        <span className="font-display font-bold text-text-accent text-sm tracking-widest uppercase whitespace-nowrap">
-          Stellar Trader
-        </span>
-      </Link>
-      <nav aria-label="Primary navigation" className="flex items-center">
-        {TOP_NAV.map((item) => (
-          <NavLink key={item.href} item={item} active={item.href === activeHref} />
-        ))}
-      </nav>
+      {/* Left: player faction flag + stats. The boundary degrades this cluster
+          alone — a treasury fetch failure must not take the save/exit verbs with it. */}
+      <QueryBoundary loadingFallback={null} errorFallback={() => null}>
+        <PlayerFactionSummary />
+      </QueryBoundary>
 
-      {/* Roomy center-left — treasury/resource readouts land here in a later workstream */}
       <div className="flex-1" />
 
       {/* Center: simulation speed + tick/tps */}

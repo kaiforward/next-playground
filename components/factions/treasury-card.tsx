@@ -9,7 +9,7 @@ import { TaxLevelStepper } from "@/components/factions/tax-level-stepper";
 import { useFactionTreasury, useUpdateTreasuryPolicy } from "@/lib/hooks/use-faction-treasury";
 import { TREASURY } from "@/lib/constants/treasury";
 import { buildingLabel } from "@/lib/engine/construction-readout";
-import { formatMagnitude } from "@/lib/utils/format";
+import { formatMagnitude, formatSignedMagnitude } from "@/lib/utils/format";
 import type { TaxLevel } from "@/lib/types/game";
 import { bandShortfall, foundingWorkingBalance, type TreasuryBands } from "@/lib/engine/treasury";
 
@@ -17,9 +17,7 @@ function money(n: number): string {
   return formatMagnitude(n);
 }
 
-function signedMoney(n: number): string {
-  return `${n < 0 ? "−" : "+"}${money(Math.abs(n))}`;
-}
+const signedMoney = formatSignedMagnitude;
 
 function LedgerRow({ label, amount, indent = false }: { label: string; amount: string; indent?: boolean }) {
   return (
