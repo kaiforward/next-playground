@@ -27,10 +27,12 @@ export interface ShipPosition {
 // ── Functions ────────────────────────────────────────────────────
 
 /**
- * Build a bidirectional adjacency list from a list of connections.
- * Each connection adds both fromSystem→toSystem and toSystem→fromSystem.
+ * Build a **bidirectional**, unweighted hop adjacency list from a list of connections — each
+ * connection adds both fromSystem→toSystem and toSystem→fromSystem, carrying no fuel cost. The
+ * graph every hop-distance question is asked of, including `lib/engine/pathfinding.ts`'s; the
+ * fuel-weighted directional one is `buildFuelAdjacency` there.
  */
-export function buildAdjacencyList(
+export function buildHopAdjacency(
   connections: ReadonlyArray<{ fromSystemId: string; toSystemId: string }>,
 ): Map<string, string[]> {
   const adj = new Map<string, string[]>();

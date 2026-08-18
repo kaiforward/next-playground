@@ -1,5 +1,5 @@
 import type { EconomyType } from "@/lib/types/game";
-import { summarizePhaseEffects } from "@/lib/utils/event-effects";
+import { summarisePhaseEffects } from "@/lib/utils/event-effects";
 
 // ── Event type union ────────────────────────────────────────────
 
@@ -803,7 +803,7 @@ export const RELATIONS_EVENT_TYPES = [
 const PHASE_EFFECT_SUMMARIES: Record<string, string> = {};
 for (const [type, def] of Object.entries(EVENT_DEFINITIONS)) {
   for (const phase of def.phases) {
-    PHASE_EFFECT_SUMMARIES[`${type}:${phase.name}`] = summarizePhaseEffects(phase);
+    PHASE_EFFECT_SUMMARIES[`${type}:${phase.name}`] = summarisePhaseEffects(phase);
   }
 }
 

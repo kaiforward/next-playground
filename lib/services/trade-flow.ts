@@ -2,7 +2,7 @@ import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem, flowEventsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
-import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
+import { bucketVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type {
@@ -15,7 +15,7 @@ import { useRatesByGood } from "@/lib/engine/honest-demand";
 import {
   aggregateLogisticsFlows,
   buildLogisticsRows,
-} from "@/lib/engine/logistics";
+} from "@/lib/engine/logistics-readout";
 
 /**
  * Returns the directed-logistics map-overlay edge set, aggregated over the last
@@ -110,6 +110,6 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
     externalMax: model.externalMax,
     activeGoodCount: model.activeGoodCount,
     tradedGoodCount: model.tradedGoodCount,
-    volumeHistory: bucketizeVolumeHistory(flows, systemId, currentTick),
+    volumeHistory: bucketVolumeHistory(flows, systemId, currentTick),
   };
 }

@@ -3,7 +3,7 @@ import {
   buildLogisticsRows,
   aggregateLogisticsFlows,
   type GoodFlowAggregate,
-} from "@/lib/engine/logistics";
+} from "@/lib/engine/logistics-readout";
 import type { SystemFlowRow } from "@/lib/engine/system-trade-flow";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 

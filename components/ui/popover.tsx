@@ -39,12 +39,13 @@ import { twMerge } from "tailwind-merge";
  * - Global exclusivity: opening one popover closes any other that is open,
  *   via a module-level "who's open" pointer — there is exactly one of
  *   these on screen at a time.
- * - `disableClickOpen` on the root: opts a consumer whose trigger's click
- *   already does something else (e.g. a Tracker row, which navigates on
- *   click) out of Radix's own click-to-toggle, by calling
- *   `event.preventDefault()` before Radix's internal handler runs — hover
- *   and keyboard-focus opens are untouched, since Radix only gates the
- *   click path on it.
+ * - `clickInert` on the root: takes the click out of the open/close gesture
+ *   set entirely, for a consumer whose trigger's click already does
+ *   something else (e.g. a Tracker row, which navigates on click). It calls
+ *   `event.preventDefault()` before Radix's internal handler runs, which
+ *   skips Radix's click *toggle* — so a click neither opens a closed popover
+ *   nor closes an open one. Hover and keyboard-focus opens are untouched,
+ *   since Radix only gates the click path on it.
  * - `pointerInert` on the root: the pointer is not an open/close gesture at
  *   all, for a consumer whose trigger hover already means something else (an
  *   alert chip's raises it clear of an overlapped run) or whose triggers
@@ -189,7 +190,7 @@ interface PopoverContextValue {
   open: boolean;
   side: PopoverPrimitive.PopoverContentProps["side"];
   align: PopoverPrimitive.PopoverContentProps["align"];
-  disableClickOpen: boolean;
+  clickInert: boolean;
   /** Written by the root as the popover closes, read by `PopoverContent`'s close-side focus
    *  handling. The live flags behind it stay private to the root — this is the one thing the
    *  content needs off them, and only after the decision has already been made. */
@@ -225,11 +226,17 @@ export interface PopoverProps {
   side?: PopoverPrimitive.PopoverContentProps["side"];
   align?: PopoverPrimitive.PopoverContentProps["align"];
   /**
-   * Opts out of click-to-open. Set when the trigger's click already has a job (e.g. a Tracker row
-   * navigates on click) so the same gesture doesn't also open the popover. Hover-open and
-   * keyboard-focus-open are unaffected — this suppresses only Radix's built-in click toggle.
+   * Takes the click out of the open/close gesture set entirely. Set when the trigger's click
+   * already has a job (e.g. a Tracker row navigates on click) so the same gesture doesn't also
+   * work the popover.
+   *
+   * Symmetric, and named for the gesture rather than for opening, for the same reason
+   * `pointerInert` below is: what it suppresses is Radix's built-in click *toggle*, so a click
+   * neither opens a closed popover nor closes an open one — a hover-opened card stays up while the
+   * click does its own job. Hover-open, keyboard-focus-open, Escape, an outside click and the
+   * exclusivity registry are all unaffected.
    */
-  disableClickOpen?: boolean;
+  clickInert?: boolean;
   /**
    * Takes the pointer out of the open/close gesture set entirely — the hover-open timer AND the
    * pointer-leave close. Set when the trigger's hover already means something else — an alert chip's
@@ -250,7 +257,7 @@ export function Popover({
   openDelay = DEFAULT_OPEN_DELAY_MS,
   side = "bottom",
   align = "center",
-  disableClickOpen = false,
+  clickInert = false,
   pointerInert = false,
   children,
 }: PopoverProps) {
@@ -399,7 +406,7 @@ export function Popover({
     open,
     side,
     align,
-    disableClickOpen,
+    clickInert,
     closeReasonRef,
     suppressNextTriggerFocusRef,
     contentRef,
@@ -509,8 +516,8 @@ export const PopoverTrigger = forwardRef<
           popover.cancelScheduledOpen();
           // Radix's own Trigger composes ITS click-toggle after this handler and skips it once
           // the event is marked defaultPrevented (see Popover's docblock) — this is the only line
-          // `disableClickOpen` adds.
-          if (popover.disableClickOpen) event.preventDefault();
+          // `clickInert` adds.
+          if (popover.clickInert) event.preventDefault();
         })}
         {...props}
       />

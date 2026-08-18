@@ -155,7 +155,7 @@ This becomes a **permanent, wired instrument** for this change and every future 
 
 - **Infra-decay's "selling" signal** is the brake's own ceiling: the economy processor emits each
   producer's `productionCeiling` at its start-of-cycle stock (`sellingFactorBySystem`), and decay's
-  "used" for production is `count × min(labourFulfillment, sellingFactor)`, with disuse decay
+  "used" for production is `count × min(labourFulfilment, sellingFactor)`, with disuse decay
   `count ← count − disuseRate · max(0, count − used)`. The Industry readout derives the same knee, so
   the tick, decay and the panel cannot disagree about which producers idle. A producer resting inside
   its full-rate band reads as selling; the signal falls only as the yard genuinely fills toward the

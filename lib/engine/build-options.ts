@@ -44,14 +44,14 @@ export function buildSiteFromSystem(
   };
 }
 
-export type BuildBlockReason = "no_space" | "no_deposit_slots";
+export type BuildOptionBlockReason = "no_space" | "no_deposit_slots";
 
 export interface BuildOption {
   buildingType: string;
   /** Whole levels physically addable now, net of built + committed (in-flight) levels. */
   maxLevels: number;
   /** Non-null = hard-blocked (maxLevels 0). */
-  blocked: BuildBlockReason | null;
+  blocked: BuildOptionBlockReason | null;
   workPerLevel: number;
   /** Heads one level adds, by grade. */
   labourAdded: { unskilled: number; skill1: number; skill2: number };
@@ -82,7 +82,7 @@ export function computeBuildOptions(
     const isExtractor = GOOD_TIER_BY_KEY[buildingType] === 0 && def.resource !== undefined;
 
     let maxLevels: number;
-    let blocked: BuildBlockReason | null = null;
+    let blocked: BuildOptionBlockReason | null = null;
     if (isExtractor && def.resource !== undefined) {
       const remaining = sys.slotCap[def.resource] - extractorsOnResource(effective, def.resource);
       maxLevels = Math.max(0, Math.floor(remaining));

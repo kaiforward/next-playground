@@ -31,7 +31,7 @@ import {
   housingUsed,
   labourParts,
   labourStateFromParts,
-  type UtilizationContext,
+  type UtilisationContext,
 } from "@/lib/engine/industry";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -110,7 +110,7 @@ export function computeSystemDecay(
   const { buildings, buildingIdleCycles, population, unrest } = input;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
-  const ctx: UtilizationContext = {
+  const ctx: UtilisationContext = {
     buildings,
     population,
     parts,

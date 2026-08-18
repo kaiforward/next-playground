@@ -1,14 +1,14 @@
 import { describe, it, expect } from "vitest";
 import {
   labourDemand,
-  labourFulfillment,
+  labourFulfilment,
   housingPopCap,
   buildingProduction,
   capacityGoodRates,
   inputDemandForGood,
   inputDemandFromProduction,
   buildIndustryReadout,
-  facilityStorageForGood,
+  buildingStorageForGood,
   extractorsByResource,
   summariseDeposits,
   summariseSpace,
@@ -31,10 +31,10 @@ import {
   labourParts,
   labourStateFromParts,
   buildingUsed,
-  computeUtilization,
+  computeUtilisation,
   housingUsed,
 } from "@/lib/engine/industry";
-import type { IndustryHealth, LabourState, GradeStaffing, LabourParts, UtilizationContext } from "@/lib/engine/industry";
+import type { IndustryHealth, LabourState, GradeStaffing, LabourParts, UtilisationContext } from "@/lib/engine/industry";
 import {
   DEFAULT_SPACE_COST,
   POP_CENTRE_DENSITY,
@@ -124,13 +124,13 @@ describe("labourDemand", () => {
   });
 });
 
-describe("labourFulfillment", () => {
+describe("labourFulfilment", () => {
   it("is 1 when no labour is demanded", () => {
-    expect(labourFulfillment(0, 0)).toBe(1);
+    expect(labourFulfilment(0, 0)).toBe(1);
   });
   it("is min(1, population / demand)", () => {
-    expect(labourFulfillment(100, 50)).toBe(1);
-    expect(labourFulfillment(50, 100)).toBeCloseTo(0.5, 6);
+    expect(labourFulfilment(100, 50)).toBe(1);
+    expect(labourFulfilment(50, 100)).toBeCloseTo(0.5, 6);
   });
 });
 
@@ -282,11 +282,11 @@ describe("buildIndustryReadout", () => {
   const one = (): number => 1;
   const demandRateOf = (): number => 2.5;
 
-  it("labourFulfillment matches the helper formula", () => {
+  it("labourFulfilment matches the helper formula", () => {
     const readout = buildIndustryReadout(buildings, pop, {}, unitResourceVector(), { demandRateOf, honestUseRateOf, anchorMultOf: one });
     const demand = labourDemand(buildings);
-    const expected = labourFulfillment(pop, demand);
-    expect(readout.labourFulfillment).toBeCloseTo(expected, 6);
+    const expected = labourFulfilment(pop, demand);
+    expect(readout.labourFulfilment).toBeCloseTo(expected, 6);
   });
 
   it("housing appears with tier -1 and no outputGood", () => {
@@ -803,23 +803,23 @@ describe("perGradeStaffing", () => {
   });
 });
 
-describe("facilityStorageForGood", () => {
+describe("buildingStorageForGood", () => {
   it("extractor stores its own resource good; factory stores its output", () => {
-    expect(facilityStorageForGood({ ore: 3 }, "ore")).toBe(3 * EXTRACTOR_STORAGE_PER_UNIT);
-    expect(facilityStorageForGood({ metals: 2 }, "metals")).toBe(2 * PRODUCTION_STORAGE_PER_UNIT);
-    expect(facilityStorageForGood({ ore: 3 }, "metals")).toBe(0); // ore extractor doesn't store metals
+    expect(buildingStorageForGood({ ore: 3 }, "ore")).toBe(3 * EXTRACTOR_STORAGE_PER_UNIT);
+    expect(buildingStorageForGood({ metals: 2 }, "metals")).toBe(2 * PRODUCTION_STORAGE_PER_UNIT);
+    expect(buildingStorageForGood({ ore: 3 }, "metals")).toBe(0); // ore extractor doesn't store metals
   });
   it("population centres hold nominal-broad storage, generous on consumer goods", () => {
-    expect(facilityStorageForGood({ [HOUSING_TYPE]: 5 }, "consumer_goods")).toBe(5 * POP_CENTRE_STORAGE.consumer_goods);
-    expect(facilityStorageForGood({ [HOUSING_TYPE]: 5 }, "ore")).toBe(5 * POP_CENTRE_STORAGE_DEFAULT); // consumed staple, default
+    expect(buildingStorageForGood({ [HOUSING_TYPE]: 5 }, "consumer_goods")).toBe(5 * POP_CENTRE_STORAGE.consumer_goods);
+    expect(buildingStorageForGood({ [HOUSING_TYPE]: 5 }, "ore")).toBe(5 * POP_CENTRE_STORAGE_DEFAULT); // consumed staple, default
   });
   it("a population centre stores nothing for a good no one consumes", () => {
     // Every real good has a GOOD_CONSUMPTION entry, so this guards the defensive
     // zero-branch: an unknown / non-consumed good gets no pop-centre storage.
-    expect(facilityStorageForGood({ [HOUSING_TYPE]: 5 }, "unobtainium")).toBe(0);
+    expect(buildingStorageForGood({ [HOUSING_TYPE]: 5 }, "unobtainium")).toBe(0);
   });
   it("sums across a mixed build-out", () => {
-    expect(facilityStorageForGood({ ore: 2, [HOUSING_TYPE]: 4 }, "ore"))
+    expect(buildingStorageForGood({ ore: 2, [HOUSING_TYPE]: 4 }, "ore"))
       .toBe(2 * EXTRACTOR_STORAGE_PER_UNIT + 4 * POP_CENTRE_STORAGE_DEFAULT);
   });
 });
@@ -928,7 +928,7 @@ describe("buildIndustryReadout — labour block", () => {
     const demand = labourDemand(buildings);
     expect(readout.labour.workforce.have).toBeCloseTo(pop, 6);
     expect(readout.labour.workforce.need).toBeCloseTo(demand, 6);
-    expect(readout.labour.workforce.fulfil).toBeCloseTo(labourFulfillment(pop, demand), 6);
+    expect(readout.labour.workforce.fulfil).toBeCloseTo(labourFulfilment(pop, demand), 6);
 
     expect(readout.labour.skill1.have).toBeCloseTo(skill1Cap(buildings), 6);
     expect(readout.labour.skill1.need).toBeCloseTo(skill1Demand(buildings), 6);
@@ -1216,7 +1216,7 @@ describe("buildIndustryReadout — support row (kind 'none')", () => {
   });
 });
 
-describe("buildingUsed + computeUtilization (unified per-output-kind utilization)", () => {
+describe("buildingUsed + computeUtilisation (unified per-output-kind utilization)", () => {
   // One mixed base exercised across every output kind. Each expectation is computed from the SAME
   // helpers the old per-type branches used, so these are coherence witnesses, not magic numbers.
   const buildings: Record<string, number> = {
@@ -1231,7 +1231,7 @@ describe("buildingUsed + computeUtilization (unified per-output-kind utilization
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
   const sellingFactors: Record<string, number> = { ore: 0.8, metals: 0.6 };
-  const ctx: UtilizationContext = {
+  const ctx: UtilisationContext = {
     buildings,
     population,
     parts,
@@ -1278,7 +1278,7 @@ describe("buildingUsed + computeUtilization (unified per-output-kind utilization
   it("capacity/pop_cap used = occupancy, and may exceed count (overshoot)", () => {
     expect(buildingUsed("housing", 4, ctx)).toBe(4);
     expect(housingUsed(population)).toBeGreaterThan(4); // 100/20 = 5 > 4 built
-    expect(computeUtilization("housing", 4, ctx)).toBe(1); // clamped, despite overshoot
+    expect(computeUtilisation("housing", 4, ctx)).toBe(1); // clamped, despite overshoot
   });
 
   it("housingUsed remains literal occupancy", () => {
@@ -1313,7 +1313,7 @@ describe("buildingUsed + computeUtilization (unified per-output-kind utilization
   it("capacity/skill2_licence used = 0 when nothing demands skill-2", () => {
     expect(parts.skill2Demand).toBe(0); // no tier-2 producer in this base
     expect(buildingUsed("research_institute", 1, ctx)).toBe(0);
-    expect(computeUtilization("research_institute", 1, ctx)).toBe(0);
+    expect(computeUtilisation("research_institute", 1, ctx)).toBe(0);
   });
 
   it("modifier used = complexUsed(count, familyThroughput, ANCHOR_RATED_COVERAGE)", () => {
@@ -1326,17 +1326,17 @@ describe("buildingUsed + computeUtilization (unified per-output-kind utilization
     // A key absent from BUILDING_TYPES falls through to the `none` fallback (every real catalog
     // entry has a non-none output), so it is measured by headcount staffing alone.
     expect(buildingUsed("nonexistent_type", 3, ctx)).toBeCloseTo(3 * state.labourFulfil, 9);
-    expect(computeUtilization("nonexistent_type", 3, ctx)).toBeCloseTo(Math.min(1, state.labourFulfil), 9);
+    expect(computeUtilisation("nonexistent_type", 3, ctx)).toBeCloseTo(Math.min(1, state.labourFulfil), 9);
   });
 
-  it("computeUtilization = min(1, buildingUsed/count), and 0 at count 0", () => {
+  it("computeUtilisation = min(1, buildingUsed/count), and 0 at count 0", () => {
     for (const type of ["ore", "metals", "vocational_school", HEAVY_INDUSTRY_COMPLEX]) {
       const count = buildings[type];
-      expect(computeUtilization(type, count, ctx)).toBeCloseTo(
+      expect(computeUtilisation(type, count, ctx)).toBeCloseTo(
         Math.min(1, buildingUsed(type, count, ctx) / count),
         9,
       );
     }
-    expect(computeUtilization("metals", 0, ctx)).toBe(0);
+    expect(computeUtilisation("metals", 0, ctx)).toBe(0);
   });
 });

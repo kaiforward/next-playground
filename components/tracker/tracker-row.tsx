@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { progressWidthPct, projectedWidthPct } from "@/lib/utils/math";
+import { barWidthPct, projectedWidthPct } from "@/lib/utils/math";
 
 /** One icon-plus-number figure on a row — population's person icon, stability's colour swatch
  *  beside its value. `label` never renders visibly (the row stays one line); it exists so the
@@ -29,7 +29,7 @@ export interface TrackerRowProps {
   figures: TrackerFigure[];
   /** Fraction in [0,1] — matches `progressOf` (`lib/engine/construction-readout.ts`) and every
    *  other progress consumer in the codebase; the ×100 conversion happens at render time via
-   *  `progressWidthPct`. Renders the progress track whenever defined, including 0 — a stalled
+   *  `barWidthPct`. Renders the progress track whenever defined, including 0 — a stalled
    *  project stays visible rather than rendering nothing. */
   progress?: number;
   /** What the coming cycle adds, in `progress`'s units — drawn as a dimmer extension of the fill,
@@ -40,7 +40,7 @@ export interface TrackerRowProps {
    *  `progress` to pick a fill colour; a `progress` with no `tone` still draws the track. */
   tone?: "build" | "colony";
   /** Flies the map to the system and opens the destination tab. Does NOT open the popover — that is
-   *  hover/keyboard-only here (see `disableClickOpen` on `Popover`). */
+   *  hover/keyboard-only here (see `clickInert` on `Popover`). */
   onActivate: () => void;
   /** The popover's content — the system's vitals table (pinned rows) or the project's detail
    *  (build/colony rows), rendered as a card. Supplied by the panel, not derived here. */
@@ -84,7 +84,7 @@ export function TrackerRow({
 
   return (
     <li className="relative border-b border-border/60 last:border-b-0" data-system-id={systemId}>
-      <Popover disableClickOpen openDelay={300} side="left" align="start">
+      <Popover clickInert openDelay={300} side="left" align="start">
         <PopoverTrigger>
           <button
             type="button"
@@ -121,7 +121,7 @@ export function TrackerRow({
         <div aria-hidden className="absolute inset-x-0 bottom-0 flex h-0.5 bg-surface-active">
           <span
             className="block h-full"
-            style={{ width: `${progressWidthPct(progress)}%`, backgroundColor: fillColor }}
+            style={{ width: `${barWidthPct(progress)}%`, backgroundColor: fillColor }}
           />
           {/* The coming cycle's gain, in the fill's own colour at half strength — a forecast, not
               work already done. Half rather than the construction screen's 40%: this track is 2px

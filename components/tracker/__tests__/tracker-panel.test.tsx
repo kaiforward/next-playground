@@ -624,7 +624,7 @@ describe("TrackerRow — a zero-progress row still shows its track", () => {
     // Existence only, which is the whole claim: a falsy `progress &&` guard would render neither
     // element at progress 0. The fill's WIDTH is deliberately not asserted — jsdom has no layout
     // engine, so a width assertion would prove only that a string reached a style attribute. The
-    // width maths lives in `progressWidthPct`, tested in node.
+    // width maths lives in `barWidthPct`, tested in node.
     expect(fill).not.toBeNull();
   });
 });

@@ -10,7 +10,7 @@ import type { ResourceVector } from "@/lib/types/game";
 import type { WorldMarket } from "@/lib/world/types";
 import { GOODS } from "@/lib/constants/goods";
 import { getInitialStock, civilianDemandRateForGood } from "@/lib/constants/market-economy";
-import { computeSystemLabourSnapshot, facilityStorageForGood } from "@/lib/engine/industry";
+import { computeSystemLabourSnapshot, buildingStorageForGood } from "@/lib/engine/industry";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
 
 export interface SystemMarketSeed {
@@ -40,7 +40,7 @@ export function createSystemMarkets(seed: SystemMarketSeed): WorldMarket[] {
     productionSuppress: 1,
   });
   return Object.keys(GOODS).map((goodId) => {
-    const storageCapacity = facilityStorageForGood(seed.buildings, goodId);
+    const storageCapacity = buildingStorageForGood(seed.buildings, goodId);
     const stock = seed.seedStock
       ? getInitialStock(seed.buildings, seed.yields, seed.population, goodId)
       : 0;

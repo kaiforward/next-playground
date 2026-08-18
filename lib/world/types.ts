@@ -183,9 +183,9 @@ export interface WorldSystem {
    *  Nothing inside the tick reads it. */
   populationChange?: number;
   /** This run's best-ranked dropped production opportunity from the directed-build planner — the
-   *  alert bar's Build blocked category. See `BuildDropReason` and `BuildBlockReport`
-   *  (`lib/engine/directed-build.ts`) for the reasons and for what `droppedRoi` is (and is not) at
-   *  each drop site. Written directly by the directed-build processor's world adapter
+   *  alert bar's Build blocked category. See `BuildDropReport` (`lib/engine/directed-build.ts`) for
+   *  the reasons and for what `droppedRoi` is (and is not) at each drop site. Written directly by
+   *  the directed-build processor's world adapter
    *  (`applyBuildBlockedUpdates`, `lib/tick/world/directed-build-world.ts`), applied in
    *  `lib/world/tick.ts` — not by the generic per-system row-mutation path. Same absence convention
    *  as `provision`/`supplyBand`/`criticalWeight`/`populationChange` above: absent means never

@@ -29,7 +29,7 @@ import type { GoodTier } from "@/lib/types/game";
 import type { BuildOptionData, PopNeedData } from "@/lib/types/api";
 import { formatMagnitude, formatPeople, formatUnitsShort } from "@/lib/utils/format";
 import { formatEta } from "@/lib/utils/construction-format";
-import { progressWidthPct } from "@/lib/utils/math";
+import { barWidthPct } from "@/lib/utils/math";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeColor } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -255,7 +255,7 @@ function BuildingTooltipBody({
             <div key={g.grade} className="flex items-center gap-1.5">
               <span aria-hidden className={`w-3 font-mono text-[9px] ${GRADE[g.grade].text}`}>{GRADE[g.grade].tag}</span>
               <div className="relative h-1.5 flex-1 overflow-hidden border border-border bg-surface-active">
-                <div className={`absolute inset-y-0 left-0 ${GRADE[g.grade].bar}`} style={{ width: `${Math.max(0, Math.min(100, g.fulfil * 100))}%` }} />
+                <div className={`absolute inset-y-0 left-0 ${GRADE[g.grade].bar}`} style={{ width: `${barWidthPct(g.fulfil)}%` }} />
               </div>
               <span className={`w-[70px] text-right font-mono text-[10px] ${g.wall ? "text-status-red-light" : "text-text-secondary"}`}>
                 {formatMagnitude(g.filled)}/{formatMagnitude(g.needed)}{g.wall ? " ◄" : ""}
@@ -328,7 +328,7 @@ function GhostNameCell({
         )}
       </span>
       <span className="mt-0.5 block h-1 max-w-[180px] bg-surface-active">
-        <span aria-hidden className="block h-full bg-status-amber/75" style={{ width: `${progressWidthPct(ghost.progress)}%` }} />
+        <span aria-hidden className="block h-full bg-status-amber/75" style={{ width: `${barWidthPct(ghost.progress)}%` }} />
       </span>
     </td>
   );
@@ -341,7 +341,7 @@ function DepositGhostRow({
   return (
     <tr className="border-b border-border/40 last:border-b-0">
       <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(progressWidthPct(ghost.progress))}%</td>
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(barWidthPct(ghost.progress))}%</td>
       <td />
       <td />
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
@@ -357,7 +357,7 @@ function BuildingGhostRow({
   return (
     <tr className="border-b border-border/40 last:border-b-0">
       <GhostNameCell ghost={ghost} canCancel={canCancel} onCancel={onCancel} cancelPending={cancelPending} />
-      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(progressWidthPct(ghost.progress))}%</td>
+      <td className="px-1.5 py-1 text-right font-mono text-[11px] text-status-amber-light">{Math.round(barWidthPct(ghost.progress))}%</td>
       <td className="px-1.5 py-1 text-right font-mono text-[11px] text-text-tertiary">{formatEta(ghost.etaCycles)}</td>
       {showActionColumn && <td />}
     </tr>
@@ -889,7 +889,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     return <EmptyState message="This system isn't developed yet — no industry to survey." />;
   }
 
-  const { space, deposits, labour, labourAllocation, labourFulfillment, supplyChain, unrest, skillBaskets, popNeeds } = data;
+  const { space, deposits, labour, labourAllocation, labourFulfilment, supplyChain, unrest, skillBaskets, popNeeds } = data;
 
   if (buildings.length === 0) {
     return <EmptyState message="Undeveloped — no industry established. Charted deposits await development." />;
@@ -954,7 +954,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
           </Badge>
           <span className="ml-auto flex items-center gap-3.5 font-mono text-xs text-text-secondary">
             <span>unrest <span className="text-text-primary">{unrest.toFixed(2)}</span></span>
-            <span>labour <span className="text-text-primary">{Math.round(labourFulfillment * 100)}%</span></span>
+            <span>labour <span className="text-text-primary">{Math.round(labourFulfilment * 100)}%</span></span>
             <LegendTooltip />
             {canOrder && (
               <Button variant="outline" size="xs" type="button" onClick={newIndustryDialog.onOpen}>

@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
+import { TrackMarker } from "@/components/ui/track-marker";
 
 /** The tile's 5px fill meter — omit on tiles that use `children` for their body instead (e.g. Population). */
 export interface VitalMeter {
   pct: number;
   color: string;
   /**
-   * Optional secondary marker on the SAME 0-100 meter scale as `pct` — a vertical tick drawn over
-   * the track independent of the fill (e.g. the Provisioned tile's remembered-level tick). Omitted
-   * by every existing caller; adding it here beats a bespoke meter for the one tile that needs it.
+   * Optional secondary mark on the SAME 0-100 meter scale as `pct`, drawn over the track
+   * independent of the fill (e.g. the Provisioned tile's remembered level). Rendered by
+   * `TrackMarker` (`components/ui/track-marker.tsx`), the one owner of this mark's geometry —
+   * so it is clamped into the track like every other marker in the app.
    */
   markerPct?: number;
 }
@@ -65,10 +67,10 @@ export function VitalTile({ label, dotColor, value, unit, meter, hint, children,
         >
           <span className="block h-full" style={{ width: `${meter.pct}%`, background: meter.color }} />
           {meter.markerPct !== undefined && (
-            <span
-              aria-hidden
-              className="absolute -top-px -bottom-px border-l-2 border-dashed border-text-primary/70"
-              style={{ left: `${meter.markerPct}%` }}
+            <TrackMarker
+              pct={meter.markerPct}
+              color="color-mix(in srgb, var(--color-text-primary) 70%, transparent)"
+              dashed
             />
           )}
         </div>

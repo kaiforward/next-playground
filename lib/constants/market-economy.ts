@@ -9,7 +9,7 @@ import {
   buildingProduction,
   computeLabourState,
   computeSystemLabourSnapshot,
-  facilityStorageForGood,
+  buildingStorageForGood,
   inputDemandForGood,
 } from "@/lib/engine/industry";
 import type { LabourState } from "@/lib/engine/industry";
@@ -77,7 +77,7 @@ export function totalDemandRateForGood(
  * Initial stock for a market at seed/reset time, derived from the system's net
  * balance for the good around its per-market band. The band is demand-priced
  * (targetStock = TARGET_COVER × demandRate, the price anchor) and
- * infrastructure-stocked (maxStock adds facilityStorageForGood on top of the
+ * infrastructure-stocked (maxStock adds buildingStorageForGood on top of the
  * demand headroom). A net producer seeds with deeper cover (reads cheap), a net
  * consumer with shallower cover (reads dear). Seeds retain a separate strategic
  * reserve floor; changing emergency rationing must not seed nearly empty markets.
@@ -100,11 +100,11 @@ export function getInitialStock(
   const band = g
     ? marketBand({
         demandRate,
-        storageCapacity: facilityStorageForGood(buildings, goodId),
+        storageCapacity: buildingStorageForGood(buildings, goodId),
         priceFloor: g.priceFloor,
         priceCeiling: g.priceCeiling,
       })
-    : marketBand({ demandRate, storageCapacity: facilityStorageForGood(buildings, goodId), priceFloor: 0.5, priceCeiling: 2.0 });
+    : marketBand({ demandRate, storageCapacity: buildingStorageForGood(buildings, goodId), priceFloor: 0.5, priceCeiling: 2.0 });
 
   const total = production + consumption;
   const producerShare = total > 0 ? production / total : 0.5; // 1 producer, 0 consumer

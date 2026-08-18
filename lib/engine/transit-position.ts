@@ -4,7 +4,7 @@
  * because only origin → final destination + ticks are persisted on the ship.
  */
 import type { ConnectionInfo } from "./navigation";
-import { findShortestPath, buildAdjacencyList, type FuelAdjacency } from "./pathfinding";
+import { findShortestPath, buildFuelAdjacency, type FuelAdjacency } from "./pathfinding";
 import { hopDuration } from "./travel";
 
 export interface Vec2 {
@@ -61,7 +61,7 @@ export function reconstructTransitPath(
   speed: number,
   adj?: FuelAdjacency,
 ): TransitPath {
-  const adjacency = adj ?? buildAdjacencyList(connections);
+  const adjacency = adj ?? buildFuelAdjacency(connections);
   const result = findShortestPath(originId, destinationId, connections, speed, adjacency);
   if (!result || result.path.length < 2) {
     return {

@@ -42,7 +42,7 @@ and needs **no treasury**.
 
 The capstone is a **rework of the Industry panel** so the three quantities the decay loop runs on —
 **available** (shared land headroom), **built** (`count`), and **in-use** (occupancy for housing,
-staffed-and-selling `count × min(labourFulfillment, sellingFactor)` for production) — read clearly at a glance,
+staffed-and-selling `count × min(labourFulfilment, sellingFactor)` for production) — read clearly at a glance,
 per land pool and per building, health-coloured. The panel was deferred until the economy *moved*; this slice
 is what makes it move.
 
@@ -81,7 +81,7 @@ only thing that can reverse it is later faction treasury spend (build-out + unre
 `WorldBuilding.count` is a whole-integer **level count**, mutated **downward only** and always by whole
 levels. Decay runs on the existing economy-shard cadence (the same fixed-interval shard as the economy and
 population processors, every `ECONOMY_UPDATE_INTERVAL` ticks ≈ one cycle) and reads the freshly-computed
-`labourFulfillment` and market state. Writes apply batched `count` + `idleCycles` deltas across the shard in
+`labourFulfilment` and market state. Writes apply batched `count` + `idleCycles` deltas across the shard in
 one pass, never per-row.
 
 ### "Used" depends on the building's role
@@ -89,9 +89,9 @@ one pass, never per-row.
 | Building class | "Used" level | Decays toward | Maintained by |
 |---|---|---|---|
 | **Housing** | occupancy | `population / POP_CENTRE_DENSITY` (units the current population fills) | the people living in it — full housing never rots |
-| **Production / extraction** | staffed *and* selling | `count × min(labourFulfillment, sellingFactor)` | active workers + a market for the output |
+| **Production / extraction** | staffed *and* selling | `count × min(labourFulfilment, sellingFactor)` | active workers + a market for the output |
 
-- **`labourFulfillment`** is the existing system-wide `min(1, pop / labourDemand)` ratio.
+- **`labourFulfilment`** is the existing system-wide `min(1, pop / labourDemand)` ratio.
 - **`sellingFactor`** (`signals.sellingFactorBySystem`) is the production brake's knee ceiling at
   start-of-cycle stock: 1 while stock sits at or below the knee (cycles of the use figure or of the
   system's own working inventory, whichever sizes the larger band), tapering linearly to 0 by the
@@ -236,7 +236,7 @@ contradict what actually decays. Fed by live `used` + `sellingFactor`. Honours t
 
 1. **Decay engine (pure).** `lib/engine/` functions: `used` per building class, disuse decay, unrest decay —
    pure, total, Vitest-tested in isolation (no DB import in the test graph).
-2. **Tick wiring.** A decay step on the economy-shard cadence: read building set + `labourFulfillment` +
+2. **Tick wiring.** A decay step on the economy-shard cadence: read building set + `labourFulfilment` +
    market uptake, compute batched downward `count` deltas, apply them, recompute `popCap` live.
    The pure body runs against the in-memory world.
 3. **Population coupling.** Housing-overshoot → unrest-weighted **migration ⊕ death** displacement term.

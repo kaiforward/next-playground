@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   clamp,
   median,
-  progressWidthPct,
+  barWidthPct,
   projectedWidthPct,
   quantile,
   weightedMean,
@@ -27,23 +27,23 @@ describe("clamp", () => {
   });
 });
 
-describe("progressWidthPct", () => {
-  // TrackerRow's progress track renders `${progressWidthPct(progress)}%` as a style attribute,
+describe("barWidthPct", () => {
+  // TrackerRow's progress track renders `${barWidthPct(progress)}%` as a style attribute,
   // which jsdom cannot honestly verify (no layout engine) — so the width maths is pinned here
   // instead, per the component-test convention's own escape hatch.
 
   it("maps a mid-range fraction to its percentage — the exact bug this fixes: reading a fraction as a percentage rendered 0.55%, not 55%", () => {
-    expect(progressWidthPct(0.55)).toBeCloseTo(55, 10);
+    expect(barWidthPct(0.55)).toBeCloseTo(55, 10);
   });
 
   it("maps the bounds: 0 to 0, 1 to 100", () => {
-    expect(progressWidthPct(0)).toBe(0);
-    expect(progressWidthPct(1)).toBe(100);
+    expect(barWidthPct(0)).toBe(0);
+    expect(barWidthPct(1)).toBe(100);
   });
 
   it("clamps out-of-range input at both ends rather than drawing a fill past 100% or below 0", () => {
-    expect(progressWidthPct(1.5)).toBe(100);
-    expect(progressWidthPct(-0.3)).toBe(0);
+    expect(barWidthPct(1.5)).toBe(100);
+    expect(barWidthPct(-0.3)).toBe(0);
   });
 });
 
@@ -57,7 +57,7 @@ describe("projectedWidthPct", () => {
 
   it("clamps to the room the fill leaves — a project 10% from done forecast a full 30% cycle draws 10, finishing the bar rather than overflowing it", () => {
     expect(projectedWidthPct(0.9, 0.3)).toBeCloseTo(10, 10);
-    expect(projectedWidthPct(0.9, 0.3) + progressWidthPct(0.9)).toBeCloseTo(100, 10);
+    expect(projectedWidthPct(0.9, 0.3) + barWidthPct(0.9)).toBeCloseTo(100, 10);
   });
 
   it("draws nothing on a completed bar, and nothing for a project absorbing nothing this cycle", () => {

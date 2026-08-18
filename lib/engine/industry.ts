@@ -58,8 +58,8 @@ export function labourDemand(buildings: Record<string, number>): number {
   return demand;
 }
 
-/** Uniform proportional labour fulfillment in [0, 1]. 1 when nothing demands labour. */
-export function labourFulfillment(population: number, demand: number): number {
+/** Uniform proportional labour fulfilment in [0, 1]. 1 when nothing demands labour. */
+export function labourFulfilment(population: number, demand: number): number {
   if (demand <= 0) return 1;
   return Math.min(1, Math.max(0, population) / demand);
 }
@@ -176,7 +176,7 @@ export function labourParts(buildings: Record<string, number>): LabourParts {
 /** Derive the three-part labour state from precomputed parts. */
 export function labourStateFromParts(parts: LabourParts, population: number): LabourState {
   return {
-    labourFulfil: labourFulfillment(population, parts.demand),
+    labourFulfil: labourFulfilment(population, parts.demand),
     skill1Fulfil: poolFulfil(parts.skill1Cap, parts.skill1Demand),
     skill2Fulfil: poolFulfil(parts.skill2Cap, parts.skill2Demand),
   };
@@ -389,7 +389,7 @@ export function housingUsed(population: number): number {
  * decay engine and the industry read service already have every field in hand (a single labourParts
  * pass + the population + a seller-side selling signal), so this just names the bundle.
  */
-export interface UtilizationContext {
+export interface UtilisationContext {
   /** The whole built base — needed for a modifier's family throughput. */
   buildings: Record<string, number>;
   population: number;
@@ -403,7 +403,7 @@ export interface UtilizationContext {
 }
 
 /** An abstract-capacity building's licence draw ÷ licence supply, in building units. */
-function capacityUsed(kind: CapacityKind, count: number, ctx: UtilizationContext): number {
+function capacityUsed(kind: CapacityKind, count: number, ctx: UtilisationContext): number {
   switch (kind) {
     case "pop_cap":
       return Math.min(count, housingUsed(ctx.population) * (1 + VACANCY_SLACK));
@@ -424,7 +424,7 @@ function capacityUsed(kind: CapacityKind, count: number, ctx: UtilizationContext
  *  - modifier → family coverage the built factories draw: complexUsed(count, familyThroughput, rated).
  *  - none → staffing only (no current type; employment/holding fallback).
  */
-export function buildingUsed(buildingType: string, count: number, ctx: UtilizationContext): number {
+export function buildingUsed(buildingType: string, count: number, ctx: UtilisationContext): number {
   const output = BUILDING_TYPES[buildingType]?.output ?? { kind: "none" as const };
   switch (output.kind) {
     case "market_good": {
@@ -449,7 +449,7 @@ export function buildingUsed(buildingType: string, count: number, ctx: Utilizati
  * Utilization u ∈ [0,1] = min(1, buildingUsed / count); 0 at non-positive count. An
  * over-occupied housing level reads as fully utilised, not greater than one.
  */
-export function computeUtilization(buildingType: string, count: number, ctx: UtilizationContext): number {
+export function computeUtilisation(buildingType: string, count: number, ctx: UtilisationContext): number {
   if (count <= 0) return 0;
   return Math.min(1, buildingUsed(buildingType, count, ctx) / count);
 }
@@ -465,13 +465,13 @@ export function buildingProduction(
   state: LabourState,
   yields: ResourceVector,
 ): number {
-  const fulfillment = effectiveFulfilment(state, GOOD_TIER_BY_KEY[goodId] ?? 0);
+  const fulfilment = effectiveFulfilment(state, GOOD_TIER_BY_KEY[goodId] ?? 0);
   let rate = 0;
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
     const def = BUILDING_TYPES[type];
     if (def?.outputGood !== goodId) continue;
-    rate += count * (def.outputPerUnit ?? 0) * fulfillment;
+    rate += count * (def.outputPerUnit ?? 0) * fulfilment;
   }
   // Tier-0 yield term: multiply by the per-resource yield multiplier.
   // `resource !== undefined` already implies tier-0 (only tier-0 goods set GOOD_PRODUCTION[g].resource);
@@ -554,7 +554,7 @@ export interface SkillBasketEntry {
 /** Snapshot of one system's industrial base and supply-chain state. */
 export interface SystemIndustryReadout {
   /** Labour supply ratio in [0, 1]. 1 = fully staffed. */
-  labourFulfillment: number;
+  labourFulfilment: number;
   /** The three system-wide labour pools (workforce/technician/engineer), supply vs demand. */
   labour: SystemLabour;
   /** Population decomposed into disjoint role buckets + unemployed (sums to population). */
@@ -700,7 +700,7 @@ export interface IndustryReadoutAccessors {
  * summariseSpace; this readout covers labour, the building roster, and the
  * supply chain.)
  *
- * - labourFulfillment: population vs total labour demand.
+ * - labourFulfilment: population vs total labour demand.
  * - buildings: one entry per building type with count > 0 (housing gets tier -1).
  * - supplyChain: tier-1+ produced goods whose recipe inputs may be short.
  *   inputGate < 1 means the good is throttled by at least one short input.
@@ -751,7 +751,7 @@ export function buildIndustryReadout(
     );
     return productionCeiling(stockOf(g), knee);
   };
-  const ctx: UtilizationContext = {
+  const ctx: UtilisationContext = {
     buildings,
     population,
     parts,
@@ -883,7 +883,7 @@ export function buildIndustryReadout(
   supplyChainEntries.sort((a, b) => a.inputGate - b.inputGate);
 
   return {
-    labourFulfillment: state.labourFulfil,
+    labourFulfilment: state.labourFulfil,
     labour,
     labourAllocation: computeLabourAllocation(parts, population),
     buildings: buildingEntries,
@@ -900,7 +900,7 @@ export function buildIndustryReadout(
  * infrastructure term of maxStock. Extractors/factories store what they handle;
  * population centres hold nominal retail stock (generous on consumer goods).
  */
-export function facilityStorageForGood(buildings: Record<string, number>, goodId: string): number {
+export function buildingStorageForGood(buildings: Record<string, number>, goodId: string): number {
   let storage = 0;
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;

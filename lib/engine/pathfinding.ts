@@ -5,7 +5,7 @@
 
 import type { ConnectionInfo } from "./navigation";
 import { hopDuration } from "./travel";
-import { buildAdjacencyList as buildHopAdjacencyList } from "./visibility";
+import { buildHopAdjacency } from "./visibility";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -32,12 +32,15 @@ export type RouteValidationResult =
 export type FuelAdjacency = Map<string, { toSystemId: string; fuelCost: number }[]>;
 
 /**
- * Build a directional fuel adjacency list from a flat connection array.
+ * Build a **directional**, fuel-weighted adjacency list from a flat connection array — one edge per
+ * connection, in the direction the connection was declared. The hop graph
+ * (`buildHopAdjacency`, `lib/engine/visibility.ts`) is the other one: bidirectional and unweighted.
+ *
  * Exported so callers that run many path queries over the same graph (e.g. the
  * map's fleet-transit layer) can build it once and pass it in, instead of
  * rebuilding it per query.
  */
-export function buildAdjacencyList(connections: ConnectionInfo[]): FuelAdjacency {
+export function buildFuelAdjacency(connections: ConnectionInfo[]): FuelAdjacency {
   const adj: FuelAdjacency = new Map();
   for (const c of connections) {
     let neighbors = adj.get(c.fromSystemId);
@@ -144,7 +147,7 @@ export function findShortestPath(
 ): PathResult | null {
   if (originId === destinationId) return null;
 
-  const adjacency = adj ?? buildAdjacencyList(connections);
+  const adjacency = adj ?? buildFuelAdjacency(connections);
   const { dist, prev } = dijkstra(originId, adjacency, { stopAt: destinationId });
 
   const totalFuelCost = dist.get(destinationId);
@@ -171,7 +174,7 @@ export function findReachableSystems(
   connections: ConnectionInfo[],
   shipSpeed?: number,
 ): Map<string, ReachableSystem> {
-  const adj = buildAdjacencyList(connections);
+  const adj = buildFuelAdjacency(connections);
   const { dist, prev } = dijkstra(originId, adj, { maxFuel: currentFuel });
   const result = new Map<string, ReachableSystem>();
 
@@ -232,7 +235,7 @@ function bfsHopDistances(
 export function computeAllHopDistances(
   connections: ConnectionInfo[],
 ): Map<string, Map<string, number>> {
-  const adj = buildHopAdjacencyList(connections);
+  const adj = buildHopAdjacency(connections);
   const result = new Map<string, Map<string, number>>();
 
   for (const origin of adj.keys()) {
@@ -255,7 +258,7 @@ export function computeBoundedHopDistances(
   connections: ConnectionInfo[],
   maxHops: number,
 ): Map<string, Map<string, number>> {
-  const adj = buildHopAdjacencyList(connections);
+  const adj = buildHopAdjacency(connections);
   const result = new Map<string, Map<string, number>>();
 
   for (const origin of adj.keys()) {
@@ -276,7 +279,7 @@ export function boundedHopsFromOrigin(
   connections: ConnectionInfo[],
   maxHops: number,
 ): Map<string, number> {
-  return bfsHopDistances(origin, buildHopAdjacencyList(connections), maxHops);
+  return bfsHopDistances(origin, buildHopAdjacency(connections), maxHops);
 }
 
 // ── Linear route validation (server-side) ──────────────────────
@@ -296,7 +299,7 @@ export function validateRoute(
     return { ok: false, error: "Route must have at least 2 systems." };
   }
 
-  const adj = buildAdjacencyList(connections);
+  const adj = buildFuelAdjacency(connections);
   let totalFuelCost = 0;
   let totalTravelDuration = 0;
 

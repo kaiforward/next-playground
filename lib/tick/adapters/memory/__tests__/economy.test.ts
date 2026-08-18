@@ -23,7 +23,7 @@ const market = (goodId: string): WorldMarket => ({
 });
 
 describe("InMemoryEconomyWorld — capacity-driven production", () => {
-  it("derives baseProductionRate from buildings × outputPerUnit × labourFulfillment", async () => {
+  it("derives baseProductionRate from buildings × outputPerUnit × labourFulfilment", async () => {
     const world = new InMemoryEconomyWorld(
       { systems: [sys({})], markets: [market("ore")], modifiers: [] },
     );

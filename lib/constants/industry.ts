@@ -285,7 +285,7 @@ export const SUPPORT_TYPES: string[] = Object.entries(BUILDING_TYPES)
   .filter(([, def]) => def.output.kind === "none")
   .map(([type]) => type);
 
-// The three storage constants below feed maxStock depth (`facilityStorageForGood`) ONLY — they are
+// The three storage constants below feed maxStock depth (`buildingStorageForGood`) ONLY — they are
 // deliberately NOT a brake input: authored per producing building, they sit ~2 orders of magnitude
 // below 40 cycles of system-wide draw (measured 16×–843× per good at the stage-3 gate), so capping
 // the brake with them hard-stopped production galaxy-wide. A brake-relevant physical warehouse is

@@ -519,7 +519,7 @@ describe("economy processor: supply-chain input-gating", () => {
    * Each system has 2 metals buildings + 1 vocational_school (licenses the
    * metals buildings' skill1 demand: 2×7=14 ≪ 150, so metals isn't skill-gated)
    * and 65 population (= labour demand at 25/metals-building + 15/school), so
-   * labourFulfillment = 1 and production is purely input-gated. No ore-producing
+   * labourFulfilment = 1 and production is purely input-gated. No ore-producing
    * buildings are included — ore stock is set directly and does not grow.
    */
   it("throttles metals production when local ore is scarce", async () => {
