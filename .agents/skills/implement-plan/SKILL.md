@@ -12,8 +12,9 @@ close: **tests that were never seen red** pin nothing, and **issues noted per-ta
 per-task** are forgotten by the time implementation ends, then expensively re-found at review.
 
 **Entry condition: the plan exists and is committed** — `docs/build-plans/<feature>.md` with
-four-field tasks (`Files / Interface / Proves / Consumes`, `Proves` a detection list) and its
-gates. No plan → that is `/build-plan`; go back. Work happens on the feature branch per `AGENTS.md` —
+four-field tasks (`Files / Interface / Proves / Consumes`, `Proves` a detection list; UI tasks also
+carry `Reuse`) and its gates. **If the plan has a Net-new UI section, the owner's approval of that
+list is part of the entry condition** — do not dispatch the first UI task without it. No plan → that is `/build-plan`; go back. Work happens on the feature branch per `AGENTS.md` —
 and **if the target branch is a `shared/*` integration branch, create `feat/<sub-feature>` off it
 before the first dispatch**: task commits land on the sub-branch, which PRs into shared when the
 feature completes (the commit-branch hook blocks commits anywhere but `feat/*`).
@@ -30,7 +31,9 @@ having happened. Two required sections:
 
 **Per task** — status; model + effort dispatched (and why, if not the default); the **red-proof
 record**: one line per detection-list entry naming the test that pins it and how it was seen red;
-one line stating **what this task's tests do not prove**; the review verdict; the commit sha.
+one line stating **what this task's tests do not prove**; the `Files` deviations (any file touched
+beyond the plan's list, any listed file left unchanged — the list is a floor, and deviations are
+recorded, never hidden); the review verdict; the commit sha.
 
 **`## Issues`** — every finding, from any source (the per-task review, the implementer, the
 session's own reading), that was not fixed before that task's commit. One row each: severity ·
@@ -38,11 +41,21 @@ source task · `file:line` · one-line claim. There are exactly two dispositions
 **fixed now** or **ledgered here**. A finding that is neither is dropped work, and dropping it
 silently is the failure this file exists to prevent. "Minor" is a severity, not a disposition.
 
+**Edit the ledger with exact anchors, never a scripted find-and-replace.** A scripted replace
+no-op'd twice on one feature — the anchor text had drifted since the previous edit — and silently
+dropped two recorded findings, which is the one loss the ledger exists to prevent and is invisible
+by construction. Use an edit that errors on no-match or assert the match count, and re-read
+`## Issues` end to end before every fix wave rather than trusting it accreted correctly.
+
 ## Per task
 
-1. **Dispatch one implementer per task.** The prompt is the task verbatim (all four fields), the
-   spec sections it implements, and the gates reference — not a paraphrase; the plan was written to
-   be executed from. Model and effort per the tiers below, always explicit.
+1. **Dispatch one implementer per task, serially by default.** The prompt is the task verbatim
+   (every field), the spec sections it implements, and the gates reference — not a paraphrase; the
+   plan was written to be executed from. Model and effort per the tiers below, always explicit.
+   Parallel dispatch of disjoint-file tasks is allowed, but a full-suite run mid-flight attributes
+   to no one task, so the session cannot verify the gate it owns: record in the ledger which task's
+   checks-green is deferred and to which run. And never run a red-proof re-execution while another
+   task's suite is in flight — the temporary break reads as that suite's false red.
 2. **TDD, where the red run is the detection list executed item by item.** Tests come from the
    `Proves` entries before implementation; each entry is seen red once — break the listed
    behaviour, watch the named test fail, restore. The implementer returns the red-proof record,
@@ -89,7 +102,9 @@ already caught and how it was resolved.
 
 ## Models
 
-Resolve tiers through `.agents/model-tiers.md`; effort explicit on every dispatch, never inherited.
+Resolve tiers through `.agents/model-tiers.md`; effort explicit on every dispatch, never inherited —
+knowing that the dispatch tool has no effort parameter: "effort" is prompt text and only prompt
+text, so write it into the prompt and record it in the ledger rather than assuming it is enforced.
 
 - **Implementer: `strong` by default.** A task with a written Interface and detection list is
   bounded implementation — the pipeline already spent the judgment upstream in the spec and plan,

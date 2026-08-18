@@ -31,6 +31,30 @@ Proves:     <detection list — the 3-6 wrong behaviours this task's tests must 
 Consumes:   <which earlier tasks' interfaces it reads; never one a later task defines>
 ```
 
+A task that touches UI carries a fifth:
+
+```
+Reuse:      <the existing components/ui|form pieces, hooks and helpers this task composes, each
+             verified by reading its props — or "New: <name> — nothing fits because <reason>">
+```
+
+**`Reuse` is where duplication is prevented — at the source, not at review.** The survey AGENTS.md
+requires before building any component happens here, once per feature against the real files,
+instead of once per implementer, chunk-scoped and alone — which is how five byte-identical hooks
+landed across five PRs and a track marker got hand-rolled twelve lines from the component that
+already drew it. Each named component is verified by **reading its props**, not remembered. A task
+that finds nothing to compose writes `New: <name>` with the reason — and the search that failed is
+run in the words a *user* of the behaviour would type, because the name-is-the-bug rule cuts both
+ways: search for what it does, and name the new thing for what it does. `npm run duplication` at
+review is the backstop, never the plan.
+
+**`Files` is a floor, not a contract.** The implementer reports in the ledger any file touched
+beyond the list and any listed file that turned out to need no change; neither is a defect, both are
+recorded. One feature's lists were wrong in both directions — a named file the engine never read,
+two omitted test files the detection list could not be pinned without — so treating the list as
+exhaustive under-delivers and treating it as a ceiling over-delivers. The floor semantic is the
+contract.
+
 The `Interface` field is the plan's actual content. "Add the donor gate" plans nothing;
 "`donorDrawable(market, good): number`, replacing the `surplusDrawable` read in
 `matchFactionTransfers`" is a contract one session can build and another can build against.
@@ -93,7 +117,8 @@ booking-at-a-gate lives (see Not covered).
 
 ## Plan-level fields
 
-After the tasks, three sections, all required:
+After the tasks, these sections — the first three always, the fourth whenever any task carries a
+`New:`:
 
 **Verification** — how the finished feature is proven in the galaxy, not in fixtures: which sim
 metric moves, read at **both horizons**, cohorted; the build gate (`npx next build --webpack`); and
@@ -109,6 +134,13 @@ or **booked at a gate** — when the booking's own evidence is produced by a sta
 booking in that gate's merge condition, so the check is still text.
 An exclusion with none of the three is a finding against the plan. The field is attached to finishing the plan
 because producing text beats doing the check — this way the check is the text.
+
+**Net-new UI** — every `New:` from the tasks' `Reuse` fields, collected into one list. This list
+goes to the owner **before `/implement-plan` starts**: a new component is a decision he redirects
+cheaply here and expensively after it ships, and "we need some UI to show X" has never been enough
+direction to prevent the second copy. Where the feature is UI-heavy, AGENTS.md's approved-prototype
+rule rides on this list — the prototype shows exactly these pieces. An empty list is stated, not
+omitted, so its absence is a claim the review can check.
 
 ## Self-review — the final step, not a second gate
 
@@ -145,7 +177,15 @@ Minutes, by the author, before committing the plan. No agent dispatch.
   the plan leans on beyond it.
 - **Each detection list read back against its own Interface.** Every branch arm, boundary and
   contention the interface implies has an entry; a list of happy-path restatements is an unfilled
-  field wearing a filled one's clothes.
+  field wearing a filled one's clothes. Two named checks inside this read-back: no entry
+  **contradicts** the Interface it tests — three tasks in one stage shipped exactly that, and the
+  implementer paid for it — and every value the task **authors** (writes, computes, exposes) is
+  pinned by some entry, not only the values it categorises. One task's four entries all covered
+  which band each event landed in, and none covered `impactRank`, the sort key the consuming task
+  read.
+- **Every `Reuse` entry opened, every `New:` searched.** A reused component's props were read this
+  session, not remembered from an earlier one; a `New:` name must not already exist under a name
+  the search missed — grep the behaviour's words, not the proposed name.
 
 Fix what the self-review finds, note anything material in the plan, move on. It is a checklist, not
 a review cycle.
