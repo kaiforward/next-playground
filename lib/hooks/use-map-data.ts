@@ -22,9 +22,6 @@ export interface SystemNodeData {
   economyType: EconomyType;
   /** Star spectral class — colours the map's star-type dot. */
   sunClass: SunClass;
-  /** True when the system is developed (control === 'developed'). Undeveloped systems render
-   *  as a hollow marker — labelled potential, not owned. */
-  developed: boolean;
   /** Settlement mark at the star's shoulder (player systems only) — see `settlementMarkFor`. */
   settlementMark: SettlementMark | null;
   regionId: string;
@@ -112,7 +109,6 @@ export function useMapData({
         name: system.name,
         economyType: system.economyType,
         sunClass: system.sunClass,
-        developed: system.developed ?? true,
         settlementMark: settlementMarkFor(ownership.get(system.id), playerFactionId),
         regionId: system.regionId,
         isGateway: system.isGateway,

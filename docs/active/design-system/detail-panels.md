@@ -12,7 +12,7 @@ switches — detailed in [player-seat.md](../gameplay/player-seat.md). Theme rul
 
 `DetailPanel` (`components/ui/detail-panel.tsx`) is a fixed, left-docked, full-height drawer
 (`top: var(--topbar-height); left: 0; bottom: 0`, width `560px`), shared by every
-panel (system, faction, faction list, diplomacy, events, styleguide).
+panel (system, faction, styleguide).
 
 - **Non-blocking** — there is no backdrop, so the map keeps all pointer events: you pan, zoom, and click
   other systems with a panel open.

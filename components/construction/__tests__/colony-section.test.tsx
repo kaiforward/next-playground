@@ -7,10 +7,11 @@ import type { ColonyPreviewData, SystemBuildOptionsData, SystemConstructionData 
 
 // All three hooks are thin `useSuspenseQuery`/mutation wrappers, so mocking them at the module edge
 // is enough — no QueryClientProvider, and no fetch for jsdom to fail on.
-const { constructionValue, buildSurface } = vi.hoisted(() => ({
-  constructionValue: { current: { visibility: "hidden" } as SystemConstructionData },
-  buildSurface: { current: { mode: "none" } as SystemBuildOptionsData },
-}));
+const { constructionValue, buildSurface } = vi.hoisted(() => {
+  const constructionValue: { current: SystemConstructionData } = { current: { visibility: "hidden" } };
+  const buildSurface: { current: SystemBuildOptionsData } = { current: { mode: "none" } };
+  return { constructionValue, buildSurface };
+});
 
 vi.mock("@/lib/hooks/use-system-construction", () => ({
   useSystemConstruction: () => constructionValue.current,
