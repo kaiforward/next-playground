@@ -196,9 +196,23 @@ cannot reach.
 
 ## Left to do
 
-1. **`/brainstorm`** — prose discussion, no forced-choice lists, terminal state is `/measure` rather
-   than a spec.
-2. **`/feature-spec`** — four-field header, hazard worksheet, refuses to start without evidence.
+1. **`/brainstorm` (done 2026-08-18)** — shipped at `.agents/skills/brainstorm/`: prose only with
+   forced-choice lists banned outright (Kai's correction: a selection list railroads the decision),
+   one decision at a time; a brainstorm-depth sweep of the hazard-worksheet system list (events
+   always written, never mentally checked) so ideas die on contact with shipped mechanics before
+   anything is measured; premises classified checkable / definitional / hypothesis, with the
+   definitional class carrying the rates-never-set-definitions rule; terminal state is a working
+   file whose `## Idea` section ends in a committed falsifier (mechanism A). **Dogfood owed: the
+   timescale queue item is its first outing** — same bar as the other skills, frictions folded back
+   same-day.
+2. **`/feature-spec` (done 2026-08-18)** — shipped at `.agents/skills/feature-spec/`: hard entry
+   refusal without an `## Evidence` section (or the brainstorm exit's explicit no-checkable-premises
+   claim, quoted); the four-field header defined as What changes / Why (owner decisions quoted) /
+   Evidence (each reading's Licenses line travels) / Not claimed (mechanism B, never empty);
+   observable-behaviour body with `/spec-review` step 1a's two sentence disciplines enforced at
+   authoring time (mechanic sentences carry `file:line`, requirement sentences name a producer);
+   the hazard worksheet filled with receipts; falsifiers carried with provenance for the git-diff
+   check. **Dogfood owed: the timescale queue item, together with `/brainstorm`.**
 3. **`/implement-plan` (done 2026-08-07)** — the execution stage, previously the only unnamed step
    in the sequence and the last superpowers dependency (executing-plans / subagent-driven-development
    / TDD are generic: they had never heard of `Proves`, red-proof, the SDD ledger or the per-task
