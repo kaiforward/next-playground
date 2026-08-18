@@ -83,6 +83,29 @@ export const GLYPH = {
   selectedRingWidth: 4,    // selection ring — bright white dashed focus ring
 } as const;
 
+// ── Settlement mark (player systems: controlled / forming / developed) ──
+// A square badge at the star's north-east shoulder — approved prototype:
+// hollow slate = claimed, hollow amber + expanding pulse = colony forming,
+// solid copper = developed. Corners get a small radius (Pixi rasterises sharp
+// corners as aliased mush — the deliberate HTML-only exception to Foundry's
+// no-rounding rule, see map-rendering.md → Gotchas).
+export const SETTLEMENT_MARK = {
+  size: 16,               // badge side, world units
+  offsetX: 12,            // badge left edge from glyph centre
+  offsetY: -28,           // badge top edge from glyph centre
+  cornerRadius: 2.5,
+  strokeWidth: 2,
+  backingColor: 0x030712, // = BG_COLOR — opaque so territory fills don't bleed through
+  backingAlpha: 0.85,
+  controlledColor: 0x64748b, // slate-500
+  formingColor: 0xf59e0b,    // status amber
+  developedColor: 0xd06a42,  // Foundry copper
+  pulsePeriodMs: 2000,
+  pulseMaxRadius: 14,     // the soft ping's radius as it fades, world units
+  /** Fraction of the period after which the ping's alpha starts falling (mock keyTimes 0;.55;1). */
+  pulseFadeStart: 0.55,
+} as const;
+
 // ── System label backing (name) ──────────────────────────────────
 // The name label sits below the glyph and can fall behind the nav ring /
 // halo, so it gets a semi-transparent black backing for legibility.

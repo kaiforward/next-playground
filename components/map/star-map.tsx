@@ -235,6 +235,8 @@ export function StarMap({
     selectedSystem,
     systemRegionMap,
     regionMap,
+    ownership,
+    playerFactionId: atlas.player?.controlledFactionId ?? null,
   });
 
   // ── Click handlers — navigate by id; the panel loads its own detail ──

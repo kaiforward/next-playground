@@ -9,6 +9,8 @@ import type {
   SystemVisibility,
 } from "@/lib/types/game";
 import type { TradeFlowEdgeInfo } from "@/lib/types/api";
+import { settlementMarkFor, type SettlementMark } from "@/lib/types/map";
+import type { SystemOwnership } from "@/lib/hooks/use-ownership";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -23,6 +25,8 @@ export interface SystemNodeData {
   /** True when the system is developed (control === 'developed'). Undeveloped systems render
    *  as a hollow marker — labelled potential, not owned. */
   developed: boolean;
+  /** Settlement mark at the star's shoulder (player systems only) — see `settlementMarkFor`. */
+  settlementMark: SettlementMark | null;
   regionId: string;
   isGateway: boolean;
   visibility: SystemVisibility;
@@ -61,6 +65,9 @@ interface UseMapDataOptions {
   selectedSystem: StarSystemInfo | null;
   systemRegionMap: Map<string, string>;
   regionMap: Map<string, { id: string; name: string }>;
+  /** Live per-system ownership — feeds the settlement marks. */
+  ownership: Map<string, SystemOwnership>;
+  playerFactionId: string | null;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -89,6 +96,8 @@ export function useMapData({
   selectedSystem,
   systemRegionMap,
   regionMap,
+  ownership,
+  playerFactionId,
 }: UseMapDataOptions): MapData {
   // ── System nodes (all systems) ────────────────────────────────
   const systems = useMemo((): SystemNodeData[] => {
@@ -104,12 +113,13 @@ export function useMapData({
         economyType: system.economyType,
         sunClass: system.sunClass,
         developed: system.developed ?? true,
+        settlementMark: settlementMarkFor(ownership.get(system.id), playerFactionId),
         regionId: system.regionId,
         isGateway: system.isGateway,
         visibility,
       };
     });
-  }, [universe.systems, visibleSystemIds]);
+  }, [universe.systems, visibleSystemIds, ownership, playerFactionId]);
 
   // ── Connections (all, deduplicated) ───────────────────────────
   const connections = useMemo((): ConnectionData[] => {
