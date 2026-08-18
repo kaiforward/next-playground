@@ -27,7 +27,19 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[L] Timescale: define the calendar.** Decide how much in-world time one tick is — the anchor
+   every duration is then audited against (cycle length, pop growth, travel, event lengths, decay).
+   Direction (Kai, 2026-08-18): a few ticks per day, EU5/Vicky3 style (Vicky3 runs 4 ticks/day with a
+   week-long economic cycle = 28 ticks; ours is 24 — resolve that discrepancy deliberately); match
+   pop growth to real-world data. Worlds currently hit max pop by ~tick 12K, so the likely shape is
+   fine-grained ticks with much slower rates, not a different tick count — but that is the design's
+   call, made against numbers. Affects the colonisation-pacing row below: its speed measure and this
+   row's time-facts measure are one instrument run, do them together.
+   *Next step:* `/measure` the time facts in ticks, both horizons — pop-to-max, colonisation pace,
+   travel durations, event lengths, decay half-lives — before choosing the anchor.
+   *Don't:* tune any rate before the anchor is defined. The calendar is a definition set from
+   external reference; a rate can fail the definition, never set it.
+2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
