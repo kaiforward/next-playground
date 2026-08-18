@@ -25,7 +25,7 @@ vi.mock("@/lib/hooks/use-construction-orders", () => ({
 
 const preview: ColonyPreviewData = {
   sourceSystemId: "s-home", sourceSystemName: "Sol", seedPop: 2, housingLevels: 1, work: 84,
-  charter: 1200, projectedBill: 3400,
+  charter: 1200, projectedBill: 3400, commitment: 8000,
 };
 
 describe("ColonySection — the founding quote on the blocked verb", () => {
@@ -44,6 +44,9 @@ describe("ColonySection — the founding quote on the blocked verb", () => {
     expect(screen.getByText(formatCredits(1200))).toBeInTheDocument();
     expect(screen.getByText(formatCredits(3400))).toBeInTheDocument();
     expect(screen.getByText(COLONY_BLOCK_COPY.insufficient_funds)).toBeInTheDocument();
+    // The gate's whole threshold is stated, so the panel can never look affordable while refusing.
+    expect(screen.getByText(formatCredits(8000))).toBeInTheDocument();
+    expect(screen.getByText(/requires/)).toBeInTheDocument();
   });
 
   it("renders no quote on a physical block that carries none", () => {

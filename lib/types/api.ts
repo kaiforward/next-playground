@@ -484,6 +484,10 @@ export interface ColonyPreviewData {
   charter: number;
   /** Upper bound on the materials bill — the uncapped want, hence "up to" in the UI. */
   projectedBill: number;
+  /** The affordability gate's whole threshold — charter + headroom × projectedBill, the same
+   *  `foundingCommitmentCost` the order boundary checks. What must be AVAILABLE before the verb
+   *  is accepted; only the charter is actually spent at the click. */
+  commitment: number;
 }
 /** Per-system verb surface: which construction verb applies here and its feasibility. */
 export type SystemBuildOptionsData =

@@ -58,18 +58,22 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
     <Card variant="bordered" padding="md" className="mb-6">
       <CardHeader title="Treasury" />
       <CardContent>
+        {/* The headline is what the player can actually spend: balance minus what founding has
+            already called for. The stored balance only falls at settlement (the single balance
+            writer), so mid-cycle the two differ — the footnote reconciles them the moment a colony
+            order commits money, and disappears when nothing is committed. */}
         <div className="mb-3 flex items-baseline justify-between">
-          <span className="font-mono text-[22px] leading-none text-text-primary">{money(data.balance)}</span>
+          <span className="font-mono text-[22px] leading-none text-text-primary">
+            {money(data.balance - data.foundingCommitted)}
+          </span>
           <span className={`font-mono text-xs ${data.net < 0 ? "text-status-red-light" : "text-status-green-light"}`}>
             net {signedMoney(data.net)} / cycle
           </span>
         </div>
-        {/* Money founding has already called for — inside the balance above until the settlement
-            charges it off, but no longer spendable, so the ledger says so the moment it happens. */}
         {data.foundingCommitted > 0 && (
           <div className="-mt-2 mb-3 flex items-baseline justify-between text-xs text-text-tertiary">
-            <span>committed to founding</span>
-            <span className="font-mono">{signedMoney(-data.foundingCommitted)}</span>
+            <span>committed to founding {signedMoney(-data.foundingCommitted)}</span>
+            <span className="font-mono">total {money(data.balance)}</span>
           </div>
         )}
         {!s ? (

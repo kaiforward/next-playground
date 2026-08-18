@@ -8,6 +8,7 @@ import { orderBuild } from "@/lib/services/construction-orders";
 import { ServiceError } from "@/lib/services/errors";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
+import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
 import type { WorldConstructionProject } from "@/lib/world/types";
 
 /** Comfortably above the habitable floor — every colony case below wants an unconstrained site. */
@@ -325,6 +326,13 @@ describe("getSystemBuildOptions", () => {
     expect(data.colony.preview.housingLevels).toBeGreaterThanOrEqual(1);
     expect(data.colony.preview.charter).toBeGreaterThanOrEqual(COLONISATION.CHARTER_FEE_MIN);
     expect(data.colony.preview.projectedBill).toBeGreaterThan(0);
+    // The quoted commitment is the gate's own threshold, from the same pricing function.
+    expect(data.colony.preview.commitment).toBeCloseTo(
+      foundingCommitmentCost(
+        data.colony.preview.charter, data.colony.preview.projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM,
+      ),
+      9,
+    );
   });
 
   it("carries no quote on a physical block — no seed source means nothing to price against", () => {

@@ -12,6 +12,8 @@ import {
 } from "@/lib/engine/construction";
 import { buildingLabel, foundingCeilings } from "@/lib/engine/construction-readout";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
+import { foundingCommitmentCost } from "@/lib/engine/founding-cost";
+import { COLONISATION } from "@/lib/constants/colonisation";
 import { foundingReadoutInputs } from "@/lib/services/construction";
 import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
@@ -43,6 +45,9 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
               world.systems.find((s) => s.id === priced.sourceSystemId)?.name ?? priced.sourceSystemId,
             seedPop: sizing.seedPop, housingLevels: sizing.housingLevels, work: sizing.work,
             charter: priced.charter, projectedBill: priced.projectedBill,
+            commitment: foundingCommitmentCost(
+              priced.charter, priced.projectedBill, COLONISATION.FOUNDING_GATE_HEADROOM,
+            ),
           };
     if (!check.eligible) return { mode: "colony", colony: { state: "ineligible", reason: check.reason, preview } };
     if (preview === null) {

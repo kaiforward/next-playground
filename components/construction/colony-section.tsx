@@ -85,6 +85,15 @@ export function ColonySection({ systemId }: { systemId: string }) {
             <Button variant="action" color="green" size="sm" disabled>◆ Establish colony</Button>
             {colony.preview !== null && <ColonyPreviewLines preview={colony.preview} />}
             <p className="mt-2.5 text-xs text-status-amber-light">{COLONY_BLOCK_COPY[colony.reason]}</p>
+            {/* The gate's whole threshold, from the same function the order boundary checks — the
+                charter is spent at the click, the rest must merely be free as a materials buffer. */}
+            {colony.preview !== null && (
+              <p className="mt-0.5 text-xs text-status-amber-light">
+                requires{" "}
+                <span className="font-mono">{formatCredits(Math.round(colony.preview.commitment))}</span>{" "}
+                available — the charter plus a buffer for the materials
+              </p>
+            )}
           </>
         ) : null}
       </CardContent>
