@@ -8,7 +8,7 @@ import {
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
 import { serializeWorld, deserializeWorld } from "../save";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
-import { unitResourceVector, resourceVectorFromColumns } from "@/lib/engine/resources";
+import { unitResourceVector, yieldsOf } from "@/lib/engine/resources";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -1867,14 +1867,7 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
     const state = toGoodMarketStates({
       buildings,
       population: system.population,
-      yields: resourceVectorFromColumns(
-        {
-          yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
-          yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
-          yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
-        },
-        "yield",
-      ),
+      yields: yieldsOf(system),
       markets: rows,
     }).find((g) => g.goodId === goodId);
     if (!state) throw new Error(`no ${goodId} state at ${systemId}`);

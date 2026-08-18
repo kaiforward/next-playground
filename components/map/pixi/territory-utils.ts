@@ -40,7 +40,7 @@ function ensurePrecision() {
  * Clip a polygon ring to a disc (approximated by an `segments`-gon inscribed in
  * the circle, so every output vertex lies within `radius` of the centre). Used
  * to round off the unbounded edge cells of a Voronoi diagram — see
- * computeTerritoryPolygons. Returns a MultiPolygon (the intersection can in
+ * clipVoronoiCells. Returns a MultiPolygon (the intersection can in
  * principle split, though a convex disc rarely does).
  */
 export function clipPolygonToDisc(
@@ -66,23 +66,25 @@ function discRing(cx: number, cy: number, radius: number, segments: number): Rin
 }
 
 /**
- * Group Voronoi cells by a key function and union them into territory polygons.
- * Pure function — reusable for regions, factions, or any grouping.
- *
- * Hull cells (which d3 clips to the bounding box) are rounded off to a disc
- * around their site so territories close off gracefully at the galaxy edge
- * instead of shooting out to the box corners — see DISC_RADIUS_FACTOR.
+ * The drawable geometry of one Voronoi cell, indexed by system index. Empty when the
+ * cell is missing or degenerate.
+ */
+export type ClippedCells = MultiPolygon[];
+
+/**
+ * Turn a Voronoi diagram into per-cell drawable polygons — the expensive half of building
+ * territories, and the half every grouping shares. Hull cells (which d3 clips to the bounding
+ * box) are rounded off to a disc around their site so territories close off gracefully at the
+ * galaxy edge instead of shooting out to the box corners — see DISC_RADIUS_FACTOR.
  *
  * @param systemCount - number of systems (matches Voronoi cell indices)
  * @param voronoi - d3-delaunay Voronoi diagram
- * @param getGroupKey - returns group key for system at index i, or null to skip
- * @returns Map of group key → unioned MultiPolygon
+ * @returns per-index polygons, aligned with the diagram's cell indices
  */
-export function computeTerritoryPolygons(
+export function clipVoronoiCells(
   systemCount: number,
   voronoi: Voronoi<Float64Array>,
-  getGroupKey: (index: number) => string | null,
-): Map<string, MultiPolygon> {
+): ClippedCells {
   ensurePrecision();
 
   const { delaunay } = voronoi;
@@ -91,30 +93,58 @@ export function computeTerritoryPolygons(
   const clipEnabled = Number.isFinite(clipRadius) && clipRadius > 0;
   const clipRadiusSq = clipRadius * clipRadius;
 
-  // Collect (possibly disc-clipped) polygons per group
-  const groups = new Map<string, Polygon[]>();
+  const cells: ClippedCells = [];
 
   for (let i = 0; i < systemCount; i++) {
-    const key = getGroupKey(i);
-    if (key === null) continue;
-
     const cell = voronoi.cellPolygon(i);
-    if (!cell) continue;
+    if (!cell) {
+      cells.push([]);
+      continue;
+    }
 
     const ring = voronoiCellToRing(cell);
-    if (ring.length < 4) continue; // need at least a triangle (3 + closing point)
+    if (ring.length < 4) {
+      cells.push([]); // need at least a triangle (3 + closing point)
+      continue;
+    }
 
     // Clip any cell that stretches past the radius — a box-clipped hull cell, OR a cell that balloons
-    // toward an internal sparse region / the galaxy's irregular boundary (both missed by the old
+    // toward an internal sparse region / the galaxy's irregular boundary (both missed by a
     // box-vertex-only test). A small interior cell (every vertex within the radius) is left untouched,
     // so no gaps open between neighbours.
     const sx = points[2 * i];
     const sy = points[2 * i + 1];
     const needsClip =
       clipEnabled && ring.some(([x, y]) => (x - sx) ** 2 + (y - sy) ** 2 > clipRadiusSq);
-    const polygons: MultiPolygon = needsClip
-      ? clipPolygonToDisc(ring, sx, sy, clipRadius, DISC_SEGMENTS)
-      : [[ring]];
+    cells.push(needsClip ? clipPolygonToDisc(ring, sx, sy, clipRadius, DISC_SEGMENTS) : [[ring]]);
+  }
+
+  return cells;
+}
+
+/**
+ * Group already-clipped cells by a key function and union each group into a territory polygon.
+ * Pure function — reusable for regions, factions, or any grouping. Cell polygons are read, never
+ * mutated, so one `ClippedCells` safely backs several groupings.
+ *
+ * @param cells - per-index cell polygons from clipVoronoiCells
+ * @param getGroupKey - returns group key for the cell at index i, or null to skip
+ * @returns Map of group key → unioned MultiPolygon
+ */
+export function unionCellsByGroup(
+  cells: ClippedCells,
+  getGroupKey: (index: number) => string | null,
+): Map<string, MultiPolygon> {
+  ensurePrecision();
+
+  const groups = new Map<string, Polygon[]>();
+
+  for (let i = 0; i < cells.length; i++) {
+    const key = getGroupKey(i);
+    if (key === null) continue;
+
+    const polygons = cells[i];
+    if (polygons.length === 0) continue;
 
     let collected = groups.get(key);
     if (!collected) {
@@ -124,7 +154,6 @@ export function computeTerritoryPolygons(
     for (const polygon of polygons) collected.push(polygon);
   }
 
-  // Union polygons per group
   const result = new Map<string, MultiPolygon>();
 
   for (const [key, polygons] of groups) {
@@ -179,8 +208,8 @@ function medianNearestNeighbor(delaunay: Delaunay<Float64Array>): number {
 /**
  * The disc-clip radius applied to over-large Voronoi cells for this triangulation
  * (`DISC_RADIUS_FACTOR × median nearest-neighbour spacing`). A cell is visually
- * contained within a disc of this radius around its site. Exported so the shared
- * cell cache hit-tests against the SAME radius the cells are trimmed to — otherwise
+ * contained within a disc of this radius around its site. Exported so the system-cell
+ * cache hit-tests against the SAME radius the cells are trimmed to — otherwise
  * a click in a trimmed-away (visually empty) region still resolves to the nearest
  * site. Returns 0 when there is no spacing to measure (clipping is then disabled).
  */

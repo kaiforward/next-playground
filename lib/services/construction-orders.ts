@@ -9,10 +9,9 @@
  */
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
 import type { World, WorldSystem, WorldBuildProject, WorldColonyEstablishProject, WorldMarket } from "@/lib/world/types";
-import { computeBuildOptions } from "@/lib/engine/build-options";
+import { computeBuildOptions, buildSiteFromSystem } from "@/lib/engine/build-options";
 import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
 import { COLONY_BLOCK_COPY } from "@/lib/types/colonisation";
@@ -53,24 +52,7 @@ export function orderBuild(input: { systemId: string; buildingType: string; leve
   }
 
   const options = computeBuildOptions(
-    {
-      population: system.population,
-      buildings: buildingsBySystem().get(system.id) ?? {},
-      slotCap: resourceVectorFromColumns(
-        {
-          slotGas: system.slotGas,
-          slotMinerals: system.slotMinerals,
-          slotOre: system.slotOre,
-          slotBiomass: system.slotBiomass,
-          slotArable: system.slotArable,
-          slotWater: system.slotWater,
-          slotRadioactive: system.slotRadioactive,
-        },
-        "slot",
-      ),
-      generalSpace: system.generalSpace,
-      habitableSpace: system.habitableSpace,
-    },
+    buildSiteFromSystem(system, buildingsBySystem().get(system.id) ?? {}),
     queuedBuildLevelsAt(seat.world.constructionProjects, system.id),
   );
   const option = options.find((o) => o.buildingType === input.buildingType);

@@ -10,7 +10,7 @@ import { getInitialStock } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
 import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { yieldsOf } from "@/lib/engine/resources";
 import { isEventTypeId } from "@/lib/types/guards";
 import type { WorldEvent, WorldEventModifier } from "@/lib/world/types";
 
@@ -184,14 +184,7 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
   const markets = world.markets.map((m) => {
     const sys = systemById.get(m.systemId);
     if (!sys) return m;
-    const yields = resourceVectorFromColumns(
-      {
-        yieldGas: sys.yieldGas, yieldMinerals: sys.yieldMinerals, yieldOre: sys.yieldOre,
-        yieldBiomass: sys.yieldBiomass, yieldArable: sys.yieldArable,
-        yieldWater: sys.yieldWater, yieldRadioactive: sys.yieldRadioactive,
-      },
-      "yield",
-    );
+    const yields = yieldsOf(sys);
     const buildings = buildingsBySystem.get(sys.id) ?? {};
     return {
       systemId: m.systemId,

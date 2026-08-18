@@ -3,8 +3,8 @@
  * Deterministic given a seed value via mulberry32 PRNG.
  */
 
-import type { EconomyType, ResourceVector, SunClass } from "@/lib/types/game";
-import { generateSubstrate, substrateAggregates, type GeneratedBody } from "./body-gen";
+import type { EconomyType } from "@/lib/types/game";
+import { generateSubstrate, substrateAggregates, type GeneratedSubstrate } from "./body-gen";
 import { deriveEconomyTypeLabel } from "./economy-type";
 import { computeHomeworldBuildings, HOME_SYSTEM_POP, homeworldGardenBody } from "./homeworld-prefab";
 import { housingPopCap } from "./industry";
@@ -24,29 +24,11 @@ export interface GeneratedRegion {
   y: number;
 }
 
-export interface GeneratedSystem {
+/** A placed system: its generated physical substrate plus the galaxy-level facts world-gen adds. */
+export interface GeneratedSystem extends GeneratedSubstrate {
   index: number;
   name: string;
   economyType: EconomyType;
-  /** Physical substrate — sun class gates body composition. */
-  sunClass: SunClass;
-  bodies: GeneratedBody[];
-  popCap: number;
-  population: number;
-  /** Σ body-archetype danger baselines — environmental danger from this system's bodies. */
-  bodyDanger: number;
-  /** Seeded industrial base — buildingType → count. */
-  buildings: Record<string, number>;
-  /** Total finite surface space across all bodies. */
-  availableSpace: number;
-  /** Sum of per-body general-purpose space. */
-  generalSpace: number;
-  /** Sum of per-body habitable space. */
-  habitableSpace: number;
-  /** Σ body deposit slots — total extractor capacity per resource across the system. */
-  slotCap: ResourceVector;
-  /** Per-resource yield multiplier — deposit quality weighting the slot capacity. */
-  yieldMult: ResourceVector;
   x: number;
   y: number;
   regionIndex: number;

@@ -3,8 +3,9 @@ import {
   emptyResourceVector, makeResourceVector,
   sumResourceVector, sumResourceVectors, resourceVectorFromColumns, prepareResourceBars,
   slotColumns, qualColumns, yieldColumns, unitResourceVector,
+  slotCapOf, qualityOf, yieldsOf, RESOURCE_TYPES,
 } from "../resources";
-import type { ResourceType } from "@/lib/types/game";
+import type { ResourceType, ResourceVector } from "@/lib/types/game";
 
 const ALL: ResourceType[] = [
   "gas", "minerals", "ore", "biomass", "arable", "water", "radioactive",
@@ -217,5 +218,51 @@ describe("resourceVectorFromColumns — new prefixes and yield default", () => {
     expect(v.minerals).toBe(1);
     expect(v.ore).toBe(1);
     expect(v.water).toBe(1);
+  });
+});
+
+/**
+ * The readers iterate `RESOURCE_TYPES`, so they pick a new resource type up for free — the column
+ * spreaders and the column-bag types they read from do NOT. An eighth type whose column never
+ * reaches the bag reads as an empty deposit (or a neutral ×1 yield) with no type error and no
+ * runtime error, so these assert coverage against `RESOURCE_TYPES` itself rather than a fixed seven.
+ */
+describe("resource column coverage", () => {
+  const columnKeys = (prefix: string): string[] =>
+    RESOURCE_TYPES.map((t) => `${prefix}${t.charAt(0).toUpperCase()}${t.slice(1)}`).sort();
+
+  /** A vector whose every resource carries its own distinct value, so a dropped column cannot
+   *  coincide with a neighbour's (or with the reader's 0/1 fallback). */
+  const distinct = (): ResourceVector => {
+    const v = emptyResourceVector();
+    RESOURCE_TYPES.forEach((t, i) => { v[t] = 2 + i; });
+    return v;
+  };
+
+  it("slotColumns emits exactly one column per resource type", () => {
+    expect(Object.keys(slotColumns(emptyResourceVector())).sort()).toEqual(columnKeys("slot"));
+  });
+
+  it("qualColumns emits exactly one column per resource type", () => {
+    expect(Object.keys(qualColumns(emptyResourceVector())).sort()).toEqual(columnKeys("qual"));
+  });
+
+  it("yieldColumns emits exactly one column per resource type", () => {
+    expect(Object.keys(yieldColumns(emptyResourceVector())).sort()).toEqual(columnKeys("yield"));
+  });
+
+  it("slotCapOf reads back every resource type's own value", () => {
+    const v = distinct();
+    expect(slotCapOf(slotColumns(v))).toEqual(v);
+  });
+
+  it("qualityOf reads back every resource type's own value", () => {
+    const v = distinct();
+    expect(qualityOf(qualColumns(v))).toEqual(v);
+  });
+
+  it("yieldsOf reads back every resource type's own value", () => {
+    const v = distinct();
+    expect(yieldsOf(yieldColumns(v))).toEqual(v);
   });
 });

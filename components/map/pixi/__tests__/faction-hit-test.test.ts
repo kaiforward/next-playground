@@ -38,7 +38,7 @@ describe("findFactionAt (ray-casting point-in-union hit test)", () => {
   });
 
   it("matches a faction whose union has multiple disjoint pieces (each a separate polygon)", () => {
-    // computeTerritoryPolygons can group a faction's non-adjacent systems into one MultiPolygon with
+    // A grouping can put a faction's non-adjacent systems into one MultiPolygon with
     // several disjoint exterior rings — so the hit-test must scan every polygon in the union, not just
     // the first. Here faction "d" owns two separate squares with a gap between them.
     const unions = new Map<string, MultiPolygon>([

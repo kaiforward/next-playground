@@ -119,7 +119,8 @@ export class ValueChoroplethLayer {
   }
 
   /** Static geometry — call on atlas change only. */
-  sync(cells: SystemCells, systems: AtlasSystem[]) {
+  sync(cells: SystemCells) {
+    const systems = cells.systems;
     this.cells = cells;
     this.systems = systems;
     this.factionBySystemId = new Map(systems.map((s) => [s.id, s.factionId]));

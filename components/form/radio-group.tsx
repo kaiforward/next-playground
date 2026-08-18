@@ -1,9 +1,11 @@
 "use client";
 
-import { Fragment, useId, type ReactNode } from "react";
 import { tv, type VariantProps } from "tailwind-variants";
-import { choiceRow, formSlots, formSizeVariants } from "./form-slots";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { choiceRow } from "./form-slots";
+import {
+  RadioOptionGroup,
+  type RadioOptionGroupBaseProps,
+} from "./radio-option-group";
 
 const radioRowVariants = tv({
   base: choiceRow.base,
@@ -28,85 +30,29 @@ const radioDotVariants = tv({
 
 type RadioGroupSize = VariantProps<typeof radioRowVariants>["size"];
 
-interface RadioGroupProps<T extends string> {
-  /** Visible heading rendered above the group. Also names the group for AT. */
-  label?: string;
-  /** Accessible name when no visible `label` is rendered (e.g. an external heading). */
-  ariaLabel?: string;
-  /** Native radio `name` — must be unique per group on the page. */
-  name: string;
-  value: T;
-  onChange: (value: T) => void;
-  /**
-   * Each option may carry an optional `tooltip` legend, revealed on
-   * hover/keyboard-focus of that row (requires an ancestor `TooltipProvider`).
-   */
-  options: ReadonlyArray<{ value: T; label: string; tooltip?: ReactNode }>;
+interface RadioGroupProps<T extends string> extends RadioOptionGroupBaseProps<T> {
   size?: RadioGroupSize;
 }
 
 /**
- * Accessible single-select radio group. Renders a real `radiogroup` whose
- * direct children are `radio`s (sr-only native inputs inside styled labels) —
- * no intervening list markup. The visible affordance is a round indicator
- * pinned to the right of each row; pair with `CheckboxInput` for a consistent
- * control family (same row, square vs round indicator). An option with a
- * `tooltip` wraps its row in a Radix tooltip (no permanent height) — the row
- * stays a direct child of the group since the trigger renders `asChild`.
+ * Accessible single-select radio group — the vertical skin over {@link RadioOptionGroup}, which owns
+ * the radio semantics. The visible affordance is a round indicator pinned to the right of each row;
+ * pair with `CheckboxInput` for a consistent control family (same row, square vs round indicator).
  */
 export function RadioGroup<T extends string>({
-  label,
-  ariaLabel,
-  name,
-  value,
-  onChange,
-  options,
   size = "sm",
+  ...props
 }: RadioGroupProps<T>) {
-  const groupId = useId();
-  const labelSlot = label
-    ? `${formSlots.label} ${formSizeVariants[size].label}`
-    : undefined;
-
   return (
-    <div>
-      {label && (
-        <span id={groupId} className={labelSlot}>
-          {label}
-        </span>
+    <RadioOptionGroup
+      {...props}
+      size={size}
+      optionClassName={(active) => radioRowVariants({ active, size })}
+      optionLabelClassName="truncate"
+      indicator={(active) => (
+        <span className={radioDotVariants({ active })} aria-hidden />
       )}
-      <div
-        role="radiogroup"
-        aria-label={label ? undefined : ariaLabel}
-        aria-labelledby={label ? groupId : undefined}
-      >
-        {options.map((option) => {
-          const active = option.value === value;
-          const row = (
-            <label className={radioRowVariants({ active, size })}>
-              <input
-                type="radio"
-                name={name}
-                value={option.value}
-                checked={active}
-                onChange={() => onChange(option.value)}
-                className="sr-only"
-              />
-              <span className="truncate">{option.label}</span>
-              <span className={radioDotVariants({ active })} aria-hidden />
-            </label>
-          );
-
-          if (!option.tooltip) return <Fragment key={option.value}>{row}</Fragment>;
-
-          return (
-            <Tooltip key={option.value}>
-              <TooltipTrigger asChild>{row}</TooltipTrigger>
-              <TooltipContent side="right">{option.tooltip}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
-    </div>
+      tooltipSide="right"
+    />
   );
 }

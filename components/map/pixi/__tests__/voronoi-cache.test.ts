@@ -31,6 +31,55 @@ describe("buildSystemCells", () => {
     expect(cells.centroidBySystemId.get("a")).toEqual({ x: 250, y: 250 });
     expect(cells.centroidBySystemId.get("d")).toEqual({ x: 750, y: 750 });
   });
+  it("exposes the systems it was built from, so consumers need no second copy", () => {
+    expect(cells.systems).toBe(systems);
+  });
+});
+
+describe("buildSystemCells — groupBy is the only territory-union path", () => {
+  const MAP = 1000;
+  // Two systems per region, arranged so each region's pair is adjacent and unions into one shape.
+  const systems: AtlasSystem[] = [
+    { ...sys("a", 200, 300), regionId: "north", factionId: "red" },
+    { ...sys("b", 800, 300), regionId: "north", factionId: "blue" },
+    { ...sys("c", 200, 700), regionId: "south", factionId: "red" },
+    { ...sys("d", 800, 700), regionId: "south", factionId: null },
+  ];
+  const cells = buildSystemCells(systems, MAP);
+
+  it("unions the cells of each group under its key", () => {
+    const byRegion = cells.groupBy((s) => s.regionId);
+    expect([...byRegion.keys()].sort()).toEqual(["north", "south"]);
+    // The two north cells are adjacent, so they merge into one polygon spanning the full width —
+    // a group that lost a member would cover only its own half.
+    expect(byRegion.get("north")?.length).toBe(1);
+    const xs = (byRegion.get("north") ?? []).flat(2).map(([x]) => x);
+    expect(Math.min(...xs)).toBeLessThan(100);
+    expect(Math.max(...xs)).toBeGreaterThan(900);
+  });
+
+  it("drops a system from every group when its key is null", () => {
+    const byFaction = cells.groupBy((s) => s.factionId);
+    expect([...byFaction.keys()].sort()).toEqual(["blue", "red"]);
+    // "d" holds the bottom-right quadrant and has no faction, so no group reaches that corner…
+    const verts = [...byFaction.values()].flat(3);
+    expect(verts.some(([x, y]) => x > 900 && y > 900)).toBe(false);
+    // …while "red" still spans both of its systems, top and bottom.
+    const redYs = (byFaction.get("red") ?? []).flat(2).map(([, y]) => y);
+    expect(Math.min(...redYs)).toBeLessThan(100);
+    expect(Math.max(...redYs)).toBeGreaterThan(900);
+  });
+
+  it("gives every grouping the same per-system geometry as cellsBySystemId", () => {
+    // Grouping by id must reproduce the eagerly-built cell map — the two share one clipped-cell set,
+    // so a divergence means a grouping recomputed geometry of its own.
+    const byId = cells.groupBy((s) => s.id);
+    expect(byId.size).toBe(systems.length);
+    for (const s of systems) {
+      expect(byId.get(s.id)).toBeDefined();
+      expect(JSON.stringify(byId.get(s.id))).toBe(JSON.stringify(cells.cellsBySystemId.get(s.id)));
+    }
+  });
 });
 
 describe("buildSystemCells — trimmed edge regions are not clickable", () => {

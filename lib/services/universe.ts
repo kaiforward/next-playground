@@ -1,10 +1,10 @@
 import { getWorld } from "@/lib/world/store";
-import { governmentByFactionId } from "./world-index";
+import { regionInfos } from "./world-index";
 import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import type { GovernmentType, RegionInfo, UniverseData } from "@/lib/types/game";
+import type { UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { slotCapOf, qualityOf } from "@/lib/engine/resources";
 import {
   capacityGoodRates,
   extractorsByResource,
@@ -14,7 +14,6 @@ import {
 import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
-import { deriveRegionDominantFaction } from "@/lib/utils/region";
 
 /**
  * Get all regions, star systems, and connections.
@@ -25,38 +24,8 @@ import { deriveRegionDominantFaction } from "@/lib/utils/region";
 export function getUniverse(): UniverseData {
   const world = getWorld();
 
-  const factionGovById = governmentByFactionId();
-  const factionNameById = new Map<string, string>(world.factions.map((f) => [f.id, f.name]));
-
-  const systemFactionsByRegion = new Map<string, string[]>();
-  for (const s of world.systems) {
-    if (!s.factionId) continue;
-    const list = systemFactionsByRegion.get(s.regionId) ?? [];
-    list.push(s.factionId);
-    systemFactionsByRegion.set(s.regionId, list);
-  }
-
-  const regionInfos: RegionInfo[] = world.regions.map((r) => {
-    const dominantFactionId = deriveRegionDominantFaction(
-      systemFactionsByRegion.get(r.id) ?? [],
-      factionNameById,
-    );
-    const dominantGov: GovernmentType = dominantFactionId
-      ? factionGovById.get(dominantFactionId) ?? "frontier"
-      : "frontier";
-    return {
-      id: r.id,
-      name: r.name,
-      dominantEconomy: r.dominantEconomy,
-      dominantFactionId,
-      dominantGovernmentType: dominantGov,
-      x: r.x,
-      y: r.y,
-    };
-  });
-
   return {
-    regions: regionInfos,
+    regions: regionInfos(),
     systems: world.systems.map((s) => ({
       id: s.id,
       name: s.name,
@@ -134,22 +103,8 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       archetypeName: BODY_ARCHETYPES[b.bodyType].name,
       habitable: b.habitable,
       size: b.size,
-      slots: resourceVectorFromColumns(
-        {
-          slotGas: b.slotGas, slotMinerals: b.slotMinerals, slotOre: b.slotOre,
-          slotBiomass: b.slotBiomass, slotArable: b.slotArable,
-          slotWater: b.slotWater, slotRadioactive: b.slotRadioactive,
-        },
-        "slot",
-      ),
-      quality: resourceVectorFromColumns(
-        {
-          qualGas: b.qualGas, qualMinerals: b.qualMinerals, qualOre: b.qualOre,
-          qualBiomass: b.qualBiomass, qualArable: b.qualArable,
-          qualWater: b.qualWater, qualRadioactive: b.qualRadioactive,
-        },
-        "qual",
-      ),
+      slots: slotCapOf(b),
+      quality: qualityOf(b),
     }));
 
   return {
@@ -181,14 +136,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   // production/consumption profile below.
   const { buildings, yields, readout } = readSystemIndustry(system);
 
-  const slotCap = resourceVectorFromColumns(
-    {
-      slotGas: system.slotGas, slotMinerals: system.slotMinerals, slotOre: system.slotOre,
-      slotBiomass: system.slotBiomass, slotArable: system.slotArable,
-      slotWater: system.slotWater, slotRadioactive: system.slotRadioactive,
-    },
-    "slot",
-  );
+  const slotCap = slotCapOf(system);
   const worked = extractorsByResource(buildings);
 
   // The readout's labourAllocation IS the civilian demand basis — reuse it

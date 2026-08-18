@@ -9,7 +9,7 @@ import type {
   TradeFlowEdges,
   SystemLogisticsData,
 } from "@/lib/types/api";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { yieldsOf } from "@/lib/engine/resources";
 import { capacityGoodRates } from "@/lib/engine/industry";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
 import {
@@ -67,14 +67,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   const flows = (flowEventsBySystem().get(systemId) ?? []).filter((f) => f.tick > minTick);
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
-  const yields = resourceVectorFromColumns(
-    {
-      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
-      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
-      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
-    },
-    "yield",
-  );
+  const yields = yieldsOf(system);
   // The strike × maintenance scalar the economy persisted on the system's rows (all carry the
   // same one; absent reads as unsuppressed). Production and the recipe draw below both carry it,
   // so every term of a row's internalNet describes the same operating state — a striking world

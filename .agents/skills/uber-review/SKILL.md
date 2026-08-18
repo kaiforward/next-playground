@@ -34,7 +34,7 @@ Per-lens assignment at `standard` (Claude family shown; resolve tier names throu
 | Boundary safety | Sonnet | high | Checklist-driven: env reads, cache headers, Zod at the boundary, save paths |
 | Performance | Sonnet | high | Benching is procedural; findings have been minor/info. Escalate to Opus only for a perf-focused PR |
 | User journey | Sonnet | medium | UI-flow reasoning; rarely fires in this codebase |
-| Conventions | Haiku | medium | Rule-matching against `rules/code-standards.md`; held up on Haiku (PR 213) |
+| Conventions | Haiku | medium | Rule-matching against `rules/code-standards.md`; held up on Haiku (PR 213). **Escalate to Sonnet `medium` when its payload carries `## Duplication candidates`** — adjudicating a pair means opening both files and weighing four dimensions, which is judgment, not pattern-matching |
 
 Validator batches: blocker/major → Opus `high`, or the orchestrator verifies those findings directly (per the tier map, that verification is frontier work either way); mixed → Sonnet `medium`; all-minor → Haiku `low`.
 
@@ -191,6 +191,25 @@ each survivor (real coverage gap vs equivalent mutant vs dev-harness-only weight
 hand-building mutation experiments; it still reviews changed test files for meaningfulness and
 missing premise coverage. If the sweep fails to run, dispatch the tests lens on Opus `high` (per
 the effort dial's escalation) and record the fallback in the report.
+
+### 1.9. Duplication scan — input for the conventions lens
+
+Run `npm run duplication -- "<space-separated changed .ts/.tsx files>"` once for the whole diff, before
+dispatching reviewers (seconds; it always exits 0). Pass its output into the **conventions** reviewer's
+payload under a `## Duplication candidates` heading, filtered to the pairs whose changed-side file is in
+that reviewer's chunk.
+
+This is the one input that is deliberately not chunk-scoped. Every reviewer sees a slice of one diff, and
+the copy is almost always in a file the diff never touched — five byte-identical map hooks landed across
+five PRs and no diff of any size contained two of them. A tenth chunk-scoped lens would inherit exactly
+that blindness at the cost of another agent; repo-wide *search* is the missing capability, and it is
+mechanical. The conventions lens already owns "extract on the second occurrence", so it adjudicates the
+candidates rather than hunting for them.
+
+The script emits candidates, never findings — most of a sweep's pairs are correctly rejected. The
+`duplicate-implementation` nuance in `rules/code-standards.md` carries the bar and the worked rejection.
+If the scan fails to run, say so in the report and dispatch conventions unchanged; it is an input, not a
+gate.
 
 ### 2. Dispatch the architect
 

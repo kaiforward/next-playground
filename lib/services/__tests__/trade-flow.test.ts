@@ -7,18 +7,7 @@ import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
 import { capacityGoodRates, computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
-
-/** The system's per-resource yield vector, assembled exactly as the read service assembles it. */
-const yieldsOf = (s: WorldSystem) =>
-  resourceVectorFromColumns(
-    {
-      yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
-      yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
-      yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
-    },
-    "yield",
-  );
+import { yieldsOf } from "@/lib/engine/resources";
 
 // Imports/exports are summed over the flow window then normalised to a
 // per-REFERENCE_INTERVAL rate (so they share units with production/consumption, which are

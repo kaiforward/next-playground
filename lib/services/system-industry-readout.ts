@@ -15,7 +15,7 @@
 import type { WorldSystem } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
 import { buildingsBySystem, marketsBySystem } from "@/lib/services/world-index";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { yieldsOf } from "@/lib/engine/resources";
 import { buildIndustryReadout, type SystemIndustryReadout } from "@/lib/engine/industry";
 import { useRatesByGood, type UseRate } from "@/lib/engine/honest-demand";
 
@@ -67,14 +67,7 @@ export function readSystemIndustry(system: WorldSystem): SystemIndustryReadoutRe
     logisticsFundingBoundByGood[row.goodId] = row.logisticsFundingBound ?? false;
   }
 
-  const yields = resourceVectorFromColumns(
-    {
-      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
-      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
-      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
-    },
-    "yield",
-  );
+  const yields = yieldsOf(system);
 
   let recomputedUse: Map<string, UseRate> | undefined;
   const honestUseRateOf = (goodKey: string): number => {

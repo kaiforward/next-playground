@@ -36,11 +36,32 @@ export function makeResourceVector(partial: Partial<ResourceVector>): ResourceVe
   return v;
 }
 
-/** Spread a vector onto the SystemBody deposit-slot columns (slot*). */
-export function slotColumns(v: ResourceVector): {
+/**
+ * The three flat column bags a resource-bearing row (a system, a body) spreads a ResourceVector
+ * across — one column per member of `RESOURCE_TYPES`. They are the parameter types of the readers
+ * below, so a row that is missing a column is a type error rather than a silent zero.
+ *
+ * Declared as type aliases, not interfaces: the readers hand them to `resourceVectorFromColumns`,
+ * whose `Record<string, number>` parameter only accepts a type with an index signature (implicit
+ * for an alias, absent for an interface).
+ */
+export type SlotColumns = {
   slotGas: number; slotMinerals: number; slotOre: number; slotBiomass: number;
   slotArable: number; slotWater: number; slotRadioactive: number;
-} {
+};
+
+export type QualColumns = {
+  qualGas: number; qualMinerals: number; qualOre: number; qualBiomass: number;
+  qualArable: number; qualWater: number; qualRadioactive: number;
+};
+
+export type YieldColumns = {
+  yieldGas: number; yieldMinerals: number; yieldOre: number; yieldBiomass: number;
+  yieldArable: number; yieldWater: number; yieldRadioactive: number;
+};
+
+/** Spread a vector onto the SystemBody deposit-slot columns (slot*). */
+export function slotColumns(v: ResourceVector): SlotColumns {
   return {
     slotGas: v.gas, slotMinerals: v.minerals, slotOre: v.ore, slotBiomass: v.biomass,
     slotArable: v.arable, slotWater: v.water, slotRadioactive: v.radioactive,
@@ -48,10 +69,7 @@ export function slotColumns(v: ResourceVector): {
 }
 
 /** Spread a vector onto the SystemBody quality-band columns (qual*). */
-export function qualColumns(v: ResourceVector): {
-  qualGas: number; qualMinerals: number; qualOre: number; qualBiomass: number;
-  qualArable: number; qualWater: number; qualRadioactive: number;
-} {
+export function qualColumns(v: ResourceVector): QualColumns {
   return {
     qualGas: v.gas, qualMinerals: v.minerals, qualOre: v.ore, qualBiomass: v.biomass,
     qualArable: v.arable, qualWater: v.water, qualRadioactive: v.radioactive,
@@ -59,10 +77,7 @@ export function qualColumns(v: ResourceVector): {
 }
 
 /** Spread a vector onto the SystemBody per-resource yield-multiplier columns (yield*). */
-export function yieldColumns(v: ResourceVector): {
-  yieldGas: number; yieldMinerals: number; yieldOre: number; yieldBiomass: number;
-  yieldArable: number; yieldWater: number; yieldRadioactive: number;
-} {
+export function yieldColumns(v: ResourceVector): YieldColumns {
   return {
     yieldGas: v.gas, yieldMinerals: v.minerals, yieldOre: v.ore, yieldBiomass: v.biomass,
     yieldArable: v.arable, yieldWater: v.water, yieldRadioactive: v.radioactive,
@@ -117,6 +132,28 @@ export function resourceVectorFromColumns(
     v[type] = source[key] ?? fallback;
   }
   return v;
+}
+
+/**
+ * Read a row's deposit-slot columns as a ResourceVector — the extractor-slot cap per resource.
+ *
+ * These three readers are the only supported way to get a vector off a row's columns. Writing the
+ * column bag out by hand at the call site is how a resource type added to `RESOURCE_TYPES` reads as
+ * an empty deposit (or a neutral ×1 yield) forever: the reader iterates the types, so it would pick
+ * the new one up, but a hand-written bag never carries its column and nothing errors.
+ */
+export function slotCapOf(row: SlotColumns): ResourceVector {
+  return resourceVectorFromColumns(row, "slot");
+}
+
+/** Read a row's quality-band columns as a ResourceVector. */
+export function qualityOf(row: QualColumns): ResourceVector {
+  return resourceVectorFromColumns(row, "qual");
+}
+
+/** Read a row's per-resource yield-multiplier columns as a ResourceVector. */
+export function yieldsOf(row: YieldColumns): ResourceVector {
+  return resourceVectorFromColumns(row, "yield");
 }
 
 /**

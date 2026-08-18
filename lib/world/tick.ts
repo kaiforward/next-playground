@@ -51,7 +51,7 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
-import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { slotCapOf, yieldsOf, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -231,22 +231,8 @@ export function toTickSystems(world: World): TickSystem[] {
       // lib/world/types.ts).
       buildOpportunity: s.buildOpportunity,
       colonyOpportunity: s.colonyOpportunity,
-      yields: resourceVectorFromColumns(
-        {
-          yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
-          yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
-          yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
-        },
-        "yield",
-      ),
-      slotCap: resourceVectorFromColumns(
-        {
-          slotGas: s.slotGas, slotMinerals: s.slotMinerals, slotOre: s.slotOre,
-          slotBiomass: s.slotBiomass, slotArable: s.slotArable,
-          slotWater: s.slotWater, slotRadioactive: s.slotRadioactive,
-        },
-        "slot",
-      ),
+      yields: yieldsOf(s),
+      slotCap: slotCapOf(s),
       generalSpace: s.generalSpace,
       habitableSpace: s.habitableSpace,
     };
