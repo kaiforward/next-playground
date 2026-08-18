@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  bucketizeVolumeHistory,
+  bucketVolumeHistory,
   type SystemFlowRow,
 } from "@/lib/engine/system-trade-flow";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -9,13 +9,13 @@ const SYS = "sys-self";
 const A = "sys-A";
 const B = "sys-B";
 
-// ── bucketizeVolumeHistory ────────────────────────────────────
+// ── bucketVolumeHistory ────────────────────────────────────
 
-describe("bucketizeVolumeHistory", () => {
+describe("bucketVolumeHistory", () => {
   const W = TRADE_SIMULATION.FLOW_HISTORY_TICKS;
 
   it("produces exactly 20 buckets covering the FLOW_HISTORY_TICKS window", () => {
-    const buckets = bucketizeVolumeHistory([], SYS, 1000);
+    const buckets = bucketVolumeHistory([], SYS, 1000);
     expect(buckets).toHaveLength(20);
     // First bucket's right edge is one bucketSize below the second's, etc.
     const bucketSize = Math.ceil(W / 20);
@@ -32,7 +32,7 @@ describe("bucketizeVolumeHistory", () => {
       // Newest tick — last bucket, outbound
       { tick: 999, goodId: "food", quantity: 3, fromSystemId: SYS, toSystemId: A },
     ];
-    const buckets = bucketizeVolumeHistory(flows, SYS, currentTick);
+    const buckets = bucketVolumeHistory(flows, SYS, currentTick);
     expect(buckets.at(-1)!.importVolume).toBe(5);
     expect(buckets.at(-1)!.exportVolume).toBe(3);
   });
@@ -42,7 +42,7 @@ describe("bucketizeVolumeHistory", () => {
     const flows: SystemFlowRow[] = [
       { tick: 1000 - W - 50, goodId: "food", quantity: 99, fromSystemId: A, toSystemId: SYS },
     ];
-    const buckets = bucketizeVolumeHistory(flows, SYS, currentTick);
+    const buckets = bucketVolumeHistory(flows, SYS, currentTick);
     const totalImports = buckets.reduce((s, b) => s + b.importVolume, 0);
     expect(totalImports).toBe(0);
   });
@@ -51,7 +51,7 @@ describe("bucketizeVolumeHistory", () => {
     const flows: SystemFlowRow[] = [
       { tick: 1000, goodId: "food", quantity: 99, fromSystemId: A, toSystemId: B },
     ];
-    const buckets = bucketizeVolumeHistory(flows, SYS, 1000);
+    const buckets = bucketVolumeHistory(flows, SYS, 1000);
     const total = buckets.reduce(
       (s, b) => s + b.importVolume + b.exportVolume,
       0,
@@ -74,14 +74,14 @@ describe("bucketizeVolumeHistory", () => {
         toSystemId: SYS,
       });
     }
-    const buckets = bucketizeVolumeHistory(flows, SYS, currentTick);
+    const buckets = bucketVolumeHistory(flows, SYS, currentTick);
     expect(buckets.map((b) => b.importVolume)).toEqual(
       Array.from({ length: 20 }, (_, i) => i + 1),
     );
   });
 
   it("returns zero-filled buckets when no flows occurred", () => {
-    const buckets = bucketizeVolumeHistory([], SYS, 1000);
+    const buckets = bucketVolumeHistory([], SYS, 1000);
     for (const b of buckets) {
       expect(b.importVolume).toBe(0);
       expect(b.exportVolume).toBe(0);

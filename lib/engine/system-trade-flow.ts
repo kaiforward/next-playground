@@ -31,7 +31,7 @@ export const VOLUME_HISTORY_BUCKETS = 20;
  * Each bucket's `tick` is its right edge (inclusive) so the chart's X axis
  * reads "ticks ago" naturally.
  */
-export function bucketizeVolumeHistory(
+export function bucketVolumeHistory(
   flows: ReadonlyArray<SystemFlowRow>,
   systemId: string,
   currentTick: number,

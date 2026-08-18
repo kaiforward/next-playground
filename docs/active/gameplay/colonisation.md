@@ -662,11 +662,11 @@ commitment for the same reason). Player rows also outrank new autonomic proposal
 
 `WorldColonyEstablishProject` carries `stagedManifest` (per-good quantities staged so far), `charterPaid` and
 `stalledCycles`. `WorldFactionTreasury` carries `pendingFounding`; `WorldTreasurySettlement` carries
-`foundingExpense`. All JSON-serializable scalars and plain records; non-finite or non-positive quantities are
+`foundingExpense`. All JSON-serialisable scalars and plain records; non-finite or non-positive quantities are
 dropped at every write rather than trusted, because `JSON.stringify` turns a NaN into `null`.
 
 All three project fields are **required, not optional** — that is what makes `tsc` enforce them at both
-creation sites, the autonomic planner and the player verb, and there are exactly two. `deserializeWorld` hard-
+creation sites, the autonomic planner and the player verb, and there are exactly two. `deserialiseWorld` hard-
 rejects any `formatVersion` mismatch and there is no field-defaulting path, so an old save fails loudly rather
 than grandfathering in colonies committed under a free model.
 

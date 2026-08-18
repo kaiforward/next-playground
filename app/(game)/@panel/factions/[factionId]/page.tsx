@@ -15,7 +15,7 @@ import {
 import { useFaction } from "@/lib/hooks/use-faction";
 import { useFactionVitals } from "@/lib/hooks/use-faction-vitals";
 import { useFactionTreasury } from "@/lib/hooks/use-faction-treasury";
-import { formatPeople, formatUnitsShort, splitMagnitude } from "@/lib/utils/format";
+import { formatPeople, formatUnitsShort, splitCompactNumber } from "@/lib/utils/format";
 import { GRADE } from "@/lib/constants/ui";
 
 function FactionOverviewContent({ factionId }: { factionId: string }) {
@@ -23,7 +23,7 @@ function FactionOverviewContent({ factionId }: { factionId: string }) {
   const vitals = useFactionVitals(factionId);
   const treasury = useFactionTreasury(factionId);
 
-  const pop = splitMagnitude(formatPeople(vitals.population));
+  const pop = splitCompactNumber(formatPeople(vitals.population));
   const developedFraction =
     vitals.territorySize > 0 ? (vitals.activeSystemCount / vitals.territorySize) * 100 : 0;
 

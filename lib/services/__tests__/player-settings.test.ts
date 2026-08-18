@@ -4,17 +4,10 @@ import { generateWorld } from "@/lib/world/gen";
 import { setAlertCategory, setTrackerSection } from "@/lib/services/player-settings";
 import { DEFAULT_ALERT_CATEGORIES, DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 import { ALERT_CATEGORY_IDS } from "@/lib/types/alerts";
+import { seatWorld } from "./seat-world";
 
-/** A small authored world with a player seat — the seat is what holds both settings records. */
-function seatWorld() {
-  return generateWorld({
-    systemCount: 60,
-    seed: 42,
-    playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
-  });
-}
-
-/** The same world with no seat — the calibration harness's shape. */
+/** The seat world with no seat — the calibration harness's shape. The seat is what holds both
+ *  settings records, so this is the shape every "no player" branch below is written against. */
 function seatlessWorld() {
   return generateWorld({ systemCount: 60, seed: 42 });
 }

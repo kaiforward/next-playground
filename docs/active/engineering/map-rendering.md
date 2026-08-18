@@ -165,9 +165,11 @@ point cloud stays neutral slate.
 
 ## Rendering architecture
 
-- **Compute the Voronoi once.** `buildSystemCells(systems, mapSize)` builds one Delaunay/Voronoi from the system
-  point set and hands per-system cells (`Map<systemId, MultiPolygon>`) + centroids + analytic hit-testing to every
-  consumer, replacing what used to be independent triangulations per value layer.
+- **Compute the Voronoi once.** `buildSystemCells(systems, mapSize)` builds the map's only Delaunay/Voronoi from
+  the system point set, clips every cell once, and hands the result to every consumer: per-system cells
+  (`Map<systemId, MultiPolygon>`), centroids, analytic hit-testing, and `groupBy(key)`. The region and political
+  layers union their territories out of those cached cells rather than triangulating for themselves — a layer that
+  builds its own is the regression, since the per-cell disc clip, not the triangulation, is where the cost sits.
 - **One generic value-choropleth layer.** `ValueChoroplethLayer` is parameterised by (value map, reference map,
   mode); it draws per-cell fills, hosts the pooled number sublayer, applies scope re-normalisation + de-emphasis,
   and strokes the faction-union outline. It replaced three near-identical stability/population/development layers.

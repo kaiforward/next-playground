@@ -6,9 +6,9 @@ import {
   marketRowsBySystem, resetAbandonedMarkets,
 } from "../tick";
 import { InMemoryPopulationWorld } from "@/lib/tick/adapters/memory/population";
-import { serializeWorld, deserializeWorld } from "../save";
+import { serialiseWorld, deserialiseWorld } from "../save";
 import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
-import { unitResourceVector, resourceVectorFromColumns } from "@/lib/engine/resources";
+import { unitResourceVector, yieldsOf } from "@/lib/engine/resources";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { RELATIONS_FREQUENCY, RELATION_HISTORY_MAX } from "@/lib/constants/relations";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
@@ -199,7 +199,7 @@ describe("runWorldTick", () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     expect(base.systems[0].provisionExpectation).toBeUndefined(); // premise: world-gen never seeds it
     const unseeded = toTickSystems(base)[0];
-    // TickSystem is a transient per-tick row, never serialized — `undefined` (whether or not the
+    // TickSystem is a transient per-tick row, never serialised — `undefined` (whether or not the
     // key is technically own-enumerable) is the only thing that matters here; readExpectation's
     // validity guard treats both identically. The JSON-boundary key-absence guarantee below is
     // checked at the WorldSystem/save layer instead, where it is actually load-bearing.
@@ -215,7 +215,7 @@ describe("runWorldTick", () => {
   it("mergeSystemsIntoWorld keeps a never-seeded system's provisionExpectation truly key-absent, not present-as-undefined", async () => {
     // An unclaimed system never enters the economy shard, so the population processor never
     // touches it — mergeSystemsIntoWorld must not leave the key present with value undefined
-    // (which would still serialize identically, but would diverge from a system that never had
+    // (which would still serialise identically, but would diverge from a system that never had
     // the key at all under a strict structural comparison).
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const unclaimed = base.systems.find((s) => s.control === "unclaimed");
@@ -228,7 +228,7 @@ describe("runWorldTick", () => {
   });
 
   it("InMemoryPopulationWorld.applyPopulationUpdates clamps provisionExpectation and never writes NaN", async () => {
-    // The write-path guarantee: a non-finite value never lands as NaN (⇒ null on serialize) or as
+    // The write-path guarantee: a non-finite value never lands as NaN (⇒ null on serialise) or as
     // an invented 0 (0 is a real, false memory — "resigned to total collapse"). It falls back to
     // the row's own prior stored value if one exists, else the key stays absent.
     const base = generateWorld({ systemCount: 60, seed: 7 });
@@ -252,7 +252,7 @@ describe("runWorldTick", () => {
     ]);
     expect(carried.systems.find((s) => s.id === target)!.provisionExpectation).toBe(0.37);
 
-    // An out-of-range but finite value clamps into [0, 1] — never serializes as null.
+    // An out-of-range but finite value clamps into [0, 1] — never serialises as null.
     const clamped = new InMemoryPopulationWorld({ systems: rows, markets: base.markets });
     await clamped.applyPopulationUpdates([
       { systemId: target, population: 100, unrest: 0, provisionExpectation: 7 },
@@ -336,7 +336,7 @@ describe("runWorldTick", () => {
     for (const n of issued) expect(n).toBeLessThan(after.nextId);
   });
 
-  it("round-trips building idleCycles across a non-decay tick (the field survives the row/World serialize round-trip)", async () => {
+  it("round-trips building idleCycles across a non-decay tick (the field survives the row/World serialise round-trip)", async () => {
     const base = generateWorld({ systemCount: 60, seed: 7 });
     const world = { ...base, buildings: base.buildings.map((b) => ({ ...b, idleCycles: 7 })) };
     const seeded = new Set(world.buildings.map((b) => `${b.systemId}|${b.buildingType}`));
@@ -364,7 +364,7 @@ describe("runWorldTick", () => {
     const assessed = result.world.markets.filter((market) => developedIds.has(market.systemId));
     expect(assessed.length).toBeGreaterThan(0);
     for (const market of assessed) {
-      expect(Number.isFinite(market.realizedProductionRate)).toBe(true);
+      expect(Number.isFinite(market.realisedProductionRate)).toBe(true);
       expect(typeof market.productionSuppressed).toBe("boolean");
       expect(market.squeezeCycles).toBeGreaterThanOrEqual(0);
       expect(market.squeezeCycles).toBeLessThanOrEqual(2);
@@ -404,9 +404,9 @@ describe("runWorldTick", () => {
     expect(foodOf(econOnly)?.squeezeCycles).toBeCloseTo(1 + catchUpFactor(1), 10);  // 1 → 1 + reference-time
     expect(foodOf(econOnly)?.proposalCycles).toBe(1); // unchanged — directed-build did not run
 
-    // The divergent-cadence result serializes and deserializes intact (the fractional proposalCycles
+    // The divergent-cadence result serialises and deserialises intact (the fractional proposalCycles
     // survives the save byte-for-byte).
-    const roundTrip = deserializeWorld(serializeWorld(buildOnly));
+    const roundTrip = deserialiseWorld(serialiseWorld(buildOnly));
     expect(roundTrip.ok).toBe(true);
     if (roundTrip.ok) {
       expect(foodOf(roundTrip.world)?.proposalCycles).toBe(foodOf(buildOnly)?.proposalCycles);
@@ -751,13 +751,13 @@ describe("runWorldTick — logistics/assessment ordering", () => {
 
   it("retains the persisted assessment across a logistics-only tick until the next economy cycle", async () => {
     // Seed a distinctive rationed assessment the economy would NOT reproduce for this state (an empty,
-    // productionless market would assess satisfaction 0 and realized rate 0), so retention is provable:
+    // productionless market would assess satisfaction 0 and realised rate 0), so retention is provable:
     // if any stage re-measured it, these exact values would move.
     const { b, world } = twoSystemWaterGradient((market) => ({
       ...market,
       satisfaction: 0.4,
       squeezeCycles: 0.5,
-      realizedProductionRate: 5,
+      realisedProductionRate: 5,
     }));
     const bWater = (w: World) => w.markets.find((m) => m.systemId === b && m.goodId === "water")!;
 
@@ -775,7 +775,7 @@ describe("runWorldTick — logistics/assessment ordering", () => {
     // move at least one of them.
     expect(bWater(afterLogistics).satisfaction).toBe(0.4);
     expect(bWater(afterLogistics).squeezeCycles).toBe(0.5);
-    expect(bWater(afterLogistics).realizedProductionRate).toBe(5);
+    expect(bWater(afterLogistics).realisedProductionRate).toBe(5);
   });
 });
 
@@ -1257,7 +1257,7 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     expect(untouched.populationChange).toBeUndefined();
     expect("populationChange" in untouched).toBe(false);
 
-    const result = deserializeWorld(serializeWorld(after));
+    const result = deserialiseWorld(serialiseWorld(after));
     if (!result.ok) throw new Error(`expected the save round-trip to succeed: ${result.error}`);
     const reloaded = result.world.systems.find((s) => s.id === developed.id);
     if (!reloaded) throw new Error("expected the reloaded world to still carry this system");
@@ -1658,7 +1658,7 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     expect(untouched.stockChange).toBeUndefined();
     expect("stockChange" in untouched).toBe(false);
 
-    const result = deserializeWorld(serializeWorld(after));
+    const result = deserialiseWorld(serialiseWorld(after));
     if (!result.ok) throw new Error(`expected the save round-trip to succeed: ${result.error}`);
     const reloaded = result.world.markets.find((m) => m.systemId === developed.id && m.goodId === "water");
     if (!reloaded) throw new Error("expected the reloaded world to still carry this market row");
@@ -1867,14 +1867,7 @@ describe("runWorldTick — the unserved shortfall level end to end", () => {
     const state = toGoodMarketStates({
       buildings,
       population: system.population,
-      yields: resourceVectorFromColumns(
-        {
-          yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
-          yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
-          yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
-        },
-        "yield",
-      ),
+      yields: yieldsOf(system),
       markets: rows,
     }).find((g) => g.goodId === goodId);
     if (!state) throw new Error(`no ${goodId} state at ${systemId}`);

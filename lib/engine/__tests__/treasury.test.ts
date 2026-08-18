@@ -29,10 +29,10 @@ describe("headsTaxIncome", () => {
 describe("productionTaxIncome", () => {
   const REF = { ore: 30, alloys: 50 };
 
-  it("values realized units at reference values, normalised by economy scale", () => {
-    const realized = new Map([["ore", 200], ["alloys", 100]]);
+  it("values realised units at reference values, normalised by economy scale", () => {
+    const realised = new Map([["ore", 200], ["alloys", 100]]);
     // at S=100: (200/100)*30 + (100/100)*50 = 110; x rate 0.05 x mult 1 = 5.5
-    expect(productionTaxIncome(realized, REF, 0.05, 1, 100)).toBeCloseTo(5.5);
+    expect(productionTaxIncome(realised, REF, 0.05, 1, 100)).toBeCloseTo(5.5);
   });
 
   it("is ECONOMY_SCALE-invariant when units scale with S", () => {
@@ -42,8 +42,8 @@ describe("productionTaxIncome", () => {
   });
 
   it("skips goods with no reference value and non-finite units", () => {
-    const realized = new Map([["mystery_good", 100], ["ore", NaN]]);
-    expect(productionTaxIncome(realized, REF, 0.05, 1, 1)).toBe(0);
+    const realised = new Map([["mystery_good", 100], ["ore", NaN]]);
+    expect(productionTaxIncome(realised, REF, 0.05, 1, 1)).toBe(0);
   });
 
   it("skips goods with non-finite reference values", () => {
@@ -219,23 +219,23 @@ describe("treasury — per-term arithmetic and the input guards", () => {
   });
 
   it("applies the production rate multiplier as a multiplier", () => {
-    const realized = new Map([["ore", 200]]);
-    const once = productionTaxIncome(realized, { ore: 30 }, 0.05, 1, 1);
-    expect(productionTaxIncome(realized, { ore: 30 }, 0.05, 2, 1)).toBeCloseTo(once * 2, 6);
+    const realised = new Map([["ore", 200]]);
+    const once = productionTaxIncome(realised, { ore: 30 }, 0.05, 1, 1);
+    expect(productionTaxIncome(realised, { ore: 30 }, 0.05, 2, 1)).toBeCloseTo(once * 2, 6);
   });
 
   it("treats an unusable economy scale as no scaling rather than dividing by it", () => {
-    const realized = new Map([["ore", 200]]);
-    const unscaled = productionTaxIncome(realized, { ore: 30 }, 0.05, 1, 1);
+    const realised = new Map([["ore", 200]]);
+    const unscaled = productionTaxIncome(realised, { ore: 30 }, 0.05, 1, 1);
     for (const scale of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(productionTaxIncome(realized, { ore: 30 }, 0.05, 1, scale), `scale ${scale}`)
+      expect(productionTaxIncome(realised, { ore: 30 }, 0.05, 1, scale), `scale ${scale}`)
         .toBeCloseTo(unscaled, 6);
     }
   });
 
-  it("ignores a negative realized quantity rather than crediting it against the tax base", () => {
-    const realized = new Map([["ore", 200], ["alloys", -1000]]);
-    expect(productionTaxIncome(realized, { ore: 30, alloys: 50 }, 0.05, 1, 1))
+  it("ignores a negative realised quantity rather than crediting it against the tax base", () => {
+    const realised = new Map([["ore", 200], ["alloys", -1000]]);
+    expect(productionTaxIncome(realised, { ore: 30, alloys: 50 }, 0.05, 1, 1))
       .toBeCloseTo(productionTaxIncome(new Map([["ore", 200]]), { ore: 30 }, 0.05, 1, 1), 6);
   });
 

@@ -15,11 +15,12 @@ export class ApiError extends Error {
 }
 
 /**
- * Typed fetch wrapper for API routes that return `ApiResponse<T>`.
- * Unwraps the response and throws on error so TanStack Query treats it as a failed query.
+ * The `ApiResponse<T>` envelope check every wrapper below shares: unwrap `data`,
+ * or throw with the response's own status so TanStack Query treats it as a
+ * failed query. A response carrying no `data` is a failure even without an
+ * `error` string.
  */
-export async function apiFetch<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+async function unwrap<T>(res: Response): Promise<T> {
   const json: ApiResponse<T> = await res.json();
 
   if (json.error || !json.data) {
@@ -30,57 +31,46 @@ export async function apiFetch<T>(url: string): Promise<T> {
 }
 
 /**
- * Typed POST wrapper for mutation API routes that return `ApiResponse<T>`.
- * Handles JSON serialization, error unwrapping, and typed response.
+ * The body-carrying half of the wrappers (POST/PATCH/DELETE): JSON serialisation,
+ * then the shared unwrap. An omitted body sends no `Content-Type` header and no
+ * payload at all — a bodyless DELETE must not advertise a JSON body it isn't sending.
  */
-export async function apiMutate<T>(url: string, body?: unknown): Promise<T> {
+async function apiSend<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
-    method: "POST",
+    method,
     headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  const json: ApiResponse<T> = await res.json();
+  return unwrap<T>(res);
+}
 
-  if (json.error || !json.data) {
-    throw new ApiError(json.error ?? "Unknown API error", res.status);
-  }
+/**
+ * Typed fetch wrapper for API routes that return `ApiResponse<T>`.
+ * Unwraps the response and throws on error so TanStack Query treats it as a failed query.
+ */
+export async function apiFetch<T>(url: string): Promise<T> {
+  return unwrap<T>(await fetch(url));
+}
 
-  return json.data;
+/**
+ * Typed POST wrapper for mutation API routes that return `ApiResponse<T>`.
+ * Handles JSON serialisation, error unwrapping, and typed response.
+ */
+export function apiMutate<T>(url: string, body?: unknown): Promise<T> {
+  return apiSend<T>("POST", url, body);
 }
 
 /**
  * Typed PATCH wrapper for partial-update API routes that return `ApiResponse<T>`.
  */
-export async function apiPatch<T>(url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const json: ApiResponse<T> = await res.json();
-
-  if (json.error || !json.data) {
-    throw new ApiError(json.error ?? "Unknown API error", res.status);
-  }
-
-  return json.data;
+export function apiPatch<T>(url: string, body?: unknown): Promise<T> {
+  return apiSend<T>("PATCH", url, body);
 }
 
 /**
  * Typed DELETE wrapper for mutation API routes that return `ApiResponse<T>`.
  * Optionally sends a JSON body.
  */
-export async function apiDelete<T>(url: string, body?: unknown): Promise<T> {
-  const res = await fetch(url, {
-    method: "DELETE",
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  const json: ApiResponse<T> = await res.json();
-
-  if (json.error || !json.data) {
-    throw new ApiError(json.error ?? "Unknown API error", res.status);
-  }
-
-  return json.data;
+export function apiDelete<T>(url: string, body?: unknown): Promise<T> {
+  return apiSend<T>("DELETE", url, body);
 }

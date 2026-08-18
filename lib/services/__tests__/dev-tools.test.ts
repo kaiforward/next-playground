@@ -9,7 +9,7 @@ import {
 } from "@/lib/services/dev-tools";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { yieldsOf } from "@/lib/engine/resources";
 import type { World, WorldEvent, WorldEventModifier } from "@/lib/world/types";
 
 let world: World;
@@ -140,14 +140,7 @@ describe("resetEconomy", () => {
     for (const b of world.buildings) {
       if (b.systemId === system.id) buildings[b.buildingType] = b.count;
     }
-    const yields = resourceVectorFromColumns(
-      {
-        yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
-        yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
-        yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
-      },
-      "yield",
-    );
+    const yields = yieldsOf(system);
     const expectedStock = getInitialStock(buildings, yields, system.population, targetGoodId);
 
     const resetRow = after.markets.find((m) => m.systemId === system.id && m.goodId === targetGoodId);

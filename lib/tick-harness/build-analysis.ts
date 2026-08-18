@@ -295,7 +295,7 @@ export function foundingCadenceMarkTick(
 }
 
 /** Fold the tracked colonies into the run's founding-stock health reading. */
-export function summarizeFoundingStock(
+export function summariseFoundingStock(
   tracker: ReadonlyMap<string, FoundedColonyRecord>,
 ): FoundingStockSummary {
   let sampledCount = 0;
@@ -348,7 +348,7 @@ export function summarizeFoundingStock(
 
 // ── Founding trajectory: Provision and unrest over colony age, not just at opening ──────
 //
-// `summarizeFoundingStock` above reads ONE snapshot per colony — its first assessed cycle. Unrest promise
+// `summariseFoundingStock` above reads ONE snapshot per colony — its first assessed cycle. Unrest promise
 // 1's window half (docs/active/gameplay/economy.md) covers the whole ~60-cycle dowry +
 // resignation period, including the manifest-exhaustion transition the opening snapshot cannot see
 // at all: a colony that opens calm and then dips as its founding stock (`FOUNDING_STOCK_COVER`)
@@ -460,7 +460,7 @@ function bucketStats(values: number[]): { mean: number; p10: number } {
   return { mean: values.reduce((a, b) => a + b, 0) / values.length, p10: quantile(values, 0.1) };
 }
 
-export function summarizeFoundingTrajectory(totals: FoundingTrajectoryTotals): FoundingTrajectorySummary {
+export function summariseFoundingTrajectory(totals: FoundingTrajectoryTotals): FoundingTrajectorySummary {
   const buckets = totals.buckets.map((b, i) => {
     const p = bucketStats(b.provisions);
     const u = bucketStats(b.unrests);
@@ -562,7 +562,7 @@ export function newInFlightEstablishTotals(): InFlightEstablishTotals {
  * processor signal, because the queue is where a commitment becomes real: an autonomic colony whose
  * charter cannot be paid is dropped and re-proposed with a fresh id, so nothing that could not pay
  * ever reaches this. A colony committed and completed inside a single cycle never appears at all —
- * `summarizeFoundingLifecycle` counts those rather than pretending they took zero cycles.
+ * `summariseFoundingLifecycle` counts those rather than pretending they took zero cycles.
  */
 export function sampleOpenColonies(
   projects: ReadonlyArray<Pick<WorldConstructionProject, "kind" | "systemId">>,
@@ -609,7 +609,7 @@ export interface FoundingLifecycleSummary {
  * `cycleTicks` is the interval this run resolved builds at, so a cadence override reports the same
  * unit rather than a tick count that silently means something else.
  */
-export function summarizeFoundingLifecycle(
+export function summariseFoundingLifecycle(
   tracker: ReadonlyMap<string, FoundedColonyRecord>,
   commitments: ReadonlyMap<string, number>,
   inFlight: InFlightEstablishTotals,
@@ -654,8 +654,8 @@ export function summarizeFoundingLifecycle(
 /** The founder-cohort read for one cohort. Each cohort carries its own denominator. */
 export interface FounderCohortStats {
   systemCount: number;
-  /** Mean, per system, of its summed realized production rate — the selling side of the draw. */
-  meanRealizedProduction: number;
+  /** Mean, per system, of its summed realised production rate — the selling side of the draw. */
+  meanRealisedProduction: number;
   /** Share of PRODUCING markets flagged production-suppressed (strike or maintenance). */
   productionSuppressedShare: number;
   /** Producing markets in the cohort — the suppressed share's denominator. */
@@ -692,9 +692,9 @@ interface CohortAccumulator {
  * that have nothing to do with founding. The comparison is read as a TREND between arms of the same
  * seed, never as a claim that supplying a colony made a system productive.
  */
-export function summarizeFounderCohort(
+export function summariseFounderCohort(
   systems: ReadonlyArray<Pick<TickSystem, "id" | "control" | "buildingIdleCycles">>,
-  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "realizedProductionRate" | "productionSuppressed">>,
+  markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "realisedProductionRate" | "productionSuppressed">>,
   founderIds: ReadonlySet<string>,
 ): FounderCohortSummary {
   const developed = new Set<string>();
@@ -725,20 +725,20 @@ export function summarizeFounderCohort(
   for (const m of markets) {
     const bucket = bucketOf(m.systemId);
     if (bucket === undefined) continue;
-    // A market only produces if it realized something. Missing means "not yet assessed", but an
+    // A market only produces if it realised something. Missing means "not yet assessed", but an
     // ASSESSED non-producer holds a real 0 — and by run end that is nearly every row in the galaxy,
     // so testing for the field's presence would put the whole basket in the denominator and deflate
     // the suppressed share toward nothing.
-    const realized = m.realizedProductionRate ?? 0;
-    if (!(realized > 0)) continue;
+    const realised = m.realisedProductionRate ?? 0;
+    if (!(realised > 0)) continue;
     bucket.producingMarkets++;
-    bucket.production += realized;
+    bucket.production += realised;
     if (m.productionSuppressed ?? false) bucket.suppressed++;
   }
 
   const fold = (b: CohortAccumulator): FounderCohortStats => ({
     systemCount: b.systemCount,
-    meanRealizedProduction: b.systemCount > 0 ? b.production / b.systemCount : 0,
+    meanRealisedProduction: b.systemCount > 0 ? b.production / b.systemCount : 0,
     productionSuppressedShare: b.producingMarkets > 0 ? b.suppressed / b.producingMarkets : 0,
     producingMarkets: b.producingMarkets,
     meanIdleTypes: b.systemCount > 0 ? b.idleTypes / b.systemCount : 0,
@@ -796,7 +796,7 @@ function projectKind(buildingType: string): string {
  * per-faction seeded homeworlds (`world.factions[].homeworldId`); every other developed
  * system is a colony.
  */
-export function summarizeColonisation(
+export function summariseColonisation(
   systems: TickSystem[],
   homeworldIds: Set<string>,
   projects: WorldConstructionProject[],
@@ -825,7 +825,7 @@ export function summarizeColonisation(
   let colonyProgressSum = 0;
   const colonyByKind: Record<string, number> = {};
   for (const p of projects) {
-    if (p.kind !== "build") continue; // colony-establish has no buildingType/levels; its lifecycle is reported separately, by sampleOpenColonies/summarizeFoundingLifecycle
+    if (p.kind !== "build") continue; // colony-establish has no buildingType/levels; its lifecycle is reported separately, by sampleOpenColonies/summariseFoundingLifecycle
     const isHome = homeworldSet.has(p.systemId);
     if (isHome) { homeworldProjects++; homeworldLevels += p.levels; }
     else {
@@ -872,7 +872,7 @@ export interface ConstructionPoolSummary {
  * queue takes to drain at that rate. Composition aggregates linearly over developed systems, so one
  * pass over the whole galaxy equals the per-faction sum.
  */
-export function summarizeConstructionPool(
+export function summariseConstructionPool(
   systems: TickSystem[],
   projects: WorldConstructionProject[],
 ): ConstructionPoolSummary {
@@ -903,7 +903,7 @@ export function summarizeConstructionPool(
 
 /**
  * One tick's directed-build commitment for a single good — the flat record the harness
- * accumulates across the whole run. Mirrors `WorldFlowEvent`'s role for `summarizeLogistics`:
+ * accumulates across the whole run. Mirrors `WorldFlowEvent`'s role for `summariseLogistics`:
  * a cycle's per-good levels are gone the moment the tick returns (never persisted in `World`,
  * per `runWorldTick().instrumentation`'s contract), so the harness must capture each cycle as it
  * happens rather than reading the final world.
@@ -931,7 +931,7 @@ export const CONSTRUCTION_WARMUP_TICKS = CONSTRUCTION_INTERVAL * (1 + DIRECTED_B
  * bounds new-proposal velocity, rather than merely asserting it exists. A silent run (no builds
  * committed) reports zero/null, never NaN or an empty-array crash.
  */
-export function summarizeBuildBursts(records: BuildCommitmentRecord[]): BuildBurstSummary {
+export function summariseBuildBursts(records: BuildCommitmentRecord[]): BuildBurstSummary {
   const maxByGood = new Map<string, { levels: number; tick: number }>();
   for (const r of records) {
     const best = maxByGood.get(r.goodId);

@@ -4,7 +4,7 @@ import { GOODS } from "@/lib/constants/goods";
 import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
 import { civilianDemandRateForGood, getInitialStock } from "@/lib/constants/market-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { yieldsOf } from "@/lib/engine/resources";
 import { toTickSystems } from "../tick";
 
 describe("generateWorld", () => {
@@ -53,7 +53,7 @@ describe("generateWorld", () => {
       expect(m.anchorMult).toBe(1);
       expect(m.squeezeCycles).toBe(0);
       expect(m.proposalCycles).toBe(0);
-      expect(m.realizedProductionRate).toBeUndefined();
+      expect(m.realisedProductionRate).toBeUndefined();
       expect(m.productionSuppressed).toBeUndefined();
     }
   });
@@ -202,11 +202,7 @@ describe("generateWorld: market seeding", () => {
     for (const building of world.buildings) {
       if (building.systemId === home.id) buildings[building.buildingType] = building.count;
     }
-    const yields = resourceVectorFromColumns({
-      yieldGas: home.yieldGas, yieldMinerals: home.yieldMinerals, yieldOre: home.yieldOre,
-      yieldBiomass: home.yieldBiomass, yieldArable: home.yieldArable, yieldWater: home.yieldWater,
-      yieldRadioactive: home.yieldRadioactive,
-    }, "yield");
+    const yields = yieldsOf(home);
     const basis = computeSystemLabourSnapshot(buildings, home.population).basis;
     const weapons = world.markets.find((market) => market.systemId === home.id && market.goodId === "weapons")!;
     expect(weapons.demandRate).toBeCloseTo(civilianDemandRateForGood("weapons", basis), 10);

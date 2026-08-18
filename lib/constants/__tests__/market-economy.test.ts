@@ -12,7 +12,7 @@ import {
 import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
 import {
   inputDemandForGood,
-  facilityStorageForGood,
+  buildingStorageForGood,
   computeSystemLabourSnapshot,
   buildingProduction,
 } from "@/lib/engine/industry";
@@ -136,7 +136,7 @@ describe("getInitialStock", () => {
     const g = GOODS[good];
     const band = marketBand({
       demandRate: civilianDemandRateForGood(good, popOnly(pop)),
-      storageCapacity: facilityStorageForGood({}, good),
+      storageCapacity: buildingStorageForGood({}, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
     const seed = getInitialStock({}, unitResourceVector(), pop, good);
@@ -159,7 +159,7 @@ describe("getInitialStock", () => {
     const g = GOODS[good];
     const band = marketBand({
       demandRate: civilianDemandRateForGood(good, popOnly(pop)),
-      storageCapacity: facilityStorageForGood(producer, good),
+      storageCapacity: buildingStorageForGood(producer, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
     const seedProducer = getInitialStock(producer, unitResourceVector(), pop, good);
@@ -178,7 +178,7 @@ describe("getInitialStock", () => {
     const g = GOODS[good];
     const band = marketBand({
       demandRate: civilianDemandRateForGood(good, popOnly(pop)),
-      storageCapacity: facilityStorageForGood({}, good),
+      storageCapacity: buildingStorageForGood({}, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
     const seed = getInitialStock({}, unitResourceVector(), pop, good);
@@ -205,7 +205,7 @@ describe("getInitialStock", () => {
 
     const band = marketBand({
       demandRate: civilianDemandRateForGood(good, popOnly(pop)),
-      storageCapacity: facilityStorageForGood(buildings, good),
+      storageCapacity: buildingStorageForGood(buildings, good),
       priceFloor: g.priceFloor, priceCeiling: g.priceCeiling,
     });
     const expectedSeed = Math.min(band.maxStock, band.targetStock * coverMult);

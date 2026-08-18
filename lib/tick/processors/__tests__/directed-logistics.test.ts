@@ -546,7 +546,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       {
         systemId: "A", factionId: "f1", population: 200,
         buildings: { food: 3 }, yields: emptyResourceVector(),
-        markets: [{ ...market("mA", "food", 10, 20), realizedProductionRate: 0 }],
+        markets: [{ ...market("mA", "food", 10, 20), realisedProductionRate: 0 }],
       },
       {
         systemId: "B", factionId: "f1", population: 200,

@@ -2,20 +2,20 @@ import { getWorld } from "@/lib/world/store";
 import { buildingsBySystem, flowEventsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
 import { TRADE_SIMULATION } from "@/lib/constants/trade-simulation";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
-import { bucketizeVolumeHistory } from "@/lib/engine/system-trade-flow";
+import { bucketVolumeHistory } from "@/lib/engine/system-trade-flow";
 import { buildFlowEdges, type RawFlowRow } from "@/lib/engine/trade-flow-edges";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type {
   TradeFlowEdges,
   SystemLogisticsData,
 } from "@/lib/types/api";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { yieldsOf } from "@/lib/engine/resources";
 import { capacityGoodRates } from "@/lib/engine/industry";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
 import {
   aggregateLogisticsFlows,
   buildLogisticsRows,
-} from "@/lib/engine/logistics";
+} from "@/lib/engine/logistics-readout";
 
 /**
  * Returns the directed-logistics map-overlay edge set, aggregated over the last
@@ -67,14 +67,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   const flows = (flowEventsBySystem().get(systemId) ?? []).filter((f) => f.tick > minTick);
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
-  const yields = resourceVectorFromColumns(
-    {
-      yieldGas: system.yieldGas, yieldMinerals: system.yieldMinerals, yieldOre: system.yieldOre,
-      yieldBiomass: system.yieldBiomass, yieldArable: system.yieldArable,
-      yieldWater: system.yieldWater, yieldRadioactive: system.yieldRadioactive,
-    },
-    "yield",
-  );
+  const yields = yieldsOf(system);
   // The strike × maintenance scalar the economy persisted on the system's rows (all carry the
   // same one; absent reads as unsuppressed). Production and the recipe draw below both carry it,
   // so every term of a row's internalNet describes the same operating state — a striking world
@@ -117,6 +110,6 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
     externalMax: model.externalMax,
     activeGoodCount: model.activeGoodCount,
     tradedGoodCount: model.tradedGoodCount,
-    volumeHistory: bucketizeVolumeHistory(flows, systemId, currentTick),
+    volumeHistory: bucketVolumeHistory(flows, systemId, currentTick),
   };
 }

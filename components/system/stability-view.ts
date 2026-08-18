@@ -28,7 +28,7 @@ import { clamp } from "@/lib/utils/math";
 import { fractionPct } from "@/lib/utils/format";
 import { stabilityRampColor } from "@/lib/utils/stability";
 import type { UnrestTrend } from "@/lib/engine/unrest-readout";
-import type { ContributorSegment } from "@/components/ui/contributor-bars";
+import type { Contributor } from "@/components/ui/contributor-bars";
 import type { SystemUnrestRead } from "@/lib/types/api";
 
 /** Which way **stability** is moving. Deliberately not the unrest trend's own words: `"rising"`
@@ -85,7 +85,7 @@ export interface StabilityView {
    * points that cause is costing. Ordered goods → tax → crowding; the goods entry is absent
    * (not zeroed) on an unassessed system.
    */
-  causes: ContributorSegment[];
+  causes: Contributor[];
   /** True when the goods cause is withheld, so the causes shown do not add up to the whole story
    *  and the block must say so rather than let their absence read as "no goods problem". */
   causesIncomplete: boolean;
@@ -106,12 +106,12 @@ export function stabilityView({
   striking: boolean;
   read: SystemUnrestRead;
 }): StabilityView {
-  const tax: ContributorSegment = {
+  const tax: Contributor = {
     label: "Tax pressure",
     value: read.contributors.tax,
     color: "var(--color-status-blue)",
   };
-  const crowding: ContributorSegment = {
+  const crowding: Contributor = {
     label: "Crowding",
     value: read.contributors.crowding,
     color: "var(--color-status-purple)",

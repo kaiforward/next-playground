@@ -14,8 +14,7 @@ describe("GET /api/game/player/alerts", () => {
 
     const res = await GET();
 
-    // Never `immutable` or a long max-age — New game replaces the world, so cached ids mismatch
-    // (AGENTS.md → Caching / data shapes).
+    // AGENTS.md → Caching / data shapes states why this header and no other.
     expect(res.headers.get("Cache-Control")).toBe("private, no-cache");
     // Asserted against the body the route really serialised, rather than through a type assertion
     // that would claim the shape instead of checking it.

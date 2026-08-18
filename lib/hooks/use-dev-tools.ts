@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query/keys";
 import { apiFetch, apiMutate } from "@/lib/query/fetcher";
 import type { EconomySnapshotSystem } from "@/lib/services/dev-tools";
@@ -18,16 +18,22 @@ export function useEconomySnapshot(enabled: boolean) {
 
 // ── Mutations ───────────────────────────────────────────────────
 
+/**
+ * The views a dev tool moving the economy leaves stale. Both such mutations invalidate the same
+ * three, so a fourth dev view is added here once rather than at each mutation that would need it.
+ */
+function invalidateEconomyViews(qc: QueryClient) {
+  for (const queryKey of [queryKeys.marketAll, queryKeys.events, queryKeys.devEconomy]) {
+    qc.invalidateQueries({ queryKey });
+  }
+}
+
 export function useAdvanceTicksMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (count: number) =>
       apiMutate<{ newTick: number; elapsed: number }>("/api/dev/advance-ticks", { count }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.marketAll });
-      qc.invalidateQueries({ queryKey: queryKeys.events });
-      qc.invalidateQueries({ queryKey: queryKeys.devEconomy });
-    },
+    onSuccess: () => invalidateEconomyViews(qc),
   });
 }
 
@@ -47,10 +53,6 @@ export function useResetEconomyMutation() {
   return useMutation({
     mutationFn: () =>
       apiMutate<{ marketsReset: number; eventsCleared: number }>("/api/dev/reset-economy", {}),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.marketAll });
-      qc.invalidateQueries({ queryKey: queryKeys.events });
-      qc.invalidateQueries({ queryKey: queryKeys.devEconomy });
-    },
+    onSuccess: () => invalidateEconomyViews(qc),
   });
 }

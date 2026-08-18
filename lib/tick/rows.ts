@@ -6,7 +6,7 @@
  * from `World` via the `toTick*` joins — inlining catalog/derived data `World`
  * omits — then merges the mutated rows back into the next `World`. They live
  * apart from `World` (`lib/world/types.ts`), which is the persisted,
- * JSON-serializable contract, because a row here saves nothing by itself.
+ * JSON-serialisable contract, because a row here saves nothing by itself.
  *
  * A row type earns its place here only by differing from its `World` row. There
  * is no tick market row: markets carry no per-tick join, so the adapters read

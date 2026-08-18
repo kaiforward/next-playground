@@ -37,8 +37,8 @@ import {
   pinnedRolesFor,
 } from "../lib/tick-harness/experiment";
 import type { PinnedRolesDocument } from "../lib/tick-harness/experiment";
-import { summarizePopulation, detectPingPong, summarizeInfrastructure, summarizeSupplyRegimes } from "../lib/tick-harness/population-analysis";
-import { summarizeColonisation, summarizeConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
+import { summarisePopulation, detectPingPong, summariseInfrastructure, summariseSupplyRegimes } from "../lib/tick-harness/population-analysis";
+import { summariseColonisation, summariseConstructionPool, CONSTRUCTION_WARMUP_TICKS } from "../lib/tick-harness/build-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../lib/tick-harness/logistics-analysis";
 import { conservationGateFailure } from "../lib/tick-harness/conservation-analysis";
 import type { ConservationReport } from "../lib/tick-harness/conservation-analysis";
@@ -68,7 +68,7 @@ type HorizonLabel = "startup" | "equilibrium";
 type HorizonReport = Omit<HarnessResults, "marketSnapshots">;
 
 /**
- * Drop the market trajectory before serializing. It is the bulk of the document at the
+ * Drop the market trajectory before serialising. It is the bulk of the document at the
  * equilibrium horizon — snapshot row density grows with the galaxy, so it outweighs the
  * startup horizon's copy many times over — and nothing downstream reads it; `marketHealth`
  * is the derived report. Dropped rather than downsampled so the omission is one stated
@@ -356,7 +356,7 @@ function formatTable(results: HarnessResults): string {
 
   // Population and unrest summary
   {
-    const pop = summarizePopulation(
+    const pop = summarisePopulation(
       finalTickSystems,
       initialPopulationTotal,
       STRIKE_PARAMS.threshold,
@@ -392,7 +392,7 @@ function formatTable(results: HarnessResults): string {
     lines.push(...renderTable(["Metric", "Value"], [24, 16], pRows.map(([l, v]) => [l, v])));
     lines.push('  meanUnrest is over all settled systems — see "Supply & unrest by world cohort" for the split.');
 
-    const regimes = summarizeSupplyRegimes(finalTickSystems, finalWorld.markets, finalWorld.events);
+    const regimes = summariseSupplyRegimes(finalTickSystems, finalWorld.markets, finalWorld.events);
     lines.push("");
     lines.push("Supply regimes (per settled system, end of simulation):");
     const rRows: [string, number, number][] = [
@@ -565,7 +565,7 @@ function formatTable(results: HarnessResults): string {
 
   // Infrastructure decay summary
   {
-    const infra = summarizeInfrastructure(finalTickSystems, initialBuildingTotal);
+    const infra = summariseInfrastructure(finalTickSystems, initialBuildingTotal);
     lines.push("");
     lines.push("Infrastructure (end of simulation):");
     const iRows: [string, string][] = [
@@ -580,7 +580,7 @@ function formatTable(results: HarnessResults): string {
   // Colonisation / build-loop health — does a colonised system actually get built out?
   {
     const homeworldIds = new Set(finalWorld.factions.map((f) => f.homeworldId));
-    const col = summarizeColonisation(finalTickSystems, homeworldIds, finalWorld.constructionProjects);
+    const col = summariseColonisation(finalTickSystems, homeworldIds, finalWorld.constructionProjects);
     lines.push("");
     lines.push("Colonisation & Build Loop (end of simulation):");
     const cRows: [string, number, number][] = [
@@ -716,8 +716,8 @@ function formatTable(results: HarnessResults): string {
       const fc = results.founderCohort;
       lines.push(
         `  founders vs other developed systems: ` +
-          `production ${fmtNum(fc.founder.meanRealizedProduction)} vs ` +
-          `${fmtNum(fc.other.meanRealizedProduction)} /system | ` +
+          `production ${fmtNum(fc.founder.meanRealisedProduction)} vs ` +
+          `${fmtNum(fc.other.meanRealisedProduction)} /system | ` +
           `suppressed markets ${(fc.founder.productionSuppressedShare * 100).toFixed(1)}% vs ` +
           `${(fc.other.productionSuppressedShare * 100).toFixed(1)}% | ` +
           `disuse countdowns ${fc.founder.meanIdleTypes.toFixed(2)} vs ` +
@@ -725,7 +725,7 @@ function formatTable(results: HarnessResults): string {
           `(n=${fc.founder.systemCount} vs ${fc.other.systemCount})`,
       );
     }
-    const cp = summarizeConstructionPool(finalTickSystems, finalWorld.constructionProjects);
+    const cp = summariseConstructionPool(finalTickSystems, finalWorld.constructionProjects);
     lines.push(
       `Construction pool: base ${fmtNum(cp.poolBase)} + centres ${fmtNum(cp.poolCentres)} ` +
         `(${(cp.centreShare * 100).toFixed(1)}% centre) | centres built ${cp.centreLevels}, in flight ${cp.centreProjects}`,

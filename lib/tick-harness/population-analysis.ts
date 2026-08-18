@@ -38,7 +38,7 @@ function totalBuilt(s: TickSystem): number {
   return n;
 }
 
-export function summarizeInfrastructure(
+export function summariseInfrastructure(
   systems: TickSystem[],
   initialBuildingTotal: number,
 ): InfrastructureSummary {
@@ -130,7 +130,7 @@ export interface PopulationSummary {
  *  is comfortably below one level rather than an arbitrary epsilon. */
 const STRANDED_POP_CAP = 1e-6;
 
-export function summarizePopulation(
+export function summarisePopulation(
   systems: TickSystem[],
   totalStart: number,
   strikeThreshold: number,
@@ -379,7 +379,7 @@ export function perSystemSupplyState(
   return states;
 }
 
-export function summarizeSupplyRegimes(
+export function summariseSupplyRegimes(
   systems: TickSystem[],
   markets: ReadonlyArray<Pick<WorldMarket, "systemId" | "goodId" | "satisfaction">>,
   events: ReadonlyArray<WorldEvent> = [],

@@ -114,7 +114,7 @@ export interface BrakeKnee {
  *
  * The output term answers the pure-exporter trap: a producer with negligible
  * local use still gets a working-inventory band instead of a zero knee. It uses
- * capacity, not realized output — realized contains the ceiling and a
+ * capacity, not realised output — realised contains the ceiling and a
  * self-referential denominator can latch shut.
  *
  * Deliberately NO physical-storage term: today's storage constants are a

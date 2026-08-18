@@ -6,16 +6,15 @@
  */
 import { getWorld, hasWorld } from "@/lib/world/store";
 import { ServiceError } from "@/lib/services/errors";
-import { computeBuildOptions } from "@/lib/engine/build-options";
+import { computeBuildOptions, buildSiteFromSystem } from "@/lib/engine/build-options";
 import {
   factionConstructionPool, forecastIndependentEtaCycles, orderOpenProjects,
 } from "@/lib/engine/construction";
 import { buildingLabel, foundingCeilings } from "@/lib/engine/construction-readout";
 import { colonyEligibility, sizingParams } from "@/lib/services/colony-eligibility";
 import { foundingReadoutInputs } from "@/lib/services/construction";
-import { sizeColonyEstablish } from "@/lib/engine/directed-build";
+import { sizeColonyEstablish, queuedBuildLevelsAt } from "@/lib/engine/directed-build";
 import { buildingsBySystem } from "@/lib/services/world-index";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import type { SystemBuildOptionsData, BuildOptionData } from "@/lib/types/api";
 import type { WorldConstructionProject } from "@/lib/world/types";
@@ -56,33 +55,10 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
   const factionProjects = orderOpenProjects(
     world.constructionProjects.filter((p) => p.factionId === factionId),
   );
-  const committed: Record<string, number> = {};
-  for (const p of factionProjects) {
-    if (p.kind === "build" && p.systemId === system.id) {
-      committed[p.buildingType] = (committed[p.buildingType] ?? 0) + p.levels;
-    }
-  }
 
   const options = computeBuildOptions(
-    {
-      population: system.population,
-      buildings: buildings.get(system.id) ?? {},
-      slotCap: resourceVectorFromColumns(
-        {
-          slotGas: system.slotGas,
-          slotMinerals: system.slotMinerals,
-          slotOre: system.slotOre,
-          slotBiomass: system.slotBiomass,
-          slotArable: system.slotArable,
-          slotWater: system.slotWater,
-          slotRadioactive: system.slotRadioactive,
-        },
-        "slot",
-      ),
-      generalSpace: system.generalSpace,
-      habitableSpace: system.habitableSpace,
-    },
-    committed,
+    buildSiteFromSystem(system, buildings.get(system.id) ?? {}),
+    queuedBuildLevelsAt(world.constructionProjects, system.id),
   );
 
   // Queue-aware ETA: a 1-level order placed NOW joins the queue behind everything committed (it is

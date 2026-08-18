@@ -50,7 +50,7 @@ export function classifyMarketState(stock: number, target: number): MarketClassi
  * Drawable directed-logistics surplus for one (system, good). A structural exporter
  * (production > demand) may ship down to EXPORT_RESERVE_COVER cycles of its own demand; every other
  * donor must clear SURPLUS_MARGIN and stops at `donorReserve`, DONOR_RESERVE_COVER cycles of its own
- * real demand. Realized production keeps suppressed or input-starved former exporters on the
+ * real demand. Realised production keeps suppressed or input-starved former exporters on the
  * ordinary-donor path.
  * One definition, shared by the logistics matcher and the build planner so both read
  * "surplus" alike.
@@ -134,7 +134,7 @@ export interface GoodMarketState {
    *  draw). The housing fed-gate folds this: necessity is authored on the civilian axis, so weighting
    *  a refinery's ore draw with it would collapse D however starved its factories are. */
   civilianDemand: number;
-  /** Realized production rate from the last economy assessment. A system that self-supplies (production >= demand) is never a deficit sink. */
+  /** Realised production rate from the last economy assessment. A system that self-supplies (production >= demand) is never a deficit sink. */
   production: number;
   /** Current building capacity, retained separately for construction target sizing. */
   capacityProduction: number;

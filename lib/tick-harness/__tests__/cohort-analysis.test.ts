@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
   classifyMarketRole, computeRoleCoverLevels, cohortsForSystem, computeWorldCohorts, marketRolesByKey,
-  logisticsTargetsByKey, summarizeEpisodeCostsByCohort, summarizeRatchetCheck,
+  logisticsTargetsByKey, summariseEpisodeCostsByCohort, summariseRatchetCheck,
 } from "../cohort-analysis";
 import {
-  newEpisodeCostTotals, perSystemSupplyState, recordEpisodeCosts, summarizePopulation,
-  summarizeSupplyRegimes,
+  newEpisodeCostTotals, perSystemSupplyState, recordEpisodeCosts, summarisePopulation,
+  summariseSupplyRegimes,
 } from "../population-analysis";
 import type { MarketRole } from "../types";
 import { MIN_DEMAND, TARGET_COVER } from "@/lib/constants/market-economy";
@@ -550,7 +550,7 @@ describe("computeWorldCohorts", () => {
       { systemId: "s2", goodId: "water", satisfaction: 0.2 }, // Famine
     ];
 
-    const summary = summarizeSupplyRegimes(systems, markets);
+    const summary = summariseSupplyRegimes(systems, markets);
     const band = computeWorldCohorts(systems, markets, new Set(), 0.8, [])
       .find((e) => e.cohort === "pop <10");
 
@@ -570,7 +570,7 @@ describe("computeWorldCohorts", () => {
       { systemId: "s2", goodId: "water", satisfaction: 1 },
     ];
 
-    const summary = summarizeSupplyRegimes(systems, markets);
+    const summary = summariseSupplyRegimes(systems, markets);
     const entries = computeWorldCohorts(systems, markets, new Set(), 0.8, []);
     const band = entries.find((e) => e.cohort === "pop <10");
 
@@ -671,7 +671,7 @@ describe("computeWorldCohorts", () => {
   describe("netGrowthPct", () => {
     it("agrees with the galaxy-wide growthPct arithmetic when the cohort is everything", () => {
       // All three systems are homeworlds ⇒ the "homeworld" cohort IS the whole settled galaxy,
-      // so its netGrowthPct must reproduce summarizePopulation's growthPct computed the same way
+      // so its netGrowthPct must reproduce summarisePopulation's growthPct computed the same way
       // (same start/end sums, same formula) over the identical systems.
       const systems = [
         sys("s1", { population: 120 }),
@@ -682,7 +682,7 @@ describe("computeWorldCohorts", () => {
       const homeworldIds = new Set(["s1", "s2", "s3"]);
 
       const totalStart = [...start.values()].reduce((a, b) => a + b, 0);
-      const expected = summarizePopulation(systems, totalStart, 0.8, CROWDING.BRAKE_END).growthPct;
+      const expected = summarisePopulation(systems, totalStart, 0.8, CROWDING.BRAKE_END).growthPct;
 
       const entries = computeWorldCohorts(systems, [], homeworldIds, 0.8, [], start);
       const homeworld = entries.find((e) => e.cohort === "homeworld");
@@ -775,7 +775,7 @@ describe("computeWorldCohorts", () => {
   });
 });
 
-describe("summarizeEpisodeCostsByCohort", () => {
+describe("summariseEpisodeCostsByCohort", () => {
   it("folds per-system totals into every cohort the system belongs to at run-end membership", () => {
     const systems = [
       sys("small", { population: 5 }), // "pop <10" + "colony"
@@ -784,7 +784,7 @@ describe("summarizeEpisodeCostsByCohort", () => {
     const totals = newEpisodeCostTotals();
     recordEpisodeCosts(totals, new Map([["small", 3]]), new Map([["big", 2]]));
 
-    const summary = summarizeEpisodeCostsByCohort(totals, systems, new Set(["big"]));
+    const summary = summariseEpisodeCostsByCohort(totals, systems, new Set(["big"]));
     expect(summary.totalTeardownLevels).toBe(3);
     expect(summary.totalOvershootDeaths).toBe(2);
 
@@ -802,7 +802,7 @@ describe("summarizeEpisodeCostsByCohort", () => {
 
   it("omits a cohort row for a system with no recorded costs, rather than a 0 row", () => {
     const systems = [sys("quiet", { population: 5 })];
-    const summary = summarizeEpisodeCostsByCohort(newEpisodeCostTotals(), systems, new Set());
+    const summary = summariseEpisodeCostsByCohort(newEpisodeCostTotals(), systems, new Set());
     const quiet = summary.byCohort.find((c) => c.cohort === "pop <10")!;
     expect(quiet.n).toBe(1);
     expect(quiet.teardownLevels).toBe(0);
@@ -810,7 +810,7 @@ describe("summarizeEpisodeCostsByCohort", () => {
   });
 });
 
-describe("summarizeRatchetCheck", () => {
+describe("summariseRatchetCheck", () => {
   it("buckets by within-cohort variance rank — a calmer system lands in a lower bucket than a jitterier one", () => {
     const systems = [sys("calm", { population: 5 }), sys("jittery", { population: 5 })];
     const markets = [
@@ -819,7 +819,7 @@ describe("summarizeRatchetCheck", () => {
     ];
     const variance = new Map([["calm", 0.001], ["jittery", 0.05]]);
 
-    const summary = summarizeRatchetCheck(variance, 6, systems, markets, new Set());
+    const summary = summariseRatchetCheck(variance, 6, systems, markets, new Set());
     const rows = summary.buckets.filter((b) => b.cohort === "pop <10");
 
     expect(rows.length).toBe(2); // two systems, two distinct quartile ranks at n=2
@@ -834,7 +834,7 @@ describe("summarizeRatchetCheck", () => {
     const markets = [{ systemId: "varianced", goodId: "water", satisfaction: 0.5 }];
     const variance = new Map([["varianced", 0.01]]); // "novariance" carries no variance reading
 
-    const summary = summarizeRatchetCheck(variance, 6, systems, markets, new Set());
+    const summary = summariseRatchetCheck(variance, 6, systems, markets, new Set());
     const n = summary.buckets
       .filter((b) => b.cohort === "pop <10")
       .reduce((sum, row) => sum + row.n, 0);
@@ -842,7 +842,7 @@ describe("summarizeRatchetCheck", () => {
   });
 
   it("reports an empty table, never a crash, for a galaxy with no variance readings", () => {
-    const summary = summarizeRatchetCheck(new Map(), 8, [], [], new Set());
+    const summary = summariseRatchetCheck(new Map(), 8, [], [], new Set());
     expect(summary.window).toBe(8);
     expect(summary.buckets).toEqual([]);
   });

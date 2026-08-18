@@ -5,7 +5,7 @@
  * `JSON.parse(JSON.stringify(world))` (save/load round-trips through this).
  *
  * Entities are stored as flat top-level arrays keyed by id (or a natural
- * composite key), not nested — the same normalized shape as the relational
+ * composite key), not nested — the same normalised shape as the relational
  * schema this superseded. A row keeps its own synthetic `id` only when
  * something else references it by id; rows with a natural composite key
  * that nothing else points to (buildings, connections, markets,
@@ -183,9 +183,9 @@ export interface WorldSystem {
    *  Nothing inside the tick reads it. */
   populationChange?: number;
   /** This run's best-ranked dropped production opportunity from the directed-build planner — the
-   *  alert bar's Build blocked category. See `BuildDropReason` and `BuildBlockReport`
-   *  (`lib/engine/directed-build.ts`) for the reasons and for what `droppedRoi` is (and is not) at
-   *  each drop site. Written directly by the directed-build processor's world adapter
+   *  alert bar's Build blocked category. See `BuildDropReport` (`lib/engine/directed-build.ts`) for
+   *  the reasons and for what `droppedRoi` is (and is not) at each drop site. Written directly by
+   *  the directed-build processor's world adapter
    *  (`applyBuildBlockedUpdates`, `lib/tick/world/directed-build-world.ts`), applied in
    *  `lib/world/tick.ts` — not by the generic per-system row-mutation path. Same absence convention
    *  as `provision`/`supplyBand`/`criticalWeight`/`populationChange` above: absent means never
@@ -404,8 +404,8 @@ export interface WorldMarket {
    * missing (pre-change save) reads as 1.
    */
   satisfaction?: number;
-  /** Reference-cycle realized output; missing uses capacity until first assessment. */
-  realizedProductionRate?: number;
+  /** Reference-cycle realised output; missing uses capacity until first assessment. */
+  realisedProductionRate?: number;
   /** Strike or maintenance reduced production; event modifiers are deliberately excluded. Missing reads as false. */
   productionSuppressed?: boolean;
   /**

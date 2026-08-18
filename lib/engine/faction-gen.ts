@@ -163,7 +163,7 @@ function homeworldResourceDiversity(slotCap: ResourceVector): number {
 
 /**
  * Pick one well-spaced, high-substrate homeworld per faction. Score = weighted sum
- * of normalized (habitable base, resource diversity) minus normalized danger;
+ * of normalised (habitable base, resource diversity) minus normalised danger;
  * greedy-select highest score first, requiring each pick to sit at least the
  * spacing threshold from all prior picks. The threshold relaxes on failure so a dense
  * galaxy degrades to "as spaced as it can be" rather than throwing on tight spacing; it

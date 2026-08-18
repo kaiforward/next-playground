@@ -13,7 +13,8 @@
     "mutation": "stryker run stryker.config.mjs",
     "validate:gen": "tsx --tsconfig tsconfig.json scripts/validate-distributions.ts",
     "report:coherence": "tsx --tsconfig tsconfig.json scripts/substrate-coherence.ts",
-    "impact": "tsx --tsconfig tsconfig.json scripts/impact.ts"
+    "impact": "tsx --tsconfig tsconfig.json scripts/impact.ts",
+    "duplication": "tsx --tsconfig tsconfig.json scripts/duplication.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

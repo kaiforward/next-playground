@@ -59,7 +59,7 @@ export interface BuildGoodState {
    * supplies it via toGoodMarketStates (a GoodMarketState, which carries production).
    */
   production?: number;
-  /** Current building capacity. The tick path always supplies this separately from realized production. */
+  /** Current building capacity. The tick path always supplies this separately from realised production. */
   capacityProduction: number;
   /**
    * Persisted consumption satisfaction from the last economy cycle (delivered ÷ demanded, ∈
@@ -150,7 +150,7 @@ export type BuildDropReason =
  *   puts that system last within it, which is a real tension with "fully saturated" being one of the
  *   worse things Build blocked can mean.
  */
-export interface BuildBlockReport {
+export interface BuildDropReport {
   systemId: string;
   reason: BuildDropReason;
   droppedRoi: number;
@@ -158,8 +158,8 @@ export interface BuildBlockReport {
 
 /**
  * One system's best-ranked SCORED production opportunity from a `planFactionBundles` run — the alert
- * bar's Build opportunity category, distinct from `BuildBlockReport` above (a dropped opportunity, not
- * a scored one; the two categories read different systems on different cycles). `score` is
+ * bar's Build opportunity category. It and Build blocked (`BuildDropReport` above) read different
+ * systems on different cycles. `score` is
  * `BuildOpportunity.score` verbatim — see that interface's own docstring for what it is ("Ordering
  * only", not comparable between systems, a 13× unit-spread bias across goods) and is NOT normalised,
  * rescaled or improved here.
@@ -337,7 +337,7 @@ export function queuedBuildLevelsAt(openProjects: WorldConstructionProject[], sy
 }
 
 /**
- * Fold all committed build levels into the planner's effective state. The standing realized rate is
+ * Fold all committed build levels into the planner's effective state. The standing realised rate is
  * preserved; committed capacity can only add its non-negative delta, never rewrite an assessment.
  * Queued consumers also expose their input draw before they land, keeping the supply chain honest.
  */
@@ -392,7 +392,7 @@ function effectiveBuildSystems(
  * Cancellation is flow-aware: a deficit is cancelled only to the extent reachable exporters' spare
  * surplus actually covers it, netted against other consumers already drawing on that surplus, rather
  * than by the mere presence of any surplus anywhere reachable. An exporter's spare
- * is its sustainable export RATE (`production − demand`) measured on REALIZED output, so capacity
+ * is its sustainable export RATE (`production − demand`) measured on REALISED output, so capacity
  * idled by a strike never cancels someone else's gap — it is not a stock pile either, so a neighbour
  * merely holding and draining stock never cancels a gap. Per good,
  * the reachable exporters' total spare is netted across all reachable gaps at once —
@@ -760,7 +760,7 @@ function planFactionBundles(
   routeCost: RouteCost,
   refs: DevelopmentRefs,
   structural: StructuralDeficit[],
-): { bundles: PlannedBundle[]; blocked: BuildBlockReport[]; topOpportunities: BuildOpportunityReport[] } {
+): { bundles: PlannedBundle[]; blocked: BuildDropReport[]; topOpportunities: BuildOpportunityReport[] } {
   // Mutable per-system working copy so capacity/labour reflect builds made this pass.
   // Only developed systems can host builds — unclaimed and controlled (outpost-tier)
   // systems are skipped here, gating both the housing and industry passes in one place.
@@ -773,14 +773,14 @@ function planFactionBundles(
 
   const bundles: PlannedBundle[] = [];
 
-  // Per-system best-ranked dropped opportunity this run (BuildBlockReport docstring above has the
+  // Per-system best-ranked dropped opportunity this run (BuildDropReport docstring above has the
   // full reasoning). A ranked drop always wins over an unranked one for the same system — a scored
   // candidate is strictly more informative than one that was never scored — and within one class the
   // FIRST one recorded wins: for ranked drops that is the highest-scored, because `opportunities`
   // (below) is iterated in descending-score order; for unranked drops there is no ranking to prefer
   // among, so it is whichever the deterministic scan order reaches first.
-  const rankedBlockBySystem = new Map<string, BuildBlockReport>();
-  const unrankedBlockBySystem = new Map<string, BuildBlockReport>();
+  const rankedBlockBySystem = new Map<string, BuildDropReport>();
+  const unrankedBlockBySystem = new Map<string, BuildDropReport>();
   const recordUnrankedDrop = (systemId: string, reason: BuildDropReason): void => {
     if (unrankedBlockBySystem.has(systemId)) return;
     unrankedBlockBySystem.set(systemId, { systemId, reason, droppedRoi: 0 });
@@ -885,7 +885,7 @@ function planFactionBundles(
       const capUnits = buildableUnits(site, goodId);
       if (capUnits <= 0) {
         // The literal "no capacity" case, and the one that fires BEFORE a BuildOpportunity is ever
-        // constructed for this site×good — see BuildBlockReport's docstring for what droppedRoi means
+        // constructed for this site×good — see BuildDropReport's docstring for what droppedRoi means
         // here (nothing: no rank exists yet).
         //
         // Recorded only where the site HAS a ceiling for this good to have exhausted. Every site is
@@ -957,7 +957,7 @@ function planFactionBundles(
     if (capUnits <= 0) {
       // Post-ranking: a higher-scored opportunity at this same site (a different good) already
       // claimed the capacity this one needed. `opp.score` is a real, ranked figure here — see
-      // BuildBlockReport's docstring.
+      // BuildDropReport's docstring.
       recordRankedDrop(opp.systemId, "no-capacity", opp.score);
       continue;
     }
@@ -1126,7 +1126,7 @@ function planFactionBundles(
 
   // A ranked drop always outranks an unranked one for the same system (see the docstring on the two
   // maps above); a system with neither simply has nothing to report.
-  const blocked: BuildBlockReport[] = [];
+  const blocked: BuildDropReport[] = [];
   const blockedSystemIds = new Set([...rankedBlockBySystem.keys(), ...unrankedBlockBySystem.keys()]);
   for (const systemId of blockedSystemIds) {
     const report = rankedBlockBySystem.get(systemId) ?? unrankedBlockBySystem.get(systemId);
@@ -1170,8 +1170,8 @@ export interface FactionBuildPlan {
    *  docstring. Calibration instrumentation only. */
   strikeSuppressedProposals: { suppressed: number; eligible: number };
   /** This run's best-ranked dropped production opportunity per system that had one — see
-   *  `BuildBlockReport`. Persisted world state, unlike `strikeSuppressedProposals` above. */
-  blockedBuilds: BuildBlockReport[];
+   *  `BuildDropReport`. Persisted world state, unlike `strikeSuppressedProposals` above. */
+  blockedBuilds: BuildDropReport[];
   /** This run's best-ranked SCORED production opportunity per system that had one — see
    *  `BuildOpportunityReport`. Persisted world state, alongside `blockedBuilds` above. */
   buildOpportunities: BuildOpportunityReport[];

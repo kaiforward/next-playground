@@ -1,16 +1,16 @@
 import {
   contributorBarWidths,
-  type ContributorSegment,
+  type Contributor,
 } from "@/components/ui/contributor-bars-helpers";
 
-export type { ContributorSegment } from "@/components/ui/contributor-bars-helpers";
+export type { Contributor } from "@/components/ui/contributor-bars-helpers";
 
 export interface ContributorBarsProps {
-  segments: ContributorSegment[];
+  contributors: Contributor[];
   /**
    * The shared scale every bar's width is measured against — e.g. `1` for a [0,1]-bounded total
    * (the Stability block's unrest floor), or a category's budget ceiling for a funding/labour-pool
-   * caller. A segment's width is `value / total`, clamped to [0,100]% so a segment reading above
+   * caller. A contributor's width is `value / total`, clamped to [0,100]% so a contributor reading above
    * `total` (an uncapped contributor) still renders a full bar rather than overflowing the track.
    * The clamp is the TRACK's limit, not the reading's: the printed label carries the true
    * percentage, so a contributor at 2.4× the scale reads 240% beside its full bar and cannot be
@@ -27,8 +27,8 @@ export interface ContributorBarsProps {
  * per-category treasury spend are the named future callers). Presentational only — no hooks, no
  * state — so it carries no `"use client"` directive.
  */
-export function ContributorBars({ segments, total }: ContributorBarsProps) {
-  const widths = contributorBarWidths(segments, total);
+export function ContributorBars({ contributors, total }: ContributorBarsProps) {
+  const widths = contributorBarWidths(contributors, total);
 
   return (
     <div className="space-y-1.5">

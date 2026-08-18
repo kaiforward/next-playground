@@ -1,5 +1,5 @@
 /**
- * Experiment system — YAML config parsing, validation, and result serialization.
+ * Experiment system — YAML config parsing, validation, and result serialisation.
  *
  * The calibration harness is a thin wrapper over `generateWorld` +
  * `runWorldTick`: the cycle cadence is the one per-run override channel —
@@ -55,7 +55,7 @@ export function experimentToHarnessConfig(exp: ExperimentConfig): {
   };
 }
 
-// ── Result serialization ─────────────────────────────────────────
+// ── Result serialisation ─────────────────────────────────────────
 
 export interface ExperimentResult {
   label?: string;

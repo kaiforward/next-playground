@@ -43,7 +43,7 @@ export const GOVERNMENT_TYPES: Record<GovernmentType, GovernmentDefinition> = {
   },
   technocratic: {
     name: "Technocratic",
-    description: "Innovation-driven, high-tier specialization. Premium prices on advanced goods.",
+    description: "Innovation-driven, high-tier specialisation. Premium prices on advanced goods.",
     dangerBaseline: 0.01,
     eventWeights: { tech_breakthrough: 5 },
   },

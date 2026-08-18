@@ -5,10 +5,10 @@ import {
   buildShocksForPhase,
   evaluateSpreadTargets,
   aggregateModifiers,
-  selectEventToSpawn,
   selectEventsToSpawn,
   rollPhaseDuration,
   type EventSnapshot,
+  type SpawnDecision,
   type SystemSnapshot,
   type NeighborSnapshot,
   type ModifierRow,
@@ -318,9 +318,9 @@ describe("rollPhaseDuration", () => {
   });
 });
 
-// ── selectEventToSpawn ──────────────────────────────────────────
+// ── selectEventsToSpawn — one pick ──────────────────────────────
 
-describe("selectEventToSpawn", () => {
+describe("selectEventsToSpawn, single pick", () => {
   const defs: Record<string, EventDefinition> = {
     inner_system_conflict: makeDefinition(),
   };
@@ -333,8 +333,19 @@ describe("selectEventToSpawn", () => {
 
   const defaultCapsSpawn = { maxEventsGlobal: 15, maxEventsPerSystem: 2 };
 
+  /** The batch selector held to one pick — the single-spawn contract these cases assert. */
+  const selectOne = (
+    definitions: Record<string, EventDefinition>,
+    activeEvents: EventSnapshot[],
+    spawnSystems: SystemSnapshot[],
+    tick: number,
+    caps: { maxEventsGlobal: number; maxEventsPerSystem: number },
+    rng: () => number,
+  ): SpawnDecision | null =>
+    selectEventsToSpawn(definitions, activeEvents, spawnSystems, tick, caps, rng, 1)[0] ?? null;
+
   it("returns a spawn decision when eligible", () => {
-    const result = selectEventToSpawn(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
+    const result = selectOne(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).not.toBeNull();
     expect(result!.type).toBe("inner_system_conflict");
   });
@@ -343,7 +354,7 @@ describe("selectEventToSpawn", () => {
     const events = Array.from({ length: 15 }, (_, i) =>
       makeSnapshot({ id: `evt-${i}`, systemId: `sys-other-${i}` }),
     );
-    const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
+    const result = selectOne(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).toBeNull();
   });
 
@@ -351,7 +362,7 @@ describe("selectEventToSpawn", () => {
     const events = Array.from({ length: 5 }, (_, i) =>
       makeSnapshot({ id: `evt-${i}`, type: "inner_system_conflict", systemId: `sys-other-${i}` }),
     );
-    const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
+    const result = selectOne(defs, events, systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).toBeNull();
   });
 
@@ -361,7 +372,7 @@ describe("selectEventToSpawn", () => {
       makeSnapshot({ id: "evt-1", type: "plague", systemId: "sys-1" }),
       makeSnapshot({ id: "evt-2", type: "mining_boom", systemId: "sys-1" }),
     ];
-    const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
+    const result = selectOne(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
     if (result) {
       expect(result.systemId).not.toBe("sys-1");
     }
@@ -373,7 +384,7 @@ describe("selectEventToSpawn", () => {
     // At tick 100, cooldown not expired (90 + 50 > 100)
     // Only sys-2 and sys-3 remain. The conflict def has no economy filter,
     // so it can spawn at either.
-    const result = selectEventToSpawn(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
+    const result = selectOne(defs, events, systems, 100, defaultCapsSpawn, () => 0.1);
     if (result) {
       expect(result.systemId).not.toBe("sys-1");
     }
@@ -385,7 +396,7 @@ describe("selectEventToSpawn", () => {
         targetFilter: { economyTypes: ["core"] },
       }),
     };
-    const result = selectEventToSpawn(filtered, [], systems, 100, defaultCapsSpawn, () => 0.5);
+    const result = selectOne(filtered, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).not.toBeNull();
     expect(result!.systemId).toBe("sys-3"); // only core system
   });
@@ -396,17 +407,17 @@ describe("selectEventToSpawn", () => {
         targetFilter: { economyTypes: ["tech"] },
       }),
     };
-    const result = selectEventToSpawn(filtered, [], systems, 100, defaultCapsSpawn, () => 0.5);
+    const result = selectOne(filtered, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).toBeNull();
   });
 
   it("sets severity to 1.0 for fresh spawns", () => {
-    const result = selectEventToSpawn(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
+    const result = selectOne(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result!.severity).toBe(1.0);
   });
 
   it("spawns with first phase and valid duration", () => {
-    const result = selectEventToSpawn(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
+    const result = selectOne(defs, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result!.phase).toBe("phase_one");
     expect(result!.phaseDuration).toBeGreaterThanOrEqual(10);
     expect(result!.phaseDuration).toBeLessThanOrEqual(20);
@@ -416,7 +427,7 @@ describe("selectEventToSpawn", () => {
     const childOnly: Record<string, EventDefinition> = {
       conflict_spillover: makeDefinition({ type: "conflict_spillover", weight: 0 }),
     };
-    const result = selectEventToSpawn(childOnly, [], systems, 100, defaultCapsSpawn, () => 0.5);
+    const result = selectOne(childOnly, [], systems, 100, defaultCapsSpawn, () => 0.5);
     expect(result).toBeNull();
   });
 });

@@ -275,11 +275,8 @@ describe("generateSystems", () => {
       expect(econCounts.get(econ) ?? 0, econ).toBeGreaterThan(0);
     }
     for (const [, count] of econCounts) {
-      // ≤ 0.80: a realistic galaxy is mostly mining worlds, so 'extraction' is a
-      // strong, DESIGNED plurality (~65-72%) — the classifier reads slotCap ×
-      // yieldMult (raw deposit potential) and most systems are barren. This guard
-      // only catches one type reaching near-total takeover, not the intended
-      // extraction-dominance.
+      // ≤ 0.80 catches a near-total takeover only, never the designed extraction plurality —
+      // rationale in universe-gen-invariants.test.ts, which holds the same bar across seeds.
       expect(count / systems.length).toBeLessThanOrEqual(0.80);
     }
   });

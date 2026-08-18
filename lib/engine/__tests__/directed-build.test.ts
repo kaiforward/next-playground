@@ -1661,14 +1661,14 @@ describe("planFactionProposals: persistent structural policy", () => {
     expect(covered.persistenceUpdates[0]?.proposalCycles).toBe(0);
   });
 
-  it("nets only REALIZED exporter spare before persistence — a striking exporter cancels nothing", () => {
+  it("nets only REALISED exporter spare before persistence — a striking exporter cancels nothing", () => {
     const sink = policySystem(policyGood(), { systemId: "sink" });
     const actualExporter = policySystem(policyGood({ demand: 0, production: 20, capacityProduction: 20 }), { systemId: "actual", slotCap: emptyResourceVector() });
     const actual = planFactionProposals([sink, actualExporter], () => 1, [], DEV_REFS);
     expect(actual.persistenceUpdates.find((update) => update.systemId === "sink")?.proposalCycles).toBe(0);
 
     // Same capacity, but struck and producing nothing. Counting its latent capacity as spare
-    // cancelled the sink's gap against supply that never shipped; only realized output counts, so
+    // cancelled the sink's gap against supply that never shipped; only realised output counts, so
     // the sink's deficit now survives to persistence.
     const latentExporter = policySystem(policyGood({ demand: 0, production: 0, capacityProduction: 20, productionSuppressed: true }), { systemId: "latent", slotCap: emptyResourceVector() });
     const latent = planFactionProposals([sink, latentExporter], () => 1, [], DEV_REFS);

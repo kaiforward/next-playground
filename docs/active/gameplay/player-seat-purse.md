@@ -9,7 +9,7 @@
 
 Every faction gets a treasury — identically: player, AI, and the (legacy-flavour) major/minor
 distinction never touches mechanics. It fills from two taxes on real economic activity —
-**employed heads (grade-weighted)** and **realized production (at fixed reference values)** —
+**employed heads (grade-weighted)** and **realised production (at fixed reference values)** —
 scaled by a five-step **tax level** whose cost is unrest. It drains through three **budget bands**
 — a *budget band* is a spending category with a 0–100% funding slider (not a tax band):
 **maintenance** (the standing sink, coupled to building decay), **logistics**, and
@@ -23,14 +23,14 @@ stock rots, and there is no debt.
 Interactions: tax level feeds the per-system `unrest` integrator (with the shipped strike channel
 already damping over-taxation before collapse); the maintenance band modulates the existing
 idle-decay machinery; band funding gates the existing construction pool and logistics work-budget.
-The one real engine touch is the economy sim exporting realized production (see Income Line 2) —
+The one real engine touch is the economy sim exporting realised production (see Income Line 2) —
 everything else activates or starves mechanics that already existed.
 
 ## The treasury container
 
 - One treasury per faction: a single balance ≥ 0 (no debt instrument in v1), stored in
   per-faction `World` rows (`treasuries` — the only tick-mutable per-faction state).
-  JSON-serializable throughout — the funded-fraction math guards against 0-bills (see
+  JSON-serialisable throughout — the funded-fraction math guards against 0-bills (see
   Settlement).
 - Income and expenses are **itemised line items** from day one (income: heads tax, production tax;
   expenses: maintenance by building type, logistics, construction, founding), with the last settlement's
@@ -55,14 +55,14 @@ frontier headcount — so education/development interleave with fiscal capacity 
 
 ### Line 2 — production tax (assessed-value shape)
 
-**Realized** production in physical units × **fixed per-good reference values** (a cadastral tax:
+**Realised** production in physical units × **fixed per-good reference values** (a cadastral tax:
 the assessor values a tonne of alloys at its standing worth, not today's local spot price).
 Responsive and industrial: an input-starved factory produces less and taxes less, so this line
 tracks what the economy actually *does* — richer than heads alone.
 
-- **The slice's one real economy touch:** the economy sim exports realized output per
+- **The slice's one real economy touch:** the economy sim exports realised output per
   (system, good) per cycle, and the treasury persists the last settlement's snapshot (the
-  itemised UI line needs it between cycles anyway). Realized — not *capacity* (no input gate) —
+  itemised UI line needs it between cycles anyway). Realised — not *capacity* (no input gate) —
   because capacity would not sag under starvation and would re-create the famine-windfall
   perversity this design exists to avoid.
 - **Reference-value calibration must be value-added-aware**: taxing every good at full reference
@@ -153,8 +153,8 @@ which is what makes the slider a *usable* budget lever rather than a self-harm d
   idle channel cannot touch a building with no idle levels, and v1 deliberately adds no new decay
   channel ("working machines crumble from total neglect" is a booked future note, not v1).
 - **Implementation trap (load-bearing):** the output malus must NOT feed the idle-detection
-  signal. Decay's idle check runs off `buildingUsed` utilization — the malus must scale output
-  *after* utilization is measured, or the flow-only promise silently breaks.
+  signal. Decay's idle check runs off `buildingUsed` utilisation — the malus must scale output
+  *after* utilisation is measured, or the flow-only promise silently breaks.
 
 ## Settlement (cadence, ladder, deficit)
 

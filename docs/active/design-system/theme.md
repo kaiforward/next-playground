@@ -24,7 +24,7 @@ Three tiers — all pass WCAG AA 4.5:1 contrast against `surface`. Plus an accen
 | Token | Hex | Ratio | Usage |
 |-------|-----|-------|-------|
 | `text-primary` | `#c9d1d9` | ~10:1 | Headings, values, key information |
-| `text-secondary` | `#8b949e` | ~5.9:1 | Supporting text, descriptions, de-emphasized metadata |
+| `text-secondary` | `#8b949e` | ~5.9:1 | Supporting text, descriptions, de-emphasised metadata |
 | `text-tertiary` | `#7d868e` | ~4.6:1 | Labels, stat names, hints |
 | `text-accent` | = `accent` | ~4.8:1 | Highlighted labels, active states (copper) |
 
@@ -62,7 +62,7 @@ Shared palette for Badge, ProgressBar, Button, InlineAlert, and Tabs. Defined as
 | Token | Value | Usage |
 |-------|-------|-------|
 | `border` | `rgba(139, 148, 158, 0.15)` | Default border — subtle, barely visible |
-| `border-strong` | `rgba(139, 148, 158, 0.30)` | Emphasized borders |
+| `border-strong` | `rgba(139, 148, 158, 0.30)` | Emphasised borders |
 
 ---
 

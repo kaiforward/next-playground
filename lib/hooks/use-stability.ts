@@ -1,32 +1,21 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
 import { queryKeys } from "@/lib/query/keys";
+import { useSystemValueMap } from "./use-system-value-map";
 import type { StabilityEntry } from "@/lib/types/game";
 
+const pickUnrest = (e: StabilityEntry) => e.unrest;
+
 /**
- * All-systems unrest (0…1), keyed by systemId. Tick-scoped (no viewport dep),
- * mirrors `useTradeFlow`. Gated by `active` so callers that don't need it
- * (map mode off) don't pay the request; the badge calls it always-on. The
- * shared `["stability"]` key means the map and the panel reuse one fetch.
+ * All-systems unrest (0…1), keyed by systemId. The badge calls it always-on while the map mode gates
+ * it; the shared `["stability"]` key means the two reuse one fetch. See `useSystemValueMap` for the
+ * fetch/gating contract.
  */
 export function useStability(active: boolean = true): Map<string, number> {
-  const { data } = useQuery({
-    queryKey: queryKeys.stability,
-    queryFn: () =>
-      apiFetch<{ systems: StabilityEntry[] }>("/api/game/systems/stability"),
-    staleTime: 10_000,
-    gcTime: 30_000,
-    enabled: active,
-  });
-
-  return useMemo(() => {
-    const m = new Map<string, number>();
-    if (active && data) {
-      for (const s of data.systems) m.set(s.systemId, s.unrest);
-    }
-    return m;
-  }, [active, data]);
+  return useSystemValueMap(
+    queryKeys.stability,
+    "/api/game/systems/stability",
+    pickUnrest,
+    active,
+  );
 }

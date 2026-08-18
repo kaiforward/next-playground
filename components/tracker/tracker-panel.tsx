@@ -9,7 +9,7 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import { StatList, StatRow } from "@/components/ui/stat-row";
-import { progressWidthPct } from "@/lib/utils/math";
+import { barWidthPct } from "@/lib/utils/math";
 import { PersonIcon, SettingsIcon } from "@/components/ui/icons";
 import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row";
 import { stabilityRampColor } from "@/lib/utils/stability";
@@ -372,7 +372,7 @@ function ProjectCard({ row, kind }: { row: TrackerRowBase; kind: "Building" | "C
         <StatRow label="Progress">
           {/* Same tested helper the bar's width uses — one definition of fraction → percent, so the
               card's number and the bar it describes can never drift apart or repeat the units bug. */}
-          <span className="font-mono text-text-primary">{Math.round(progressWidthPct(row.progress))}%</span>
+          <span className="font-mono text-text-primary">{Math.round(barWidthPct(row.progress))}%</span>
         </StatRow>
         <StatRow label="ETA">
           <span className="font-mono text-text-primary">{etaLabel(row.etaCycles)}</span>

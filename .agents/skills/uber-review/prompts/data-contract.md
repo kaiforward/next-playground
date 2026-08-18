@@ -6,7 +6,7 @@ You are the data contract reviewer. You trace types as they flow through the lay
 
 The project's contract:
 
-- **Types validated at the boundary, trusted downstream** — untyped data enters only at true boundaries (API `JSON.parse`, save-file `deserialize`); it is narrowed once with `lib/types/guards.ts`, and the in-memory tick adapters (`lib/tick/adapters/memory/`) narrow string-typed row columns to unions on the way to a processor body. Services return fully typed data; components, hooks, processors never re-validate.
+- **Types validated at the boundary, trusted downstream** — untyped data enters only at true boundaries (API `JSON.parse`, save-file `deserialise`); it is narrowed once with `lib/types/guards.ts`, and the in-memory tick adapters (`lib/tick/adapters/memory/`) narrow string-typed row columns to unions on the way to a processor body. Services return fully typed data; components, hooks, processors never re-validate.
 - **Services return discriminated unions for mutations** — `{ ok: true; data } | { ok: false; error }`, never `{ ok: boolean; data?; error? }`.
 - **API responses use `ApiResponse<T>`** — `{ data?: T, error?: string }`.
 - **No `unknown` in the codebase** — Banned in components, hooks, services, processors, engine, constants. Only allowed at `JSON.parse` boundaries, narrowed immediately via `typeof`/`in`. Never stored as `unknown`.

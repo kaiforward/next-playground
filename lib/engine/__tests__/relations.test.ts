@@ -10,7 +10,6 @@ import {
   indexPairs,
   indexRelationEvents,
   pactNegotiationTemplate,
-  parseRelationEventMetadata,
   rollWindow,
 } from "../relations";
 import {
@@ -300,27 +299,6 @@ describe("rollWindow", () => {
 
   it("collapses to a single value when min === max", () => {
     expect(rollWindow([4, 4], () => 0.42)).toBe(4);
-  });
-});
-
-// ── parseRelationEventMetadata ──────────────────────────────────
-
-describe("parseRelationEventMetadata", () => {
-  it("accepts valid shape", () => {
-    const parsed = parseRelationEventMetadata({
-      factionAId: "a",
-      factionBId: "b",
-      expiresAtTick: 50,
-    });
-    expect(parsed).toEqual({ factionAId: "a", factionBId: "b", expiresAtTick: 50 });
-  });
-
-  it("rejects malformed input", () => {
-    expect(parseRelationEventMetadata(null)).toBeNull();
-    expect(parseRelationEventMetadata({})).toBeNull();
-    expect(
-      parseRelationEventMetadata({ factionAId: "a", factionBId: 1, expiresAtTick: 5 }),
-    ).toBeNull();
   });
 });
 

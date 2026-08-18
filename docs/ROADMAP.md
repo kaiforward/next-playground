@@ -27,21 +27,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[M] Duplication sweep, and a mechanical check so it stops recurring.** Full audit at
-   `.agent-reviews/duplication-audit-2026-08-17.md` — seven ranked findings, two of which carry
-   docstrings that are currently false (`voronoi-cache.ts` claims it replaced triangulations that
-   still run; `universe-gen.ts` describes `yieldMult` as a different quantity than `body-gen.ts`
-   computes). Worst by cost: three Delaunay/Voronoi triangulations of the same point set, five
-   byte-identical value-mode map hooks, and a resource-column literal typed out eleven times where an
-   eighth resource type would silently read as empty.
-   *Next step:* build `scripts/duplication.ts` (npm-aliased) and burn down the standing stock in the
-   same pass, so the check starts from zero rather than reporting pre-existing pairs forever.
-   *Don't:* add a tenth `/uber-review` lens. Every lens is chunk-scoped and the duplicate is almost
-   always in a file the PR does not touch — five copies of the map hook landed across five PRs and no
-   diff of any size ever contained two of them. The missing capability is repo-wide search, which is
-   mechanical; route its output into the conventions lens, which already owns the rule.
-
-2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
@@ -234,12 +220,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[M] Type `goodId` as a `GoodId` union instead of `string`** — `GOODS` is `Record<string, GoodDefinition>`,
   so `GOODS[goodId]` type-checks and never narrows to `undefined`. Not a live bug (world-gen seeds every id
   from `Object.keys`), but load-bearing at ~10 point-of-use sites since the market round-trip was deleted.
-  89 declaration sites across 96 files — its own PR. *Blocked on a decision:* the save-file `deserialize`
+  89 declaration sites across 96 files — its own PR. *Blocked on a decision:* the save-file `deserialise`
   boundary needs a guard narrowing `string` → `GoodId` with a decided failure mode (reject the save, or drop
   the row). Don't start without settling that.
-- **[S] Two build-ceiling checks assume monotonic system ownership** — the read service nets committed levels
-  from the player *faction's* rows; the mutation service nets *all* rows at the system. They agree only
-  because a system's owner can't change yet. Unify behind one helper before conquest or rebellion ships.
 - **[S] `estStaffing` and `buildingUsed` read staffing differently for support types** — `min` over the
   grades a building actually draws, vs `count × labourFulfil` (unskilled only). Display-consistency, not
   correctness; worth one shared staffing-estimate helper.

@@ -430,7 +430,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     expect(on.buildOpportunityUpdates.some((u) => u.systemId === "B" && u.goodId === "food")).toBe(true);
   });
 
-  // A developed food SELF-SUPPLIER: buildings cover 1.1× demand (no capacity gap) and a persisted realized
+  // A developed food SELF-SUPPLIER: buildings cover 1.1× demand (no capacity gap) and a persisted realised
   // rate of 0 keeps it off the exporter self-netting path — so the ONLY thing that can advance its clock is
   // the squeeze-feedback gap, isolating the two guards that suppress it.
   const rationedSelfSupplier = (extra: Partial<MarketRowForLogistics>): SystemBuildRow => ({
@@ -438,7 +438,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
     buildings: { food: 10 }, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
     markets: [{
       id: "S|food", goodId: "food", stock: 50, anchorMult: 1, demandRate: 10, storageCapacity: 0,
-      squeezeCycles: 2, satisfaction: 0, realizedProductionRate: 0, proposalCycles: 1, ...extra,
+      squeezeCycles: 2, satisfaction: 0, realisedProductionRate: 0, proposalCycles: 1, ...extra,
     }],
   });
 
@@ -1226,7 +1226,7 @@ describe("runDirectedBuildProcessor — strike-suppression instrumentation (stri
     buildings: { food: 10 }, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
     markets: [{
       id: "S|food", goodId: "food", stock: 50, anchorMult: 1, demandRate: 10, storageCapacity: 0,
-      squeezeCycles: 2, satisfaction: 0, realizedProductionRate: 0, proposalCycles: 1, productionSuppressed,
+      squeezeCycles: 2, satisfaction: 0, realisedProductionRate: 0, proposalCycles: 1, productionSuppressed,
     }],
   });
 
@@ -1283,7 +1283,7 @@ const HOME_POP = 1000;
 
 /**
  * A saturated home that also holds tradeable stock, so a founding manifest can actually be drawn.
- * `exportRates` gives a good a realized output; above the home's own demand it becomes a structural
+ * `exportRates` gives a good a realised output; above the home's own demand it becomes a structural
  * exporter, drawable down to its strategic reserve rather than gated on the surplus margin.
  */
 function stockedHome(
@@ -1294,7 +1294,7 @@ function stockedHome(
     ...saturatedHome(HOME_POP),
     markets: Object.entries(goodStocks).map(([goodId, stock]) => ({
       ...stockedMarket("home", goodId, stock),
-      realizedProductionRate: exportRates[goodId],
+      realisedProductionRate: exportRates[goodId],
     })),
   };
 }
@@ -1612,7 +1612,7 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     const founder = (systemId: string): SystemBuildRow => ({
       ...saturatedHome(HOME_POP),
       systemId,
-      markets: [{ ...stockedMarket(systemId, "food", stock), realizedProductionRate: exportRate }],
+      markets: [{ ...stockedMarket(systemId, "food", stock), realisedProductionRate: exportRate }],
     });
     const from = (id: string, systemId: string, sourceSystemId: string): WorldColonyEstablishProject => ({
       ...stagingProject(), kind: "colony_establish", id, systemId, sourceSystemId,
@@ -2259,7 +2259,7 @@ describe("runDirectedBuildProcessor — what the colony planner is shown", () =>
       systemId: "src", factionId: "f1", control: "controlled", population: 0, buildings: {},
       yields: unitResourceVector(), slotCap: emptyResourceVector(),
       generalSpace: 0, habitableSpace: 0,
-      markets: [{ ...stockedMarket("src", "food", 0), realizedProductionRate: 100_000 }],
+      markets: [{ ...stockedMarket("src", "food", 0), realisedProductionRate: 100_000 }],
     };
     const w = new MemoryDirectedBuildWorld([saturatedHome(1000), controlledSource]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {

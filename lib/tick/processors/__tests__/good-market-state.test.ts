@@ -138,10 +138,10 @@ describe("toGoodMarketStates", () => {
     expect(withoutValue.satisfaction).toBeUndefined();
   });
 
-  it("uses explicit realized production including zero, while missing values fall back to capacity", () => {
+  it("uses explicit realised production including zero, while missing values fall back to capacity", () => {
     const base = {
       buildings: { food: 3 }, population: 100,
-      yields: unitResourceVector(), markets: [{ ...foodMarket(20, 40), realizedProductionRate: 0 }],
+      yields: unitResourceVector(), markets: [{ ...foodMarket(20, 40), realisedProductionRate: 0 }],
     };
     const [assessed] = toGoodMarketStates(base);
     expect(assessed.capacityProduction).toBeGreaterThan(0);
@@ -149,7 +149,7 @@ describe("toGoodMarketStates", () => {
 
     const [legacy] = toGoodMarketStates({
       ...base,
-      markets: [{ ...foodMarket(20, 40), realizedProductionRate: undefined }],
+      markets: [{ ...foodMarket(20, 40), realisedProductionRate: undefined }],
     });
     expect(legacy.production).toBe(legacy.capacityProduction);
   });

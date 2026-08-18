@@ -1,11 +1,10 @@
 "use client";
 
 import { use } from "react";
-import { usePathname } from "next/navigation";
 import { useFaction } from "@/lib/hooks/use-faction";
 import { FACTION_TABS } from "@/lib/constants/faction-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
-import { TabList, TabLink } from "@/components/ui/tabs";
+import { PanelTabs } from "@/components/ui/tabs";
 import { QueryBoundary } from "@/components/ui/query-boundary";
 import { FactionStatusBadge } from "@/components/factions/faction-status-badge";
 
@@ -17,17 +16,6 @@ function FactionPanelContent({
   children: React.ReactNode;
 }) {
   const { faction } = useFaction(factionId);
-  const pathname = usePathname();
-
-  const basePath = `/factions/${factionId}`;
-  const tabs = FACTION_TABS.map((tab) => {
-    const href = tab.segment ? `${basePath}/${tab.segment}` : basePath;
-    return {
-      label: tab.label,
-      href,
-      active: tab.segment ? pathname.startsWith(href) : pathname === basePath,
-    };
-  });
 
   const subtitle = (
     <span className="inline-flex items-center gap-2">
@@ -46,13 +34,11 @@ function FactionPanelContent({
       title={faction.name}
       subtitle={subtitle}
       subHeader={
-        <TabList aria-label="Faction tabs">
-          {tabs.map((tab) => (
-            <TabLink key={tab.href} href={tab.href} active={tab.active}>
-              {tab.label}
-            </TabLink>
-          ))}
-        </TabList>
+        <PanelTabs
+          basePath={`/factions/${factionId}`}
+          tabs={FACTION_TABS}
+          label="Faction tabs"
+        />
       }
     >
       {/* Active tab content */}

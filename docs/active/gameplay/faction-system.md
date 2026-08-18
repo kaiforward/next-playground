@@ -30,7 +30,7 @@ Foundation (Layer 2, Sub-Project 1) is implemented and merged. Below is the per-
 
 ## 1. Faction Model
 
-Factions are hand-crafted named entities with distinct identity and behavior.
+Factions are hand-crafted named entities with distinct identity and behaviour.
 
 **Status: Implemented** — the hand-owned `WorldFaction` row type lives in `lib/world/types.ts`; summary derivation in `lib/services/factions.ts`.
 
@@ -41,10 +41,10 @@ Factions are hand-crafted named entities with distinct identity and behavior.
 | name | string | Unique faction name (e.g. "Terran Sovereignty") |
 | description | text | Lore, personality, background |
 | government | GovernmentType | Political character — drives event weights and transit danger |
-| doctrine | Doctrine | Political identity — drives foreign policy and war behavior |
+| doctrine | Doctrine | Political identity — drives foreign policy and war behaviour |
 | homeworld | system_id | Capital system. Very hard to capture (see [war-system.md](../../planned/war-system.md) §5) |
 | territory | [system_ids] | Derived from systems that have `factionId` |
-| color | string | Map/UI color for territory visualization |
+| color | string | Map/UI color for territory visualisation |
 
 Implementation note: there is also a `createdAtTick` field on the `Faction` row, populated at seed time (0) and used by any future faction-spawning event to record when a new faction came into being.
 
@@ -87,7 +87,7 @@ The exact formula is an implementation detail, but the principle is: military ou
 
 Doctrine defines how a faction behaves toward other factions. Each faction has one primary doctrine.
 
-**Status: Implemented (narrow behavioral surface).** `DOCTRINES` definitions in `lib/constants/doctrines.ts`; doctrine-pair compatibility in `lib/constants/relations.ts` (`DOCTRINE_COMPATIBILITY`).
+**Status: Implemented (narrow behavioural surface).** `DOCTRINES` definitions in `lib/constants/doctrines.ts`; doctrine-pair compatibility in `lib/constants/relations.ts` (`DOCTRINE_COMPATIBILITY`).
 
 **Key design rule**: All factions are warlike. The aggression spread between doctrines is narrow — the difference is what *triggers* conflict and how they fight, not whether they fight. Even the most defensive doctrine will wage war under the right conditions. War exhaustion and attacker cost asymmetry (see [war-system.md](../../planned/war-system.md) §3) keep aggressive doctrines from steamrolling reactive ones.
 
@@ -105,11 +105,11 @@ What's wired up today:
 - `declarationModifier` field on each `DoctrineDefinition` — Foundation reads it to bias the alliance-negotiation outcome (higher = harder to ally).
 - `exhaustionMultiplier` field on each `DoctrineDefinition` — stub for War.
 
-> **Planned (War sub-project):** doctrine-specific war trigger logic ("fights when trade is threatened", "strikes when others are weakened"), reclamation bonuses, trade-embargo behavior, vassal mechanics. These need the war/exhaustion model to land first.
+> **Planned (War sub-project):** doctrine-specific war trigger logic ("fights when trade is threatened", "strikes when others are weakened"), reclamation bonuses, trade-embargo behaviour, vassal mechanics. These need the war/exhaustion model to land first.
 
 ### Government Types
 
-Government type is strictly an **economic/internal** axis. It defines how a faction runs its own territory — market behavior, production modifiers, trade regulations, internal stability. It says nothing about foreign policy (that's doctrine's job).
+Government type is strictly an **economic/internal** axis. It defines how a faction runs its own territory — market behaviour, production modifiers, trade regulations, internal stability. It says nothing about foreign policy (that's doctrine's job).
 
 Two factions can share a government type and still be bitter enemies. A federation and another federation may both be democratic internally but have completely opposing doctrines and interests.
 
@@ -122,11 +122,11 @@ Two factions can share a government type and still be bitter enemies. A federati
 | Government | Character |
 |---|---|
 | Federation | Balanced, regulated, stable |
-| Corporate | Pro-trade, low regulation, profit-maximizing |
+| Corporate | Pro-trade, low regulation, profit-maximising |
 | Authoritarian | State-controlled, price-fixed, rigid |
 | Frontier | Lawless, unregulated, dangerous |
 | Cooperative | Worker-owned, egalitarian, community-focused |
-| Technocratic | Innovation-driven, high-tier specialization |
+| Technocratic | Innovation-driven, high-tier specialisation |
 | Militarist | War economy, resource-hungry, mobilized |
 | Theocratic | Ideological, community-driven, insular |
 
@@ -174,7 +174,7 @@ These push factions toward conflict. Most are persistent and cumulative — they
 | Resource envy | *Planned* | — | Weaker-economy faction resents richer neighbor; driven by GDP/production gap |
 | Territory envy | *Planned* | — | Smaller faction looking at larger neighbor's territory; scales with size disparity |
 | Historical grievance | *Planned (War)* | — | Lost territory in a previous war — needs the war system to produce the underlying record |
-| Player actions (hostile) | *Planned* | — | Mass smuggling in faction space, hostile player behavior aggregated |
+| Player actions (hostile) | *Planned* | — | Mass smuggling in faction space, hostile player behaviour aggregated |
 | Trade competition | *Planned* | — | Two mercantile factions competing for the same routes |
 
 **Example compound scenario (today's drivers)**: The Kessari Dominion (expansionist, authoritarian) shares a long border with the Terran Sovereignty (protectionist, federation). Per-drift-tick contributions: baseline -0.05, border -0.02×N (for N shared lanes), doctrine -0.06 (expansionist vs protectionist), government -0.04 (authoritarian vs federation). With 5 shared border lanes that's -0.25/tick — visible negative drift, war zone in a few hundred ticks.
@@ -281,7 +281,7 @@ Border conflicts are ambient, low-stakes friction events that fire when a factio
 > - **Economy effects**: war modifiers feed into the existing economy processor — production penalties, war goods demand spikes, volatility increases. Attacker pays economy-wide; defender only on the front line.
 > - **Alliance in war**: co-defenders contribute military output at reduced exhaustion cost. Can withdraw if overextended. See alliance mechanics §2.1 and [war-system.md](../../planned/war-system.md) §11.
 
-Relations (§2) drive both layers — negative drift pushes factions through border conflicts into full wars. Doctrine (§1) influences declaration thresholds and war behavior.
+Relations (§2) drive both layers — negative drift pushes factions through border conflicts into full wars. Doctrine (§1) influences declaration thresholds and war behaviour.
 
 ---
 
@@ -357,7 +357,7 @@ Rivalries are not hard-coded. They emerge naturally from the relation system (§
 
 ### Starting Relation Scores (Implemented as zero-init)
 
-All faction-pair relations are seeded at score 0 at world-gen time, *not* pre-nudged by doctrine compatibility or government opposition. The relations processor then immediately starts drifting them — within the first few hundred ticks the doctrine + government + border drivers produce a recognizable political landscape without needing a hand-tuned starting matrix. This was the simpler implementation choice and gives processor tuning a clean baseline.
+All faction-pair relations are seeded at score 0 at world-gen time, *not* pre-nudged by doctrine compatibility or government opposition. The relations processor then immediately starts drifting them — within the first few hundred ticks the doctrine + government + border drivers produce a recognisable political landscape without needing a hand-tuned starting matrix. This was the simpler implementation choice and gives processor tuning a clean baseline.
 
 All faction names, lore, and color choices are provisional. The roster will grow as the game scales.
 
@@ -367,7 +367,7 @@ All faction names, lore, and color choices are provisional. The roster will grow
 
 **Status: Implemented.** Procedural generation in `lib/engine/faction-gen.ts`.
 
-12 minor factions at default universe scale, 18 at 10K scale. Both values come from `UNIVERSE_GEN.MINOR_FACTION_COUNT` and scale with the universe preset. Minors use the same doctrine pool as majors — doctrine behavior scales with territory size, not faction category. An expansionist minor is a regional nuisance; an expansionist major is a galactic threat. Minor governments and doctrines are picked randomly from the full pool at world-gen time.
+12 minor factions at default universe scale, 18 at 10K scale. Both values come from `UNIVERSE_GEN.MINOR_FACTION_COUNT` and scale with the universe preset. Minors use the same doctrine pool as majors — doctrine behaviour scales with territory size, not faction category. An expansionist minor is a regional nuisance; an expansionist major is a galactic threat. Minor governments and doctrines are picked randomly from the full pool at world-gen time.
 
 **Starting size**: minors get the same single-homeworld treatment as majors — one developed homeworld, spaced and seed-biased alongside every other faction's. There is no seeded territory floor and no seeded major/minor size difference: **status emerges from expansion** (§1). A minor is simply a faction whose identity (name/government/doctrine) reads as regional; whether it stays small or grows into a power is settled on the map.
 

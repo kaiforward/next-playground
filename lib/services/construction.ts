@@ -21,7 +21,7 @@ import {
 } from "@/lib/engine/construction-readout";
 import { orderOpenProjects } from "@/lib/engine/construction";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { yieldsOf } from "@/lib/engine/resources";
 import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
@@ -57,14 +57,7 @@ function foundingSupplyBySource(
     const states = toGoodMarketStates({
       buildings: buildings.get(sourceId) ?? {},
       population: source.population,
-      yields: resourceVectorFromColumns(
-        {
-          yieldGas: source.yieldGas, yieldMinerals: source.yieldMinerals, yieldOre: source.yieldOre,
-          yieldBiomass: source.yieldBiomass, yieldArable: source.yieldArable,
-          yieldWater: source.yieldWater, yieldRadioactive: source.yieldRadioactive,
-        },
-        "yield",
-      ),
+      yields: yieldsOf(source),
       markets: marketRows.get(sourceId) ?? [],
     });
     supply.set(

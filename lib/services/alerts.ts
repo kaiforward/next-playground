@@ -40,7 +40,7 @@ import { getWorld } from "@/lib/world/store";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
 import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
-import { resourceVectorFromColumns } from "@/lib/engine/resources";
+import { slotCapOf } from "@/lib/engine/resources";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import {
   habitableHousingHeadroom, queuedBuildLevelsBySystem,
@@ -144,22 +144,6 @@ function buildOpportunitySortKey(goodId: string, score: number): number {
   return band + offset;
 }
 
-/** The extractor-slot ResourceVector `hasNoHousingHeadroom`'s per-system feasibility read needs. */
-function systemSlotCap(system: WorldSystem) {
-  return resourceVectorFromColumns(
-    {
-      slotGas: system.slotGas,
-      slotMinerals: system.slotMinerals,
-      slotOre: system.slotOre,
-      slotBiomass: system.slotBiomass,
-      slotArable: system.slotArable,
-      slotWater: system.slotWater,
-      slotRadioactive: system.slotRadioactive,
-    },
-    "slot",
-  );
-}
-
 /**
  * No housing headroom's queue-adjusted headroom read. `habitableHousingHeadroom`
  * (lib/engine/directed-build.ts:213) takes a `BuildSystemState`, and its `buildings` here is folded
@@ -194,7 +178,7 @@ function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number
     control: system.control,
     population: system.population,
     buildings,
-    slotCap: systemSlotCap(system),
+    slotCap: slotCapOf(system),
     generalSpace: system.generalSpace,
     habitableSpace: system.habitableSpace,
     goods: [],

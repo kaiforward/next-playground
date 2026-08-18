@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getAtlas } from "@/lib/services/atlas";
-import type { World, WorldSystem } from "@/lib/world/types";
+import { regionInfos } from "@/lib/services/world-index";
+import type { World } from "@/lib/world/types";
 
 let world: World;
 
@@ -14,17 +15,6 @@ beforeEach(() => {
 afterEach(() => {
   clearWorld();
 });
-
-/** Group systems by regionId, preserving world.systems order within each region. */
-function groupSystemsByRegion(systems: WorldSystem[]): Map<string, WorldSystem[]> {
-  const byRegion = new Map<string, WorldSystem[]>();
-  for (const s of systems) {
-    const list = byRegion.get(s.regionId) ?? [];
-    list.push(s);
-    byRegion.set(s.regionId, list);
-  }
-  return byRegion;
-}
 
 describe("getAtlas", () => {
   it("returns regions/systems/connections/factions in the expected shape", () => {
@@ -89,49 +79,11 @@ describe("getAtlas", () => {
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
   });
 
-  it("derives a region's dominant faction from its most-represented owning faction", () => {
-    const byRegion = groupSystemsByRegion(world.systems);
-    // A region with >=3 systems lets us give one faction a strict majority
-    // (2 systems) over a second faction (1 system) without a tie.
-    const [majorityRegionId, majoritySystems] = [...byRegion.entries()].find(
-      ([, list]) => list.length >= 3,
-    )!;
-
-    const factionA = world.factions[0].id;
-    const factionB = world.factions[1].id;
-    const overrides = new Map<string, string>();
-    majoritySystems.forEach((s, i) => {
-      overrides.set(s.id, i < majoritySystems.length - 1 ? factionA : factionB);
-    });
-
-    const systems = world.systems.map((s) => {
-      const factionId = overrides.get(s.id);
-      return factionId === undefined ? s : { ...s, factionId };
-    });
-    setWorld({ ...world, systems });
-
-    const region = getAtlas().regions.find((r) => r.id === majorityRegionId)!;
-    expect(region.dominantFactionId).toBe(factionA);
-    expect(region.dominantGovernmentType).toBe(
-      world.factions.find((f) => f.id === factionA)!.governmentType,
-    );
-  });
-
-  it("falls back to 'frontier' for a region with no faction-owned systems", () => {
-    const byRegion = groupSystemsByRegion(world.systems);
-    const [frontierRegionId, frontierSystems] = [...byRegion.entries()].find(
-      ([, list]) => list.length >= 1,
-    )!;
-    const frontierIds = new Set(frontierSystems.map((s) => s.id));
-
-    const systems = world.systems.map((s) =>
-      frontierIds.has(s.id) ? { ...s, factionId: null } : s,
-    );
-    setWorld({ ...world, systems });
-
-    const region = getAtlas().regions.find((r) => r.id === frontierRegionId)!;
-    expect(region.dominantFactionId).toBeNull();
-    expect(region.dominantGovernmentType).toBe("frontier");
+  // The dominant-faction/government derivation is asserted at its owner
+  // (world-index.test.ts → regionInfos); this is the wiring — the atlas serves that
+  // derivation rather than a second one of its own.
+  it("serves the shared region index rather than re-deriving regions", () => {
+    expect(getAtlas().regions).toEqual(regionInfos());
   });
 
   it("derives developed flag from system.control, not popCap", () => {

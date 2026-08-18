@@ -10,7 +10,7 @@ describe("ContributorBars", () => {
   it("renders a labelled row per contributor with its rounded percentage", () => {
     render(
       <ContributorBars
-        segments={[
+        contributors={[
           { label: "Goods shortfall", value: 0.4, color: "red" },
           { label: "Tax pressure", value: 0.1, color: "blue" },
         ]}
@@ -27,7 +27,7 @@ describe("ContributorBars", () => {
     // The bar is full either way; the printed figure is the only thing that separates "at the
     // ceiling" from "far past it".
     render(
-      <ContributorBars segments={[{ label: "Goods shortfall", value: 2.4, color: "red" }]} total={1} />,
+      <ContributorBars contributors={[{ label: "Goods shortfall", value: 2.4, color: "red" }]} total={1} />,
     );
     expect(screen.getByText("240%")).toBeInTheDocument();
     expect(screen.queryByText("100%")).not.toBeInTheDocument();
@@ -35,7 +35,7 @@ describe("ContributorBars", () => {
 
   it("a zero scale renders real rows with no NaN reaching the markup", () => {
     const { container } = render(
-      <ContributorBars segments={[{ label: "Goods shortfall", value: 0.4, color: "red" }]} total={0} />,
+      <ContributorBars contributors={[{ label: "Goods shortfall", value: 0.4, color: "red" }]} total={0} />,
     );
     expect(screen.getByText("Goods shortfall")).toBeInTheDocument();
     expect(screen.getByText("0%")).toBeInTheDocument();

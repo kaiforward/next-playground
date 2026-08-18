@@ -3,7 +3,7 @@ import {
   buildLogisticsRows,
   aggregateLogisticsFlows,
   type GoodFlowAggregate,
-} from "@/lib/engine/logistics";
+} from "@/lib/engine/logistics-readout";
 import type { SystemFlowRow } from "@/lib/engine/system-trade-flow";
 import type { SubstrateGoodRate } from "@/lib/engine/physical-economy";
 
@@ -42,7 +42,7 @@ describe("buildLogisticsRows", () => {
     expect(food.externalNet).toBe(-4);
   });
 
-  it("normalizes each column to its own max, and counts active/traded goods", () => {
+  it("normalises each column to its own max, and counts active/traded goods", () => {
     const flows = new Map<string, GoodFlowAggregate>([
       ["water", agg({ exportLogistics: 6 })], // export total 6
       ["food", agg({ importLogistics: 4 })], // import total 4

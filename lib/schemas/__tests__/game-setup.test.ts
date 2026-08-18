@@ -7,12 +7,12 @@ describe("saveGameSchema", () => {
     expect(saveGameSchema.safeParse({ name: "My Save 1" }).success).toBe(true);
   });
 
-  it("rejects a name that sanitizes to empty", () => {
+  it("rejects a name that sanitises to empty", () => {
     expect(saveGameSchema.safeParse({ name: "???" }).success).toBe(false);
   });
 
   it("rejects a name reserved for the autosave slot", () => {
-    // "autosave", "AUTOSAVE", "Auto Save" all sanitize to AUTOSAVE_NAME and
+    // "autosave", "AUTOSAVE", "Auto Save" all sanitise to AUTOSAVE_NAME and
     // would otherwise clobber (or be clobbered by) the ambient autosave.
     expect(saveGameSchema.safeParse({ name: AUTOSAVE_NAME }).success).toBe(false);
     expect(saveGameSchema.safeParse({ name: "AUTOSAVE" }).success).toBe(false);
@@ -31,7 +31,7 @@ describe("loadGameSchema", () => {
     expect(loadGameSchema.safeParse({ name: AUTOSAVE_NAME }).success).toBe(true);
   });
 
-  it("rejects empty / empty-sanitizing names (mirrors saveGameSchema)", () => {
+  it("rejects empty / empty-sanitising names (mirrors saveGameSchema)", () => {
     expect(loadGameSchema.safeParse({ name: "" }).success).toBe(false);
     expect(loadGameSchema.safeParse({ name: "???" }).success).toBe(false);
   });

@@ -5,6 +5,7 @@
 
 import type { ConnectionInfo } from "./navigation";
 import { hopDuration } from "./travel";
+import { buildHopAdjacency } from "./visibility";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -31,12 +32,15 @@ export type RouteValidationResult =
 export type FuelAdjacency = Map<string, { toSystemId: string; fuelCost: number }[]>;
 
 /**
- * Build a directional fuel adjacency list from a flat connection array.
+ * Build a **directional**, fuel-weighted adjacency list from a flat connection array — one edge per
+ * connection, in the direction the connection was declared. The hop graph
+ * (`buildHopAdjacency`, `lib/engine/visibility.ts`) is the other one: bidirectional and unweighted.
+ *
  * Exported so callers that run many path queries over the same graph (e.g. the
  * map's fleet-transit layer) can build it once and pass it in, instead of
  * rebuilding it per query.
  */
-export function buildAdjacencyList(connections: ConnectionInfo[]): FuelAdjacency {
+export function buildFuelAdjacency(connections: ConnectionInfo[]): FuelAdjacency {
   const adj: FuelAdjacency = new Map();
   for (const c of connections) {
     let neighbors = adj.get(c.fromSystemId);
@@ -69,6 +73,65 @@ function sumTravelDuration(
 // ── Dijkstra — lowest-fuel path ────────────────────────────────
 
 /**
+ * Dijkstra over the fuel adjacency, with a linear-scan priority queue (fine for small graphs).
+ * `maxFuel` drops any node the budget cannot reach; `stopAt` ends the search the moment that node
+ * is the cheapest unvisited one, i.e. once its cost is final.
+ * Returns the settled cost map and the predecessor map `reconstructPath` walks.
+ */
+function dijkstra(
+  originId: string,
+  adjacency: FuelAdjacency,
+  options: { maxFuel?: number; stopAt?: string } = {},
+): { dist: Map<string, number>; prev: Map<string, string> } {
+  const dist = new Map<string, number>();
+  const prev = new Map<string, string>();
+  const visited = new Set<string>();
+
+  dist.set(originId, 0);
+
+  while (true) {
+    // Pick unvisited node with smallest distance
+    let current: string | null = null;
+    let currentDist = Infinity;
+    for (const [node, d] of dist) {
+      if (!visited.has(node) && d < currentDist) {
+        current = node;
+        currentDist = d;
+      }
+    }
+
+    if (current === null) break; // No more reachable nodes
+    if (current === options.stopAt) break; // Target cost is final
+
+    visited.add(current);
+
+    const neighbors = adjacency.get(current) ?? [];
+    for (const { toSystemId, fuelCost } of neighbors) {
+      if (visited.has(toSystemId)) continue;
+      const newDist = currentDist + fuelCost;
+      if (options.maxFuel !== undefined && newDist > options.maxFuel) continue;
+      if (newDist < (dist.get(toSystemId) ?? Infinity)) {
+        dist.set(toSystemId, newDist);
+        prev.set(toSystemId, current);
+      }
+    }
+  }
+
+  return { dist, prev };
+}
+
+/** Walk the predecessor chain back from `target`; the returned path runs origin-first. */
+function reconstructPath(prev: Map<string, string>, target: string): string[] {
+  const path: string[] = [];
+  let node: string | undefined = target;
+  while (node !== undefined) {
+    path.unshift(node);
+    node = prev.get(node);
+  }
+  return path;
+}
+
+/**
  * Find the lowest-fuel-cost path between two systems using Dijkstra.
  * Returns null if no path exists.
  * Optional shipSpeed adjusts travel duration calculations.
@@ -84,56 +147,15 @@ export function findShortestPath(
 ): PathResult | null {
   if (originId === destinationId) return null;
 
-  const adjacency = adj ?? buildAdjacencyList(connections);
+  const adjacency = adj ?? buildFuelAdjacency(connections);
+  const { dist, prev } = dijkstra(originId, adjacency, { stopAt: destinationId });
 
-  // dist[node] = lowest fuel cost from origin to node
-  const dist = new Map<string, number>();
-  const prev = new Map<string, string>();
-  const visited = new Set<string>();
+  const totalFuelCost = dist.get(destinationId);
+  if (totalFuelCost === undefined) return null;
 
-  dist.set(originId, 0);
-
-  // Simple priority queue via linear scan (fine for small graphs)
-  while (true) {
-    // Pick unvisited node with smallest distance
-    let current: string | null = null;
-    let currentDist = Infinity;
-    for (const [node, d] of dist) {
-      if (!visited.has(node) && d < currentDist) {
-        current = node;
-        currentDist = d;
-      }
-    }
-
-    if (current === null) break; // No more reachable nodes
-    if (current === destinationId) break; // Found destination
-
-    visited.add(current);
-
-    const neighbors = adjacency.get(current) ?? [];
-    for (const { toSystemId, fuelCost } of neighbors) {
-      if (visited.has(toSystemId)) continue;
-      const newDist = currentDist + fuelCost;
-      if (newDist < (dist.get(toSystemId) ?? Infinity)) {
-        dist.set(toSystemId, newDist);
-        prev.set(toSystemId, current);
-      }
-    }
-  }
-
-  // Reconstruct path
-  if (!dist.has(destinationId)) return null;
-
-  const path: string[] = [];
-  let node: string | undefined = destinationId;
-  while (node !== undefined) {
-    path.unshift(node);
-    node = prev.get(node);
-  }
-
+  const path = reconstructPath(prev, destinationId);
   if (path[0] !== originId) return null; // Disconnected
 
-  const totalFuelCost = dist.get(destinationId)!;
   const totalTravelDuration = sumTravelDuration(path, adjacency, shipSpeed);
 
   return { path, totalFuelCost, totalTravelDuration };
@@ -152,53 +174,15 @@ export function findReachableSystems(
   connections: ConnectionInfo[],
   shipSpeed?: number,
 ): Map<string, ReachableSystem> {
-  const adj = buildAdjacencyList(connections);
+  const adj = buildFuelAdjacency(connections);
+  const { dist, prev } = dijkstra(originId, adj, { maxFuel: currentFuel });
   const result = new Map<string, ReachableSystem>();
-
-  // Dijkstra with fuel constraint
-  const dist = new Map<string, number>();
-  const prev = new Map<string, string>();
-  const visited = new Set<string>();
-
-  dist.set(originId, 0);
-
-  while (true) {
-    let current: string | null = null;
-    let currentDist = Infinity;
-    for (const [node, d] of dist) {
-      if (!visited.has(node) && d < currentDist) {
-        current = node;
-        currentDist = d;
-      }
-    }
-
-    if (current === null) break;
-
-    visited.add(current);
-
-    const neighbors = adj.get(current) ?? [];
-    for (const { toSystemId, fuelCost } of neighbors) {
-      if (visited.has(toSystemId)) continue;
-      const newDist = currentDist + fuelCost;
-      if (newDist <= currentFuel && newDist < (dist.get(toSystemId) ?? Infinity)) {
-        dist.set(toSystemId, newDist);
-        prev.set(toSystemId, current);
-      }
-    }
-  }
 
   // Build results (exclude origin)
   for (const [systemId, fuelCost] of dist) {
     if (systemId === originId) continue;
 
-    // Reconstruct path
-    const path: string[] = [];
-    let pnode: string | undefined = systemId;
-    while (pnode !== undefined) {
-      path.unshift(pnode);
-      pnode = prev.get(pnode);
-    }
-
+    const path = reconstructPath(prev, systemId);
     const travelDuration = sumTravelDuration(path, adj, shipSpeed);
     result.set(systemId, { systemId, fuelCost, travelDuration, path });
   }
@@ -208,33 +192,35 @@ export function findReachableSystems(
 
 // ── Hop distance helpers ─────────────────────────────────────────
 
-/** Build a bidirectional adjacency list for hop counting. */
-function buildHopAdjacencyList(
-  connections: ConnectionInfo[],
-): { adj: Map<string, string[]>; allSystems: Set<string> } {
-  const adj = new Map<string, string[]>();
-  const allSystems = new Set<string>();
+/**
+ * BFS hop-count from one origin over a bidirectional adjacency list.
+ * Always includes the origin at 0; `maxHops`, when given, stops the frontier at that depth.
+ */
+function bfsHopDistances(
+  origin: string,
+  adj: Map<string, string[]>,
+  maxHops?: number,
+): Map<string, number> {
+  const distances = new Map<string, number>();
+  distances.set(origin, 0);
+  const queue: string[] = [origin];
+  let head = 0;
 
-  for (const c of connections) {
-    allSystems.add(c.fromSystemId);
-    allSystems.add(c.toSystemId);
+  while (head < queue.length) {
+    const current = queue[head++];
+    const currentDist = distances.get(current) ?? 0;
+    if (maxHops !== undefined && currentDist >= maxHops) continue;
 
-    let neighborsFrom = adj.get(c.fromSystemId);
-    if (!neighborsFrom) {
-      neighborsFrom = [];
-      adj.set(c.fromSystemId, neighborsFrom);
+    const neighbors = adj.get(current) ?? [];
+    for (const neighbor of neighbors) {
+      if (!distances.has(neighbor)) {
+        distances.set(neighbor, currentDist + 1);
+        queue.push(neighbor);
+      }
     }
-    neighborsFrom.push(c.toSystemId);
-
-    let neighborsTo = adj.get(c.toSystemId);
-    if (!neighborsTo) {
-      neighborsTo = [];
-      adj.set(c.toSystemId, neighborsTo);
-    }
-    neighborsTo.push(c.fromSystemId);
   }
 
-  return { adj, allSystems };
+  return distances;
 }
 
 // ── All-pairs hop distances (BFS) ──────────────────────────────
@@ -249,29 +235,11 @@ function buildHopAdjacencyList(
 export function computeAllHopDistances(
   connections: ConnectionInfo[],
 ): Map<string, Map<string, number>> {
-  const { adj, allSystems } = buildHopAdjacencyList(connections);
+  const adj = buildHopAdjacency(connections);
   const result = new Map<string, Map<string, number>>();
 
-  for (const origin of allSystems) {
-    const distances = new Map<string, number>();
-    distances.set(origin, 0);
-    const queue: string[] = [origin];
-    let head = 0;
-
-    while (head < queue.length) {
-      const current = queue[head++];
-      const currentDist = distances.get(current) ?? 0;
-      const neighbors = adj.get(current) ?? [];
-
-      for (const neighbor of neighbors) {
-        if (!distances.has(neighbor)) {
-          distances.set(neighbor, currentDist + 1);
-          queue.push(neighbor);
-        }
-      }
-    }
-
-    result.set(origin, distances);
+  for (const origin of adj.keys()) {
+    result.set(origin, bfsHopDistances(origin, adj));
   }
 
   return result;
@@ -290,30 +258,11 @@ export function computeBoundedHopDistances(
   connections: ConnectionInfo[],
   maxHops: number,
 ): Map<string, Map<string, number>> {
-  const { adj, allSystems } = buildHopAdjacencyList(connections);
+  const adj = buildHopAdjacency(connections);
   const result = new Map<string, Map<string, number>>();
 
-  for (const origin of allSystems) {
-    const distances = new Map<string, number>();
-    distances.set(origin, 0);
-    const queue: string[] = [origin];
-    let head = 0;
-
-    while (head < queue.length) {
-      const current = queue[head++];
-      const currentDist = distances.get(current) ?? 0;
-      if (currentDist >= maxHops) continue;
-
-      const neighbors = adj.get(current) ?? [];
-      for (const neighbor of neighbors) {
-        if (!distances.has(neighbor)) {
-          distances.set(neighbor, currentDist + 1);
-          queue.push(neighbor);
-        }
-      }
-    }
-
-    result.set(origin, distances);
+  for (const origin of adj.keys()) {
+    result.set(origin, bfsHopDistances(origin, adj, maxHops));
   }
 
   return result;
@@ -330,27 +279,7 @@ export function boundedHopsFromOrigin(
   connections: ConnectionInfo[],
   maxHops: number,
 ): Map<string, number> {
-  const { adj } = buildHopAdjacencyList(connections);
-  const distances = new Map<string, number>();
-  distances.set(origin, 0);
-  const queue: string[] = [origin];
-  let head = 0;
-
-  while (head < queue.length) {
-    const current = queue[head++];
-    const currentDist = distances.get(current) ?? 0;
-    if (currentDist >= maxHops) continue;
-
-    const neighbors = adj.get(current) ?? [];
-    for (const neighbor of neighbors) {
-      if (!distances.has(neighbor)) {
-        distances.set(neighbor, currentDist + 1);
-        queue.push(neighbor);
-      }
-    }
-  }
-
-  return distances;
+  return bfsHopDistances(origin, buildHopAdjacency(connections), maxHops);
 }
 
 // ── Linear route validation (server-side) ──────────────────────
@@ -370,7 +299,7 @@ export function validateRoute(
     return { ok: false, error: "Route must have at least 2 systems." };
   }
 
-  const adj = buildAdjacencyList(connections);
+  const adj = buildFuelAdjacency(connections);
   let totalFuelCost = 0;
   let totalTravelDuration = 0;
 

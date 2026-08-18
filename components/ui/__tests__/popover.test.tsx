@@ -505,11 +505,13 @@ describe("Popover — exclusivity", () => {
   });
 });
 
-describe("Popover — disableClickOpen suppresses only the click-to-open path", () => {
+describe("Popover — clickInert takes the click out of BOTH the open and the close gesture", () => {
   // Click-to-open itself has no dedicated test elsewhere in this file (renderPopover()'s trigger has
-  // never been clicked above) — these three cases close that gap from the opt-out side: a plain
-  // click does open by default, `disableClickOpen` suppresses exactly that and nothing else, and
-  // the row's own click handler still runs either way (the opt-out exists FOR that handler).
+  // never been clicked above) — these cases close that gap from the opt-out side: a plain click does
+  // open by default and Radix's toggle would close an open popover, `clickInert` suppresses both
+  // halves of that toggle and nothing else, and the row's own click handler still runs either way
+  // (the opt-out exists FOR that handler). The already-open case is the one that pins the close
+  // half: hover-open a Tracker row's card, click the row to fly the map, and the card stays up.
 
   it("without the opt-out, a click opens the popover (the behaviour being opted out of)", async () => {
     const { user } = setup();
@@ -522,7 +524,7 @@ describe("Popover — disableClickOpen suppresses only the click-to-open path", 
     const { user } = setup();
     const onRowClick = vi.fn();
     render(
-      <Popover openDelay={OPEN_DELAY} disableClickOpen>
+      <Popover openDelay={OPEN_DELAY} clickInert>
         <PopoverTrigger>
           <button type="button" onClick={onRowClick}>
             System row
@@ -545,7 +547,7 @@ describe("Popover — disableClickOpen suppresses only the click-to-open path", 
   it("with the opt-out, hover still opens the popover after openDelay", async () => {
     const { user } = setup();
     render(
-      <Popover openDelay={OPEN_DELAY} disableClickOpen>
+      <Popover openDelay={OPEN_DELAY} clickInert>
         <PopoverTrigger>
           <button type="button">System row</button>
         </PopoverTrigger>
@@ -559,10 +561,36 @@ describe("Popover — disableClickOpen suppresses only the click-to-open path", 
     expect(await screen.findByText("System vitals")).toBeInTheDocument();
   });
 
+  it("with the opt-out, clicking a trigger whose popover is ALREADY open leaves it open", async () => {
+    const { user } = setup();
+    const onRowClick = vi.fn();
+    render(
+      <Popover openDelay={OPEN_DELAY} clickInert>
+        <PopoverTrigger>
+          <button type="button" onClick={onRowClick}>
+            System row
+          </button>
+        </PopoverTrigger>
+        <PopoverContent>
+          <p>System vitals</p>
+        </PopoverContent>
+      </Popover>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "System row" });
+    await user.hover(trigger);
+    expect(await screen.findByText("System vitals")).toBeInTheDocument();
+
+    await user.click(trigger);
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    await wait(200);
+    expect(screen.getByText("System vitals")).toBeInTheDocument();
+  });
+
   it("with the opt-out, keyboard focus still opens the popover", async () => {
     const { user } = setup();
     render(
-      <Popover openDelay={OPEN_DELAY} disableClickOpen>
+      <Popover openDelay={OPEN_DELAY} clickInert>
         <PopoverTrigger>
           <button type="button">System row</button>
         </PopoverTrigger>
@@ -578,7 +606,7 @@ describe("Popover — disableClickOpen suppresses only the click-to-open path", 
 });
 
 describe("Popover — pointerInert takes the pointer out of BOTH the open and the close gesture", () => {
-  // Mirrors the disableClickOpen block above, from the pointer side: a plain hover does open, and a
+  // Mirrors the clickInert block above, from the pointer side: a plain hover does open, and a
   // pointer-leave does close, by default; `pointerInert` suppresses both and nothing else, leaving
   // click and keyboard-focus opens untouched. The alert bar's chips need hover to mean "raise clear
   // of the overlapped stack" instead — and, having opened by click, must not then be dismissed by

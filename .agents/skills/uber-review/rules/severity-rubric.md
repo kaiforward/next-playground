@@ -26,7 +26,7 @@ Examples:
 
 ## `major`
 
-A clear bug, contract violation, or convention break that has a **localized** fix. Other reviewers can still meaningfully review the rest of the diff.
+A clear bug, contract violation, or convention break that has a **localised** fix. Other reviewers can still meaningfully review the rest of the diff.
 
 Examples:
 - Missing Zod validation at an API boundary

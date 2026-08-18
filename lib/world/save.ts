@@ -1,5 +1,5 @@
 /**
- * Pure save serialization for `World`. No `fs`/`process.env`/Node imports —
+ * Pure save serialisation for `World`. No `fs`/`process.env`/Node imports —
  * the disk adapter lives in `save-files.ts`, the only Node-edge file in
  * `lib/world`; this module only turns a `World` into a JSON string and back.
  *
@@ -17,7 +17,7 @@
  * as 0), and the stale per-building value is dropped the first time `flattenBuildings`
  * rebuilds the rows — so the worst case is one system starting its next collapse from
  * zero rather than mid-accrual.
- * `deserializeWorld` does structural spot-checks, not exhaustive validation,
+ * `deserialiseWorld` does structural spot-checks, not exhaustive validation,
  * so an old save's shape can drift from the current `World` type without
  * tripping any of the checks below — the version bump is what makes old
  * saves fail cleanly ("saves break on upgrade") instead of loading a stale
@@ -26,19 +26,19 @@
 
 import type { World } from "./types";
 
-export const SAVE_FORMAT_VERSION = 14;
+export const SAVE_FORMAT_VERSION = 15;
 
 /** Reserved save name the tick loop autosaves to; the start screen's "Continue" loads it. */
 export const AUTOSAVE_NAME = "autosave";
 
 /**
- * Canonical save-name sanitizer — strips everything but `[a-z0-9-_]` so a
+ * Canonical save-name sanitiser — strips everything but `[a-z0-9-_]` so a
  * player-typed name can never escape `saves/` via path separators or
  * traversal sequences (`../`). Lives here (pure) rather than in the disk
- * adapter so the save-name form schema can reject names that sanitize to
+ * adapter so the save-name form schema can reject names that sanitise to
  * empty without importing Node-edge code.
  */
-export function sanitizeSaveName(name: string): string {
+export function sanitiseSaveName(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9-_]/g, "");
 }
 
@@ -47,11 +47,11 @@ interface SaveFile {
   world: World;
 }
 
-export type DeserializeResult =
+export type DeserialiseResult =
   | { ok: true; world: World }
   | { ok: false; error: string };
 
-export function serializeWorld(world: World): string {
+export function serialiseWorld(world: World): string {
   const save: SaveFile = { formatVersion: SAVE_FORMAT_VERSION, world };
   return JSON.stringify(save);
 }
@@ -64,7 +64,7 @@ export function serializeWorld(world: World): string {
  * fields the map/tile geometry depends on), not exhaustive validation:
  * pre-1.0 saves are trusted local files, not untrusted network input.
  */
-export function deserializeWorld(json: string): DeserializeResult {
+export function deserialiseWorld(json: string): DeserialiseResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);

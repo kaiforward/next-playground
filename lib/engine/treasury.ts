@@ -1,6 +1,6 @@
 /**
  * Faction treasury math — pure (no I/O, no world imports). Income lines value
- * real economic activity (employed heads by grade; realized physical output at
+ * real economic activity (employed heads by grade; realised physical output at
  * fixed reference values); bills are paid in a fixed priority ladder
  * maintenance → logistics → construction, so flow costs (a stalled queue)
  * starve before stock costs (unpaid upkeep) compound. Balance never goes
@@ -85,7 +85,7 @@ export function headsTaxIncome(
 }
 
 export function productionTaxIncome(
-  realizedByGood: ReadonlyMap<string, number>,
+  realisedByGood: ReadonlyMap<string, number>,
   referenceValues: Record<string, number>,
   rate: number,
   rateMult: number,
@@ -93,7 +93,7 @@ export function productionTaxIncome(
 ): number {
   const scale = Number.isFinite(economyScale) && economyScale > 0 ? economyScale : 1;
   let assessed = 0;
-  for (const [goodId, units] of realizedByGood) {
+  for (const [goodId, units] of realisedByGood) {
     const ref = referenceValues[goodId];
     if (ref === undefined || !Number.isFinite(ref) || !Number.isFinite(units) || units <= 0) continue;
     assessed += (units / scale) * ref;
@@ -181,7 +181,7 @@ const safeFunding = (f: number): number => (Number.isFinite(f) ? clamp(f, 0, 1) 
  * Flow-only maintenance output malus: a production multiplier scaling linearly
  * with the funding shortfall (1 at full funding, 1 − slope at zero). Rides
  * productionSuppress in the market-tick builder — it must never feed the
- * buildingUsed utilization signal, or the flow-only promise silently breaks.
+ * buildingUsed utilisation signal, or the flow-only promise silently breaks.
  */
 export function maintenanceOutputMalus(funding: number, slope: number): number {
   return 1 - clamp(slope, 0, 1) * (1 - safeFunding(funding));

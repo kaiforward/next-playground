@@ -11,7 +11,7 @@ function goodDisplayName(goodId: string): string {
  * Anchor shifts surface as "X demand up/down" (high demand = high price).
  * Returns e.g. "Food, Medicine demand up · Production slowed".
  */
-export function summarizePhaseEffects(phase: EventPhaseDefinition): string {
+export function summarisePhaseEffects(phase: EventPhaseDefinition): string {
   const parts: string[] = [];
 
   const demandUp: string[] = [];

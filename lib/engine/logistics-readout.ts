@@ -1,7 +1,8 @@
 /**
- * Pure builders for the per-system Logistics tab. The service in
+ * Pure builders for the per-system Logistics tab — a view model, not the mechanic. The service in
  * `lib/services/trade-flow.ts` window-sums raw flow rows and feeds them
- * through these helpers to produce the panel-facing shape.
+ * through these helpers to produce the panel-facing shape. Goods actually move in
+ * `lib/engine/directed-logistics.ts`.
  *
  * Pure: no I/O. Safe to unit-test against in-memory data.
  */

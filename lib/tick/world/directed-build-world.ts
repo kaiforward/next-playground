@@ -60,8 +60,8 @@ export interface ProposalPersistenceUpdate {
 export type FoundingStockLine = WorldFoundingStockLine;
 
 /** One system's best-ranked dropped production opportunity this run — the world-boundary shape of
- *  the engine's `BuildBlockReport` (`lib/engine/directed-build.ts`), which also owns `BuildDropReason`
- *  and the full reasoning behind `droppedRoi`. */
+ *  the engine's `BuildDropReport` (`lib/engine/directed-build.ts`), which owns the full reasoning
+ *  behind `droppedRoi`. */
 export interface BuildBlockedUpdate {
   systemId: string;
   reason: BuildDropReason;

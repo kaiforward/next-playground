@@ -20,7 +20,7 @@ You look for:
 
 - An API route reading `request.json()` / body / query params into logic without a Zod parse
 - A route mutating world state from an unvalidated, unbounded client value
-- A save/load path that builds a filesystem path from an unsanitized user-supplied name
+- A save/load path that builds a filesystem path from an unsanitised user-supplied name
 - `Cache-Control: immutable` (or a long `max-age`) on any `app/api/` response
 - A client component (or a constant it imports) reading a server-only env's resolved value
 
@@ -42,7 +42,7 @@ You look for:
 
 ## What to read
 
-You are on the PR-head working tree — `Read` the route handler, the schema, or `save-files.ts` to confirm whether a value is parsed/sanitized before use.
+You are on the PR-head working tree — `Read` the route handler, the schema, or `save-files.ts` to confirm whether a value is parsed/sanitised before use.
 
 ## Output
 

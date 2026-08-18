@@ -5,7 +5,7 @@ description: Multi-agent code review of a local branch or GitHub PR. Use when th
 
 # /uber-review — Multi-agent code review
 
-You are orchestrating a team of specialized reviewer sub-agents to review a code change. This file is your playbook — follow it step by step. Per-agent prompts and shared rules live next to this file in `prompts/` and `rules/`.
+You are orchestrating a team of specialised reviewer sub-agents to review a code change. This file is your playbook — follow it step by step. Per-agent prompts and shared rules live next to this file in `prompts/` and `rules/`.
 
 ## Inputs
 
@@ -30,11 +30,11 @@ Per-lens assignment at `standard` (Claude family shown; resolve tier names throu
 | Data contract | Opus | high | Cross-layer shape/semantics drift; the source of the subtlest confirmed findings (judgment, not checklist) |
 | Silent failures | Opus | high | Fallback-masking / denominator / guard-polarity class; top producer of confirmed real bugs |
 | Tests | Sonnet | high | Consumes the mutation survivor report (step 1.8) — discovery of vacuous coverage is mechanical now; the lens triages survivors and reviews changed tests for meaningfulness. **Escalate to Opus `high` if the sweep could not run** |
-| World integrity | Sonnet | high | Explicit invariant checklist (JSON-serializable, determinism, save surface). **Escalate to Opus when the diff touches `lib/world/save*` or the `World` type shape** — the miss cost there is save corruption |
+| World integrity | Sonnet | high | Explicit invariant checklist (JSON-serialisable, determinism, save surface). **Escalate to Opus when the diff touches `lib/world/save*` or the `World` type shape** — the miss cost there is save corruption |
 | Boundary safety | Sonnet | high | Checklist-driven: env reads, cache headers, Zod at the boundary, save paths |
 | Performance | Sonnet | high | Benching is procedural; findings have been minor/info. Escalate to Opus only for a perf-focused PR |
 | User journey | Sonnet | medium | UI-flow reasoning; rarely fires in this codebase |
-| Conventions | Haiku | medium | Rule-matching against `rules/code-standards.md`; held up on Haiku (PR 213) |
+| Conventions | Haiku | medium | Rule-matching against `rules/code-standards.md`; held up on Haiku (PR 213). **Escalate to Sonnet `medium` when its payload carries `## Duplication candidates`** — adjudicating a pair means opening both files and weighing four dimensions, which is judgment, not pattern-matching |
 
 Validator batches: blocker/major → Opus `high`, or the orchestrator verifies those findings directly (per the tier map, that verification is frontier work either way); mixed → Sonnet `medium`; all-minor → Haiku `low`.
 
@@ -111,7 +111,7 @@ Default chunk-size target is 20 files. Override with `--chunk-size=N`.
 
 #### Feature stem extraction
 
-For each file, strip recognized layer prefixes to extract a feature stem:
+For each file, strip recognised layer prefixes to extract a feature stem:
 
 | Path pattern | Feature stem |
 |--------------|--------------|
@@ -192,6 +192,27 @@ hand-building mutation experiments; it still reviews changed test files for mean
 missing premise coverage. If the sweep fails to run, dispatch the tests lens on Opus `high` (per
 the effort dial's escalation) and record the fallback in the report.
 
+### 1.9. Duplication scan — input for the conventions lens
+
+Run `npm run duplication -- "<changed .ts/.tsx files, space- or comma-separated>"` once for the whole
+diff, before dispatching reviewers (seconds; it always exits 0, and one quoted argument holding several
+paths is fine). Pass its output into the **conventions** reviewer's payload under a
+`## Duplication candidates` heading, filtered to the pairs whose changed-side file is in that
+reviewer's chunk. If it prints `DUPLICATION SCAN COMPARED NOTHING` on stderr, none of the paths reached
+it — fix the invocation and rerun rather than passing the empty section on.
+
+This is the one input that is deliberately not chunk-scoped. Every reviewer sees a slice of one diff, and
+the copy is almost always in a file the diff never touched — five byte-identical map hooks landed across
+five PRs and no diff of any size contained two of them. A tenth chunk-scoped lens would inherit exactly
+that blindness at the cost of another agent; repo-wide *search* is the missing capability, and it is
+mechanical. The conventions lens already owns "extract on the second occurrence", so it adjudicates the
+candidates rather than hunting for them.
+
+The script emits candidates, never findings — most of a sweep's pairs are correctly rejected. The
+`duplicate-implementation` nuance in `rules/code-standards.md` carries the bar and the worked rejection.
+If the scan fails to run, say so in the report and dispatch conventions unchanged; it is an input, not a
+gate.
+
 ### 2. Dispatch the architect
 
 Skip this section if `--skip-architect` is set; jump to step 5 with severity `clean`.
@@ -253,7 +274,7 @@ Otherwise:
 Skip this section if:
 - Architect returned `blocker` (pipeline already halted; only architect's findings get validated)
 - `--only=architect` was passed
-- `--skip-architect` was passed AND `--only` excludes downstream reviewers (rare; default behavior is "skip architect but run everyone else")
+- `--skip-architect` was passed AND `--only` excludes downstream reviewers (rare; default behaviour is "skip architect but run everyone else")
 
 **For each chunk** (computed in step 1.6), determine which reviewers run based on the chunk's file classification:
 
@@ -302,7 +323,7 @@ Log skipped reviewers with reason (e.g., "user-journey: skipped — no UI files 
 
 **Pass 1 — deterministic.**
 
-Collect all findings into a pool. Group by `(file, normalized_line, category)` where `normalized_line` is the start line (parse "42" or "42-48" → 42).
+Collect all findings into a pool. Group by `(file, normalised_line, category)` where `normalised_line` is the start line (parse "42" or "42-48" → 42).
 
 For each group with >1 finding:
 - Merge: pick the **highest** severity

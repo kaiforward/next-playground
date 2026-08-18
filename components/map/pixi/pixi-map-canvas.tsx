@@ -390,15 +390,15 @@ export function PixiMapCanvas({
     const p = pixiRef.current;
     if (!p || !pixiReady) return;
 
-    const mapSize = atlasData.meta.mapSize;
-    p.territoryLayer.sync(atlasData.systems, regionInfos, mapSize);
-    p.politicalTerritoryLayer.sync(atlasData.systems, atlasData.factions, mapSize);
-
-    // Shared Voronoi cells for the value choropleth — stashed on the ref so
-    // value-mode click hit-testing can reuse the same geometry.
-    const cells = buildSystemCells(atlasData.systems, mapSize);
+    // The map's one Voronoi diagram. Every territory grouping unions out of these cells and
+    // click hit-testing resolves against them, so it is built before anything that reads it
+    // and stashed on the ref for the pointer handlers.
+    const cells = buildSystemCells(atlasData.systems, atlasData.meta.mapSize);
     p.cells = cells;
-    p.valueChoroplethLayer.sync(cells, atlasData.systems);
+
+    p.territoryLayer.sync(cells, regionInfos);
+    p.politicalTerritoryLayer.sync(cells, atlasData.factions);
+    p.valueChoroplethLayer.sync(cells);
     p.valueChoroplethLayer.setFactionOutlines(
       p.politicalTerritoryLayer.getFactionUnions(),
       p.politicalTerritoryLayer.getFactionColors(),

@@ -9,17 +9,17 @@ import type { SystemUnrestRead } from "@/lib/types/api";
 // track at all.
 
 /**
- * Every absolutely-positioned mark in the block. `TrackRule` is the only thing that renders one —
- * `ContributorBars` has no per-bar marker of its own — so this count says how many rules the track
+ * Every absolutely-positioned mark in the block. `TrackMarker` is the only thing that renders one —
+ * `ContributorBars` has no per-bar marker of its own — so this count says how many markers the track
  * carries, without depending on how any one of them is painted. A negative assertion tied to one
- * rule's colour or dash would pass vacuously the moment that painting changed.
+ * marker's colour or dash would pass vacuously the moment that painting changed.
  */
 function marks(container: HTMLElement): NodeListOf<Element> {
   return container.querySelectorAll(".absolute");
 }
 
 describe("StabilityBlock — two moments on one track: stability now, and where it is heading", () => {
-  it("the dying world renders as visibly heading for collapse — an 85% headline, a heading-to rule at total collapse, and the word Falling, never the read's own 'rising'", () => {
+  it("the dying world renders as visibly heading for collapse — an 85% headline, a heading-to marker at total collapse, and the word Falling, never the read's own 'rising'", () => {
     // The reproduction: seed 42, 600 systems, 1000 ticks, `system-481` — Provision 0, famine,
     // population 2.0, unrest 0.150. Goods 2.4 is slopeShortage × d at Provision 0; settled is the
     // capped 1. The whole defect lives in the gap between 0.150 and 1.
@@ -38,7 +38,7 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
     expect(screen.getByText("Now 85%")).toBeInTheDocument();
     expect(screen.getByText("Heading for 0%")).toBeInTheDocument();
     expect(screen.getByText("Strike below 35%")).toBeInTheDocument();
-    expect(marks(container)).toHaveLength(2); // both track rules
+    expect(marks(container)).toHaveLength(2); // both track markers
     expect(screen.getByText(/Falling/)).toBeInTheDocument();
     // `trend` describes UNREST. Printed as-is it would tell the owner a collapsing world is rising.
     expect(screen.queryByText(/rising/i)).not.toBeInTheDocument();
@@ -62,13 +62,13 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
     // claimed a per-cause threshold, but `settled` here is 0.42 from three causes none of which
     // exceeds 0.3, and a system with 0.3/0.2/0.2 strikes with every bar under the line — so the
     // marker belongs to the total, which the track carries. The count below is purely the track's
-    // own rules.
+    // own markers.
     expect(marks(container)).toHaveLength(2);
     expect(screen.getByText("Goods shortfall")).toBeInTheDocument();
     expect(screen.getByText(/Holding/)).toBeInTheDocument();
   });
 
-  it("unassessed: no heading-to rule and no direction word, an explicit incomplete-causes caveat, and only tax/crowding bars", () => {
+  it("unassessed: no heading-to marker and no direction word, an explicit incomplete-causes caveat, and only tax/crowding bars", () => {
     const unrestBreakdown: SystemUnrestRead = {
       assessed: false,
       contributors: { tax: 0.1, crowding: 0.02 },
@@ -83,8 +83,8 @@ describe("StabilityBlock — two moments on one track: stability now, and where 
     expect(screen.getByText(/Goods shortfall is not assessed yet/)).toBeInTheDocument();
     // The withheld cause must not read as "no goods problem" by silent absence…
     expect(screen.queryByText("Goods shortfall")).not.toBeInTheDocument();
-    // …and no heading-to rule may be drawn from tax and crowding alone: the strike line is the
-    // only rule on this track.
+    // …and no heading-to marker may be drawn from tax and crowding alone: the strike line is the
+    // only marker on this track.
     expect(marks(container)).toHaveLength(1);
     expect(screen.queryByText(/Falling/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Holding/)).not.toBeInTheDocument();

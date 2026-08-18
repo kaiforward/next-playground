@@ -1,5 +1,7 @@
 import { getWorld, getWorldVersion } from "@/lib/world/store";
 import type { World, WorldFlowEvent, WorldMarket } from "@/lib/world/types";
+import type { GovernmentType, RegionInfo } from "@/lib/types/game";
+import { deriveRegionDominantFaction } from "@/lib/utils/region";
 
 /**
  * Lazy per-version indexes over the world store, shared by the read services.
@@ -68,3 +70,42 @@ export const governmentByFactionId = versionCached(
 export const systemNameById = versionCached(
   (world) => new Map(world.systems.map((s) => [s.id, s.name])),
 );
+
+/**
+ * Every region with its dominant owning faction and that faction's government — derived, never
+ * stored on the region row. A region with no faction-owned systems reads as "frontier".
+ *
+ * Cached here rather than derived per read service: the atlas and the universe both serve it, and a
+ * second derivation is a second answer waiting to drift.
+ */
+export const regionInfos = versionCached((world): RegionInfo[] => {
+  const factionNameById = new Map(world.factions.map((f) => [f.id, f.name]));
+  const factionGovById = governmentByFactionId();
+
+  const systemFactionsByRegion = new Map<string, string[]>();
+  for (const s of world.systems) {
+    if (!s.factionId) continue;
+    const list = systemFactionsByRegion.get(s.regionId) ?? [];
+    list.push(s.factionId);
+    systemFactionsByRegion.set(s.regionId, list);
+  }
+
+  return world.regions.map((r) => {
+    const dominantFactionId = deriveRegionDominantFaction(
+      systemFactionsByRegion.get(r.id) ?? [],
+      factionNameById,
+    );
+    const dominantGovernmentType: GovernmentType = dominantFactionId
+      ? factionGovById.get(dominantFactionId) ?? "frontier"
+      : "frontier";
+    return {
+      id: r.id,
+      name: r.name,
+      dominantEconomy: r.dominantEconomy,
+      dominantFactionId,
+      dominantGovernmentType,
+      x: r.x,
+      y: r.y,
+    };
+  });
+});

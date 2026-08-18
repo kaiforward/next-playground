@@ -97,7 +97,7 @@ The `LabourState` threads through every consumer of the production math, so the 
 identically on the live tick, decay, the seed, and the forecast:
 
 - **Production** (`buildingProduction`, both tick adapters, `capacityGoodRates`) — output uses
-  `effectiveFulfilment(tier)` instead of the old scalar `labourFulfillment`.
+  `effectiveFulfilment(tier)` instead of the old scalar `labourFulfilment`.
 - **Demand forecast** (`totalDemandRateForGood` / `inputDemandForGood`) — the input-draw term is
   skill-gated too, so a tier-1/2 system with **no academy** correctly forecasts **zero** (not phantom)
   input demand. The population adapters compute the `LabourState` once per system and pass it in.

@@ -1,23 +1,40 @@
 import { Delaunay } from "d3-delaunay";
-import { computeTerritoryPolygons, clipRadiusForDelaunay, type MultiPolygon } from "./territory-utils";
+import {
+  clipVoronoiCells,
+  unionCellsByGroup,
+  clipRadiusForDelaunay,
+  type MultiPolygon,
+} from "./territory-utils";
 import type { AtlasSystem } from "@/lib/types/game";
 
 export interface SystemCells {
+  /** The systems the diagram was built from, in cell-index order. */
+  systems: AtlasSystem[];
   cellsBySystemId: Map<string, MultiPolygon>;
   centroidBySystemId: Map<string, { x: number; y: number }>;
   findSystemAt(x: number, y: number): string | null;
+  /**
+   * Union the cells into territory polygons keyed by `getGroupKey(system)` — a null key drops
+   * that system from every group. The per-cell geometry is computed once at build time and only
+   * the union is redone per grouping, so a caller must never re-derive cells of its own.
+   */
+  groupBy(getGroupKey: (system: AtlasSystem) => string | null): Map<string, MultiPolygon>;
 }
 
 /**
- * Build the Voronoi ONCE from the system point set and hand per-system cells to every consumer,
- * replacing the five independent triangulations. Hit-testing is analytic: a Voronoi cell is the set
- * of points nearest its site, so `delaunay.find(x, y)` is the cell under the cursor in O(log n).
+ * The map's single Voronoi diagram. Every consumer of cell geometry reads from the object this
+ * returns — per-system cells, per-system centroids, the territory layers' grouped unions, and
+ * hit-testing, which is analytic: a Voronoi cell is the set of points nearest its site, so
+ * `delaunay.find(x, y)` is the cell under the cursor in O(log n).
  */
 export function buildSystemCells(systems: AtlasSystem[], mapSize: number): SystemCells {
   const points: [number, number][] = systems.map((s) => [s.x, s.y]);
   const delaunay = Delaunay.from(points);
   const voronoi = delaunay.voronoi([0, 0, mapSize, mapSize]);
-  const cellsBySystemId = computeTerritoryPolygons(systems.length, voronoi, (i) => systems[i].id);
+  const clippedCells = clipVoronoiCells(systems.length, voronoi);
+  const groupBy = (getGroupKey: (system: AtlasSystem) => string | null) =>
+    unionCellsByGroup(clippedCells, (i) => getGroupKey(systems[i]));
+  const cellsBySystemId = groupBy((s) => s.id);
   const centroidBySystemId = new Map(systems.map((s) => [s.id, { x: s.x, y: s.y }]));
 
   // The same radius the cells are visually disc-clipped to, so hit-testing matches what's drawn.
@@ -29,15 +46,17 @@ export function buildSystemCells(systems: AtlasSystem[], mapSize: number): Syste
   let lastFound = 0;
 
   return {
+    systems,
     cellsBySystemId,
     centroidBySystemId,
+    groupBy,
     findSystemAt(x, y) {
       if (x < 0 || y < 0 || x > mapSize || y > mapSize) return null;
       const i = delaunay.find(x, y, lastFound);
       if (i < 0 || i >= systems.length) return null;
       lastFound = i;
       // A visual cell is contained within a disc of clipRadius around its site (over-large cells are
-      // trimmed to it — see computeTerritoryPolygons). A point beyond that radius from its nearest site
+      // trimmed to it — see clipVoronoiCells). A point beyond that radius from its nearest site
       // sits in a trimmed-away, visually-empty region, so it reads as an empty click rather than
       // selecting the site whose analytic Voronoi cell would otherwise reach it.
       if (clipRadius > 0) {

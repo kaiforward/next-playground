@@ -20,7 +20,6 @@ import type {
   FactionPairView,
   FactionView,
   RelationEventCreate,
-  RelationEventMetadata,
   RelationEventView,
   RelationHistoryEntry,
 } from "@/lib/tick/world/relations-world";
@@ -335,25 +334,4 @@ export function computeConflictCounts(
   }
 
   return { commonEnemyCount, allianceWithEnemyCount };
-}
-
-// ── Metadata parsing ────────────────────────────────────────────
-
-/**
- * Validate JSON parsed from `GameEvent.metadata` against the relations event
- * shape. Returns null if any field is missing or wrongly typed — caller
- * should drop the event.
- */
-export function parseRelationEventMetadata(
-  raw: unknown,
-): RelationEventMetadata | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  if (!("factionAId" in raw) || typeof raw.factionAId !== "string") return null;
-  if (!("factionBId" in raw) || typeof raw.factionBId !== "string") return null;
-  if (!("expiresAtTick" in raw) || typeof raw.expiresAtTick !== "number") return null;
-  return {
-    factionAId: raw.factionAId,
-    factionBId: raw.factionBId,
-    expiresAtTick: raw.expiresAtTick,
-  };
 }

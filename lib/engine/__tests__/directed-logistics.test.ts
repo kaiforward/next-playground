@@ -800,21 +800,21 @@ describe("strategic exporter reserve", () => {
     expect(surplusDrawable(150, 100, 5, 0, true)).toBe(surplusDrawable(150, 100, 5, 0, false));
   });
 
-  it("keeps suppressed and realized-zero former exporters on the ordinary excess path", () => {
+  it("keeps suppressed and realised-zero former exporters on the ordinary excess path", () => {
     const recipient = sys("B", 0, { goodId: "ore", stock: 0, logisticsTarget: 100, demand: 5 });
     const suppressed = sys("A", 100, {
       goodId: "ore", stock: 150, logisticsTarget: 100, demand: 5,
       production: 30, capacityProduction: 30, productionSuppressed: true,
     });
-    const realizedZero = sys("C", 100, {
+    const realisedZero = sys("C", 100, {
       goodId: "ore", stock: 150, logisticsTarget: 100, demand: 5,
       production: 0, capacityProduction: 30,
     });
 
     const suppressedTransfer = matchFactionTransfers([suppressed, recipient], oneHop).transfers[0];
-    const realizedZeroTransfer = matchFactionTransfers([realizedZero, recipient], oneHop).transfers[0];
+    const realisedZeroTransfer = matchFactionTransfers([realisedZero, recipient], oneHop).transfers[0];
     expect(suppressedTransfer.quantity).toBe(50);
-    expect(realizedZeroTransfer.quantity).toBe(50);
+    expect(realisedZeroTransfer.quantity).toBe(50);
   });
 
   it("reserves nothing for a good with no local demand left, and pins that it is deliberate", () => {

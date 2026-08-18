@@ -3,6 +3,7 @@ import { generateWorld } from "@/lib/world/gen";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getAlertData } from "@/lib/services/alerts";
+import { seatWorld } from "./seat-world";
 import { getSystemIndustry } from "@/lib/services/universe";
 import { labourDemand } from "@/lib/engine/industry";
 import { strikeMultiplier } from "@/lib/engine/population";
@@ -17,15 +18,6 @@ import { planFactionProposals, type BuildSystemState, type BuildGoodState } from
 import { emptyResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { DevelopmentRefs } from "@/lib/engine/development";
 import { SURVIVAL_GOODS } from "@/lib/constants/physical-economy";
-
-/** A player-seat world: the player faction owns a developed homeworld. */
-function seatWorld(): World {
-  return generateWorld({
-    systemCount: 60,
-    seed: 42,
-    playerFaction: { name: "Test Seat", governmentType: "federation", doctrine: "mercantile" },
-  });
-}
 
 /** Two arbitrary systems that are NOT the player's homeworld — fixture sites the tests force into
  *  a developed, player-owned state (mirrors lib/services/__tests__/tracker.test.ts's own pattern of

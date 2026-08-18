@@ -5,7 +5,7 @@
  * once at that boundary so downstream code can use the proper union types without unsafe `as`
  * casts (see `lib/services/dev-tools.ts` and the Zod enums in `lib/schemas/game-setup.ts`).
  *
- * Save-file loads deliberately do NOT come through here: `deserializeWorld`
+ * Save-file loads deliberately do NOT come through here: `deserialiseWorld`
  * (`lib/world/save.ts`) runs its own `isWorldShaped` spot-check over `formatVersion` and the
  * numeric `meta` fields, and trusts the rest — pre-1.0 saves are local files, not untrusted
  * network input. A loaded save's union-typed fields are therefore compile-time assertions, not

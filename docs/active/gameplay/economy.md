@@ -8,7 +8,7 @@ See [Design Rationale](#design-rationale) below for why this replaced the legacy
 
 ## Goods
 
-26 goods organized in 3 tiers. The tiers form a **production chain**: tier-0 raw materials are extracted from body resource deposits, and each tier-1/2 good is manufactured from a recipe of lower-tier inputs (see [Supply Chain & Input-Gating](#supply-chain--input-gating)). The chain also drives the trade progression — cheap, deep-market raw goods for early game; expensive, thin-market manufactured goods for late game.
+26 goods organised in 3 tiers. The tiers form a **production chain**: tier-0 raw materials are extracted from body resource deposits, and each tier-1/2 good is manufactured from a recipe of lower-tier inputs (see [Supply Chain & Input-Gating](#supply-chain--input-gating)). The chain also drives the trade progression — cheap, deep-market raw goods for early game; expensive, thin-market manufactured goods for late game.
 
 ### Tier 0 — Raw Materials (8)
 
@@ -86,12 +86,12 @@ Production and consumption are **physical** — they derive from each system's s
 **Production** — capacity-driven and **input-gated**, computed per good `g` from the system's `WorldBuilding` rows:
 
 ```
-production_g = Σ(buildings whose output good is g)  count × outputPerUnit × labourFulfillment × inputGate_g × yield_g
-labourFulfillment = min(1, population / Σ(count × labourPerUnit))
+production_g = Σ(buildings whose output good is g)  count × outputPerUnit × labourFulfilment × inputGate_g × yield_g
+labourFulfilment = min(1, population / Σ(count × labourPerUnit))
 yield_g           = system yieldMult[resource(g)]  for tier-0 extractables, else 1
 ```
 
-`labourFulfillment` is one uniform system-wide ratio — population is the labour pool, and if labour demand exceeds population the whole industrial base operates below capacity. `inputGate_g` is the recipe-input availability throttle (always 1 for tier-0; see [Supply Chain & Input-Gating](#supply-chain--input-gating)). Key constraints by building tier:
+`labourFulfilment` is one uniform system-wide ratio — population is the labour pool, and if labour demand exceeds population the whole industrial base operates below capacity. `inputGate_g` is the recipe-input availability throttle (always 1 for tier-0; see [Supply Chain & Input-Gating](#supply-chain--input-gating)). Key constraints by building tier:
 
 - **Tier-0 extractors** — output goods are the eight tradeable raw materials (water, ore, gas, …), each extracted from a body resource deposit with no recipe (`inputGate = 1`). Their building count is capped at world-gen by the system's **deposit slots** (a per-resource extractor ceiling), and their output is scaled by the resource's **yield multiplier** (`yieldMult`, the mean quality of the filled slots) — so both how *much* (slots) and how *rich* (quality) a body's deposits are drive extraction. See [the available-space substrate model](./economy-substrate-v2-available-space.md).
 - **Tier-1+ manufacturers** — bounded by **general space** and labour, **and input-gated**: each building type carries an `inputs` recipe and draws those inputs from local market stock each tick. A manufacturer short of any input throttles its output proportionally (`inputGate_g < 1`), so shortages cascade down the chain. See [Supply Chain & Input-Gating](#supply-chain--input-gating).
@@ -112,7 +112,7 @@ All `outputPerUnit` constants and per-capita needs are first-draft and **simulat
 
 `WorldBuilding.count` is no longer seed-frozen. A dedicated **infrastructure-decay** processor runs each economy shard (right after economy commits, before population) and mutates `count` **downward only**, toward what is actively *used* — the gap between *built* and *used* is what rots:
 
-- **"Used" per role.** Housing → occupancy `population / POP_CENTRE_DENSITY`; production/extraction → staffed *and* selling `count × min(labourFulfillment, sellingFactor)`. The selling factor is the production brake's own ceiling (`brakeKnee`/`productionCeiling`, `lib/engine/tick.ts`) at the cycle's start stock — 1 while stock is at or below the warehouse knee, → 0 as it fills toward the brake's ramp end (1.3 × the knee).
+- **"Used" per role.** Housing → occupancy `population / POP_CENTRE_DENSITY`; production/extraction → staffed *and* selling `count × min(labourFulfilment, sellingFactor)`. The selling factor is the production brake's own ceiling (`brakeKnee`/`productionCeiling`, `lib/engine/tick.ts`) at the cycle's start stock — 1 while stock is at or below the warehouse knee, → 0 as it fills toward the brake's ramp end (1.3 × the knee).
 - **Idle contraction (buffered, gentle).** Decay is a whole-level ratchet, not a continuous shave: a per-(system, building type) countdown accrues one reference-cycle each run while at least a whole level sits idle (`count > used`), and only once it crosses `idleBufferCycles` (12) does the marginal idle level tear down — the countdown resets the moment the level refills, so a brief dip costs nothing and only a sustained gap compounds down.
 - **Unrest teardown (catastrophic).** Above `unrestThreshold` (θ_decay = 0.75) one **system-wide** collapse-debt accumulator accrues each run at a severity ramped by how far unrest sits above θ (0 at θ, 1 at unrest 1); each time the debt crosses a whole integer, one whole level tears down — even while in use — from the system's least-used eligible building type (ties broken by type id). Below θ the debt resets to 0: collapse is a regime, not a ledger. One level is shed **per run for the whole system**, not per building type, so teardown speed doesn't scale with how many industries a system happens to run. Housing can only lose a level while occupancy leaves the level above resident need spare, so this channel can never strand a population at `popCap = 0` (`lib/engine/infrastructure-decay.ts`).
 
@@ -197,7 +197,7 @@ maxStock    = targetStock / priceFloor ^ (1/k)              // demand headroom �
 ```
 
 - **Demand-derived floor & anchor.** `minStock` is a *reserve*, not zero — the scarcity floor below which price ceilings out; directed logistics treats stock above the reserve (`stock − minStock`) as movable surplus. As stock falls toward the reserve, price climbs to the ceiling and the market holds its last reserve. Both `minStock` and `targetStock` scale with population, so the price point and the scarcity threshold track local demand.
-- **Infrastructure-derived ceiling.** `maxStock` is a demand-headroom term (which alone guarantees every market spans its *entire* price curve, so pricing never runs clipped) **plus the sum of storage its buildings provide** (`facilityStorageForGood`, `lib/engine/industry.ts`): extractors and factories store what they handle, population centres hold nominal retail stock (generous on consumer-facing goods). This is what makes a low-population **mega-mine cheap *and* liquid** — huge ore storage lets ore pile high (→ price floors → cheap) against a tiny demand reserve (→ nearly all of it buyable). The storage sum is denormalised onto `WorldMarket.storageCapacity` at seed (recomputed on build-out in SP5), so the band derives from the market row alone.
+- **Infrastructure-derived ceiling.** `maxStock` is a demand-headroom term (which alone guarantees every market spans its *entire* price curve, so pricing never runs clipped) **plus the sum of storage its buildings provide** (`buildingStorageForGood`, `lib/engine/industry.ts`): extractors and factories store what they handle, population centres hold nominal retail stock (generous on consumer-facing goods). This is what makes a low-population **mega-mine cheap *and* liquid** — huge ore storage lets ore pile high (→ price floors → cheap) against a tiny demand reserve (→ nearly all of it buyable). The storage sum is denormalised onto `WorldMarket.storageCapacity` at seed (recomputed on build-out in SP5), so the band derives from the market row alone.
 
 This restores the cover model's intended invariant — **same cycles-of-cover → same price regardless of system size** (a huge world holding 1600 food against 20/tick and a tiny outpost holding 80 against 1/tick both sit at 80 cycles of cover and price identically). It fixes the motivating bug: the global band was *absolute* while the anchor *scales with population*, so on a big world the anchor outgrew the band, stock could never reach it, and the galaxy's biggest food producer read as food-*expensive*. It also yields a free progression arc — an undeveloped system is a thin, swingy market; as build-out (SP5) deepens its storage, its markets become liquid hubs. `marketBand` (`lib/engine/market-pricing.ts`) is the single source of truth; `maxStock > minStock` is guaranteed structurally by the demand-headroom term.
 
@@ -216,13 +216,13 @@ There is no mean-reversion step and no demand axis — both are gone from the si
 |---|---|---|
 | Elasticity `k` | 1 | Curve steepness (price reaction to stock gap) |
 | Stock band | per-market `[minStock, maxStock]` | Demand-derived floor reserve + infrastructure-derived ceiling (see [Market Pricing Band](#market-pricing-band-per-market-stock-range)) |
-| Production rate | capacity-driven, input-gated | `Σ count × outputPerUnit × labourFulfillment × inputGate`; scaled by self-limiting + strike suppression |
+| Production rate | capacity-driven, input-gated | `Σ count × outputPerUnit × labourFulfilment × inputGate`; scaled by self-limiting + strike suppression |
 | Consumption rate | civilian + production-input | civilian `perCapitaNeed × population` (self-limiting, never strike-suppressed) + tier-1+ recipe-input draw from local stock |
 | Price history | Rolling window | Snapshots recorded periodically (`lib/engine/snapshot.ts`) |
 
 ### Population, Unrest, and Strikes
 
-Each system has a **`population`** (a Float magnitude) that is now dynamic — it grows, declines, and migrates. Population drives the system-wide `labourFulfillment` ratio (labour pool for the seeded industrial base) and consumption demand (`perCapitaNeed × population`). As population moves, the stored `demandRate` per market is rewritten each tick to reflect the new level.
+Each system has a **`population`** (a Float magnitude) that is now dynamic — it grows, declines, and migrates. Population drives the system-wide `labourFulfilment` ratio (labour pool for the seeded industrial base) and consumption demand (`perCapitaNeed × population`). As population moves, the stored `demandRate` per market is rewritten each tick to reflect the new level.
 
 **Unrest (`unrest`, 0…1)** accumulates from a population's grievance against what it has grown accustomed to, not from the absolute shortfall. Each economy tick the processor records per-good satisfaction (`delivered / demanded`) for each system it processes. The population processor folds these into **Provision** — the necessity-and-demand-weighted mean satisfaction, each demanded good weighted by its demand share × its authored necessity (`GOOD_NECESSITY`, the suffering weight). Provision reads as *"the share of what this world needs, weighted by how badly it needs it"* — never "the share of its goods that arrived": a world receiving no war matériel and no luxuries still reads ≈ 0.97, because those carry almost no suffering weight. Each system also carries a persisted memory of the Provision it is accustomed to; the unrest integral consumes whichever reads larger of a **grievance** term (how far today's Provision has fallen below that memory) and an absolute **crisis** term:
 
@@ -314,7 +314,7 @@ The system screen surfaces dynamic population and stability through two views, b
 - **Population tab** — shows the current population magnitude, `popCap` utilisation, unrest/stability (via the stability badge), current strike state, and a per-good **needs ledger**: want vs delivered per consumed good, severity-glyphed and pressure-sorted — the read-side projection of the same satisfaction signal the unrest spine integrates (`computePopNeeds`, `lib/engine/pop-needs.ts`). The base/technician/engineer consumption split lives in each row's tooltip. The Industry tab reads the same needs for its pop-pressure chip and per-row pop-short markers.
 - **Overview stability row** — a quick stability badge on the system Overview, so the current unrest level is visible without switching tabs.
 
-> **Prosperity is retired.** The former `prosperity` value (a trade-volume proxy for supply-response scaling, 0.3× crisis to 1.3× booming) is removed. SP1 already moved the smooth supply response onto `population` (via `labourFulfillment`), so the proxy became redundant. Population is now the smooth health channel; `unrest` is the consequence channel.
+> **Prosperity is retired.** The former `prosperity` value (a trade-volume proxy for supply-response scaling, 0.3× crisis to 1.3× booming) is removed. SP1 already moved the smooth supply response onto `population` (via `labourFulfilment`), so the proxy became redundant. Population is now the smooth health channel; `unrest` is the consequence channel.
 
 ### Event-Driven Anchor Shifts
 

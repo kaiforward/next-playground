@@ -51,7 +51,7 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
-import { resourceVectorFromColumns, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { slotCapOf, yieldsOf, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -150,7 +150,7 @@ export function tickRng(seed: number, tick: number): RNG {
 /**
  * Exported alongside `toTickSystems` — the calibration harness
  * (`lib/tick-harness/runner.ts`) reuses these same joins to build the
- * tick-row views its (pre-existing) health analyzers read.
+ * tick-row views its (pre-existing) health analysers read.
  */
 export function toTickConnections(world: World): TickConnection[] {
   return world.connections.map((c) => ({
@@ -231,22 +231,8 @@ export function toTickSystems(world: World): TickSystem[] {
       // lib/world/types.ts).
       buildOpportunity: s.buildOpportunity,
       colonyOpportunity: s.colonyOpportunity,
-      yields: resourceVectorFromColumns(
-        {
-          yieldGas: s.yieldGas, yieldMinerals: s.yieldMinerals, yieldOre: s.yieldOre,
-          yieldBiomass: s.yieldBiomass, yieldArable: s.yieldArable,
-          yieldWater: s.yieldWater, yieldRadioactive: s.yieldRadioactive,
-        },
-        "yield",
-      ),
-      slotCap: resourceVectorFromColumns(
-        {
-          slotGas: s.slotGas, slotMinerals: s.slotMinerals, slotOre: s.slotOre,
-          slotBiomass: s.slotBiomass, slotArable: s.slotArable,
-          slotWater: s.slotWater, slotRadioactive: s.slotRadioactive,
-        },
-        "slot",
-      ),
+      yields: yieldsOf(s),
+      slotCap: slotCapOf(s),
       generalSpace: s.generalSpace,
       habitableSpace: s.habitableSpace,
     };
@@ -343,7 +329,7 @@ export function marketRowsBySystem(markets: WorldMarket[]): Map<string, MarketRo
       honestUseRate: m.honestUseRate,
       storageCapacity: m.storageCapacity,
       satisfaction: m.satisfaction,
-      realizedProductionRate: m.realizedProductionRate,
+      realisedProductionRate: m.realisedProductionRate,
       productionSuppressed: m.productionSuppressed,
       productionSuppressRate: m.productionSuppressRate,
       productionMult: m.productionMult,
@@ -391,6 +377,63 @@ function buildBuildRows(
   }));
 }
 
+/** The three fields directed-logistics writes back, present in both market row shapes it reaches. */
+interface LogisticsWritableRow {
+  stock: number;
+  logisticsFundingBound?: boolean;
+  unservedShortfall?: number;
+}
+
+/** Clear through the constraint, so the generic patch below can delete an optional key. */
+function clearUnservedShortfall(row: LogisticsWritableRow): void {
+  delete row.unservedShortfall;
+}
+
+/**
+ * Apply one run's directed-logistics writes to one market row, in whichever row shape holds it —
+ * the persisted `WorldMarket` and the tick's `MarketRowForLogistics` view take the identical patch,
+ * and this is the single place that decides it. Returns the row itself when nothing addressed it,
+ * so an untouched market keeps its identity.
+ *
+ * stock and logisticsFundingBound stay coupled exactly as they always were: either one changing
+ * rewrites both together (`?? next.field` on the untouched one), which is what stamps an
+ * explicit-undefined logisticsFundingBound key onto a market whose stock alone moved. That quirk
+ * predates unservedShortfall and is deliberately left alone. unservedShortfall is applied as an
+ * entirely separate, independently-conditioned spread — never folded into the branch above — so a
+ * market whose ONLY change this run is the shortfall does not also pick up a spurious
+ * logisticsFundingBound key it never earned, and vice versa.
+ */
+function patchLogisticsRow<T extends LogisticsWritableRow>(
+  row: T,
+  key: string,
+  stockUpdates: Map<string, number>,
+  fundingBoundUpdates: Map<string, boolean>,
+  unservedShortfallUpdates: Map<string, number>,
+): T {
+  const newStock = stockUpdates.get(key);
+  const logisticsFundingBound = fundingBoundUpdates.get(key);
+  const unservedShortfall = unservedShortfallUpdates.get(key);
+  const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
+  if (!stockOrFundingChanged && unservedShortfall === undefined) return row;
+  let next: T = row;
+  if (stockOrFundingChanged) {
+    next = {
+      ...next,
+      stock: newStock ?? next.stock,
+      logisticsFundingBound: logisticsFundingBound ?? next.logisticsFundingBound,
+    };
+  }
+  if (unservedShortfall !== undefined) {
+    // A positive level is the structural reading; 0 is this run saying the row is servable, which
+    // deletes the key rather than persisting a zero — absence, not a falsy number, is what "not
+    // unservable" looks like on a market row.
+    next = { ...next };
+    if (unservedShortfall > 0) next.unservedShortfall = unservedShortfall;
+    else clearUnservedShortfall(next);
+  }
+  return next;
+}
+
 function applyLogisticsMarketUpdates(
   markets: WorldMarket[],
   stockUpdates: Map<string, number>,
@@ -404,38 +447,15 @@ function applyLogisticsMarketUpdates(
   ) {
     return markets;
   }
-  return markets.map((m) => {
-    const id = `${m.systemId}|${m.goodId}`;
-    const newStock = stockUpdates.get(id);
-    const logisticsFundingBound = fundingBoundUpdates.get(id);
-    const unservedShortfall = unservedShortfallUpdates.get(id);
-    // stock and logisticsFundingBound stay coupled exactly as they always were: either one changing
-    // rewrites both together (`?? m.field` on the untouched one), which is what stamps an
-    // explicit-undefined logisticsFundingBound key onto a market whose stock alone moved. That quirk
-    // predates unservedShortfall and is deliberately left alone. unservedShortfall is applied as an
-    // entirely separate, independently-conditioned spread — never folded into the branch above — so a
-    // market whose ONLY change this run is the shortfall does not also pick up a spurious
-    // logisticsFundingBound key it never earned, and vice versa.
-    const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
-    if (!stockOrFundingChanged && unservedShortfall === undefined) return m;
-    let next: WorldMarket = m;
-    if (stockOrFundingChanged) {
-      next = {
-        ...next,
-        stock: newStock ?? next.stock,
-        logisticsFundingBound: logisticsFundingBound ?? next.logisticsFundingBound,
-      };
-    }
-    if (unservedShortfall !== undefined) {
-      // A positive level is the structural reading; 0 is this run saying the row is servable, which
-      // deletes the key rather than persisting a zero — absence, not a falsy number, is what "not
-      // unservable" looks like on a market row.
-      next = { ...next };
-      if (unservedShortfall > 0) next.unservedShortfall = unservedShortfall;
-      else delete next.unservedShortfall;
-    }
-    return next;
-  });
+  return markets.map((m) =>
+    patchLogisticsRow(
+      m,
+      `${m.systemId}|${m.goodId}`,
+      stockUpdates,
+      fundingBoundUpdates,
+      unservedShortfallUpdates,
+    ),
+  );
 }
 
 /**
@@ -474,32 +494,9 @@ function patchLogisticsMarketRows(
     if (!rows) continue;
     patched.set(
       systemId,
-      rows.map((r) => {
-        const newStock = stockUpdates.get(r.id);
-        const logisticsFundingBound = fundingBoundUpdates.get(r.id);
-        const unservedShortfall = unservedShortfallUpdates.get(r.id);
-        // Same isolation as applyLogisticsMarketUpdates above: stock/logisticsFundingBound stay
-        // coupled as they already were; unservedShortfall is a separate, independently-conditioned
-        // spread so it cannot stamp a spurious logisticsFundingBound key (or vice versa) onto a row
-        // whose only real change this run is the other field.
-        const stockOrFundingChanged = newStock !== undefined || logisticsFundingBound !== undefined;
-        if (!stockOrFundingChanged && unservedShortfall === undefined) return r;
-        let next: MarketRowForLogistics = r;
-        if (stockOrFundingChanged) {
-          next = {
-            ...next,
-            stock: newStock ?? next.stock,
-            logisticsFundingBound: logisticsFundingBound ?? next.logisticsFundingBound,
-          };
-        }
-        if (unservedShortfall !== undefined) {
-          // Same positive-means-unservable, zero-means-clear rule as applyLogisticsMarketUpdates.
-          next = { ...next };
-          if (unservedShortfall > 0) next.unservedShortfall = unservedShortfall;
-          else delete next.unservedShortfall;
-        }
-        return next;
-      }),
+      rows.map((r) =>
+        patchLogisticsRow(r, r.id, stockUpdates, fundingBoundUpdates, unservedShortfallUpdates),
+      ),
     );
   }
   return patched;
@@ -508,7 +505,7 @@ function patchLogisticsMarketRows(
 /**
  * Fold directed-build's proposal-pressure counters back into the world market rows. Changes ONLY
  * `proposalCycles` (spread preserves every field the same-tick economy and logistics stages already
- * wrote — satisfaction, squeeze, realized rate, stock, funding-bound). `updates` keys are
+ * wrote — satisfaction, squeeze, realised rate, stock, funding-bound). `updates` keys are
  * `${systemId}|${goodId}`, the same composite key the market row groups are built by. The counter is
  * fractional reference-time, so it is clamped to a finite [0,2] on the way into world state (NaN/Infinity
  * guarded like every other persisted numeric field). No-op writes (the clamped value already equals what
@@ -549,98 +546,118 @@ export function applyBuildingIncreases(systems: TickSystem[], updates: BuildBuil
 }
 
 /**
+ * The set-and-clear fold every directed-build planner report shares. `visitedSystemIds` is the
+ * population the run actually considered: a visited system NOT in `updates` is CLEARED (the run
+ * looked and found nothing to report for it), and a system the run never visited is left untouched,
+ * carrying forward whatever reading it already had. Clearing is delete-on-a-copy, not
+ * `field: undefined` in the object literal — see `mergeSystemsIntoWorld`'s own comment on the same
+ * pattern for why a present key holding `undefined` is not the same thing as a true absence.
+ *
+ * `reads` answers "does this row already carry the field", so an unchanged row keeps its identity;
+ * `writes` builds the row carrying the new reading. Both are passed explicitly rather than derived
+ * from a key so each caller's own non-finite guards stay at its own site.
+ */
+function applyVisitedSystemReports<U extends { systemId: string }>(
+  systems: TickSystem[],
+  visitedSystemIds: string[],
+  updates: U[],
+  reads: (s: TickSystem) => boolean,
+  clears: (s: TickSystem) => void,
+  writes: (s: TickSystem, update: U) => TickSystem,
+): TickSystem[] {
+  if (visitedSystemIds.length === 0) return systems;
+  const visited = new Set(visitedSystemIds);
+  const bySystem = new Map(updates.map((u) => [u.systemId, u]));
+  return systems.map((s): TickSystem => {
+    if (!visited.has(s.id)) return s;
+    const update = bySystem.get(s.id);
+    if (!update) {
+      if (!reads(s)) return s;
+      const next = { ...s };
+      clears(next);
+      return next;
+    }
+    return writes(s, update);
+  });
+}
+
+/**
  * Fold directed-build's Build blocked report back into the system rows. `visitedSystemIds` is every
  * system belonging to a due faction this run (the planner's own "visited" set, captured by the
  * processor regardless of the build-automation switch — see the processor for why): a visited system
  * NOT in `updates` is CLEARED, because nothing was dropped for it this run (it landed everything or
- * wanted nothing), and a system this run never visited is left untouched, carrying forward whatever
- * `buildBlocked` reading it already had. Delete/assign, not `buildBlocked: entry` in the object
- * literal — see `mergeSystemsIntoWorld`'s own comment on the same pattern for why a present key
- * holding `undefined` is not the same thing as a true absence.
+ * wanted nothing).
  */
 export function applyBuildBlockedUpdates(
   systems: TickSystem[],
   visitedSystemIds: string[],
   updates: BuildBlockedUpdate[],
 ): TickSystem[] {
-  if (visitedSystemIds.length === 0) return systems;
-  const visited = new Set(visitedSystemIds);
-  const bySystem = new Map(updates.map((u) => [u.systemId, u]));
-  return systems.map((s): TickSystem => {
-    if (!visited.has(s.id)) return s;
-    const update = bySystem.get(s.id);
-    if (!update) {
-      if (s.buildBlocked === undefined) return s;
-      const next = { ...s };
-      delete next.buildBlocked;
-      return next;
-    }
+  return applyVisitedSystemReports(
+    systems,
+    visitedSystemIds,
+    updates,
+    (s) => s.buildBlocked !== undefined,
+    (s) => { delete s.buildBlocked; },
     // An unreadable ROI reads as 0 rather than poisoning the world: `buildBlocked` is world state,
     // and `JSON.stringify` turns a NaN into null.
-    const droppedRoi = Number.isFinite(update.droppedRoi) ? update.droppedRoi : 0;
-    return { ...s, buildBlocked: { reason: update.reason, droppedRoi } };
-  });
+    (s, u) => ({
+      ...s,
+      buildBlocked: { reason: u.reason, droppedRoi: Number.isFinite(u.droppedRoi) ? u.droppedRoi : 0 },
+    }),
+  );
 }
 
 /**
  * Fold directed-build's Build opportunity report back into the system rows. Same visited/clear/set
- * contract as `applyBuildBlockedUpdates` above — `visitedSystemIds` is the same "every system
- * belonging to a due faction this run" set, a visited system NOT in `updates` is CLEARED (nothing
- * scored for it this run), and an unvisited system is left untouched.
+ * contract as `applyBuildBlockedUpdates` above, over the same "every system belonging to a due
+ * faction this run" set — a visited system NOT in `updates` scored nothing this run.
  */
 export function applyBuildOpportunityUpdates(
   systems: TickSystem[],
   visitedSystemIds: string[],
   updates: BuildOpportunityUpdate[],
 ): TickSystem[] {
-  if (visitedSystemIds.length === 0) return systems;
-  const visited = new Set(visitedSystemIds);
-  const bySystem = new Map(updates.map((u) => [u.systemId, u]));
-  return systems.map((s): TickSystem => {
-    if (!visited.has(s.id)) return s;
-    const update = bySystem.get(s.id);
-    if (!update) {
-      if (s.buildOpportunity === undefined) return s;
-      const next = { ...s };
-      delete next.buildOpportunity;
-      return next;
-    }
+  return applyVisitedSystemReports(
+    systems,
+    visitedSystemIds,
+    updates,
+    (s) => s.buildOpportunity !== undefined,
+    (s) => { delete s.buildOpportunity; },
     // Same non-finite guard as buildBlocked's droppedRoi: world state must never carry a
     // NaN/Infinity `JSON.stringify` would turn into null.
-    const score = Number.isFinite(update.score) ? update.score : 0;
-    return { ...s, buildOpportunity: { score, goodId: update.goodId } };
-  });
+    (s, u) => ({
+      ...s,
+      buildOpportunity: { score: Number.isFinite(u.score) ? u.score : 0, goodId: u.goodId },
+    }),
+  );
 }
 
 /**
- * Fold directed-build's Colony opportunity report back into the system rows. `visitedSystemIds` is
- * every colony-establish CANDIDATE the colonisation planner considered this run — a population
- * distinct from Build blocked/opportunity's (a candidate is a CONTROLLED, not-yet-developed system) —
- * captured regardless of the colonisation-automation switch. A visited candidate NOT in `updates` is
- * CLEARED (nothing was proposed for it this run), and a candidate this run did not consider is left
- * untouched.
+ * Fold directed-build's Colony opportunity report back into the system rows. Same visited/clear/set
+ * contract again, but over a DIFFERENT population: `visitedSystemIds` is every colony-establish
+ * CANDIDATE the colonisation planner considered this run (a candidate is a CONTROLLED,
+ * not-yet-developed system), captured regardless of the colonisation-automation switch.
  */
 export function applyColonyOpportunityUpdates(
   systems: TickSystem[],
   visitedSystemIds: string[],
   updates: ColonyOpportunityUpdate[],
 ): TickSystem[] {
-  if (visitedSystemIds.length === 0) return systems;
-  const visited = new Set(visitedSystemIds);
-  const bySystem = new Map(updates.map((u) => [u.systemId, u]));
-  return systems.map((s): TickSystem => {
-    if (!visited.has(s.id)) return s;
-    const update = bySystem.get(s.id);
-    if (!update) {
-      if (s.colonyOpportunity === undefined) return s;
-      const next = { ...s };
-      delete next.colonyOpportunity;
-      return next;
-    }
-    const value = Number.isFinite(update.value) ? update.value : 0;
-    const work = Number.isFinite(update.work) ? update.work : 0;
-    return { ...s, colonyOpportunity: { value, work } };
-  });
+  return applyVisitedSystemReports(
+    systems,
+    visitedSystemIds,
+    updates,
+    (s) => s.colonyOpportunity !== undefined,
+    (s) => { delete s.colonyOpportunity; },
+    (s, u) => ({
+      ...s,
+      colonyOpportunity: {
+        value: Number.isFinite(u.value) ? u.value : 0,
+        work: Number.isFinite(u.work) ? u.work : 0,
+      },
+    }),
+  );
 }
 
 /** Count of resources this system has any deposit slot for — a claim/develop score input. */
@@ -661,6 +678,31 @@ function applyClaims(systems: TickSystem[], claims: SystemClaim[]): TickSystem[]
     if (factionId === undefined) return s;
     return { ...s, factionId, control: "controlled" };
   });
+}
+
+/**
+ * The resettlement rule, in one place: a reading from a system's PREVIOUS life must not survive into
+ * its new one. Every optional per-life reading a system row carries clears together — the stored
+ * Provision memory, this cycle's Provisioned reading, its band and its critical-good weight, the
+ * realised population change, and directed-build's three planner readings. Only the expectation is a
+ * memory; the rest are fresh readings, but a stale reading from a previous life is exactly as false
+ * as a stale expectation would be, so they clear the same way: absent reads as "not yet assessed in
+ * this life", never as a lie.
+ *
+ * Deleted, never assigned `undefined` — a present key holding `undefined` is not a true absence (see
+ * `mergeSystemsIntoWorld`). Both life transitions clear the identical set, a colony being founded
+ * (`applyDevelopments`) and one dying (`applyAbandonments`), so a new per-life reading added to
+ * `TickSystem` is cleared on both or on neither.
+ */
+function clearPreviousLifeReadings(next: TickSystem): void {
+  delete next.provisionExpectation;
+  delete next.provision;
+  delete next.supplyBand;
+  delete next.criticalWeight;
+  delete next.populationChange;
+  delete next.buildBlocked;
+  delete next.buildOpportunity;
+  delete next.colonyOpportunity;
 }
 
 /**
@@ -712,34 +754,13 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
       buildings,
       popCap: nowDeveloped ? Math.max(s.popCap, housingPopCap(buildings)) : s.popCap,
     };
-    // The resettlement rule: a stored memory from a previous life must not survive into a system's
-    // new one — see the docstring above. `provision`/`supplyBand` are not a memory, but a stale
-    // reading from a previous life is exactly as false as a stale expectation would be, so they
-    // clear the same way: absent reads as "not yet assessed in this life", never as a lie.
-    if (nowDeveloped) {
-      delete next.provisionExpectation;
-      delete next.provision;
-      delete next.supplyBand;
-      delete next.criticalWeight;
-      // Same resettlement rule: a predecessor's realised population change is a reading from a
-      // previous life and must not survive into this one.
-      delete next.populationChange;
-      // Same resettlement rule: a predecessor's blocked-build reading belongs to the colony that
-      // just ended, not the one that just started. `applyBuildBlockedUpdates` below already runs
-      // (and already clears) BEFORE this function within the same tick — this system was still
-      // `controlled` when directed-build's own "visited" set was captured, so it can only ever have
-      // been cleared there, never freshly assigned — but the delete stays here too, matching every
-      // other field on this line, so a system surviving untouched to a LATER run is still covered.
-      delete next.buildBlocked;
-      // Same resettlement rule, same reasoning as buildBlocked directly above.
-      delete next.buildOpportunity;
-      // A candidate that just developed was, by definition, IN this run's colonyOpportunity visited
-      // set (a colony candidate is exactly a controlled system being weighed for establishment) — so
-      // `applyColonyOpportunityUpdates` below already cleared it (a newly developed system is no
-      // longer a candidate, so it never appears in that write's `updates`). The delete stays here too,
-      // matching every other field on this line, for a system surviving untouched to a LATER run.
-      delete next.colonyOpportunity;
-    }
+    // The resettlement rule (`clearPreviousLifeReadings`): every reading on this row belongs to the
+    // colony that just ended, not the one that just started. The three planner readings were already
+    // cleared earlier in this same tick — a system still `controlled` when directed-build captured
+    // its visited set can only have been cleared there, never freshly assigned, and a just-developed
+    // system is no longer a colony candidate — but they clear here too, so a system that survives
+    // untouched to a LATER run is covered as well.
+    if (nowDeveloped) clearPreviousLifeReadings(next);
     return next;
   });
 }
@@ -776,27 +797,23 @@ export function applyAbandonments(systems: TickSystem[], abandonedSystemIds: str
       buildings: {},
       buildingIdleCycles: {},
     };
-    delete next.provisionExpectation;
-    delete next.provision;
-    delete next.supplyBand;
-    delete next.criticalWeight;
-    // The tick body writes this AFTER this function runs (post-migration), so without this delete a
-    // naive later write would re-populate a stale reading on the system this same cycle just reset —
-    // see the write site below for how that's avoided; this clear is the defense that matters once
-    // the system survives untouched to a LATER cycle instead.
-    delete next.populationChange;
-    // These three deletes are the ONLY thing that ever clears an abandoned system's planner readings,
-    // and the reason is the opposite of what it looks like. An abandoned system flips to `unclaimed`
-    // above, so `isEconomicallyActive` drops it out of the planner's working set and it is never
-    // VISITED again — and the clear-visited-then-assign writes below (`applyBuildBlockedUpdates` and
-    // its two siblings) only touch systems inside their visited set, by design, because set-and-clear
-    // says an entity a run did not visit keeps its previous value. So "the write path naturally
-    // excludes it" is precisely why the delete is load-bearing rather than a backstop: without it a
-    // dead colony would advertise its last blocked build and its last opportunity indefinitely, which
-    // is the present-but-false reading the absence convention exists to prevent.
-    delete next.buildBlocked;
-    delete next.buildOpportunity;
-    delete next.colonyOpportunity;
+    // The resettlement rule (`clearPreviousLifeReadings`). Two of the fields it clears carry weight
+    // at this site in particular:
+    //  • populationChange — the tick body writes it AFTER this function runs (post-migration), so
+    //    without the clear a naive later write would re-populate a stale reading on the system this
+    //    same cycle just reset; see the write site below for how that's avoided. The clear is the
+    //    defense that matters once the system survives untouched to a LATER cycle instead.
+    //  • the three planner readings — this is the ONLY thing that ever clears them for an abandoned
+    //    system, and the reason is the opposite of what it looks like. An abandoned system flips to
+    //    `unclaimed` above, so `isEconomicallyActive` drops it out of the planner's working set and
+    //    it is never VISITED again — and the clear-visited-then-assign writes below
+    //    (`applyBuildBlockedUpdates` and its two siblings) only touch systems inside their visited
+    //    set, by design, because set-and-clear says an entity a run did not visit keeps its previous
+    //    value. So "the write path naturally excludes it" is precisely why clearing here is
+    //    load-bearing rather than a backstop: without it a dead colony would advertise its last
+    //    blocked build and its last opportunity indefinitely, which is the present-but-false reading
+    //    the absence convention exists to prevent.
+    clearPreviousLifeReadings(next);
     return next;
   });
 }

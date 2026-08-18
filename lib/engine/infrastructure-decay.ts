@@ -2,7 +2,7 @@
  * Pure whole-level infrastructure decay — zero DB dependency.
  *
  * Capacity is a ratchet: construction adds whole levels, decay removes whole levels. Each decay run
- * measures a building's utilization (resolved uniformly by `buildingUsed`, dispatched on its typed
+ * measures a building's utilisation (resolved uniformly by `buildingUsed`, dispatched on its typed
  * output) and:
  *  - idle contraction (buffered): while a whole level sits idle, a per-(system, type) countdown accrues
  *    the run's catch-up factor (elapsed reference-cycles); only after a sustained-idle buffer does the
@@ -31,7 +31,7 @@ import {
   housingUsed,
   labourParts,
   labourStateFromParts,
-  type UtilizationContext,
+  type UtilisationContext,
 } from "@/lib/engine/industry";
 import { HOUSING_TYPE } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
@@ -88,7 +88,7 @@ export function collapseSeverity(unrest: number, threshold: number): number {
 }
 
 /**
- * Whole levels of `type` currently sitting idle: the integer count minus its utilization, floored.
+ * Whole levels of `type` currently sitting idle: the integer count minus its utilisation, floored.
  * A level counts as idle only when a FULL level's capacity is unused. Housing occupancy can exceed
  * its own count (over-crowding), which yields a negative gap → never idle.
  */
@@ -110,7 +110,7 @@ export function computeSystemDecay(
   const { buildings, buildingIdleCycles, population, unrest } = input;
   const parts = labourParts(buildings);
   const state = labourStateFromParts(parts, population);
-  const ctx: UtilizationContext = {
+  const ctx: UtilisationContext = {
     buildings,
     population,
     parts,
@@ -121,7 +121,7 @@ export function computeSystemDecay(
 
   const newCounts: Record<string, number> = {};
   const newIdleCycles: Record<string, number> = {};
-  // Utilization is measured once, against the state the run started in — it drives the idle
+  // Utilisation is measured once, against the state the run started in — it drives the idle
   // countdown here and orders the collapse channel below off the same reading.
   const usedByType = new Map<string, number>();
 

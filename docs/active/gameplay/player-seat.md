@@ -37,7 +37,7 @@ both identities with no player seat, so the AI-only simulation is untouched.
 
 `world.player: { controlledFactionId: string; automation: { build: boolean; colonisation: boolean };
 pinnedSystemIds: string[]; alertCategories: Record<AlertCategoryId, boolean>; trackerSections:
-Record<TrackerSectionKey, boolean> } | null` is a top-level, JSON-serializable field on `World` — it
+Record<TrackerSectionKey, boolean> } | null` is a top-level, JSON-serialisable field on `World` — it
 survives save/load like everything else. The three fields after `automation` are the attention
 layer's: the Tracker's pin list, and the two settings records the alert bar and the Tracker store
 per-save. No processor reads any of them.
