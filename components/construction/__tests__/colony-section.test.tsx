@@ -67,6 +67,10 @@ describe("ColonySection — the founding quote on the blocked verb", () => {
     expect(screen.getByRole("button", { name: /Establish colony/ })).toBeEnabled();
     expect(screen.getByText("Sol")).toBeInTheDocument();
     expect(screen.getByText(formatCredits(1200))).toBeInTheDocument();
+    // The whole commitment threshold shows on the ELIGIBLE verb too — the player sees the final
+    // number before clicking, not only after being refused.
+    expect(screen.getByText(formatCredits(8000))).toBeInTheDocument();
+    expect(screen.getByText(/requires/)).toBeInTheDocument();
     expect(screen.queryByText(COLONY_BLOCK_COPY.insufficient_funds)).not.toBeInTheDocument();
   });
 });

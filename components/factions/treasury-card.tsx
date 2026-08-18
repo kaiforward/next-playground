@@ -11,7 +11,7 @@ import { TREASURY } from "@/lib/constants/treasury";
 import { buildingLabel } from "@/lib/engine/construction-readout";
 import { formatMagnitude } from "@/lib/utils/format";
 import type { TaxLevel } from "@/lib/types/game";
-import { bandShortfall, type TreasuryBands } from "@/lib/engine/treasury";
+import { bandShortfall, foundingWorkingBalance, type TreasuryBands } from "@/lib/engine/treasury";
 
 function money(n: number): string {
   return formatMagnitude(n);
@@ -64,7 +64,7 @@ export function TreasuryCard({ factionId, interactive }: TreasuryCardProps) {
             order commits money, and disappears when nothing is committed. */}
         <div className="mb-3 flex items-baseline justify-between">
           <span className="font-mono text-[22px] leading-none text-text-primary">
-            {money(data.balance - data.foundingCommitted)}
+            {money(foundingWorkingBalance(data.balance, data.foundingCommitted))}
           </span>
           <span className={`font-mono text-xs ${data.net < 0 ? "text-status-red-light" : "text-status-green-light"}`}>
             net {signedMoney(data.net)} / cycle
