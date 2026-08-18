@@ -128,6 +128,7 @@ export function TabLink({
   return (
     <Link
       href={href}
+      aria-current={active ? "page" : undefined}
       className={tabVariants({ variant, active, activeColor, className })}
     >
       {children}
