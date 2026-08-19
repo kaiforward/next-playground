@@ -41,6 +41,13 @@ declare global {
  */
 export function resolveHostConfig(): HostConfig {
   if (globalThis.__hostConfig !== undefined) return globalThis.__hostConfig;
+  // Vite's browser bundle has no `process` global at all — reached only if a caller imports this
+  // module without going through `client/worker/boot.ts` (which sets `__hostConfig` before the
+  // dynamic import that reaches here). The guard keeps that misuse a defined "no override
+  // requested" default instead of a `ReferenceError: process is not defined` crash.
+  if (typeof process === "undefined") {
+    return { debugEconomy: false, debugEvents: false };
+  }
   return {
     economyScale: process.env.ECONOMY_SCALE,
     debugEconomy: process.env.DEBUG_ECONOMY === "1",
