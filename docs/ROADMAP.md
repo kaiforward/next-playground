@@ -36,8 +36,9 @@ The attention layer — how the player finds what to do — is two surfaces, bot
    seeded developed worlds are born at max, so the shape is fine-grained ticks with much slower
    rates, growth ~30× the real-world anchor. Colonisation-pacing's speed measure (row below) was
    taken in the same instrument run.
-   *Next step:* `/feature-spec` from the working file's evidence — anchor chosen (1 tick = 6 h,
-   cycle = 24 ticks = a fictionally-named 6-day week), duration audit next.
+   *Next step:* `/build-plan` from the reviewed spec (working file `## Spec`, amended through
+   `/spec-review` 2026-08-19 — 15-entry rate table, numeric sim gates). Anchor: 1 tick = 6 h,
+   cycle = 24 ticks = a fictionally-named 6-day week.
    *Don't:* tune any rate before the anchor is defined. The calendar is a definition set from
    external reference; a rate can fail the definition, never set it.
 2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
