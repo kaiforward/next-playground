@@ -384,7 +384,7 @@ interval count (an N-absorption build reads N−1 — the fencepost C2 exhibits 
 | Tier-2 factory | 7.5 cycles = 45 days | 75 cycles ≈ 15 months | heavy plant 2-4 years |
 | Colony establish | 16 measured (17-absorption floor) ≈ 100 days | ~169 measured (170-absorption floor) ≈ 2.8 years | no analog; owner call |
 | Pop growth | ≈ ×2.5/year | ≈ 3.1%/year | frontier-boom ceiling |
-| Galaxy maturation | ~8 years (plateau t≈11,500) | ×10–×30 slower — projection; C1 does not separate the build-limited (×10 ≈ 79 yr) from the growth-limited (×30 ≈ 236 yr) case, and the trajectory run's slope answers it | a grand-strategy arc |
+| Galaxy maturation | ~8 years (plateau t≈11,500) | **≈×14 (Gate C answer)** — the 50K run's settled slope is ≈2.6%/year (pop 228.5K at t=50K, still far from plateau); extrapolation reaches the baseline plateau population ≈ t 160K ≈ 110 in-world years. Inside the ×10–×30 bracket, nearer the build-limited pole | a grand-strategy arc |
 
 Behavioural notes, observable: build ETAs shown by `lib/services/build-options.ts:80-82` and
 `lib/services/construction.ts:134-135` read the same constants, so every UI ETA moves consistently

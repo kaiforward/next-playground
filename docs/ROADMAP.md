@@ -185,10 +185,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   whether that slowdown is the right shape for a famine or crisis event, and whether the
   death:growth ratio itself is a deliberate design point or an artifact worth revisiting.
   *Next step:* design pass on what "disaster" means at the new rates.
-- **[S] Measure why construction centres never fund at reference scale** — zero centre commits in
-  the pre-timescale equilibrium run, and zero again post-change: centres never fund on either set
-  of constants at the reference seed/scale. Surfaced as a baseline fact at the timescale build
-  plan's Gate B and owner-deferred out of that PR. ROI competition against backlog draining has not
+- **[S] Measure why construction centres never funded pre-timescale** — zero centre commits
+  anywhere in the pre-timescale equilibrium run (surfaced as a baseline fact at the timescale
+  build plan's Gate B, owner-deferred out of that PR). At the shipped constants they do fund —
+  every faction committed and completed exactly one in the 50K trajectory read — so the question
+  is why the old `PAYBACK_HORIZON`/`BACKLOG_WINDOW` regime priced them out entirely, and whether
+  one-per-faction is the intended pacing now. ROI competition against backlog draining has not
   been separated as the cause.
   *Next step:* `/measure` before any centre-tuning design.
 **Platform**
