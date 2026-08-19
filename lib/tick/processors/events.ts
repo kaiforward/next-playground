@@ -36,8 +36,9 @@ import type {
   PhaseAdvance,
   SystemShock,
 } from "@/lib/tick/world/events-world";
+import { resolveHostConfig } from "@/lib/constants/economy-scale";
 
-const DEBUG = process.env.DEBUG_EVENTS === "1";
+const DEBUG = resolveHostConfig().debugEvents;
 
 /**
  * The `EventCreate` a spawn decision becomes. Both paths that create an event build the identical
