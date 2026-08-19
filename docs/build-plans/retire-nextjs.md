@@ -1,5 +1,12 @@
 # Retire Next.js + TanStack Query — working file
 
+## Spec
+
+Written to [docs/planned/client-runtime.md](../planned/client-runtime.md) rather than inline: this
+is an XL multi-PR feature and this file already carries ~270 lines of evidence — the spec would
+stop both being readable. The falsifiers below are the provenance source the spec's copies are
+diffed against.
+
 Roadmap queue head. This file starts at the row's `/measure` step: where a system-panel open
 actually spends its time, and the query layer's load-bearing surface. The evidence sizes the design
 pass that settles what replaces the query layer.
