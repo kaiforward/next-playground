@@ -626,7 +626,9 @@ Files:      `docs/SPEC.md` (calendar definition; horizon-relabel note), `docs/RO
             calendar section; flag the equilibrium-horizon row `:384` with the relabel — 10,000
             ticks is now founding-era, ~year 7; add two rows: the player-facing date-display
             slice, and the disasters/decline-realism pass carrying the accepted 100:1
-            death:growth asymmetry and the deferred `declineRate` realism)
+            death:growth asymmetry and the deferred `declineRate` realism; add a third row —
+            measure why construction centres never fund at reference scale, a pre-existing
+            fact Gate B surfaced, owner-deferred out of this PR)
 Interface:  none — docs only.
 Proves:     SPEC's calendar section derives the cycle's in-world length from
             `CYCLE_LENGTH × HOURS_PER_TICK`, never an independent day count; no active doc still
@@ -650,8 +652,11 @@ Merge condition — all of, numbers per the spec's gates:
             floors; establish commits per cycle non-zero through the run, with the
             `settlerBudget` series as the diagnostic if they stall; median charter + fee-floor
             share and median faction balance within ~3× of the Gate B baselines (the charter-drift
-            hypothesis is judged here); centre proposals funded per faction non-zero and
-            comparable to baseline; plateau-slope extrapolation brackets the ×10–×30 maturation
+            hypothesis is judged here); centre proposals funded: no-regression only — funded
+            centres ≥ baseline (which is ZERO; Gate B found centres never fund on pre-change
+            constants either), reading recorded either way (owner decision, 2026-08-19 — the
+            why-centres-never-fund investigation is booked as its own roadmap row, Task 4);
+            plateau-slope extrapolation brackets the ×10–×30 maturation
             question and the answer is written into this file's durations table.
 3.          Gate 3: cumulative teardown per standing level ≤ ~1.5× C7's 0.042 at the equilibrium
             horizon and at 50K; landing-unstaffed fraction compared against Gate B's baseline.
