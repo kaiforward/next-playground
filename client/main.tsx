@@ -43,6 +43,10 @@ worker.onmessage = (event: MessageEvent<OutboundMessage>) => {
       gameStore.applyPacingFrame(message.frame);
       return;
     case "state":
+      if (import.meta.env.DEV) {
+        console.log("[shell] state frame:", message.frame.worldVersion,
+          "slices:", Object.keys(message.frame.slices).length);
+      }
       gameStore.applyStateFrame(message.frame);
       return;
     case "tickFailed":
@@ -90,6 +94,7 @@ if (import.meta.env.DEV) {
     if (worldVersion === null) return;
     unsubscribeBoot();
     if (worldVersion === 0) {
+      console.log("[shell] world-less store observed — posting dev newGame");
       postCommand({ id: crypto.randomUUID(), type: "newGame", payload: DEV_NEW_GAME });
     }
   });

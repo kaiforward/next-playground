@@ -375,3 +375,31 @@ describe("createGameWorker — saveGame / loadGame", () => {
     expect(result.result.error).toContain("not found");
   });
 });
+
+describe("createGameWorker — boot-in-flight command race (Gate B vite-dev smoke)", () => {
+  it("a command posted immediately after boot, before the engine import settles, waits for boot instead of being rejected", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+
+    // No `await`, no `setTimeout`, no microtask flush between these two `receive()` calls — this
+    // is the exact shape of the real vite-dev bug (main.tsx's boot → subscribe → newGame posted
+    // back-to-back). `loadEngine`'s dynamic `import()` chain cannot have settled by the time the
+    // second message is processed: ECMAScript dynamic `import()` always resolves via the job queue
+    // (a minimum of one microtask), never synchronously, and nothing in this test has yielded to
+    // the microtask queue yet — so this genuinely exercises the boot-still-pending path, not a
+    // coincidentally-already-resolved one. Proven directly, not just argued: `scope.sent` is still
+    // empty here — under the OLD behaviour (reject when `!engine`) the rejection would have posted
+    // synchronously, so an empty array is itself evidence the worker did NOT take that path.
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    expect(scope.sent).toHaveLength(0);
+
+    const result = await waitForCommandResult(scope, "ng");
+    expect(result.result.ok).toBe(true);
+
+    const state = [...scope.sent].reverse().find((m) => m.type === "state");
+    if (!state || state.type !== "state") throw new Error("expected a state message");
+    expect(state.frame.worldVersion).toBeGreaterThan(0);
+    expect(state.frame.slices.universe).toBeDefined();
+  });
+});

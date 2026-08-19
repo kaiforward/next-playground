@@ -380,6 +380,22 @@ async function runCommand(engine: Engine, envelope: GameCommandEnvelope): Promis
 export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundMessage>): void {
   const host: WorkerHost<InboundMessage, OutboundMessage> = createWorkerHost(scope);
   let engine: Engine | null = null;
+  /**
+   * Set the instant a `boot` message is processed (synchronously, before `loadEngine`'s dynamic
+   * `import()`s have a chance to settle) — `null` means no `boot` message has EVER arrived, the
+   * only case `handleCommand` rejects with "Worker not booted." A non-null value means boot is
+   * either still in flight or already settled; either way a command awaits this promise rather
+   * than rejecting. This is the fix for a real vite-dev bug (Gate B smoke, 2026-08-19): under
+   * webpack/vitest the dynamic-import chain settles fast enough that a command issued right after
+   * `subscribe` never raced it, but under vite dev it's slow enough that `main.tsx`'s boot →
+   * subscribe → (on the world-less frame) newGame sequence posted `newGame` while `handleBoot`'s
+   * `await loadEngine(config)` was still pending — and the worker rejected it outright, because
+   * "booted" was tracked only by `engine`'s nullness, which flips only once loading finishes.
+   * Message order already guarantees `boot` was received before any command that depends on it
+   * (the UI never commands before it has seen a subscribe reply, and it never subscribes before
+   * posting boot); what was missing was honouring that order on the worker side too.
+   */
+  let bootPromise: Promise<void> | null = null;
 
   /** The pacing frame for a world-less worker — `TickLoop.getSnapshot()`'s own no-world shape
    *  (`currentTick: 0, speed: "paused", achievedTps: 0, events: {}`, `lib/world/tick-loop.ts:88-95`)
@@ -415,21 +431,65 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
     }
   }
 
-  async function handleBoot(config: BootConfig): Promise<void> {
-    engine = await loadEngine(config);
-    engine.tickLoop.subscribe((broadcast) => {
-      pushPacingFrame(broadcast);
-      pushStateFrame();
+  /**
+   * A `boot` message never blocks the message loop: `bootPromise` is assigned SYNCHRONOUSLY here
+   * (calling `loadEngine` returns its promise immediately; only its own body awaits the dynamic
+   * imports), so any message processed after this one — even in the same synchronous batch, before
+   * any microtask runs — already sees `bootPromise` as non-null. `subscribe` deliberately does not
+   * await it (see `handleSubscribe`'s docstring); `command` does (see `handleCommand`'s).
+   */
+  function handleBoot(config: BootConfig): void {
+    bootPromise = loadEngine(config).then((loaded) => {
+      engine = loaded;
+      engine.tickLoop.subscribe((broadcast) => {
+        pushPacingFrame(broadcast);
+        pushStateFrame();
+      });
     });
   }
 
+  /**
+   * Replies immediately in every state, boot-in-flight included — this is the one handler that
+   * must NEVER await `bootPromise`, so a subscriber attaching mid-boot still gets a defined frame
+   * on the frame it asked (spec: "subscribing to a world-less worker returns a defined no-world
+   * frame, not silence").
+   *
+   * A subscribe that lands WHILE boot is still pending gets nothing further pushed when boot then
+   * completes (no re-push here, no subscriber-list to replay to) — this is safe only because the
+   * pre-boot and post-boot-but-still-world-less frames are byte-identical: `TickLoop`'s own
+   * defaults (`speed: "paused"` at construction, `hasWorld()` false pre-`newGame`/`loadGame`) are
+   * exactly `NO_ENGINE_PACING_FRAME`/`noWorldStateFrame()`'s values, so nothing observable changes
+   * at the moment boot finishes. The instant something WOULD differ — a world lands — is exactly
+   * `newGame`/`loadGame` committing, and THAT already pushes its own full frame (`handleCommand`
+   * below). If a future change makes the pre/post-boot world-less frame diverge (e.g. pacing
+   * gaining a boot-progress field), this invariant breaks silently — push a frame from inside
+   * `handleBoot`'s `.then` at that point rather than re-deriving this reasoning.
+   */
   function handleSubscribe(): void {
     host.post({ type: "pacing", frame: engine ? engine.tickLoop.getSnapshot() : NO_ENGINE_PACING_FRAME });
     pushStateFrame();
   }
 
   async function handleCommand(envelope: GameCommandEnvelope): Promise<void> {
+    if (!bootPromise) {
+      host.post({ type: "commandResult", id: envelope.id, result: { ok: false, error: "Worker not booted." } });
+      return;
+    }
+    // Boot received but maybe still in flight: wait for it rather than rejecting. Awaiting the
+    // SAME promise from every concurrently-queued command preserves arrival order — each `await`
+    // attaches a microtask in the order `handleCommand` was called (message order), and a promise
+    // runs its attached continuations in attachment order whether it was already settled or not —
+    // so this needs no explicit queue on top.
+    try {
+      await bootPromise;
+    } catch {
+      host.post({ type: "commandResult", id: envelope.id, result: { ok: false, error: "Worker failed to boot." } });
+      return;
+    }
     if (!engine) {
+      // Defensive: `loadEngine` rejected, so `bootPromise` settled but `engine` was never assigned
+      // (the `.then` that assigns it never ran). Caught above via the `catch`, but kept here too in
+      // case a future change makes `bootPromise` resolve without `engine` being set.
       host.post({ type: "commandResult", id: envelope.id, result: { ok: false, error: "Worker not booted." } });
       return;
     }
@@ -441,7 +501,7 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
   host.onMessage((message) => {
     switch (message.type) {
       case "boot":
-        void handleBoot(message.config);
+        handleBoot(message.config);
         return;
       case "subscribe":
         handleSubscribe();
