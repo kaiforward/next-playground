@@ -76,3 +76,6 @@ temp/
 # MCP server config (local tooling)
 .mcp.json
 .claude/reviews/
+
+# Vite build output
+/dist/
