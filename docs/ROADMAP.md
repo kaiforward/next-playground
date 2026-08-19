@@ -27,7 +27,33 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[XL] Retire Next.js and TanStack Query — this is a single-page game, not a web app.** Packaging
+   path B from [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §6: the engine in a Web
+   Worker, fully client-side, shippable as static web plus Tauri/Electron from one codebase. The
+   Next.js server, the App Router, the `app/api/game/` handlers and the query layer all retire
+   together.
+   That section says "A migrates into B; don't decide today" — written when the pivot was young.
+   Everything else in it has since shipped (Postgres and Prisma gone, world in memory, saves as JSON
+   on disk), so the packaging path is the last undecided piece of a finished pivot, and the
+   non-decision is the stale part.
+   Queued to the head by Kai (2026-08-19): the last leftover of the old game — both frameworks carry
+   web-app quirks the game still pays for, and the felt cost is now concrete: **a loading panel on
+   every system click**. The genre bar is EU5, where a system detail panel opens instantly; a visible
+   load on a detail panel is not acceptable in a grand-strategy game. His read (2026-08-12) stands:
+   real performance gains, no delay opening panels, the coupling below all solvable, the end state
+   simpler than what it replaces — and the retirement holds even for future multiplayer.
+   **What it actually touches**, so nobody sizes this as a framework swap: the entire client data
+   layer. TanStack Query is load-bearing today — `useTickInvalidation`, the map atlas held at
+   `staleTime: Infinity`, and the SSE-driven hooks that seed initial state from REST. The route
+   handlers are thin, but every hook in `lib/hooks/` reads through them.
+   *Next step:* `/measure` where a system-panel open actually spends its time (server round-trip vs
+   query cache vs Suspense fallback flash), and inventory the query layer's load-bearing surface —
+   that evidence sizes the design pass that settles what replaces the query layer. With the world
+   in-process there may be no cache to invalidate at all — that is the simplification being claimed,
+   and proving or killing it decides the size of everything else.
+   *Don't:* port TanStack across as-is. Caching in front of an in-process world is the indirection
+   this work exists to remove, and keeping it would leave both layers in place for none of the gain.
+2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
@@ -207,29 +233,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   one-per-faction is the intended pacing now. ROI competition against backlog draining has not
   been separated as the cause.
   *Next step:* `/measure` before any centre-tuning design.
-**Platform**
-- **[XL] Retire Next.js and TanStack Query — this is a single-page game, not a web app.** Packaging
-  path B from [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §6: the engine in a Web
-  Worker, fully client-side, shippable as static web plus Tauri/Electron from one codebase. The
-  Next.js server, the App Router, the `app/api/game/` handlers and the query layer all retire
-  together.
-  That section says "A migrates into B; don't decide today" — written when the pivot was young.
-  Everything else in it has since shipped (Postgres and Prisma gone, world in memory, saves as JSON
-  on disk), so the packaging path is the last undecided piece of a finished pivot, and the
-  non-decision is the stale part.
-  Kai's reasoning (2026-08-12): real performance gains and no delay opening panels, since the client
-  currently round-trips to a local server for state that could sit in-process. His read is that the
-  coupling below is all solvable and the end state is simpler than what it replaces.
-  **What it actually touches**, so nobody sizes this as a framework swap: the entire client data
-  layer. TanStack Query is load-bearing today — `useTickInvalidation`, the map atlas held at
-  `staleTime: Infinity`, and the SSE-driven hooks that seed initial state from REST. The route
-  handlers are thin, but every hook in `lib/hooks/` reads through them.
-  *Next step:* a design pass that settles what replaces the query layer *first*. With the world
-  in-process there may be no cache to invalidate at all — that is the simplification being claimed,
-  and proving or killing it decides the size of everything else.
-  *Don't:* port TanStack across as-is. Caching in front of an in-process world is the indirection
-  this work exists to remove, and keeping it would leave both layers in place for none of the gain.
-
 **Tick performance**
 - **[M] `toTickSystems` is the whole mid-cycle tick outside events** — 2.5 ms/tick at 2,400 systems,
   19.0% of a mid-cycle tick. Gating can't touch it: ship-arrivals and events both run every tick and both
