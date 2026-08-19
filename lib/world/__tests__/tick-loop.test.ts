@@ -218,4 +218,158 @@ describe("TickLoop", () => {
 
     expect(getWorld().meta.currentTick).toBe(1);
   });
+
+  describe("enqueueCommand", () => {
+    it("applies a command immediately when the loop is paused, bumping the world version", async () => {
+      const beforeVersion = getWorld().meta.currentTick; // sanity: world starts at tick 0
+      expect(beforeVersion).toBe(0);
+
+      const promise = loop.enqueueCommand((world) => ({
+        world: { ...world, meta: { ...world.meta, currentTick: 999 } },
+        result: "ok",
+      }));
+
+      // No await/advance needed: paused enqueue drains synchronously inside enqueueCommand.
+      expect(getWorld().meta.currentTick).toBe(999);
+      const { result, worldVersion } = await promise;
+      expect(result).toBe("ok");
+      expect(worldVersion).toBeGreaterThan(0);
+    });
+
+    it("a command enqueued during a tick's await window applies AFTER that tick and is not overwritten", async () => {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(runWorldTick).mockImplementationOnce(async (world) => {
+        await gate;
+        return {
+          world: { ...world, meta: { ...world.meta, currentTick: world.meta.currentTick + 1 } },
+          events: { currentTick: world.meta.currentTick + 1, events: {} },
+          markets: [],
+          instrumentation: {},
+        };
+      });
+
+      loop.setSpeed(5); // 200ms interval
+      await new Promise<void>((resolve) => setTimeout(resolve, 250)); // tick started, awaiting the gate
+
+      const MARKER_MAP_SIZE = -777; // a value world-gen never produces, used purely as a write marker
+      const commandPromise = loop.enqueueCommand((world) => ({
+        world: { ...world, meta: { ...world.meta, mapSize: MARKER_MAP_SIZE } },
+        result: "committed",
+      }));
+
+      // Still inside the tick's await window: the command must NOT have applied yet.
+      expect(getWorld().meta.mapSize).not.toBe(MARKER_MAP_SIZE);
+
+      release(); // let the tick's own setWorld run
+      const { result } = await commandPromise;
+
+      expect(result).toBe("committed");
+      // The tick's setWorld ran first (currentTick bumped to 1); the command's write
+      // rode on top of it rather than being silently reverted by it.
+      expect(getWorld().meta.currentTick).toBe(1);
+      expect(getWorld().meta.mapSize).toBe(MARKER_MAP_SIZE);
+    });
+
+    it("two rapid commands queued together apply in order, the second reading the first's committed state", async () => {
+      // Both must land in the SAME drain batch (the actual silent-revert hazard) rather than
+      // each triggering its own separate immediate drain — queue them while a tick is in
+      // flight so they both sit in the queue until one shared `drainCommands` call runs.
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(runWorldTick).mockImplementationOnce(async (world) => {
+        await gate;
+        return {
+          world,
+          events: { currentTick: world.meta.currentTick, events: {} },
+          markets: [],
+          instrumentation: {},
+        };
+      });
+
+      loop.setSpeed(5); // 200ms interval
+      await new Promise<void>((resolve) => setTimeout(resolve, 250)); // tick started, awaiting the gate
+
+      const first = loop.enqueueCommand((world) => ({
+        world: { ...world, meta: { ...world.meta, currentTick: world.meta.currentTick + 1 } },
+        result: world.meta.currentTick,
+      }));
+      const second = loop.enqueueCommand((world) => ({
+        world: { ...world, meta: { ...world.meta, currentTick: world.meta.currentTick + 1 } },
+        result: world.meta.currentTick,
+      }));
+
+      release(); // tick commits (currentTick unchanged by the tick itself), then both commands drain together
+      const [firstOutcome, secondOutcome] = await Promise.all([first, second]);
+      loop.setSpeed("paused");
+
+      // First read the post-tick committed tick (0, since this tick leaves it unchanged);
+      // second read first's committed output (1) — never a revert to the pre-drain value.
+      expect(firstOutcome.result).toBe(0);
+      expect(secondOutcome.result).toBe(1);
+      expect(secondOutcome.worldVersion).toBeGreaterThan(firstOutcome.worldVersion);
+      expect(getWorld().meta.currentTick).toBe(2);
+    });
+
+    it("a throwing command rejects its own promise without pausing the loop or corrupting the world", async () => {
+      const tickBefore = getWorld().meta.currentTick;
+
+      // Queue the failing command together with a good one in the SAME drain batch (during a
+      // tick's await window, so both accumulate before either runs) — a throw must not abort
+      // the rest of that batch.
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      vi.mocked(runWorldTick).mockImplementationOnce(async (world) => {
+        await gate;
+        return {
+          world,
+          events: { currentTick: world.meta.currentTick, events: {} },
+          markets: [],
+          instrumentation: {},
+        };
+      });
+      loop.setSpeed(5); // 200ms interval
+      await new Promise<void>((resolve) => setTimeout(resolve, 250)); // tick started, awaiting the gate
+
+      const failing = loop.enqueueCommand<string>(() => {
+        throw new Error("bad command");
+      });
+      const batchmate = loop.enqueueCommand((world) => ({
+        world: { ...world, meta: { ...world.meta, currentTick: world.meta.currentTick + 1 } },
+        result: "batchmate-ok",
+      }));
+      release(); // tick commits, then the batch (failing, then batchmate) drains together
+
+      await expect(failing).rejects.toThrow("bad command");
+      const batchmateOutcome = await batchmate;
+      expect(batchmateOutcome.result).toBe("batchmate-ok");
+      loop.setSpeed("paused");
+
+      // World untouched by the throwing command; the batchmate's write did land.
+      expect(getWorld().meta.currentTick).toBe(tickBefore + 1);
+
+      // The loop is unaffected: still paused (not hard-paused-by-error state confused with
+      // normal paused), and a later command still applies against the last good world.
+      expect(loop.getSpeed()).toBe("paused");
+      const followUp = await loop.enqueueCommand((world) => ({
+        world: { ...world, meta: { ...world.meta, currentTick: world.meta.currentTick + 1 } },
+        result: "fine",
+      }));
+      expect(followUp.result).toBe("fine");
+      expect(getWorld().meta.currentTick).toBe(tickBefore + 2);
+
+      // And the loop still ticks normally afterward.
+      vi.useFakeTimers();
+      const tickBeforeResume = getWorld().meta.currentTick;
+      loop.setSpeed(1);
+      await vi.advanceTimersByTimeAsync(2_100);
+      expect(getWorld().meta.currentTick).toBeGreaterThan(tickBeforeResume);
+    });
+  });
 });

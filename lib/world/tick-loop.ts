@@ -12,10 +12,11 @@
  * store) so dev-server module reloads don't spawn parallel loops.
  */
 
-import { getWorld, hasWorld, setWorld } from "./store";
+import { getWorld, getWorldVersion, hasWorld, setWorld } from "./store";
 import { AUTOSAVE_NAME } from "./save";
 import { runWorldTick } from "./tick";
 import type { GlobalEventMap } from "@/lib/tick/types";
+import type { World } from "./types";
 
 export type Speed = "paused" | 1 | 5 | "max";
 
@@ -64,6 +65,13 @@ export class TickLoop {
   private pendingBroadcast: TickBroadcast | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private lastAutosaveAt = 0;
+  /**
+   * Commands queued while a tick is in flight — each entry closes over its own `run`,
+   * `resolve`/`reject`, so the queue itself stays a plain array of niladic thunks
+   * regardless of what `T` any individual command resolves with. Drained in
+   * `drainCommands`, never applied inside `tickOnce`'s await window.
+   */
+  private commandQueue: (() => void)[] = [];
 
   getSpeed(): Speed {
     return this.speed;
@@ -105,6 +113,60 @@ export class TickLoop {
       }, 1000 / speed);
     }
     this.emit(this.getSnapshot(), true);
+  }
+
+  /**
+   * Queues `run` against the last committed world and resolves with its result plus the
+   * world version it committed at. `runWorldTick` is async (`tickOnce` below reads the
+   * world before its `await` and writes after), so a command applied mid-tick would be
+   * silently overwritten by the tick's own `setWorld` — commands therefore only ever run
+   * between ticks. While a tick is in flight this just queues; `tickOnce`'s `finally`
+   * drains the queue right after that tick's own commit, so a command queued during the
+   * await window applies AFTER the tick and is never the thing that gets overwritten.
+   * When no tick is in flight (paused, or between an interval's fires) the queue drains
+   * synchronously, inside this same call, so a paused command is never left waiting on a
+   * tick that will never come.
+   *
+   * Each queued command commits with its own `setWorld` — draining N queued commands
+   * bumps the world version N times rather than once. That is deliberate, not merely
+   * cheap: the "once per committed world version" notify contract (spec §2) is per
+   * version, not per drain, so N commits notifying N times is within contract; the reason
+   * to pick per-command commits over a single end-of-drain commit is that the SECOND of
+   * two rapid commands must read the FIRST's committed output, not the pre-drain world —
+   * the silent-revert kill this task exists to close. A single end-of-drain commit would
+   * let every command in the batch read the same stale pre-drain world.
+   *
+   * A throwing `run` rejects only its own promise. The world stays at its last good
+   * committed state (the throw happens before this command's `setWorld`), the loop keeps
+   * ticking, and every command queued after the failing one still runs — against that
+   * last good state.
+   */
+  enqueueCommand<T>(
+    run: (world: World) => { world: World; result: T },
+  ): Promise<{ result: T; worldVersion: number }> {
+    return new Promise((resolve, reject) => {
+      this.commandQueue.push(() => {
+        try {
+          const { world, result } = run(getWorld());
+          setWorld(world);
+          resolve({ result, worldVersion: getWorldVersion() });
+        } catch (error) {
+          reject(error instanceof Error ? error : new Error(String(error)));
+        }
+      });
+      if (!this.ticking) this.drainCommands();
+    });
+  }
+
+  /** Runs every queued command in commit order, each against whatever the previous one
+   *  (or the tick that preceded this drain) just committed. Called from `enqueueCommand`
+   *  when no tick is in flight, and from `tickOnce`'s `finally` once that tick's own
+   *  `setWorld` has run — never from inside `runWorldTick`'s await window. */
+  private drainCommands(): void {
+    while (this.commandQueue.length > 0) {
+      const command = this.commandQueue.shift();
+      command?.();
+    }
   }
 
   subscribe(fn: (e: TickBroadcast) => void): () => void {
@@ -161,6 +223,9 @@ export class TickLoop {
       this.emit(this.getSnapshot(), true);
     } finally {
       this.ticking = false;
+      // Drain anything queued during the await window above — after this tick's own
+      // `setWorld` (success path) or its no-op-on-world (failure path), never inside it.
+      this.drainCommands();
     }
   }
 
