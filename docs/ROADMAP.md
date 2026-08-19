@@ -328,11 +328,16 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   never a red test.
 - **[M] Player-facing calendar & date display** — the timescale calendar shipped the internal
   anchor (`HOURS_PER_TICK`, `ticksToHours`) but deliberately cut the display slice: there is no
-  fictional cycle/date naming and no tick-to-date conversion anywhere in the UI. Needs a fictional
-  naming scheme for the cycle/date units and a rendering pass wherever a tick count is currently
-  shown raw.
+  fictional cycle/date naming and no tick-to-date conversion anywhere in the UI. **Unit structure
+  decided (Kai, 2026-08-19), all derived from the tick:** day = 4 ticks; cycle = 6 days (the
+  economic week, fictionally named); month = 5 cycles = 30 days; year = 12 months = 360 days =
+  1,440 ticks — a clean fictional year, deliberately NOT the ~1,461-tick real-unit year internal
+  research math keeps using; epoch start-year constant (e.g. 2350) renders tick 0 Stellaris-style
+  as `2350.01.01`, display-only, no save change. Still open: the cycle's fictional name, epoch
+  value, format details, and where it renders (top bar + every raw tick count: ETAs, event
+  durations). Branch `feat/calendar-display` exists off post-timescale main.
   *Next step:* UI-heavy — a browser-viewable HTML prototype approved before implementation, per
-  AGENTS.
+  AGENTS: breadth-first variants of the top-bar date and of converted ETA/duration readouts.
 
 **Audits Kai has asked for**
 - **[M] Trader-hangover audit** — sweep the codebase for leftovers from the old browser space-trading
