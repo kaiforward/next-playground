@@ -268,3 +268,372 @@ fetches are serial behind it, and the mounted-guard flash is per-open regardless
 three are framework artefacts the retirement removes by construction. What the retirement does
 NOT automatically remove is the ~240-250 ms render cost, and sizing that (prod build, profiler)
 is the first open question for `/feature-spec`.
+
+## Build plan
+
+Spec: [docs/planned/client-runtime.md](../planned/client-runtime.md) (spec-reviewed 2026-08-19,
+amendments applied). PR structure: integration branch `shared/client-runtime`, four sub-PRs (one
+per stage below); stages are check-in pauses inside those sub-PRs, never PRs of their own.
+
+**Plan-level decisions proposed here (owner approves before /implement-plan):**
+- **Store: hand-rolled on `useSyncExternalStore`, no library.** The store's whole content is this
+  feature's logic (structural-sharing merge, version tracking, liveness) — a state library would
+  wrap the same React primitive and own none of it. The owner deferred this choice at spec triage;
+  this is the plan's proposal.
+- **Router: hand-rolled History API module.** The route table is five entries; a router library's
+  value (nested layouts, loaders, search-param schemas) is the framework surface being removed.
+- **Web save backend: IndexedDB** (not OPFS) — Safari-safe, transactional (gives the
+  atomic-or-recoverable write), and the index-record pattern fits object stores naturally.
+- **New entry directory `client/`** (Vite root: entry, worker, router, fonts). `components/` and
+  `lib/` stay where they are; `app/` is deleted at Task 14.
+- **Desktop shell packaging (Tauri vs Electron) is NOT in this migration** — booked, see Not
+  covered. The save-backend interface keeps the Node/file implementation so desktop slots in later.
+
+### Resolution — every measure the spec's prose names, to its producer
+
+| Measure (spec prose) | State | Producer |
+|---|---|---|
+| pacing frame ("tick/speed/tps/events") | exists | `TickBroadcast`, `lib/world/tick-loop.ts:23-28` |
+| state frame ("UI-facing slices") | new | Task 1 `buildStateFrame` |
+| coalescing throttle ("at most every 250 ms") | exists | `BROADCAST_MIN_INTERVAL_MS`, `lib/world/tick-loop.ts:44,177-203` |
+| "committed world version" | exists | `getWorldVersion()` / `setWorld()` bump, `lib/world/store.ts:19-20` (every non-tick writer calls `setWorld`) |
+| "value-wise merge / structural sharing" | new | Task 3 `replaceEqualDeep` (hand-rolled; technique per TanStack) |
+| "worker-liveness state" | new | Task 3 store field + Task 5/11 drivers |
+| "tickFailed message" | new | Task 5 (wraps the existing hard-pause path, `lib/world/tick-loop.ts:155-164`) |
+| "boot configuration" (scale, DEBUG flags) | new | Task 4 `resolveHostConfig` (env under Node — `lib/constants/economy-scale.ts:29`; guard `scripts/simulate.ts:89-97` preserved) |
+| "command queue drained at the tick boundary" | new | Task 2 (the await window it avoids: `lib/world/tick-loop.ts:140-141`) |
+| command results (discriminated unions) | exists | mutation services (`lib/services/construction-orders.ts` etc., AGENTS convention) |
+| derived views | exists | `lib/services/*` + `versionCached`, `lib/services/world-index.ts:13-33`; two worker-side: `colony-eligibility.ts`, `construction.ts` |
+| save backend ("write/read/list") | exists (Node) | `lib/world/save-files.ts:44-65`; web impl new — Task 12 |
+| save index record ("name, tick, savedAt, bytes") | new | Task 12 |
+| "pagehide save" | new | Task 11 |
+| "not found" panel state | new | Task 9 (composes `EmptyState`, props read: `{message, className}`) |
+| `ServiceError` discriminant | exists (field change) | `lib/services/errors.ts`; re-pointed Task 14 |
+| world-existence gate | exists | `hasWorld()`, `app/(game)/layout.tsx:15-17` → boot handshake, Task 11 |
+| route table / `useRoute` | new | Task 6 |
+| font variables `--font-*` | exists (producer replaced) | consumed `app/globals.css:22-24`; new producer Task 10 `@font-face` over `app/fonts/*.woff2` + self-hosted Geist |
+| click-frame selected feedback | exists | map selection ring (Pixi, `star-map.tsx`) — kept, verified at Gate C |
+| tick-speed audit ("acceptable max") | gate | Gate D booked end task (`/measure`) |
+
+No `Interface` line below names a measure outside this table.
+
+---
+
+### Stage A — substrate (headless; no app behaviour change) — sub-PR 1
+
+### Task 1 — Snapshot slice types and worker-side frame assembly
+Files:      lib/runtime/channel.ts (new), lib/runtime/snapshot.ts (new)
+Interface:  `SnapshotSlices` — the UI-facing slice types, keyed like today's query keys (atlas,
+            universe, visibility, events, alerts, tracker, playerSettings, ownership, value-map
+            slices, factions, relations, per-id: systemVitals/Population/Industry/Logistics/
+            Construction/BuildOptions, factionVitals/Construction/Treasury incl. worker-priced
+            colonyEligibility + constructionStalls);
+            `StateFrame { worldVersion: number; slices: Partial<SnapshotSlices> }`;
+            `buildStateFrame(world: World, since: number | null): StateFrame` (since=null gives
+            the full frame);
+            `PacingFrame` (= TickBroadcast shape), `TickFailedMsg { error: string }`,
+            `CommandEnvelope` / `CommandResult<T>` (discriminated), `BootConfig`.
+Proves:     a full frame carries every slice any panel can open on (open-panel coverage, checked
+            against the slice key list); each slice in a frame is self-contained — applying only
+            the newer of two frames equals applying both (drop-harmless); per-tick event lists
+            never appear outside a state slice; every slice survives JSON round-trip (no
+            Map/Set/Date/NaN — the postMessage/save discipline); vacuity: a seeded world's full
+            frame is non-empty for every populated slice.
+Consumes:   —
+
+### Task 2 — Command queue drained at the tick boundary
+Files:      lib/world/tick-loop.ts
+Interface:  `TickLoop.enqueueCommand<T>(run: (world: World) => { world: World; result: T }):
+            Promise<{ result: T; worldVersion: number }>` — queued; drained between ticks and
+            immediately when paused; never applied inside `runWorldTick`'s await window; each
+            drain commits via `setWorld` (version bump).
+Proves:     a command enqueued while a tick is awaiting applies AFTER that tick and is not
+            overwritten (the await-window race); on a paused loop a command applies immediately
+            and bumps the version; two rapid commands apply in order and the second reads the
+            first's committed state (the silent-revert kill); a throwing command rejects its own
+            promise without pausing the loop or corrupting the world.
+Consumes:   Task 1 (`CommandResult`)
+
+### Task 3 — The UI-side snapshot store
+Files:      lib/store/replace-equal-deep.ts (new), lib/store/game-store.ts (new),
+            lib/store/use-game-store.ts (new)
+Interface:  `replaceEqualDeep<T>(prev: T, next: T): T`;
+            `createGameStore()` returning `{ applyStateFrame(f), applyPacingFrame(f),
+            setLiveness(s: Liveness), subscribe(fn), getSnapshot(): StoreState }` with
+            `Liveness = "no-world" | "live" | "paused" | "dead"`;
+            React `useGameSlice<T>(select: (s: StoreState) => T): T` via `useSyncExternalStore`.
+Proves:     an unchanged slice keeps object identity across two applies (the per-view identity
+            bar); a changed subtree gets new identity while unchanged siblings keep theirs;
+            subscribers notify once per applied version including non-tick versions; a frame
+            older than the held version is ignored (out-of-order safety); vacuity: applying a
+            frame to an empty store stores it verbatim.
+Consumes:   Task 1
+
+### Gate A
+Arms: Tasks 1-3. Reads: vitest green including every new suite; each Proves entry red-proofed;
+`npx next build --webpack` green (no app-visible change). Merge condition: sub-PR into
+`shared/client-runtime`; no gameplay surface changed.
+
+---
+
+### Stage B — the worker runtime and shell — sub-PR 2
+
+### Task 4 — Host seam for env-resolved constants
+Files:      lib/constants/economy-scale.ts, lib/tick/processors/economy.ts,
+            lib/tick/processors/events.ts, scripts/simulate.ts, client/worker/boot.ts (new)
+Interface:  `resolveHostConfig(): { economyScale?: string; debugEconomy: boolean;
+            debugEvents: boolean }` — reads `process.env` under Node, a host-set global under the
+            worker; the worker entry sets it from `BootConfig` BEFORE dynamically importing the
+            engine/constants graph (module-eval `scaleValue`/`scaleRecord` tables then see the
+            resolved value); the simulate mismatch guard survives against the new resolution
+            point.
+Proves:     a worker booted with scale S yields S-scaled constant tables; a Node run with the env
+            set behaves exactly as today; the simulate guard still crashes when an import
+            reaches the constants before the config (the fault it exists for); no config means
+            default 100.
+Consumes:   —
+
+### Task 5 — The game worker
+Files:      client/worker/game-worker.ts (new), client/worker/host.ts (new)
+Interface:  message protocol — inbound `{type:"boot", config: BootConfig}`,
+            `{type:"subscribe"}`, `{type:"command", envelope: CommandEnvelope}`; outbound
+            `PacingFrame`, `StateFrame`, `TickFailedMsg`, `CommandResult`. Subscribe replies
+            immediately with a full pacing + state frame (paused/world-less included). The worker
+            boots world-less and answers `listSaves`/`newGame`/`loadGame` commands in that state.
+            Frames ride TickLoop's existing throttle; command handlers wrap the existing mutation
+            services plus the two worker-side pricing services.
+Proves:     subscribing to a world-less worker returns a defined no-world frame (not silence); a
+            failing tick emits `TickFailedMsg` and the pause frame (never a silent stop); a burst
+            of ticks inside one throttle window coalesces to a frame whose store-applied result
+            equals the world (nothing lost to latest-wins); `newGame` yields a full frame for the
+            fresh world; a command while paused returns its result plus a version frame.
+Consumes:   Tasks 1, 2, 4
+
+### Task 6 — Vite shell and router
+Files:      vite.config.ts (new), client/index.html (new), client/main.tsx (new),
+            client/router.ts (new), components/ui/button.tsx, components/ui/tabs.tsx,
+            components/ui/back-link.tsx
+Interface:  `navigate(path: string): void`; `useRoute(): Route` — discriminated union over the
+            route table (map root, /start, /system/:id/:tab, /factions/:id/:tab, /styleguide);
+            `RouterLink({ href, ...anchor })` — the `href` contract Button link-mode, `TabLink`
+            and `BackLink` swap onto (their public props unchanged; props read this session:
+            button.tsx:62-77, tabs.tsx:111, back-link.tsx:4).
+Proves:     back/forward re-render the matching route; an unknown path lands on the map root;
+            `TabLink` active state follows the route without `next/navigation`; Button link-mode
+            navigates with no document reload.
+Reuse:      Button, TabList/Tab/TabLink, BackLink (verified above). New: RouterLink — nothing
+            fits because every existing link component delegates to `next/link`, which retires.
+Consumes:   Task 5 (shell boots worker + store; top-bar clock is the end-to-end proof)
+
+### Gate B
+Arms: Tasks 4-6. Reads: `vite dev` boots the real game in-browser — worker ticks, top-bar clock
+advances, speed round-trips; vitest green; simulate both horizons unchanged vs main (engine
+identity — same seed, byte-equal world hash after N ticks). Merge condition: manual smoke by Kai
+(clock + speed only; panels are Stage C); sub-PR into shared.
+
+---
+
+### Stage C — UI migration — sub-PR 3
+
+### Task 7 — Store-backed hooks: system, faction, market, global reads
+Files:      lib/hooks/use-events.ts, use-universe.ts, use-atlas.ts, use-visibility.ts,
+            use-system-info.ts, use-system-{substrate,vitals,population,industry,logistics,
+            construction,cadence}.ts, use-build-options.ts, use-market.ts,
+            use-market-comparison.ts, use-faction.ts, use-factions.ts, use-relations.ts,
+            use-faction-{vitals,construction}.ts, use-static-tiles.ts, hook test setup
+Interface:  every hook keeps its existing public signature; implementation becomes
+            `useGameSlice` reads. Per-id hooks return a discriminated not-found for an absent id
+            (consumed by Task 9). Visibility keeps all-visible semantics.
+Proves:     existing component tests pass with a store test-double replacing the QueryClient
+            wrapper; the shared-store sync test (map-right-rail.test.tsx:62-63) still passes; a
+            hook re-renders on its slice's version and not on unrelated slices; a per-id hook on
+            an absent id returns not-found, never throws.
+Consumes:   Tasks 3, 5
+
+### Task 8 — Store-backed map hooks and mutations-as-commands
+Files:      lib/hooks/use-ownership.ts, use-{stability,population,development,migration,
+            provision}.ts, use-system-value-map.ts, use-trade-flow.ts, use-tracker.ts,
+            use-alerts.ts, use-player-pins.ts, use-player-settings.ts,
+            use-construction-orders.ts, use-faction-treasury.ts, use-game-lifecycle.ts,
+            use-tick.ts, use-map-data.ts
+Interface:  mutation hooks keep signatures and dispatch worker commands; the in-flight rule (a
+            control holds its set value until the result's world version lands); `useTick` reads
+            pacing state from the store (SSE seeding gone); ownership/value-map hooks read
+            slices with the store's identity guarantee.
+Proves:     ownership keeps object identity across no-change ticks (the Pixi zero-rebuild bar at
+            hook level); two rapid treasury band commits — the second is built from the first's
+            committed state; a pin while paused updates the tracker immediately; a rejected
+            command surfaces its error and is never silently queued.
+Consumes:   Tasks 3, 5, 7
+
+### Task 9 — Panels as route components; QueryBoundary retirement
+Files:      components/panels/** (new — contents move from app/(game)/@panel/** pages/layouts),
+            components/map/star-map.tsx, components/ui/detail-panel.tsx,
+            lib/hooks/use-system-focus.ts, components/alerts/alert-run.tsx, the 26 QueryBoundary
+            mount sites, four test files mocking next/navigation
+Interface:  `SystemPanel({ systemId, tab })`, `FactionPanel({ factionId, tab })`, a panel root
+            switching on `useRoute()`; a not-found panel state for absent entities (composes
+            EmptyState); QueryBoundary deleted — error boundaries remain via
+            react-error-boundary directly.
+Proves:     a panel URL naming an absent system renders the not-found state (not blank, not
+            loading); no `role="status"` fallback ever mounts on a panel open; back/forward
+            across panels restores content; the click frame shows the selection ring (the
+            feedback bar).
+Reuse:      EmptyState, DetailPanel, every existing panel body component unchanged; error
+            fallback components (error-fallback.tsx). New: none — panel bodies move, not rebuilt.
+Consumes:   Tasks 6, 7, 8
+
+### Task 10 — Fonts, document shell, client env
+Files:      client/fonts.css (new), client/index.html, client/fonts/ (new — Geist woff2s
+            self-hosted; Chakra Petch stays at app/fonts until Task 14 moves it),
+            components/game-shell.tsx, components/dev-tools/axe-accessibility.tsx
+Interface:  `@font-face` rules emitting `--font-chakra`, `--font-geist-sans`,
+            `--font-geist-mono` (the `@theme inline` block in globals.css untouched); client
+            `NODE_ENV` reads become the bundler's dev flag.
+Proves:     all three font variables resolve to loaded faces (visual smoke at Gate C); a
+            production bundle contains no dev-only components (bundle grep).
+Reuse:      globals.css theme as-is.
+Consumes:   Task 6
+
+### Task 11 — Lifecycle: start screen, world replacement, failure surfaces
+Files:      components/start/start-screen.tsx, components/start/create-faction-form.tsx,
+            client/main.tsx, components/runtime/liveness-banner.tsx (new), pagehide save wiring,
+            store swap-reset path
+Interface:  start-screen actions become worker commands (listSaves/newGame/loadGame) valid
+            world-less; world replacement per spec §8 — navigate to map root, one-commit store
+            swap, Pixi teardown/rebuild; `LivenessBanner` renders tickFailed (paused + cause +
+            autosave offer) and dead-worker (reload-from-autosave) states; a `pagehide` save in
+            the web packaging; autosave failure surfaces through the same banner.
+Proves:     new game from a live game lands on the map root with no stale panel URL and no
+            no-world throw reaching a render; a terminated worker flips liveness to dead,
+            commands reject, the banner offers reload; tickFailed shows cause and pause; reads
+            during the swap window get the defined no-world state.
+Reuse:      Card, Button, Dialog/useDialog (read before use at implementation), alert-bar styling
+            as reference. New: LivenessBanner — searched "banner", "toast", "connection": nothing
+            app-level exists; the alert bar is game-alert-specific.
+Consumes:   Tasks 5, 6, 8
+
+### Gate C
+Arms: Tasks 7-11. Reads: the full game runs under Vite; Kai smokes every surface side-by-side
+against the Next build (same save loaded in both); vitest green; the A2 browser instrument re-run
+on the new panel opens — informational against the ~100 ms aim, not a merge gate (owner decision).
+Merge condition: owner smoke sign-off; sub-PR into shared.
+
+---
+
+### Stage D — persistence, dev loop, deletion — sub-PR 4
+
+### Task 12 — Save backend seam and the web backend
+Files:      lib/world/save-backend.ts (new — interface), lib/world/save-files.ts (becomes the
+            Node/file implementation), client/save-indexeddb.ts (new),
+            lib/world/tick-loop.ts (autosave via the seam), start-screen export/import controls
+Interface:  `SaveBackend { write(name, json): Promise<void>; read(name): Promise<string>;
+            list(): Promise<SaveInfo[]>; remove(name): Promise<void> }` — write is
+            atomic-or-recoverable (IndexedDB transaction, write-then-swap-key); `SaveInfo`
+            gains its values from an index record (name, tick, savedAt, bytes) written in the
+            same transaction; `navigator.storage.persist()` requested at boot; export/import
+            moves the raw save JSON.
+Proves:     an interrupted write (value committed, index not) recovers to the last good save;
+            listing never parses save blobs (index only — proven by listing cost on a multi-MB
+            fixture); a simulated quota failure surfaces through the banner, not the console;
+            export then import round-trips byte-equal.
+Consumes:   Tasks 5, 11
+
+### Task 13 — Dev loop and cheats
+Files:      lib/hooks/use-dev-tools.ts, client/worker/game-worker.ts (dev command registration,
+            build-time excluded), lib/services/dev-tools.ts (advanceTicks through the loop's
+            notify path), dev teardown save + boot-from-save, dev world-inspection command
+Interface:  dev commands (advanceTicks, spawnEvent, resetEconomy, economySnapshot, inspectWorld)
+            registered only when the bundler's dev flag is set; advanceTicks publishes a world
+            version per batch; the dev worker saves on teardown and its replacement boots from
+            that save (spec §10).
+Proves:     advanceTicks leaves the store current (no stale UI); a production bundle contains no
+            dev command handler (bundle grep); a worker module edit in dev restores the running
+            galaxy from the teardown save (manual, Gate D).
+Consumes:   Tasks 5, 12
+
+### Task 14 — The deletion and repo re-point
+Files:      delete app/api/** (46 routes), app/(game)/**, app/start/** (old pages), app/layout.tsx,
+            components/ui/query-boundary.tsx, components/providers/query-provider.tsx,
+            lib/query/**, lib/api/** (all four files are route-only — verified),
+            lib/hooks/use-tick-invalidation.ts; shipArrived removal (lib/tick/types.ts
+            GlobalEventMap, lib/tick/processors/ship-arrivals.ts:34, lib/hooks/use-tick.ts
+            dispatch, docstrings use-visibility.ts:14 + use-system-logistics.ts:10);
+            lib/services/errors.ts (`status` becomes a discriminant) + its consumers;
+            package.json (drop next/@tanstack/geist; scripts: dev/build to vite, the build gate
+            becomes `tsc && vite build`), .github/workflows/ci.yml, next.config.ts (delete),
+            AGENTS.md (Commands, the Next/TanStack gotcha rows, line 74), docs/SPEC.md
+            (interaction map: SSE to worker channel; shipArrived edge removed)
+Interface:  none new — this task removes; the repo's build gate identity changes and AGENTS.md
+            names the new one.
+Proves:     the new build gate is green with Next absent; repo-wide grep finds zero live
+            `next/`, `@tanstack`, `queryKeys`, `apiFetch`, `QueryBoundary`, `shipArrived`
+            references outside git history; the full test suite is green; the stranded-reader
+            text sweep (AGENTS rule) over fields/props/helpers the deletion orphans comes back
+            empty.
+Consumes:   Tasks 7-13 (everything must already run without what this deletes)
+
+### Task 15 — Doc fold and final verification
+Files:      docs/SPEC.md, docs/active/engineering/single-player-runtime.md (rewritten for the
+            worker runtime), docs/planned/client-runtime.md (promoted to docs/active, present
+            tense), docs/planned/grand-strategy-vision.md (§6 path decision recorded),
+            docs/ROADMAP.md (row deleted; desktop-shell row added), this working file (deleted)
+Interface:  none — docs only; the deferred-work sweep before deletion (grep this file and the
+            spec for deferred/booked items; verify each reached the roadmap).
+Proves:     no doc in docs/active describes the Next runtime; `npm run duplication` on the
+            branch diff; every booking named in Not covered exists as a roadmap row.
+Consumes:   Task 14
+
+### Gate D — final (shared to main PR)
+Arms: Tasks 12-15. Reads: new build gate green; full vitest; `npm run simulate` both horizons
+quoted with the engine-identity check (same seed, byte-equal world hash vs main after N ticks —
+the "engine untouched" proof); full manual smoke by Kai; **the booked end task runs here:
+`/measure` tick speed at high system and population counts, producing the acceptable-maximum
+report** (informs the roadmap's tick-performance rows; not a merge gate). Merge condition: all of
+the above plus owner sign-off; squash shared to main.
+
+---
+
+### Verification
+
+The feature's proof is behavioural parity plus the removals: (1) engine identity — same seed,
+same tick count, byte-equal `JSON.stringify(world)` hash between main and the branch, run under
+`npm run simulate` (the engine-untouched claim, both horizons quoted); (2) the A2 browser
+instrument re-run on the new runtime (cold/warm panel opens, tick churn) — informational against
+the ~100 ms aim; (3) the build gate — `npx next build --webpack` through Stage C, `tsc && vite
+build` from Task 14 on (AGENTS.md updated in the same commit); (4) no new harness metric — the
+sim is untouched by design, and the identity check is what proves that.
+
+### Doc fold
+
+`docs/active/engineering/single-player-runtime.md` goes stale (rewritten, Task 15);
+`docs/planned/client-runtime.md` is superseded by its promotion to docs/active;
+`grand-strategy-vision.md` §6's "don't decide today" is resolved to path B (recorded, Task 15);
+AGENTS.md's Next/TanStack gotchas and commands change at Task 14, on the branch. This working
+file is deleted at ship, after the deferred-work sweep.
+
+### Not covered
+
+- **Desktop shell packaging (Tauri vs Electron)** — booked: new roadmap row at Task 15 (the
+  save-backend seam and §11's channel boundary are its prerequisites, both shipped here).
+- **Worker-side dirty-sets / delta frames** — booked: the existing roadmap row *Markets need a
+  real dirty/ownership model* (spec §2 gates the optimisation on it).
+- **The ~100 ms p95 panel aim as an enforced gate** — dropped by owner decision at spec triage
+  ("the performance targets can come later"); re-raised by the Gate C/D informational readings.
+- **The events processor's scaling and tick performance rows** — booked already (roadmap, Tick
+  performance section); the Gate D tick-speed audit feeds them.
+- **Multiplayer** — dropped per the spec's Not-claimed.
+- **Nested tooltips migration, map accessibility, and every other UI roadmap row** — untouched;
+  they ride on components this plan deliberately does not rebuild.
+
+### Net-new UI (owner approval before /implement-plan)
+
+- `RouterLink` (Task 6) — infrastructure, replaces `next/link` inside the three link-bearing
+  primitives; no visual change.
+- `LivenessBanner` (Task 11) — the only genuinely new visible component: tick-failure / dead
+  worker / autosave-failure banner with cause and autosave-restore offer.
+- Not-found panel state (Task 9) — composes the existing `EmptyState`; a state, not a component.
+- Start-screen export/import controls (Task 12) — two Buttons on the existing start screen.
+
+Everything else is moved or re-wired, not new; no HTML prototype pass is owed under the
+approved-prototype rule unless the owner wants one for `LivenessBanner`.
