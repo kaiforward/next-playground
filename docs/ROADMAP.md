@@ -185,6 +185,20 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   whether that slowdown is the right shape for a famine or crisis event, and whether the
   death:growth ratio itself is a deliberate design point or an artifact worth revisiting.
   *Next step:* design pass on what "disaster" means at the new rates.
+- **[M] Housing relief valve: size the burst from current pop growth** — `plannedHousingUnits`
+  (`lib/engine/directed-build.ts:266-279`) builds one instantaneous burst back to `RELIEF_TARGET`
+  0.92 once occupancy passes `RELIEF_TRIGGER` 0.95 — ~3-8% of current popCap in whole levels at
+  once (a seeded 250-level world commits ~18-22 housing on its first plan). The burst size silently
+  encoded the old fill rate: headroom that filled in weeks at ×2.5/year growth takes ~2 years at
+  3%/year, sitting as unstaffed landings meanwhile — the timescale gate read 54% of levels landing
+  into systems with labourFulfil < 1, vs 8.7% pre-change (pooled across types; not yet split).
+  Direction (Kai, 2026-08-19): derive the build size from the CURRENT population growth rate — build
+  what will fill within a near-term horizon — so the valve survives future growth/scaling retunes
+  instead of re-encoding a rate assumption. Design carefully: trigger oscillation, the decay
+  containment invariant (`RELIEF_TARGET × (1 + VACANCY_SLACK) ≥ 1`), and whole-level lumpiness on
+  small sites all constrain the sizing.
+  *Next step:* `/measure` — split unstaffed landings by building type (the trajectory instrument's
+  landing diff needs a per-type split) and read the fill time of a relief burst at the new rates.
 - **[S] Measure why construction centres never funded pre-timescale** — zero centre commits
   anywhere in the pre-timescale equilibrium run (surfaced as a baseline fact at the timescale
   build plan's Gate B, owner-deferred out of that PR). At the shipped constants they do fund —
