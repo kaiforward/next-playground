@@ -1350,13 +1350,15 @@ describe("getAlertData", () => {
 
       const windfall = category("windfall");
       expect(windfall.instances.map((i) => i.systemId)).toEqual([expiring, lasting]);
-      expect(windfall.instances[0].measure).toBe("10 ticks remaining");
-      expect(windfall.instances[1].measure).toBe("50 ticks remaining");
+      // 10 ticks = 2.5 days and 50 ticks = 12.5 days under the calendar's auto-scaled rendering;
+      // sortKey stays the raw tick count, so ordering precision survives the coarser label.
+      expect(windfall.instances[0].measure).toBe("≈3 days remaining");
+      expect(windfall.instances[1].measure).toBe("≈13 days remaining");
     });
 
     it("clamps an already-expired windfall to 0 rather than counting down past it", () => {
       // A phase whose end tick is long past — the world's event sweep has not retired it yet. The
-      // countdown must floor at 0: a negative figure would read as "-350 ticks remaining" and would
+      // countdown must floor at 0: a negative figure would render a nonsense negative duration and would
       // sort ahead of every live windfall.
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
@@ -1383,12 +1385,12 @@ describe("getAlertData", () => {
 
       const windfall = category("windfall");
       const row = windfall.instances.find((i) => i.systemId === expired);
-      expect(row?.measure).toBe("0 ticks remaining");
+      expect(row?.measure).toBe("0 hours remaining");
       expect(row?.sortKey).toBe(0);
       // Non-vacuous on the clamp: an unclamped −350 would still sort first, so the live event has to
       // be the one that proves 0 is a floor and not just "the smallest number here".
       expect(windfall.instances.map((i) => i.systemId)).toEqual([expired, live]);
-      expect(windfall.instances[1].measure).toBe("20 ticks remaining");
+      expect(windfall.instances[1].measure).toBe("≈5 days remaining");
     });
   });
 

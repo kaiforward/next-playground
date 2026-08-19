@@ -690,8 +690,8 @@ describe("TrackerRow — the coming cycle's gain is drawn only when there is one
   });
 });
 
-describe("TrackerPanel — a build or colony row shows its cycles remaining on the row itself", () => {
-  it("a funded build reads its ETA on the row; a colony with no forecast reads an em-dash, not a stale number", () => {
+describe("TrackerPanel — a build or colony row shows its time remaining on the row itself", () => {
+  it("a funded build reads its ETA on the row; a colony with no forecast reads 'stalled', not a stale number", () => {
     trackerData = tracker({
       building: [buildRow("sys-b", "Rigel Yards", 0.5)], // etaCycles 4
       colonising: [
@@ -711,17 +711,17 @@ describe("TrackerPanel — a build or colony row shows its cycles remaining on t
     // the figure rendered inside the row it describes, and it carries the sr-only label with it.
     expect(
       screen.getByRole("button", {
-        name: (name) => name.includes("Rigel Yards") && name.includes("≈4 cyc"),
+        name: (name) => name.includes("Rigel Yards") && name.includes("≈24 days"),
       }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", {
-        name: (name) => name.includes("New Haven") && name.includes("Cycles remaining") && name.includes("—"),
+        name: (name) => name.includes("New Haven") && name.includes("Time remaining") && name.includes("stalled"),
       }),
     ).toBeInTheDocument();
     // The unforecastable colony must not borrow the funded build's number.
     expect(
-      screen.queryByRole("button", { name: (name) => name.includes("New Haven") && name.includes("4") }),
+      screen.queryByRole("button", { name: (name) => name.includes("New Haven") && name.includes("24") }),
     ).not.toBeInTheDocument();
   });
 });
@@ -737,9 +737,10 @@ describe("TrackerPanel — a project row's card ETA matches the row's own coarse
     await screen.findByText("Rigel Yards", { selector: "h3" });
 
     // Scoped to the card's own ETA line — the row's OWN figure carries the identical text
-    // ("≈4 cyc"), so an unscoped text query would match both and fail on ambiguity.
+    // ("≈24 days", etaCycles 4 through the same formatEta), so an unscoped text query would
+    // match both and fail on ambiguity.
     const eta = screen.getByText("ETA").closest("div");
-    expect(eta).toHaveTextContent("≈4 cyc");
+    expect(eta).toHaveTextContent("≈24 days");
   });
 });
 

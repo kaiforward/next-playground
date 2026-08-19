@@ -13,6 +13,7 @@ import { useFilterState } from "@/lib/hooks/use-filter-state";
 import { EVENT_TYPE_BADGE_COLOR, compareEventSeverity } from "@/lib/constants/ui";
 import type { ActiveEvent } from "@/lib/types/game";
 import type { EventTypeId } from "@/lib/constants/events";
+import { formatDuration } from "@/lib/utils/calendar";
 
 const FILTER_CHIPS = [
   { id: "all", label: "All" },
@@ -25,7 +26,7 @@ const FILTER_CHIPS = [
 
 const SORT_OPTIONS = [
   { id: "severity", label: "Severity" },
-  { id: "ticks", label: "Ticks remaining" },
+  { id: "ticks", label: "Time remaining" },
   { id: "system", label: "System name" },
 ];
 
@@ -128,7 +129,7 @@ function EventsContent() {
               </div>
               <div className="text-right shrink-0">
                 <div className="text-xs font-mono text-text-primary">
-                  {event.ticksRemaining} ticks
+                  {formatDuration(event.ticksRemaining)}
                 </div>
                 <div className="text-[10px] text-text-secondary mt-0.5">
                   Sev: {event.severity.toFixed(1)}

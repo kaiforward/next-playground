@@ -37,6 +37,7 @@
  * in for the planner's own value/work ROI).
  */
 import { getWorld } from "@/lib/world/store";
+import { formatDuration } from "@/lib/utils/calendar";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
 import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
@@ -631,7 +632,7 @@ export function getAlertData(): AlertData {
       windfall.push({
         systemId: event.systemId,
         name,
-        measure: `${ticksRemaining} ticks remaining`,
+        measure: `${formatDuration(ticksRemaining)} remaining`,
         sortKey: ticksRemaining,
       });
     }

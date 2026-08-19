@@ -9,6 +9,7 @@ import { apiFetch, apiMutate } from "@/lib/query/fetcher";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import type { SaveInfo } from "@/lib/world/save-files";
 import type { WorldMeta } from "@/lib/world/types";
+import { formatDate } from "@/lib/utils/calendar";
 
 function formatSavedAt(iso: string): string {
   return new Date(iso).toLocaleString();
@@ -64,8 +65,8 @@ export function StartScreen() {
             title="Continue"
             subtitle={
               <>
-                Autosave — tick{" "}
-                <span className="font-mono text-text-secondary">{autosave.tick}</span>,{" "}
+                Autosave —{" "}
+                <span className="font-mono text-text-secondary">{formatDate(autosave.tick)}</span>,{" "}
                 {formatSavedAt(autosave.savedAt)}
               </>
             }
@@ -102,7 +103,7 @@ export function StartScreen() {
                 <div className="min-w-0">
                   <p className="font-mono text-sm text-text-primary truncate">{save.name}</p>
                   <p className="text-xs text-text-tertiary">
-                    Tick <span className="font-mono">{save.tick}</span> ·{" "}
+                    <span className="font-mono">{formatDate(save.tick)}</span> ·{" "}
                     {formatSavedAt(save.savedAt)}
                   </p>
                 </div>

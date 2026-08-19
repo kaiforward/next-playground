@@ -10,8 +10,8 @@ export function clamp(value: number, min: number, max: number): number {
 /**
  * Ticks to in-world hours, via the calendar anchor (`HOURS_PER_TICK`,
  * `lib/constants/tick-cadence.ts`) — 4 ticks/day. The one place a tick count becomes an
- * in-world duration; display code (future fictional-date rendering) converts from here, never
- * from a second literal.
+ * in-world duration; display code (`lib/utils/calendar.ts`) converts from here, never from a
+ * second literal.
  */
 export function ticksToHours(ticks: number): number {
   return ticks * HOURS_PER_TICK;

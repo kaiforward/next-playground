@@ -14,6 +14,7 @@ import { PersonIcon, SettingsIcon } from "@/components/ui/icons";
 import { TrackerRow, type TrackerFigure } from "@/components/tracker/tracker-row";
 import { stabilityRampColor } from "@/lib/utils/stability";
 import { formatPeople } from "@/lib/utils/format";
+import { formatEta } from "@/lib/utils/construction-format";
 import type { TrackerPinnedRow, TrackerRowBase } from "@/lib/types/api";
 
 /** Building-row display cap (docs/active/gameplay/tracker.md → "Rows and the card": a dozen rows are
@@ -278,24 +279,18 @@ function pinnedFigures(row: TrackerPinnedRow): TrackerFigure[] {
   ];
 }
 
-/** Coarse ETA label shared by a row's own figure and its card's ETA line — one definition of the
- *  "≈N cyc" abbreviation so the two registers can't drift (the row read "≈4 cyc" while the card
- *  under the SAME figure read a bare "4 cyc", implying a precision the forecast doesn't have). */
-function etaLabel(etaCycles: number | null): string {
-  return etaCycles !== null ? `≈${etaCycles} cyc` : "—";
-}
-
-/** The one figure a build or colony row carries: cycles remaining, right-aligned in the same slot a
- *  pinned row spends on population and stability. Same `etaCycles` the row's card shows, so the two
- *  cannot disagree, and the same em-dash for a project with no forecast — a colony the pool has not
- *  reached this cycle has no rate to divide by. It stays in the row's ordinary grey: the Tracker is a
- *  quiet list, and calling out trouble is the alert bar's job, not a colour on every stalled row.
+/** The one figure a build or colony row carries: time remaining, right-aligned in the same slot a
+ *  pinned row spends on population and stability. Row and card both go through `formatEta` on the
+ *  same `etaCycles`, so the two registers cannot disagree — including "stalled" for a project with
+ *  no forecast, a colony the pool has not reached this cycle having no rate to divide by. It stays
+ *  in the row's ordinary grey: the Tracker is a quiet list, and calling out trouble is the alert
+ *  bar's job, not a colour on every stalled row.
  *
  *  Typed on `TrackerRowBase` rather than `TrackerBuildRow | TrackerColonyRow`: this only ever reads
  *  base fields, and `TrackerColonyRow` is itself a bare alias of `TrackerRowBase`, so the union
  *  constrained nothing a caller could rely on. */
 function etaFigures(row: TrackerRowBase): TrackerFigure[] {
-  return [{ label: "Cycles remaining", value: etaLabel(row.etaCycles) }];
+  return [{ label: "Time remaining", value: formatEta(row.etaCycles) }];
 }
 
 /** A project card's accessible name. A card is a `dialog` to a screen reader, and an unnamed
@@ -375,7 +370,7 @@ function ProjectCard({ row, kind }: { row: TrackerRowBase; kind: "Building" | "C
           <span className="font-mono text-text-primary">{Math.round(barWidthPct(row.progress))}%</span>
         </StatRow>
         <StatRow label="ETA">
-          <span className="font-mono text-text-primary">{etaLabel(row.etaCycles)}</span>
+          <span className="font-mono text-text-primary">{formatEta(row.etaCycles)}</span>
         </StatRow>
       </StatList>
     </div>

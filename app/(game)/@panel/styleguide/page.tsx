@@ -91,7 +91,7 @@ function TypographySection() {
         </div>
         <div>
           <p className="text-[10px] text-text-secondary uppercase tracking-wider mb-1">font-mono (Geist Mono) — numeric values</p>
-          <p className="text-sm font-mono text-text-primary">1,250,000 cr · Tick 4,821 · 12.5% · (2048, 3072)</p>
+          <p className="text-sm font-mono text-text-primary">1,250,000 cr · 2353.05.06 06:00 · 12.5% · (2048, 3072)</p>
         </div>
       </div>
     </StyleSection>
