@@ -27,19 +27,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[L] Timescale: define the calendar.** Decide how much in-world time one tick is — the anchor
-   every duration is then audited against (cycle length, pop growth, travel, event lengths, decay).
-   Direction (Kai, 2026-08-18): a few ticks per day, EU5/Vicky3 style (Vicky3 runs 4 ticks/day with a
-   week-long economic cycle = 28 ticks; ours is 24 — resolve that discrepancy deliberately); match
-   pop growth to real-world data. Worlds currently hit max pop by ~tick 12K, so the likely shape is
-   fine-grained ticks with much slower rates, not a different tick count — but that is the design's
-   call, made against numbers. Affects the colonisation-pacing row below: its speed measure and this
-   row's time-facts measure are one instrument run, do them together.
-   *Next step:* `/measure` the time facts in ticks, both horizons — pop-to-max, colonisation pace,
-   travel durations, event lengths, decay half-lives — before choosing the anchor.
-   *Don't:* tune any rate before the anchor is defined. The calendar is a definition set from
-   external reference; a rate can fail the definition, never set it.
-2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
@@ -189,6 +177,36 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   distance-weighting the autonomic-build spare pool (a possible refinement to the response-pacing
   backstop, noted, not built). No design pass on any of the three; pull individually when its area
   comes forward rather than as a group.
+- **[M] Disasters / decline realism pass** — the timescale calendar carries an accepted ~100:1
+  death:growth asymmetry forward unexamined: `overshootDeathRate` stays at 0.05 (fires only above
+  the unrest gate — calm overcrowding just stops growing, crisis shedding stays short and violent),
+  while `declineRate` now scales with growth, so famine decline runs ×30 slower in real terms than
+  before the calendar shipped. Decide what disaster-driven decline should mean at the new anchor —
+  whether that slowdown is the right shape for a famine or crisis event, and whether the
+  death:growth ratio itself is a deliberate design point or an artifact worth revisiting.
+  *Next step:* design pass on what "disaster" means at the new rates.
+- **[M] Housing relief valve: size the burst from current pop growth** — `plannedHousingUnits`
+  (`lib/engine/directed-build.ts:266-279`) builds one instantaneous burst back to `RELIEF_TARGET`
+  0.92 once occupancy passes `RELIEF_TRIGGER` 0.95 — ~3-8% of current popCap in whole levels at
+  once (a seeded 250-level world commits ~18-22 housing on its first plan). The burst size silently
+  encoded the old fill rate: headroom that filled in weeks at ×2.5/year growth takes ~2 years at
+  3%/year, sitting as unstaffed landings meanwhile — the timescale gate read 54% of levels landing
+  into systems with labourFulfil < 1, vs 8.7% pre-change (pooled across types; not yet split).
+  Direction (Kai, 2026-08-19): derive the build size from the CURRENT population growth rate — build
+  what will fill within a near-term horizon — so the valve survives future growth/scaling retunes
+  instead of re-encoding a rate assumption. Design carefully: trigger oscillation, the decay
+  containment invariant (`RELIEF_TARGET × (1 + VACANCY_SLACK) ≥ 1`), and whole-level lumpiness on
+  small sites all constrain the sizing.
+  *Next step:* `/measure` — split unstaffed landings by building type (the trajectory instrument's
+  landing diff needs a per-type split) and read the fill time of a relief burst at the new rates.
+- **[S] Measure why construction centres never funded pre-timescale** — zero centre commits
+  anywhere in the pre-timescale equilibrium run (surfaced as a baseline fact at the timescale
+  build plan's Gate B, owner-deferred out of that PR). At the shipped constants they do fund —
+  every faction committed and completed exactly one in the 50K trajectory read — so the question
+  is why the old `PAYBACK_HORIZON`/`BACKLOG_WINDOW` regime priced them out entirely, and whether
+  one-per-faction is the intended pacing now. ROI competition against backlog draining has not
+  been separated as the cause.
+  *Next step:* `/measure` before any centre-tuning design.
 **Platform**
 - **[XL] Retire Next.js and TanStack Query — this is a single-page game, not a web app.** Packaging
   path B from [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §6: the engine in a Web
@@ -288,16 +306,8 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   million people; tick/cycle; Provision; bands; cover; unrest/strike; control ladder…), written as
   the single source tooltips and tutorials quote from. The nested-tooltips row's "cross-linking
   concept glossary" is this doc grown hyperlinks — start it flat, don't wait for that system.
-  Sibling of the tick-tempo anchor row below (that one anchors time; this anchors vocabulary).
-- **[S] Define a tick-tempo anchor** — a short doc section stating what a tick feels like in play:
-  wall-clock at each speed setting (fast mode is 5 ticks/s today), rough equivalents against
-  genre reference points (Victoria 3 ≈ 146K ticks per 100 years at 4 ticks/day), and the cycle
-  (24 ticks) as the unit pacing arguments should be made in. Exists so calibration decisions stop
-  arguing "N ticks feels long/short" from unanchored intuition — the relaxation-rate call at the
-  supply-response Gate 1 turned on exactly this. Not a design of game-time itself (ticks still
-  have no defined in-fiction span); just the shared measuring language.
-  *Next step:* one section in `docs/SPEC.md` or `docs/active/gameplay/`, plus a one-line pointer
-  wherever pacing constants are authored.
+  The time-anchoring counterpart already shipped — SPEC.md's Calendar section anchors ticks to
+  in-world time; this row anchors vocabulary instead.
 - **[S] Move the dev cheat-panel button to the header** — the map sidebar and other floating elements block it.
 - **[S] Standardise main content panel size** — system detail should be smaller than command center.
 - **[S] Unrest history / recovery forecast** — a per-system chart of unrest over time and a forecast
@@ -316,6 +326,13 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   *Don't:* let the width drift silently in the meantime — the packing tests derive their expected
   widths from the same constants they check, so a mismatch would only ever surface as visual overflow,
   never a red test.
+- **[M] Player-facing calendar & date display** — the timescale calendar shipped the internal
+  anchor (`HOURS_PER_TICK`, `ticksToHours`) but deliberately cut the display slice: there is no
+  fictional cycle/date naming and no tick-to-date conversion anywhere in the UI. Needs a fictional
+  naming scheme for the cycle/date units and a rendering pass wherever a tick count is currently
+  shown raw.
+  *Next step:* UI-heavy — a browser-viewable HTML prototype approved before implementation, per
+  AGENTS.
 
 **Audits Kai has asked for**
 - **[M] Trader-hangover audit** — sweep the codebase for leftovers from the old browser space-trading
@@ -384,6 +401,12 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   t≈9,500-11,000; ship_frames later still). Options: extend the labelled horizon to 12-16k
   (+20-60% runtime on every run) or keep 10k and rely on the documented trap (memory
   `measurement-traps`, "The horizon"). Kai's call; surfaced 2026-08-03.
+  **The timescale calendar inherits and sharpens this row**: at the shipped rates the first colony
+  founds ~tick 4,128, so the 1,000-tick startup horizon is now entirely pre-founding (zero
+  colonies, zero migration, zero transfers) and the 10,000-tick horizon is founding-era
+  (~in-world year 7), not equilibrium — founding-era questions need ~5,000+ ticks, and true
+  equilibrium sits far beyond 10K (galaxy maturation runs ×10-×30 slower at the new anchor). The
+  decision is now to re-pick BOTH horizon labels and lengths, not just extend one.
 - **[M] System-finder dev tool** — queryable dev panel or `scripts/` CLI surfacing representative systems by
   characteristic (population band, economy type, deposit profile, building roster, NaN checks) with a direct
   `/system/<id>` link. Recurring need whenever generation or economy changes land.

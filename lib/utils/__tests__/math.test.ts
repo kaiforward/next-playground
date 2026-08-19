@@ -6,7 +6,9 @@ import {
   projectedWidthPct,
   quantile,
   weightedMean,
+  ticksToHours,
 } from "@/lib/utils/math";
+import { HOURS_PER_TICK, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 
 describe("clamp", () => {
   it("returns the value untouched when it is already inside the bounds", () => {
@@ -119,5 +121,29 @@ describe("weightedMean", () => {
 
   it("falls back to a plain arithmetic mean when the total weight is 0", () => {
     expect(weightedMean([0.4, 0.6], [0, 0])).toBeCloseTo(0.5, 10);
+  });
+});
+
+describe("ticksToHours", () => {
+  it("scales linearly by HOURS_PER_TICK", () => {
+    expect(ticksToHours(1)).toBe(HOURS_PER_TICK);
+    expect(ticksToHours(10)).toBeCloseTo(10 * HOURS_PER_TICK, 10);
+    expect(ticksToHours(0)).toBe(0);
+  });
+
+  it("agrees with the spec's derived language: 4 ticks/day", () => {
+    expect(ticksToHours(1) * 4).toBe(24); // 4 ticks cover one 24-hour day
+  });
+
+  it("agrees with the spec's derived language: a cycle = CYCLE_LENGTH ticks = 144 h = 6 days", () => {
+    const cycleHours = ticksToHours(CYCLE_LENGTH);
+    expect(cycleHours).toBe(144);
+    expect(cycleHours / 24).toBe(6);
+  });
+
+  it("agrees with the spec's derived language: 1 year ≈ 1,461 ticks", () => {
+    const ticksPerYear = (365.25 * 24) / HOURS_PER_TICK;
+    expect(Math.round(ticksPerYear)).toBe(1461);
+    expect(ticksToHours(ticksPerYear)).toBeCloseTo(365.25 * 24, 6);
   });
 });

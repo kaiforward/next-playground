@@ -253,7 +253,7 @@ describe("getTrackerData", () => {
         return { ...s, factionId: pid, control: "controlled" as const, population: 0 };
       }
       // Neutralise any other system this faction starts owning, so the pool comes from `home` alone
-      // (population 80 at THROUGHPUT_PER_POP 0.05 = pool 4, exactly one build project's cap).
+      // (population 80 at THROUGHPUT_PER_POP 0.005 = pool 0.4, exactly one build project's cap).
       if (s.factionId === pid) return { ...s, population: 0 };
       return s;
     });
@@ -296,7 +296,7 @@ describe("getTrackerData", () => {
     const home = world.factions.find((f) => f.id === pid)!.homeworldId;
 
     const systems = world.systems.map((s) => {
-      if (s.id === home) return { ...s, population: 80 }; // pool = 4, one build's cap
+      if (s.id === home) return { ...s, population: 80 }; // pool = 0.4, one build's cap
       if (s.factionId === pid) return { ...s, population: 0 };
       return s;
     });
@@ -332,7 +332,7 @@ describe("getTrackerData", () => {
     if (!colonySite) throw new Error("fixture: expected a spare system");
 
     const systems = world.systems.map((s) => {
-      if (s.id === home) return { ...s, population: 80 }; // pool = 4, exactly one build's cap
+      if (s.id === home) return { ...s, population: 80 }; // pool = 0.4, exactly one build's cap
       if (s.id === colonySite.id) {
         return { ...s, factionId: pid, control: "controlled" as const, population: 0 };
       }
@@ -347,7 +347,7 @@ describe("getTrackerData", () => {
       systems,
       buildings,
       constructionProjects: [
-        // Absorbs the whole pool: 4 of 8 work, so half the bar is forecast to fill next cycle.
+        // Absorbs the whole pool: 0.4 of 8 work, so 5% of the bar is forecast to fill next cycle.
         {
           kind: "build", id: "front", origin: "auto", factionId: pid, systemId: home,
           buildingType: "housing", levels: 1, workTotal: 8, workDone: 0,
@@ -363,7 +363,7 @@ describe("getTrackerData", () => {
 
     const data = getTrackerData();
     // The real fundQueue step in the row's own units, not a flat "some progress" placeholder.
-    expect(data.building[0].nextCycleProgress).toBeCloseTo(0.5, 10);
+    expect(data.building[0].nextCycleProgress).toBeCloseTo(0.05, 10);
     // The colony absorbs nothing THIS cycle, and its gain says so — it must not borrow the build's 0.5.
     expect(data.colonising[0].nextCycleProgress).toBe(0);
     // …but it still has a forecast: the ETA replays the queue, so a colony behind the front lands
@@ -379,7 +379,7 @@ describe("getTrackerData", () => {
     const home = world.factions.find((f) => f.id === pid)!.homeworldId;
 
     const systems = world.systems.map((s) => {
-      if (s.id === home) return { ...s, population: 80 }; // pool 4 — twice the work this project has left
+      if (s.id === home) return { ...s, population: 80 }; // pool 0.4 — more than the work this project has left
       if (s.factionId === pid) return { ...s, population: 0 };
       return s;
     });
@@ -393,15 +393,15 @@ describe("getTrackerData", () => {
       constructionProjects: [
         {
           kind: "build", id: "nearly", origin: "auto", factionId: pid, systemId: home,
-          buildingType: "housing", levels: 1, workTotal: 8, workDone: 6,
+          buildingType: "housing", levels: 1, workTotal: 8, workDone: 7.8,
         },
       ],
     });
 
     const row = getTrackerData().building[0];
-    expect(row.progress).toBeCloseTo(0.75, 10);
-    // 2 work left of 8, not the cap's 4 — the pair sums to exactly a full bar.
-    expect(row.nextCycleProgress).toBeCloseTo(0.25, 10);
+    expect(row.progress).toBeCloseTo(0.975, 10);
+    // 0.2 work left of 8, not the cap's 0.4 — the pair sums to exactly a full bar.
+    expect(row.nextCycleProgress).toBeCloseTo(0.025, 10);
     expect(row.progress + row.nextCycleProgress).toBeCloseTo(1, 10);
   });
 
@@ -411,7 +411,7 @@ describe("getTrackerData", () => {
     const home = world.factions.find((f) => f.id === pid)!.homeworldId;
 
     const systems = world.systems.map((s) => {
-      // pool = 10 (population 200 at 0.05): enough to fully fund both projects' cap-4 draws this cycle.
+      // pool = 1.0 (population 200 at 0.005): enough to fully fund both projects' cap-0.4 draws this cycle.
       if (s.id === home) return { ...s, population: 200 };
       if (s.factionId === pid) return { ...s, population: 0 };
       return s;
@@ -447,10 +447,13 @@ describe("getTrackerData", () => {
     expect(data.building[0].label).toContain("Housing");
     expect(data.colonising.map((c) => c.systemId)).toEqual([home]);
 
-    // Each row's ETA is its own project's. Both draw the cap-4 slice from a pool that covers both,
-    // so the build lands in 20/4 = 5 cycles and the colony in 60/4 = 15.
-    expect(data.building[0].etaCycles).toBe(5);
-    expect(data.colonising[0].etaCycles).toBe(15);
+    // Each row's ETA is its own project's. Both draw the cap-0.4 slice from a pool that covers both,
+    // so the build lands after 20/0.4 = 50 cap-sized absorptions and the colony after 60/0.4 = 150 —
+    // but 0.4 has no exact IEEE-754 double, so summing it 50 (or 150) times lands fractionally short
+    // of the target (19.999999999999993 / 59.99999999999985) and the real fundQueue loop takes one
+    // more cycle than the exact-arithmetic count to clear the remainder.
+    expect(data.building[0].etaCycles).toBe(51);
+    expect(data.colonising[0].etaCycles).toBe(151);
   });
 });
 

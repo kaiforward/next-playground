@@ -15,12 +15,13 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
  * Each active build absorbs at most `PER_BUILD_ABSORPTION_CAP` construction points per cycle, so a
  * level's minimum build time is `workCostPerLevel ÷ cap` cycles — a floor wealth cannot buy past. A
  * larger pool spreads across more builds (parallel fronts ≈ pool ÷ cap), never finishing one faster.
+ * Worked example: housing (workCostPerLevel 8) floors at `8 ÷ 0.4` = 20 cycles, unchanged by pool size.
  */
 export const CONSTRUCTION = {
   /** Construction points a faction's pool gains per unit population per cycle (matches the old build scale). */
-  THROUGHPUT_PER_POP: 0.05,
+  THROUGHPUT_PER_POP: 0.005,
   /** Most points one build can absorb per cycle — sets the minimum build time (work ÷ cap) and the front count. */
-  PER_BUILD_ABSORPTION_CAP: 4,
+  PER_BUILD_ABSORPTION_CAP: 0.4,
   /** Fallback per-level work cost for a building type with no explicit override (tier-derived below). */
   DEFAULT_WORK_PER_LEVEL: 20,
   /**
@@ -30,19 +31,19 @@ export const CONSTRUCTION = {
    * 0, fading to nothing at FLOOR_DEV_KNEE. A minimum, never a max-spend cap — the homeworld still
    * drains the remainder by value. Coarse first-cut, calibrated against the simulator.
    */
-  POOL_FLOOR_BASE: 4,
+  POOL_FLOOR_BASE: 0.4,
   /** Development at which a colony has weaned fully off the pool floor (self-weaning training wheels). */
   FLOOR_DEV_KNEE: 0.3,
   /**
    * Construction points one fully-staffed Construction Centre level adds to its faction's pool per
    * reference cycle. Set well above what the level's own labour draw would yield as eligible heads
-   * (25 heads × THROUGHPUT_PER_POP ≈ 1.25), so substituting capital + technicians for raw labour pays.
+   * (25 heads × THROUGHPUT_PER_POP ≈ 0.125), so substituting capital + technicians for raw labour pays.
    */
-  POINTS_PER_LEVEL: 5,
+  POINTS_PER_LEVEL: 0.5,
   /** Reference cycles of point output a centre's value is amortised over (the ROI numerator horizon). */
-  PAYBACK_HORIZON: 12,
+  PAYBACK_HORIZON: 120,
   /** Reference cycles of pool drain that define the funding frontier — work beyond it is "starved". */
-  BACKLOG_WINDOW: 6,
+  BACKLOG_WINDOW: 60,
 } as const;
 
 /** Explicit per-level work costs for the non-production building types (housing, academies, complexes). */

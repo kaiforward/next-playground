@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { foldFoundingTick, runTickHarness } from "../runner";
 import { MARKET_ROLES } from "../types";
-import type { HarnessConfig, MarketRole } from "../types";
+import type { HarnessConfig, HarnessResults, MarketRole } from "../types";
 import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { SNAPSHOT_INTERVAL } from "../market-analysis";
 import { LOGISTICS_WARMUP_TICKS } from "../logistics-analysis";
@@ -254,19 +254,37 @@ describe("runTickHarness: the tick-0 readings", () => {
 // which is the same number a quiet galaxy reports, and a sign-flipped fold reads negative while
 // every other figure in the report stays healthy.
 
-/** Big enough that colonies are founded, migration resolves and goods move. ~2s. */
-const BUSY: HarnessConfig = { systemCount: 60, seed: 7, tickCount: 1000 };
+/**
+ * Big enough that colonies are founded, migration resolves and goods move. The tick count is set by
+ * the establish duration, which is denominated in construction cycles and therefore cadence-invariant:
+ * the absorption cap funds 0.4 work per cycle, so a 68-work establish takes ~170 cycles and the first
+ * colony on this seed lands at tick 4176 — before which the galaxy has no same-faction developed pair
+ * at all, so migration, directed logistics and every counter downstream of them read a flat zero. The
+ * horizon is then set by the slowest of the counters read below: the demand-hunting flip rate, which
+ * clears its bound from ~7,000 ticks on (measured 0.0090 here, against a bound of 0.005). ~18s.
+ */
+const BUSY: HarnessConfig = { systemCount: 60, seed: 7, tickCount: 10_000 };
+
+/**
+ * One shared BUSY run. `runTickHarness` is deterministic and every test below only reads its result,
+ * so re-running it per test would spend ~18s a time to reproduce the same object.
+ */
+let busyRun: Promise<HarnessResults> | null = null;
+function runBusy(): Promise<HarnessResults> {
+  busyRun ??= runTickHarness(BUSY);
+  return busyRun;
+}
 
 describe("runTickHarness: the per-tick instrumentation", () => {
   it("accumulates migration throughput over the cycles that resolved it", async () => {
-    const results = await runTickHarness(BUSY);
+    const results = await runBusy();
     const m = results.migrationThroughput;
 
     expect(m.cycleCount).toBeGreaterThan(0);
     expect(m.totalColonists).toBeGreaterThan(0);
     expect(m.totalDiffusion).toBeGreaterThan(0);
     expect(m.meanPerCycle).toBeCloseTo((m.totalColonists + m.totalDiffusion) / m.cycleCount, 9);
-  }, 60_000);
+  }, 180_000);
 
   it("reports a zero denominator rather than dividing by it when no cycle ever resolves", async () => {
     // Below CYCLE_LENGTH the migration resolution never runs, so `cycleCount` stays 0. The mean
@@ -281,7 +299,7 @@ describe("runTickHarness: the per-tick instrumentation", () => {
   });
 
   it("accumulates the directed-build commitments each cycle committed", async () => {
-    const results = await runTickHarness(BUSY);
+    const results = await runBusy();
     const bursts = results.buildBurstSummary;
 
     expect(bursts.globalMax).toBeGreaterThan(0);
@@ -294,13 +312,15 @@ describe("runTickHarness: the per-tick instrumentation", () => {
       expect(Number.isFinite(entry.maxLevelsPerCycle)).toBe(true);
       expect(Number.isFinite(entry.tick)).toBe(true);
     }
-  }, 60_000);
+  }, 180_000);
 
   it("resolves strike suppression per eligible pair, both halves accumulated", async () => {
-    // 4000 ticks at 60 systems is the smallest fixture where a strike actually silences a
-    // proposal (12 of 125k eligible pairs) — below it `suppressed` is 0 and the numerator's
-    // wiring is untestable, because a dropped fold and a quiet galaxy print the same 0.
-    const results = await runTickHarness({ systemCount: 60, seed: 7, tickCount: 4000 });
+    // A strike only silences a proposal once the galaxy has colonies restive enough to strike, which
+    // is downstream of the same establish duration BUSY's horizon is set by: at 60 systems / seed 7
+    // `suppressed` is still 0 at 6,000 ticks and reads 55 of 227k eligible pairs at BUSY's 10,000.
+    // Below that a dropped fold and a quiet galaxy print the same 0 and the numerator's wiring is
+    // untestable.
+    const results = await runBusy();
     const s = results.strikeSuppression;
 
     expect(s.eligible).toBeGreaterThan(0);
@@ -315,10 +335,12 @@ describe("runTickHarness: the per-tick instrumentation", () => {
 describe("runTickHarness: the whole-run flow log", () => {
   it("takes each tick's flow rows once, as that tick produces them", async () => {
     // The world prunes its own flow log to FLOW_HISTORY_TICKS every tick, which is why the run
-    // accumulates its own. 650 ticks at 20 systems is the window where the two can be compared:
-    // the first transfer lands at tick 456, inside the retention tail, so the final world still
-    // holds every row the run ever produced and is a ground truth for the accumulator.
-    const tickCount = 650;
+    // accumulates its own. 4,300 ticks at 20 systems is the window where the two can be compared:
+    // the first transfer lands at tick 4152 (nothing moves before a faction has a second developed
+    // system, and the first colony completes at 4128), which is inside the retention tail of a run
+    // ending at 4,300 — floor 4,100 — so the final world still holds every row the run ever produced
+    // and is a ground truth for the accumulator.
+    const tickCount = 4_300;
     const results = await runTickHarness({ systemCount: 20, seed: 7, tickCount });
     const rows = results.finalWorld.flowEvents;
 
@@ -335,9 +357,10 @@ describe("runTickHarness: the whole-run flow log", () => {
   }, 60_000);
 
   it("starts the haul-budget ledger at the logistics warm-up tick, not before", async () => {
-    // Transfers are already happening before the warm-up tick — so a ledger that started early
-    // would read a spend fraction there, and one that started late would read none at the tick
-    // it is supposed to open on. Both arms are needed: either bound alone passes vacuously.
+    // Transfers are already happening before the warm-up tick (they start at 4152 on this fixture,
+    // LOGISTICS_WARMUP_TICKS is above that by design) — so a ledger that started early would read a
+    // spend fraction there, and one that started late would read none at the tick it is supposed to
+    // open on. Both arms are needed: either bound alone passes vacuously.
     const base = { systemCount: 20, seed: 7 } as const;
     const before = await runTickHarness({ ...base, tickCount: LOGISTICS_WARMUP_TICKS - 1 });
     const at = await runTickHarness({ ...base, tickCount: LOGISTICS_WARMUP_TICKS });
@@ -355,7 +378,7 @@ describe("runTickHarness: the whole-run flow log", () => {
 
 describe("runTickHarness: the cycle-gated samplers", () => {
   it("counts only the colonies founded in play, never the ones world-gen shipped developed", async () => {
-    const results = await runTickHarness(BUSY);
+    const results = await runBusy();
     const start = generateWorld({ systemCount: BUSY.systemCount, seed: BUSY.seed });
     const developedAtStart = toTickSystems(start).filter((s) => s.control === "developed").length;
     const developedAtEnd = toTickSystems(results.finalWorld)
@@ -367,7 +390,7 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // the difference — a start set drawn from the wrong systems breaks the identity in both
     // directions (too wide a set founds nothing; too narrow a one founds the galaxy).
     expect(results.foundingStock.foundedCount).toBe(developedAtEnd - developedAtStart);
-  }, 60_000);
+  }, 180_000);
 
   it("holds each colony's opening reading until its first economy cycle", async () => {
     // Colonies land on the construction cadence and are read on the economy one, so a run that
@@ -375,7 +398,12 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // waiting — `sampledCount` BELOW `foundedCount` is the whole signature of the gate. A sampler
     // that fired on any other tick would have read every one of them, and read them before the
     // cycle that writes their satisfaction had ever run.
-    const results = await runTickHarness({ systemCount: 60, seed: 7, tickCount: 493 });
+    // 4,357 = the construction cycle at 4,344 (which founds this seed's sixth colony) plus 13 ticks,
+    // so the run stops mid-cycle: five earlier colonies have met an economy cycle and been sampled,
+    // the sixth has not. The founding ticks themselves moved with the establish duration — the first
+    // colony on this seed lands at 4,176, not at the couple-of-hundred-tick mark a faster absorption
+    // cap used to put it at.
+    const results = await runTickHarness({ systemCount: 60, seed: 7, tickCount: 4_357 });
     const stock = results.foundingStock;
 
     expect(stock.foundedCount).toBeGreaterThan(0);
@@ -391,9 +419,9 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // Sampled every tick instead, the same reversals divide by CYCLE_LENGTH times as many
     // readings and the rate collapses by an order of magnitude — the bound below is what a
     // per-tick sampler cannot clear, not a tuning value.
-    const results = await runTickHarness(BUSY);
+    const results = await runBusy();
     expect(results.demandHunting.flipRate).toBeGreaterThan(0.005);
-  }, 60_000);
+  }, 180_000);
 });
 
 describe("runTickHarness: strike-suppression rate", () => {
@@ -425,7 +453,7 @@ describe("runTickHarness: world cohort net growth", () => {
 
 describe("runTickHarness: episode costs, founding trajectory, the ratchet check", () => {
   it("reports well-formed episode-cost, trajectory and ratchet sections, never NaN or negative", async () => {
-    const results = await runTickHarness(BUSY);
+    const results = await runBusy();
 
     expect(Number.isFinite(results.episodeCosts.totalTeardownLevels)).toBe(true);
     expect(results.episodeCosts.totalTeardownLevels).toBeGreaterThanOrEqual(0);
@@ -455,17 +483,17 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
       expect(row.meanGrievance).toBeGreaterThanOrEqual(0);
       expect(row.meanGrievance).toBeLessThanOrEqual(1);
     }
-  }, 60_000);
+  }, 180_000);
 
   it("actually wires activity through — BUSY is not a run where every new section reads zero", async () => {
     // A genuinely broken wire (accumulator never fed, or the summary always empty) and a genuinely
     // quiet galaxy both print zero — this fixture confirms BUSY is the former's counter-example, so
     // the "well-formed, never negative" test above cannot be passing vacuously.
-    const results = await runTickHarness(BUSY);
+    const results = await runBusy();
     expect(results.episodeCosts.totalTeardownLevels).toBeGreaterThan(0);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
-  }, 60_000);
+  }, 180_000);
 });
 
 // ── foldFoundingTick ──────────────────────────────────────────────
@@ -523,7 +551,7 @@ describe("runTickHarness: founding instruments", () => {
     expect((inFlight.maxTick ?? 1) % CONSTRUCTION_INTERVAL).toBe(0); // taken on a cycle boundary
     expect(inFlight.meanPerCycle).toBeGreaterThan(0);
     expect(inFlight.meanPerCycle).toBeLessThanOrEqual(inFlight.max);
-  }, 30_000);
+  }, 60_000);
 
   it("wires the founding stall board, its gate split and its event context end to end", async () => {
     const results = await runTickHarness(CONFIG);
@@ -543,7 +571,7 @@ describe("runTickHarness: founding instruments", () => {
     // re-anchor the fixture — do not delete the attribution check.
     expect(stalls.materialsShortUnderEvent).toBeGreaterThan(0);
     expect(stalls.materialsShortUnderEvent).toBeLessThanOrEqual(stalls.materialsShort);
-  }, 30_000);
+  }, 60_000);
 
   it("collects the founder cohort from the manifests actually staged, and settles cleanly", async () => {
     const results = await runTickHarness(CONFIG);
@@ -553,21 +581,23 @@ describe("runTickHarness: founding instruments", () => {
     expect(results.founderCohort.founder.systemCount).toBeGreaterThan(0);
     // Every faction-cycle folded into the money bars is a real settlement, not a seeded placeholder.
     expect(results.foundingEra.invalidRows).toBe(0);
-  }, 30_000);
+  }, 60_000);
 });
 
 describe("runTickHarness: logistics instruments", () => {
   it("wires the budget ledger and flow counters end to end", async () => {
     // A silent wiring break reads 0.000 on every new counter — exactly the healthy-looking
-    // value an ample budget produces — so the guard is a live run asserting non-zero. 800
-    // ticks: past LOGISTICS_WARMUP_TICKS (where ledger accumulation starts) with cycles to
-    // spare on a small world that transfers well before then.
-    const results = await runTickHarness({ systemCount: 20, seed: 7, tickCount: 800 });
+    // value an ample budget produces — so the guard is a live run asserting non-zero.
+    // LOGISTICS_WARMUP_TICKS + 200 (eight cycles): past the tick where ledger accumulation starts,
+    // with cycles to spare on a small world that transfers from tick 4152.
+    const results = await runTickHarness({
+      systemCount: 20, seed: 7, tickCount: LOGISTICS_WARMUP_TICKS + 200,
+    });
     const lg = results.logisticsActivity;
     expect(lg.transferCount).toBeGreaterThan(0);
     expect(lg.budgetSpentFrac).toBeGreaterThan(0);
     expect(lg.flowRowsPerCycle).toBeGreaterThanOrEqual(1);
-  }, 30_000);
+  }, 60_000);
 
   it("wires the third-arm drawBrakeCeiling pin through to a measurable divergence", async () => {
     // A silently dropped wire is invisible on every OTHER counter — both arms would just run the
@@ -578,17 +608,19 @@ describe("runTickHarness: logistics instruments", () => {
     // goods changes nothing at all: the divergence needs two systems of the same faction short of
     // the SAME good in one cycle, competing for one donor's drawable.
     //
-    // Faction count barely moves with galaxy size (8 majors plus a √N-interpolated dozen minors),
-    // so systems-per-faction is what supplies that competition. At 60 systems a faction musters
-    // three or four systems and same-good pairs essentially never swap (measured: 0 swaps at
-    // 3000 ticks, still 0 at 6000 — it is structural, not a matter of running longer); at 120 the
-    // same factions carry eight or nine systems each and the swaps are routine — 109 of them
-    // across 7 goods on this seed, 159 and 58 on the two others tried, which is what makes the
-    // divergence below an outcome rather than a coincidence.
-    const config: HarnessConfig = { systemCount: 120, seed: 7, tickCount: 3000 };
+    // Faction count barely moves with galaxy size (8 majors plus a √N-interpolated dozen minors), so
+    // systems-per-faction is what supplies that competition — and the systems a faction holds are
+    // almost all colonised in play, which is why the horizon matters as much as the galaxy size. At
+    // 120 systems the galaxy is fully developed (114 of 120) by ~10,000 ticks, but a donor is not yet
+    // contested: measured on this seed, the two arms are bit-identical at 6,000, 8,000 and 10,000
+    // ticks and first diverge between 10,000 and 13,000 — 18.2 units of 116,536 hauled at 13,000,
+    // 725 of 257,237 at 16,000. 13,000 is the cheapest horizon that clears the onset — the divergence
+    // is an outcome of the pin, not a coincidence, but it is a rare one and a shorter run reports the
+    // same zero a dropped wire would.
+    const config: HarnessConfig = { systemCount: 120, seed: 7, tickCount: 13_000 };
     const live = await runTickHarness(config);
     const pinned = await runTickHarness({ ...config, drawBrakeCeiling: "anchor" });
     expect(live.logisticsActivity.transferCount).toBeGreaterThan(0);
     expect(pinned.logisticsActivity.totalQuantity).not.toBeCloseTo(live.logisticsActivity.totalQuantity, 6);
-  }, 60_000);
+  }, 240_000);
 });

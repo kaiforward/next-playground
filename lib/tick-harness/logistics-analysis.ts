@@ -19,13 +19,16 @@ import type { LogisticsActivitySummary } from "./types";
 /**
  * Ticks below which a run's logistics counters read as colonisation warm-up, not economy health.
  * Directed-logistics moves nothing until a faction has two same-faction developed systems within
- * MAX_HOPS, which is colonisation-paced: at the default system count / seed nothing transfers before
- * ~tick 456, so a sub-window run reports a pre-logistics galaxy — one of the three economy pillars
- * essentially outside its window. Measured at 600 systems / seed 42: 500 ticks → 30 transfers over
- * 2 cycles; 1500 ticks → 14,200 over 44. This is a legibility bound, not a correctness one — below it,
- * low activity means "too early", not "broken" (which the block's own NOTHING-MOVED line still flags).
+ * MAX_HOPS, which is colonisation-paced: the first establish completes at tick 4128 and the first
+ * transfer lands at 4152 — the same two ticks at 20 systems / seed 7 and at 600 / seed 42, because
+ * the establish duration is set by the absorption cap (68 work ÷ 0.4 per cycle ≈ 170 cycles), not by
+ * galaxy size. A sub-window run therefore reports a pre-logistics galaxy — one of the three economy
+ * pillars essentially outside its window. Measured at 600 systems / seed 42: 4,600 ticks → 591
+ * transfers over 16 cycles; 5,600 ticks → 4,258 over 58. This is a legibility bound, not a
+ * correctness one — below it, low activity means "too early", not "broken" (which the block's own
+ * NOTHING-MOVED line still flags).
  */
-export const LOGISTICS_WARMUP_TICKS = 600;
+export const LOGISTICS_WARMUP_TICKS = 5400;
 
 /** Haul-budget ledger totals, accumulated by the runner from `LOGISTICS_WARMUP_TICKS` onward —
  *  before that, budget is granted every cycle while nothing can transfer (see the constant's

@@ -54,6 +54,13 @@ export async function runPopulationProcessor(
   // episode-cost instrument reads. Absent system ⇒ 0 (kept sparse: the gate fires on few
   // systems most cycles). Populated below, observational only — it changes nothing about `population`.
   const overshootDeathBySystem = new Map<string, number>();
+  // Calibration-only: per-system growth-term amount this cycle — the trajectory instrument reads.
+  // Same differential-fold idiom as overshootDeathBySystem above, mirrored for the opposite term:
+  // re-run the same pure fold with growthRate zeroed instead of the death rate. Unlike death,
+  // growth appears additively and alone in populationDelta's formula (decline/death subtract
+  // identically in both runs), so the difference isolates it exactly with no defensive clamp.
+  // Absent system ⇒ 0, kept sparse for the same reason.
+  const growthBySystem = new Map<string, number>();
   // Abandonment Rule 2 (the death line): systems this cycle found in survival shortfall with
   // post-delta population below ABANDON_POP_FLOOR. Reported, never applied here — this processor
   // stays pure and leaves the control-flip/reset to the tick body (lib/world/tick.ts), the sole
@@ -119,6 +126,14 @@ export async function runPopulationProcessor(
     );
     const overshootDeath = Math.max(0, deltaWithoutDeath - delta) * catchUp;
     if (overshootDeath > 0) overshootDeathBySystem.set(s.systemId, overshootDeath);
+    // Same isolation, for the growth term: re-run with growthRate zeroed. delta - deltaWithoutGrowth
+    // cancels decline and death exactly (both subtract identically in each run), leaving the growth
+    // product alone.
+    const deltaWithoutGrowth = populationDelta(
+      s.population, s.popCap, d, unrest, { ...params.population, growthRate: 0 },
+    );
+    const growth = (delta - deltaWithoutGrowth) * catchUp;
+    if (growth > 0) growthBySystem.set(s.systemId, growth);
     // The memory advances only now that this cycle's unrest has already been judged against it.
     // An emptying world's Provision-1 reading is a denominator artifact, not an experience to
     // normalise toward, so the update is skipped and the stored value (post-seed, pre-floor)
@@ -157,6 +172,7 @@ export async function runPopulationProcessor(
   await world.rewriteDemandRates(demandPops);
   const result: TickProcessorResult = {};
   if (overshootDeathBySystem.size > 0) result.overshootDeathBySystem = overshootDeathBySystem;
+  if (growthBySystem.size > 0) result.growthBySystem = growthBySystem;
   if (abandonedSystems.length > 0) result.abandonedSystems = abandonedSystems;
   return result;
 }

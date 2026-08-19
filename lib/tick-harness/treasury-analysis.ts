@@ -43,9 +43,10 @@ function isShorted(t: WorldFactionTreasury): boolean {
 
 /**
  * Last tick of the startup tail. Faction-cycles at or below it are reported apart from the founding
- * era and excluded from its bars: the tail's shortfalls predate any founding (its last event is
- * t=120 against a first founding at t=432), so blaming them on a charter would be false, and letting
- * them into the era's denominator would dilute the share the charter is actually answerable for.
+ * era and excluded from its bars: the tail's shortfalls predate any charter charge (its last event
+ * is t=120 against a first charter at ~t=401 — charged at commit, long before the establish
+ * completes), so blaming them on a charter would be false, and letting them into the era's
+ * denominator would dilute the share the charter is actually answerable for.
  */
 export const FOUNDING_ERA_START_TICK = 400;
 

@@ -271,7 +271,7 @@ decline term as the non-conserved death sink); Industry panel rework.
   unsold" maps to a decay-eligible idle fraction).
 - Housing-overshoot displacement rate and the unrest-weighted migration-vs-death split (low unrest → flee,
   high unrest → perish).
-- Symmetry check against the population rates (`growthRate`/`declineRate` = 0.015): decay should be slow
+- Symmetry check against the population rates (`growthRate`/`declineRate` = 0.0005): decay should be slow
   enough that infrastructure is "stickier" than population, so a brief dip doesn't strand a base.
 
 Per the standing approach, calibrate to a **coarse** health bar (no NaN/runaway/galaxy-wide collapse; viable
