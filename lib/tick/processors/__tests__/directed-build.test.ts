@@ -501,17 +501,18 @@ describe("construction centres", () => {
   it("prices the centre off the UNSCALED pool — the commit decision is interval-invariant", async () => {
     // A world tuned so the backlog (one 12-work food bundle; housing is already at its habitable cap,
     // so it proposes nothing) sits just above the reference-interval frontier budget
-    // (poolRef.total=1 × BACKLOG_WINDOW=6 = 6 < 12) but just below what a WRONGLY-scaled budget would
-    // read at catchUp=2 (1 × 2 × 6 = 12, no longer < 12) — so a regression that fed the scaled funding
-    // pool into planCentreProposal (instead of the unscaled poolRef.total) would commit a centre at the
-    // reference interval (24) but NOT at interval 48, while the correct unscaled valuation commits at
-    // both (mirrors the non-reference-interval construction in "interval invariance" below).
+    // (poolRef.total=0.1 × BACKLOG_WINDOW=60 = 6 < 12) but just below what a WRONGLY-scaled budget
+    // would read at catchUp=2 (0.1 × 2 × 60 = 12, no longer < 12) — so a regression that fed the
+    // scaled funding pool into planCentreProposal (instead of the unscaled poolRef.total) would
+    // commit a centre at the reference interval (24) but NOT at interval 48, while the correct
+    // unscaled valuation commits at both (mirrors the non-reference-interval construction in
+    // "interval invariance" below).
     const fullyHoused = scenario(0, 100, 20, 1000, { control: "developed", foodCycles: 1 });
     const committed = async (interval: number): Promise<boolean> => {
       const w = new MemoryDirectedBuildWorld(fullyHoused);
       await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
         interval, routeCost: reachable,
-        construction: mkConstruction(2, 0.0002),
+        construction: mkConstruction(2, 0.00002),
       });
       return w.constructionProjects.some(
         (p) => p.kind === "build" && p.buildingType === CONSTRUCTION_CENTRE_TYPE,
@@ -1447,7 +1448,13 @@ describe("runDirectedBuildProcessor: staged founding materials", () => {
     // One charter's worth of money and a source with plenty to sell: the charter empties the purse, so
     // every staging draw is unaffordable and the ceiling holds the project at zero work — until the
     // write-off drops the remaining want and it finishes on construction alone.
-    const run = await runEstablish(stockedHome({ food: 5_000, water: 5_000 }), FEE);
+    // maxCycles must clear FOUNDING_STALL_COMPLETE_CYCLES + STAGE_CYCLES, not the default 40 — the
+    // default was sized for the old ~8-cycle stall window and the run would truncate mid-stall now.
+    const run = await runEstablish(
+      stockedHome({ food: 5_000, water: 5_000 }),
+      FEE,
+      COLONISATION.FOUNDING_STALL_COMPLETE_CYCLES + STAGE_CYCLES + 5,
+    );
 
     expect(run.committed).toBe(FEE);                          // only the charter was ever paid…
     expect(run.draws).toEqual([]);                            // …so no materials moved

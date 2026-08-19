@@ -1,7 +1,9 @@
 /**
  * Faction treasury constants. ALL values here are ECONOMY_SCALE-invariant by
- * definition (money never rides S): heads, building levels, and construction
- * work points are unscaled counts, and the two S-scaled tax bases (realised
+ * definition (money never rides S): heads and building levels are unscaled
+ * counts, construction work points are fractional counts (absorption caps at
+ * 0.4/cycle — the pool ÷10, points-per-level ×10 pairing that holds per-cycle
+ * construction spend invariant), and the two S-scaled tax bases (realised
  * production, logistics work) are divided by the scale at collection.
  *
  * Rate magnitudes are harness-calibrated (`npm run simulate` — early-game
@@ -23,7 +25,7 @@ export const TREASURY = {
   /** Per-cycle upkeep per unit of build-work embodied in standing building levels. */
   MAINTENANCE_RATE_PER_WORK: 0.016,
   /** Money per construction point actually absorbed by the queue. */
-  CONSTRUCTION_RATE_PER_WORK: 4,
+  CONSTRUCTION_RATE_PER_WORK: 40,
   /** Money per unit of logistics work-budget actually consumed (S-normalised at accrual). */
   LOGISTICS_RATE_PER_WORK: 0.4,
   /** The maintenance slider's floor — the 50-100% range charges only flow (recoverable). */

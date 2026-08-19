@@ -123,8 +123,8 @@ export const EXPECTATION_PARAMS: ExpectationParams = { floor: 0.5, riseRate: 0.2
  * death. Calibrated against the simulator.
  */
 export const POPULATION_PARAMS: PopulationParams = {
-  growthRate: 0.015,
-  declineRate: 0.015,
+  growthRate: 0.0005,
+  declineRate: 0.0005,
   overshootDeathRate: 0.05,
   crowdBrakeEnd: CROWDING.BRAKE_END,
   overshootDeathUnrestGate: STRIKE_PARAMS.threshold,
@@ -151,18 +151,18 @@ export const MIGRATION_PARAMS: MigrationFlowParams = {
   // contentment/headroom/jobs mix pulls jointly rather than any one term dominating the gradient.
   weights: { contentment: 1, headroom: 1, jobs: 1 },
   // Local balancing only — colony population is supplied by the targeted colonist-delivery pass, not by
-  // diffusion. Kept BELOW the natural growth rate (0.015) so edge diffusion can't drain a system faster
+  // diffusion. Kept BELOW the natural growth rate (0.0005) so edge diffusion can't drain a system faster
   // than it regrows; a stronger rate bled the cores dry feeding the nearest colonies.
-  maxOutflowFraction: 0.01,
+  maxOutflowFraction: 0.0003,
   gradientThreshold: 0.02,
   distanceDecay: 0.1, // per-hop gradient attenuation over the open-edge topology
   // Above any achievable |gradient| (with these weights the appeal gap tops out ~5), so the full
   // staffed pool stays home; the future player speed-dial lowers this per chosen system, at a cost.
   employedGradientThreshold: 100,
   // Small always-on leak of staffed workers toward strongly-attractive colonies — the pop pump that
-  // lets colonisation proceed once home worlds saturate (spare labour ≈ 0). Coarse first cut,
-  // calibrated against the simulator.
-  employedLeakFraction: 0.02,
+  // lets colonisation proceed once home worlds saturate (spare labour ≈ 0). Preserves its ~1.3× ratio
+  // to the growth rate (0.0005). Coarse first cut, calibrated against the simulator.
+  employedLeakFraction: 0.0007,
 };
 
 /**
@@ -174,9 +174,9 @@ export const MIGRATION_PARAMS: MigrationFlowParams = {
  * tuned against the simulator toward an even spread (colony mean within ~50% of max).
  */
 export const COLONY_DELIVERY_PARAMS: ColonistDeliveryParams = {
-  // Well above the diffusion rate — colony delivery is the primary flow. A source donates only its idle
-  // spare (pop above jobs), so it keeps its workers and cores stabilise at their own size while shedding
-  // surplus to the frontier; growth re-donates, keeping reinforcement sustained.
-  sourceOutflowCap: 0.05,
+  // Well above the diffusion rate (0.0003) — colony delivery is the primary flow. A source donates only
+  // its idle spare (pop above jobs), so it keeps its workers and cores stabilise at their own size while
+  // shedding surplus to the frontier; growth re-donates, keeping reinforcement sustained.
+  sourceOutflowCap: 0.0017,
   minSourcePopulation: 50,
 };

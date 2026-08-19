@@ -692,7 +692,7 @@ lookup can feed them later without changing any formula.
 | `CHARTER_FEE_SPEND_MULT` | Multiplier on the reference maintenance bill setting the charter | 6.5 |
 | `CHARTER_FEE_MIN` | Real `max()` floor under the charter | 100 |
 | `FOUNDING_GATE_HEADROOM` | Multiplier on the projected material bill in the affordability gate | 2.0 |
-| `FOUNDING_STALL_COMPLETE_CYCLES` | Consecutive staging-nothing cycles before a project writes off its remainder | 8 |
+| `FOUNDING_STALL_COMPLETE_CYCLES` | Consecutive staging-nothing cycles before a project writes off its remainder | 80 |
 
 The four cost constants get one coarse pass and then stay coarse: precision tuning waits for the sibling cost
 mechanics (priced logistics, military, industry pricing) to land on the same treasury, per the standing

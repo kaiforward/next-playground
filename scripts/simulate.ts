@@ -859,8 +859,8 @@ function formatTable(results: HarnessResults): string {
     if (results.config.tickCount < LOGISTICS_WARMUP_TICKS) {
       lines.push(
         `  warm-up: ${results.config.tickCount} ticks is below the ~${LOGISTICS_WARMUP_TICKS}-tick logistics ` +
-        `warm-up window — directed-logistics is colonisation-gated and barely moves before ~tick 456 at ` +
-        `default scale, so read low activity as "too early", not "broken" (a matured read needs ~1500 ticks).`,
+        `warm-up window — directed-logistics is colonisation-gated and moves nothing before ~tick 4152 at ` +
+        `default scale, so read low activity as "too early", not "broken" (a matured read needs ~5600 ticks).`,
       );
     }
   }

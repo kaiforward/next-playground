@@ -924,6 +924,17 @@ function fixtureLandHeadroom(system: WorldSystem): number {
   return Math.floor(Math.min(system.habitableSpace - used, system.generalSpace - used) / cost);
 }
 
+/**
+ * The fixture population whose relief want is exactly `levels` whole housing levels — the inverse of
+ * the planner's own sizing formula, `ceil((population ÷ RELIEF_TARGET − popCap) ÷ POP_CENTRE_DENSITY)`.
+ * Lets a fixture be placed a chosen distance below a whole-level boundary, which is the only way a
+ * per-cycle population change smaller than one level's worth of want (POP_CENTRE_DENSITY ×
+ * RELIEF_TARGET) is observable in the committed level count at all.
+ */
+function populationForReliefWant(levels: number): number {
+  return (FIXTURE_POP_CAP + levels * POP_CENTRE_DENSITY) * DIRECTED_BUILD.RELIEF_TARGET;
+}
+
 function withStock(world: World, systemId: string, stock: number): World {
   return {
     ...world,
@@ -1103,7 +1114,19 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     // population. The fixture above parks the economy to buy an exact closed form; this one runs the
     // DEFAULT cadence and pins the stage ordering instead, on ranges rather than a level count, so it
     // does not re-encode world-gen incidentals.
-    const { world, systemId } = populationFixture(0.97, RESTIVE_UNREST);
+    //
+    // The observable is discrete — one whole housing level is POP_CENTRE_DENSITY × RELIEF_TARGET =
+    // 18.4 pop of relief want — while one cycle's net growth here is ~1.5 pop, so the fixture is placed
+    // deliberately rather than at a round occupancy: the PRE-growth want sits BOUNDARY_SLACK below a
+    // whole level. A post-population-stage read then commits exactly one more level than a
+    // start-of-tick read would, for any per-cycle growth between 0.18 and 18.6 pop — an ~8x slowdown or
+    // a ~12x speed-up of the growth rate either side of what this fixture actually grows.
+    const BOUNDARY_LEVELS = 14;
+    const BOUNDARY_SLACK = 0.01; // levels — 0.18 pop, far above float noise, far below one cycle's growth
+    const { world, systemId } = populationFixture(
+      populationForReliefWant(BOUNDARY_LEVELS - BOUNDARY_SLACK) / FIXTURE_POP_CAP,
+      RESTIVE_UNREST,
+    );
     const before = fixtureSystem(world, systemId);
     const after = await runTicks(world, CYCLE_LENGTH);
     const grown = fixtureSystem(after, systemId);
@@ -1134,6 +1157,10 @@ describe("runWorldTick — population growth, unrest recovery and housing relief
     const preGrowthLevels = Math.ceil(
       (before.population / DIRECTED_BUILD.RELIEF_TARGET - FIXTURE_POP_CAP) / POP_CENTRE_DENSITY,
     );
+    // Premise: the fixture really is parked just under the boundary, so the discrimination below is
+    // one level of growth crossing it — not a fixture that was already a level clear either way.
+    expect(preGrowthLevels).toBe(BOUNDARY_LEVELS);
+    expect(reliefLevels).toBe(BOUNDARY_LEVELS + 1);
     expect(reliefLevels).toBeGreaterThan(preGrowthLevels);
   }, 60_000);
 });
@@ -1212,9 +1239,15 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     // The isolated run is near-flat (only the tiny standing-crowding decline term); the connected
     // run is clearly, substantially more negative — the gap is migration's own contribution, which
     // a write of the pre-migration delta alone could never show.
+    // Thresholds re-derived for `maxOutflowFraction` 0.01 → 0.0003 (÷33.3, timescale change): outflow
+    // itself shrinks by the same factor, so a bound sized for the old rate (isolated < 20, connected
+    // < −50) no longer holds — measured isolated ≈ −0.017, connected ≈ −14.6, still a ~840× gap. −5
+    // sits well below the isolated near-zero read and comfortably inside the measured connected
+    // magnitude, preserving the same qualitative claim (migration's contribution is real and large
+    // relative to the pre-migration read) without pinning to the exact measured figure.
     expect(Math.abs(isolatedChange)).toBeLessThan(20);
-    expect(connectedChange).toBeLessThan(-50);
-    expect(connectedChange - isolatedChange).toBeLessThan(-50);
+    expect(connectedChange).toBeLessThan(-5);
+    expect(connectedChange - isolatedChange).toBeLessThan(-5);
   }, 30_000);
 
   it("clears on abandonment and again on redevelopment, so a re-founded colony never inherits its predecessor's reading", () => {
@@ -1387,7 +1420,8 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
 
   // ── colony-founding donation, driven through runWorldTick, not applyDevelopments directly ──
   // A specific, empirically-verified galaxy (seed 11, 90 systems) funds and completes a real
-  // colony-establish project — system-50 seeding system-40 — at tick 432 under the DEFAULT cadence,
+  // colony-establish project — system-50 seeding system-40 — at tick 4128 under the DEFAULT cadence
+  // (re-derived for the slowed construction/founding rates; was tick 432 at the pre-timescale rates),
   // found the same way `lib/world/__tests__/tick-colony-source.test.ts` does: run the real loop
   // forward and watch `control`/`constructionProjects`. `EXPANSION.COLONY_SEED_POP` fixes the
   // donation at exactly 2 regardless of fixture size, so "unmistakably different" comes from a
@@ -1398,7 +1432,7 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
   // dynamics free to differ between the two branches.
   it("includes a colony-founding donation: the donor's populationChange is NOT short by the seed it gave away", async () => {
     const base = generateWorld({ systemCount: 90, seed: 11 });
-    const preWorld = await runTicks(base, 431);
+    const preWorld = await runTicks(base, 4127);
 
     const withDonation = (await runWorldTick(preWorld)).world;
     const withoutDonation = (await runWorldTick(preWorld, {
@@ -1449,7 +1483,7 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
 
   it("a system founded, abandoned and later redeveloped reports populationChange absent, not its predecessor's value — driven through runWorldTick across real cycles", async () => {
     const base = generateWorld({ systemCount: 90, seed: 11 });
-    let world = await runTicks(base, 432); // the colony above (system-40, seeded from system-50) completes here
+    let world = await runTicks(base, 4128); // the colony above (system-40, seeded from system-50) completes here
 
     const colonyId = "system-40";
     expect(fixtureSystem(world, colonyId).control).toBe("developed"); // premise: really founded first
@@ -1457,17 +1491,23 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     // Force a real famine/abandonment: cut the colony off from any donor haul (no logistics rescue),
     // drive population and stock to the death line, and let the REAL population processor call it
     // via runWorldTick — the same technique the stockChange suite uses to reach the death line.
+    // The famine is TOTAL — every producer stripped and every market emptied, not just the two
+    // survival goods — because the descent rate is what has to fit the loop budget below: at full
+    // dissatisfaction the growth term is exactly zero and decline runs at the whole declineRate
+    // against a unrest pinned at 1, so crossing ABANDON_POP_FLOOR (1) takes ln(population) ÷
+    // declineRate ≈ 40 reference cycles from 1.02 (measured: abandoned at tick 952). Leave any good
+    // satisfied and growth claws back ~3/4 of the decline, stretching the same descent past the
+    // budget. Cadence buys nothing: reference cycles per tick are interval-invariant by construction,
+    // so 3,000 ticks is ~125 reference cycles at ANY cadence.
     const savedConnections = world.connections;
     world = {
       ...world,
       systems: world.systems.map((s): WorldSystem =>
-        s.id === colonyId ? { ...s, unrest: 0.9, population: 1.3, popCap: 20 } : s,
+        s.id === colonyId ? { ...s, unrest: 0.9, population: 1.02, popCap: 20 } : s,
       ),
-      buildings: world.buildings.filter(
-        (b) => !(b.systemId === colonyId && (b.buildingType === "water" || b.buildingType === "food")),
-      ),
+      buildings: world.buildings.filter((b) => b.systemId !== colonyId),
       markets: world.markets.map((m): WorldMarket =>
-        m.systemId === colonyId && (m.goodId === "water" || m.goodId === "food") ? { ...m, stock: 0 } : m,
+        m.systemId === colonyId ? { ...m, stock: 0 } : m,
       ),
       connections: world.connections.filter((c) => c.fromId !== colonyId && c.toId !== colonyId),
     };
@@ -1497,8 +1537,11 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
       ),
     };
 
+    // Re-founding is a whole establish over again — ~170 construction cycles at the absorption cap,
+    // so ~4,100 ticks, the same duration the first founding above took. The budget is that plus room
+    // for the establish to be proposed and priced, not a round number.
     let redeveloped = false;
-    for (let i = 0; i < 500 && !redeveloped; i++) {
+    for (let i = 0; i < 5_000 && !redeveloped; i++) {
       world = (await runWorldTick(world)).world;
       redeveloped = fixtureSystem(world, colonyId).control === "developed";
     }
@@ -1507,7 +1550,7 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     const refounded = fixtureSystem(world, colonyId);
     expect(refounded.populationChange).toBeUndefined();
     expect("populationChange" in refounded).toBe(false);
-  }, 120_000);
+  }, 300_000);
 });
 
 // ── the realised per-cycle survival-good stock change ─────────────────
@@ -1603,10 +1646,13 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
   });
 
   it("excludes a system this SAME cycle abandoned from the write — the write site's own guard, distinct from resetAbandonedMarkets' earlier clear", async () => {
-    // Tiny population with both survival goods cut to zero stock and no local producers: famine
+    // Tiny population with every market emptied and every local producer stripped: total famine,
     // every cycle. Starting population and unrest sit close enough to the death line (famine AND
     // post-delta population below ABANDON_POP_FLOOR) that unrest-driven decline crosses it partway
-    // through this run — the exact tick the population processor reports this system in
+    // through this run — at full dissatisfaction the growth term is exactly zero and unrest pins at
+    // 1, so ln(1.02) ÷ declineRate is ~40 reference cycles (measured: abandoned at tick 952), inside
+    // the ~125 reference cycles 3,000 ticks buys at any cadence. The exact tick the population
+    // processor reports this system in
     // `abandonedSystemIds` is the same tick `stockAtCycleStart` snapshotted its water row while the
     // system was still developed, so without the write site's own guard that snapshot would be
     // recomputed against and written back over `resetAbandonedMarkets`' clear, further up this same
@@ -1616,14 +1662,10 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
     let world: World = {
       ...base,
       systems: base.systems.map((s): WorldSystem =>
-        s.id === systemId ? { ...s, population: 1.3, popCap: 20, unrest: 0.87 } : s,
+        s.id === systemId ? { ...s, population: 1.02, popCap: 20, unrest: 0.87 } : s,
       ),
-      buildings: base.buildings.filter(
-        (b) => !(b.systemId === systemId && (b.buildingType === "water" || b.buildingType === "food")),
-      ),
-      markets: base.markets.map((m) =>
-        m.systemId === systemId && (m.goodId === "water" || m.goodId === "food") ? { ...m, stock: 0 } : m,
-      ),
+      buildings: base.buildings.filter((b) => b.systemId !== systemId),
+      markets: base.markets.map((m) => (m.systemId === systemId ? { ...m, stock: 0 } : m)),
     };
 
     let abandoned = false;
@@ -1723,28 +1765,42 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
   });
 
   // ── colony-founding staging draw, driven through runWorldTick, not applyFoundingStagingDraws ──
-  // The same seed-11/90-system galaxy and the same tick-432 counterfactual the populationChange
-  // suite above uses: two clones of one identical pre-tick world, diverging ONLY in whether
-  // directed-build resolves this tick, so the staging draw's contribution to a founder's own
-  // survival-good rows is isolated exactly. A donor ships food and water out of its warehouse to
-  // stand up a colony (`planStagingDraw` sizes the manifest on the seed's own basket, which at a
-  // 2-pop seed is mostly those two), and that is as real a drain as consumption — the field's one
-  // reader divides `stock` by `−stockChange` for a cycles-to-empty countdown, so a drain outside the
-  // figure would quote the donor a longer runway than it has, on the cycle it can least afford one.
+  // The same seed-11/90-system galaxy the populationChange suite above uses, but caught on a STAGING
+  // cycle rather than the completion tick: a colony's manifest is staged cycle by cycle as its founder
+  // can spare the goods, and runs dry before the construction work finishes — system-40's draws from
+  // system-50 run every construction cycle from tick 48 to 3816, while the establish itself only
+  // completes at 4128, so the completion tick draws nothing at all and is the wrong tick to measure a
+  // draw on. Tick 480 is a mid-sequence staging cycle carrying both survival goods, with the draws
+  // either side of it the same size and the same goods.
+  //
+  // Two clones of one identical pre-tick world, diverging ONLY in whether directed-build resolves this
+  // tick, so the staging draw's contribution to a founder's own survival-good rows is isolated exactly.
+  // A donor ships food and water out of its warehouse to stand up a colony (`planStagingDraw` sizes the
+  // manifest on the seed's own basket, which at a 2-pop seed is mostly those two), and that is as
+  // real a drain as consumption — the field's one reader divides `stock` by `−stockChange` for a
+  // cycles-to-empty countdown, so a drain outside the figure would quote the donor a longer runway
+  // than it has, on the cycle it can least afford one.
   it("includes a colony-founding staging draw: the donor's stockChange covers the survival goods it shipped out", async () => {
     const base = generateWorld({ systemCount: 90, seed: 11 });
-    const preWorld = await runTicks(base, 431);
+    const preWorld = await runTicks(base, 479);
 
-    const withStaging = (await runWorldTick(preWorld)).world;
+    const staged = await runWorldTick(preWorld);
+    const withStaging = staged.world;
     const withoutStaging = (await runWorldTick(preWorld, {
       cadence: { cycle: CYCLE_LENGTH, logistics: LOGISTICS_INTERVAL, construction: NEVER },
     })).world;
 
-    // Premise: the two branches genuinely diverge on founding this exact tick.
-    expect(fixtureSystem(withStaging, "system-40").control).toBe("developed");
-    expect(fixtureSystem(withoutStaging, "system-40").control).toBe("controlled");
-
     const donorId = "system-50"; // system-40's seed source, per the populationChange suite above
+    // Premise: the two branches genuinely diverge on a staging draw this exact tick, and the draw
+    // really carries the two survival goods asserted below. Read off the tick's own manifest record —
+    // the colony is still `controlled` on both branches here, so control cannot be the premise.
+    const donorManifests = (staged.instrumentation.foundingManifests ?? [])
+      .filter((m) => m.sourceSystemId === donorId);
+    expect(donorManifests.length).toBeGreaterThan(0);
+    for (const goodId of ["water", "food"]) {
+      expect(donorManifests.some((m) => m.goodIds.includes(goodId))).toBe(true);
+    }
+
     for (const goodId of ["water", "food"]) {
       const drawn = marketRow(withStaging, donorId, goodId);
       const undrawn = marketRow(withoutStaging, donorId, goodId);

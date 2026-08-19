@@ -105,8 +105,8 @@ export const COLONISATION = {
    * The counter runs only once the charter is paid, so a project that cannot afford its charter can
    * never escape into a free colony.
    *
-   * ~8 is roughly half a nominal establish (68 work ÷ an absorption cap of 4 ⇒ ≥17 cycles) — long
+   * ~80 is roughly half a nominal establish (68 work ÷ an absorption cap of 0.4 ⇒ ≥170 cycles) — long
    * enough that ordinary lumpiness in a founder's spare stock does not trip it.
    */
-  FOUNDING_STALL_COMPLETE_CYCLES: 8,
+  FOUNDING_STALL_COMPLETE_CYCLES: 80,
 } as const;

@@ -47,9 +47,35 @@ import type { World } from "@/lib/world/types";
 
 const SEED = 745878428; // colonies + cycle starts in-window (shared with the ECONOMY_SCALE invariance test)
 const SYSTEM_COUNT = 60;
-const TICKS = 480; // 20 reference-cycles — long enough for growth and construction rates to accumulate
+/** Where the STOCK figures are read: 20 reference-cycles — long enough for growth and construction
+ *  rates to accumulate, short enough that the arms have not yet diverged on colonisation timing. */
+const STATE_TICKS = 480;
+/**
+ * How far the run goes, and therefore the window the founding FLOW is accumulated over. Founding
+ * money is a lumpy era-scale flow, not a smooth rate: it arrives as charter and manifest lumps, the
+ * era's whole spend is essentially over by ~5,000 ticks (this fixture: 20,768 of an eventual 20,860
+ * banked by 5,760), and an establish takes ~170 construction cycles to complete. A 20-cycle window
+ * therefore samples only the ramp's leading edge, where the two arms' lumps land on different ticks
+ * and the comparison measures phase rather than rate — measured on this fixture, cycle12 diverges
+ * 1.4e-1 at 480 ticks and 2.9e-1 at 1,920, then collapses to 1.2e-3 at 2,880 once the ramp is inside
+ * the window, settling at 1.3e-2 by 5,760. The stock figures are NOT read here: the arms genuinely
+ * drift apart as colonies complete on different ticks (buildings 7.2e-3, mean expectation 4.9e-2 at
+ * 7,680), which is why each figure is read at the window it converges in rather than at one shared
+ * end tick.
+ */
+const FOUNDING_TICKS = 5760;
 const TOL = 5e-3;
 const TREASURY_TOL = 6e-2; // measured honest baseline ~2.24e-2 — see header note
+/**
+ * Founding money gets its own bar rather than borrowing the treasury balance's. Measured over
+ * FOUNDING_TICKS the honest cross-arm diffs are 1.27e-2 (cycle12) / 1.08e-2 (build12) — well inside
+ * TREASURY_TOL, and reusing that number would have left the arm blind: mis-scaling the founding
+ * money seam by `catchUp` (`spent = plan.cost × share × catchUp` in the directed-build staging path,
+ * exactly the class of break this arm exists for) drives build12 to 5.47e-2, which TREASURY_TOL's
+ * 6e-2 would have let through. 3e-2 sits between: ~2.4x headroom over the honest baseline, ~1.8x
+ * past it for that break.
+ */
+const FOUNDING_TOL = 3e-2;
 // Adaptive-expectation guard: the memory update sub-steps at catchUpFactor(cadence.cycle) rather
 // than rate-scaling (lib/engine/expectation.ts), specifically BECAUSE it is nonlinear
 // (branch-switching) and therefore NOT invariant under the relaxation-rate's own scaling trick.
@@ -85,7 +111,8 @@ interface RunTotals {
   treasuryBalance: number;
   /** Founding money settled over the WHOLE run — a flow, so it must be accumulated, not read off
    *  the last settlement. The settlement clock is not the construction clock, so this is the total
-   *  the `build12` arm (construction 12, cycle 24) actually tests for interval invariance. */
+   *  the `build12` arm (construction 12, cycle 24) actually tests for interval invariance. Read over
+   *  FOUNDING_TICKS, not STATE_TICKS — see that constant for why the flow needs the longer window. */
   foundingExpense: number;
   /** Mean effective adaptive-expectation memory over settled systems at run end — the sub-step
    *  rule's guard: cycle12 doubles the sub-step count at half the interval, which must reproduce
@@ -140,7 +167,11 @@ async function runAtCadence(cadence?: TickCadence): Promise<RunTotals> {
   let world = generateWorld({ systemCount: SYSTEM_COUNT, seed: SEED });
   let foundingExpense = 0;
   const countedSettlement = new Map<string, number>();
-  for (let t = 0; t < TICKS; t++) {
+  // The world as it stood at STATE_TICKS, kept so the stock figures are read at their own window
+  // while the run carries on far enough to accumulate the founding flow. The run is deterministic, so
+  // this is byte-identical to what a run that stopped at STATE_TICKS would have ended on.
+  let stateWorld: World | null = null;
+  for (let t = 0; t < FOUNDING_TICKS; t++) {
     const result = await runWorldTick(world, cadence ? { cadence } : undefined);
     world = result.world;
     for (const treasury of world.treasuries) {
@@ -149,14 +180,16 @@ async function runAtCadence(cadence?: TickCadence): Promise<RunTotals> {
       countedSettlement.set(treasury.factionId, s.tick);
       foundingExpense += s.foundingExpense;
     }
+    if (t === STATE_TICKS - 1) stateWorld = world;
   }
+  if (stateWorld === null) throw new Error("expected the run to pass STATE_TICKS");
   let population = 0;
-  for (const s of world.systems) population += s.population;
+  for (const s of stateWorld.systems) population += s.population;
   let buildings = 0;
-  for (const b of world.buildings) buildings += Math.max(0, b.count);
+  for (const b of stateWorld.buildings) buildings += Math.max(0, b.count);
   let treasuryBalance = 0;
-  for (const t of world.treasuries) treasuryBalance += t.balance;
-  const { meanExpectation, meanGrievance } = meanExpectationAndGrievance(world);
+  for (const t of stateWorld.treasuries) treasuryBalance += t.balance;
+  const { meanExpectation, meanGrievance } = meanExpectationAndGrievance(stateWorld);
   return { population, buildings, treasuryBalance, foundingExpense, meanExpectation, meanGrievance };
 }
 
@@ -208,7 +241,7 @@ describe("cadence interval invariance", () => {
         expect(
           dFnd,
           `${name}: founding expense rate diverges — base ${base.foundingExpense.toFixed(1)} vs ${v.foundingExpense.toFixed(1)} (rel ${dFnd.toExponential(2)})`,
-        ).toBeLessThan(TREASURY_TOL);
+        ).toBeLessThan(FOUNDING_TOL);
         // The sub-step rule's guard: cycle12 doubles catchUpFactor(cadence.cycle), so the memory
         // update sub-steps twice as often over half the interval — reproducing the baseline's mean,
         // not diverging the way a rate-scaled (non-sub-stepped) update would. build12 does not touch
@@ -226,6 +259,6 @@ describe("cadence interval invariance", () => {
         ).toBeLessThan(GRIEVANCE_ABS_TOL);
       }
     },
-    120_000,
+    240_000,
   );
 });

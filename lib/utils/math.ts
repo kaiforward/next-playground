@@ -1,8 +1,20 @@
+import { HOURS_PER_TICK } from "@/lib/constants/tick-cadence";
+
 /**
  * Clamp a value between a minimum and maximum.
  */
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Ticks to in-world hours, via the calendar anchor (`HOURS_PER_TICK`,
+ * `lib/constants/tick-cadence.ts`) — 4 ticks/day. The one place a tick count becomes an
+ * in-world duration; display code (future fictional-date rendering) converts from here, never
+ * from a second literal.
+ */
+export function ticksToHours(ticks: number): number {
+  return ticks * HOURS_PER_TICK;
 }
 
 /**

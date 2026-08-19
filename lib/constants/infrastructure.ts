@@ -18,7 +18,7 @@ import type { DecayParams } from "@/lib/engine/infrastructure-decay";
  * The buffer is deliberately long enough to absorb temporary labour and market shocks.
  */
 export const INFRASTRUCTURE_DECAY_PARAMS: DecayParams = {
-  idleBufferCycles: 12,
+  idleBufferCycles: 120,
   unrestThreshold: 0.75,
 };
 

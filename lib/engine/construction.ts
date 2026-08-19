@@ -320,7 +320,7 @@ export function forecastEtaCycles(
   projects: WorldConstructionProject[],
   pool: number,
   cap: number,
-  maxCycles = 999,
+  maxCycles = 9999,
   capFor?: ProjectCap,
 ): (number | null)[] {
   // Everything is stalled (this also avoids a maxCycles spin).
@@ -356,7 +356,7 @@ export function forecastIndependentEtaCycles(
   hypotheticals: WorldConstructionProject[],
   pool: number,
   cap: number,
-  maxCycles = 999,
+  maxCycles = 9999,
   capFor?: ProjectCap,
 ): (number | null)[] {
   if (fundsNothing(pool, cap)) {

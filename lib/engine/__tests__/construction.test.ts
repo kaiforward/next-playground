@@ -595,3 +595,35 @@ describe("forecastIndependentEtaCycles — the stall guard, remaining work and t
     expect(forecastIndependentEtaCycles([], [project("h", HOUSING_TYPE, 1, 0, 30)], 100, 10, 3)).toEqual([3]);
   });
 });
+
+describe("forecastEtaCycles / forecastIndependentEtaCycles — the default give-up bound (999 → 9999)", () => {
+  // The slowed-down constants push every forecast out ~10×, so a project that used to land well
+  // inside the old 999-cycle guard now lands past it but still well inside a sane give-up bound.
+  // These pin the DEFAULT maxCycles (no explicit horizon argument) directly, so a regression back
+  // to 999 fails on a real assertion, not an import error.
+  const LANDING_CYCLE = 5000; // strictly between 999 and 9999
+
+  it("forecastEtaCycles reports a numeric ETA for a deep queue landing between 999 and 9999 cycles out", () => {
+    const cap = 1;
+    const deep = project("deep", HOUSING_TYPE, 1, 0, LANDING_CYCLE * cap);
+    expect(forecastEtaCycles([deep], cap, cap)).toEqual([LANDING_CYCLE]);
+  });
+
+  it("forecastEtaCycles still reports null (stalled) for a genuinely unfundable queue", () => {
+    const cap = 1;
+    const deep = project("deep", HOUSING_TYPE, 1, 0, LANDING_CYCLE * cap);
+    expect(forecastEtaCycles([deep], 0, cap)).toEqual([null]);
+  });
+
+  it("forecastIndependentEtaCycles reports a numeric ETA for a hypothetical landing between 999 and 9999 cycles out", () => {
+    const cap = 1;
+    const deep = project("deep", HOUSING_TYPE, 1, 0, LANDING_CYCLE * cap);
+    expect(forecastIndependentEtaCycles([], [deep], cap, cap)).toEqual([LANDING_CYCLE]);
+  });
+
+  it("forecastIndependentEtaCycles still reports null (stalled) for a genuinely unfundable hypothetical", () => {
+    const cap = 1;
+    const deep = project("deep", HOUSING_TYPE, 1, 0, LANDING_CYCLE * cap);
+    expect(forecastIndependentEtaCycles([], [deep], 0, cap)).toEqual([null]);
+  });
+});
