@@ -19,7 +19,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   miss), make evidence the deliverable rather than a design.
   *Next step:* the skills shipped (#246) and the pipeline has run end-to-end (timescale #247,
   calendar display #248); fold `docs/build-plans/process-overhaul.md` into `feature-process.md`
-  and delete it — the fold's inputs are recorded in memory (`process-overhaul-dogfood`).
+  and delete it — the fold's inputs are recorded in the plan's own "Dogfood record" section.
 
 ---
 
