@@ -28,6 +28,20 @@ Calibration of base mechanics targets only a healthy *shape* — no NaN / runawa
 
 ---
 
+## Extraction dominance and habitability are deliberately sparse
+
+The galaxy should read **barren-but-alive**. Most systems being extraction/mining worlds
+(~65-70%) is desired, not a bug — the basic building blocks are needed in huge numbers, so most
+systems realistically *are* extraction economies. Don't distort generation to force label variety;
+if a wall of "extraction" labels ever reads as monotonous, the fix is smarter labels (e.g. "ore
+extraction" vs "gas extraction"), never a faked distribution.
+
+Habitability follows the same principle: a pure gas-giant system has zero habitable space and is
+genuinely, permanently dead — no surface, no population, no market. Rocky barrens (asteroid belts,
+volcanic, barren rock, frozen) carry tiny artificial habitation instead, so they read as small-but-
+alive mining outposts rather than dead markets. Don't fill in more habitability than that to make a
+barren system feel less empty — the sparseness is the point.
+
 ## The design-space inventory
 
 Each baseline inefficiency the audit surfaced maps 1:1 to a planned lever. The 1:1-ness is the tell that these are features, not bugs:

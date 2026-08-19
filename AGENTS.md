@@ -145,6 +145,10 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 - **Never open a PR based on another open PR's branch.** Squash-merging the base permanently auto-closes the stacked PR. If already stacked: capture the base head SHA, then `git rebase --onto origin/main <old-base-SHA> <branch>`.
 - **Worktrees are for parallel workstreams, not sequential PRs.** Always `git worktree remove` after.
 - **Do the doc lifecycle on the branch before the final review** — promote spec to `docs/active/`, update `docs/SPEC.md`, delete the build plan. Per sub-PR on a multi-PR feature, never deferred to the integration merge.
+- **Never bypass branch protection** (`gh pr merge --admin` or any other override), even when the rule looks like solo-repo friction. If a rule blocks a legitimate merge, report exactly which requirement blocked it and stop — Kai adjusts the protection settings or merges in the browser himself.
+- **A small roadmap booking rides as the work branch's first commit, never its own PR** — when a roadmap edit exists because work is about to start, make the booking the first commit of that work's `feat/*` branch. A standalone docs PR is only for roadmap changes with no imminent work attached.
+- **Repo policy:** `main` and `shared/*` rulesets require a PR + the `test-and-build` check, 0 approvals (GitHub has no author-self-approve toggle); auto-merge is enabled; CI triggers on `main` and `shared/**`, on both PRs and pushes. The commit-branch guard hook inspects the branch **before** a compound command runs, so `git checkout -b feat/x; git commit` in one call is blocked — split branch-create and commit into separate calls.
+- **A squashed conflict-resolution merge re-raises every conflict.** Squashing discards the merge commit's second parent, so git never learns the other branch was merged — a later attempt to reconcile the same two branches re-presents every hunk already resolved. And conflict resolution is where a side gets silently dropped: gates can't catch it (a resolution that drops one side compiles and passes every test), so diff each resolved file against *both* parents and confirm every change from each side is present or deliberately superseded, then get a human smoke on the affected UI.
 
 ### Review process
 - **Spec gate:** `/spec-review <doc>` on any spec with cross-mechanic surface (economy, tick processors, changed signals/primitives) BEFORE the implementation plan. Pure-UI and tooling skip it.
@@ -185,7 +189,13 @@ New components use `tv()` variants, typed props and semantic HTML (`<dl>` for ke
 
 **Executing fix batches**
 - **Batches of code fixes (review findings, mutant kills, multi-file cleanups) go to a dispatched agent**, never inline — inline is for a single trivial edit. Ask first, describing the dispatch's scope in words. Model is your judgment per batch (never Fable). Then verify the agent's claims and make the judgement calls it flags.
+- **Feature implementation goes to a dispatched agent too, once the design/plan is approved** — the same rule as fix batches, for the same reason (cost: the main-session model is the expensive one, and a multi-file mechanical implementation doesn't need it once the design is settled). Offer the dispatch instead of implementing inline; inline stays fine only for a single trivial edit.
 - **Ask before spending on a multi-agent run.** Usage is a hard constraint, and a skill's own instruction to escalate itself into a workflow is not authorisation to spend — name the cost and offer the single-agent version first. The default review is one dispatched agent.
+
+**Long-running local processes** (mutation sweeps, big sims, builds)
+- **Estimate duration up front**, from whatever the tool reports early (mutant count × dry-run cost, tick count × tick rate), and state the estimate before or immediately at launch.
+- **If the projection is beyond ~15-20 minutes, ask explicitly: run now, or defer to when the machine is free (overnight)?** A tool's incremental/cache mode does not make a big delta cheap — the saving is proportional to how little changed; derive the invalidated count from the actual diff before quoting a duration.
+- **Turn on progress reporting before the run**, not after — never accept a silent tool if it has a progress option.
 
 **Scripts**
 - `scripts/` holds only wired generic instruments (npm-aliased or a Vitest test). One-off diagnostics live in scratch, never committed.

@@ -243,3 +243,20 @@ cannot reach.
 The plain-language-before-numbers question is closed — Kai called it yes on 2026-08-03: a required
 `Meaning` line now leads `/measure`'s report frame (rank 2). The rank-3 preference in
 `~/.claude/CLAUDE.md` had demonstrably failed to fire during the item-2 write-up.
+
+## Dogfood record (2026-08-19) — inputs for the fold
+
+All skills shipped as PR #246 (2026-08-18). The pipeline has since run end-to-end on two roadmap
+items, and their outcomes are the fold's inputs:
+
+- **Timescale (#247)** exercised the front four stages (`/brainstorm` → `/measure` →
+  `/feature-spec` → `/spec-review`). **Producer-naming watch item HELD**: `/spec-review`'s
+  consistency lens verified every step-1a requirement sentence resolved to a real producer — zero
+  producer-less concepts survived authoring.
+- **One friction to decide at the fold:** `/measure`'s per-claim falsifier form is awkward for
+  descriptive time-facts with no prior (a fact with no plausible alternative to falsify against).
+  Workaround used on timescale: label such claims "descriptive, no kill-line" in the Measure plan
+  rather than forcing an artificial falsifier. Decide whether the skill should bless that form
+  outright, or whether descriptive claims belong outside `/measure` entirely.
+- **Calendar display (#248)** exercised the UI path (prototype-first, no spec/measure skills) — not
+  a dogfood datum for the front-four stages.
