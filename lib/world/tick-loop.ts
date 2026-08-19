@@ -20,12 +20,17 @@ import type { World } from "./types";
 
 export type Speed = "paused" | 1 | 5 | "max";
 
-/** One SSE frame: tick position, pacing state, and the tick's global events. */
+/** One SSE frame: tick position, pacing state, and the tick's global events. `error` is present
+ *  ONLY on the hard-pause-on-failure emit (`tickOnce`'s catch block below) — every other emit
+ *  omits the field entirely, so a consumer can tell "paused because the player paused" from
+ *  "paused because a tick threw" without a second channel (client-runtime spec §4: the worker
+ *  surfaces this as a `tickFailed` message alongside the pause pacing frame). */
 export interface TickBroadcast {
   currentTick: number;
   speed: Speed;
   achievedTps: number;
   events: Partial<GlobalEventMap>;
+  error?: string;
 }
 
 /**
@@ -217,10 +222,11 @@ export class TickLoop {
     } catch (error) {
       // Pause rather than spin on a failing tick. No autosave — don't
       // overwrite the last good save with state from a broken tick.
+      const message = error instanceof Error ? error.message : String(error);
       console.error("[tick-loop] tick failed — pausing:", error);
       this.stopPacing();
       this.speed = "paused";
-      this.emit(this.getSnapshot(), true);
+      this.emit({ ...this.getSnapshot(), error: message }, true);
     } finally {
       this.ticking = false;
       // Drain anything queued during the await window above — after this tick's own

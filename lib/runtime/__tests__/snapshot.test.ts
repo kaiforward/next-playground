@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
-import { setWorld, clearWorld } from "@/lib/world/store";
+import { getWorld, setWorld, clearWorld } from "@/lib/world/store";
 import { buildStateFrame, type SnapshotSlices, type StateFrame } from "@/lib/runtime/snapshot";
-import type { PacingFrame } from "@/lib/runtime/channel";
 import type { World, WorldEvent } from "@/lib/world/types";
 import { GOODS } from "@/lib/constants/goods";
 
@@ -99,12 +98,14 @@ describe("buildStateFrame — drop-harmless", () => {
       ...world,
       systems: world.systems.map((s) => (s.id === target.id ? { ...s, population: s.population + 500 } : s)),
     };
+    setWorld(w1);
     const f1 = buildStateFrame(w1, f0.worldVersion);
 
     const w2: World = {
       ...w1,
       systems: w1.systems.map((s) => (s.id === target.id ? { ...s, population: s.population + 500 } : s)),
     };
+    setWorld(w2);
     const f2 = buildStateFrame(w2, f1.worldVersion);
 
     // The mutation actually moved something, so equality below is not vacuous.
@@ -133,17 +134,24 @@ describe("buildStateFrame — event lists stay in the state slice", () => {
       ...world,
       events: [baseEvent({ id: "ev-1", systemId: world.systems[0].id })],
     };
+    setWorld(withEvent);
     const frame = buildStateFrame(withEvent, null);
 
     expect(Array.isArray(frame.slices.events)).toBe(true);
     expect(frame.slices.events?.length).toBe(1);
     expect(frame.slices.events?.[0]).toHaveProperty("id", "ev-1");
     expect(frame.slices.events?.[0]).toHaveProperty("phase");
+  });
+});
 
-    // PacingFrame's own `events` field is a Partial<GlobalEventMap> — a record of per-type payload
-    // arrays, never the flat list of active-event objects the state slice above carries.
-    const pacingSample: PacingFrame = { currentTick: 0, speed: "paused", achievedTps: 0, events: {} };
-    expect(Array.isArray(pacingSample.events)).toBe(false);
+describe("buildStateFrame — call-pattern contract", () => {
+  it("throws when handed a world that is not the store's current value, instead of silently adopting it", () => {
+    // A foreign world — never passed to setWorld — is exactly the caller bug ensureWorldCommitted
+    // now refuses rather than silently committing (see the module docstring's resolution).
+    const foreign: World = { ...world, nextId: world.nextId + 1 };
+    expect(() => buildStateFrame(foreign, null)).toThrow(/not the store's current value/);
+    // The store is untouched by the rejected call — still holding the world this file's beforeEach set.
+    expect(getWorld()).toBe(world);
   });
 });
 
