@@ -1,24 +1,19 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query/keys";
+import { useGameSlice } from "@/lib/store/use-game-store";
 import type { MarketComparisonEntry } from "@/lib/types/game";
-import type { MarketComparisonResponse } from "@/lib/types/api";
 
+const EMPTY_ENTRIES: MarketComparisonEntry[] = [];
+
+/** One good's price/stock comparison across every system — read from the store's
+ *  `marketComparison` slice, keyed by GOOD id (see `MarketComparisonSlice`'s docstring,
+ *  `lib/runtime/snapshot.ts`). `goodId` is drawn from the fixed goods catalog by every caller, so
+ *  an absent entry (a goodId outside the catalog) reads as no comparison rows rather than a
+ *  distinct not-found state. */
 export function useMarketComparison(goodId: string): {
   goodId: string;
   entries: MarketComparisonEntry[];
 } {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.marketByGood(goodId),
-    queryFn: async () => {
-      const res = await fetch(`/api/game/market/by-good/${goodId}`);
-      if (!res.ok) throw new Error(`Failed to load market comparison (${res.status})`);
-      const json: MarketComparisonResponse = await res.json();
-      if (json.error || !json.data) throw new Error(json.error ?? "Empty response");
-      return json.data;
-    },
-  });
-
-  return data;
+  const slice = useGameSlice((state) => state.slices.marketComparison?.[goodId]);
+  return { goodId, entries: slice?.entries ?? EMPTY_ENTRIES };
 }

@@ -15,7 +15,9 @@ function FactionPanelContent({
   factionId: string;
   children: React.ReactNode;
 }) {
-  const { faction } = useFaction(factionId);
+  const result = useFaction(factionId);
+  if (!result.found) return null;
+  const { faction } = result;
 
   const subtitle = (
     <span className="inline-flex items-center gap-2">

@@ -1,15 +1,24 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { useGameSlice } from "@/lib/store/use-game-store";
 import type { FactionConstructionData } from "@/lib/types/api";
 
-/** A faction's construction command summary (pool composition, switches, queue lists). Tick-invalidated. */
+/** See `use-faction-vitals.ts`'s NOT_FOUND docstring — same reasoning: this hook's only caller
+ *  (`components/construction/faction-construction-card.tsx`) reads its fields directly, so an
+ *  absent factionId reads as an empty construction summary. */
+const NOT_FOUND: FactionConstructionData = {
+  factionId: "",
+  pool: 0,
+  poolBase: 0,
+  poolCentres: 0,
+  automation: null,
+  buildSystems: [],
+  colonies: [],
+  orderedCount: 0,
+};
+
+/** A faction's construction command summary — read from the store's `factionConstruction` slice,
+ *  tick-current by construction. */
 export function useFactionConstruction(factionId: string): FactionConstructionData {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.factionConstruction(factionId),
-    queryFn: () => apiFetch<FactionConstructionData>(`/api/game/factions/${factionId}/construction`),
-  });
-  return data;
+  return useGameSlice((state) => state.slices.factionConstruction?.[factionId] ?? NOT_FOUND);
 }

@@ -10,7 +10,9 @@ import { SectionHeader } from "@/components/ui/section-header";
 import { useFaction } from "@/lib/hooks/use-faction";
 
 function FactionTerritoryContent({ factionId }: { factionId: string }) {
-  const { faction } = useFaction(factionId);
+  const result = useFaction(factionId);
+  if (!result.found) return null;
+  const { faction } = result;
 
   return (
     <>

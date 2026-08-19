@@ -20,8 +20,10 @@ import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { GRADE } from "@/lib/constants/ui";
 
 function FactionOverviewContent({ factionId }: { factionId: string }) {
-  const { faction } = useFaction(factionId);
+  const result = useFaction(factionId);
   const vitals = useFactionVitals(factionId);
+  if (!result.found) return null;
+  const { faction } = result;
   const treasury = useFactionTreasury(factionId);
 
   const pop = splitCompactNumber(formatPeople(vitals.population));

@@ -1,16 +1,10 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
-import type { RelationsMatrixData } from "@/lib/services/factions";
+import { useGameSlice } from "@/lib/store/use-game-store";
+import { EMPTY_RELATIONS } from "./empty-slices";
 
+/** The galaxy-wide pair-score relations matrix — read from the store's `relations` slice. */
 export function useRelations() {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.factionRelations,
-    queryFn: () =>
-      apiFetch<RelationsMatrixData>("/api/game/factions/relations"),
-  });
-
-  return { relations: data };
+  const relations = useGameSlice((state) => state.slices.relations ?? EMPTY_RELATIONS);
+  return { relations };
 }

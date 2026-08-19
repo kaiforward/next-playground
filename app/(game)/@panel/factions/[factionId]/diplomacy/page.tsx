@@ -22,7 +22,9 @@ import type { FactionRelatedEvent } from "@/lib/services/factions";
 import { formatDate, formatDuration } from "@/lib/utils/calendar";
 
 function FactionDiplomacyContent({ factionId }: { factionId: string }) {
-  const { faction } = useFaction(factionId);
+  const result = useFaction(factionId);
+  if (!result.found) return null;
+  const { faction } = result;
 
   return (
     <>

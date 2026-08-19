@@ -1,16 +1,11 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
-import type { UniverseData } from "@/lib/types/game";
+import { useGameSlice } from "@/lib/store/use-game-store";
+import { EMPTY_UNIVERSE } from "./empty-slices";
 
+/** Static universe data (regions/systems/connections/factions) — read from the store's `universe`
+ *  slice, falling back to an empty universe before the first frame lands. */
 export function useUniverse() {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.universe,
-    queryFn: () => apiFetch<UniverseData>("/api/game/systems"),
-    staleTime: Infinity, // static data — never refetch
-  });
-
+  const data = useGameSlice((state) => state.slices.universe ?? EMPTY_UNIVERSE);
   return { data };
 }
