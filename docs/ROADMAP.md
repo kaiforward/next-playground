@@ -296,10 +296,10 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   genre reference points (Victoria 3 ≈ 146K ticks per 100 years at 4 ticks/day), and the cycle
   (24 ticks) as the unit pacing arguments should be made in. Exists so calibration decisions stop
   arguing "N ticks feels long/short" from unanchored intuition — the relaxation-rate call at the
-  supply-response Gate 1 turned on exactly this. Not a design of game-time itself (ticks still
-  have no defined in-fiction span); just the shared measuring language.
-  *Next step:* one section in `docs/SPEC.md` or `docs/active/gameplay/`, plus a one-line pointer
-  wherever pacing constants are authored.
+  supply-response Gate 1 turned on exactly this. **Largely superseded by the timescale item
+  (queue head): its spec defines the calendar (1 tick = 6 h) and `HOURS_PER_TICK`.** What remains
+  of this row when that ships: the wall-clock-per-speed table and the doc-section placement.
+  *Next step:* fold into the timescale item's doc lifecycle; do not write separately.
 - **[S] Move the dev cheat-panel button to the header** — the map sidebar and other floating elements block it.
 - **[S] Standardise main content panel size** — system detail should be smaller than command center.
 - **[S] Unrest history / recovery forecast** — a per-system chart of unrest over time and a forecast
