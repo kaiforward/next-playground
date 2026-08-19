@@ -228,6 +228,34 @@ Licenses:   Supports numeric gate comparisons (gates 1 and 3). The 332 overshoot
             attribution (event-driven vs idle-driven not separated here).
 ```
 
+### Gate B — baseline extension (recorded at implementation, pre-flip constants)
+
+```
+Meaning:    The baseline comparators gates 2-3 need that C7 does not carry, read by the
+            trajectory instrument (temp/timescale-trajectory.ts) at 10,000 ticks, seed 42,
+            scale 100, on pre-change constants. Instrument validated: pop t=9,600 = 1,584,259
+            EXACT vs C1; teardown/standing 6,070/144,635 = 0.0420 EXACT vs C7; establish
+            median 16 vs C2; settler-gate invariant 0 violations in 8,320 checks.
+Number:     Charter fees: early era (cycle ≤104) n=552, median 631.6, share at CHARTER_FEE_MIN
+            0.0%; late era n=0 — the founding era is OVER by cycle ~312 on baseline, so the
+            only baseline charter comparator is the early era. Landing-unstaffed fraction
+            0.087 (5,044/57,688 landings). Build-duration interval medians: housing 3
+            (mean 5.15), raw extractors (ore/minerals/gas) 2, tier-1 goods 4, electronics-
+            class 7, complexes 9, establish 16. Faction balance median by tick: t≈240 883;
+            t≈5,040 257,214; t≈9,840 2,108,979 (grows ~2,400× over the run — any "within 3×"
+            read must be era/tick-matched, never whole-run). Establish commits: 569 total,
+            323 of 416 cycles zero (bursty). Construction centres: ZERO committed in-run, and
+            zero `construction_centre` anywhere in the equilibrium quick-run dump — centres
+            never fund on TODAY'S constants at this seed/scale. Growth-term per-cycle rate:
+            p10 0.00802 / median 0.01412 / p90 0.01500 / max 0.01500 (= growthRate, brake off).
+Horizon:    10,000 ticks (baseline "equilibrium").
+Cohort:     As per metric: unsaturated developed (growth); galaxy-wide (rest).
+Licenses:   Gate 2/3 comparisons against these numbers. The zero-centre baseline means gate
+            2's centre line cannot demand "non-zero vs C7" — it can only check no regression
+            (owner decision pending at Gate C). Does NOT license any conclusion about why
+            centres never fund on baseline (ROI competition vs backlog draining — not separated).
+```
+
 ### Verdict against the falsifiers
 
 - **Claim A (rates too fast): CONFIRMED** — ~30× the real-world growth anchor; the falsifier
