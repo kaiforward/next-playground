@@ -28,6 +28,14 @@ function postCommand(envelope: GameCommandEnvelope): void {
   post({ type: "command", envelope });
 }
 
+// Task 11 owns the real liveness state machine; until then a dying worker must at least say so.
+worker.onerror = (event) => {
+  console.error("[shell] worker error:", event.message, event.filename, event.lineno);
+};
+worker.onmessageerror = () => {
+  console.error("[shell] worker message failed to deserialize");
+};
+
 worker.onmessage = (event: MessageEvent<OutboundMessage>) => {
   const message = event.data;
   switch (message.type) {
@@ -48,7 +56,11 @@ worker.onmessage = (event: MessageEvent<OutboundMessage>) => {
       // rule). This shell's speed control doesn't need it: a `setSpeed` command's effect is
       // observable through the pacing frame the loop broadcasts immediately on speed change
       // (`lib/world/tick-loop.ts` `setSpeed` → `emit(..., true)`), which is the round-trip this
-      // task proves.
+      // task proves. Until Task 11 builds the real failure surfaces, a rejected command must not
+      // vanish — log it so a browser-side failure is diagnosable at all.
+      if (!message.result.ok) {
+        console.error("[shell] command rejected:", message.id, message.result.error);
+      }
       return;
   }
 };
