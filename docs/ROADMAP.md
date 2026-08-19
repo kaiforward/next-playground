@@ -93,6 +93,15 @@ The attention layer — how the player finds what to do — is two surfaces, bot
 
 No order. Pull from here when the queue empties, or fold one in when a PR is already in the file.
 
+**Packaging**
+- **[M] Desktop shell packaging (Tauri vs Electron)** — booked out of the client-runtime migration
+  by explicit decision (2026-08-19, "we should do it at some point soon"). Gated on that migration
+  shipping: its save-backend seam and worker channel are the prerequisites, both built there.
+  Desktop gets real transferable `.json` save files via the existing Node file backend
+  (`lib/world/save-files.ts`), owns its window chrome (no accidental refresh), and can hold
+  window-close for the save. The shell choice itself is the row's first decision.
+  *Next step:* pick the shell (Tauri vs Electron) once the client runtime is merged.
+
 **Economy / simulation**
 - **[M] Relief — a player-funded intervention buys a viable world out of the strike loop** by
   moving goods through the real logistics simulation, never by deleting unrest. Design:

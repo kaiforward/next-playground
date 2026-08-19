@@ -276,18 +276,22 @@ amendments applied). PR structure: integration branch `shared/client-runtime`, f
 per stage below); stages are check-in pauses inside those sub-PRs, never PRs of their own.
 
 **Plan-level decisions proposed here (owner approves before /implement-plan):**
-- **Store: hand-rolled on `useSyncExternalStore`, no library.** The store's whole content is this
-  feature's logic (structural-sharing merge, version tracking, liveness) — a state library would
-  wrap the same React primitive and own none of it. The owner deferred this choice at spec triage;
-  this is the plan's proposal.
-- **Router: hand-rolled History API module.** The route table is five entries; a router library's
-  value (nested layouts, loaders, search-param schemas) is the framework surface being removed.
+- **Store: Zustand as the container, our logic on top** (owner decision 2026-08-19: "zustand is
+  very small and saves us some boilerplate"). Zustand provides the container/subscribe/selector
+  plumbing over React's `useSyncExternalStore`; the feature-specific parts — the
+  structural-sharing merge, frame application, version tracking, liveness — are ours regardless
+  of container.
+- **Router: wouter** (owner decision 2026-08-19) — a ~2 KB History-API router with hooks and a
+  `Link`; the route table is five entries and URLs/deep-links/back-forward behave exactly as
+  today. Heavier routers (React Router, TanStack Router) bring nested-layout machinery this
+  migration deletes.
 - **Web save backend: IndexedDB** (not OPFS) — Safari-safe, transactional (gives the
   atomic-or-recoverable write), and the index-record pattern fits object stores naturally.
 - **New entry directory `client/`** (Vite root: entry, worker, router, fonts). `components/` and
   `lib/` stay where they are; `app/` is deleted at Task 14.
-- **Desktop shell packaging (Tauri vs Electron) is NOT in this migration** — booked, see Not
-  covered. The save-backend interface keeps the Node/file implementation so desktop slots in later.
+- **Desktop shell packaging (Tauri vs Electron) is NOT in this migration** — booked as a roadmap
+  row (Unqueued > Packaging, added 2026-08-19). The save-backend interface keeps the Node/file
+  implementation so desktop slots in later.
 
 ### Resolution — every measure the spec's prose names, to its producer
 
@@ -310,7 +314,7 @@ per stage below); stages are check-in pauses inside those sub-PRs, never PRs of 
 | "not found" panel state | new | Task 9 (composes `EmptyState`, props read: `{message, className}`) |
 | `ServiceError` discriminant | exists (field change) | `lib/services/errors.ts`; re-pointed Task 14 |
 | world-existence gate | exists | `hasWorld()`, `app/(game)/layout.tsx:15-17` → boot handshake, Task 11 |
-| route table / `useRoute` | new | Task 6 |
+| route table / `useRoute` | new | Task 6 (over wouter) |
 | font variables `--font-*` | exists (producer replaced) | consumed `app/globals.css:22-24`; new producer Task 10 `@font-face` over `app/fonts/*.woff2` + self-hosted Geist |
 | click-frame selected feedback | exists | map selection ring (Pixi, `star-map.tsx`) — kept, verified at Gate C |
 | tick-speed audit ("acceptable max") | gate | Gate D booked end task (`/measure`) |
@@ -356,12 +360,13 @@ Consumes:   Task 1 (`CommandResult`)
 
 ### Task 3 — The UI-side snapshot store
 Files:      lib/store/replace-equal-deep.ts (new), lib/store/game-store.ts (new),
-            lib/store/use-game-store.ts (new)
+            lib/store/use-game-store.ts (new), package.json (adds zustand)
 Interface:  `replaceEqualDeep<T>(prev: T, next: T): T`;
             `createGameStore()` returning `{ applyStateFrame(f), applyPacingFrame(f),
             setLiveness(s: Liveness), subscribe(fn), getSnapshot(): StoreState }` with
             `Liveness = "no-world" | "live" | "paused" | "dead"`;
-            React `useGameSlice<T>(select: (s: StoreState) => T): T` via `useSyncExternalStore`.
+            React `useGameSlice<T>(select: (s: StoreState) => T): T` — the Zustand store hook
+            with our apply/merge actions (container per the plan-level decision).
 Proves:     an unchanged slice keeps object identity across two applies (the per-view identity
             bar); a changed subtree gets new identity while unchanged siblings keep theirs;
             subscribers notify once per applied version including non-tick versions; a frame
@@ -411,18 +416,18 @@ Consumes:   Tasks 1, 2, 4
 
 ### Task 6 — Vite shell and router
 Files:      vite.config.ts (new), client/index.html (new), client/main.tsx (new),
-            client/router.ts (new), components/ui/button.tsx, components/ui/tabs.tsx,
-            components/ui/back-link.tsx
-Interface:  `navigate(path: string): void`; `useRoute(): Route` — discriminated union over the
-            route table (map root, /start, /system/:id/:tab, /factions/:id/:tab, /styleguide);
-            `RouterLink({ href, ...anchor })` — the `href` contract Button link-mode, `TabLink`
-            and `BackLink` swap onto (their public props unchanged; props read this session:
+            client/routes.ts (new — the route table over wouter), components/ui/button.tsx,
+            components/ui/tabs.tsx, components/ui/back-link.tsx, package.json (adds wouter)
+Interface:  wouter's `navigate`/`useLocation` wrapped by `useRoute(): Route` — a discriminated
+            union over the route table (map root, /start, /system/:id/:tab, /factions/:id/:tab,
+            /styleguide); wouter's `Link` is the `href` contract Button link-mode, `TabLink` and
+            `BackLink` swap onto (their public props unchanged; props read this session:
             button.tsx:62-77, tabs.tsx:111, back-link.tsx:4).
 Proves:     back/forward re-render the matching route; an unknown path lands on the map root;
             `TabLink` active state follows the route without `next/navigation`; Button link-mode
             navigates with no document reload.
-Reuse:      Button, TabList/Tab/TabLink, BackLink (verified above). New: RouterLink — nothing
-            fits because every existing link component delegates to `next/link`, which retires.
+Reuse:      Button, TabList/Tab/TabLink, BackLink (verified above); wouter's `Link` replaces
+            `next/link` inside them — no new component.
 Consumes:   Task 5 (shell boots worker + store; top-bar clock is the end-to-end proof)
 
 ### Gate B
@@ -577,7 +582,8 @@ Consumes:   Tasks 7-13 (everything must already run without what this deletes)
 Files:      docs/SPEC.md, docs/active/engineering/single-player-runtime.md (rewritten for the
             worker runtime), docs/planned/client-runtime.md (promoted to docs/active, present
             tense), docs/planned/grand-strategy-vision.md (§6 path decision recorded),
-            docs/ROADMAP.md (row deleted; desktop-shell row added), this working file (deleted)
+            docs/ROADMAP.md (this feature's row deleted; desktop-shell row verified present),
+            this working file (deleted)
 Interface:  none — docs only; the deferred-work sweep before deletion (grep this file and the
             spec for deferred/booked items; verify each reached the roadmap).
 Proves:     no doc in docs/active describes the Next runtime; `npm run duplication` on the
@@ -614,8 +620,8 @@ file is deleted at ship, after the deferred-work sweep.
 
 ### Not covered
 
-- **Desktop shell packaging (Tauri vs Electron)** — booked: new roadmap row at Task 15 (the
-  save-backend seam and §11's channel boundary are its prerequisites, both shipped here).
+- **Desktop shell packaging (Tauri vs Electron)** — booked: roadmap row already added
+  (2026-08-19, Unqueued > Packaging); Task 15 verifies it survives the fold.
 - **Worker-side dirty-sets / delta frames** — booked: the existing roadmap row *Markets need a
   real dirty/ownership model* (spec §2 gates the optimisation on it).
 - **The ~100 ms p95 panel aim as an enforced gate** — dropped by owner decision at spec triage
@@ -628,8 +634,6 @@ file is deleted at ship, after the deferred-work sweep.
 
 ### Net-new UI (owner approval before /implement-plan)
 
-- `RouterLink` (Task 6) — infrastructure, replaces `next/link` inside the three link-bearing
-  primitives; no visual change.
 - `LivenessBanner` (Task 11) — the only genuinely new visible component: tick-failure / dead
   worker / autosave-failure banner with cause and autosave-restore offer.
 - Not-found panel state (Task 9) — composes the existing `EmptyState`; a state, not a component.
