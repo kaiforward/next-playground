@@ -64,8 +64,8 @@ The attention layer — how the player finds what to do — is two surfaces, bot
    attention layer, whose Tracker owns the *surface* for a forming colony; this row owns the pacing.
    The knob already exists: `habitableFraction` is housing-per-space efficiency
    (`habitableSpace = generalSpace × habitableFraction`), and the expensive, low-yield
-   specialist-habitation *building* was recorded as a hook at that same decision — see memory
-   `project-barren-galaxy-artificial-habitation`.
+   specialist-habitation *building* was recorded as a hook at that same decision — see
+   [negative-space-economy.md](./planned/negative-space-economy.md).
    **Honest dependency:** there is no technology or progression system in the codebase today — a grep
    for terraforming or technology finds only event and faction flavour text. "Gated behind
    technology" is therefore a new system, not a constant change, and the sequencing of the two is
@@ -159,8 +159,8 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   full Provision, individual goods sit at 0 or 1 with almost nothing between. Hypothesis: greedy
   fill — each receiving system takes its full demand while in-range supply lasts, so at most one
   system gets a partial fill and everyone after gets zero. If confirmed, the fix is an allocation
-  policy weighing availability against the number of demanding systems (candidate policies in
-  memory `design-logistics-depth-inputs`; possibly player-configurable). Complements the band /
+  policy weighing availability against the number of demanding systems (candidate policies listed
+  on the logistics-pillar depth check row below; possibly player-configurable). Complements the band /
   critical-good mechanics — partial-satisfaction states make `CRITICAL_SATISFACTION` a live line
   instead of a formality. Sibling of the logistics-pillar depth check below.
   *Next step:* `/measure` the directed-logistics fill order to confirm or kill the greedy-drain
@@ -178,6 +178,14 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   developed cores. Emerges from priced founding; composes with the ROI/`Proposal` review lens. Distinct
   from the funding sliders, which throttle payment of bills already arrived — this shapes what gets
   committed upstream. Needs the treasury spend-attribution row (Tooling) built first.
+  **Design space, not a decision** (Kai, 2026-08-08): an EU5/Vic3-style **control/integration**
+  primitive — a per-system stat a newly-taken or remote world starts low on, that scales BOTH tax
+  pressure and tax income together (today `TAX_LEVEL_UNREST_PRESSURE` lands flat on every owned
+  system while income scales with economic activity, so a two-pop colony carries the homeworld's
+  unrest pressure for epsilon income). Distinct from adaptive expectation (which scales what
+  population *demands*) — control scales what the *state extracts*; its value is the wider surface
+  (occupation, distance, government types, doctrine allocation), not solving the founding-strike
+  problem, which expectation already dissolves alone.
 - **[XL] Pop wealth and buying power** — pops hold wealth and must afford their basket, so demand becomes
   partly monetary. Provision survives as a ratio and stays distinct (a world can hold the wealth and still
   lack the goods). The former blocker — `demandRate` double-purposed as pricing anchor and logistics
@@ -187,8 +195,8 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[L] Expanded pop tiers / social strata** — today's tiering is labour-grade only. Richer strata carry
   their own baskets. Composes with adaptive expectation (per-class expectation is how Victoria 3 derives
   its reference); nothing breaks if it never lands.
-  **Also carries the strata-as-private-builder mechanic** (scoped 2026-08-12; inputs in memory
-  `design-strata-private-builder`): in both reference games the strata are a *second builder* that is
+  **Also carries the strata-as-private-builder mechanic** (scoped 2026-08-12): in both reference
+  games the strata are a *second builder* that is
   neither the player nor automation — Victoria 3's investment pool splits the construction queue into
   private and government by economic law; EU5's estates build regardless of the player's automation
   settings and their builds cannot be cancelled. The interesting axis is **ownership, not output** —
@@ -235,6 +243,27 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   been separated as the cause.
   *Next step:* `/measure` before any centre-tuning design.
 **Tick performance**
+
+To reprofile `runWorldTick` (~15 min): temporarily add an `export const __tickProfile:
+Record<string, number>` + a `__mark(section)` closure to `lib/world/tick.ts`, stamp every section
+boundary keyed by `boundary|off-boundary` (`tick % 24 === 0`), drive it from a `scripts/` tsx script
+(bare imports don't resolve from a scratchpad script) that generates a world, runs one warm-up cycle,
+clears the profile, then times 4 cycles; `git checkout lib/world/tick.ts` reverts cleanly. Always
+record a whole-tick total and assert marks sum to ~100% of it — a decomposition that stops at the last
+processor silently misses the assemble step. A/B only within one process: the same tick measured
+29.26ms after a 600-system world in the same process vs 21.17ms measured alone (GC pressure), so
+absolute ms are not portable across sessions or runs. To prove a gating/caching change by identity
+rather than inspection, hash `JSON.stringify(world)` after N ticks and require byte-equality (hash the
+broadcast split — payload apart from `processors` — or a diff in the unread run-list masquerades as an
+SSE-payload diff).
+
+Three guesses this profiling killed, so nobody re-reasons to them: "off-boundary ticks are free, so
+gating adds galaxy walks" (false — everything except relations already rebuilt its full setup every
+tick pre-#180); "`marketRowsBySystem`/`buildBuildRows` are the big costs" (no — 3.8%/0.8%, and a later
+re-measurement of `marketRowsBySystem` alone found 9.5%, the *smallest* gateable item, after an
+earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `mergeSystems` 0.57ms,
+`flattenBuildings` 0.13ms; the cost is markets, and only markets).
+
 - **[M] `toTickSystems` is the whole mid-cycle tick outside events** — 2.5 ms/tick at 2,400 systems,
   19.0% of a mid-cycle tick. Gating can't touch it: ship-arrivals and events both run every tick and both
   consume `TickSystem` rows. *Next step:* check what those two actually read (ids/names; ids/names/control/region)
@@ -251,6 +280,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   whether or not anything changed, so it always reports dirty. Real save-corruption risk if aliasing leaks.
 
 **Types / correctness**
+- **[S] `.get(...)!`-in-tests idiom decision** — 8 sites use a postfix-`!` `Map.get` in tests (against
+  the Conventions rule that only allows it in `find(...)!`). Deferred at the fix wave that found them,
+  not booked. Decide: sweep them to a real check, or widen the accepted-idiom carve-out to cover
+  `Map.get` too.
+  *Next step:* raise whenever test conventions next open; not urgent on its own.
 - **[M] Type `goodId` as a `GoodId` union instead of `string`** — `GOODS` is `Record<string, GoodDefinition>`,
   so `GOODS[goodId]` type-checks and never narrows to `undefined`. Not a live bug (world-gen seeds every id
   from `Object.keys`), but load-bearing at ~10 point-of-use sites since the market round-trip was deleted.
@@ -262,6 +296,11 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   correctness; worth one shared staffing-estimate helper.
 
 **UI**
+- **[M] How far to push map accessibility** — raised and unsettled (2026-08-13): the Pixi map is not
+  accessible at all, so how much of the rest of the game is worth doing given that ceiling? The
+  narrow piece that WAS decided already shipped with the Tracker — a keyboard enter/exit convention
+  for popovers, as interaction design, not accessibility charity.
+  *Next step:* Kai's call on scope before any design pass.
 - **[M] Dedicated goods tab** — a per-system goods surface with more depth than the Population or
   Industry tabs carry: per-good cycles of cover against the anchor, the regime (Supplied / Low
   reserve / Rationing / Shortage / Glut), civilian versus industrial draw, local production against
@@ -344,12 +383,27 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   carries real cargo. Also absorbs **unifying people-movement**: one-hop diffusion migration and the
   faction-pool colonist delivery do the same task for different reasons and should become one routed
   system when logistics carries people (decided at the abandonment measurement, 2026-08-10; the
-  interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design leanings for it (hub/chain propagation, flow priority as a lever, one
-  coarse in-fiction valve at most) are preserved in memory `design-logistics-depth-inputs`.
+  interim famine gate on delivery is explicitly temporary scaffolding for this). Kai's design
+  leanings for the pass (all leanings, not decisions):
+  - **Hub/chain is the real hard part** (2026-08-03): difficulty should come from being part of a
+    *chain* — infrastructure, cost, labour, distance — not per-world stock thresholds. A
+    throughput/entrepôt world would request more inbound when its exports hit their limit (demand
+    propagating upstream through hubs) while producers near consumers ship direct. The point-to-point
+    matcher today has no hub concept.
+  - **Flow priority is a lever** (2026-08-03): the matcher's sink ordering (severity = shortfall ×
+    draw, worst-first) is designable — e.g. scaling need by relative size so a tiny colony's request
+    can outrank raw tonnage, with a mechanical player lever over priority.
+  - **Player exposure stays coarse**: sensible defaults for thresholds, never raw per-good
+    warehouse valves (unmanageable, illegible). At most one coarse in-fiction policy (a faction
+    stockpile stance); real control lives in automation toggles, budgets, directed orders.
+  - **Scarce-good allocation policy candidates** (2026-08-08, feeding the good-allocation-cliff row
+    above), if the greedy-drain hypothesis confirms: (a) spread available supply evenly across
+    demanding systems; (b) satisfy lowest-Provision systems first; (c) band-maximizing — scale
+    exports so as many systems as possible cross a higher satisfaction band without maxing any one out.
   **Absorbs the former flow-visualisation row**, retired 2026-08-12: a logistics overlay already
   ships on the map, and designing a second flow view before this pass changes what flows is
   backwards. Its approved HTML prototype survives as an input —
-  [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md), memory `project-ws2-map-modes`.
+  [ui-ws2-map-modes.md](./planned/ui-ws2-map-modes.md) (P2, flow-viz).
   **Carry necessity into the routing calculations too** (Kai, 2026-08-16). The same gap the build
   planner has: logistics decides what to haul from shortfall quantity and route cost, and a unit of
   unmet food ranks alongside a unit of unmet luxuries. Sibling of the necessity-weighting row under
@@ -360,6 +414,31 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
+- **[S/M] Overnight mutation re-sweep** — the first Stryker cycle (merged 2026-08-09) swept 40 files;
+  the remaining ~66 `lib/` files have never been swept at all. Owed: an overnight re-sweep of the 40
+  (incremental cache invalidates most of them anyway) plus a first sweep of the rest, same
+  kill-or-accept discipline as the first cycle. **Noise-survivor warning:** the review that closed
+  cycle 1 reverted the mutator-class exclusions in `stryker.config.mjs`, so the re-sweep will
+  re-report the ~204 already-accepted noise-class survivors (`temp/fix-wave/noise-ledger.md`) —
+  don't re-triage them.
+  *Next step:* schedule the overnight batch (`--concurrency 8`, pre-approved) for a window Kai isn't
+  using the machine.
+- **[M] Sim gates beyond the four founding identities** — agreed rule: a gate fails only when the
+  code is broken, never when the balance is off; if a designer could plausibly fix it by changing a
+  constant, it's a bar to read, not a gate. Three families, all seed-proof (never "X of Y systems"):
+  (1) **invariants** (any seed/tick) — no non-finite number, no negative stock/pop/popCap/levels,
+  bounded [0,1] fields, tick never threw; (2) **liveness**, strictly `>0` and skip-with-printed-reason
+  below the warm-up tick counts — something transported/built/founded/migrated/taxed/resolved an
+  event; (3) **pathology** (the tail) — stranded systems, total collapse, divergence ceilings. Price
+  gates are explicitly OUT ("we don't care about price of goods right now"). Determinism does NOT
+  belong in the sim — a Vitest test on a tiny world proves it in seconds. Kai also wants integration
+  tests eventually — raise how the two relate when either starts.
+  *Next step:* design pass turning the three families into an actual gate list, then `/spec-review`.
+- **[S] Doc-lifecycle gate** — a script failing when a `docs/planned/` doc names an identifier that
+  exists in `lib/` (i.e. the doc describes shipped code in the tense of outstanding work), wired into
+  `/uber-review`. Seven of fourteen `docs/planned/` docs had rotted this way at the process-overhaul
+  audit; ~an hour of work would have caught all seven.
+  *Next step:* write the script and wire it into `/uber-review`'s conventions lens.
 - **[S] Component tests for the two interactions still proven by nothing** — tooltip open state and
   keyboard navigation. Both are within what jsdom can honestly verify: a tooltip's open state is an
   accessibility-tree fact (`aria-describedby`, the content appearing), and keyboard navigation is
@@ -396,8 +475,9 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 - **[S] Decide the simulate "equilibrium" horizon** — the quick run's 10,000-tick label sits inside
   the startup transient for high-tier consumer metrics (electronics/luxuries recoveries land
   t≈9,500-11,000; ship_frames later still). Options: extend the labelled horizon to 12-16k
-  (+20-60% runtime on every run) or keep 10k and rely on the documented trap (memory
-  `measurement-traps`, "The horizon"). Kai's call; surfaced 2026-08-03.
+  (+20-60% runtime on every run) or keep 10k and rely on the documented trap
+  ([measurement-traps.md](./active/engineering/measurement-traps.md), "The horizon"). Kai's call;
+  surfaced 2026-08-03.
   **The timescale calendar inherits and sharpens this row**: at the shipped rates the first colony
   founds ~tick 4,128, so the 1,000-tick startup horizon is now entirely pre-founding (zero
   colonies, zero migration, zero transfers) and the 10,000-tick horizon is founding-era
@@ -427,6 +507,37 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   against a live Postgres world via `npm run audit:economy`, and neither the database nor the script
   exists any more. The doc now carries a warning header saying so. Read the questions, discard the
   numbers, and either re-measure the survivors with `npm run simulate` or delete it.
+- **[S] The `[1.3, 1.4)× self-supplier lock` as a bug** — closed as intended, 2026-08-03. A
+  self-supplier whose stock sits between the production brake and the donation margin has
+  production halted and donation refused, exit only downward — ruled **chosen conservatism**: a
+  world producing less than it uses shouldn't dump stock it can't replace. Measured false before
+  closure that it "can only re-donate what it was given" (the generosity rule fires 2.9%/1.8% of
+  hauls at startup/equilibrium, 95% of those donors held made, not given, stock).
+- **Necessity as demand-curve slope** — killed as structurally unbuildable at review; the shipped
+  replacement is necessity as an **authored per-good weight** on the unrest fold. `demandRate`
+  itself is not movable to carry necessity: it is the unit of account for a good in a system —
+  price anchor, market band, ration threshold, producer glut/decay signal, logistics deficit gate,
+  build planner's capacity sizing, colony founding stock, and the harness cover metric all key off
+  it. Anything that moves it moves all of those.
+- **[S] Per-tick construction funding** — killed 2026-07-17. Its Victoria-3-parity motivation
+  didn't survive a check (Vic3's queue-timing window is ~28 base ticks vs our 24, larger, and its
+  bars move weekly). The month-long funding lag is a granularity artifact of the coarse economy
+  tick, not the deliberate demand-anchor lag — reordering the economy ahead of directed-build was
+  considered and rejected (would fund construction off month-start pop/stocks). If responsiveness
+  ever matters the lever is a finer economy cadence, not construction staleness.
+- **Map price mode** — cut 2026-07 as premature; a trader hangover; price is the *opportunity* tool
+  for a trader and the player is a faction ruler. Event pills were stripped from the map at the
+  same time. Flow overlays survive as ambient world-legibility and are still queued (logistics-pillar
+  depth check row).
+- **Retiring the idle channel for housing** — superseded 2026-07-27, never built. Targeted a minor
+  collision (12 months to bite, spare level only); sizing colony housing to the seed dissolves it
+  by construction. The actual colony-killer was the unrest channel, not this.
+- **Cycle 24 → 28 ticks for Earth-week/Vic3 parity** — killed at the timescale brainstorm,
+  2026-08-19. `CYCLE_LENGTH` feeds logistics cadence, treasury settlement, pricing cadence and
+  every cycle-denominated constant; stretching it 17% for a calendar *label* with zero simulation
+  meaning was rejected — the fiction absorbs the week length instead. Same session killed 1h ticks
+  (100y ≈ 876K ticks, ~49 wall-hours at 5 ticks/s) and 1-day ticks (against the fine-grained-ticks
+  lean).
 
 **Deferred / conditional**
 - **[S] Relations' trade-volume drift driver is dead code** — `getTradeVolumeBetween` counts only

@@ -11,6 +11,9 @@
  * running beside it. An element the run draws and an element the fit check pays for therefore cannot
  * come apart, which is the failure class this module exists to prevent.
  *
+ * `layoutRun` is the ONE owner of the run's geometry — the component decides nothing. A second place
+ * computing a position is the regression; `alert-packing.test.ts`'s invariant tests exist to catch it.
+ *
  * Every number here is derived from an authored Tailwind class on the elements the run renders
  * (`components/alerts/alert-chip.tsx`, `components/alerts/alert-run.tsx`), never measured — there is
  * no layout available at the point this is called from. `CHIP_DIGIT_WIDTH` is the single exception;

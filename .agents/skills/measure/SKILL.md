@@ -17,6 +17,9 @@ Run this when anything downstream will rest on a claim about how the game behave
 out" is such a claim** and gets the same treatment — nobody re-tests a negative, so a wrong one
 survives indefinitely.
 
+**Read `docs/active/engineering/measurement-traps.md` before trusting any measurement** — every way
+a reading of this simulation has produced a confident, specific, wrong answer.
+
 ## Steps
 
 Do these in order. Steps 1-2 happen **before** any instrument runs, and that ordering is the point.
@@ -141,7 +144,7 @@ Each cost a real investigation here.
   planner's `spare` instead of logistics' `surplusDrawable`, while missing that `matchFactionTransfers`
   runs per faction, turned "22 of 23 have no supplier" into a confident "0 of 23".
 
-Fuller list: the `measurement-traps` memory.
+Fuller list: `docs/active/engineering/measurement-traps.md`.
 
 ## Output
 
