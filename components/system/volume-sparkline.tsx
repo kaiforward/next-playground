@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { ChartTooltip } from "@/components/ui/chart-tooltip";
+import { formatDate } from "@/lib/utils/calendar";
 import { CHART_THEME } from "@/lib/constants/ui";
 import type { TradeFlowVolumeBucket } from "@/lib/types/api";
 
@@ -38,7 +39,7 @@ export function VolumeSparkline({ buckets }: { buckets: TradeFlowVolumeBucket[] 
             dataKey="tick"
             stroke={CHART_THEME.axisStroke}
             tick={{ fill: CHART_THEME.tickFill, fontSize: CHART_THEME.tickFontSize }}
-            tickFormatter={(v: number) => `t${v}`}
+            tickFormatter={(v: number) => formatDate(v)}
             minTickGap={32}
           />
           <YAxis
@@ -47,7 +48,7 @@ export function VolumeSparkline({ buckets }: { buckets: TradeFlowVolumeBucket[] 
             width={28}
           />
           <ChartTooltip
-            labelFormatter={(label) => `Tick ${label}`}
+            labelFormatter={(label) => formatDate(Number(label))}
             formatter={(value, name) => [
               `${value ?? 0} units`,
               name === "imports" ? "Imports" : "Exports",

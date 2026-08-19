@@ -326,13 +326,6 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   *Don't:* let the width drift silently in the meantime — the packing tests derive their expected
   widths from the same constants they check, so a mismatch would only ever surface as visual overflow,
   never a red test.
-- **[M] Player-facing calendar & date display** — the timescale calendar shipped the internal
-  anchor (`HOURS_PER_TICK`, `ticksToHours`) but deliberately cut the display slice: there is no
-  fictional cycle/date naming and no tick-to-date conversion anywhere in the UI. Needs a fictional
-  naming scheme for the cycle/date units and a rendering pass wherever a tick count is currently
-  shown raw.
-  *Next step:* UI-heavy — a browser-viewable HTML prototype approved before implementation, per
-  AGENTS.
 
 **Audits Kai has asked for**
 - **[M] Trader-hangover audit** — sweep the codebase for leftovers from the old browser space-trading

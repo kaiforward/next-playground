@@ -86,7 +86,7 @@ Two entry points, both served by one feasibility computation (`computeBuildOptio
   housing, support, charted deposits including unworked ones). One click queues +1 level; a **second**
   click on the same row extends the same open player project rather than opening a second row
   (`levels += 1`, `workTotal += workPerLevel` on the standing `(system, buildingType)` row) — orders
-  batch into one ledger entry. A hover tooltip carries the quick numbers (work · ≈cycles at the current
+  batch into one ledger entry. A hover tooltip carries the quick numbers (work · ≈duration at the current
   pool); a hard-blocked row renders the `+` disabled with its reason.
 - **New-industry dialog** — for types with no ledger row yet (including academies): building + levels +
   a live feasibility readout (space, deposit slots, labour added, estimated staffing, work, ETA). Hard

@@ -8,8 +8,8 @@ import type { Speed } from "@/lib/world/tick-loop";
 
 const SPEED_OPTIONS: { value: Speed; label: React.ReactNode; title: string }[] = [
   { value: "paused", label: <Pause className="w-3.5 h-3.5" />, title: "Pause" },
-  { value: 1, label: "1×", title: "1 tick per second" },
-  { value: 5, label: "5×", title: "5 ticks per second" },
+  { value: 1, label: "1×", title: "6 in-world hours per second" },
+  { value: 5, label: "5×", title: "30 in-world hours per second" },
   { value: "max", label: <FastForward className="w-3.5 h-3.5" />, title: "Max speed" },
 ];
 

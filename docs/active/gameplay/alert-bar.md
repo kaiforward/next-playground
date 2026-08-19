@@ -106,7 +106,7 @@ ROI at all, sit on the same bar as an industry proposal without inventing a weig
 | critical | Crisis | An event severe enough to threaten a world (plague, pirate raid, asteroid strike, inner-system or border conflict). | Authored impact rank. |
 | important | Deprived worlds | Provision has fallen into the Deprived band. | Provision ascending. |
 | important | Unrest rising | Provision is below what the population expects, before anyone strikes. | Grievance depth. |
-| important | Survival stock falling | A world's food or water reserve is under three cycles from running out. | Cycles remaining (soonest first). |
+| important | Survival stock falling | A world's food or water reserve is under three cycles from running out. | Time to empty (soonest first). |
 | important | Demand unservable | A shortfall no reachable supplier or local production can close. | Unserved shortfall (largest first). |
 | important | Overcrowded | Population has outgrown the housing built for it. | Cap utilisation (most over first). |
 | important | No housing headroom | Overcrowded, nothing queued to fix it, and no room left to build more housing. | Population over cap. |

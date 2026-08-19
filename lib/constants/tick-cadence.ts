@@ -35,8 +35,9 @@ export const CYCLE_LENGTH = 24;
  * HOURS_PER_TICK`, never a second literal — retuning `CYCLE_LENGTH` changes the week's length,
  * never the tick.
  *
- * Documentation-of-meaning plus a conversion helper for future display work (player-facing
- * fictional-date rendering) — no processor reads this constant this pass.
+ * No processor reads this constant. Its display consumers are `ticksToHours`
+ * (`lib/utils/math.ts`) and the fictional calendar built on it (`lib/constants/calendar.ts`,
+ * `lib/utils/calendar.ts`) — the player-facing date/duration rendering.
  */
 export const HOURS_PER_TICK = 6;
 

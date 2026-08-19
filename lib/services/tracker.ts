@@ -91,8 +91,8 @@ export function getTrackerData(): TrackerData {
 
   // Every colony forming gets a row, funded this cycle or not, in queue order. Both figures come
   // off the colony's OWN row: `etaCycles` is forecast for a project behind the front too (the
-  // forecast replays the queue until it lands), so reading it off the front instead would print the
-  // em-dash that means "no forecast at all" over a starved colony that has a real landing cycle.
+  // forecast replays the queue until it lands), so reading it off the front instead would print
+  // "stalled" (formatEta's no-forecast reading) over a starved colony that has a real landing cycle.
   const colonising: TrackerColonyRow[] = readout.all
     .filter((row) => row.kind === "colony_establish")
     .map((row) => ({

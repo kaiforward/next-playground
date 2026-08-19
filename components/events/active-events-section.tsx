@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
 import type { ActiveEvent } from "@/lib/types/game";
+import { formatDuration } from "@/lib/utils/calendar";
 
 interface ActiveEventsSectionProps {
   events: ActiveEvent[];
@@ -38,7 +39,7 @@ export function ActiveEventsSection({ events, compact }: ActiveEventsSectionProp
               )}
             </div>
             <span className="text-xs text-text-secondary whitespace-nowrap ml-2">
-              {compact ? event.phaseDisplayName : `${event.ticksRemaining} ticks`}
+              {compact ? event.phaseDisplayName : formatDuration(event.ticksRemaining)}
             </span>
           </li>
         ))}

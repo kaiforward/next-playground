@@ -261,8 +261,9 @@ describe("getAlertData", () => {
 
       const famine = category("famine");
       expect(famine.instances.map((i) => i.systemId)).toEqual([shrinking, steady]);
-      const countdown = Math.log(100 / 1) / 0.05;
-      expect(famine.instances[0].measure).toBe(`${countdown.toFixed(1)} cycles to abandonment`);
+      // countdown = ln(100)/0.05 ≈ 92.1 cycles = 2210.48 ticks = 552.62 days = 1.535 years (360
+      // days/year) — rounded to the nearest tenth of a year by formatDuration's years branch.
+      expect(famine.instances[0].measure).toBe("≈1.5 years to abandonment");
       expect(famine.instances[1].measure).toBe("not shrinking — 90% short");
     });
   });
@@ -690,7 +691,9 @@ describe("getAlertData", () => {
 
       const stockFalling = category("survival_stock_falling");
       expect(stockFalling.instances.filter((i) => i.systemId === target)).toHaveLength(1);
-      expect(stockFalling.instances[0].measure).toBe("food empties in 1.0 cycles");
+      // 1.0 cycles = 24 ticks = 6 days (TICKS_PER_DAY = 4) — under formatDuration's 45-day whole-days
+      // branch.
+      expect(stockFalling.instances[0].measure).toBe("food empties in ≈6 days");
     });
 
     it("excludes a row carrying stock but no stockChange — never assessed is not a countdown", () => {
@@ -1350,13 +1353,15 @@ describe("getAlertData", () => {
 
       const windfall = category("windfall");
       expect(windfall.instances.map((i) => i.systemId)).toEqual([expiring, lasting]);
-      expect(windfall.instances[0].measure).toBe("10 ticks remaining");
-      expect(windfall.instances[1].measure).toBe("50 ticks remaining");
+      // 10 ticks = 2.5 days and 50 ticks = 12.5 days under the calendar's auto-scaled rendering;
+      // sortKey stays the raw tick count, so ordering precision survives the coarser label.
+      expect(windfall.instances[0].measure).toBe("≈3 days remaining");
+      expect(windfall.instances[1].measure).toBe("≈13 days remaining");
     });
 
     it("clamps an already-expired windfall to 0 rather than counting down past it", () => {
       // A phase whose end tick is long past — the world's event sweep has not retired it yet. The
-      // countdown must floor at 0: a negative figure would read as "-350 ticks remaining" and would
+      // countdown must floor at 0: a negative figure would render a nonsense negative duration and would
       // sort ahead of every live windfall.
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
@@ -1383,12 +1388,12 @@ describe("getAlertData", () => {
 
       const windfall = category("windfall");
       const row = windfall.instances.find((i) => i.systemId === expired);
-      expect(row?.measure).toBe("0 ticks remaining");
+      expect(row?.measure).toBe("0 hours remaining");
       expect(row?.sortKey).toBe(0);
       // Non-vacuous on the clamp: an unclamped −350 would still sort first, so the live event has to
       // be the one that proves 0 is a floor and not just "the smallest number here".
       expect(windfall.instances.map((i) => i.systemId)).toEqual([expired, live]);
-      expect(windfall.instances[1].measure).toBe("20 ticks remaining");
+      expect(windfall.instances[1].measure).toBe("≈5 days remaining");
     });
   });
 

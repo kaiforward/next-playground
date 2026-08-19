@@ -13,6 +13,7 @@ import { useFactionTreasury } from "@/lib/hooks/use-faction-treasury";
 import { useFactionVitals } from "@/lib/hooks/use-faction-vitals";
 import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { formatMagnitude, formatSignedMagnitude } from "@/lib/utils/format";
+import { formatDate, formatTimeOfDay } from "@/lib/utils/calendar";
 
 /* ------------------------------------------------------------------ */
 /*  Player faction flag + stats                                       */
@@ -92,8 +93,10 @@ function TickReadout() {
   return (
     <div className="flex items-center gap-1.5 text-xs font-mono text-text-secondary whitespace-nowrap">
       <span className="h-1.5 w-1.5 rounded-full bg-status-green animate-pulse shrink-0" />
-      <span>
-        t.<span className="text-text-primary">{currentTick}</span>
+      {/* The raw tick survives only in the title — the shipped UI reads the fictional calendar. */}
+      <span title={`tick ${currentTick}`}>
+        <span className="text-secondary">{formatDate(currentTick)}</span>{" "}
+        <span className="text-text-primary">{formatTimeOfDay(currentTick)}</span>
       </span>
       <span className="text-text-tertiary">·</span>
       <span>

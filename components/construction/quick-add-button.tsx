@@ -13,7 +13,7 @@ const BLOCK_COPY = {
 
 /**
  * One-click "+1 level" order for a ledger row. The ledger itself is the feasibility readout, so the
- * tooltip carries only the quick numbers (work · ≈cycles); a hard-blocked row disables with its
+ * tooltip carries only the quick numbers (work · ≈duration); a hard-blocked row disables with its
  * reason. Bare TooltipTrigger — a square icon button already reads as a control.
  */
 export function QuickAddButton({ systemId, option }: { systemId: string; option: BuildOptionData }) {

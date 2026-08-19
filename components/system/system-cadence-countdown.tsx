@@ -5,13 +5,14 @@ import { useTickContext } from "@/lib/hooks/use-tick-context";
 import { useSystemCadence } from "@/lib/hooks/use-system-cadence";
 import { ticksUntilShard } from "@/lib/tick/shard";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
+import { formatDuration } from "@/lib/utils/calendar";
 
 function label(ticks: number): string {
-  return ticks === 0 ? "now" : `${ticks}t`;
+  return ticks === 0 ? "now" : formatDuration(ticks);
 }
 
 /**
- * Compact "next update in N ticks" countdown for the system panel header. Under
+ * Compact "next update in ..." countdown (in-world duration) for the system panel header. Under
  * the cycle resolution the whole galaxy — every system's economy,
  * population and infrastructure plus its faction's logistics and build — resolves
  * together on the cycle boundary, so it is one countdown. Pure clock math off the

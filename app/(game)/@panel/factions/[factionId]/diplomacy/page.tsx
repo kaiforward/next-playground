@@ -19,6 +19,7 @@ import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { RELATION_TIERS, RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { EVENT_TYPE_BADGE_COLOR } from "@/lib/constants/ui";
 import type { FactionRelatedEvent } from "@/lib/services/factions";
+import { formatDate, formatDuration } from "@/lib/utils/calendar";
 
 function FactionDiplomacyContent({ factionId }: { factionId: string }) {
   const { faction } = useFaction(factionId);
@@ -60,11 +61,11 @@ function FactionDiplomacyContent({ factionId }: { factionId: string }) {
                   </Link>
                   <div className="shrink-0 text-right">
                     <div className="font-mono text-xs text-text-tertiary">
-                      formed t.{a.formedAtTick}
+                      formed {formatDate(a.formedAtTick)}
                     </div>
                     {a.pendingDissolutionAtTick !== null && (
                       <Badge color="amber" className="mt-1">
-                        Dissolving t.{a.pendingDissolutionAtTick}
+                        Dissolving {formatDate(a.pendingDissolutionAtTick)}
                       </Badge>
                     )}
                   </div>
@@ -147,7 +148,7 @@ function GalaxyRelationsCard() {
     <Card variant="bordered" padding="md">
       <CardHeader
         title="Galaxy Relations"
-        subtitle={`Pair scores across every faction, drifting every ${RELATIONS_FREQUENCY} ticks. Click a faction name to inspect it.`}
+        subtitle={`Pair scores across every faction, drifting every ${formatDuration(RELATIONS_FREQUENCY)}. Click a faction name to inspect it.`}
       />
       <CardContent>
         {relations.factions.length === 0 ? (
@@ -215,7 +216,7 @@ function RecentEventRow({ event }: { event: FactionRelatedEvent }) {
         </div>
       </div>
       <span className="text-xs font-mono text-text-tertiary shrink-0">
-        t.{event.startTick}
+        {formatDate(event.startTick)}
       </span>
     </li>
   );
