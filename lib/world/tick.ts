@@ -1274,6 +1274,8 @@ export async function runWorldTick(
   // ── population ──
   // Calibration-only: per-cycle overshoot-death amount, keyed by system. Same reason as above.
   let overshootDeathBySystem: TickInstrumentation["overshootDeathBySystem"];
+  // Calibration-only: per-cycle growth-term amount, keyed by system. Same reason as above.
+  let growthBySystem: TickInstrumentation["growthBySystem"];
   // Abandonment Rule 2 (the death line): systems the population processor found in famine with
   // post-delta population below ABANDON_POP_FLOOR this cycle. Applied just below, outside the
   // gate — the tick body is the sole owner of the control-flip/reset the processor only reports.
@@ -1307,6 +1309,7 @@ export async function runWorldTick(
     systems = popWorld.systems;
     markets = popWorld.markets;
     overshootDeathBySystem = popResult.overshootDeathBySystem;
+    growthBySystem = popResult.growthBySystem;
     abandonedSystemIds = popResult.abandonedSystems ?? [];
     processorsRun.push("population");
   }
@@ -1881,7 +1884,7 @@ export async function runWorldTick(
     markets,
     instrumentation: {
       buildCommitmentsByGood, migrationMoved, foundingManifests, foundingStalls, logisticsBudget,
-      strikeSuppressedProposals, overshootDeathBySystem, teardownLevelsBySystem,
+      strikeSuppressedProposals, overshootDeathBySystem, growthBySystem, teardownLevelsBySystem,
     },
   };
 }

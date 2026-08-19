@@ -1124,6 +1124,96 @@ describe("population processor: overshoot-death instrumentation", () => {
   });
 });
 
+describe("population processor: growth-term instrumentation", () => {
+  // decay: 0 makes accumulateUnrest a no-op (relaxed = floor + 1*(unrest - floor) = unrest,
+  // gain = term*0 = 0), so the fixture's starting unrest IS the cycle's unrest — deterministic
+  // without having to also derive the term the accumulator would otherwise fold in.
+  const NO_RELAX = { slopeBase: 0, slopeShortage: 0, decay: 0 };
+
+  it("reports exactly the growth term's formula, catch-up scaled, matching the population actually gained", async () => {
+    // population 200, popCap 1000 -> r = 0.2, well under 1, crowdFactor = 1; d = 0.3.
+    // growth (one reference cycle) = 0.1 * 200 * 1 * 0.7 = 14; interval 48 -> catchUp = 2 -> 28.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 200, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0.3]])), {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.1, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 48,
+    });
+    expect(result.growthBySystem?.get("a")).toBeCloseTo(28, 9);
+    const a = world.systems.find((s) => s.id === "a")!;
+    expect(a.population).toBeCloseTo(200 + 28, 9); // the reported amount is what actually arrived
+  });
+
+  it("reports the same growth whether or not decline/death fired this cycle — same pop/popCap/D, different unrest", async () => {
+    // Both systems: population 110, popCap 100 (r = 1.1, mid-brake), d = 0.2. "calm" sits at
+    // unrest 0 (no decline, no death); "hot" sits at unrest 0.9, above the death gate (0.65) —
+    // decline and the death gate both fire for "hot" but neither term feeds populationDelta's
+    // growth product, so the two systems must report identical growth despite very different
+    // net population outcomes.
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("calm", 110, 100, 0), sys("hot", 110, 100, 0.9)],
+      markets: [],
+    });
+    const result = await runPopulationProcessor(
+      world,
+      ctxWithD(new Map([["calm", 0.2], ["hot", 0.2]])),
+      {
+        unrest: NO_RELAX,
+        population: { growthRate: 0.05, declineRate: 0.02, overshootDeathRate: 0.1, ...POP_SHAPE },
+        expectation: EXPECTATION_PARAMS,
+        interval: 24,
+      },
+    );
+    const calmGrowth = result.growthBySystem?.get("calm");
+    const hotGrowth = result.growthBySystem?.get("hot");
+    expect(calmGrowth).toBeCloseTo(1.140741, 6);
+    expect(hotGrowth).toBeCloseTo(1.140741, 6);
+    expect(hotGrowth).toBeCloseTo(calmGrowth ?? Number.NaN, 9);
+    // The net populations diverge (decline/death actually hit "hot") — proving the identical
+    // growth reading above is isolation, not a fixture where nothing happened to either system.
+    const calm = world.systems.find((s) => s.id === "calm")!;
+    const hot = world.systems.find((s) => s.id === "hot")!;
+    expect(calm.population).not.toBeCloseTo(hot.population, 6);
+  });
+
+  it("omits a system entirely when growth is zero (popCap <= 0)", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 50, 0, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.1, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    // Empty map ⇒ the processor returns {} rather than an empty Map (kept sparse).
+    expect(result.growthBySystem).toBeUndefined();
+  });
+
+  it("omits a system entirely when growth is zero (population at or past the crowd brake end)", async () => {
+    // r = population/popCap = 10, far past crowdBrakeEnd (1.15) -> crowdFactor saturates at 0.
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 1000, 100, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.1, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.growthBySystem).toBeUndefined();
+  });
+
+  it("vacuity: a growing fixture yields a non-empty map, so a dropped fold is seen to fail", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 300, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), {
+      unrest: NO_RELAX,
+      population: { growthRate: 0.02, declineRate: 0, overshootDeathRate: 0, ...POP_SHAPE },
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.growthBySystem).toBeInstanceOf(Map);
+    expect(result.growthBySystem?.size).toBeGreaterThan(0);
+  });
+});
+
 // ── Abandonment Rule 2 (the death line): the processor REPORTS a famine system whose post-delta
 // population has collapsed below ABANDON_POP_FLOOR — it never writes control itself, only names
 // the candidate for the tick body to reset (docs/active/gameplay/colonisation.md, abandonment). ──

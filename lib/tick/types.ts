@@ -135,6 +135,14 @@ export interface TickProcessorResult {
    *  evidence the harness reads (docs/active/gameplay/economy.md, unrest promise 5);
    *  surfaced via `runWorldTick().instrumentation`, never broadcast or persisted. */
   overshootDeathBySystem?: Map<string, number>;
+  /** Per-system growth-term amount this cycle — `growthRate * pop * crowdFactor * (1 - D)` inside
+   *  `populationDelta`, isolated from decline/death/migration/leak/diffusion and already scaled by
+   *  this run's catch-up factor. A system absent from the map contributed no growth this cycle (the
+   *  term was zero or negative, or the system was not in this tick's shard). Calibration
+   *  instrumentation only — the trajectory instrument's one consumer this pass; deliberately not
+   *  folded into the harness's population/cohort analysis. Surfaced via
+   *  `runWorldTick().instrumentation`, never broadcast or persisted. */
+  growthBySystem?: Map<string, number>;
   /** Per-system whole building levels torn down this cycle — both infrastructure-decay channels
    *  (sustained-idle contraction and the unrest-collapse catastrophe) combined, since both remove
    *  capacity a population must live without either way. A system absent from the map lost no levels
@@ -229,6 +237,7 @@ export type TickInstrumentation = Pick<
   | "logisticsBudget"
   | "strikeSuppressedProposals"
   | "overshootDeathBySystem"
+  | "growthBySystem"
   | "teardownLevelsBySystem"
 >;
 
