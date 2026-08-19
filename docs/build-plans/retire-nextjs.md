@@ -99,8 +99,90 @@ document /system/system-77 run1: 0.033005s size=51959 run2: 0.041169s
 world tick check: currentTick 11908 → 11911 over 3 s (speed 1, achievedTps 1)
 ```
 
-Side-finding with a receipt: `/api/game/systems` is 322 KB per response, and the tick loop
-invalidates every mounted query ~every second — if that key is tick-invalidated, the client
-re-downloads ~322 KB/s while the map is open. Whether it is tick-invalidated is part of census B.
+Side-finding with a receipt: `/api/game/systems` is 322 KB per response — resolved by census B:
+it backs the `universe` key at `staleTime: Infinity` and is never invalidated, so it is a
+once-per-session read, not per-tick churn.
 
-(census B and the in-browser half: pending)
+### B — census of the query layer's load-bearing surface (dispatched agent, receipts spot-checked)
+
+```
+Meaning:    The query layer is NOT pure boundary management. Five behaviours depend on cache
+            semantics a direct synchronous world read would not supply: cross-component sync
+            through a shared cached key, dedup across N mounts, referentially-stable snapshots
+            driving Pixi repaints, read-modify-write against cached objects, and cross-parallel-
+            route sharing. Three of the five are correctness, not just performance.
+Claim:      Claim B (query layer exists solely to manage the client–server boundary).
+Number:     44 hooks classed: 7 plain fetch-through / 6 static staleTime:Infinity /
+            11 tick-invalidated suspense / 8 enabled-gated map layers / 13 mutations /
+            7 no-query. 42 API routes, all thin service wrappers (~20 lines avg), all
+            Cache-Control: private, no-cache. 5 counterexamples to Claim B (below).
+            Confirmed clean: zero keepPreviousData/placeholderData, zero select, zero
+            refetchInterval, zero onMutate/rollback, zero prefetch/dehydrate/HydrationBoundary,
+            zero direct getQueryData outside hooks.
+Horizon:    n/a (static code census, whole repo at feat/retire-nextjs == main 1aa2de02).
+Cohort:     all of lib/hooks/ (44 files), lib/query/, components consuming them, app/api/game/
+            (42 routes), QueryBoundary and provider wiring.
+Licenses:   Supports: sizing the replacement design — it must carry (1) a subscriber/notification
+            mechanism for shared reads, (2) referentially-stable snapshots (structural sharing),
+            (3) a read-back path for mutation payload construction, or redesign the treasury band
+            commit. Does NOT support: keeping TanStack (the roadmap Don't stands — these are
+            requirements on the replacement, not a case for the cache). Does NOT support: any
+            claim about panel-open latency — that is instrument A.
+```
+
+**Verdict: Falsifier B fires — Claim B is false as written.** The five counterexamples, receipts
+spot-checked against the working tree:
+
+1. **C1 — cross-component sync through one cached key (correctness).** `TrackerPanel` and
+   `TrackerSettingsPanel` are siblings in separate `QueryBoundary`s that must agree instantly on
+   section flags; each reads its own `useTracker()` and the shared cache entry is the designed
+   synchronisation mechanism (`components/tracker/tracker-settings.tsx:66-68`,
+   `components/map/map-right-rail.tsx:43-46`; behaviour pinned by
+   `components/map/__tests__/map-right-rail.test.tsx:62-63`).
+2. **C2 — dedup + already-resolved suspense across N mounts (perf).** `ActiveAlertFlyout` mounts
+   once per alert chip, each calling `useAtlas()`; safe only because the entry is already resolved
+   at `staleTime: Infinity` (`components/alerts/alert-run.tsx:307-313`; same bet in
+   `components/system/pin-toggle.tsx:34,41-42`).
+3. **C3 — referential stability from structural sharing (correctness at tick cadence).**
+   `useOwnership` is invalidated every economy tick; structural sharing keeps `data` referentially
+   stable when ownership is unchanged, and that identity gates the Pixi territory/marker rebuild
+   (`lib/hooks/use-ownership.ts:22-23`, `components/map/star-map.tsx:137-150`,
+   `lib/hooks/use-map-data.ts:100-118,193`). Without it: full geometry rebuild ~every second.
+4. **C4 — read-modify-write against cached objects (correctness).** The treasury band commit
+   builds its payload from cached bands; without the immediate `setQueryData` write, a quick
+   second slider release spreads the pre-commit value and silently reverts the first change
+   (`lib/hooks/use-faction-treasury.ts:29-37`). Three sibling latency-motivated sites:
+   `use-player-pins.ts:20-22`, `use-player-settings.ts:25-27,40-42`.
+5. **C5 — cross-parallel-route sharing (perf).** The `@panel` tree reads `useOwnership` /
+   `useFactionTreasury` the map/top-bar tree already fetched — panel tab visibility costs no
+   fetch because the sibling tree holds the key (`app/(game)/@panel/system/layout.tsx:24,33-36`,
+   `components/top-bar.tsx:52-57`).
+
+Full inventory (hook→key→route→settings tables, mutation/invalidation wiring, QueryBoundary
+anatomy) is in the census agent's report; the classes and counts above are its summary and the
+receipts above were re-read from the tree, not trusted.
+
+**`useTickInvalidation` wiring (for the replacement design):** `economyTick` invalidates 17 key
+prefixes (`lib/hooks/use-tick-invalidation.ts:20-54`); `eventNotifications` invalidates `events` +
+`alerts` (`:56-61`). Signal source is the SSE `EventSource("/api/game/tick-stream")`
+(`lib/hooks/use-tick.ts:94`). Exactly one SSE-seeded hook exists: `useTick` seeds
+tick/speed/achievedTps from `/api/game/world` via plain `useState`, never touching the query cache
+(`use-tick.ts:72-80`).
+
+**Side-finding (pre-existing, unrelated to this measure's claims):** the `shipArrived` SSE channel
+has **zero subscribers** (dispatch registry `use-tick.ts:66,110`; no `subscribeToEvent("shipArrived")`
+anywhere in non-test code), and `queryKeys.visibility` is **never invalidated** despite
+`use-visibility.ts:14` claiming "Invalidated on shipArrived only" — fog-of-war is a session-lifetime
+read today. `use-system-logistics.ts:10` and `AGENTS.md:74` carry the same stale claim.
+
+## Outcomes
+
+- **Claim B: Falsified.** The "no cache to invalidate at all" simplification is dead as literally
+  stated. This is the measure doing its job — the replacement data layer's requirements are now
+  concrete: a subscriber/notification mechanism, referentially-stable snapshots, and a read-back
+  path (or a redesigned band commit). C2/C5 are degradation-not-incorrectness and can be accepted
+  or carried deliberately.
+- **Claim A: partially measured.** Server half done (fast — see above); the decisive client-side
+  split (click→content vs network, cold/warm/tick-running) is blocked on the Chrome extension
+  being connected. Until it runs, nothing licenses a statement about where the visible loading
+  panel comes from.
