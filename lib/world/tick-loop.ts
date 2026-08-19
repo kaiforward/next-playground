@@ -2,9 +2,11 @@
  * In-process tick loop — paces `runWorldTick` against the world store and
  * broadcasts tick results to subscribers (the SSE route).
  *
- * Wall-clock APIs (`Date.now`, `setInterval`, `setTimeout`, `setImmediate`)
- * are used for pacing, broadcast throttling, and autosave cadence only —
- * never inside tick math, which stays deterministic in `runWorldTick`.
+ * Wall-clock APIs (`Date.now`, `setInterval`, `setTimeout`) are used for
+ * pacing, broadcast throttling, and autosave cadence only — never inside
+ * tick math, which stays deterministic in `runWorldTick`. Host-portable by
+ * requirement: this module runs under Node AND in the browser game worker,
+ * so no Node-only globals (`setImmediate` was one, once).
  * Disk access (autosave) goes through a dynamic import of `save-files.ts`
  * so this module's static graph stays free of Node-edge dependencies.
  *
@@ -241,7 +243,10 @@ export class TickLoop {
       do {
         await this.tickOnce();
       } while (this.speed === "max" && this.maxToken === token && Date.now() < budgetEnd);
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      // setTimeout(0), not setImmediate: the loop runs in the browser worker too, where
+      // setImmediate does not exist. The point is only to yield to the event loop between
+      // budget windows so queued messages and timers get a turn.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
   }
 
