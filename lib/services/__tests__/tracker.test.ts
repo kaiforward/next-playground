@@ -367,8 +367,8 @@ describe("getTrackerData", () => {
     // The colony absorbs nothing THIS cycle, and its gain says so — it must not borrow the build's 0.5.
     expect(data.colonising[0].nextCycleProgress).toBe(0);
     // …but it still has a forecast: the ETA replays the queue, so a colony behind the front lands
-    // once the front clears. The em-dash means "no forecast at all", and printing it here would
-    // report a starved colony as a permanently stalled one.
+    // once the front clears. "Stalled" (formatEta's no-forecast reading) means "no forecast at all",
+    // and printing it here would report a starved colony as a permanently stalled one.
     expect(data.colonising[0].etaCycles).not.toBeNull();
     expect(data.colonising[0].etaCycles).toBeGreaterThan(data.building[0].etaCycles!);
   });

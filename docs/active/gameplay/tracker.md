@@ -130,10 +130,11 @@ will fund next cycle rather than an average rate. A project the pool cannot reac
 segment at all, which is how a stalled row is told apart from a slow one at a glance. Near the end the
 segment is capped at the work actually remaining, so a bar finishes rather than overflowing.
 
-A build or colony row's one figure is its **cycles remaining**, right-aligned in the same slot a
-pinned row spends on population and stability. It stays in the row's ordinary grey even when there is
-no forecast at all (an em-dash): the Tracker is a quiet list, and calling out trouble is the alert
-bar's job, not a colour on every stalled row.
+A build or colony row's one figure is its **time remaining**, right-aligned in the same slot a
+pinned row spends on population and stability — a calendar-scaled duration (`formatEta`, the same
+auto-scaling rule every duration surface shares, `lib/utils/calendar.ts`). It stays in the row's
+ordinary grey even when there is no forecast at all ("stalled"): the Tracker is a quiet list, and
+calling out trouble is the alert bar's job, not a colour on every stalled row.
 
 Figures are icon-plus-number, never a bare glyph: population takes a person icon, stability a small
 colour swatch beside its value. Stability is never signalled by colour alone.

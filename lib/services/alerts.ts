@@ -38,6 +38,7 @@
  */
 import { getWorld } from "@/lib/world/store";
 import { formatDuration } from "@/lib/utils/calendar";
+import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
 import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
@@ -306,7 +307,7 @@ export function getAlertData(): AlertData {
         // denomination (lib/world/types.ts:143-148).
         const countdown = Math.log(system.population / ABANDON_POP_FLOOR) / k;
         sortKey = countdown;
-        measure = `${countdown.toFixed(1)} cycles to abandonment`;
+        measure = `${formatDuration(countdown * CYCLE_LENGTH)} to abandonment`;
       } else {
         const shortfallDepth = 1 - system.provision;
         // Sorts after every shrinking world (see FAMINE_NON_SHRINKING_SORT_BASE), deepest shortfall
@@ -402,8 +403,9 @@ export function getAlertData(): AlertData {
     // cycles-to-empty at all, and simply falling is meaningless on its own (stocks oscillate); the
     // countdown carries the whole condition. A system short in BOTH water
     // and food counts once, at its worse (smaller) reading — instances are systems here, same as
-    // every other system-scoped category. Sorts by cycles remaining ascending, soonest first — the
-    // sortKey IS the measure. ──
+    // every other system-scoped category. Sorts by cycles-to-empty ascending, soonest first — the
+    // sortKey is that raw cycle figure; the displayed measure renders it as a calendar-scaled
+    // duration (`formatDuration`), never the cycle count itself. ──
     let worstCyclesToEmpty: number | undefined;
     let worstSurvivalGood: string | undefined;
     for (const goodId of SURVIVAL_GOODS) {
@@ -420,7 +422,7 @@ export function getAlertData(): AlertData {
       survivalStockFalling.push({
         systemId: system.id,
         name: system.name,
-        measure: `${worstSurvivalGood} empties in ${worstCyclesToEmpty.toFixed(1)} cycles`,
+        measure: `${worstSurvivalGood} empties in ${formatDuration(worstCyclesToEmpty * CYCLE_LENGTH)}`,
         sortKey: worstCyclesToEmpty,
       });
     }
