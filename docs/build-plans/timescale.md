@@ -477,3 +477,205 @@ the 4-ticks/day anchor is dead** — a 100-year arc is 146,000 ticks at this anc
 3 ticks/s that arc exceeds ~13.5 wall-clock hours at best speed, which no rate tuning can fix; a
 coarser tick would be forced. (Reference: fast mode is configured at 5 ticks/s today; Victoria 3's
 100-year arc is ~146K ticks — the direction claims we land in its league, ~8 wall-hours.)
+
+## Build plan
+
+One branch (`feat/timescale`), one PR. Order: instrument → baseline gate → the change → doc fold →
+ship gates. The baseline gate sits BEFORE the constants flip because gates 2-3 compare against
+baseline figures C7 does not carry (charter fees, landing-unstaffed, per-type build medians) — they
+can only be read while the old constants are still in the tree.
+
+### Resolution — every measure the spec's tasks and gates use
+
+| Measure (spec wording) | State | Producer / receipt |
+|---|---|---|
+| `HOURS_PER_TICK` + conversion helper | **new** | Task 3 |
+| The 15 rate-table constants | exists | read this session: `population.ts:126,127,156,165,180`; `construction.ts:21,23,33,41,43,45`; `treasury.ts:26`; `colonisation.ts:111`; `infrastructure.ts:21` |
+| ETA guard `maxCycles` + its "stalled" consumer | exists | `lib/engine/construction.ts:323,359`; `components/construction/construction-row.tsx:32` |
+| Conservation identities, NaN/runaway/pinning, striking share, cumulative teardown + overshoot deaths, standing levels | exists | `npm run simulate` report (`scripts/simulate.ts:385,491-506`); instrumentation fields `lib/tick/types.ts:137,144` |
+| "the growth term itself", per system per cycle | **new** | Task 1 — `growthBySystem` on `TickInstrumentation` |
+| Realised commit→complete medians per build type | **new** | Task 2 — per-cycle scan of `world.constructionProjects` |
+| Colony-establish commits per cycle | **new** | Task 2 (same queue scan; the harness's `foldFoundingLifecycle` covers the standard runs) |
+| "settler-gate denial count" | **substituted** | the literal count needs `affordable.length`, internal to `planFactionColonyProposals` (`lib/engine/directed-build.ts:1496-1507`) and never surfaced. Task 2 instead recomputes `settlerBudget` and `hungry` per faction-cycle — exact, from the same cycle-start state the gate reads (`population`, `labourDemand` `lib/engine/industry.ts:51`, `housingPopCap` `industry.ts:340`, open establishes, `MIN_SETTLER_SUPPLY` `colonisation.ts:43`). Budget 0 while opportunities persist = the gate is the binding constraint, which is the question gate 2 asks. Stated in Not covered |
+| Median charter fee + `CHARTER_FEE_MIN` share | **new** | Task 2 recompute at each observed commit: `max(CHARTER_FEE_MIN, CHARTER_FEE_SPEND_MULT × lastSettlement.maintenanceBill)` (`colonisation.ts:68,81,89`; purse `lastSettlement` persisted, `lib/world/types.ts:630`). The harness cannot read fees (`conservation-analysis.ts:118-119`) and C7 carries none — baseline figures come from Gate B |
+| Median faction balance | exists | simulate treasury section; baseline in `temp/timescale-quick.json` |
+| Centre proposals funded per faction | exists | simulate report (`scripts/simulate.ts:730-731`) |
+| Plateau slope / maturation bracket | **new** | Task 2 pop series (pattern: `temp/timescale-diag.ts` trajectory table) |
+| Landing-unstaffed fraction | **new** | Task 2 — per-cycle buildings diff; for systems whose level count rose, post-landing `min(pop, labourDemand)/labourDemand`. Baseline from Gate B (C7 lacks it) |
+| Teardown per standing level | exists | ratio of two simulate figures (C7: 6,070 / 144,635 ≈ 0.042) |
+| Docstring targets | exists | all read this session (list in the spec's "Docstrings updated" block) |
+| Roadmap rows | exists | timescale `docs/ROADMAP.md:30-43`; pacing-reference `:296-302`; equilibrium-horizon `:384` |
+
+### Task 1 — growth-term instrumentation field
+
+Files:      `lib/tick/types.ts`, `lib/tick/processors/population.ts`, `lib/world/tick.ts`,
+            `lib/tick/processors/__tests__/population.test.ts`
+Interface:  `TickProcessorResult.growthBySystem?: Map<string, number>` — per-cycle growth component
+            per system, catch-up scaled, sparse (absent ⇒ 0), added to the `TickInstrumentation`
+            pick (`lib/tick/types.ts:223-230`) and surfaced by `runWorldTick().instrumentation`.
+            Produced by the same differential-fold idiom as `overshootDeathBySystem`
+            (`processors/population.ts:112-121`): re-run the pure fold with `growthRate` zeroed;
+            the difference is the growth term. Deliberately NOT folded into the harness report
+            (`runner.ts` / `population-analysis.ts` / `cohort-analysis.ts`, the sibling's other
+            readers) — its one consumer this pass is the trajectory instrument; see Not covered.
+Proves:     the reported figure equals the growth product (rate × pop × crowdFactor × (1−D) ×
+            catch-up) on a hand-computable fixture; a high-unrest overshooting fixture reports the
+            same growth as a calm one with identical pop/cap/D (decline and death must not leak
+            in); a popCap-0 or fully-braked system produces no entry (sparse absence, not a zero
+            entry); vacuity — a growing fixture must yield a non-empty map, so a dropped fold is
+            seen to fail.
+Consumes:   nothing.
+
+### Task 2 — trajectory instrument (scratch, never committed)
+
+Files:      `temp/timescale-trajectory.ts` (new, gitignored — extends the `temp/timescale-diag.ts`
+            pattern; outputs to `temp/`)
+Interface:  a runner over pure `runWorldTick` (env `TICKS`/`SEED`, per-cycle sampling) emitting:
+            annualised growth-term rate on the unsaturated developed cohort (developed AND
+            `population < popCap`, so the crowd brake is off), read from
+            `instrumentation.growthBySystem`; per-type commit→complete interval medians
+            (housing / extractor / tier-1 / tier-2 / establish) from the queue scan; establish
+            commits per cycle + recomputed `settlerBudget`/`hungry` per faction-cycle; charter fee
+            per commit + `CHARTER_FEE_MIN` share, by era; faction balance medians; centre projects
+            committed/completed; landing-unstaffed fraction; pop series for the plateau slope;
+            cumulative teardown per standing level.
+Proves:     (a scratch instrument's red-proof is its validation anchors, run on BASELINE constants
+            first:) total pop at t=10,000 inside the quick run's bracket and establish median 16
+            intervals (C1/C2 recovery — a sampler mis-timed against the cycle fails both); the
+            annualised growth-term rate recovers what `growthRate` 0.015/cycle implies on the
+            unsaturated developed cohort; charter-fee observation count equals the run's
+            chartered-colony count (the conservation census identity — a wrong faction/timing join
+            breaks it); establishes committed by a faction in one cycle never exceed its recomputed
+            `settlerBudget` (a wrong recompute is seen as a violation); the duration convention is
+            printed as interval counts (an N-absorption build reads N−1 — drift is seen against
+            C2's 16-vs-17 fencepost); landing-unstaffed reads a non-degenerate fraction on a
+            baseline galaxy C7 shows tearing down.
+Consumes:   Task 1's `growthBySystem`.
+
+### Gate B — baseline extension (before any constant moves)
+
+Arms:       after Tasks 1-2, before Task 3.
+Reads:      the trajectory runner on baseline constants (10,000 ticks, seed 42, scale 100) plus
+            the existing C7/quick-run artifacts.
+Merge condition: every Task 2 validation anchor passes, and the baseline figures gates 2-3 need are
+            recorded IN THIS FILE next to C7 — charter median + `CHARTER_FEE_MIN` share by era,
+            landing-unstaffed fraction, per-type build-duration medians, faction balance medians.
+            These are the "vs baseline" comparators; C7 stays untouched.
+
+### Task 3 — the calendar, the rates, the guard, the docstrings
+
+Files:      `lib/constants/tick-cadence.ts` (new `HOURS_PER_TICK` + `CYCLE_LENGTH` docstring),
+            `lib/constants/population.ts`, `lib/constants/construction.ts`,
+            `lib/constants/treasury.ts`, `lib/constants/colonisation.ts`,
+            `lib/constants/infrastructure.ts` (the 15 values, spec table verbatim),
+            `lib/engine/construction.ts` (`maxCycles` 999 → 9999 at `:323,359`), the docstring
+            list from the spec's "Docstrings updated" block, `lib/utils/` or `lib/engine/` home
+            for the conversion helper, plus every test whose anchor a changed constant moves —
+            discovered by the run; known candidates: `lib/tick-harness/__tests__/runner.test.ts`
+            founding-lifecycle and count-anchor rows (spec's harness-sweep row), and any
+            engine/service test importing a changed constant rather than passing fixture params.
+Interface:  `HOURS_PER_TICK = 6` exported beside `CYCLE_LENGTH`; one pure conversion helper
+            `ticksToHours(ticks: number): number` (display-ready derived language lives in the
+            docstring: 4 ticks/day, cycle = `CYCLE_LENGTH × HOURS_PER_TICK` = 144 h = 6 days,
+            ≈60.9 cycles/year, 1 year ≈ 1,461 ticks — the cycle's in-world length is always
+            DERIVED, never a second literal). No processor reads either this pass.
+Proves:     a deep queue whose landing cycle sits between 999 and 9,999 gets a numeric ETA where
+            the old guard returned null ("stalled"), and a genuinely unfundable queue still
+            forecasts stalled for every project; both forecast paths honour the same bound (the
+            independent-hypotheticals arm too); `ticksToHours` scales linearly and agrees with the
+            spec's derived language within rounding; every anchored test the constants move is
+            seen red before its anchor is re-derived, each re-derivation justified against the
+            test's own premise, never against the new output; every updated docstring's worked
+            example still computes with the new values (a transposed row is seen as an example
+            that no longer adds up).
+Consumes:   nothing (ordered after Gate B only because the baseline must be read first).
+
+### Task 4 — doc fold and bookings
+
+Files:      `docs/SPEC.md` (calendar definition; horizon-relabel note), `docs/ROADMAP.md` (delete
+            the timescale row `:30-43`; fold the pacing-reference row `:296-302` — its surviving
+            scope is the wall-clock-per-speed table and doc-section placement — into SPEC's
+            calendar section; flag the equilibrium-horizon row `:384` with the relabel — 10,000
+            ticks is now founding-era, ~year 7; add two rows: the player-facing date-display
+            slice, and the disasters/decline-realism pass carrying the accepted 100:1
+            death:growth asymmetry and the deferred `declineRate` realism)
+Interface:  none — docs only.
+Proves:     SPEC's calendar section derives the cycle's in-world length from
+            `CYCLE_LENGTH × HOURS_PER_TICK`, never an independent day count; no active doc still
+            reads the 10,000-tick horizon as "equilibrium" unqualified; both new roadmap rows
+            exist and the two folded/deleted rows are gone; everything this working file defers is
+            booked before the file dies at ship (grep it for defer/later/"Not claimed" and check
+            each against the roadmap).
+Consumes:   Task 3 (the shipped values and names).
+
+### Gate C — ship gates (the spec's Verification plan, executed)
+
+Arms:       after Tasks 3-4; the PR's merge gate.
+Reads:      `npm run simulate` both horizons; the trajectory runner at ~50,000 ticks on the new
+            constants; `npx vitest run`; `npx next build --webpack`.
+Merge condition — all of, numbers per the spec's gates:
+1.          Gate 1: conservation identities PASS (a failure blocks the merge outright), no
+            NaN/runaway/pinning; striking share ≤ ~3× C7 at the matching horizon (equilibrium
+            1.4% → ≤ ~4.2%; startup 0.0% → still ≈ 0); teardown compared numerically against C7.
+2.          Gate 2 (50K run): annualised growth term 3% ± 1/year on the unsaturated developed
+            cohort; establish median ≈ 169 ± 5 measured cycles, other types at-or-above their
+            floors; establish commits per cycle non-zero through the run, with the
+            `settlerBudget` series as the diagnostic if they stall; median charter + fee-floor
+            share and median faction balance within ~3× of the Gate B baselines (the charter-drift
+            hypothesis is judged here); centre proposals funded per faction non-zero and
+            comparable to baseline; plateau-slope extrapolation brackets the ×10–×30 maturation
+            question and the answer is written into this file's durations table.
+3.          Gate 3: cumulative teardown per standing level ≤ ~1.5× C7's 0.042 at the equilibrium
+            horizon and at 50K; landing-unstaffed fraction compared against Gate B's baseline.
+4.          Gate 4's booking verified as text: the equilibrium-horizon roadmap row carries the
+            relabel flag (Task 4's edit is present).
+            The PR quotes the simulate run at both horizons, per AGENTS.
+
+### Verification
+
+Gates B and C above are the verification: the galaxy-level reads happen in `npm run simulate`
+(both horizons, always) and the 50K trajectory run; the build gate is `npx next build --webpack`.
+One new harness-visible metric ships (Task 1); everything else is scratch instrumentation.
+Runtime preflight: baseline 10K validation ≈ 4-6 min pure-tick; the 50K run ≈ 20-30 min at C6's
+settled ~20-22 ms/tick (likely less — slower colonisation means a smaller galaxy for longer). Run
+in the background with progress output; no overnight batch needed.
+
+### Doc fold
+
+`docs/SPEC.md` gains the calendar definition (and inherits the pacing-reference row's surviving
+scope); `docs/ROADMAP.md` loses the timescale and pacing-reference rows and gains the two booked
+rows; the equilibrium-horizon row is flagged, not solved (spec gate 4). Constant docstrings are
+part of Task 3, not the fold. Grep `docs/planned/` for tick/cycle duration claims the new calendar
+falsifies before calling the fold done. This working file is deleted on the PR that ships the
+feature, after everything it defers is verified booked (Task 4's check).
+
+### Not covered
+
+- **Player-facing date display and fictional calendar names** — booked: Task 4 adds the roadmap row.
+- **Disasters / decline realism** (the accepted 100:1 death:growth asymmetry, `declineRate`'s
+  famine meaning) — booked: Task 4 adds the roadmap row.
+- **Colonisation frequency after the slowdown** — booked: the existing colonisation-pacing row owns it.
+- **The charter-drift hypothesis** — booked at Gate C (merge condition 2 reads the median charter
+  and the fee-floor share against Gate B's baseline).
+- **The literal settler-gate denial count** — dropped: unobservable without an engine-return change
+  the spec doesn't license; the recomputed `settlerBudget` series answers gate 2's actual question.
+  Revisit only if Gate C's founding line fails ambiguously.
+- **Folding `growthBySystem` into the harness report/cohort analysis** (the sibling's other
+  readers) — dropped: its one consumer this pass is the trajectory instrument; fold it later if a
+  standing calibration metric is wanted.
+- **The harness "equilibrium" horizon decision** — booked: existing roadmap row, flagged by Task 4.
+
+### Net-new UI
+
+None. The ETA-guard change alters what an existing component already renders
+(`construction-row.tsx:32` stops reading healthy deep queues as "stalled"); no new component, no
+prototype needed.
+
+### Self-review notes
+
+All `file:line` citations above were read this session (not carried from the spec on trust); the
+three new names (`HOURS_PER_TICK`, `growthBySystem`, `ticksToHours`, `temp/timescale-trajectory.ts`)
+grep clean against the tree. Sibling walk for Task 1 ran against `overshootDeathBySystem` (8 files);
+the four harness-analysis files are deliberately omitted, stated in Task 1 and Not covered. The
+resolution table was re-read against the finished tasks: every `new` producer sits before its
+consumer, and no Interface line names a measure outside the table.
