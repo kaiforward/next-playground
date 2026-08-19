@@ -1,6 +1,8 @@
+"use client";
+
 import { forwardRef, type ButtonHTMLAttributes } from "react";
-import Link from "next/link";
 import { tv, type VariantProps } from "tailwind-variants";
+import { useLinkComponent } from "./link-provider";
 
 const buttonVariants = tv({
   base: "inline-flex items-center justify-center font-medium transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
@@ -77,11 +79,12 @@ interface ButtonAsLink extends ButtonBaseProps {
 type ButtonProps = ButtonAsButton | ButtonAsLink;
 
 /**
- * Button component — renders `<button>` or Next.js `<Link>` depending on `href`.
+ * Button component — renders `<button>` or a router-driven `<a>` (via the link seam,
+ * `link-provider.tsx`) depending on `href`.
  *
  * Note: `forwardRef` does not support discriminated union element types, so
  * link-mode Buttons do not forward `ref`. In practice no callers use refs on
- * link-mode Buttons; if needed, use `<Link>` directly.
+ * link-mode Buttons; if needed, use the seam's `Link` component directly.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
@@ -89,17 +92,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref
   ) {
     const classes = buttonVariants({ variant, color, size, fullWidth, className });
+    const LinkComponent = useLinkComponent();
 
     if ("href" in props && props.href) {
       const { href, ...rest } = props;
       return (
-        <Link
+        <LinkComponent
           href={href}
           className={classes}
           {...rest}
         >
           {children}
-        </Link>
+        </LinkComponent>
       );
     }
 

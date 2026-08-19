@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { tv, type VariantProps } from "tailwind-variants";
 import { TabCountBadge } from "./tab-count-badge";
 import { resolvePanelTabs, type PanelTabDef } from "./tabs-helpers";
+import { useLinkComponent } from "./link-provider";
 
 // ── TabList ─────────────────────────────────────────────────────
 
@@ -125,8 +125,9 @@ export function TabLink({
   className,
   children,
 }: TabLinkProps) {
+  const LinkComponent = useLinkComponent();
   return (
-    <Link
+    <LinkComponent
       href={href}
       aria-current={active ? "page" : undefined}
       className={tabVariants({ variant, active, activeColor, className })}
@@ -135,7 +136,7 @@ export function TabLink({
       {count != null && count > 0 && (
         <TabCountBadge count={count} />
       )}
-    </Link>
+    </LinkComponent>
   );
 }
 

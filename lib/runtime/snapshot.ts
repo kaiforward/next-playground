@@ -3,11 +3,16 @@
  * from the same read services `app/api/game/*` routes wrap today. Slices are keyed like today's query
  * keys (`lib/query/keys.ts`) and carry exactly the services' existing return types — no parallel DTOs.
  *
- * Node-portable: no `fs`, no static `process.env` read. NOT pure: `buildStateFrame` syncs the
- * `getWorld()` singleton to its `world` argument when they differ (the read services it reuses all
- * read the singleton internally), committing via `setWorld` — a version bump and a live-state
- * overwrite if handed anything but the world just committed by the caller. Callers pass the exact
- * reference they last gave `setWorld` (or let this function commit it).
+ * Node-portable: no `fs`, no static `process.env` read. NOT pure: `buildStateFrame` reads through
+ * the `getWorld()` singleton (the read services it reuses all read the singleton internally), so it
+ * REQUIRES its `world` argument to already be the singleton's held value — `ensureWorldCommitted`
+ * below throws rather than silently adopting a mismatched world. This used to adopt (call
+ * `setWorld(world)` on a mismatch) until the game worker (client-runtime build plan, Task 5) became
+ * the mechanism's first real caller and settled the call pattern: every caller fetches `getWorld()`
+ * immediately before passing it here, so a mismatch can only mean a caller is holding a stale or
+ * foreign reference — exactly the bug a silent adopt would hide (a stale closure's world quietly
+ * becoming live state, with only an unexplained version-counter jump as a trace). Callers MUST call
+ * `setWorld(world)` themselves first if `world` is not already the singleton's value.
  *
  * **Full frame only, for now.** `buildStateFrame`'s `since` parameter is accepted for interface
  * stability (later tasks' callers pass the last-acked world version) but is not yet consulted — every
@@ -18,7 +23,7 @@
  * therefore already self-contained latest state, which is what makes the drop-harmless guarantee hold
  * trivially rather than needing a merge rule.
  */
-import { getWorld, getWorldVersion, hasWorld, setWorld } from "@/lib/world/store";
+import { getWorld, getWorldVersion, hasWorld } from "@/lib/world/store";
 import type { World } from "@/lib/world/types";
 import { DEFAULT_ALERT_CATEGORIES, DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 import type { AlertCategorySettings } from "@/lib/types/alerts";
@@ -153,17 +158,17 @@ export interface StateFrame {
 
 /**
  * Every read service below reads the store singleton (`getWorld()`), not the `world` parameter
- * directly — the same singleton the worker's own tick loop commits to via `setWorld`. This makes the
- * store hold `world` before delegating, but only when it does not already: the common worker-side call
- * happens immediately after the tick loop's own `setWorld(world)`, and re-calling it here would bump
- * `getWorldVersion()` a second time for the same commit, breaking "once per committed world version"
- * for every other reader of that counter. Tests that hand `buildStateFrame` a freshly generated world
- * rely on this same guard to seed the store without double-bumping on a second call with the same
- * reference.
+ * directly — the same singleton the worker's own tick loop commits to via `setWorld`. `world` must
+ * therefore already BE the singleton's held value when this runs; a mismatch throws rather than
+ * silently committing `world` on the caller's behalf (module docstring above states why, and names
+ * the resolution).
  */
 function ensureWorldCommitted(world: World): void {
   if (!hasWorld() || getWorld() !== world) {
-    setWorld(world);
+    throw new Error(
+      "buildStateFrame called with a world that is not the store's current value — " +
+        "call setWorld(world) first, or pass the exact reference getWorld() just returned.",
+    );
   }
 }
 

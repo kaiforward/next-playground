@@ -45,7 +45,7 @@ import type { ConservationReport } from "../lib/tick-harness/conservation-analys
 import { renderTable } from "../lib/tick-harness/table";
 import { STRIKE_PARAMS, POPULATION_PARAMS } from "@/lib/constants/population";
 import { DEFAULT_SYSTEM_COUNT } from "@/lib/constants/universe-gen";
-import { ECONOMY_SCALE, toEconomyScale } from "@/lib/constants/economy-scale";
+import { ECONOMY_SCALE, resolveHostConfig, assertHostConfigResolved } from "@/lib/constants/economy-scale";
 import { ECONOMY_CONSTANTS } from "@/lib/constants/economy";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { toTickSystems } from "../lib/world/tick";
@@ -82,20 +82,14 @@ function toHorizonReport(results: HarnessResults): HorizonReport {
 
 // Enforce the import-order invariant the dotenv import above depends on. ES modules
 // evaluate imports in source order, and economy-scale.ts resolves ECONOMY_SCALE at
-// module load — so an import placed above `dotenv/config` that transitively reaches
-// it would bake in the code default before .env was read, and every magnitude the
-// run reports would silently belong to a different economy than the one requested.
-// Comparing the resolved constant against the environment turns that into a crash.
-if (process.env.ECONOMY_SCALE !== undefined) {
-  const requested = toEconomyScale(process.env.ECONOMY_SCALE);
-  if (requested !== ECONOMY_SCALE) {
-    throw new Error(
-      `ECONOMY_SCALE mismatch: the environment asks for ${requested}, but the constants resolved to ` +
-        `${ECONOMY_SCALE}. An import above "dotenv/config" in scripts/simulate.ts reached ` +
-        `lib/constants/economy-scale.ts before .env was loaded — move it below the dotenv import.`,
-    );
-  }
-}
+// module load via `resolveHostConfig()` (Node branch: `process.env`) — so an import
+// placed above `dotenv/config` that transitively reaches it would bake in the code
+// default before .env was read, and every magnitude the run reports would silently
+// belong to a different economy than the one requested. Comparing the resolved
+// constant against a freshly-read host config (by now, post-dotenv) turns that into
+// a crash — retargeted at `resolveHostConfig`, the seam Task 4 introduced, but the
+// fault it detects (and the crash it produces) is unchanged.
+assertHostConfigResolved(resolveHostConfig(), ECONOMY_SCALE);
 
 // ── Argument parsing ────────────────────────────────────────────
 

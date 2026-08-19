@@ -183,6 +183,10 @@ describe("TickLoop", () => {
     expect(getWorld().meta.currentTick).toBe(0);
     expect(vi.mocked(writeSave)).not.toHaveBeenCalled();
     expect(received.at(-1)?.speed).toBe("paused");
+    // The hard-pause emit carries WHY it paused — the one field that lets a consumer (the game
+    // worker, client-runtime spec §4) tell "the player paused" from "a tick threw" and surface a
+    // tickFailed message instead of a silent stop.
+    expect(received.at(-1)?.error).toBe("boom");
 
     // Pacing is stopped: further elapsed time doesn't run more ticks.
     const callsAfterFailure = vi.mocked(runWorldTick).mock.calls.length;

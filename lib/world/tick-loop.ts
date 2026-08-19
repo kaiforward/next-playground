@@ -2,9 +2,11 @@
  * In-process tick loop — paces `runWorldTick` against the world store and
  * broadcasts tick results to subscribers (the SSE route).
  *
- * Wall-clock APIs (`Date.now`, `setInterval`, `setTimeout`, `setImmediate`)
- * are used for pacing, broadcast throttling, and autosave cadence only —
- * never inside tick math, which stays deterministic in `runWorldTick`.
+ * Wall-clock APIs (`Date.now`, `setInterval`, `setTimeout`) are used for
+ * pacing, broadcast throttling, and autosave cadence only — never inside
+ * tick math, which stays deterministic in `runWorldTick`. Host-portable by
+ * requirement: this module runs under Node AND in the browser game worker,
+ * so no Node-only globals (`setImmediate` was one, once).
  * Disk access (autosave) goes through a dynamic import of `save-files.ts`
  * so this module's static graph stays free of Node-edge dependencies.
  *
@@ -20,12 +22,17 @@ import type { World } from "./types";
 
 export type Speed = "paused" | 1 | 5 | "max";
 
-/** One SSE frame: tick position, pacing state, and the tick's global events. */
+/** One SSE frame: tick position, pacing state, and the tick's global events. `error` is present
+ *  ONLY on the hard-pause-on-failure emit (`tickOnce`'s catch block below) — every other emit
+ *  omits the field entirely, so a consumer can tell "paused because the player paused" from
+ *  "paused because a tick threw" without a second channel (client-runtime spec §4: the worker
+ *  surfaces this as a `tickFailed` message alongside the pause pacing frame). */
 export interface TickBroadcast {
   currentTick: number;
   speed: Speed;
   achievedTps: number;
   events: Partial<GlobalEventMap>;
+  error?: string;
 }
 
 /**
@@ -217,10 +224,11 @@ export class TickLoop {
     } catch (error) {
       // Pause rather than spin on a failing tick. No autosave — don't
       // overwrite the last good save with state from a broken tick.
+      const message = error instanceof Error ? error.message : String(error);
       console.error("[tick-loop] tick failed — pausing:", error);
       this.stopPacing();
       this.speed = "paused";
-      this.emit(this.getSnapshot(), true);
+      this.emit({ ...this.getSnapshot(), error: message }, true);
     } finally {
       this.ticking = false;
       // Drain anything queued during the await window above — after this tick's own
@@ -235,7 +243,10 @@ export class TickLoop {
       do {
         await this.tickOnce();
       } while (this.speed === "max" && this.maxToken === token && Date.now() < budgetEnd);
-      await new Promise<void>((resolve) => setImmediate(resolve));
+      // setTimeout(0), not setImmediate: the loop runs in the browser worker too, where
+      // setImmediate does not exist. The point is only to yield to the event loop between
+      // budget windows so queued messages and timers get a turn.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
   }
 
