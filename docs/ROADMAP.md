@@ -47,11 +47,14 @@ The attention layer — how the player finds what to do — is two surfaces, bot
    layer. TanStack Query is load-bearing today — `useTickInvalidation`, the map atlas held at
    `staleTime: Infinity`, and the SSE-driven hooks that seed initial state from REST. The route
    handlers are thin, but every hook in `lib/hooks/` reads through them.
-   *Next step:* `/measure` where a system-panel open actually spends its time (server round-trip vs
-   query cache vs Suspense fallback flash), and inventory the query layer's load-bearing surface —
-   that evidence sizes the design pass that settles what replaces the query layer. With the world
-   in-process there may be no cache to invalidate at all — that is the simplification being claimed,
-   and proving or killing it decides the size of everything else.
+   Spec (measured, written, spec-reviewed 2026-08-19, amendments applied):
+   [client-runtime.md](./planned/client-runtime.md). Both measure falsifiers fired — the benefit
+   claim is architectural (no RSC gate / waterfall / fallback flash), not "remove the server hop";
+   the replacement is a snapshot store with UI-side structural sharing, never a cache. Booked end
+   task (rides this migration): `/measure` tick speed at high system/population counts to set the
+   acceptable maximum — the spec's §11 carries the JS-tick ceiling and the compiled-engine escape
+   the channel boundary preserves.
+   *Next step:* `/build-plan` against the spec.
    *Don't:* port TanStack across as-is. Caching in front of an in-process world is the indirection
    this work exists to remove, and keeping it would leave both layers in place for none of the gain.
 2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
