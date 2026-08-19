@@ -182,7 +182,82 @@ read today. `use-system-logistics.ts:10` and `AGENTS.md:74` carry the same stale
   concrete: a subscriber/notification mechanism, referentially-stable snapshots, and a read-back
   path (or a redesigned band commit). C2/C5 are degradation-not-incorrectness and can be accepted
   or carried deliberately.
-- **Claim A: partially measured.** Server half done (fast — see above); the decisive client-side
-  split (click→content vs network, cold/warm/tick-running) is blocked on the Chrome extension
-  being connected. Until it runs, nothing licenses a statement about where the visible loading
-  panel comes from.
+- **Claim A: Falsified as stated — see A2 below.** Network round-trips are ~32% of a cold panel
+  open; the dominant cost (~240–250 ms, ~two-thirds) is client-side render work inside the
+  navigation transition. Both falsifier conditions fired.
+
+### A2 — in-browser click→content split (Chrome, real clicks on the Pixi map)
+
+Conditions: same live dev server and world as A (600 systems, tick loop running at speed 1,
+~1 tick/s). Fresh tab (page JS cold on first open). Instrument: a capture-phase `pointerdown`
+listener stamping `performance.now()`, a rAF loop detecting the `role="status"` loading fallback
+appearing/disappearing and panel content committing, `performance.getEntriesByType('resource')`
+for the network waterfall (buffer resized — the default 250-entry buffer was full and silently
+returned nothing on the first read), and a `PerformanceObserver({type:'longtask'})`. All
+instrumentation was page-side JS, removed from the page afterwards; no tracked code touched.
+
+```
+Meaning:    The visible loading panel on a system click is real (~310 ms of spinner on every
+            cold-target open) but it is NOT the server: round-trips account for about a third of
+            it. The single biggest cost is ~240–250 ms of client-side render work between the
+            last blocking fetch and the panel committing — time-sliced by React's transition
+            rendering (no single ≥50 ms task), in a dev-build React. The framework still owns the
+            other two-thirds' architecture: an RSC hop before any query can start, a serial
+            five-fetch suspense waterfall behind it, and a fallback that flashes even fully warm.
+Claim:      Claim A (panel open dominated by client–server round-trips; fallback ends when the
+            last fetch resolves).
+Number:     Cold-target opens (3 runs, map→panel ×2 and panel→panel ×1):
+              click→content 361 / 357 / 368 ms; fallback visible from ~46-62 ms to content.
+              Anatomy (consistent): RSC nav fetch @~1 ms +28-39 ms → serial waterfall
+              cadence+substrate → vitals → construction → build-options, each step starting only
+              after the previous resolves (~2 ms suspense-retry gaps), all done by ~104-118 ms →
+              ~240-250 ms with ZERO network and ZERO ≥50 ms long tasks → commit.
+            First-ever open of the session (page JS chunks cold): 713 ms (fallback at 117 ms).
+            Warm reopen of an already-visited system: 72 ms click→content, including a ~15 ms
+            one-frame fallback flash (the QueryBoundary mounted-guard paints its fallback once
+            regardless of cache — documented at components/map/map-right-rail.tsx:55-61).
+            Panel→panel switch: header renames at ~51 ms (atlas cached), body spinner otherwise
+            identical to a cold open.
+            Tick churn: every economy tick refetches 10-11 queries while one panel is open
+            (volleys observed @468/@564/@595/@848 ms after clicks, ~1/s), occasionally with a
+            ~200-240 ms long task (207 ms and 241 ms observed twice, not on every volley).
+Horizon:    dev server only (next dev, React development build). Production build NOT measured —
+            the ~240-250 ms render figure is dev-build React and Turbopack dev output; a prod
+            measurement is the open condition before attributing it to architecture vs dev mode.
+Cohort:     4 developed systems (system-538, 385, 379, 569) + 1 (429) discarded for a marker
+            artefact; one faction's view; localhost.
+Licenses:   Supports: the felt loading panel is real and its floor is NOT server time — killing
+            the HTTP hop alone (leaving the render architecture) would shave ~115-155 ms off
+            ~360 ms and a spinner would remain. Supports: the retirement's target list must
+            include the route-transition render path and the per-route QueryBoundary fallback
+            architecture (the mounted-guard flash means even a perfect cache still flashes),
+            not only the fetch layer. Does NOT support: "React rendering is inherently too slow"
+            — dev build, unprofiled; the 240 ms attribution between panel-tree render, dev-build
+            overhead and map churn needs a profiler pass or a prod build. Does NOT support: the
+            EU5 instant-panel bar being unreachable in-framework — warm opens are 72 ms.
+Raw:        cold open system-385: fallback 46.6→361.5, content 361.5;
+              res: /system/system-385?_rsc @1+28, cadence @44+14, substrate @44+24, vitals @69+17,
+              construction @86+13, build-options @102+13, events @347+7; tick volleys @468, @1475.
+            cold open system-379: fallback 46→356.8, content 356.8; longtasks: none;
+              res: ?_rsc @1+29, cadence @47+17, substrate @48+25, vitals @75+12, construction
+              @88+13, build-options @103+15, events @357+6; tick volley @595 (10 requests).
+            panel→panel cold system-569: fallback 61.8→367.8; longtasks: none;
+              res: ?_rsc @2+37, cadence @51+22, substrate @52+29, vitals @81+10, construction
+              @92+11, build-options @104+13; tick volley @520 (10 requests). events NOT refetched
+              before commit (still fresh) — commit time unchanged, killing the "content waits on
+              the events fetch" alternative.
+            warm reopen system-385: fallback 56.8→72.2, content 72.2; longtasks: none;
+              res: ?_rsc @1+39, then construction/events/build-options/vitals @61 in PARALLEL
+              (background stale refetches, non-blocking); tick volley @564.
+            first-ever open system-538: fallback 117.1→712.8, content 712.8 (resource log lost to
+              the full default buffer).
+```
+
+**Verdict: Falsifier A fires on both conditions** — summed blocking network ≈ 115-155 ms of
+~360 ms (~32-43%, under 50%), and the fallback persists ~240-250 ms after the last blocking
+response. The claim's *architecture* half survives in a weaker form worth carrying to the design
+pass: the RSC hop gates the entire waterfall (nothing fetches until it returns), the five API
+fetches are serial behind it, and the mounted-guard flash is per-open regardless of cache — all
+three are framework artefacts the retirement removes by construction. What the retirement does
+NOT automatically remove is the ~240-250 ms render cost, and sizing that (prod build, profiler)
+is the first open question for `/feature-spec`.
