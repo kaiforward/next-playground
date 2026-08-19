@@ -17,8 +17,9 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
   premises far too early, and output Kai can't parse. Direction: drop superpowers for this project,
   write project-specific skills built around interconnected game systems (events is the recurring
   miss), make evidence the deliverable rather than a design.
-  *Next step:* the instruction-mass cut is done (AGENTS.md is the single home for rules, memory and
-  doc pointers repointed at it); design the replacement skills.
+  *Next step:* the skills shipped (#246) and the pipeline has run end-to-end (timescale #247,
+  calendar display #248); fold `docs/build-plans/process-overhaul.md` into `feature-process.md`
+  and delete it — the fold's inputs are recorded in memory (`process-overhaul-dogfood`).
 
 ---
 
