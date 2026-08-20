@@ -276,3 +276,96 @@ call), the direction is dead:** subscribed detail would cost like full frames th
 panels are open, and the fix must instead be incremental push gated on the markets
 dirty/ownership model row. Units: ms per single-id detail derivation; fixture: 20K systems,
 seed 42, founding era.
+
+## Idea evidence (measured 2026-08-20, after the falsifier commit)
+
+Instruments: `temp/frame-cost-diag.ts` (claims 1+2) and `temp/autosave-split-diag.ts` (claim 3),
+both gitignored Node scratch runners driving the REAL call paths (`generateWorld` 20K seed 42,
+10 ticks committed via `setWorld`, then the same service calls `buildStateFrame` makes). No `lib/`
+patch was needed — `git status` clean throughout. Validation: (a) the per-slice sum (~3.5 s,
+round 2) agrees with the whole `buildStateFrame` best run (4.13 s) within ~15% (residual = record
+assembly + first-run JIT); (b) the Node full-frame time (4.1-7.5 s) is the same order as B1's
+browser mean (~8.65 s), so Node readings transfer.
+
+### I1 — single-id panel-detail derivation (Idea premise 1)
+
+```
+Meaning:    Deriving one system's complete panel detail is sub-millisecond even on the priciest
+            cohort — the read services do NOT do irreducible galaxy-scale work per call, so
+            interest-subscribed detail is affordable at any plausible open-panel count.
+Claim:      Single-id full panel detail (8 families) at 20K systems costs <= ~10 ms per call.
+Number:     Developed cohort (all 29): bundle mean 0.955 ms, median 0.782, max 4.674 (max is
+            first-call JIT on industry: 4.077). Undeveloped sample (100, stride-picked): bundle
+            mean 0.212 ms, median 0.207, max 0.484. Worst single family (developed): industry
+            mean 0.464 ms; substrate mean 0.143 ms.
+Horizon:    founding era (t=10) only — matches the B1 fixture and the committed falsifier.
+            Per-id cost grows with per-system CONTENT (a late-game developed system is richer),
+            not with total systems; equilibrium unmeasured.
+Cohort:     20K galaxy (15,232 non-empty systems), seed 42; developed (29) and undeveloped (100
+            sampled) reported separately.
+Licenses:   Supports: premise 1 CONFIRMED — two orders of magnitude under the 10 ms bar, three
+            under the 500 ms terminal falsifier; the pull direction survives. Supports: B's
+            per-push detail cost for a handful of subscribed ids is ~1-5 ms. Does NOT support:
+            an equilibrium-era per-id number, or extrapolating the undeveloped cohort's cost to
+            developed late-game systems.
+```
+
+### I2 — per-slice buildStateFrame breakdown / coarse-set cost (Idea premise 2)
+
+```
+Meaning:    The eight per-system detail families ARE the frame cost; everything the map and
+            attention layer need (the coarse set) is essentially free even at 20K — the split
+            the chosen direction assumes is exactly how the cost actually falls.
+Number:     Full buildStateFrame: 7546 / 4566 / 4133 ms (3 runs, first includes JIT). Detail
+            families (all 15,232 systems, round 2): substrate 1651, logistics 518, population
+            387, vitals 216, construction 180, industry 175, market 171, buildOptions 162 —
+            sum ~3460 ms (~99.5% of the per-slice total). Coarse set sum ~17 ms: factionAggregates
+            10.4, universe 1.0-9.0, atlas 1.5, factions 1.1, development 0.9, tradeFlow 0.5-0.8,
+            everything else <=0.2 each (alerts/tracker ~0.00 — see Licenses). marketComparison
+            (all 26 goods) 0.2-0.5 ms; colonyEligibility ~0 (0 controlled systems at t=10);
+            constructionStalls 2.3-2.4 ms.
+Claim:      The per-system detail families dominate buildStateFrame at 20K; the coarse set
+            (map layers + attention + aggregates) builds in <= ~250 ms per push.
+Horizon:    founding era (t=10) only. Coarse-set entries scale with CONTENT (developed cohort,
+            markets, events, player systems), not total systems — the two total-system-scaled
+            coarse slices measured (universe, visibility, map layers) are the cheap ones.
+Cohort:     same fixture as I1; 29 factions, 26 goods, 0 controlled systems, no player seat.
+Licenses:   Supports: premise 2 CONFIRMED — coarse set beats the 250 ms bar by ~15x; pushing it
+            every window is affordable. Supports: substrate is the single biggest family (1.65 s
+            — 40% of the frame) and is STATIC world data per system, a natural push-once or
+            read-command slice. Does NOT support: alerts/tracker cost in a real game — the
+            fixture has NO PLAYER SEAT, so both read defaults (~0 ms); their real cost scales
+            with player content and is unmeasured (hypothesis: small, same content-scaling
+            class as factionAggregates). Does NOT support: equilibrium coarse-set cost —
+            marketComparison/tradeFlow grow with the market/flow population.
+```
+
+### I3 — autosave split (Idea premise 3)
+
+```
+Meaning:    Serialisation is innocent: stringifying the whole 20K world costs ~0.12 s — the
+            browser's ~47 s autosave is >=99% NOT serialisation, so it is the IndexedDB write
+            and/or event-loop starvation while 8.7 s frame builds saturate the worker, and a
+            structured-clone handoff to a save worker is cheap if ever needed.
+Claim:      How the ~47 s browser autosave divides between JSON.stringify and the IndexedDB
+            write; what a structured-clone World handoff costs.
+Number:     serialiseWorld (JSON.stringify): 120 / 118 / 116 ms. Save size 37.0 MB.
+            structuredClone(world): 184 / 132 / 132 ms. JSON.parse of the save: 70-73 ms.
+            (Browser-side stringify-vs-IDB attribution of the 47 s residual: unmeasured — needs
+            a browser reading, see Licenses.)
+Horizon:    founding era (t=10) only; save size and all costs grow with content over a campaign.
+Cohort:     same 20K fixture; Node (V8) — same engine family as Chrome, absolute ms transfer
+            approximately.
+Licenses:   Supports: the autosave sub-direction does NOT need a serialisation fix; the ~130 ms
+            clone makes an off-thread save worker viable but possibly unnecessary. Supports:
+            the B1 47 s reading is dominated by whatever the frame fix removes (loop saturation)
+            plus the IDB write of a 37 MB string — attribution BETWEEN those two is unmeasured
+            and only a browser reading after the frame fix can split them. Does NOT support:
+            "IndexedDB takes 47 s" (never isolated); ruling out slow IDB writes on real user
+            disks. The spec should treat the browser re-read post-frame-fix as the gate on
+            whether autosave needs its own mechanism at all.
+```
+
+**Outcome vs the terminal falsifier: the direction SURVIVES** — single-id derivation is ~0.2-1 ms
+against the 500 ms kill line, and both checkable premises are confirmed at the committed fixture.
+Next: `/feature-spec` from this evidence.
