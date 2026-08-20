@@ -494,6 +494,10 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
       return;
     }
     const message = await runCommand(engine, envelope);
+    // No await between these two posts: lib/store/command-overlay.ts clears its in-flight
+    // overlays on the store's next notification and relies on a command's own state frame
+    // being the very next message after its result — an interleaved pacing/tick frame here
+    // would reopen the snap-back flicker the overlay exists to prevent.
     host.post(message);
     pushStateFrame();
   }

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@/app/globals.css";
 import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
+import { configureCommandTransport, deliverCommandResult } from "@/lib/runtime/command-client";
 import { LinkProvider } from "@/components/ui/link-provider";
 import type { Speed } from "@/lib/world/tick-loop";
 import type { NewGameInput } from "@/lib/schemas/game-setup";
@@ -27,6 +28,14 @@ function post(message: InboundMessage): void {
 function postCommand(envelope: GameCommandEnvelope): void {
   post({ type: "command", envelope });
 }
+
+// Wires every `lib/hooks/` mutation hook's `sendCommand` (`lib/runtime/command-client.ts`, Task 8)
+// to this real worker connection — the "shell initialises it with the host connection" half of that
+// module's own seam contract (a test initialises it with a fake `CommandTransport` instead). Not in
+// Task 8's own Files list (this file is Task 6's), but without this wiring the command-dispatching
+// hooks built this task would have no real transport outside tests — deviation named in the PR
+// description.
+configureCommandTransport({ postCommand });
 
 // Task 11 owns the real liveness state machine; until then a dying worker must at least say so.
 worker.onerror = (event) => {
@@ -56,12 +65,12 @@ worker.onmessage = (event: MessageEvent<OutboundMessage>) => {
       gameStore.setLiveness("paused");
       return;
     case "commandResult":
-      // Stage C (Task 8) correlates results back to the control that issued them (the "in-flight"
-      // rule). This shell's speed control doesn't need it: a `setSpeed` command's effect is
-      // observable through the pacing frame the loop broadcasts immediately on speed change
-      // (`lib/world/tick-loop.ts` `setSpeed` → `emit(..., true)`), which is the round-trip this
-      // task proves. Until Task 11 builds the real failure surfaces, a rejected command must not
-      // vanish — log it so a browser-side failure is diagnosable at all.
+      // Task 8's mutation hooks correlate results back to the control that issued them (the
+      // "in-flight" rule) through `lib/runtime/command-client.ts`'s per-id resolver registry —
+      // deliver every result there first. Until Task 11 builds the real failure surfaces, a
+      // rejected command must still not vanish silently — log it so a browser-side failure is
+      // diagnosable at all (the hook itself also surfaces it to its own caller).
+      deliverCommandResult(message);
       if (!message.result.ok) {
         console.error("[shell] command rejected:", message.id, message.result.error);
       }

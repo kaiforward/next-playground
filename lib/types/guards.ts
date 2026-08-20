@@ -25,6 +25,7 @@ import type {
 import type { ShipTypeId, ShipSize, ShipRole } from "@/lib/constants/ships";
 import { EVENT_DEFINITIONS, type EventTypeId } from "@/lib/constants/events";
 import { SUN_CLASSES, BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import type { CommandResult } from "@/lib/runtime/channel";
 
 // ── Lookup sets (built once) ────────────────────────────────────
 
@@ -177,6 +178,28 @@ export function toBodyArchetypeId(value: string): BodyArchetypeId {
     throw new Error(`Invalid body archetype id: "${value}"`);
   }
   return value as BodyArchetypeId;
+}
+
+// ── Command-result narrowing (client-runtime build plan Task 8) ─
+
+/**
+ * Narrows a worker command result's `data` to the caller's statically-known type. Every
+ * `GameCommandResultMessage` (`client/worker/game-worker.ts`) shares the literal `type:
+ * "commandResult"` regardless of which command it answers, so TypeScript sees `message.result` as
+ * the union of every command's `CommandResult<...>` — the correlation that actually picks out ONE
+ * of those data types is `message.id` matching the `id` a specific `sendCommand` call sent
+ * (`lib/runtime/command-client.ts`'s per-id resolver map), a runtime fact no static type can carry.
+ * This is NOT a runtime guard — it performs no shape check, and cannot: a real check would mean a
+ * hand-written validator per command payload for shapes our own compiled worker already guarantees.
+ * It is a trusted-boundary CAST, an owner-accepted exception to the casts-only-inside-runtime-guards
+ * rule (named in AGENTS.md > Conventions): both endpoints are our own typed code, structured clone
+ * preserves shape, and the id correlation picks the one command a result answers. Every call site
+ * narrows to the type its own envelope's command demands, right where it awaits that command's
+ * result, never held as the wide type past this point.
+ */
+export function narrowCommandResult<T>(result: { ok: true; data: unknown } | { ok: false; error: string }): CommandResult<T> {
+  if (!result.ok) return result;
+  return { ok: true, data: result.data as T };
 }
 
 // ── Constant arrays (avoids Object.keys() + as casts) ───────────

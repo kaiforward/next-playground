@@ -1,24 +1,34 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
-import { apiMutate } from "@/lib/query/fetcher";
+import { sendCommand } from "@/lib/runtime/command-client";
+import { narrowCommandResult } from "@/lib/types/guards";
+import { useCommandMutation, type CommandMutation } from "@/lib/hooks/use-command-mutation";
 import type { Speed } from "@/lib/world/tick-loop";
+import type { SaveGameResult } from "@/lib/services/game";
 
-/** Save the current world under a player-chosen name (`POST /api/game/saves`). */
-export function useSaveGameMutation() {
-  return useMutation({
-    mutationFn: (name: string) =>
-      apiMutate<{ name: string; tick: number }>("/api/game/saves", { name }),
+type SaveGameData = Extract<SaveGameResult, { ok: true }>["data"];
+
+/** Save the current world under a player-chosen name (`saveGame` command). */
+export function useSaveGameMutation(): CommandMutation<string, SaveGameData> {
+  return useCommandMutation((name: string) => {
+    const id = crypto.randomUUID();
+    return sendCommand({ id, type: "saveGame", payload: { name } }).then((message) =>
+      narrowCommandResult<SaveGameData>(message.result),
+    );
   });
 }
 
 /**
- * Set the tick-loop speed (`POST /api/game/speed`). No cache invalidation —
- * the loop always broadcasts on a speed change, so the SSE stream carries the
- * new speed back to `useTick` consumers.
+ * Set the tick-loop speed (`setSpeed` command). No local echo needed — the worker's own pacing
+ * frame (fed by `TickLoop.emit`, unconditionally on a speed change) carries the new speed back to
+ * every `useTick`/`useTickContext` consumer the moment it's applied, whether or not this hook's own
+ * caller is still mounted.
  */
-export function useSpeedMutation() {
-  return useMutation({
-    mutationFn: (speed: Speed) => apiMutate<{ speed: Speed }>("/api/game/speed", { speed }),
+export function useSpeedMutation(): CommandMutation<Speed, { speed: Speed }> {
+  return useCommandMutation((speed: Speed) => {
+    const id = crypto.randomUUID();
+    return sendCommand({ id, type: "setSpeed", payload: { speed } }).then((message) =>
+      narrowCommandResult<{ speed: Speed }>(message.result),
+    );
   });
 }
