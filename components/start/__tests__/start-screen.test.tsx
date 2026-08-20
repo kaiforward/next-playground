@@ -3,10 +3,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StartScreen } from "../start-screen";
 import { NavigateProvider } from "@/components/ui/link-provider";
-import { configureCommandTransport, deliverCommandResult } from "@/lib/runtime/command-client";
+import {
+  configureCommandTransport,
+  deliverCommandResult,
+  type AnyCommandEnvelope,
+} from "@/lib/runtime/command-client";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { gameStore } from "@/lib/store/use-game-store";
-import type { GameCommandEnvelope } from "@/client/worker/game-worker";
 
 // jsdom doesn't implement <dialog>'s imperative methods — `Dialog` (components/ui/dialog.tsx)
 // calls `.show()`/`.showModal()`/`.close()` in an effect, which throws without this polyfill. No
@@ -27,7 +30,7 @@ if (typeof HTMLDialogElement !== "undefined") {
 // Proves 1's client half (client-runtime build plan Task 11): listSaves/loadGame/newGame are all
 // worker commands valid world-less, and a successful load/new-game navigates to the map root.
 
-let posted: GameCommandEnvelope[];
+let posted: AnyCommandEnvelope[];
 
 beforeEach(() => {
   posted = [];

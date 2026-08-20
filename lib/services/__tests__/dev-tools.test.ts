@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
-import { setWorld, clearWorld, getWorld } from "@/lib/world/store";
+import { setWorld, clearWorld, getWorld, getWorldVersion } from "@/lib/world/store";
+import { tickLoop } from "@/lib/world/tick-loop";
 import {
   advanceTicks,
   spawnEvent,
   resetEconomy,
   getEconomySnapshot,
+  inspectWorld,
 } from "@/lib/services/dev-tools";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
@@ -166,6 +168,47 @@ describe("advanceTicks", () => {
     const tooHigh = await advanceTicks(1001);
     expect(tooHigh.ok).toBe(false);
   });
+
+  describe("Task 13 Proves 1 — publishes through the loop's own notify path", () => {
+    it("commits once PER TICK (not once for the whole batch) and notifies a tickLoop subscriber before the batch resolves", async () => {
+      const seen: number[] = [];
+      const unsubscribe = tickLoop.subscribe((broadcast) => seen.push(broadcast.currentTick));
+      const startVersion = getWorldVersion();
+
+      const result = await advanceTicks(3);
+      if (!result.ok) throw new Error(`expected ok, got error: ${result.error}`);
+
+      // The distinguishing proof: the OLD implementation looped `runWorldTick` locally and called
+      // `setWorld` exactly ONCE for the whole batch (`lib/world/store.ts`'s `version` would advance
+      // by exactly 1 regardless of `count`). Routing through `TickLoop.runTicks` means every one of
+      // the 3 ticks commits its OWN `setWorld` — the version advances by exactly the tick count.
+      expect(getWorldVersion()).toBe(startVersion + 3);
+
+      // The broadcast throttle (`BROADCAST_MIN_INTERVAL_MS`) may coalesce the 3 ticks' emits into
+      // fewer than 3 deliveries, but never into zero — wait past the throttle window before
+      // asserting "silence" would be a false negative. The old implementation never touched
+      // `tickLoop.subscribe` at all, so `seen` would stay empty forever, not just briefly.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      unsubscribe();
+
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.at(-1)).toBe(result.data.newTick);
+    });
+  });
+});
+
+describe("inspectWorld", () => {
+  it("returns meta and entity counts matching the live world", () => {
+    const result = inspectWorld();
+    if (!result.ok) throw new Error(`expected ok, got error: ${result.error}`);
+
+    expect(result.data.meta).toEqual(world.meta);
+    expect(result.data.counts.systems).toBe(world.systems.length);
+    expect(result.data.counts.regions).toBe(world.regions.length);
+    expect(result.data.counts.markets).toBe(world.markets.length);
+    expect(result.data.counts.factions).toBe(world.factions.length);
+    expect(result.data.nextId).toBe(world.nextId);
+  });
 });
 
 describe("getEconomySnapshot", () => {
@@ -208,6 +251,11 @@ describe("no-world guard", () => {
 
   it("getEconomySnapshot returns ok:false when no world is loaded", () => {
     const result = getEconomySnapshot();
+    expect(result.ok).toBe(false);
+  });
+
+  it("inspectWorld returns ok:false when no world is loaded", () => {
+    const result = inspectWorld();
     expect(result.ok).toBe(false);
   });
 });

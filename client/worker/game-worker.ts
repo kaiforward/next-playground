@@ -43,6 +43,7 @@ import type { UpdateTreasuryPolicyResult } from "@/lib/services/treasury";
 import type { SetSystemPinResult } from "@/lib/services/player-pins";
 import type { SetAlertCategoryResult, SetTrackerSectionResult } from "@/lib/services/player-settings";
 import type { LoadGameResult, SaveGameResult, ExportSaveResult, ImportSaveResult } from "@/lib/services/game";
+import type { DevCommandEnvelope, DevCommandResultMessage, DevHandlers } from "./dev-commands";
 
 import { bootHost } from "./boot";
 import { createWorkerHost, type WorkerHost, type RawWorkerScope } from "./host";
@@ -103,7 +104,7 @@ export type GameCommandResultMessage = {
 export type InboundMessage =
   | { type: "boot"; config: BootConfig }
   | { type: "subscribe" }
-  | { type: "command"; envelope: GameCommandEnvelope };
+  | { type: "command"; envelope: GameCommandEnvelope | DevCommandEnvelope };
 
 export type OutboundMessage =
   | { type: "pacing"; frame: PacingFrame }
@@ -115,7 +116,8 @@ export type OutboundMessage =
    *  `GameStore.setAutosaveFailure`, so a persistently failing autosave reaches the player rather
    *  than only `console.error`. */
   | { type: "autosaveResult"; error: string | null }
-  | GameCommandResultMessage;
+  | GameCommandResultMessage
+  | DevCommandResultMessage;
 
 // ── The dynamically-imported engine graph ───────────────────────────────────
 
@@ -168,6 +170,9 @@ interface Engine {
     alertCategorySchema: PlayerSettingsSchemas["alertCategorySchema"];
     trackerSectionSchema: PlayerSettingsSchemas["trackerSectionSchema"];
   };
+  /** Populated only in a dev build (`import.meta.env.DEV`) — see `dev-commands.ts`'s header
+   *  docstring for why the guard lives here as a literal rather than through `isDevBuild()`. */
+  dev: DevHandlers | null;
 }
 
 async function loadEngine(config: BootConfig): Promise<Engine> {
@@ -188,6 +193,10 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
     import("@/lib/schemas/player-pins"),
     import("@/lib/schemas/player-settings"),
   ]);
+  // Literal `import.meta.env.DEV` guard (not `isDevBuild()`) — see `dev-commands.ts`'s header
+  // docstring: Rollup needs this exact expression to dead-code-eliminate the branch, dropping
+  // `loadDevHandlers`'s target (`lib/services/dev-tools.ts`) from a production bundle entirely.
+  const dev = import.meta.env.DEV ? await (await import("./dev-commands")).loadDevHandlers() : null;
   return {
     tickLoop: tickLoopMod.tickLoop,
     hasWorld: storeMod.hasWorld,
@@ -223,6 +232,7 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
       alertCategorySchema: settingsSchemas.alertCategorySchema,
       trackerSectionSchema: settingsSchemas.trackerSectionSchema,
     },
+    dev,
   };
 }
 
@@ -260,7 +270,16 @@ function runWorldMutatingCommand<T>(engine: Engine, fn: () => T): Promise<{ resu
   });
 }
 
-async function runCommand(engine: Engine, envelope: GameCommandEnvelope): Promise<GameCommandResultMessage> {
+/** Dev commands are unavailable in this build (`Engine.dev` is `null`) — a production worker never
+ *  hits this because the case bodies below are unreachable without a dev registry, but a dev
+ *  build's own worker answers it the same discriminated-error way every other command failure does,
+ *  never a thrown exception. */
+const DEV_COMMANDS_UNAVAILABLE = "Dev commands unavailable in this build.";
+
+async function runCommand(
+  engine: Engine,
+  envelope: GameCommandEnvelope | DevCommandEnvelope,
+): Promise<GameCommandResultMessage | DevCommandResultMessage> {
   const { id } = envelope;
   try {
     switch (envelope.type) {
@@ -386,6 +405,35 @@ async function runCommand(engine: Engine, envelope: GameCommandEnvelope): Promis
         }
         const result = await engine.importSave(parsed.data.name, parsed.data.json);
         return { type: "commandResult", id, result };
+      }
+      case "advanceTicks": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        const result = await dev.advanceTicks(envelope.payload);
+        return { type: "commandResult", id, result };
+      }
+      case "spawnEvent": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        const { result } = await runWorldMutatingCommand(engine, () => dev.spawnEvent(envelope.payload));
+        return { type: "commandResult", id, result };
+      }
+      case "resetEconomy": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        const { result } = await runWorldMutatingCommand(engine, () => dev.resetEconomy());
+        return { type: "commandResult", id, result };
+      }
+      case "economySnapshot": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        // A pure read (no `setWorld`) — never queued, same as `listSaves` above.
+        return { type: "commandResult", id, result: dev.economySnapshot() };
+      }
+      case "inspectWorld": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        return { type: "commandResult", id, result: dev.inspectWorld() };
       }
       default: {
         // Exhaustiveness: every `GameCommandType` is a case above, so `envelope` (and therefore
@@ -514,7 +562,7 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
     pushStateFrame();
   }
 
-  async function handleCommand(envelope: GameCommandEnvelope): Promise<void> {
+  async function handleCommand(envelope: GameCommandEnvelope | DevCommandEnvelope): Promise<void> {
     if (!bootPromise) {
       host.post({ type: "commandResult", id: envelope.id, result: { ok: false, error: "Worker not booted." } });
       return;

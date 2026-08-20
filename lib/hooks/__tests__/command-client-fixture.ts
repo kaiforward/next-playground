@@ -6,11 +6,10 @@
  * test file's own responsibility) prevents one test's fake transport leaking into the next, since
  * the module holds one process-wide singleton.
  */
-import { configureCommandTransport } from "@/lib/runtime/command-client";
-import type { GameCommandEnvelope } from "@/client/worker/game-worker";
+import { configureCommandTransport, type AnyCommandEnvelope } from "@/lib/runtime/command-client";
 
-export function installFakeCommandTransport(): { posted: GameCommandEnvelope[] } {
-  const posted: GameCommandEnvelope[] = [];
+export function installFakeCommandTransport(): { posted: AnyCommandEnvelope[] } {
+  const posted: AnyCommandEnvelope[] = [];
   configureCommandTransport({ postCommand: (envelope) => posted.push(envelope) });
   return { posted };
 }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { TickLoop, type TickBroadcast } from "@/lib/world/tick-loop";
 import { generateWorld } from "@/lib/world/gen";
-import { getWorld, setWorld, clearWorld } from "@/lib/world/store";
+import { getWorld, setWorld, clearWorld, hasWorld } from "@/lib/world/store";
 import { setSavesDirForTesting, nodeSaveBackend } from "@/lib/world/save-files";
 import { resetSaveBackendForTesting } from "@/lib/world/save-backend";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
@@ -419,6 +419,38 @@ describe("TickLoop", () => {
       loop.setSpeed(1);
       await vi.advanceTimersByTimeAsync(2_100);
       expect(getWorld().meta.currentTick).toBeGreaterThan(tickBeforeResume);
+    });
+  });
+
+  describe("runTicks (build plan Task 13 review finding 2)", () => {
+    it("a mid-batch tick failure stops the batch and leaves the loop hard-paused exactly as a single-tick failure would", async () => {
+      const received: TickBroadcast[] = [];
+      loop.subscribe((e) => received.push(e));
+      vi.mocked(runWorldTick).mockRejectedValueOnce(new Error("boom"));
+
+      await loop.runTicks(5);
+
+      // Stopped after the failing tick, not run to completion — the same hard-pause state a
+      // single failing paced tick leaves (`tickOnce`'s own catch block).
+      expect(getWorld().meta.currentTick).toBe(0);
+      expect(loop.getSpeed()).toBe("paused");
+      expect(received.at(-1)?.error).toBe("boom");
+      // Exactly ONE tick attempted, not 5 — later iterations correctly saw "no progress" and
+      // stopped rather than looping uselessly past the failure.
+      expect(vi.mocked(runWorldTick)).toHaveBeenCalledTimes(1);
+    });
+
+    it("runTicks on a world-less loop is a clean no-op — no tick attempted, no throw", async () => {
+      clearWorld();
+      await expect(loop.runTicks(3)).resolves.toBeUndefined();
+      expect(vi.mocked(runWorldTick)).not.toHaveBeenCalled();
+      expect(hasWorld()).toBe(false);
+    });
+
+    it("otherwise runs exactly `count` ticks", async () => {
+      await loop.runTicks(3);
+      expect(getWorld().meta.currentTick).toBe(3);
+      expect(vi.mocked(runWorldTick)).toHaveBeenCalledTimes(3);
     });
   });
 });

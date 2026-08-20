@@ -14,9 +14,14 @@
  * pause is standing (see `applyOutboundMessage`'s own docstring for why the ordering of a failed
  * tick's own three posted messages makes that guard necessary).
  */
-import { deliverCommandResult, markTransportDead } from "@/lib/runtime/command-client";
+import {
+  deliverCommandResult,
+  markTransportDead,
+  type AnyCommandEnvelope,
+  type AnyCommandResultMessage,
+} from "@/lib/runtime/command-client";
 import type { GameStore } from "@/lib/store/game-store";
-import type { OutboundMessage, GameCommandEnvelope, GameCommandResultMessage } from "./worker/game-worker";
+import type { OutboundMessage } from "./worker/game-worker";
 
 /**
  * Feeds one message posted by the worker into the store — the shared body behind `main.tsx`'s
@@ -109,7 +114,7 @@ export function markWorkerDead(store: GameStore): void {
  */
 export function handlePageHideSave(
   store: GameStore,
-  send: (envelope: GameCommandEnvelope) => Promise<GameCommandResultMessage>,
+  send: (envelope: AnyCommandEnvelope) => Promise<AnyCommandResultMessage>,
   autosaveName: string,
 ): void {
   const { liveness } = store.getSnapshot();

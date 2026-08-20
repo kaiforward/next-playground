@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 
 import { createGameWorker, type InboundMessage, type OutboundMessage, type GameCommandEnvelope } from "@/client/worker/game-worker";
+import type { DevCommandEnvelope } from "@/client/worker/dev-commands";
 import { createFakeWorkerScope } from "@/client/worker/host";
 import { narrowCommandResult } from "@/lib/types/guards";
 import type { BootConfig } from "@/lib/runtime/channel";
@@ -95,7 +96,7 @@ async function waitForCommandResult(
   });
 }
 
-function send(scope: FakeScope, envelope: GameCommandEnvelope): void {
+function send(scope: FakeScope, envelope: GameCommandEnvelope | DevCommandEnvelope): void {
   scope.receive({ type: "command", envelope });
 }
 
@@ -452,5 +453,82 @@ describe("createGameWorker — boot-in-flight command race (Gate B vite-dev smok
     if (!state || state.type !== "state") throw new Error("expected a state message");
     expect(state.frame.worldVersion).toBeGreaterThan(0);
     expect(state.frame.slices.universe).toBeDefined();
+  });
+});
+
+describe("createGameWorker — dev commands (Task 13)", () => {
+  it("advanceTicks advances the world and pushes a fresh state frame — the worker-level half of Proves 1", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng");
+    const tickBefore = getWorld().meta.currentTick;
+    scope.sent.length = 0;
+
+    send(scope, { id: "advance", type: "advanceTicks", payload: { count: 3 } });
+    const result = narrowCommandResult<{ newTick: number; elapsed: number }>(
+      (await waitForCommandResult(scope, "advance")).result,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.newTick).toBe(tickBefore + 3);
+    expect(getWorld().meta.currentTick).toBe(tickBefore + 3);
+
+    const state = [...scope.sent].reverse().find((m) => m.type === "state");
+    if (!state || state.type !== "state") throw new Error("expected a state message after the dev command");
+    expect(state.frame.worldVersion).toBeGreaterThan(0);
+  });
+
+  it("spawnEvent, resetEconomy and inspectWorld round-trip through the worker's command channel", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng");
+    const systemId = getWorld().systems[0].id;
+
+    send(scope, { id: "spawn", type: "spawnEvent", payload: { systemId, eventType: "solar_storm" } });
+    const spawnResult = narrowCommandResult<{ eventId: string; type: string; phase: string }>(
+      (await waitForCommandResult(scope, "spawn")).result,
+    );
+    expect(spawnResult.ok).toBe(true);
+    if (spawnResult.ok) expect(getWorld().events.some((e) => e.id === spawnResult.data.eventId)).toBe(true);
+
+    send(scope, { id: "reset", type: "resetEconomy", payload: null });
+    const resetResult = narrowCommandResult<{ marketsReset: number; eventsCleared: number }>(
+      (await waitForCommandResult(scope, "reset")).result,
+    );
+    expect(resetResult.ok).toBe(true);
+    if (resetResult.ok) expect(resetResult.data.eventsCleared).toBeGreaterThan(0);
+    // resetEconomy clears events — the spawned one above is gone.
+    expect(getWorld().events).toHaveLength(0);
+
+    send(scope, { id: "inspect", type: "inspectWorld", payload: null });
+    const inspectResult = narrowCommandResult<{ meta: { currentTick: number }; counts: { systems: number } }>(
+      (await waitForCommandResult(scope, "inspect")).result,
+    );
+    expect(inspectResult.ok).toBe(true);
+    if (inspectResult.ok) expect(inspectResult.data.counts.systems).toBe(getWorld().systems.length);
+  });
+
+  it("economySnapshot returns market data for the running world without mutating it", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng");
+    const tickBefore = getWorld().meta.currentTick;
+
+    send(scope, { id: "snap", type: "economySnapshot", payload: null });
+    const result = narrowCommandResult<{ systems: { systemId: string }[] }>(
+      (await waitForCommandResult(scope, "snap")).result,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.data.systems.length).toBe(getWorld().systems.length);
+    expect(getWorld().meta.currentTick).toBe(tickBefore);
   });
 });

@@ -261,6 +261,33 @@ export class TickLoop {
     }
   }
 
+  /**
+   * Dev-only (build plan Task 13): runs `count` ticks back-to-back through this loop's own
+   * `tickOnce` — the SAME subscriber/`emit` path a paced tick uses, so the batch publishes exactly
+   * like real ticks (throttled per `BROADCAST_MIN_INTERVAL_MS`, coalescing correctly) instead of a
+   * private caller looping `runWorldTick` directly and never notifying anyone — the bug this method
+   * exists to close (the old dev `advanceTicks` service did exactly that: N ticks, ONE `setWorld` at
+   * the end, zero subscriber notifications in between). Each `tickOnce` call commits its own
+   * `setWorld` (`lib/world/store.ts` bumps `version` by exactly 1 per call), so `count` ticks bump
+   * the world version `count` times — the batch is `count` distinct committed versions, not one.
+   *
+   * Stops early if a tick fails or is a no-op (`tickOnce` bails without advancing `currentTick` when
+   * `!hasWorld()` or a re-entrant call lands mid-tick, and its hard-pause-on-failure path leaves the
+   * tick uncommitted) — further iterations would also no-op, so this checks the tick actually
+   * advanced before continuing rather than looping uselessly to `count`.
+   *
+   * Never wall-clock-paced: ticks run one after another with no `setInterval`/budget window, and
+   * this bypasses `speed` entirely — a caller can run N ticks while paused, or while already ticking
+   * at speed 1/5/max, indistinguishable from an extra burst of real ticks landing back-to-back.
+   */
+  async runTicks(count: number): Promise<void> {
+    for (let i = 0; i < count; i++) {
+      const tickBefore = hasWorld() ? getWorld().meta.currentTick : null;
+      await this.tickOnce();
+      if (!hasWorld() || getWorld().meta.currentTick === tickBefore) break;
+    }
+  }
+
   private async runMaxLoop(token: number): Promise<void> {
     while (this.speed === "max" && this.maxToken === token) {
       const budgetEnd = Date.now() + MAX_SPEED_BUDGET_MS;
