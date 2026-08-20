@@ -588,6 +588,208 @@ receipts are folded into the body's sentences above.)
 | achieved TPS | same + 600-system smoke | ENGINE cost (C1 curve) — the reason acceptance is share-based, not TPS-based |
 | autosave wall ms | 20K fixture, browser | IDB write on the user's real disk; content growth over a campaign (I3 licenses) |
 
+## Build plan
+
+Single PR on `feat/frame-architecture` → `shared/client-runtime`. Phase A (Tasks 1-3, the
+worker/store substrate) and Phase B (Tasks 4-5, the UI wiring) are check-in pauses on this one
+branch, not PRs.
+
+### Resolution — every measure the spec names, to its producer
+
+| Measure (spec prose) | State | Producer |
+|---|---|---|
+| interest set (`systems`/`factions`/`goods`) | new | Task 1 (`InterestSet` type), Task 2 (worker-held set), Task 4 (UI registry) |
+| `frameSeq` send counter | new | Task 1 (field on `StateFrame`), Task 2 (worker counter), Task 3 (store freshness floor) |
+| coarse slice list | exists | `lib/runtime/snapshot.ts:254-286` (verified read) |
+| the 8 detail families + `colonyEligibility` | exists | `snapshot.ts:220-234,183-190` |
+| `marketComparison` by good id | exists | `snapshot.ts:79-82,236-239`; catalog `lib/constants/goods.ts` (`GOODS`) |
+| existence check for the gate ("id exists in the world") | exists | `universe` slice — `getUniverse().systems` carries `id` for every system (`snapshot.ts:110-115`) |
+| presence gate | new | Task 5 (panel roots) |
+| dev unsubscribed-read warning | new | Task 5 (shared detail-read helper) |
+| grow vs shrink classification of an interest change | new | Task 2 (set comparison in the worker handler) |
+| `worldVersion` (kept jobs: sentinel, replacement floor) | exists | `lib/world/store.ts` (bump sites), `lib/store/game-store.ts:44-58,190-216` |
+| `achievedTps` (acceptance metric) | exists | pacing frames — `TickBroadcast`, `lib/world/tick-loop.ts` (aliased `lib/runtime/channel.ts:15`) |
+| `advanceTicks` (acceptance criterion 5 fast-forward) | exists | `client/worker/game-worker.ts:409-414` (dev command) |
+| share% tick/frame/idle (acceptance instrument) | new (not a task) | `?tickdiag` temp relay re-created at Verification from this file's B1 description; never committed |
+
+### Task 1 — interest-aware frame assembly: `buildStateFrame` builds coarse always, detail per interest id
+
+Files:      lib/runtime/channel.ts, lib/runtime/snapshot.ts, lib/runtime/__tests__/snapshot.test.ts
+Interface:  `channel.ts`: `interface InterestSet { systems: string[]; factions: string[]; goods: string[] }`,
+            `EMPTY_INTEREST: InterestSet` (frozen). `snapshot.ts`: `StateFrame` gains
+            `frameSeq: number`; `interface StateFrameBody { worldVersion: number; slices: Partial<SnapshotSlices> }`
+            with `StateFrame = StateFrameBody & { frameSeq: number }` (the worker stamps `frameSeq`
+            at post time — Task 2); `buildStateFrame(world: World, interest: InterestSet): StateFrameBody`
+            (`since` retired). Every frame carries EVERY slice key; the coarse slices are complete as
+            today; each detail record contains exactly the interest ids that exist in the world
+            (`world.systems` / `GOODS`) — an absent id's key is omitted, never a throw; `factions`
+            interest is accepted and ignored (all faction slices coarse).
+Proves:     (1) empty interest → all coarse slices present and content-identical to today's full
+            frame for those keys; every detail record present but empty. (2) an interest id absent
+            from the world is skipped — no throw, key omitted (break the guard: a stale id must
+            crash the build). (3) a subscribed system's 8 family entries — and `colonyEligibility`
+            when controlled — all appear in the same single frame (atomic bundle). (4) goods
+            interest yields exactly the requested catalog goods in `marketComparison`, nothing
+            else. (5) vacuity: an interest naming every system id and every good reproduces
+            today's full-frame slice content exactly (field-level equality against the pre-change
+            builder's output on the same world).
+Consumes:   — (first task)
+
+### Task 2 — worker: interest message, frameSeq counter, immediate grow reply, clear on replacement
+
+Files:      client/worker/game-worker.ts, client/worker/__tests__/game-worker.test.ts
+Interface:  `InboundMessage` gains `{ type: "interest"; interest: InterestSet }`. The worker holds
+            `currentInterest: InterestSet` (initial `EMPTY_INTEREST`, replace-whole-set). Every
+            posted state frame is `{ ...buildStateFrame(getWorld(), currentInterest), frameSeq }`
+            with `frameSeq` a per-worker monotonic counter (starts 1, +1 every state post,
+            regardless of trigger). An interest message that grows the set (any id present in the
+            new set and not the old) triggers one immediate state push; shrink-only does not.
+            `newGame`/`loadGame` success resets `currentInterest` to `EMPTY_INTEREST` before the
+            command's follow-up frame is built.
+Proves:     (1) interest grow with no intervening world commit → a state frame with higher
+            `frameSeq` and unchanged `worldVersion` (the paused-panel case at the worker's end).
+            (2) shrink-only change → no immediate push. (3) `newGame` issued while stale system
+            ids are held → the command's follow-up frame still posts (no unhandled rejection)
+            and carries empty detail records. (4) a command's result is still immediately
+            followed by its own state frame with nothing interleaved. (5) `frameSeq` strictly
+            increases across mixed triggers (subscribe reply, tick broadcast, command follow-up,
+            interest reply).
+Consumes:   Task 1 (`InterestSet`, `EMPTY_INTEREST`, `StateFrameBody`, the new `buildStateFrame`
+            signature)
+
+### Task 3 — store: freshness moves to frameSeq; worldVersion keeps its other jobs
+
+Files:      lib/store/game-store.ts, lib/store/__tests__/game-store.test.ts
+Interface:  `StoreState` gains `frameSeq: number | null` (held; `null` = none applied).
+            `applyStateFrame` applies a frame iff its `frameSeq` is strictly newer (or held is
+            `null`), still subject to the `replacementFloor` check on `worldVersion` (unchanged,
+            `game-store.ts:158`); on apply it adopts both `frameSeq` and `worldVersion`.
+            `beginWorldReplacement` additionally resets held `frameSeq` to `null` (a dev-restore
+            worker restarts its counter at 1). No other method changes.
+Proves:     (1) a frame with equal `worldVersion` but higher `frameSeq` applies and notifies —
+            the fix the spec's finding-1 amendment requires. (2) equal-or-lower `frameSeq` is
+            dropped without notifying. (3) after `beginWorldReplacement`, an outgoing-world
+            frame (higher `frameSeq`, `worldVersion` at/below the floor) is dropped and the new
+            world's frame applies. (4) after a replacement reset, a fresh worker's restarted
+            counter (seq 1) applies. (5) the `worldVersion === 0` no-world sentinel and
+            `selectIsReplacing` behave exactly as before (existing tests stay green unmodified
+            where they pin those).
+Consumes:   Task 1 (`StateFrame.frameSeq`)
+
+*Phase A pause — full suite + `npm run build` green before UI wiring starts.*
+
+### Task 4 — UI interest registry: panels declare interest; the shell posts it
+
+Files:      lib/store/interest.ts (new), lib/store/__tests__/interest.test.ts (new),
+            client/main.tsx, components/panels/system-panel.tsx,
+            components/market/market-comparison-panel.tsx
+Interface:  `interest.ts` (new): `createInterestRegistry(post: (interest: InterestSet) => void)`
+            returning `{ register(kind: "system" | "good", id: string): () => void; resend(): void }`
+            — ref-counted per (kind, id); posts the replace-whole-set on every net change,
+            never on a no-op; `resend()` re-posts the current set unchanged. A module-level
+            registry instance wired in `client/main.tsx` to the worker's `postMessage`, plus a
+            `useInterest(kind, id | null): void` hook (register on mount / id change, release on
+            unmount; `null` no-ops). `system-panel.tsx` calls `useInterest("system", systemId)`;
+            `market-comparison-panel.tsx` calls `useInterest("good", goodId)`. `main.tsx` calls
+            `resend()` when a replacement completes (the store's `isReplacing` transitions
+            true → false), satisfying the spec's re-post-after-replacement clause. Faction panels
+            register nothing (all faction slices coarse).
+Reuse:      `useGameSlice` (`lib/store/use-game-store.ts` — selector-based store read, props read
+            this session), `useRoute` (`client/routes.ts:36-51`), `selectIsReplacing`
+            (`lib/store/game-store.ts:247-249`). New: `interest.ts` registry + `useInterest` —
+            grep for existing registration/ref-count helpers under `lib/store|lib/hooks`
+            ("register", "subscribe", "refcount") found only Zustand's own `subscribe`, which is
+            listener plumbing, not a keyed ref-counted set.
+Proves:     (1) mounting the system panel posts a set containing its id; unmounting posts one
+            without it. (2) two registrants of one id → one entry, present until both release.
+            (3) an id change on a mounted panel (route navigation between systems) posts a set
+            with the new id and without the old. (4) an identical set is never re-posted (no
+            post storm on re-render). (5) `resend()` after a simulated replacement posts the
+            currently-held set verbatim.
+Consumes:   Task 1 (`InterestSet`), Task 2 (the `interest` inbound message it feeds)
+
+### Task 5 — presence gates, two-way absence meaning, dev unsubscribed-read warning
+
+Files:      lib/hooks/detail-read.ts (new), components/panels/system-panel.tsx,
+            components/market/market-comparison-panel.tsx,
+            lib/hooks/use-system-vitals.ts, use-system-population.ts, use-system-industry.ts,
+            use-system-logistics.ts, use-system-construction.ts, use-build-options.ts,
+            use-system-substrate.ts, use-market.ts, use-market-comparison.ts,
+            lib/hooks/__tests__/use-per-id-defaults.test.tsx,
+            lib/hooks/__tests__/use-per-id-existing-discriminant.test.tsx
+Interface:  `detail-read.ts` (new): a shared read path the nine interest-keyed hooks route
+            through — signature shape `useDetailEntry<T>(select: (slices: Partial<SnapshotSlices>) => T | undefined, family: string, id: string): T | undefined`
+            — which, in dev builds only (`import.meta.env.DEV` literal, per the Rollup
+            dead-code rule `game-worker.ts:196-199`), warns once per (family, id) when the entry
+            is absent while `id` exists in the `universe` slice. Hooks keep their exact public
+            signatures and fallback values; only docstrings and the internal read path change.
+            The system panel root gates on existence (`universe`) vs presence (`systemVitals`
+            entry — any family works, the bundle is atomic per Task 1 Proves 3): nonexistent id
+            → the panel's existing not-found rendering; existent-but-absent → the panel shell
+            without detail sections until the entry lands. `market-comparison-panel.tsx` gates
+            the same way on `marketComparison[goodId]`.
+Reuse:      `useGameSlice` (read this session); the panel root's EXISTING existence split —
+            `useSystemInfo` against the atlas/universe lookup with an `EmptyState` not-found
+            branch and a pre-boot `worldVersion === null` guard (`system-panel.tsx:35,39-53`,
+            read this session) — the presence gate slots in after that branch, reusing
+            `DetailPanel`/`EmptyState` for the held shell. New: `detail-read.ts` — searched
+            "warn", "missing", "fallback" under `lib/hooks|lib/store`; only `empty-slices.ts`
+            (static empty defaults, no universe check) exists, and it stays as the
+            fallback-value source.
+Proves:     (1) store-level: gate held while a subscribed id's entry is absent, clears on the
+            frame that adds it (the paused-panel acceptance case at jsdom level). (2) an id not
+            in `universe` renders the not-found state and logs nothing. (3) an id in `universe`
+            but absent from the detail slice returns the fallback AND fires the dev warning
+            exactly once per (family, id). (4) the two updated suites pin "never existed" and
+            "exists, not subscribed" as distinct cases per hook family. (5) after the gate
+            clears, no hook below it can observe its fallback for that id (assert against a
+            frame carrying the full bundle).
+Consumes:   Task 1 (atomic bundle + always-present slice keys), Task 3 (store applies the
+            interest reply), Task 4 (`useInterest` supplies the subscription the gate waits on)
+
+### Verification
+
+No sim metric moves and none may move — the feature touches no `lib/engine|tick` file;
+`npm run simulate` is not the instrument (its harness never builds frames). Proof is:
+- the full suite + the build gate (`npm run build` = `tsc && vite build`);
+- the spec's `### Acceptance` list, run by hand in Chrome at the 20K fixture with the
+  `?tickdiag` relay re-created in `temp/` (share% tick/frame/idle, frame build ms, paused-panel
+  case, autosave reading, and the pinned 600-system smoke vs C1's 118.8 TPS) — owner-run smoke,
+  results pasted into the PR;
+- the autosave acceptance gate's booking rule: if the re-measured stall exceeds ~2 s, the save
+  worker follow-up is booked as a roadmap row in the same PR (named in Acceptance §4).
+
+### Doc fold
+
+- `docs/active/engineering/client-runtime.md` — the frame-contract section ("full frame only",
+  `since`) is rewritten to the interest model, present tense, on this branch before review.
+- `docs/ROADMAP.md` — the "[M] Frame architecture" row is deleted by this PR (it ships); the
+  "[L] Engine tick at aspiration scale" row's next-step line already points at the post-ship
+  browser re-measure and stays.
+- This working file (`tick-speed-audit.md`) is deleted by this PR; the C1 curve numbers already
+  live in the [L] roadmap row (its stated durable copy); the B1/I1-I3 readings die with the file
+  per the roadmap row's own note (git keeps the record).
+
+### Not covered
+
+- **Save worker for autosave** — booked at a gate: Acceptance §4's rule books the roadmap row
+  iff the post-fix reading still stalls (> ~2 s).
+- **Dirty-sets / incremental frames** — existing roadmap row ("Markets need a real
+  dirty/ownership model"), untouched by this feature per the spec's Not-claimed.
+- **Engine tick cost at 10-20K** — existing "[L] Engine tick at aspiration scale" row.
+- **`factions` interest arm** — accepted in the protocol, unused; dropped (no consumer exists:
+  every faction slice is pushed-coarse; the arm exists so wars/ships-era panels need no
+  protocol change).
+- **Wars/battles/ship-unit map layers** — future features; the spec assigns them to the coarse
+  class and I2's ~15× headroom licenses that without work here.
+
+### Net-new UI
+
+None — no new visible component. The two gates are behaviour added to existing panel roots
+(`system-panel.tsx`, `market-comparison-panel.tsx`) using their existing not-found/empty
+renderings; `interest.ts` and `detail-read.ts` are non-visual plumbing. (Stated empty per the
+plan rule, so its absence is checkable.)
+
 ### Falsifier (committed at `8f518222`, moved here unedited)
 
 **If deriving one system's full panel detail at the 20K fixture measures ≥ ~500 ms per call —
