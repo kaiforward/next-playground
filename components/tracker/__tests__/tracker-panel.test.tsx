@@ -36,9 +36,10 @@ function unpinRemovesTheRow() {
   });
 }
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace: vi.fn() }),
-}));
+vi.mock("@/components/ui/link-provider", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui/link-provider")>();
+  return { ...actual, useNavigate: () => push };
+});
 
 vi.mock("@/lib/hooks/use-player-pins", () => ({
   useSetSystemPin: () => ({ mutate: setPinMutate }),

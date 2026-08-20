@@ -1,10 +1,10 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
+import { ErrorBoundary } from "react-error-boundary";
 import { StarMap } from "@/components/map/star-map";
 import { useAtlas } from "@/lib/hooks/use-atlas";
-import { QueryBoundary } from "@/components/ui/query-boundary";
-import { LoadingFallback } from "@/components/ui/loading-fallback";
+import { renderErrorFallback } from "@/components/ui/error-fallback";
 
 function MapContent({ initialSystemId }: { initialSystemId?: string }) {
   const { atlas } = useAtlas();
@@ -24,15 +24,8 @@ export default function MapPage() {
   const initialSystemId = searchParams.get("systemId") ?? undefined;
 
   return (
-    <QueryBoundary
-      loadingFallback={
-        <LoadingFallback
-          message="Loading star map..."
-          className="h-[calc(100vh-var(--topbar-height))]"
-        />
-      }
-    >
+    <ErrorBoundary fallbackRender={renderErrorFallback}>
       <MapContent initialSystemId={initialSystemId} />
-    </QueryBoundary>
+    </ErrorBoundary>
   );
 }

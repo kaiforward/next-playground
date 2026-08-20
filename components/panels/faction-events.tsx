@@ -1,0 +1,145 @@
+"use client";
+
+import { useMemo } from "react";
+import { withCounts } from "@/lib/utils/filter";
+import { FilterBar } from "@/components/ui/filter-bar";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/badge";
+import { EventIcon } from "@/components/events/event-icon";
+import { useEvents } from "@/lib/hooks/use-events";
+import { useFilterState } from "@/lib/hooks/use-filter-state";
+import { EVENT_TYPE_BADGE_COLOR, compareEventSeverity } from "@/lib/constants/ui";
+import type { ActiveEvent } from "@/lib/types/game";
+import type { EventTypeId } from "@/lib/constants/events";
+import { formatDuration } from "@/lib/utils/calendar";
+import { useLinkComponent } from "@/components/ui/link-provider";
+
+const FILTER_CHIPS = [
+  { id: "all", label: "All" },
+  { id: "economic", label: "Economic" },
+  { id: "conflict", label: "Conflict" },
+  { id: "environmental", label: "Environmental" },
+  { id: "social", label: "Social" },
+  { id: "diplomatic", label: "Diplomatic" },
+];
+
+const SORT_OPTIONS = [
+  { id: "severity", label: "Severity" },
+  { id: "ticks", label: "Time remaining" },
+  { id: "system", label: "System name" },
+];
+
+const TYPE_CATEGORY: Record<EventTypeId, string> = {
+  inner_system_conflict: "conflict",
+  conflict_spillover: "conflict",
+  pirate_raid: "conflict",
+  plague: "environmental",
+  plague_risk: "environmental",
+  solar_storm: "environmental",
+  asteroid_strike: "environmental",
+  trade_festival: "social",
+  refugee_crisis: "social",
+  mining_boom: "economic",
+  ore_glut: "economic",
+  supply_shortage: "economic",
+  trade_embargo: "economic",
+  tech_breakthrough: "economic",
+  border_conflict: "conflict",
+  pact_under_negotiation: "diplomatic",
+  alliance_dissolved: "diplomatic",
+};
+
+function sortEvents(events: ActiveEvent[], sortBy: string): ActiveEvent[] {
+  return [...events].sort((a, b) => {
+    switch (sortBy) {
+      case "severity":
+        return compareEventSeverity(a.type, b.type);
+      case "ticks":
+        return a.ticksRemaining - b.ticksRemaining;
+      case "system":
+        return (a.systemName ?? "").localeCompare(b.systemName ?? "");
+      default:
+        return 0;
+    }
+  });
+}
+
+/** Moved from `app/(game)/@panel/factions/[factionId]/events/page.tsx` — the galaxy-wide
+ *  active-events feed, not scoped to the faction whose panel hosts it. */
+export function FactionEvents() {
+  const { events } = useEvents();
+  const { activeChips, toggleChip, activeSort, setActiveSort } =
+    useFilterState({ defaultSort: "severity" });
+  const LinkComponent = useLinkComponent();
+
+  const filtered = useMemo(() => {
+    let result = events;
+    if (!activeChips.includes("all")) {
+      result = result.filter((e) => activeChips.includes(TYPE_CATEGORY[e.type] ?? ""));
+    }
+    return sortEvents(result, activeSort ?? "severity");
+  }, [events, activeChips, activeSort]);
+
+  const chipsWithCounts = useMemo(
+    () => withCounts(FILTER_CHIPS, events, (e) => TYPE_CATEGORY[e.type] ?? ""),
+    [events],
+  );
+
+  return (
+    <>
+      <FilterBar
+        chips={chipsWithCounts}
+        activeChips={activeChips}
+        onChipToggle={toggleChip}
+        sortOptions={SORT_OPTIONS}
+        activeSort={activeSort}
+        onSortChange={setActiveSort}
+        resultCount={{ shown: filtered.length, total: events.length }}
+      />
+
+      {filtered.length === 0 ? (
+        <EmptyState message="No active events match this filter." className="py-16" />
+      ) : (
+        <ul className="space-y-2">
+          {filtered.map((event) => (
+            <li
+              key={event.id}
+              className="flex items-start gap-3 py-3 px-3 bg-surface-hover/40 hover:bg-surface-hover border-l-2 border-l-accent transition-colors"
+            >
+              <div className="pt-0.5 shrink-0 text-text-secondary">
+                <EventIcon eventType={event.type} className="w-4.5 h-4.5" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-medium text-text-primary">{event.name}</span>
+                  <Badge color={EVENT_TYPE_BADGE_COLOR[event.type] ?? "slate"}>
+                    {event.phaseDisplayName}
+                  </Badge>
+                </div>
+                {event.effects && (
+                  <p className="text-xs text-text-secondary mt-0.5">{event.effects}</p>
+                )}
+                {event.systemName && (
+                  <LinkComponent
+                    href={`/system/${event.systemId}`}
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors mt-0.5 inline-block"
+                  >
+                    {event.systemName}
+                  </LinkComponent>
+                )}
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-xs font-mono text-text-primary">
+                  {formatDuration(event.ticksRemaining)}
+                </div>
+                <div className="text-[10px] text-text-secondary mt-0.5">
+                  Sev: {event.severity.toFixed(1)}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}

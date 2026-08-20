@@ -1,22 +1,31 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { ErrorBoundary } from "react-error-boundary";
 import "@/app/globals.css";
 import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
 import { configureCommandTransport, deliverCommandResult } from "@/lib/runtime/command-client";
-import { LinkProvider } from "@/components/ui/link-provider";
+import { useAtlas } from "@/lib/hooks/use-atlas";
+import { TickProvider } from "@/lib/hooks/use-tick-context";
+import { DevOverlayProvider } from "@/components/dev-tools/dev-overlay-context";
+import { StarMap } from "@/components/map/star-map";
+import { SystemPanel } from "@/components/panels/system-panel";
+import { FactionPanel } from "@/components/panels/faction-panel";
+import { StyleguidePanel } from "@/components/panels/styleguide-panel";
+import { renderErrorFallback } from "@/components/ui/error-fallback";
 import type { Speed } from "@/lib/world/tick-loop";
 import type { NewGameInput } from "@/lib/schemas/game-setup";
-import { WouterLinkAdapter } from "./wouter-link";
+import { WouterRuntimeProvider } from "./wouter-link";
 import { useRoute } from "./routes";
 import type { InboundMessage, OutboundMessage, GameCommandEnvelope } from "./worker/game-worker";
 
 /**
  * The Vite shell's entry (client-runtime spec §9, build plan Task 6) — boots the real game worker,
  * feeds every posted frame into the one module-level `gameStore` (`lib/store/use-game-store.ts`),
- * and renders a minimal router + top-bar clock + speed control. This is deliberately not the real
- * game UI: Stage C (Tasks 7-11) moves the actual panels, map and start screen over. What this file
- * has to prove is narrower and load-bearing — the worker boots, ticks, and the UI thread observes
- * it with no server involved (Gate B's manual smoke: "clock + speed only; panels are Stage C").
+ * and renders the router + top-bar clock/speed control. Task 9 wires the real map and panels onto
+ * this shell (`RouteBody` below): the map root always renders `StarMap`, and a `/system/:id/:tab`
+ * or `/factions/:id/:tab` route additionally docks the matching panel over it — mirroring the old
+ * Next app's page + `@panel` parallel-route split, but as one component switching on `useRoute()`
+ * rather than two route trees. The start screen is still Task 11's job.
  */
 
 const worker = new Worker(new URL("./worker/entry.ts", import.meta.url), { type: "module" });
@@ -152,48 +161,73 @@ function SpeedControl() {
   );
 }
 
+/** The map root — always mounted (a panel docks over it, never instead of it): `StarMap` reads its
+ *  own selection off `useRouteInfo()` (`components/ui/link-provider.tsx`), so it needs no route
+ *  prop from here, only the atlas. Wrapped in its own boundary so a map read failure doesn't take
+ *  the header or an open panel down with it — mirrors the old Next app's `app/(game)/page.tsx`. */
+function MapRoot() {
+  const { atlas } = useAtlas();
+  return (
+    <div className="h-[calc(100vh-var(--topbar-height))] w-full relative">
+      <StarMap atlas={atlas} initialSelectedSystemId={atlas.player?.homeworldSystemId} />
+    </div>
+  );
+}
+
 function RouteBody() {
   const route = useRoute();
   switch (route.name) {
     case "map":
-      return <div>Map (placeholder — Stage C)</div>;
+      return <MapRoot />;
     case "start":
+      // Task 11's job — the start screen becomes reachable world-less (listSaves/newGame/loadGame
+      // as worker commands). Until then the dev auto-newGame below stands in.
       return <div>Start screen (placeholder — Task 11)</div>;
     case "system":
       return (
-        <div>
-          System {route.systemId} · {route.tab} (placeholder — Stage C)
-        </div>
+        <>
+          <MapRoot />
+          <SystemPanel systemId={route.systemId} tab={route.tab} />
+        </>
       );
     case "faction":
       return (
-        <div>
-          Faction {route.factionId} · {route.tab} (placeholder — Stage C)
-        </div>
+        <>
+          <MapRoot />
+          <FactionPanel factionId={route.factionId} tab={route.tab} />
+        </>
       );
     case "styleguide":
-      // The real styleguide page exists (`app/(game)/@panel/styleguide/page.tsx`) but does not
-      // import cleanly outside Next: it renders through `DetailPanel`
-      // (`components/ui/detail-panel.tsx:4`), which calls `next/navigation`'s `useRouter()` — a
-      // hook with no meaning outside Next's router context, and no equivalent Task 6 is asked to
-      // build (DetailPanel's own router-agnosticism is Task 9's job, not named in this task's
-      // Files list). Placeholder here, per the task's own fallback instruction; deviation noted in
-      // the PR description.
-      return <div>Styleguide (placeholder — DetailPanel isn't router-agnostic yet, Task 9)</div>;
+      return <StyleguidePanel />;
   }
 }
 
 function App() {
   return (
-    <LinkProvider component={WouterLinkAdapter}>
-      <header>
-        <TopBarClock />
-        <SpeedControl />
-      </header>
-      <main>
-        <RouteBody />
-      </main>
-    </LinkProvider>
+    <WouterRuntimeProvider>
+      {/* Task 10/11 wire the real `GameShell` (dev tools, overlay context) onto this shell — until
+          then, `TickProvider` and `DevOverlayProvider` are mounted directly here because
+          `SystemCadenceCountdown` (`components/system/system-cadence-countdown.tsx`, from
+          `SystemPanel`'s header) needs `useTickContext()`, and `star-map.tsx` needs
+          `useDevOverlay()` — both throw without a provider, which would crash the panel/map open
+          rather than merely look unfinished. Judgment call, named in the PR description; grepped
+          every `createContext`/`useContext` pair in the repo (`components/ui/link-provider.tsx`,
+          `components/ui/popover.tsx` — self-contained, provides its own context per `<Popover>`
+          instance — and these two) to confirm no third one is still unwired. */}
+      <TickProvider>
+        <DevOverlayProvider>
+          <header>
+            <TopBarClock />
+            <SpeedControl />
+          </header>
+          <main>
+            <ErrorBoundary fallbackRender={renderErrorFallback}>
+              <RouteBody />
+            </ErrorBoundary>
+          </main>
+        </DevOverlayProvider>
+      </TickProvider>
+    </WouterRuntimeProvider>
   );
 }
 

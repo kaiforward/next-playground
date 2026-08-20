@@ -65,7 +65,7 @@ export function TrackerSettings({ sections, onChangeSection }: TrackerSettingsPr
  *
  * It reads `useTracker()` rather than taking `sections` down from `MapRightRail`: this panel and
  * `TrackerPanel` are siblings that must agree on the same live flags, and sharing one cached query
- * is what guarantees that now the state lives on the server. Mount inside a `QueryBoundary`.
+ * is what guarantees that now the state lives on the server. Mount inside an `ErrorBoundary`.
  */
 export function TrackerSettingsPanel() {
   const { sections } = useTracker();

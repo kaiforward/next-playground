@@ -1,10 +1,10 @@
 "use client";
 
+import { ErrorBoundary } from "react-error-boundary";
 import { useSystemSubstrate } from "@/lib/hooks/use-system-substrate";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
 import { dangerBand } from "@/lib/utils/system";
 import { Badge } from "@/components/ui/badge";
-import { QueryBoundary } from "@/components/ui/query-boundary";
 
 function DangerBadge({ danger }: { danger: number }) {
   const band = dangerBand(danger);
@@ -36,11 +36,11 @@ function SystemDangerBadgeInner({
 
 /**
  * System danger readout for the overview panel. `baseDanger` is the
- * substrate-independent part (government baseline). Body danger is fetched
- * in its own boundary so it never blocks the overview —
- * until the substrate loads (or for unsurveyed systems, or on fetch error) the
- * base danger shows. Event-modifier danger is intentionally excluded: this is a
- * static preview, not the live arrival-pipeline value.
+ * substrate-independent part (government baseline); body danger reads in its own boundary so a
+ * read failure (or an unsurveyed system, where `useSystemSubstrate` reports no bodies) never takes
+ * the base danger down with it — the badge degrades to base-only rather than disappearing.
+ * Event-modifier danger is intentionally excluded: this is a static preview, not the live
+ * arrival-pipeline value.
  */
 export function SystemDangerBadge({
   systemId,
@@ -50,11 +50,8 @@ export function SystemDangerBadge({
   baseDanger: number;
 }) {
   return (
-    <QueryBoundary
-      loadingFallback={<DangerBadge danger={baseDanger} />}
-      errorFallback={() => <DangerBadge danger={baseDanger} />}
-    >
+    <ErrorBoundary fallbackRender={() => <DangerBadge danger={baseDanger} />}>
       <SystemDangerBadgeInner systemId={systemId} baseDanger={baseDanger} />
-    </QueryBoundary>
+    </ErrorBoundary>
   );
 }
