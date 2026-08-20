@@ -143,3 +143,106 @@ describe("createGameStore — setLiveness", () => {
     expect(notifications).toBe(1);
   });
 });
+
+describe("createGameStore — setTickFailed", () => {
+  it("flips liveness to paused and records the cause in one commit", () => {
+    const store = createGameStore();
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+
+    store.setTickFailed("processor threw: negative stock");
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.liveness).toBe("paused");
+    expect(snapshot.failureCause).toBe("processor threw: negative stock");
+    expect(notifications).toBe(1);
+  });
+});
+
+describe("createGameStore — setAutosaveFailure", () => {
+  it("records and clears an autosave failure independently of liveness", () => {
+    const store = createGameStore();
+    store.setLiveness("live");
+
+    store.setAutosaveFailure("quota exceeded");
+    expect(store.getSnapshot().autosaveFailure).toBe("quota exceeded");
+    expect(store.getSnapshot().liveness).toBe("live");
+
+    store.setAutosaveFailure(null);
+    expect(store.getSnapshot().autosaveFailure).toBeNull();
+  });
+});
+
+describe("createGameStore — beginWorldReplacement", () => {
+  it("resets slices, worldVersion, pacing and failure state to the no-world default in one commit", () => {
+    const store = createGameStore();
+    store.applyStateFrame({ worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+    store.applyPacingFrame(pacingFrame(5));
+    store.setTickFailed("boom");
+    store.setAutosaveFailure("quota exceeded");
+
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+    store.beginWorldReplacement();
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.slices).toEqual({});
+    // 0, not null: null means "boot hasn't produced a first frame yet" to `client/main.tsx`'s
+    // RouteBody, which would tear the start screen (already mounted; the caller of this reset)
+    // down into its generic boot-loading state instead of leaving it mounted with its own pending
+    // UI. 0 is the worker's own no-world sentinel and reads identically to every other consumer.
+    expect(snapshot.worldVersion).toBe(0);
+    expect(snapshot.pacing).toBeNull();
+    expect(snapshot.liveness).toBe("no-world");
+    expect(snapshot.failureCause).toBeNull();
+    expect(snapshot.autosaveFailure).toBeNull();
+    expect(notifications).toBe(1);
+  });
+
+  it("lets the new world's frame apply once its version exceeds the pre-reset floor", () => {
+    const store = createGameStore();
+    store.applyStateFrame({ worldVersion: 50, slices: { visibility: { systemIds: ["a"] } } });
+
+    store.beginWorldReplacement();
+    // The world-store's version counter is monotonic across a replacement (Task 5) — the new
+    // world's own frame is always newer than anything the outgoing world could have posted, never
+    // a low/reset-looking number.
+    store.applyStateFrame({ worldVersion: 51, slices: { visibility: { systemIds: ["b"] } } });
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.worldVersion).toBe(51);
+    expect(snapshot.slices.visibility).toEqual({ systemIds: ["b"] });
+  });
+
+  it("drops a stale in-flight frame from the OUTGOING world during the swap window — the swap-window bug (Proves 4)", () => {
+    // The scenario a naive `worldVersion: 0` reset alone does not cover: the tick loop keeps
+    // broadcasting the outgoing world right up to the moment the swap command commits, so a frame
+    // carrying a real, pre-reset `worldVersion` can still be in flight on the postMessage channel
+    // when `beginWorldReplacement` fires. It must not transiently re-merge the outgoing world's
+    // slices or resurrect its liveness before the new world's own frame lands.
+    const store = createGameStore();
+    store.applyStateFrame({ worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+    store.setLiveness("live");
+
+    store.beginWorldReplacement();
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+
+    // The stale in-flight frame — same version as the one already applied before the reset.
+    store.applyStateFrame({ worldVersion: 5, slices: { visibility: { systemIds: ["STALE"] } } });
+
+    let snapshot = store.getSnapshot();
+    expect(snapshot.worldVersion).toBe(0);
+    expect(snapshot.slices).toEqual({});
+    expect(snapshot.liveness).toBe("no-world");
+    expect(notifications).toBe(0);
+
+    // The new world's own frame — version 6, past the floor — lands and applies normally.
+    store.applyStateFrame({ worldVersion: 6, slices: { visibility: { systemIds: ["new-world"] } } });
+
+    snapshot = store.getSnapshot();
+    expect(snapshot.worldVersion).toBe(6);
+    expect(snapshot.slices.visibility).toEqual({ systemIds: ["new-world"] });
+    expect(notifications).toBe(1);
+  });
+});

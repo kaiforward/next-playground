@@ -1,10 +1,11 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "react-error-boundary";
 import "./fonts.css";
 import "@/app/globals.css";
-import { gameStore } from "@/lib/store/use-game-store";
-import { configureCommandTransport, deliverCommandResult } from "@/lib/runtime/command-client";
+import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
+import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";
+import { applyOutboundMessage, markWorkerDead, handlePageHideSave } from "./worker-connection";
 import { useAtlas } from "@/lib/hooks/use-atlas";
 import { GameShell } from "@/components/game-shell";
 import { AxeAccessibility } from "@/components/dev-tools/axe-accessibility";
@@ -12,21 +13,24 @@ import { StarMap } from "@/components/map/star-map";
 import { SystemPanel } from "@/components/panels/system-panel";
 import { FactionPanel } from "@/components/panels/faction-panel";
 import { StyleguidePanel } from "@/components/panels/styleguide-panel";
+import { StartScreen } from "@/components/start/start-screen";
 import { renderErrorFallback } from "@/components/ui/error-fallback";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { NewGameInput } from "@/lib/schemas/game-setup";
+import { useNavigate } from "@/components/ui/link-provider";
+import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { WouterRuntimeProvider } from "./wouter-link";
-import { useRoute } from "./routes";
-import type { InboundMessage, OutboundMessage, GameCommandEnvelope } from "./worker/game-worker";
+import { useRoute, resolveRouteGate } from "./routes";
+import { startHref } from "@/lib/utils/route-hrefs";
+import type { InboundMessage } from "./worker/game-worker";
 
 /**
- * The Vite shell's entry (client-runtime spec §9, build plan Task 6) — boots the real game worker
- * and feeds every posted frame into the one module-level `gameStore` (`lib/store/use-game-store.ts`).
- * `RouteBody` below renders the real map, panels and `GameShell` (Task 10): the map root always
- * renders `StarMap`, and a `/system/:id/:tab` or `/factions/:id/:tab` route additionally docks the
- * matching panel over it — mirroring the old Next app's page + `@panel` parallel-route split, but as
- * one component switching on `useRoute()` rather than two route trees. The start screen is still
- * Task 11's job.
+ * The Vite shell's entry (client-runtime spec §9, build plan Task 6/11) — boots the real game
+ * worker, feeds every posted frame into the one module-level `gameStore`
+ * (`lib/store/use-game-store.ts`), and gates the game routes on the store's own world-existence
+ * state (spec §3: "the game route renders only after the worker's ready message reports a world,
+ * routing to the start screen otherwise"). `RouteBody` below renders the real map, panels, the
+ * start screen and `GameShell`: the map root always renders `StarMap`, and a `/system/:id/:tab` or
+ * `/factions/:id/:tab` route additionally docks the matching panel over it.
  */
 
 const worker = new Worker(new URL("./worker/entry.ts", import.meta.url), { type: "module" });
@@ -35,89 +39,34 @@ function post(message: InboundMessage): void {
   worker.postMessage(message);
 }
 
-function postCommand(envelope: GameCommandEnvelope): void {
-  post({ type: "command", envelope });
-}
+configureCommandTransport({
+  postCommand: (envelope) => post({ type: "command", envelope }),
+});
 
-// Wires every `lib/hooks/` mutation hook's `sendCommand` (`lib/runtime/command-client.ts`, Task 8)
-// to this real worker connection — the "shell initialises it with the host connection" half of that
-// module's own seam contract (a test initialises it with a fake `CommandTransport` instead). Not in
-// Task 8's own Files list (this file is Task 6's), but without this wiring the command-dispatching
-// hooks built this task would have no real transport outside tests — deviation named in the PR
-// description.
-configureCommandTransport({ postCommand });
-
-// Task 11 owns the real liveness state machine; until then a dying worker must at least say so.
+// Liveness drivers (spec §4): `worker.onerror`/`onmessageerror` mean the worker is gone — flip
+// liveness to "dead" and reject every pending/future command (`markWorkerDead`,
+// `client/worker-connection.ts`). Every other frame this shell receives is handled by
+// `applyOutboundMessage`, which also derives the no-world/live/paused liveness transitions.
 worker.onerror = (event) => {
   console.error("[shell] worker error:", event.message, event.filename, event.lineno);
+  markWorkerDead(gameStore);
 };
 worker.onmessageerror = () => {
   console.error("[shell] worker message failed to deserialize");
+  markWorkerDead(gameStore);
 };
 
-worker.onmessage = (event: MessageEvent<OutboundMessage>) => {
-  const message = event.data;
-  switch (message.type) {
-    case "pacing":
-      gameStore.applyPacingFrame(message.frame);
-      return;
-    case "state":
-      if (import.meta.env.DEV) {
-        console.log("[shell] state frame:", message.frame.worldVersion,
-          "slices:", Object.keys(message.frame.slices).length);
-      }
-      gameStore.applyStateFrame(message.frame);
-      return;
-    case "tickFailed":
-      // The full liveness state machine (worker.onerror/onmessageerror, heartbeat, the dead-worker
-      // banner) is Task 11's job (spec §4) — this shell only carries the field far enough to prove
-      // the message reaches the UI thread at all.
-      gameStore.setLiveness("paused");
-      return;
-    case "commandResult":
-      // Task 8's mutation hooks correlate results back to the control that issued them (the
-      // "in-flight" rule) through `lib/runtime/command-client.ts`'s per-id resolver registry —
-      // deliver every result there first. Until Task 11 builds the real failure surfaces, a
-      // rejected command must still not vanish silently — log it so a browser-side failure is
-      // diagnosable at all (the hook itself also surfaces it to its own caller).
-      deliverCommandResult(message);
-      if (!message.result.ok) {
-        console.error("[shell] command rejected:", message.id, message.result.error);
-      }
-      return;
-  }
+worker.onmessage = (event) => {
+  applyOutboundMessage(gameStore, event.data);
 };
 
-/**
- * Task 6 has no start screen yet (Task 11's job, which removes this whole block) — the
- * end-to-end proof this task owes (a top-bar clock actually advancing in the browser) needs some
- * ticking world to read. If the worker reports world-less after its first frame, this spins one up
- * with fixed defaults so the shell has something to show. A stand-in for the real new-game flow,
- * not a design decision — a Task 6 judgment call, named in the PR description.
- *
- * Gated on `import.meta.env.DEV` (Vite's dev-mode flag, true under `vite dev` and false in a
- * `vite build` production bundle) so this never ships: Gate B's manual smoke runs under `vite dev`,
- * where it's still on, but a production build silently has no auto-boot — the real lifecycle
- * (Task 11) is the only thing that starts a game there.
- */
-const DEV_NEW_GAME: NewGameInput = {
-  systemCount: 50,
-  name: "Dev Faction",
-  governmentType: "federation",
-  doctrine: "expansionist",
-};
-
-if (import.meta.env.DEV) {
-  const unsubscribeBoot = gameStore.subscribe(() => {
-    const { worldVersion } = gameStore.getSnapshot();
-    if (worldVersion === null) return;
-    unsubscribeBoot();
-    if (worldVersion === 0) {
-      console.log("[shell] world-less store observed — posting dev newGame");
-      postCommand({ id: crypto.randomUUID(), type: "newGame", payload: DEV_NEW_GAME });
-    }
-  });
-}
+// The pagehide save (spec §5, §11): fires an autosave command so a refresh or tab close doesn't
+// discard up to 60 s of play. Fire-and-log by construction — see `handlePageHideSave`'s own
+// docstring for why this cannot block navigation, and why its failure path IS the seam that feeds
+// `LivenessBanner`'s autosave-failure state rather than a bug worked around here.
+window.addEventListener("pagehide", () => {
+  handlePageHideSave(gameStore, sendCommand, AUTOSAVE_NAME);
+});
 
 post({ type: "boot", config: { economyScale: 100, debugEconomy: false, debugEvents: false } });
 post({ type: "subscribe" });
@@ -125,32 +74,86 @@ post({ type: "subscribe" });
 /** The map root — always mounted (a panel docks over it, never instead of it): `StarMap` reads its
  *  own selection off `useRouteInfo()` (`components/ui/link-provider.tsx`), so it needs no route
  *  prop from here, only the atlas. Wrapped in its own boundary so a map read failure doesn't take
- *  the header or an open panel down with it — mirrors the old Next app's `app/(game)/page.tsx`. */
+ *  the header or an open panel down with it — mirrors the old Next app's `app/(game)/page.tsx`.
+ *
+ *  `key={atlas.meta.seed}` is the world-replacement teardown/rebuild mechanism (spec §8): a new
+ *  world's seed is a fresh identity every time (`newGame`'s own random or player-supplied seed,
+ *  `loadGame`'s saved one), so React unmounts the previous `StarMap` — destroying its Pixi canvas,
+ *  camera and internal selection state — and mounts a brand-new instance against the new atlas,
+ *  rather than an update pass trying to reconcile Pixi state built for a galaxy that no longer
+ *  exists. */
 function MapRoot() {
   const { atlas } = useAtlas();
   return (
     <div className="h-[calc(100vh-var(--topbar-height))] w-full relative">
       <ErrorBoundary fallbackRender={renderErrorFallback}>
-        <StarMap atlas={atlas} initialSelectedSystemId={atlas.player?.homeworldSystemId} />
+        <StarMap
+          key={atlas.meta.seed}
+          atlas={atlas}
+          initialSelectedSystemId={atlas.player?.homeworldSystemId}
+        />
       </ErrorBoundary>
     </div>
   );
 }
 
+/** Boot/swap loading state — rendered while no state frame has landed yet (`worldVersion === null`,
+ *  pre-boot) and, briefly, in the one render before the no-world→`/start` redirect effect below
+ *  fires. One of the three loading states spec §3 names (boot, new game, load game) — new game and
+ *  load game get their own inline pending state from `useCommandMutation`'s `isPending`
+ *  (`components/start/start-screen.tsx`, `create-faction-form.tsx`), this one covers the rest. */
+function BootLoading() {
+  return (
+    <div className="min-h-screen flex items-center justify-center text-text-tertiary text-sm">
+      Booting…
+    </div>
+  );
+}
+
 /**
+ * The world-existence gate (spec §3, §9) — the successor to the old Next app's synchronous
+ * `hasWorld()` + `redirect("/start")` (`app/(game)/layout.tsx:15-17`). One-directional, matching
+ * that precedent: no world redirects every non-start route to `/start`; a live world does NOT
+ * force `/start` away (Exit navigates there deliberately while the worker keeps ticking in the
+ * background, so the player can return to a game in progress by navigating back).
+ *
  * `GameShell` (`components/game-shell.tsx`) is the real in-game shell the old Next app mounted at
- * `app/(game)/layout.tsx` — `TickProvider`, `DevOverlayProvider`, the real `TopBar` (save/exit,
- * speed, tick/tps, faction stats) and the dev-tools panel now come from there instead of this
- * file's Task 6 stand-ins (removed this task; `SystemCadenceCountdown` and `star-map.tsx`'s
- * `useDevOverlay()` calls, the reason those stand-ins existed, are satisfied by `GameShell`'s own
- * providers). Only the map + system/faction/styleguide routes are wrapped — `GameQueryProvider`
- * (TanStack, retired from this host already) is dropped, and the world-existence redirect
- * `app/(game)/layout.tsx` also did (`hasWorld()` → `/start`) stays Task 11's job: the "start" route
- * below renders its placeholder OUTSIDE `GameShell`, since `TopBar` reads faction/treasury data
- * that assumes a world already exists.
+ * `app/(game)/layout.tsx` — `TickProvider`, `DevOverlayProvider`, `LivenessBanner`, the real
+ * `TopBar` and the dev-tools panel come from there. Only the map + system/faction/styleguide
+ * routes are wrapped; the start screen renders OUTSIDE `GameShell`, since `TopBar` reads
+ * faction/treasury data that assumes a world already exists.
  */
 function RouteBody() {
   const route = useRoute();
+  const navigate = useNavigate();
+  const worldVersion = useGameSlice((state) => state.worldVersion);
+  const noWorld = worldVersion === 0;
+
+  useEffect(() => {
+    if (noWorld && route.name !== "start") {
+      navigate(startHref(), { replace: true });
+    }
+  }, [noWorld, route.name, navigate]);
+
+  const gate = resolveRouteGate(worldVersion, route.name === "start");
+
+  if (gate === "boot-loading") return <BootLoading />;
+  if (gate === "start") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-10 px-6 py-12">
+        <header className="text-center">
+          <h1 className="font-display font-bold uppercase tracking-widest text-4xl text-text-accent">
+            Stellar Trader
+          </h1>
+          <p className="mt-3 text-sm text-text-tertiary">
+            A living galaxy, simulated on your machine.
+          </p>
+        </header>
+        <StartScreen />
+      </div>
+    );
+  }
+
   switch (route.name) {
     case "map":
       return (
@@ -158,11 +161,6 @@ function RouteBody() {
           <MapRoot />
         </GameShell>
       );
-    case "start":
-      // Task 11's job — the start screen becomes reachable world-less (listSaves/newGame/loadGame
-      // as worker commands). Until then the dev auto-newGame below stands in. Deliberately NOT
-      // wrapped in GameShell: TopBar assumes a live world.
-      return <div>Start screen (placeholder — Task 11)</div>;
     case "system":
       return (
         <GameShell panel={<SystemPanel systemId={route.systemId} tab={route.tab} />}>

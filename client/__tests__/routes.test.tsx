@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { useRoute } from "../routes";
+import { useRoute, resolveRouteGate } from "../routes";
 
 function RouteProbe() {
   const route = useRoute();
@@ -101,5 +101,36 @@ describe("useRoute", () => {
     window.history.pushState(null, "", "/");
     render(<RouteProbe />);
     expect(screen.getByTestId("route")).toHaveTextContent(JSON.stringify({ name: "map" }));
+  });
+});
+
+// Build plan Task 11's world-existence gate — pinned as a pure function so the exact bug it fixes
+// (a mid-game world-replacement reset tearing the already-mounted start screen down into the
+// generic boot-loading state) has a fast, no-Worker regression test.
+describe("resolveRouteGate", () => {
+  it("shows boot-loading before the very first frame lands, regardless of route", () => {
+    expect(resolveRouteGate(null, true)).toBe("boot-loading");
+    expect(resolveRouteGate(null, false)).toBe("boot-loading");
+  });
+
+  it("shows boot-loading for a non-start route while no world exists (briefly, before the redirect effect fires)", () => {
+    expect(resolveRouteGate(0, false)).toBe("boot-loading");
+  });
+
+  it("renders the start route normally once the first frame has landed, world or no world", () => {
+    expect(resolveRouteGate(0, true)).toBe("start");
+    expect(resolveRouteGate(42, true)).toBe("start");
+  });
+
+  it("renders the matched route normally once a world exists", () => {
+    expect(resolveRouteGate(42, false)).toBe("route");
+  });
+
+  it("does not fall back to boot-loading on a mid-game world-replacement reset (worldVersion 0, still on /start)", () => {
+    // The exact scenario `GameStore.beginWorldReplacement()` exists for: the start screen is
+    // already mounted (routeIsStart=true) and dispatches newGame/loadGame, which resets
+    // worldVersion to 0 — this must render "start", never "boot-loading", or the dialog showing
+    // the pending "Generating…" button would be torn down mid-submit.
+    expect(resolveRouteGate(0, true)).toBe("start");
   });
 });

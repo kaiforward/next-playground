@@ -30,16 +30,37 @@ export interface CommandTransport {
 
 let transport: CommandTransport | null = null;
 
+/**
+ * Set once the worker connection is confirmed dead (`client/worker-connection.ts`'s
+ * `markWorkerDead`, driven by `worker.onerror`/`onmessageerror`, spec §4). While true, every command
+ * — in flight or newly sent — resolves with a rejection instead of ever reaching (or continuing to
+ * wait on) a transport that will never answer; "commands issued while dead are rejected, never
+ * queued silently" holds even though the worker itself cannot post a real reply once it's gone.
+ */
+let dead = false;
+
 /** Wires the module to a real (or fake) transport — called once by `client/main.tsx` at boot, and
- *  by a test's setup before any hook under test dispatches a command. */
+ *  by a test's setup before any hook under test dispatches a command. Also clears `dead`: supplying
+ *  a transport is, by construction, supplying a live connection. */
 export function configureCommandTransport(next: CommandTransport | null): void {
   transport = next;
+  dead = false;
 }
 
 /** One resolver per envelope `id`, awaiting exactly that command's correlated result — `deliver`
  *  below is the only way one leaves this map, whether the worker actually answers or the transport
  *  was never configured (resolved immediately in that case, never left hanging). */
 const pending = new Map<string, (message: GameCommandResultMessage) => void>();
+
+/** See `dead`'s own docstring. Resolves (never leaves hanging) every command currently awaiting a
+ *  result, then latches so every future `sendCommand` call resolves the same way without posting. */
+export function markTransportDead(): void {
+  dead = true;
+  for (const [id, resolve] of pending) {
+    resolve({ type: "commandResult", id, result: { ok: false, error: "Worker connection lost." } });
+  }
+  pending.clear();
+}
 
 /** Feeds one incoming `commandResult` message to whichever `sendCommand` call is awaiting its `id` —
  *  called by `client/main.tsx`'s `worker.onmessage` handler (the shell) or directly by a test. A
@@ -62,6 +83,14 @@ export function deliverCommandResult(message: GameCommandResultMessage): void {
  */
 export function sendCommand(envelope: GameCommandEnvelope): Promise<GameCommandResultMessage> {
   return new Promise((resolve) => {
+    if (dead) {
+      resolve({
+        type: "commandResult",
+        id: envelope.id,
+        result: { ok: false, error: "Worker connection lost." },
+      });
+      return;
+    }
     if (!transport) {
       resolve({
         type: "commandResult",

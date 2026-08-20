@@ -1,6 +1,7 @@
 "use client";
 
 import { TopBar } from "@/components/top-bar";
+import { LivenessBanner } from "@/components/runtime/liveness-banner";
 import { TickProvider } from "@/lib/hooks/use-tick-context";
 import { useTickInvalidation } from "@/lib/hooks/use-tick-invalidation";
 import { DevToolsPanel } from "@/components/dev-tools/dev-tools-panel";
@@ -32,6 +33,7 @@ function GameShellInner({ panel, children }: GameShellProps) {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <TopBar />
+      <LivenessBanner />
       <main className="flex-1 relative overflow-hidden">
         {children}
         {panel}

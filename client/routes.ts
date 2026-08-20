@@ -50,18 +50,33 @@ export function useRoute(): Route {
   return { name: "map" };
 }
 
-// ── href builders ────────────────────────────────────────────────────────
-//
-// The inverse of `useRoute` — every place that needs to construct a URL (a `Button`/`TabLink`
-// `href`, or a test asserting where a click landed) builds it from here rather than hand-formatting
-// a template string, so the route table has exactly one producer of each shape as well as one
-// consumer. `tab: ""` builds the bare base path, never a trailing-slash `/system/<id>/` — matching
-// the same "empty string = Overview, no segment" convention `useRoute` reads back.
+// href builders (`mapHref`, `startHref`, `systemHref`, etc.) moved to `lib/utils/route-hrefs.ts` —
+// see that module's own docstring for why: they're plain string builders with no router dependency,
+// but living in this file would still pull `wouter` (imported above for `useRoute`) into anything
+// that imports one, including `components/start/*`, which the still-live Next app also compiles.
 
-export const mapHref = (): string => "/";
-export const startHref = (): string => "/start";
-export const styleguideHref = (): string => "/styleguide";
-export const systemHref = (systemId: string, tab: string): string =>
-  tab === "" ? `/system/${systemId}` : `/system/${systemId}/${tab}`;
-export const factionHref = (factionId: string, tab: string): string =>
-  tab === "" ? `/factions/${factionId}` : `/factions/${factionId}/${tab}`;
+// ── World-existence gate (client-runtime spec §3, §9, build plan Task 11) ───
+//
+// Pulled out of `client/main.tsx`'s `RouteBody` as a pure function so the ordering it encodes —
+// the exact bug this task found and fixed — has a fast unit test that needs no real `Worker`:
+// `worldVersion === null` (no state frame has EVER landed, i.e. still booting) must be checked only
+// AFTER "is this the start route", because `GameStore.beginWorldReplacement()` uses `0`, not
+// `null`, precisely so a newGame/loadGame dispatched FROM the start screen never re-triggers the
+// boot-loading branch and tears the (already-mounted, already showing its own pending state) start
+// screen down into a generic "Booting…" screen.
+
+export type RouteGateDecision =
+  /** No state frame has landed yet — nothing this task built (start screen, map, panels) has
+   *  anything defined to read; render the boot-loading state regardless of route. */
+  | "boot-loading"
+  /** Render the start screen — either the route IS `/start`, or the store reports no world and the
+   *  redirect effect (`client/main.tsx`) hasn't landed on `/start` yet. */
+  | "start"
+  /** Render the matched route's normal content (map root, a panel, the styleguide). */
+  | "route";
+
+export function resolveRouteGate(worldVersion: number | null, routeIsStart: boolean): RouteGateDecision {
+  if (routeIsStart) return worldVersion === null ? "boot-loading" : "start";
+  if (worldVersion === null || worldVersion === 0) return "boot-loading";
+  return "route";
+}
