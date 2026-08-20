@@ -262,13 +262,18 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   not waste: it de-aliases rows the previous world still holds. *Next step:* a design pass on copy-on-write
   rows or a dirty flag. *Don't:* reference-identity dirty-checking — the adapter hands back fresh rows
   whether or not anything changed, so it always reports dirty. Real save-corruption risk if aliasing leaks.
-- **[S] Tick-speed acceptable-maximum audit** — booked as an end task of the client-runtime migration
-  (Kai, 2026-08-19): "an audit of the tick speed at a high number of systems and population to see
-  what our acceptable max is." Never run — feeds the two rows above (the events processor's scaling,
-  the dirty/ownership model) with the ceiling they're sized against; the JS-tick ceiling and the
-  compiled-engine escape the worker channel boundary preserves are recorded in
-  [client-runtime.md](./active/engineering/client-runtime.md). *Next step:* `/measure` tick speed at
-  high system and population counts.
+- **[M] Frame architecture: stop deriving the whole galaxy every push** — the tick-speed audit's
+  `/measure` ran (evidence: [tick-speed-audit.md](../docs/build-plans/tick-speed-audit.md), on
+  `feat/tick-speed-audit`): at 20K systems the tick costs ~0.1 s but `buildStateFrame` costs ~8.7 s
+  per push (per-id slices derived for ALL systems, ~4×/s) and the 60 s autosave costs ~47 s — the
+  worker spends 87-99% of its time on host work, ~1% ticking; the engine matches its Node
+  projections and is not the bottleneck. Direction agreed with Kai (2026-08-20): pull-based frames
+  — push coarse map slices + aggregates, derive panel detail on demand over the command channel,
+  dirty-sets only where the processors make them free; autosave off the hot path separately.
+  **BLOCKS the shared→main client-runtime merge (Kai decision 2026-08-20)** — even 600-system
+  galaxies degrade to ~4 TPS. Watch-item from Kai: the full map is visible at once at 20K zoom-out
+  and future layers (wars, battles, ship units) will widen what the map needs pushed. *Next step:*
+  `/brainstorm` the frame architecture in a fresh session, 20K galaxy as the acceptance fixture.
 
 **Types / correctness**
 - **[S] `.get(...)!`-in-tests idiom decision** — 8 sites use a postfix-`!` `Map.get` in tests (against

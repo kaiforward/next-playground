@@ -1,5 +1,16 @@
 # Tick-speed acceptable-maximum audit — working file
 
+**Outcome (2026-08-20): Claim B CONFIRMED** (evidence below) — the browser worker's collapse is
+host-side frame derivation + autosave, not the engine. Claim A is subsumed by B's mechanism
+(content-scaled host cost; no separate 600-scale reading taken — the owner judged the 20K result
+decisive and the 4-vs-75 anecdote a likely one-off). Claim C is PARKED (Node projections lean
+false — ~19.5 TPS extrapolated at 10K equilibrium — but unmeasured; the big runs were deliberately
+not spent on). Next: `/brainstorm` the pull-based frame architecture (new session; roadmap row
+"Frame architecture" carries the agreed direction and the merge-blocking decision). Instruments
+were reverted per the measure rule; temp/tick-timing-diag.ts (gitignored) survives, and the
+`?tickdiag` worker instrument can be re-created from this file's description + git history of the
+session if the spec pass wants live readings again.
+
 Roadmap row: Tick performance > "[S] Tick-speed acceptable-maximum audit". This file starts at the
 row's `/measure` step. Two questions drive it: where tick time actually goes as the galaxy grows,
 and why the browser worker's max-speed TPS varied wildly between two same-size galaxies (owner
