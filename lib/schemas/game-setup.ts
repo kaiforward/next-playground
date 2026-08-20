@@ -39,17 +39,28 @@ const saveName = z
     message: "Save name must contain at least one letter or number",
   });
 
-export const saveGameSchema = z.object({
-  // A player-typed name that sanitises to the reserved autosave slot would
-  // silently clobber (and be clobbered by) the ambient autosave — reject it.
-  name: saveName.refine((name) => sanitiseSaveName(name) !== AUTOSAVE_NAME, {
-    message: `"${AUTOSAVE_NAME}" is a reserved save name`,
-  }),
+// A player-typed name that sanitises to the reserved autosave slot would silently clobber (and be
+// clobbered by) the ambient autosave — reject it. Shared by every schema that writes a NEW named
+// save (saveGame, importSave); loadGame/exportSave read an EXISTING save, where the autosave name
+// is exactly the legitimate "Continue" case, so they keep the plain `saveName` instead.
+const writableSaveName = saveName.refine((name) => sanitiseSaveName(name) !== AUTOSAVE_NAME, {
+  message: `"${AUTOSAVE_NAME}" is a reserved save name`,
 });
 
+export const saveGameSchema = z.object({ name: writableSaveName });
+
 export const loadGameSchema = z.object({ name: saveName });
+
+export const exportSaveSchema = z.object({ name: saveName });
+
+export const importSaveSchema = z.object({
+  name: writableSaveName,
+  json: z.string().min(1, "Save file is empty"),
+});
 
 export type NewGameInput = z.infer<typeof newGameSchema>;
 export type SpeedInput = z.infer<typeof speedSchema>;
 export type SaveGameInput = z.infer<typeof saveGameSchema>;
 export type LoadGameInput = z.infer<typeof loadGameSchema>;
+export type ExportSaveInput = z.infer<typeof exportSaveSchema>;
+export type ImportSaveInput = z.infer<typeof importSaveSchema>;

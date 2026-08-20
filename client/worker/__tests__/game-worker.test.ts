@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 
 import { createGameWorker, type InboundMessage, type OutboundMessage, type GameCommandEnvelope } from "@/client/worker/game-worker";
 import { createFakeWorkerScope } from "@/client/worker/host";
+import { narrowCommandResult } from "@/lib/types/guards";
 import type { BootConfig } from "@/lib/runtime/channel";
 
 import { tickLoop } from "@/lib/world/tick-loop";
@@ -13,6 +14,7 @@ import { getWorld, getWorldVersion, clearWorld } from "@/lib/world/store";
 import { buildStateFrame } from "@/lib/runtime/snapshot";
 import { createGameStore } from "@/lib/store/game-store";
 import { setSavesDirForTesting } from "@/lib/world/save-files";
+import { resetSaveBackendForTesting } from "@/lib/world/save-backend";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { runWorldTick } from "@/lib/world/tick";
 
@@ -112,6 +114,9 @@ beforeAll(async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Forces `getSaveBackend()` to re-resolve the Node backend each test rather than reusing a
+  // cached resolution from an earlier file/registration.
+  resetSaveBackendForTesting();
 });
 
 afterEach(async () => {
@@ -373,6 +378,52 @@ describe("createGameWorker — saveGame / loadGame", () => {
     expect(result.result.ok).toBe(false);
     if (result.result.ok) throw new Error("expected an error result");
     expect(result.result.error).toContain("not found");
+  });
+});
+
+describe("createGameWorker — exportSave / importSave", () => {
+  it("exportSave -> importSave round-trips the raw save JSON through the worker command channel", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng");
+    send(scope, { id: "save", type: "saveGame", payload: { name: "export-me" } });
+    await waitForCommandResult(scope, "save");
+
+    send(scope, { id: "export", type: "exportSave", payload: { name: "export-me" } });
+    const exportResult = narrowCommandResult<{ name: string; json: string }>(
+      (await waitForCommandResult(scope, "export")).result,
+    );
+    expect(exportResult.ok).toBe(true);
+    if (!exportResult.ok) return;
+    const { json } = exportResult.data;
+
+    send(scope, { id: "import", type: "importSave", payload: { name: "imported-copy", json } });
+    const importResult = await waitForCommandResult(scope, "import");
+    expect(importResult.result).toEqual({ ok: true, data: { name: "imported-copy", tick: getWorld().meta.currentTick } });
+
+    // Re-exporting the imported copy returns the exact same bytes — a real byte round trip, not
+    // merely "some save with a matching name now exists".
+    send(scope, { id: "export2", type: "exportSave", payload: { name: "imported-copy" } });
+    const reExportResult = narrowCommandResult<{ name: string; json: string }>(
+      (await waitForCommandResult(scope, "export2")).result,
+    );
+    expect(reExportResult.ok).toBe(true);
+    if (!reExportResult.ok) return;
+    expect(reExportResult.data.json).toBe(json);
+  });
+
+  it("importSave rejects an invalid save file with a discriminated error, never throwing", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+
+    send(scope, { id: "import", type: "importSave", payload: { name: "bad", json: "not json at all" } });
+    const result = await waitForCommandResult(scope, "import");
+    expect(result.result.ok).toBe(false);
   });
 });
 

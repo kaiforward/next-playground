@@ -23,12 +23,11 @@ import path from "path";
  */
 
 /**
- * `lib/world/save-files.ts` (Node's disk-backed `SaveBackend`; `lib/world/tick-loop.ts`'s
- * dynamic-imported autosave path, `tick-loop.ts:281`) is reachable from the WORKER's module graph
- * even though it only ever runs under Node — `new Worker(new URL("./worker/entry.ts", ...))` gives
- * the worker entry its own Rollup sub-build (`worker.plugins` below), and a dynamic `import()` still
- * makes Rollup trace and bundle what it points at for a production build; it does not exempt a
- * module from bundling, only from the initial chunk.
+ * `lib/world/save-files.ts` (Node's disk-backed `SaveBackend`) is reachable from the WORKER's
+ * module graph even though it only ever RUNS under Node — `new Worker(new URL("./worker/entry.ts",
+ * ...))` gives the worker entry its own Rollup sub-build (`worker.plugins` below), and a dynamic
+ * `import()` still makes Rollup trace and bundle what it points at for a production build; it does
+ * not exempt a module from bundling, only from the initial chunk.
  *
  * Vite's own `vite:resolve` plugin intercepts `node:*` specifiers first and rewrites them to an
  * empty browser-compat shim with no named exports — that shim is what turns `save-files.ts`'s named
@@ -37,18 +36,33 @@ import path from "path";
  * the emitted chunk instead of erroring. Needed on BOTH the main build and the worker sub-build
  * (`worker.plugins`) — Vite does not share the top-level `plugins` list with the worker bundle.
  *
- * This is a stated Task 6 judgment call, not the real fix: the actual fix is
- * `client/save-indexeddb.ts`, the browser `SaveBackend` Task 12 adds, at which point the web bundle
- * stops reaching `save-files.ts` at all (a browser `SaveBackend` implementation, not the Node one)
- * and both this plugin and the `rollupOptions.external` below can come out.
+ * **Verified still needed at Task 12 (build plan), NOT removed — the reachability moved, it did not
+ * disappear.** The Task-6 note this docstring used to carry expected `client/save-indexeddb.ts` (the
+ * browser `SaveBackend` Task 12 adds) to make this plugin removable; it doesn't, because of WHERE the
+ * Node fallback lives. `lib/world/save-backend.ts`'s `getSaveBackend()` — the shared resolution point
+ * `lib/services/game.ts`/`lib/world/tick-loop.ts` both call, and the ONLY module that may reach
+ * `save-files.ts` at all now (Path-B purity) — keeps a `dynamic import("./save-files")` FALLBACK for
+ * every Node host that never explicitly registers a backend (`npm run simulate`, unit tests, the
+ * still-alive Next dev server, none of which have a single bootstrap hook to call `setSaveBackend`
+ * from). That fallback is provably never TAKEN in the browser (`client/worker/entry.ts` registers
+ * the IndexedDB backend synchronously before `createGameWorker` can process a single message), but
+ * the `import()` call is still textually present in `save-backend.ts`, which the worker's bundle
+ * does reach (`lib/services/game.ts` is the module the worker dynamic-imports at boot) — and Rollup
+ * bundles a dynamic import's target into its own chunk from the static module graph regardless of
+ * whether that branch is ever reached at runtime (confirmed: removing this plugin still fails the
+ * build on `save-files.ts`'s `node:fs/promises` import, same three-line error as before this task).
+ * Actually removing the reachability would mean either giving every Node host an explicit boot hook
+ * to call `setSaveBackend(nodeSaveBackend)` (a bigger change than this task's scope — see
+ * `save-backend.ts`'s header docstring for the design this weighs against), or hiding the specifier
+ * from Rollup's static analysis (`/* @vite-ignore *\/`), which trades a verified, obvious failure
+ * mode (a real client `node:*` import breaks the build) for a silent one (a real client `node:*`
+ * import breaks only at runtime, in the browser) — not a trade this task makes unilaterally.
  *
- * The trap this leaves live until then: marking EVERY `node:*` specifier external is coarser than
- * the one reachable case above — a genuinely mistaken `node:*` import added to other client code
- * would also silently pass this plugin instead of failing the build, and only announce itself as a
- * runtime crash in the browser (the bare specifier left unresolved in the shipped chunk). There is
- * no narrower target available (the plugin only sees the specifier, not which module is asking for
- * it), so this is accepted as part of the same judgment call, not a separate gap — Task 12 removing
- * the plugin removes the trap too.
+ * The trap this leaves live: marking EVERY `node:*` specifier external is coarser than the one
+ * reachable case above — a genuinely mistaken `node:*` import added to other client code would also
+ * silently pass this plugin instead of failing the build, and only announce itself as a runtime
+ * crash in the browser (the bare specifier left unresolved in the shipped chunk). There is no
+ * narrower target available (the plugin only sees the specifier, not which module is asking for it).
  */
 function externalNodeBuiltins(): Plugin {
   return {

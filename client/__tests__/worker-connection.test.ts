@@ -84,6 +84,24 @@ describe("applyOutboundMessage — tickFailed", () => {
   });
 });
 
+// Proves 3 (build plan Task 12): the in-game autosave's own failure channel — distinct from
+// `handlePageHideSave`'s command-result path below, this is `TickLoop.subscribeAutosave` relayed
+// through the worker's `autosaveResult` message.
+describe("applyOutboundMessage — autosaveResult", () => {
+  it("surfaces an autosave failure through the store, not only the console", () => {
+    const store = createGameStore();
+    applyOutboundMessage(store, { type: "autosaveResult", error: "quota exceeded" });
+    expect(store.getSnapshot().autosaveFailure).toBe("quota exceeded");
+  });
+
+  it("clears a standing autosave failure on a subsequent successful autosave", () => {
+    const store = createGameStore();
+    store.setAutosaveFailure("previous failure");
+    applyOutboundMessage(store, { type: "autosaveResult", error: null });
+    expect(store.getSnapshot().autosaveFailure).toBeNull();
+  });
+});
+
 describe("applyOutboundMessage — commandResult", () => {
   it("delivers the result to the pending sendCommand call", async () => {
     const posted: { id: string }[] = [];

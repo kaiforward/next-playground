@@ -20,7 +20,7 @@ import type {
 } from "./game";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import type { SupplyRegime } from "@/lib/engine/population";
-import type { SaveInfo } from "@/lib/world/save-files";
+import type { SaveInfo } from "@/lib/world/save-backend";
 import type { WorldMeta } from "@/lib/world/types";
 
 // ── Responses ────────────────────────────────────────────────────

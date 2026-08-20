@@ -6,12 +6,14 @@ import { narrowCommandResult } from "@/lib/types/guards";
 import { useCommandMutation, type CommandMutation } from "@/lib/hooks/use-command-mutation";
 import { gameStore } from "@/lib/store/use-game-store";
 import type { Speed } from "@/lib/world/tick-loop";
-import type { SaveGameResult } from "@/lib/services/game";
-import type { SaveInfo } from "@/lib/world/save-files";
+import type { SaveGameResult, ExportSaveResult, ImportSaveResult } from "@/lib/services/game";
+import type { SaveInfo } from "@/lib/world/save-backend";
 import type { WorldMeta } from "@/lib/world/types";
 import type { NewGameInput, LoadGameInput } from "@/lib/schemas/game-setup";
 
 type SaveGameData = Extract<SaveGameResult, { ok: true }>["data"];
+type ExportSaveData = Extract<ExportSaveResult, { ok: true }>["data"];
+type ImportSaveData = Extract<ImportSaveResult, { ok: true }>["data"];
 
 /** Save the current world under a player-chosen name (`saveGame` command). */
 export function useSaveGameMutation(): CommandMutation<string, SaveGameData> {
@@ -19,6 +21,28 @@ export function useSaveGameMutation(): CommandMutation<string, SaveGameData> {
     const id = crypto.randomUUID();
     return sendCommand({ id, type: "saveGame", payload: { name } }).then((message) =>
       narrowCommandResult<SaveGameData>(message.result),
+    );
+  });
+}
+
+/** Export a save's raw JSON (`exportSave` command) — the start screen's Export control. */
+export function useExportSaveMutation(): CommandMutation<string, ExportSaveData> {
+  return useCommandMutation((name: string) => {
+    const id = crypto.randomUUID();
+    return sendCommand({ id, type: "exportSave", payload: { name } }).then((message) =>
+      narrowCommandResult<ExportSaveData>(message.result),
+    );
+  });
+}
+
+/** Write a caller-supplied save JSON through the active backend (`importSave` command) — the start
+ *  screen's Import control. Never touches the world store: writes the save into the picker, not
+ *  onto the running game. */
+export function useImportSaveMutation(): CommandMutation<{ name: string; json: string }, ImportSaveData> {
+  return useCommandMutation(({ name, json }: { name: string; json: string }) => {
+    const id = crypto.randomUUID();
+    return sendCommand({ id, type: "importSave", payload: { name, json } }).then((message) =>
+      narrowCommandResult<ImportSaveData>(message.result),
     );
   });
 }

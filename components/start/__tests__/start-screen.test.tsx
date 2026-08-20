@@ -64,11 +64,10 @@ describe("StartScreen — saves list", () => {
     expect(posted.some((e) => e.type === "listSaves")).toBe(true);
   });
 
-  // Gate C smoke finding B (owner, `npx vite dev`): the saves list showed the raw
-  // "Failed to fetch dynamically imported module …/lib/world/save-files.ts" error — the worker's
-  // `listSaves` handler dynamic-importing the Node file backend, which cannot load in a browser
-  // until Task 12. This pins the honest replacement and that New Game stays unaffected.
-  it("shows an honest, quiet message (never the raw import-failure text) when listSaves rejects, and leaves New Game usable", async () => {
+  // Build plan Task 12: the browser save backend is real now (IndexedDB), so a `listSaves`
+  // rejection is a genuine failure (quota, corruption) worth showing verbatim — the Task-12-seam
+  // "Saves aren't available in the browser yet" placeholder this test used to pin is gone.
+  it("shows the real error text when listSaves rejects, and leaves New Game usable", async () => {
     configureCommandTransport({
       postCommand: (envelope) => {
         posted.push(envelope);
@@ -76,19 +75,14 @@ describe("StartScreen — saves list", () => {
           deliverCommandResult({
             type: "commandResult",
             id: envelope.id,
-            result: {
-              ok: false,
-              error: "Failed to fetch dynamically imported module '/lib/world/save-files.ts'",
-            },
+            result: { ok: false, error: "IndexedDB quota exceeded" },
           });
         }
       },
     });
     renderStartScreen();
 
-    expect(await screen.findByText("Saves aren't available in the browser yet.")).toBeInTheDocument();
-    expect(screen.queryByText(/dynamically imported module/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/save-files\.ts/)).not.toBeInTheDocument();
+    expect(await screen.findByText("IndexedDB quota exceeded")).toBeInTheDocument();
 
     // New Game is a wholly separate command (`newGame` never touches the save backend) — the
     // saves-list failure must not disable it.
@@ -140,9 +134,9 @@ describe("StartScreen — load", () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
   });
 
-  // The same Task-12 seam as the saves-list finding: `loadGame` dynamic-imports the identical Node
-  // backend, so it rejects with the same raw import-failure text pre-Task-12.
-  it("shows the same honest, quiet message (never the raw import-failure text) when loadGame rejects", async () => {
+  // Build plan Task 12: same reasoning as the saves-list finding above — `loadGame`'s failure is
+  // now real and shown verbatim.
+  it("shows the real error text when loadGame rejects", async () => {
     configureCommandTransport({
       postCommand: (envelope) => {
         posted.push(envelope);
@@ -170,14 +164,90 @@ describe("StartScreen — load", () => {
     deliverCommandResult({
       type: "commandResult",
       id: loadEnvelope.id,
-      result: {
-        ok: false,
-        error: "Failed to fetch dynamically imported module '/lib/world/save-files.ts'",
-      },
+      result: { ok: false, error: "Save \"autosave\" not found" },
     });
 
-    expect(await screen.findByText("Saves aren't available in the browser yet.")).toBeInTheDocument();
-    expect(screen.queryByText(/dynamically imported module/i)).not.toBeInTheDocument();
+    expect(await screen.findByText('Save "autosave" not found')).toBeInTheDocument();
+  });
+});
+
+describe("StartScreen — export/import", () => {
+  it("exports a save by triggering the exportSave command and downloading the returned JSON", async () => {
+    const downloaded: { filename: string; content: string }[] = [];
+    vi.spyOn(URL, "createObjectURL").mockImplementation(() => "blob:mock");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    const originalCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+      const el = originalCreateElement(tag);
+      if (tag === "a") {
+        vi.spyOn(el as HTMLAnchorElement, "click").mockImplementation(() => {
+          downloaded.push({ filename: (el as HTMLAnchorElement).download, content: "" });
+        });
+      }
+      return el;
+    });
+
+    configureCommandTransport({
+      postCommand: (envelope) => {
+        posted.push(envelope);
+        if (envelope.type === "listSaves") {
+          deliverCommandResult({
+            type: "commandResult",
+            id: envelope.id,
+            result: {
+              ok: true,
+              data: [{ name: "mysave", tick: 5, savedAt: new Date().toISOString(), bytes: 100 }],
+            },
+          });
+        } else if (envelope.type === "exportSave") {
+          deliverCommandResult({
+            type: "commandResult",
+            id: envelope.id,
+            result: { ok: true, data: { name: "mysave", json: '{"formatVersion":15}' } },
+          });
+        }
+      },
+    });
+    renderStartScreen();
+
+    const exportButtons = await screen.findAllByRole("button", { name: /^Export$/ });
+    await userEvent.click(exportButtons[exportButtons.length - 1]);
+
+    await waitFor(() => expect(posted.some((e) => e.type === "exportSave")).toBe(true));
+    await waitFor(() => expect(downloaded).toHaveLength(1));
+    expect(downloaded[0].filename).toBe("mysave.json");
+
+    vi.restoreAllMocks();
+  });
+
+  it("rejects an invalid imported file with a visible message, not a throw", async () => {
+    configureCommandTransport({
+      postCommand: (envelope) => {
+        posted.push(envelope);
+        if (envelope.type === "listSaves") {
+          deliverCommandResult({ type: "commandResult", id: envelope.id, result: { ok: true, data: [] } });
+        } else if (envelope.type === "importSave") {
+          deliverCommandResult({
+            type: "commandResult",
+            id: envelope.id,
+            result: { ok: false, error: "Incompatible save: Save file is not valid JSON" },
+          });
+        }
+      },
+    });
+    renderStartScreen();
+    await screen.findByText("No saved games yet.");
+
+    const fileInput = screen.getByLabelText("Import save file");
+    const badFile = new File(["not json"], "broken.json", { type: "application/json" });
+
+    // The file input change handler and the async read/command dispatch it triggers must never
+    // throw out of the event handler — a rendered error message is the only observable outcome.
+    await expect(
+      userEvent.upload(fileInput as HTMLInputElement, badFile),
+    ).resolves.not.toThrow();
+
+    expect(await screen.findByText("Incompatible save: Save file is not valid JSON")).toBeInTheDocument();
   });
 });
 

@@ -7,15 +7,18 @@
  * tick math, which stays deterministic in `runWorldTick`. Host-portable by
  * requirement: this module runs under Node AND in the browser game worker,
  * so no Node-only globals (`setImmediate` was one, once).
- * Disk access (autosave) goes through a dynamic import of `save-files.ts`
- * so this module's static graph stays free of Node-edge dependencies.
+ * Disk access (autosave) goes through the save-backend seam (`save-backend.ts`), which itself
+ * reaches the Node disk adapter only via a dynamic `import()` — so this module's static graph
+ * stays free of Node-edge dependencies, and unmodified for the browser worker (which registers an
+ * IndexedDB backend before this ever runs, spec §5).
  *
  * Singleton: `tickLoop` is globalThis-cached (same idiom as the world
  * store) so dev-server module reloads don't spawn parallel loops.
  */
 
 import { getWorld, getWorldVersion, hasWorld, setWorld } from "./store";
-import { AUTOSAVE_NAME } from "./save";
+import { AUTOSAVE_NAME, serialiseWorld } from "./save";
+import { getSaveBackend } from "./save-backend";
 import { runWorldTick } from "./tick";
 import type { GlobalEventMap } from "@/lib/tick/types";
 import type { World } from "./types";
@@ -67,6 +70,12 @@ export class TickLoop {
   /** The most recent autosave's write chain — awaitable for graceful shutdown / tests. */
   private savePromise: Promise<void> = Promise.resolve();
   private subscribers = new Set<(e: TickBroadcast) => void>();
+  /** Autosave-result listeners (spec §5's "surfaced to the player, not swallowed to the console") —
+   *  notified with `null` on a successful write, or the failure's message otherwise. A separate
+   *  channel from `subscribers`: an autosave result is not a tick event and must not be coalesced
+   *  by the broadcast throttle above (`emit`'s job), nor confused with `TickBroadcast.error`, which
+   *  is specifically a FAILED-TICK cause. */
+  private autosaveListeners = new Set<(error: string | null) => void>();
   private tickTimestamps: number[] = [];
   private lastEmitAt = 0;
   private pendingBroadcast: TickBroadcast | null = null;
@@ -183,6 +192,21 @@ export class TickLoop {
     };
   }
 
+  /** Registers an autosave-result listener; returns an unsubscribe function (same shape as
+   *  `subscribe`). Fired once per autosave attempt — `null` for a clean write, the failure's
+   *  message otherwise — the worker relays this to the UI store so a persistently failing autosave
+   *  (quota exhaustion, storage eviction) reaches the player, not only `console.error` below. */
+  subscribeAutosave(fn: (error: string | null) => void): () => void {
+    this.autosaveListeners.add(fn);
+    return () => {
+      this.autosaveListeners.delete(fn);
+    };
+  }
+
+  private notifyAutosaveResult(error: string | null): void {
+    for (const fn of this.autosaveListeners) fn(error);
+  }
+
   /** Hard teardown (tests, shutdown): stop pacing without autosaving or emitting. */
   stop(): void {
     this.stopPacing();
@@ -283,9 +307,14 @@ export class TickLoop {
     this.saving = true;
     this.lastAutosaveAt = Date.now();
     const world = getWorld();
-    this.savePromise = import("./save-files")
-      .then(({ writeSave }) => writeSave(AUTOSAVE_NAME, world))
-      .catch((error) => console.error("[tick-loop] autosave failed:", error))
+    this.savePromise = getSaveBackend()
+      .then((backend) => backend.write(AUTOSAVE_NAME, serialiseWorld(world)))
+      .then(() => this.notifyAutosaveResult(null))
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error("[tick-loop] autosave failed:", error);
+        this.notifyAutosaveResult(message);
+      })
       .finally(() => {
         this.saving = false;
       });

@@ -61,6 +61,12 @@ export function applyOutboundMessage(store: GameStore, message: OutboundMessage)
     case "tickFailed":
       store.setTickFailed(message.msg.error);
       return;
+    case "autosaveResult":
+      // Build plan Task 12: the in-game (60 s cadence / on-pause) autosave now surfaces its own
+      // failures the same way `handlePageHideSave` below already does for the pagehide save — via
+      // the store, which `LivenessBanner` reads, never only `console.error` (`TickLoop.autosave`).
+      store.setAutosaveFailure(message.error);
+      return;
     case "commandResult":
       // `useCommandMutation`'s `mutate()` (`lib/hooks/use-command-mutation.ts`) already logs a
       // rejection when its caller gave no `onError`, and every `mutateAsync` caller this task adds

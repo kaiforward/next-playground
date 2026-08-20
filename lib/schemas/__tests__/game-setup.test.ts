@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { saveGameSchema, loadGameSchema, newGameSchema } from "@/lib/schemas/game-setup";
+import {
+  saveGameSchema,
+  loadGameSchema,
+  newGameSchema,
+  exportSaveSchema,
+  importSaveSchema,
+} from "@/lib/schemas/game-setup";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 
 describe("saveGameSchema", () => {
@@ -69,5 +75,30 @@ describe("newGameSchema — authored faction", () => {
 
   it("rejects an overlong name (over the 40-char bound)", () => {
     expect(newGameSchema.safeParse({ ...valid, name: "x".repeat(41) }).success).toBe(false);
+  });
+});
+
+describe("exportSaveSchema", () => {
+  it("accepts any existing save name, including the autosave slot", () => {
+    expect(exportSaveSchema.safeParse({ name: "roundtrip" }).success).toBe(true);
+    expect(exportSaveSchema.safeParse({ name: AUTOSAVE_NAME }).success).toBe(true);
+  });
+
+  it("rejects a name that sanitises to empty", () => {
+    expect(exportSaveSchema.safeParse({ name: "???" }).success).toBe(false);
+  });
+});
+
+describe("importSaveSchema", () => {
+  it("accepts a normal name plus non-empty json", () => {
+    expect(importSaveSchema.safeParse({ name: "imported", json: "{}" }).success).toBe(true);
+  });
+
+  it("rejects an empty json payload", () => {
+    expect(importSaveSchema.safeParse({ name: "imported", json: "" }).success).toBe(false);
+  });
+
+  it("rejects a name reserved for the autosave slot (mirrors saveGameSchema)", () => {
+    expect(importSaveSchema.safeParse({ name: AUTOSAVE_NAME, json: "{}" }).success).toBe(false);
   });
 });

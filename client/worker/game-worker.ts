@@ -25,8 +25,15 @@ import type { BootConfig, CommandEnvelope, CommandResult, PacingFrame, TickFaile
 import type { StateFrame } from "@/lib/runtime/snapshot";
 import type { Speed } from "@/lib/world/tick-loop";
 import type { WorldMeta } from "@/lib/world/types";
-import type { SaveInfo } from "@/lib/world/save-files";
-import type { NewGameInput, LoadGameInput, SaveGameInput, SpeedInput } from "@/lib/schemas/game-setup";
+import type { SaveInfo } from "@/lib/world/save-backend";
+import type {
+  NewGameInput,
+  LoadGameInput,
+  SaveGameInput,
+  SpeedInput,
+  ExportSaveInput,
+  ImportSaveInput,
+} from "@/lib/schemas/game-setup";
 import type { OrderBuildInput, AutomationInput } from "@/lib/schemas/construction-orders";
 import type { TreasuryPolicyInput } from "@/lib/schemas/treasury";
 import type { PinInput } from "@/lib/schemas/player-pins";
@@ -35,7 +42,7 @@ import type { OrderBuildResult, OrderColonyResult, CancelOrderResult, SetAutomat
 import type { UpdateTreasuryPolicyResult } from "@/lib/services/treasury";
 import type { SetSystemPinResult } from "@/lib/services/player-pins";
 import type { SetAlertCategoryResult, SetTrackerSectionResult } from "@/lib/services/player-settings";
-import type { LoadGameResult, SaveGameResult } from "@/lib/services/game";
+import type { LoadGameResult, SaveGameResult, ExportSaveResult, ImportSaveResult } from "@/lib/services/game";
 
 import { bootHost } from "./boot";
 import { createWorkerHost, type WorkerHost, type RawWorkerScope } from "./host";
@@ -57,6 +64,8 @@ type SetAlertCategoryData = Extract<SetAlertCategoryResult, { ok: true }>["data"
 type SetTrackerSectionData = Extract<SetTrackerSectionResult, { ok: true }>["data"];
 type LoadGameData = Extract<LoadGameResult, { ok: true }>["data"];
 type SaveGameData = Extract<SaveGameResult, { ok: true }>["data"];
+type ExportSaveData = Extract<ExportSaveResult, { ok: true }>["data"];
+type ImportSaveData = Extract<ImportSaveResult, { ok: true }>["data"];
 
 export interface GameCommandMap {
   orderBuild: { payload: OrderBuildInput & { systemId: string }; data: OrderBuildData };
@@ -72,6 +81,8 @@ export interface GameCommandMap {
   newGame: { payload: NewGameInput; data: WorldMeta };
   loadGame: { payload: LoadGameInput; data: LoadGameData };
   saveGame: { payload: SaveGameInput; data: SaveGameData };
+  exportSave: { payload: ExportSaveInput; data: ExportSaveData };
+  importSave: { payload: ImportSaveInput; data: ImportSaveData };
 }
 
 export type GameCommandType = keyof GameCommandMap;
@@ -98,6 +109,12 @@ export type OutboundMessage =
   | { type: "pacing"; frame: PacingFrame }
   | { type: "state"; frame: StateFrame }
   | { type: "tickFailed"; msg: TickFailedMsg }
+  /** An autosave attempt's result (build plan Task 12, spec §5) — `error: null` on a clean write,
+   *  the failure's message otherwise. Relayed from `TickLoop.subscribeAutosave`
+   *  (`lib/world/tick-loop.ts`); `client/worker-connection.ts` turns this into
+   *  `GameStore.setAutosaveFailure`, so a persistently failing autosave reaches the player rather
+   *  than only `console.error`. */
+  | { type: "autosaveResult"; error: string | null }
   | GameCommandResultMessage;
 
 // ── The dynamically-imported engine graph ───────────────────────────────────
@@ -127,6 +144,8 @@ interface Engine {
   loadGame: GameServiceModule["loadGame"];
   listGameSaves: GameServiceModule["listGameSaves"];
   saveGame: GameServiceModule["saveGame"];
+  exportSave: GameServiceModule["exportSave"];
+  importSave: GameServiceModule["importSave"];
   orderBuild: ConstructionOrdersModule["orderBuild"];
   orderColony: ConstructionOrdersModule["orderColony"];
   cancelOrder: ConstructionOrdersModule["cancelOrder"];
@@ -140,6 +159,8 @@ interface Engine {
     loadGameSchema: GameSetupSchemas["loadGameSchema"];
     saveGameSchema: GameSetupSchemas["saveGameSchema"];
     speedSchema: GameSetupSchemas["speedSchema"];
+    exportSaveSchema: GameSetupSchemas["exportSaveSchema"];
+    importSaveSchema: GameSetupSchemas["importSaveSchema"];
     orderBuildSchema: ConstructionOrderSchemas["orderBuildSchema"];
     automationSchema: ConstructionOrderSchemas["automationSchema"];
     treasuryPolicySchema: TreasurySchemas["treasuryPolicySchema"];
@@ -178,6 +199,8 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
     loadGame: gameMod.loadGame,
     listGameSaves: gameMod.listGameSaves,
     saveGame: gameMod.saveGame,
+    exportSave: gameMod.exportSave,
+    importSave: gameMod.importSave,
     orderBuild: ordersMod.orderBuild,
     orderColony: ordersMod.orderColony,
     cancelOrder: ordersMod.cancelOrder,
@@ -191,6 +214,8 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
       loadGameSchema: gameSetupSchemas.loadGameSchema,
       saveGameSchema: gameSetupSchemas.saveGameSchema,
       speedSchema: gameSetupSchemas.speedSchema,
+      exportSaveSchema: gameSetupSchemas.exportSaveSchema,
+      importSaveSchema: gameSetupSchemas.importSaveSchema,
       orderBuildSchema: orderSchemas.orderBuildSchema,
       automationSchema: orderSchemas.automationSchema,
       treasuryPolicySchema: treasurySchemas.treasuryPolicySchema,
@@ -346,6 +371,22 @@ async function runCommand(engine: Engine, envelope: GameCommandEnvelope): Promis
         const result = await engine.saveGame(parsed.data.name);
         return { type: "commandResult", id, result };
       }
+      case "exportSave": {
+        const parsed = engine.schemas.exportSaveSchema.safeParse(envelope.payload);
+        if (!parsed.success) {
+          return { type: "commandResult", id, result: { ok: false, error: zodIssueMessage(parsed.error) } };
+        }
+        const result = await engine.exportSave(parsed.data.name);
+        return { type: "commandResult", id, result };
+      }
+      case "importSave": {
+        const parsed = engine.schemas.importSaveSchema.safeParse(envelope.payload);
+        if (!parsed.success) {
+          return { type: "commandResult", id, result: { ok: false, error: zodIssueMessage(parsed.error) } };
+        }
+        const result = await engine.importSave(parsed.data.name, parsed.data.json);
+        return { type: "commandResult", id, result };
+      }
       default: {
         // Exhaustiveness: every `GameCommandType` is a case above, so `envelope` (and therefore
         // this branch) is unreachable — TS narrows it to `never` here, which is also why nothing
@@ -444,6 +485,9 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
       engine.tickLoop.subscribe((broadcast) => {
         pushPacingFrame(broadcast);
         pushStateFrame();
+      });
+      engine.tickLoop.subscribeAutosave((error) => {
+        host.post({ type: "autosaveResult", error });
       });
     });
   }

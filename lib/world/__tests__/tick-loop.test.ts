@@ -5,7 +5,8 @@ import * as path from "node:path";
 import { TickLoop, type TickBroadcast } from "@/lib/world/tick-loop";
 import { generateWorld } from "@/lib/world/gen";
 import { getWorld, setWorld, clearWorld } from "@/lib/world/store";
-import { setSavesDirForTesting, writeSave } from "@/lib/world/save-files";
+import { setSavesDirForTesting, nodeSaveBackend } from "@/lib/world/save-files";
+import { resetSaveBackendForTesting } from "@/lib/world/save-backend";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { runWorldTick } from "@/lib/world/tick";
 
@@ -20,7 +21,10 @@ vi.mock("@/lib/world/tick", async (importOriginal) => {
 
 vi.mock("@/lib/world/save-files", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/world/save-files")>();
-  return { ...actual, writeSave: vi.fn(actual.writeSave) };
+  return {
+    ...actual,
+    nodeSaveBackend: { ...actual.nodeSaveBackend, write: vi.fn(actual.nodeSaveBackend.write) },
+  };
 });
 
 let savesDir: string;
@@ -35,6 +39,9 @@ beforeEach(async () => {
   // Only clears call history (not the wrapped implementations above), so
   // each test starts from a clean call count without losing the passthrough.
   vi.clearAllMocks();
+  // Forces `getSaveBackend()` to re-resolve through THIS file's (possibly mocked)
+  // `save-files` module rather than a Node backend some earlier test/file already cached.
+  resetSaveBackendForTesting();
   // Every test writes the same AUTOSAVE_NAME file in the shared dir. Remove any
   // leftover from a prior test so a file-reading assertion (vi.waitFor) can only
   // ever observe this test's own autosave (retrying while absent) rather than a
@@ -160,6 +167,44 @@ describe("TickLoop", () => {
     });
   });
 
+  // Proves 3 (build plan Task 12): a simulated quota failure surfaces through
+  // `subscribeAutosave`, not only `console.error` — the channel the worker relays into
+  // `GameStore.setAutosaveFailure`, so `LivenessBanner` renders it.
+  it("subscribeAutosave notifies null on a successful autosave", async () => {
+    const results: (string | null)[] = [];
+    loop.subscribeAutosave((error) => results.push(error));
+
+    loop.setSpeed(5);
+    await vi.waitFor(() => {
+      expect(getWorld().meta.currentTick).toBeGreaterThan(0);
+    });
+    loop.setSpeed("paused");
+    await loop.whenAutosaveSettled();
+
+    expect(results).toContain(null);
+  });
+
+  it("subscribeAutosave notifies the failure's message when the write rejects — not swallowed to only the console", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(nodeSaveBackend.write).mockRejectedValueOnce(new Error("quota exceeded"));
+
+    const results: (string | null)[] = [];
+    loop.subscribeAutosave((error) => results.push(error));
+
+    loop.setSpeed(5);
+    await vi.waitFor(() => {
+      expect(getWorld().meta.currentTick).toBeGreaterThan(0);
+    });
+    loop.setSpeed("paused");
+    await loop.whenAutosaveSettled();
+
+    // The load-bearing assertion: the listener channel carries the failure...
+    expect(results).toContain("quota exceeded");
+    // ...alongside the console log (both, not either/or — see this module's `autosave()`).
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it("getSnapshot reflects current tick and speed", async () => {
     vi.useFakeTimers();
     loop.setSpeed(1);
@@ -181,7 +226,7 @@ describe("TickLoop", () => {
 
     expect(loop.getSpeed()).toBe("paused");
     expect(getWorld().meta.currentTick).toBe(0);
-    expect(vi.mocked(writeSave)).not.toHaveBeenCalled();
+    expect(vi.mocked(nodeSaveBackend.write)).not.toHaveBeenCalled();
     expect(received.at(-1)?.speed).toBe("paused");
     // The hard-pause emit carries WHY it paused — the one field that lets a consumer (the game
     // worker, client-runtime spec §4) tell "the player paused" from "a tick threw" and surface a
