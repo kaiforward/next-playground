@@ -460,6 +460,26 @@ the UI-side worker connection. Semantics:
   once (same pattern as `subscribe`'s immediate reply, `game-worker.ts:560-563`), so opening a
   panel costs one postMessage round trip (~ms), not a wait for the next throttle window. A
   shrink-only change waits for the next scheduled frame.
+- **Frame freshness moves to a send counter** (spec-review finding 1, accepted). Frame contents
+  now vary with the interest set, not only with world state, so two frames at one `worldVersion`
+  can legitimately differ — and `applyStateFrame`'s strictly-newer-version guard
+  (`lib/store/game-store.ts:157`) would drop an interest reply built between world commits (the
+  guaranteed case: the game is PAUSED — `worldVersion` advances only via `setWorld`/`clearWorld`,
+  `lib/world/store.ts`, and no tick runs while paused — so an opened panel would never fill).
+  Every `StateFrame` therefore additionally carries `frameSeq`: a worker-side monotonic counter
+  bumped on every send (new — emitted where the worker posts state frames). The store applies a
+  frame when `frameSeq` is strictly newer; `worldVersion` keeps its remaining jobs unchanged
+  (no-world sentinel, replacement floor, world-swap detection — `game-store.ts:44-58`).
+- **Stale or unknown ids never throw** (spec-review finding 2, accepted). The per-id read
+  services throw `ServiceError("not_found")` for a missing id (e.g.
+  `lib/services/system-vitals.ts:20`), and the command path's follow-up `pushStateFrame()` runs
+  outside any catch (`game-worker.ts:589-594`) — an interest id absent from the world would kill
+  the promised frame silently. Frame assembly therefore SKIPS an interest id that does not exist
+  in `world.systems`/`GOODS`, omitting its key, rather than letting the lookup throw; this guard
+  lives in the interest loop itself so it covers every stale-id source. Additionally, the worker
+  clears its held interest set when a `newGame`/`loadGame` command commits (the set is
+  world-scoped state; a live worker survives exit-to-menu → new game), and the shell re-posts
+  interest after the replacement's first frame lands.
 - **UI derivation.** The shell derives the set from what is open — the routed panel's id plus
   any open detail popovers — and re-posts it on route/popover change. The empty set is valid
   (map only): frames carry the coarse set alone.
@@ -485,8 +505,26 @@ the UI-side worker connection. Semantics:
   future is explicitly not this feature (roadmap "Markets need a real dirty/ownership model");
   it retires now rather than surviving as a stranded parameter. The world-less frame
   (`worldVersion: 0`, empty slices — `game-worker.ts:501-503`) is unchanged.
-- **`StateFrame`'s shape is unchanged** (`Partial<SnapshotSlices>` + `worldVersion`,
-  `snapshot.ts:154-157`) — what changes is which keys a frame populates.
+- **`StateFrame` gains one field**: `frameSeq` (the send counter above) joins `worldVersion` +
+  `Partial<SnapshotSlices>` (`snapshot.ts:154-157`); which keys a frame populates changes per
+  the assignment table. `applyStateFrame`'s freshness guard reads `frameSeq`; every other
+  `worldVersion` consumer is untouched.
+- **The hooks' absence fallback gets a second meaning, documented and diagnosable**
+  (spec-review finding 3, accepted in strengthened form). Today every detail hook's
+  `?? NOT_FOUND`/empty fallback is documented and test-pinned as "this id does not exist in the
+  world" (e.g. `lib/hooks/use-system-substrate.ts:6-8`;
+  `lib/hooks/__tests__/use-per-id-defaults.test.tsx`,
+  `use-per-id-existing-discriminant.test.tsx`); interest-keying adds the routine second meaning
+  "exists, not currently subscribed". The build plan: (a) rewrites those docstrings to state
+  both meanings; (b) updates the two test suites to cover "never existed" and "not subscribed"
+  as distinct cases; (c) the panel-root presence gate decides EXISTENCE from the coarse
+  `universe` slice (always pushed, carries every system id) and PRESENCE from the detail slice —
+  and a frame carries a subscribed id's whole family bundle atomically, so once the gate clears,
+  the hooks' fallbacks are provably unreachable below it; (d) dev builds only: a detail hook
+  read for an id that exists in `universe` but is absent from its detail slice logs a console
+  warning naming the id and the missing interest registration — so a future surface calling a
+  detail hook without wiring interest announces itself at first render instead of shipping
+  confidently-wrong "unknown" data. Production behaviour: gate + fallback, no warning cost.
 
 ### Autosave
 
@@ -511,9 +549,14 @@ point, never built speculatively in this PR.
    not host-limited (no absolute TPS promise — the engine ceiling at 20K is C1's extrapolated
    ~5 TPS and not this feature's to move).
 4. Autosave gate as above; record the reading either way.
-5. 600-system smoke: no order-of-magnitude browser-vs-Node TPS gap at matched era (closes the
-   4-vs-75 anecdote's mechanism to the extent B's content-scaling explanation covers it —
+5. 600-system smoke, pinned (spec-review finding 4, accepted): metric is `achievedTps` from the
+   pacing frames; comparator is C1's 600-system Node reading (118.8 TPS at t≈10,000); the
+   browser reading is taken on a 600-system save advanced to ≈t 10,000 via the dev
+   `advanceTicks` command; pass = browser `achievedTps` within 10× of the comparator (closes
+   the 4-vs-75 anecdote's mechanism to the extent B's content-scaling explanation covers it —
    Claim A stays dismissed-not-ruled-out).
+6. Paused-panel case (spec-review finding 1, accepted): pause the game, open a system panel —
+   the panel renders its detail without waiting for a tick.
 
 ### Hazard worksheet (scope: runtime/UI delivery change — rows 3 and 6 per the worksheet's own
 scope rule; no economy, processor, world-state or shared-constant surface. Row 5-style producer
