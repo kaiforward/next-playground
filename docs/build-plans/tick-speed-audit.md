@@ -1,15 +1,18 @@
 # Tick-speed acceptable-maximum audit — working file
 
-**Outcome (2026-08-20): Claim B CONFIRMED** (evidence below) — the browser worker's collapse is
-host-side frame derivation + autosave, not the engine. Claim A is subsumed by B's mechanism
-(content-scaled host cost; no separate 600-scale reading taken — the owner judged the 20K result
-decisive and the 4-vs-75 anecdote a likely one-off). Claim C is PARKED (Node projections lean
-false — ~19.5 TPS extrapolated at 10K equilibrium — but unmeasured; the big runs were deliberately
-not spent on). Next: `/brainstorm` the pull-based frame architecture (new session; roadmap row
-"Frame architecture" carries the agreed direction and the merge-blocking decision). Instruments
-were reverted per the measure rule; temp/tick-timing-diag.ts (gitignored) survives, and the
-`?tickdiag` worker instrument can be re-created from this file's description + git history of the
-session if the spec pass wants live readings again.
+**Outcome (2026-08-20): Claim B CONFIRMED, Claim C FALSE in its stated range, Claim A DISMISSED**
+(evidence below). The browser worker's collapse is host-side frame derivation + autosave, not the
+engine. Claim A is dismissed by owner decision (2026-08-20): B's mechanism (content-scaled host
+cost) plausibly covers the 600-system 4-vs-75 anecdote, the anecdote's conditions were unrecorded,
+and no 600-scale reading was spent on it — dismissed, not ruled out. Claim C measured (C1 below):
+the Node engine sustains ~10.5 TPS at 10,000 systems at the 10,000-tick horizon — above the 5 TPS
+reference, so no ceiling inside the current presets — but the crossing extrapolates to ~19-20K
+systems, inside the owner's 10-20K aspiration band, at the CHEAPEST era (founding, ~490 developed).
+Next: `/brainstorm` the pull-based frame architecture (new session; roadmap row "Frame
+architecture" carries the agreed direction and the merge-blocking decision). Instruments were
+reverted per the measure rule; temp/tick-timing-diag.ts and temp/tps-scale-diag.ts (gitignored)
+survive, and the `?tickdiag` worker instrument can be re-created from this file's description +
+git history of the session if the spec pass wants live readings again.
 
 Roadmap row: Tick performance > "[S] Tick-speed acceptable-maximum audit". This file starts at the
 row's `/measure` step. Two questions drive it: where tick time actually goes as the galaxy grows,
@@ -133,6 +136,51 @@ Side observations with receipts (not claims — candidates for the follow-up rea
 - `buildStateFrame` cost is content-driven, so it plausibly also explains the 600-system 4-vs-75
   variance (two galaxies differing in developed mass → differing frame+autosave cost) — that is
   Claim A's follow-up reading at 600 scale, not yet taken.
+
+### C1 — TPS-vs-scale curve (Node, sustained at the 10,000-tick horizon)
+
+Conditions: `temp/tps-scale-diag.ts` (no lib/ patch — times whole `runWorldTick` calls), seed 42,
+10,000-tick warmup then a 500-tick timed window per scale; 600-system point recomputed from the
+calibration run's raw window (same seed, same horizon, same window length). Sequential runs, idle
+machine.
+
+```
+Meaning:    The Node engine has no TPS ceiling inside the current presets — but the 5 TPS
+            reference rate is crossed around ~19-20K systems, inside the owner's 10-20K
+            aspiration band, and that is at the cheapest era the game has.
+Claim:      Claim C (sustained TPS falls below 5 somewhere between 600 and 10K systems).
+Number:     Sustained TPS at t=10,000-10,500: 600 systems 118.8 (developed 315); 2,000 systems
+            56.4 (439); 5,000 systems 22.7 (502); 10,000 systems 10.5 (493). 10K detail:
+            ordinary-tick median 35.0 ms / p95 293 ms, cycle-start median 340 ms / p95 563 ms.
+            Last-segment log-log slope (5K->10K) ~ -1.1; 5 TPS crossing extrapolates to ~19-20K
+            systems (extrapolated, unmeasured). The earlier two-point fit's ~19.5 TPS at 10K
+            was ~2x optimistic vs the measured 10.5.
+Horizon:    10,000-tick window end only (founding era ~year 7 — first colony ~t=4,128). This is
+            the era MOST favourable to the claim being false: the developed cohort is still
+            small (~490 of 10K) and barely grows with scale here, so per-tick cost at this
+            horizon is dominated by total-system-scaled machinery. True late-game equilibrium
+            (bigger developed mass) can only be slower.
+Cohort:     one galaxy per scale, seed 42; developed counts as listed (note they are FLAT across
+            2K/5K/10K — settlement pace, not map size, sets the cohort at this date), so the
+            curve isolates the total-system scaling term the calibration flagged (join/merge
+            ~46%, directed-build full-list scan).
+Licenses:   Supports: Claim C FALSE in its stated range — 10K sustains 10.5 >= 5 TPS; no preset
+            hits the ceiling. Supports: re-prioritising engine tick work only when content
+            pushes past ~10K systems or a later era fattens the developed cohort; at 20K the
+            engine alone is marginal (~5 TPS extrapolated) even before host work. Does NOT
+            support: any claim about late-game equilibrium TPS (unmeasured era); treating
+            ~19-20K as a measured ceiling (extrapolated from the last segment).
+```
+
+Raw summary lines (verbatim, from temp/tps-scale-claimC-out.txt; per-tick rows in
+temp/tps-scale-claimC-s{2000,5000,10000}-t10500.jsonl):
+
+```
+s2000:  SUSTAINED: 500 ticks in 8.87s -> 56.39 tps   ORDINARY median 9.505  CYCLE median 166.990   developed=439
+s5000:  SUSTAINED: 500 ticks in 22.04s -> 22.69 tps  ORDINARY median 20.405 CYCLE median 276.598   developed=502
+s10000: SUSTAINED: 500 ticks in 47.68s -> 10.49 tps  ORDINARY median 35.041 CYCLE median 340.069   developed=493
+s600 (recomputed from tick-timing-s600e10000-s600-t10500.jsonl): 500 ticks, 4210 ms -> 118.76 tps, developed=315
+```
 
 ### Node calibration (per-processor, both eras at 600; startup at 2000) — summary
 
