@@ -6,7 +6,13 @@ import "./globals.css";
 import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
 import { selectIsReplacing } from "@/lib/store/game-store";
 import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";
-import { applyOutboundMessage, markWorkerDead, handlePageHideSave } from "./worker-connection";
+import {
+  applyOutboundMessage,
+  markWorkerDead,
+  handlePageHideSave,
+  markDevReloadIfWorldLive,
+  restoreFromDevReloadMarkerIfPending,
+} from "./worker-connection";
 import { useAtlas } from "@/lib/hooks/use-atlas";
 import { GameShell } from "@/components/game-shell";
 import { AxeAccessibility } from "@/components/dev-tools/axe-accessibility";
@@ -69,8 +75,27 @@ window.addEventListener("pagehide", () => {
   handlePageHideSave(gameStore, sendCommand, AUTOSAVE_NAME);
 });
 
+/**
+ * Dev worker-graph-edit restore (build plan Task 13 correction, spec §10) — see
+ * `client/dev-reload-marker.ts`'s header docstring for the full diagnosis and mechanism, and
+ * `client/worker-connection.ts`'s `markDevReloadIfWorldLive`/`restoreFromDevReloadMarkerIfPending`
+ * for the pure logic under test. `import.meta.hot` is `undefined` outside `vite dev` (statically
+ * eliminated from a production build, same idiom `dev-commands.ts` uses for `import.meta.env.DEV`),
+ * and this only ever listens for Vite's OWN reload event — never `beforeunload`/a user-initiated
+ * refresh — so a normal F5 still lands on the start screen exactly as before.
+ */
+if (import.meta.hot) {
+  import.meta.hot.on("vite:beforeFullReload", () => {
+    markDevReloadIfWorldLive(gameStore, sessionStorage);
+  });
+}
+
 post({ type: "boot", config: { economyScale: 100, debugEconomy: false, debugEvents: false } });
 post({ type: "subscribe" });
+
+if (import.meta.hot) {
+  restoreFromDevReloadMarkerIfPending(gameStore, sessionStorage, sendCommand, AUTOSAVE_NAME);
+}
 
 /** The map root — always mounted (a panel docks over it, never instead of it): `StarMap` reads its
  *  own selection off `useRouteInfo()` (`components/ui/link-provider.tsx`), so it needs no route

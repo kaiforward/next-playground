@@ -1,8 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyOutboundMessage, markWorkerDead, handlePageHideSave } from "../worker-connection";
+import {
+  applyOutboundMessage,
+  markWorkerDead,
+  handlePageHideSave,
+  markDevReloadIfWorldLive,
+  restoreFromDevReloadMarkerIfPending,
+} from "../worker-connection";
 import { createGameStore } from "@/lib/store/game-store";
 import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";
 import type { OutboundMessage, GameCommandResultMessage } from "../worker/game-worker";
+
+/** A trivial in-memory `Storage`-shaped fake, matching `client/dev-reload-marker.ts`'s own test
+ *  fixture — no real `sessionStorage`/DOM needed for this pure logic. */
+function createFakeStorage(): Storage {
+  const map = new Map<string, string>();
+  return {
+    getItem: (key) => map.get(key) ?? null,
+    setItem: (key, value) => {
+      map.set(key, value);
+    },
+    removeItem: (key) => {
+      map.delete(key);
+    },
+    clear: () => map.clear(),
+    key: () => null,
+    get length() {
+      return map.size;
+    },
+  };
+}
 
 afterEach(() => {
   configureCommandTransport(null);
@@ -201,6 +227,70 @@ describe("handlePageHideSave", () => {
     await Promise.resolve();
 
     expect(store.getSnapshot().autosaveFailure).toBe("Node save backend unavailable in-browser");
+  });
+});
+
+// Build plan Task 13 correction (Gate D smoke finding): a worker-graph edit under `vite dev`
+// triggers a full PAGE reload, not a worker-side HMR dispose — see `client/dev-reload-marker.ts`'s
+// header docstring for the diagnosis. These two functions are the page-side mechanism's pure logic.
+
+describe("markDevReloadIfWorldLive", () => {
+  it("marks when a world is live (worldVersion > 0)", () => {
+    const store = createGameStore();
+    store.applyStateFrame({ worldVersion: 5, slices: {} });
+    const storage = createFakeStorage();
+
+    markDevReloadIfWorldLive(store, storage);
+
+    expect(storage.getItem("stellar-trader:dev-reload-restore")).not.toBeNull();
+  });
+
+  it("does not mark world-less (worldVersion 0 or never applied) — nothing worth restoring", () => {
+    const storage = createFakeStorage();
+    markDevReloadIfWorldLive(createGameStore(), storage);
+    expect(storage.getItem("stellar-trader:dev-reload-restore")).toBeNull();
+
+    const worldLessStore = createGameStore();
+    worldLessStore.applyStateFrame({ worldVersion: 0, slices: {} });
+    markDevReloadIfWorldLive(worldLessStore, storage);
+    expect(storage.getItem("stellar-trader:dev-reload-restore")).toBeNull();
+  });
+});
+
+describe("restoreFromDevReloadMarkerIfPending", () => {
+  it("when the marker is present: begins a world replacement and dispatches loadGame(autosaveName), consuming the marker", async () => {
+    const store = createGameStore();
+    store.applyStateFrame({ worldVersion: 3, slices: {} }); // a prior "live" world, pre-reload
+    const storage = createFakeStorage();
+    markDevReloadIfWorldLive(store, storage);
+    const send = vi.fn(
+      async (): Promise<GameCommandResultMessage> => ({
+        type: "commandResult",
+        id: "x",
+        result: { ok: true, data: { seed: 1, systemCount: 1, mapSize: 1, currentTick: 0 } },
+      }),
+    );
+
+    restoreFromDevReloadMarkerIfPending(store, storage, send, "autosave");
+
+    // The store-side half of the swap-window contract: replaced BEFORE the async load settles.
+    expect(store.getSnapshot().worldVersion).toBe(0);
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "loadGame", payload: { name: "autosave" } }),
+    );
+    // Consumed — a later boot with no HMR reload involved must never find it again.
+    expect(storage.getItem("stellar-trader:dev-reload-restore")).toBeNull();
+  });
+
+  it("is a no-op when no marker is present — every ordinary boot is untouched", () => {
+    const store = createGameStore();
+    const storage = createFakeStorage();
+    const send = vi.fn();
+
+    restoreFromDevReloadMarkerIfPending(store, storage, send, "autosave");
+
+    expect(send).not.toHaveBeenCalled();
+    expect(store.getSnapshot().worldVersion).toBeNull();
   });
 });
 

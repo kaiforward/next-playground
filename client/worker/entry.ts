@@ -30,82 +30,23 @@
  * Registration is synchronous and happens before `createGameWorker` installs its message handler, so
  * no command can possibly reach `getSaveBackend()` before this has run.
  *
- * **Dev teardown/restore (build plan Task 13, spec §10):** gated on `import.meta.hot` — Vite's HMR
- * context handle, present only under `vite dev` and statically `undefined` in a production build
- * (the same dead-code-elimination idiom `dev-commands.ts` uses for `import.meta.env.DEV`, applied
- * to the HMR-specific signal since this feature is inherently tied to HMR rather than to dev-ness in
- * general). `hot.dispose` fires right before THIS module instance is torn down for a replacement —
- * the mechanism itself (write-on-dispose, prefer-on-boot) lives in `dev-teardown.ts`, unit-tested
- * there against a fake `SaveBackend`; what's here is the real-`self`-only wiring: polling a cheap
- * `listSaves` command (mirrors `game-worker.test.ts`'s own `waitForBoot` helper, driven from outside
- * a worker) until boot completes, then dispatching a real `loadGame` command against the reserved
- * save name through this worker's own `self.onmessage` — the same "post a message this worker's own
- * handler will see" technique the fake-host tests use, aimed at the real `self` instead of a fake
- * one. Untestable under Node (no `self`, no `import.meta.hot`), so the real HMR cycle is a Gate D
- * manual smoke, not a unit proof — see `dev-teardown.ts`'s own docstring.
+ * **No dev-HMR wiring here (build plan Task 13 correction, Gate D smoke finding):** an earlier
+ * version of this file registered an `import.meta.hot.dispose` hook here to save the world before
+ * a worker-graph edit tore this module down. It never fired: Vite does not support HMR for web
+ * workers (https://vite.dev/guide/api-hmr) — an edit anywhere in the worker's module graph instead
+ * fires `vite:beforeFullReload` on the PAGE client and reloads the whole document, which kills the
+ * worker abruptly rather than disposing this module through Vite's HMR runtime. Removed rather than
+ * left as a plausible-looking dead mechanism. The real fix is page-side: `client/main.tsx`'s
+ * `vite:beforeFullReload` listener plus `client/dev-reload-marker.ts` — see that file's docstring.
  */
 import { createGameWorker } from "./game-worker";
 import type { InboundMessage, OutboundMessage } from "./game-worker";
 import type { RawWorkerScope } from "./host";
 import { setSaveBackend } from "@/lib/world/save-backend";
 import { indexedDbSaveBackend, requestPersistentStorage } from "@/client/save-indexeddb";
-import { hasWorld, getWorld } from "@/lib/world/store";
-import { serialiseWorld } from "@/lib/world/save";
-import { saveTeardownSnapshot, restoreTeardownSaveIfPresent } from "./dev-teardown";
 
 declare const self: RawWorkerScope<InboundMessage, OutboundMessage>;
 
 setSaveBackend(indexedDbSaveBackend);
 requestPersistentStorage();
 createGameWorker(self);
-
-if (import.meta.hot) {
-  const hot = import.meta.hot;
-
-  hot.dispose(() => {
-    // Fire-and-forget: HMR disposes this module synchronously right after `dispose` returns, so the
-    // write cannot be awaited — same posture as the pagehide save (`client/worker-connection.ts`'s
-    // `handlePageHideSave`).
-    void saveTeardownSnapshot(indexedDbSaveBackend, hasWorld() ? getWorld() : null, serialiseWorld);
-  });
-
-  void restoreTeardownSaveIfPresent(indexedDbSaveBackend, loadFromTeardownViaSelf);
-}
-
-/** Polls with a `listSaves` probe (a fresh id each attempt) until a `commandResult` answers it
- *  `ok: true` — the same "no boot signal but a probe reply" technique
- *  `game-worker.test.ts`'s `waitForBoot` uses, necessary here because entry.ts has no other way to
- *  observe `createGameWorker`'s internal `bootPromise` settling. Once booted, dispatches the real
- *  `loadGame` command and resolves once ITS result lands. */
-function loadFromTeardownViaSelf(name: string): Promise<void> {
-  const PROBE_PREFIX = "dev-teardown-boot-probe-";
-  return new Promise((resolve) => {
-    const original = self.postMessage.bind(self);
-    let booted = false;
-    const loadId = crypto.randomUUID();
-    let interval: ReturnType<typeof setInterval> | null = null;
-
-    self.postMessage = (message: OutboundMessage) => {
-      original(message);
-      if (message.type !== "commandResult") return;
-      if (!booted && message.id.startsWith(PROBE_PREFIX) && message.result.ok) {
-        booted = true;
-        if (interval) clearInterval(interval);
-        self.onmessage?.({ data: { type: "command", envelope: { id: loadId, type: "loadGame", payload: { name } } } });
-        return;
-      }
-      if (message.id === loadId) {
-        self.postMessage = original;
-        resolve();
-      }
-    };
-
-    const probe = () => {
-      self.onmessage?.({
-        data: { type: "command", envelope: { id: `${PROBE_PREFIX}${Date.now()}`, type: "listSaves", payload: null } },
-      });
-    };
-    probe();
-    interval = setInterval(probe, 25);
-  });
-}

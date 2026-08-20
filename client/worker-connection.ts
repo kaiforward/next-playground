@@ -22,6 +22,7 @@ import {
 } from "@/lib/runtime/command-client";
 import type { GameStore } from "@/lib/store/game-store";
 import type { OutboundMessage } from "./worker/game-worker";
+import { markPendingDevReload, consumePendingDevReload } from "./dev-reload-marker";
 
 /**
  * Feeds one message posted by the worker into the store — the shared body behind `main.tsx`'s
@@ -124,4 +125,42 @@ export function handlePageHideSave(
   void send({ id, type: "saveGame", payload: { name: autosaveName } }).then((message) => {
     store.setAutosaveFailure(message.result.ok ? null : message.result.error);
   });
+}
+
+/**
+ * The `vite:beforeFullReload` half of the dev worker-graph-edit restore (build plan Task 13
+ * correction — see `client/dev-reload-marker.ts`'s header docstring for the full diagnosis).
+ * Pulled out of `main.tsx` for the same reason every other function here is: pure over its inputs,
+ * so a test drives it without a real Vite HMR client or `sessionStorage`.
+ *
+ * Marks only when a world is actually live (`worldVersion > 0`) — editing a file while sitting on
+ * the start screen has nothing worth restoring, and marking anyway would try to auto-load whatever
+ * the last autosave happened to be on the next boot.
+ */
+export function markDevReloadIfWorldLive(store: GameStore, storage: Pick<Storage, "setItem">): void {
+  if ((store.getSnapshot().worldVersion ?? 0) > 0) {
+    markPendingDevReload(storage);
+  }
+}
+
+/**
+ * The boot half of the dev worker-graph-edit restore. Consumes the marker (removes it — a later,
+ * genuinely fresh boot must never find it again) and, only if it was present, resets the store for
+ * a replacement and dispatches the restore load — `beginWorldReplacement()` runs BEFORE the async
+ * `loadGame` settles so the route gate renders its boot-loading state instead of redirecting to
+ * `/start` on the initial world-less subscribe frame (`client/routes.ts`'s
+ * `shouldRedirectToStart`/`resolveRouteGate`, spec §8's swap-window contract — the same mechanism
+ * `useLoadGameMutation` uses for an ordinary player-triggered load). A no-op when no marker is
+ * present — the ordinary boot path (including every production boot) is untouched.
+ */
+export function restoreFromDevReloadMarkerIfPending(
+  store: GameStore,
+  storage: Pick<Storage, "getItem" | "removeItem">,
+  send: (envelope: AnyCommandEnvelope) => Promise<AnyCommandResultMessage>,
+  autosaveName: string,
+): void {
+  if (!consumePendingDevReload(storage)) return;
+  store.beginWorldReplacement();
+  const id = crypto.randomUUID();
+  void send({ id, type: "loadGame", payload: { name: autosaveName } });
 }
