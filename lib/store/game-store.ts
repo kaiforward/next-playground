@@ -120,6 +120,20 @@ export interface GameStore {
    * straight through `applyStateFrame`'s freshness check against the reset `0`.
    */
   beginWorldReplacement(): void;
+  /**
+   * Cancels an in-flight world replacement — the failure path `beginWorldReplacement()` itself
+   * cannot cover: a `newGame`/`loadGame` command (or the dev worker-graph-edit restore,
+   * `client/worker-connection.ts`'s `restoreFromDevReloadMarkerIfPending`) dispatched right after
+   * `beginWorldReplacement()` that then rejects or resolves `ok: false` (a bad save name, a corrupt
+   * or missing autosave, a validation failure) leaves `replacementFloor` latched forever — nothing
+   * will ever post a frame past it, so `selectIsReplacing` would stay `true` and the route gate
+   * would sit on its boot-loading render indefinitely instead of falling back to the ordinary
+   * no-world state (spec §3's `/start` redirect). The store is ALREADY in coherent no-world state
+   * from `beginWorldReplacement()` (empty slices, `worldVersion: 0`, `liveness: "no-world"`) — this
+   * only needs to drop the floor so `applyStateFrame`'s guard and `selectIsReplacing` stop treating
+   * a replacement as still in flight.
+   */
+  cancelWorldReplacement(): void;
   subscribe(listener: () => void): () => void;
   getSnapshot(): StoreState;
   /**
@@ -183,10 +197,26 @@ export function createGameStore(): GameStore {
       failureCause: null,
       autosaveFailure: null,
       // The floor is the pre-reset worldVersion — the highest version any frame still in flight
-      // from the OUTGOING world could possibly carry. `null` (never booted, or already world-less)
-      // needs no floor: there is no outgoing world's stale frame to guard against.
-      replacementFloor: current.worldVersion,
+      // from the OUTGOING world could possibly carry. `current.worldVersion ?? 0`, NOT bare
+      // `current.worldVersion`: a caller invoking this before boot has ever produced a first frame
+      // (`worldVersion: null` — the dev worker-graph-edit restore, `client/worker-connection.ts`'s
+      // `restoreFromDevReloadMarkerIfPending`, calls this immediately after posting `subscribe`,
+      // before any frame has landed) has no outgoing world either, but STILL needs a floor: the
+      // worker's own world-less `{worldVersion: 0}` subscribe reply is about to arrive, and without
+      // a floor here `replacementFloor` stays `null` — `selectIsReplacing` reads `null` as "not
+      // replacing", so the route gate sees `worldVersion: 0` with nothing in flight and redirects to
+      // `/start` before the real load's frame lands (the exact bug this comment used to argue could
+      // not happen: "null... needs no floor" was true for every OTHER caller, which always has a
+      // real world running, but false for this one). Floor `0` costs nothing extra: the world-less
+      // frame is already dropped by the version-equality guard above regardless of the floor, and
+      // `0` still latches `replacementFloor !== null` so `isReplacing` stays true until the loaded
+      // world's own frame (version >= 1) clears it.
+      replacementFloor: current.worldVersion ?? 0,
     });
+  }
+
+  function cancelWorldReplacement(): void {
+    api.setState({ ...api.getState(), replacementFloor: null });
   }
 
   return {
@@ -196,6 +226,7 @@ export function createGameStore(): GameStore {
     setTickFailed,
     setAutosaveFailure,
     beginWorldReplacement,
+    cancelWorldReplacement,
     subscribe: (listener) => api.subscribe(listener),
     getSnapshot: () => api.getState(),
     readonlyApi: api,

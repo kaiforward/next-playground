@@ -152,6 +152,12 @@ export function markDevReloadIfWorldLive(store: GameStore, storage: Pick<Storage
  * `shouldRedirectToStart`/`resolveRouteGate`, spec §8's swap-window contract — the same mechanism
  * `useLoadGameMutation` uses for an ordinary player-triggered load). A no-op when no marker is
  * present — the ordinary boot path (including every production boot) is untouched.
+ *
+ * A failed load (missing/corrupt autosave — the dev-only marker gives no guarantee one exists)
+ * calls `store.cancelWorldReplacement()` so the route gate falls back to its ordinary `/start`
+ * redirect instead of sitting on boot-loading forever (that stuck-forever edge, and the identical
+ * one in `useNewGameMutation`/`useLoadGameMutation`, is what `cancelWorldReplacement` exists to
+ * close — see its own docstring, `lib/store/game-store.ts`).
  */
 export function restoreFromDevReloadMarkerIfPending(
   store: GameStore,
@@ -162,5 +168,7 @@ export function restoreFromDevReloadMarkerIfPending(
   if (!consumePendingDevReload(storage)) return;
   store.beginWorldReplacement();
   const id = crypto.randomUUID();
-  void send({ id, type: "loadGame", payload: { name: autosaveName } });
+  void send({ id, type: "loadGame", payload: { name: autosaveName } }).then((message) => {
+    if (!message.result.ok) store.cancelWorldReplacement();
+  });
 }

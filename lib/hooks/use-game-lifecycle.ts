@@ -68,26 +68,39 @@ export function useSpeedMutation(): CommandMutation<Speed, { speed: Speed }> {
  * swap-window contract, Proves 4): a read of any store slice between this call and the new world's
  * own full frame landing gets the defined no-world default, never the outgoing world's stale data.
  * Correct whether or not a world existed beforehand — resetting an already-empty store is a no-op.
+ *
+ * On a rejected result (a validation failure or a thrown `newGame` — both reach the command result
+ * as `ok: false`, `client/worker/game-worker.ts`'s `newGame` case) calls
+ * `gameStore.cancelWorldReplacement()` before returning the error to `useCommandMutation` — without
+ * it the replacement floor `beginWorldReplacement()` just latched would never clear (nothing will
+ * ever post a frame past it), leaving the route gate on boot-loading forever instead of the ordinary
+ * `/start` state a failed new-game attempt should fall back to.
  */
 export function useNewGameMutation(): CommandMutation<NewGameInput, WorldMeta> {
   return useCommandMutation((input: NewGameInput) => {
     gameStore.beginWorldReplacement();
     const id = crypto.randomUUID();
-    return sendCommand({ id, type: "newGame", payload: input }).then((message) =>
-      narrowCommandResult<WorldMeta>(message.result),
-    );
+    return sendCommand({ id, type: "newGame", payload: input }).then((message) => {
+      const result = narrowCommandResult<WorldMeta>(message.result);
+      if (!result.ok) gameStore.cancelWorldReplacement();
+      return result;
+    });
   });
 }
 
 /** Load a save into the store (`loadGame` command) — same swap-window reset as `useNewGameMutation`
- *  and for the same reason: a load can replace a LIVE game, not only a world-less one. */
+ *  and for the same reason: a load can replace a LIVE game, not only a world-less one. Same
+ *  cancel-on-failure as `useNewGameMutation` too (a missing/corrupt save name is the realistic
+ *  failure mode here) — see that function's docstring. */
 export function useLoadGameMutation(): CommandMutation<LoadGameInput, WorldMeta> {
   return useCommandMutation((input: LoadGameInput) => {
     gameStore.beginWorldReplacement();
     const id = crypto.randomUUID();
-    return sendCommand({ id, type: "loadGame", payload: input }).then((message) =>
-      narrowCommandResult<WorldMeta>(message.result),
-    );
+    return sendCommand({ id, type: "loadGame", payload: input }).then((message) => {
+      const result = narrowCommandResult<WorldMeta>(message.result);
+      if (!result.ok) gameStore.cancelWorldReplacement();
+      return result;
+    });
   });
 }
 

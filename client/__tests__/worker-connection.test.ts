@@ -6,8 +6,10 @@ import {
   markDevReloadIfWorldLive,
   restoreFromDevReloadMarkerIfPending,
 } from "../worker-connection";
-import { createGameStore } from "@/lib/store/game-store";
+import { createGameStore, selectIsReplacing } from "@/lib/store/game-store";
 import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";
+import { markPendingDevReload } from "../dev-reload-marker";
+import { shouldRedirectToStart } from "../routes";
 import type { OutboundMessage, GameCommandResultMessage } from "../worker/game-worker";
 
 /** A trivial in-memory `Storage`-shaped fake, matching `client/dev-reload-marker.ts`'s own test
@@ -259,10 +261,16 @@ describe("markDevReloadIfWorldLive", () => {
 
 describe("restoreFromDevReloadMarkerIfPending", () => {
   it("when the marker is present: begins a world replacement and dispatches loadGame(autosaveName), consuming the marker", async () => {
+    // The REAL boot sequence: this runs on a FRESH store, immediately after posting `subscribe`,
+    // before the worker's own world-less reply has arrived — `worldVersion` is still `null`, never
+    // a real prior version. `markDevReloadIfWorldLive` ran against a DIFFERENT store instance on
+    // the PRIOR page load (a full reload discards the whole JS heap, including that instance) — an
+    // earlier version of this test seeded `worldVersion: 3` on the SAME store before calling
+    // `restoreFromDevReloadMarkerIfPending`, which masked review finding 1's bug (a `null` floor
+    // reading as "not replacing"): that state is one the real boot is never actually in.
     const store = createGameStore();
-    store.applyStateFrame({ worldVersion: 3, slices: {} }); // a prior "live" world, pre-reload
     const storage = createFakeStorage();
-    markDevReloadIfWorldLive(store, storage);
+    markPendingDevReload(storage); // simulate the marker set on the prior page load
     const send = vi.fn(
       async (): Promise<GameCommandResultMessage> => ({
         type: "commandResult",
@@ -275,11 +283,22 @@ describe("restoreFromDevReloadMarkerIfPending", () => {
 
     // The store-side half of the swap-window contract: replaced BEFORE the async load settles.
     expect(store.getSnapshot().worldVersion).toBe(0);
+    expect(selectIsReplacing(store.getSnapshot())).toBe(true);
     expect(send).toHaveBeenCalledWith(
       expect.objectContaining({ type: "loadGame", payload: { name: "autosave" } }),
     );
     // Consumed — a later boot with no HMR reload involved must never find it again.
     expect(storage.getItem("stellar-trader:dev-reload-restore")).toBeNull();
+
+    // The worker's own world-less subscribe reply lands next (it always does, independent of this
+    // restore) — must NOT end the replacement early or let the route gate redirect to `/start`.
+    store.applyStateFrame({ worldVersion: 0, slices: {} });
+    expect(selectIsReplacing(store.getSnapshot())).toBe(true);
+    expect(shouldRedirectToStart(store.getSnapshot().worldVersion, false, selectIsReplacing(store.getSnapshot()))).toBe(false);
+
+    // The loaded world's own frame (version >= 1) is what actually clears it.
+    store.applyStateFrame({ worldVersion: 1, slices: {} });
+    expect(selectIsReplacing(store.getSnapshot())).toBe(false);
   });
 
   it("is a no-op when no marker is present — every ordinary boot is untouched", () => {
@@ -291,6 +310,30 @@ describe("restoreFromDevReloadMarkerIfPending", () => {
 
     expect(send).not.toHaveBeenCalled();
     expect(store.getSnapshot().worldVersion).toBeNull();
+  });
+
+  it("cancels the replacement when the restore load fails (missing/corrupt autosave) — the route gate falls back to /start instead of sitting on boot-loading forever", async () => {
+    const store = createGameStore();
+    const storage = createFakeStorage();
+    markPendingDevReload(storage);
+    const send = vi.fn(
+      async (): Promise<GameCommandResultMessage> => ({
+        type: "commandResult",
+        id: "x",
+        result: { ok: false, error: "Save not found: autosave" },
+      }),
+    );
+
+    restoreFromDevReloadMarkerIfPending(store, storage, send, "autosave");
+    expect(selectIsReplacing(store.getSnapshot())).toBe(true);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(selectIsReplacing(store.getSnapshot())).toBe(false);
+    // Still a coherent no-world state — cancel doesn't leave anything half-set.
+    expect(store.getSnapshot().worldVersion).toBe(0);
+    expect(store.getSnapshot().liveness).toBe("no-world");
   });
 });
 
