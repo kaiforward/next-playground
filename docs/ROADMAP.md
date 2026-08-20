@@ -274,6 +274,21 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   galaxies degrade to ~4 TPS. Watch-item from Kai: the full map is visible at once at 20K zoom-out
   and future layers (wars, battles, ship units) will widen what the map needs pushed. *Next step:*
   `/brainstorm` the frame architecture in a fresh session, 20K galaxy as the acceptance fixture.
+- **[L] Engine tick at aspiration scale (10-20K systems)** — the tick-speed audit's measured curve
+  (C1 in [tick-speed-audit.md](./build-plans/tick-speed-audit.md)): sustained Node TPS at the
+  10,000-tick horizon is 118.8 / 56.4 / 22.7 / 10.5 at 600 / 2K / 5K / 10K systems, with the
+  developed cohort FLAT (~440-500) across scales — so the cost is total-system-scaled machinery
+  (join/merge ~46% of tick time; directed-build scans the full system list), and the 5 TPS
+  reference crosses at ~19-20K systems extrapolated, at the cheapest era the game has. No current
+  preset hits the ceiling, so this is not urgent — it becomes real work when content pushes past
+  ~10K systems or a later era fattens the developed cohort. The frame-architecture fix cannot
+  carry 20K alone: engine and host both need their pass before anything steers players toward
+  galaxies above ~10K. The sibling rows above (toTickSystems, events scaling, market dirty model)
+  are the known mechanisms; this row is the umbrella target that decides when they come forward.
+  *Next step:* after the frame architecture ships, re-measure the curve in the browser worker and
+  decide which sibling row moves first.
+  *Don't:* tune against the 10,000-tick horizon's TPS as if it were equilibrium — it is founding
+  era (~year 7), the cheapest era; late-game numbers are strictly worse and unmeasured.
 
 **Types / correctness**
 - **[S] `.get(...)!`-in-tests idiom decision** — 8 sites use a postfix-`!` `Map.get` in tests (against
