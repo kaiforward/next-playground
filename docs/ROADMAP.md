@@ -262,13 +262,37 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   not waste: it de-aliases rows the previous world still holds. *Next step:* a design pass on copy-on-write
   rows or a dirty flag. *Don't:* reference-identity dirty-checking — the adapter hands back fresh rows
   whether or not anything changed, so it always reports dirty. Real save-corruption risk if aliasing leaks.
-- **[S] Tick-speed acceptable-maximum audit** — booked as an end task of the client-runtime migration
-  (Kai, 2026-08-19): "an audit of the tick speed at a high number of systems and population to see
-  what our acceptable max is." Never run — feeds the two rows above (the events processor's scaling,
-  the dirty/ownership model) with the ceiling they're sized against; the JS-tick ceiling and the
-  compiled-engine escape the worker channel boundary preserves are recorded in
-  [client-runtime.md](./active/engineering/client-runtime.md). *Next step:* `/measure` tick speed at
-  high system and population counts.
+- **[M] Frame architecture: stop deriving the whole galaxy every push** — the tick-speed audit's
+  `/measure` ran (evidence: [tick-speed-audit.md](./build-plans/tick-speed-audit.md) — this is the
+  frame-architecture feature's working file; its PR deletes it, git keeps the full record): at 20K
+  systems the tick costs ~0.1 s but `buildStateFrame` costs ~8.7 s per push (per-id slices derived
+  for ALL systems, throttled to at most 4×/s but achieving ~0.1 pushes/s because builds are
+  serial) and the 60 s autosave costs ~47 s — the
+  worker spends 87-99% of its time on host work, ~1% ticking; the engine matches its Node
+  projections and is not the bottleneck. Direction agreed with Kai (2026-08-20): pull-based frames
+  — push coarse map slices + aggregates, derive panel detail on demand over the command channel,
+  dirty-sets only where the processors make them free; autosave off the hot path separately.
+  **BLOCKS the shared→main client-runtime merge (Kai decision 2026-08-20)** — a 600-system galaxy
+  was once observed at ~4 TPS (anecdote, conditions unrecorded; no 600-scale reading attributes it
+  to this mechanism). Watch-item from Kai: the full map is visible at once at 20K zoom-out
+  and future layers (wars, battles, ship units) will widen what the map needs pushed. *Next step:*
+  `/brainstorm` the frame architecture in a fresh session, 20K galaxy as the acceptance fixture.
+- **[L] Engine tick at aspiration scale (10-20K systems)** — the tick-speed audit's measured curve
+  (C1 in [tick-speed-audit.md](./build-plans/tick-speed-audit.md); that file dies with the
+  frame-architecture PR — the numbers in this row are the durable copy): sustained Node TPS at the
+  10,000-tick horizon is 118.8 / 56.4 / 22.7 / 10.5 at 600 / 2K / 5K / 10K systems, with the
+  developed cohort FLAT (~440-500) across scales — so the cost is total-system-scaled machinery
+  (join/merge ~46% of tick time; directed-build scans the full system list), and the 5 TPS
+  reference crosses at ~19-20K systems extrapolated, at the cheapest era the game has. No current
+  preset hits the ceiling, so this is not urgent — it becomes real work when content pushes past
+  ~10K systems or a later era fattens the developed cohort. The frame-architecture fix cannot
+  carry 20K alone: engine and host both need their pass before anything steers players toward
+  galaxies above ~10K. The sibling rows above (toTickSystems, events scaling, market dirty model)
+  are the known mechanisms; this row is the umbrella target that decides when they come forward.
+  *Next step:* after the frame architecture ships, re-measure the curve in the browser worker and
+  decide which sibling row moves first.
+  *Don't:* tune against the 10,000-tick horizon's TPS as if it were equilibrium — it is founding
+  era (~year 7), the cheapest era; late-game numbers are strictly worse and unmeasured.
 
 **Types / correctness**
 - **[S] `.get(...)!`-in-tests idiom decision** — 8 sites use a postfix-`!` `Map.get` in tests (against
