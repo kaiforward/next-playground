@@ -2,7 +2,7 @@
 
 Visual language for Stellar Trader. Industrial, utilitarian, warm copper/amber accents on a dark steel background. Think spacecraft instrument panels and factory control rooms — functional, sharp, no unnecessary decoration.
 
-Defined in `app/globals.css` via `@theme inline {}`. All components use tailwind-variants (`tv()`).
+Defined in `client/globals.css` via `@theme inline {}`. All components use tailwind-variants (`tv()`).
 
 ---
 

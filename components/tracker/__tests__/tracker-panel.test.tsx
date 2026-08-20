@@ -9,11 +9,10 @@ import type { PinInput } from "@/lib/schemas/player-pins";
 import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 import type { TrackerSections } from "@/lib/types/tracker";
 
-// TrackerPanel owns three suspense-backed hooks (useTracker, useAtlas) and a mutation
-// (useSetSystemPin). All three are mocked directly rather than through a real QueryClient —
-// QueryBoundary's Suspense/ErrorBoundary/QueryErrorResetBoundary machinery needs no QueryClient
-// context of its own (only useSuspenseQuery does, and that call never runs here), so mocking the
-// hooks is both simpler and keeps these tests about the panel's own logic, not TanStack's.
+// TrackerPanel owns three store-backed hooks (useTracker, useAtlas) and a mutation
+// (useSetSystemPin). All three are mocked directly — the hooks are synchronous store reads with
+// no client-side cache/context of their own, so mocking them is both simpler and keeps these tests
+// about the panel's own logic.
 
 const push = vi.fn();
 const setPinMutate = vi.fn();

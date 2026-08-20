@@ -1,7 +1,7 @@
 /**
  * The snapshot store's payload — the UI-facing slices of world state (spec §2), assembled worker-side
- * from the same read services `app/api/game/*` routes wrap today. Slices are keyed like today's query
- * keys (`lib/query/keys.ts`) and carry exactly the services' existing return types — no parallel DTOs.
+ * from the same read services the old per-route API handlers used to wrap. Slices are keyed like
+ * those routes' old query keys and carry exactly the services' existing return types — no parallel DTOs.
  *
  * Node-portable: no `fs`, no static `process.env` read. NOT pure: `buildStateFrame` reads through
  * the `getWorld()` singleton (the read services it reuses all read the singleton internally), so it

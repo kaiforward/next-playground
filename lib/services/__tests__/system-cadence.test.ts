@@ -126,14 +126,14 @@ describe("shard-order helpers vs. the tick adapters (drift guard)", () => {
 });
 
 describe("getSystemCadence — fallbacks", () => {
-  it("throws ServiceError(404) for an unknown system id", () => {
+  it('throws ServiceError("not_found") for an unknown system id', () => {
     setWorld(buildWorld([makeSystem("sys-only", null)]));
 
     expect(() => getSystemCadence("does-not-exist")).toThrow(ServiceError);
     try {
       getSystemCadence("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 });

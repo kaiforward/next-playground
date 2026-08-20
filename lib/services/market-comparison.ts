@@ -10,14 +10,14 @@ import type { MarketComparisonEntry } from "@/lib/types/game";
  * good's price curve.
  *
  * `goodId` is the goods-catalog key (e.g. "food").
- * Throws ServiceError(404) if the good does not exist.
+ * Throws ServiceError("not_found") if the good does not exist.
  */
 export function getMarketComparison(
   goodId: string,
 ): { goodId: string; entries: MarketComparisonEntry[] } {
   const good = Object.hasOwn(GOODS, goodId) ? GOODS[goodId] : undefined;
   if (!good) {
-    throw new ServiceError("Good not found.", 404);
+    throw new ServiceError("Good not found.", "not_found");
   }
 
   const entries: MarketComparisonEntry[] = getWorld()

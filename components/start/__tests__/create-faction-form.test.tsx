@@ -4,8 +4,11 @@ import userEvent from "@testing-library/user-event";
 import { CreateFactionForm } from "../create-faction-form";
 import { NavigateProvider } from "@/components/ui/link-provider";
 import { gameStore } from "@/lib/store/use-game-store";
-import { configureCommandTransport, deliverCommandResult } from "@/lib/runtime/command-client";
-import type { GameCommandEnvelope } from "@/client/worker/game-worker";
+import {
+  configureCommandTransport,
+  deliverCommandResult,
+  type AnyCommandEnvelope,
+} from "@/lib/runtime/command-client";
 
 // Proves 1's client half (client-runtime build plan Task 11): new game from a live game lands on
 // the map root — pinned here as "a successful newGame command navigates to the map root and resets
@@ -21,7 +24,7 @@ function renderForm(onSuccess?: () => void) {
   return { navigate };
 }
 
-let posted: GameCommandEnvelope[];
+let posted: AnyCommandEnvelope[];
 
 beforeEach(() => {
   posted = [];

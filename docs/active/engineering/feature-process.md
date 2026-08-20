@@ -57,7 +57,7 @@ Two mechanisms upgrade rank-3 rules toward rank 2, and every skill carries them 
 
 ## Implementation gates — definition of done, per task
 
-1. **Checks green**: `tsc` clean, `npx vitest run` green, and `npx next build --webpack` for any
+1. **Checks green**: `tsc` clean, `npx vitest run` green, and `npm run build` (`tsc && vite build`) for any
    change with a build surface. Quote real output; never assert "tests pass" without running them.
 2. **Red-proof gate**: every new or changed test has been *seen red* — break the premise it protects
    (revert the change, or mutate the seam it pins), run the test, watch it fail, restore green. Say

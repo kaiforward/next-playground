@@ -11,6 +11,6 @@ import type { SystemCadence } from "@/lib/types/api";
 export function getSystemCadence(systemId: string): SystemCadence {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
-  if (!system) throw new ServiceError("System not found.", 404);
+  if (!system) throw new ServiceError("System not found.", "not_found");
   return { resolutionGroup: 0 };
 }

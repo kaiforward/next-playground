@@ -34,6 +34,10 @@ describe("LivenessBanner — tickFailed pause", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Game paused");
     expect(alert).toHaveTextContent("processor threw: negative stock at system-24");
+    // The autosave now genuinely persists (IndexedDB, build plan Task 12) — Reload's offer must say
+    // so, never the pre-Task-12 "not available yet" copy.
+    expect(alert).toHaveTextContent("Reload to recover from the autosave");
+    expect(alert).not.toHaveTextContent("isn't available in this build yet");
     expect(screen.getByRole("button", { name: "Reload App" })).toBeInTheDocument();
   });
 });
@@ -47,6 +51,8 @@ describe("LivenessBanner — dead worker", () => {
 
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Connection to the game was lost");
+    expect(alert).toHaveTextContent("Reload to recover from the autosave");
+    expect(alert).not.toHaveTextContent("isn't available in this build yet");
     expect(screen.getByRole("button", { name: "Reload App" })).toBeInTheDocument();
   });
 
@@ -72,6 +78,11 @@ describe("LivenessBanner — autosave failure", () => {
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("Autosave failed");
     expect(status).toHaveTextContent("Node save backend unavailable in-browser");
+    // The write itself is what failed — there is no reload path to offer here (reloading loses
+    // exactly the progress that didn't autosave); point at the start screen's real Export control
+    // instead of the pre-Task-12 "manual export isn't available" copy.
+    expect(status).toHaveTextContent("Export your save from the start screen");
+    expect(status).not.toHaveTextContent("isn't available in this build yet");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 });

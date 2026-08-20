@@ -6,12 +6,14 @@ import { narrowCommandResult } from "@/lib/types/guards";
 import { useCommandMutation, type CommandMutation } from "@/lib/hooks/use-command-mutation";
 import { gameStore } from "@/lib/store/use-game-store";
 import type { Speed } from "@/lib/world/tick-loop";
-import type { SaveGameResult } from "@/lib/services/game";
-import type { SaveInfo } from "@/lib/world/save-files";
+import type { SaveGameResult, ExportSaveResult, ImportSaveResult } from "@/lib/services/game";
+import type { SaveInfo } from "@/lib/world/save-backend";
 import type { WorldMeta } from "@/lib/world/types";
 import type { NewGameInput, LoadGameInput } from "@/lib/schemas/game-setup";
 
 type SaveGameData = Extract<SaveGameResult, { ok: true }>["data"];
+type ExportSaveData = Extract<ExportSaveResult, { ok: true }>["data"];
+type ImportSaveData = Extract<ImportSaveResult, { ok: true }>["data"];
 
 /** Save the current world under a player-chosen name (`saveGame` command). */
 export function useSaveGameMutation(): CommandMutation<string, SaveGameData> {
@@ -19,6 +21,28 @@ export function useSaveGameMutation(): CommandMutation<string, SaveGameData> {
     const id = crypto.randomUUID();
     return sendCommand({ id, type: "saveGame", payload: { name } }).then((message) =>
       narrowCommandResult<SaveGameData>(message.result),
+    );
+  });
+}
+
+/** Export a save's raw JSON (`exportSave` command) — the start screen's Export control. */
+export function useExportSaveMutation(): CommandMutation<string, ExportSaveData> {
+  return useCommandMutation((name: string) => {
+    const id = crypto.randomUUID();
+    return sendCommand({ id, type: "exportSave", payload: { name } }).then((message) =>
+      narrowCommandResult<ExportSaveData>(message.result),
+    );
+  });
+}
+
+/** Write a caller-supplied save JSON through the active backend (`importSave` command) — the start
+ *  screen's Import control. Never touches the world store: writes the save into the picker, not
+ *  onto the running game. */
+export function useImportSaveMutation(): CommandMutation<{ name: string; json: string }, ImportSaveData> {
+  return useCommandMutation(({ name, json }: { name: string; json: string }) => {
+    const id = crypto.randomUUID();
+    return sendCommand({ id, type: "importSave", payload: { name, json } }).then((message) =>
+      narrowCommandResult<ImportSaveData>(message.result),
     );
   });
 }
@@ -44,26 +68,39 @@ export function useSpeedMutation(): CommandMutation<Speed, { speed: Speed }> {
  * swap-window contract, Proves 4): a read of any store slice between this call and the new world's
  * own full frame landing gets the defined no-world default, never the outgoing world's stale data.
  * Correct whether or not a world existed beforehand — resetting an already-empty store is a no-op.
+ *
+ * On a rejected result (a validation failure or a thrown `newGame` — both reach the command result
+ * as `ok: false`, `client/worker/game-worker.ts`'s `newGame` case) calls
+ * `gameStore.cancelWorldReplacement()` before returning the error to `useCommandMutation` — without
+ * it the replacement floor `beginWorldReplacement()` just latched would never clear (nothing will
+ * ever post a frame past it), leaving the route gate on boot-loading forever instead of the ordinary
+ * `/start` state a failed new-game attempt should fall back to.
  */
 export function useNewGameMutation(): CommandMutation<NewGameInput, WorldMeta> {
   return useCommandMutation((input: NewGameInput) => {
     gameStore.beginWorldReplacement();
     const id = crypto.randomUUID();
-    return sendCommand({ id, type: "newGame", payload: input }).then((message) =>
-      narrowCommandResult<WorldMeta>(message.result),
-    );
+    return sendCommand({ id, type: "newGame", payload: input }).then((message) => {
+      const result = narrowCommandResult<WorldMeta>(message.result);
+      if (!result.ok) gameStore.cancelWorldReplacement();
+      return result;
+    });
   });
 }
 
 /** Load a save into the store (`loadGame` command) — same swap-window reset as `useNewGameMutation`
- *  and for the same reason: a load can replace a LIVE game, not only a world-less one. */
+ *  and for the same reason: a load can replace a LIVE game, not only a world-less one. Same
+ *  cancel-on-failure as `useNewGameMutation` too (a missing/corrupt save name is the realistic
+ *  failure mode here) — see that function's docstring. */
 export function useLoadGameMutation(): CommandMutation<LoadGameInput, WorldMeta> {
   return useCommandMutation((input: LoadGameInput) => {
     gameStore.beginWorldReplacement();
     const id = crypto.randomUUID();
-    return sendCommand({ id, type: "loadGame", payload: input }).then((message) =>
-      narrowCommandResult<WorldMeta>(message.result),
-    );
+    return sendCommand({ id, type: "loadGame", payload: input }).then((message) => {
+      const result = narrowCommandResult<WorldMeta>(message.result);
+      if (!result.ok) gameStore.cancelWorldReplacement();
+      return result;
+    });
   });
 }
 

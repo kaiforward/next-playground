@@ -16,7 +16,7 @@ export function getFactionTreasury(factionId: string): FactionTreasuryData {
   const world = getWorld();
   const treasury = world.treasuries.find((t) => t.factionId === factionId);
   if (!treasury) {
-    throw new ServiceError(`Faction ${factionId} not found.`, 404);
+    throw new ServiceError(`Faction ${factionId} not found.`, "not_found");
   }
   const s = treasury.lastSettlement;
   // Founding is a real expense that never passes through a band, so it has to be subtracted

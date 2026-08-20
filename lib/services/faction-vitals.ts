@@ -15,7 +15,7 @@ import type { FactionVitalsData } from "@/lib/types/api";
 export function getFactionVitals(factionId: string): FactionVitalsData {
   const world = getWorld();
   const faction = world.factions.find((f) => f.id === factionId);
-  if (!faction) throw new ServiceError(`Faction ${factionId} not found.`, 404);
+  if (!faction) throw new ServiceError(`Faction ${factionId} not found.`, "not_found");
 
   const buildings = buildingsBySystem();
   const owned = world.systems.filter((s) => s.factionId === factionId);

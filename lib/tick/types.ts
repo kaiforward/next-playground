@@ -3,14 +3,6 @@ import type { SupplyState } from "@/lib/engine/population";
 
 // ── Typed tick event payloads ─────────────────────────────────────
 
-/** Ships are ownerless in Phase 2 (no `Player` entity) — see `WorldShip`'s doc comment. */
-export interface ShipArrivedPayload {
-  shipId: string;
-  shipName: string;
-  systemId: string;
-  destName: string;
-}
-
 export interface EconomyTickPayload {
   /** Number of systems processed in this tick's shard. */
   systemCount: number;
@@ -31,7 +23,6 @@ export interface EventNotificationPayload {
 export interface GlobalEventMap {
   economyTick: EconomyTickPayload[];
   eventNotifications: EventNotificationPayload[];
-  shipArrived: ShipArrivedPayload[];
 }
 
 // ── Processor types ───────────────────────────────────────────────

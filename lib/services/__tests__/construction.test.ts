@@ -113,13 +113,13 @@ describe("getFactionConstruction", () => {
     expect(data.colonies.map((c) => c.systemId)).toEqual([sysHigh.id, sysMid.id, sysLowB.id, sysLowA.id]);
   });
 
-  it("throws ServiceError(404) naming the id for an unknown faction", () => {
+  it('throws ServiceError("not_found") naming the id for an unknown faction', () => {
     expect(() => getFactionConstruction("nope")).toThrow(ServiceError);
     try {
       getFactionConstruction("nope");
     } catch (err) {
       if (!(err instanceof ServiceError)) throw err;
-      expect(err.status).toBe(404);
+      expect(err.kind).toBe("not_found");
       expect(err.message).toContain("nope");
     }
   });
@@ -395,13 +395,13 @@ describe("getSystemConstruction", () => {
     expect(noBuildings).not.toEqual(rich);
   });
 
-  it("throws ServiceError(404) naming the id for an unknown system", () => {
+  it('throws ServiceError("not_found") naming the id for an unknown system', () => {
     expect(() => getSystemConstruction("nope")).toThrow(ServiceError);
     try {
       getSystemConstruction("nope");
     } catch (err) {
       if (!(err instanceof ServiceError)) throw err;
-      expect(err.status).toBe(404);
+      expect(err.kind).toBe("not_found");
       expect(err.message).toContain("nope");
     }
   });

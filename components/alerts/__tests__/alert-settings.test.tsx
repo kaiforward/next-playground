@@ -14,7 +14,7 @@ import {
 
 // AlertSettings is pure props-in: it never reads the settings itself (mirrors
 // `TrackerSettingsProps`'s own `sections`/`onChangeSection` split), so every test here renders it
-// directly with a `categories` record and spy/stateful callbacks — no router, no QueryBoundary.
+// directly with a `categories` record and spy/stateful callbacks — no router, no client-side cache.
 // Where the record actually comes from, and the refusal to hide a critical category, are the write
 // boundary's own (`lib/services/__tests__/player-settings.test.ts`).
 //

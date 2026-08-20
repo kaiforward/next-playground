@@ -14,9 +14,15 @@
  * pause is standing (see `applyOutboundMessage`'s own docstring for why the ordering of a failed
  * tick's own three posted messages makes that guard necessary).
  */
-import { deliverCommandResult, markTransportDead } from "@/lib/runtime/command-client";
+import {
+  deliverCommandResult,
+  markTransportDead,
+  type AnyCommandEnvelope,
+  type AnyCommandResultMessage,
+} from "@/lib/runtime/command-client";
 import type { GameStore } from "@/lib/store/game-store";
-import type { OutboundMessage, GameCommandEnvelope, GameCommandResultMessage } from "./worker/game-worker";
+import type { OutboundMessage } from "./worker/game-worker";
+import { markPendingDevReload, consumePendingDevReload } from "./dev-reload-marker";
 
 /**
  * Feeds one message posted by the worker into the store — the shared body behind `main.tsx`'s
@@ -61,6 +67,12 @@ export function applyOutboundMessage(store: GameStore, message: OutboundMessage)
     case "tickFailed":
       store.setTickFailed(message.msg.error);
       return;
+    case "autosaveResult":
+      // Build plan Task 12: the in-game (60 s cadence / on-pause) autosave now surfaces its own
+      // failures the same way `handlePageHideSave` below already does for the pagehide save — via
+      // the store, which `LivenessBanner` reads, never only `console.error` (`TickLoop.autosave`).
+      store.setAutosaveFailure(message.error);
+      return;
     case "commandResult":
       // `useCommandMutation`'s `mutate()` (`lib/hooks/use-command-mutation.ts`) already logs a
       // rejection when its caller gave no `onError`, and every `mutateAsync` caller this task adds
@@ -103,7 +115,7 @@ export function markWorkerDead(store: GameStore): void {
  */
 export function handlePageHideSave(
   store: GameStore,
-  send: (envelope: GameCommandEnvelope) => Promise<GameCommandResultMessage>,
+  send: (envelope: AnyCommandEnvelope) => Promise<AnyCommandResultMessage>,
   autosaveName: string,
 ): void {
   const { liveness } = store.getSnapshot();
@@ -112,5 +124,51 @@ export function handlePageHideSave(
   const id = crypto.randomUUID();
   void send({ id, type: "saveGame", payload: { name: autosaveName } }).then((message) => {
     store.setAutosaveFailure(message.result.ok ? null : message.result.error);
+  });
+}
+
+/**
+ * The `vite:beforeFullReload` half of the dev worker-graph-edit restore (build plan Task 13
+ * correction — see `client/dev-reload-marker.ts`'s header docstring for the full diagnosis).
+ * Pulled out of `main.tsx` for the same reason every other function here is: pure over its inputs,
+ * so a test drives it without a real Vite HMR client or `sessionStorage`.
+ *
+ * Marks only when a world is actually live (`worldVersion > 0`) — editing a file while sitting on
+ * the start screen has nothing worth restoring, and marking anyway would try to auto-load whatever
+ * the last autosave happened to be on the next boot.
+ */
+export function markDevReloadIfWorldLive(store: GameStore, storage: Pick<Storage, "setItem">): void {
+  if ((store.getSnapshot().worldVersion ?? 0) > 0) {
+    markPendingDevReload(storage);
+  }
+}
+
+/**
+ * The boot half of the dev worker-graph-edit restore. Consumes the marker (removes it — a later,
+ * genuinely fresh boot must never find it again) and, only if it was present, resets the store for
+ * a replacement and dispatches the restore load — `beginWorldReplacement()` runs BEFORE the async
+ * `loadGame` settles so the route gate renders its boot-loading state instead of redirecting to
+ * `/start` on the initial world-less subscribe frame (`client/routes.ts`'s
+ * `shouldRedirectToStart`/`resolveRouteGate`, spec §8's swap-window contract — the same mechanism
+ * `useLoadGameMutation` uses for an ordinary player-triggered load). A no-op when no marker is
+ * present — the ordinary boot path (including every production boot) is untouched.
+ *
+ * A failed load (missing/corrupt autosave — the dev-only marker gives no guarantee one exists)
+ * calls `store.cancelWorldReplacement()` so the route gate falls back to its ordinary `/start`
+ * redirect instead of sitting on boot-loading forever (that stuck-forever edge, and the identical
+ * one in `useNewGameMutation`/`useLoadGameMutation`, is what `cancelWorldReplacement` exists to
+ * close — see its own docstring, `lib/store/game-store.ts`).
+ */
+export function restoreFromDevReloadMarkerIfPending(
+  store: GameStore,
+  storage: Pick<Storage, "getItem" | "removeItem">,
+  send: (envelope: AnyCommandEnvelope) => Promise<AnyCommandResultMessage>,
+  autosaveName: string,
+): void {
+  if (!consumePendingDevReload(storage)) return;
+  store.beginWorldReplacement();
+  const id = crypto.randomUUID();
+  void send({ id, type: "loadGame", payload: { name: autosaveName } }).then((message) => {
+    if (!message.result.ok) store.cancelWorldReplacement();
   });
 }

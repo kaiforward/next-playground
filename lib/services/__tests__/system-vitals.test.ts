@@ -106,12 +106,12 @@ describe("getSystemVitals", () => {
   // Visibility gating on non-developed control is covered once, cross-service, in
   // developed-gate-services.test.ts — not duplicated here.
 
-  it("throws ServiceError(404) for an unknown system", () => {
+  it('throws ServiceError("not_found") for an unknown system', () => {
     expect(() => getSystemVitals("does-not-exist")).toThrow(ServiceError);
     try {
       getSystemVitals("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 });

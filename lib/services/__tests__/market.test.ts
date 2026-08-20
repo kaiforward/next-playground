@@ -64,12 +64,12 @@ describe("getMarket", () => {
     expect(scarce.currentPrice).toBeGreaterThan(abundant.currentPrice);
   });
 
-  it("throws ServiceError(404) for an unknown system", () => {
+  it('throws ServiceError("not_found") for an unknown system', () => {
     expect(() => getMarket("does-not-exist")).toThrow(ServiceError);
     try {
       getMarket("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 });

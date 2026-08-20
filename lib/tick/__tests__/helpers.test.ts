@@ -3,7 +3,6 @@ import type {
   EconomyTickPayload,
   EventNotificationPayload,
   GlobalEventMap,
-  ShipArrivedPayload,
   TickProcessorResult,
 } from "@/lib/tick/types";
 
@@ -13,10 +12,6 @@ function economyTick(shardIndex: number): EconomyTickPayload {
 
 function eventNotification(message: string): EventNotificationPayload {
   return { message, type: "trade_festival", refs: {} };
-}
-
-function shipArrived(shipId: string): ShipArrivedPayload {
-  return { shipId, shipName: shipId, systemId: "s1", destName: "Sol" };
 }
 
 describe("mergeGlobalEvents", () => {
@@ -38,16 +33,6 @@ describe("mergeGlobalEvents", () => {
 
     mergeGlobalEvents(target, { globalEvents: { eventNotifications: [eventNotification("second")] } });
     expect(target.eventNotifications).toEqual([eventNotification("first"), eventNotification("second")]);
-  });
-
-  it("initialises and then appends shipArrived entries in order", () => {
-    const target: Partial<GlobalEventMap> = {};
-
-    mergeGlobalEvents(target, { globalEvents: { shipArrived: [shipArrived("ship-1")] } });
-    expect(target.shipArrived).toEqual([shipArrived("ship-1")]);
-
-    mergeGlobalEvents(target, { globalEvents: { shipArrived: [shipArrived("ship-2")] } });
-    expect(target.shipArrived).toEqual([shipArrived("ship-1"), shipArrived("ship-2")]);
   });
 
   it("leaves target untouched when the result carries no globalEvents", () => {

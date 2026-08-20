@@ -25,8 +25,15 @@ import type { BootConfig, CommandEnvelope, CommandResult, PacingFrame, TickFaile
 import type { StateFrame } from "@/lib/runtime/snapshot";
 import type { Speed } from "@/lib/world/tick-loop";
 import type { WorldMeta } from "@/lib/world/types";
-import type { SaveInfo } from "@/lib/world/save-files";
-import type { NewGameInput, LoadGameInput, SaveGameInput, SpeedInput } from "@/lib/schemas/game-setup";
+import type { SaveInfo } from "@/lib/world/save-backend";
+import type {
+  NewGameInput,
+  LoadGameInput,
+  SaveGameInput,
+  SpeedInput,
+  ExportSaveInput,
+  ImportSaveInput,
+} from "@/lib/schemas/game-setup";
 import type { OrderBuildInput, AutomationInput } from "@/lib/schemas/construction-orders";
 import type { TreasuryPolicyInput } from "@/lib/schemas/treasury";
 import type { PinInput } from "@/lib/schemas/player-pins";
@@ -35,7 +42,8 @@ import type { OrderBuildResult, OrderColonyResult, CancelOrderResult, SetAutomat
 import type { UpdateTreasuryPolicyResult } from "@/lib/services/treasury";
 import type { SetSystemPinResult } from "@/lib/services/player-pins";
 import type { SetAlertCategoryResult, SetTrackerSectionResult } from "@/lib/services/player-settings";
-import type { LoadGameResult, SaveGameResult } from "@/lib/services/game";
+import type { LoadGameResult, SaveGameResult, ExportSaveResult, ImportSaveResult } from "@/lib/services/game";
+import type { DevCommandEnvelope, DevCommandResultMessage, DevHandlers } from "./dev-commands";
 
 import { bootHost } from "./boot";
 import { createWorkerHost, type WorkerHost, type RawWorkerScope } from "./host";
@@ -57,6 +65,8 @@ type SetAlertCategoryData = Extract<SetAlertCategoryResult, { ok: true }>["data"
 type SetTrackerSectionData = Extract<SetTrackerSectionResult, { ok: true }>["data"];
 type LoadGameData = Extract<LoadGameResult, { ok: true }>["data"];
 type SaveGameData = Extract<SaveGameResult, { ok: true }>["data"];
+type ExportSaveData = Extract<ExportSaveResult, { ok: true }>["data"];
+type ImportSaveData = Extract<ImportSaveResult, { ok: true }>["data"];
 
 export interface GameCommandMap {
   orderBuild: { payload: OrderBuildInput & { systemId: string }; data: OrderBuildData };
@@ -72,6 +82,8 @@ export interface GameCommandMap {
   newGame: { payload: NewGameInput; data: WorldMeta };
   loadGame: { payload: LoadGameInput; data: LoadGameData };
   saveGame: { payload: SaveGameInput; data: SaveGameData };
+  exportSave: { payload: ExportSaveInput; data: ExportSaveData };
+  importSave: { payload: ImportSaveInput; data: ImportSaveData };
 }
 
 export type GameCommandType = keyof GameCommandMap;
@@ -92,13 +104,20 @@ export type GameCommandResultMessage = {
 export type InboundMessage =
   | { type: "boot"; config: BootConfig }
   | { type: "subscribe" }
-  | { type: "command"; envelope: GameCommandEnvelope };
+  | { type: "command"; envelope: GameCommandEnvelope | DevCommandEnvelope };
 
 export type OutboundMessage =
   | { type: "pacing"; frame: PacingFrame }
   | { type: "state"; frame: StateFrame }
   | { type: "tickFailed"; msg: TickFailedMsg }
-  | GameCommandResultMessage;
+  /** An autosave attempt's result (build plan Task 12, spec §5) — `error: null` on a clean write,
+   *  the failure's message otherwise. Relayed from `TickLoop.subscribeAutosave`
+   *  (`lib/world/tick-loop.ts`); `client/worker-connection.ts` turns this into
+   *  `GameStore.setAutosaveFailure`, so a persistently failing autosave reaches the player rather
+   *  than only `console.error`. */
+  | { type: "autosaveResult"; error: string | null }
+  | GameCommandResultMessage
+  | DevCommandResultMessage;
 
 // ── The dynamically-imported engine graph ───────────────────────────────────
 
@@ -127,6 +146,8 @@ interface Engine {
   loadGame: GameServiceModule["loadGame"];
   listGameSaves: GameServiceModule["listGameSaves"];
   saveGame: GameServiceModule["saveGame"];
+  exportSave: GameServiceModule["exportSave"];
+  importSave: GameServiceModule["importSave"];
   orderBuild: ConstructionOrdersModule["orderBuild"];
   orderColony: ConstructionOrdersModule["orderColony"];
   cancelOrder: ConstructionOrdersModule["cancelOrder"];
@@ -140,6 +161,8 @@ interface Engine {
     loadGameSchema: GameSetupSchemas["loadGameSchema"];
     saveGameSchema: GameSetupSchemas["saveGameSchema"];
     speedSchema: GameSetupSchemas["speedSchema"];
+    exportSaveSchema: GameSetupSchemas["exportSaveSchema"];
+    importSaveSchema: GameSetupSchemas["importSaveSchema"];
     orderBuildSchema: ConstructionOrderSchemas["orderBuildSchema"];
     automationSchema: ConstructionOrderSchemas["automationSchema"];
     treasuryPolicySchema: TreasurySchemas["treasuryPolicySchema"];
@@ -147,6 +170,9 @@ interface Engine {
     alertCategorySchema: PlayerSettingsSchemas["alertCategorySchema"];
     trackerSectionSchema: PlayerSettingsSchemas["trackerSectionSchema"];
   };
+  /** Populated only in a dev build (`import.meta.env.DEV`) — see `dev-commands.ts`'s header
+   *  docstring for why the guard lives here as a literal rather than through `isDevBuild()`. */
+  dev: DevHandlers | null;
 }
 
 async function loadEngine(config: BootConfig): Promise<Engine> {
@@ -167,6 +193,10 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
     import("@/lib/schemas/player-pins"),
     import("@/lib/schemas/player-settings"),
   ]);
+  // Literal `import.meta.env.DEV` guard (not `isDevBuild()`) — see `dev-commands.ts`'s header
+  // docstring: Rollup needs this exact expression to dead-code-eliminate the branch, dropping
+  // `loadDevHandlers`'s target (`lib/services/dev-tools.ts`) from a production bundle entirely.
+  const dev = import.meta.env.DEV ? await (await import("./dev-commands")).loadDevHandlers() : null;
   return {
     tickLoop: tickLoopMod.tickLoop,
     hasWorld: storeMod.hasWorld,
@@ -178,6 +208,8 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
     loadGame: gameMod.loadGame,
     listGameSaves: gameMod.listGameSaves,
     saveGame: gameMod.saveGame,
+    exportSave: gameMod.exportSave,
+    importSave: gameMod.importSave,
     orderBuild: ordersMod.orderBuild,
     orderColony: ordersMod.orderColony,
     cancelOrder: ordersMod.cancelOrder,
@@ -191,6 +223,8 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
       loadGameSchema: gameSetupSchemas.loadGameSchema,
       saveGameSchema: gameSetupSchemas.saveGameSchema,
       speedSchema: gameSetupSchemas.speedSchema,
+      exportSaveSchema: gameSetupSchemas.exportSaveSchema,
+      importSaveSchema: gameSetupSchemas.importSaveSchema,
       orderBuildSchema: orderSchemas.orderBuildSchema,
       automationSchema: orderSchemas.automationSchema,
       treasuryPolicySchema: treasurySchemas.treasuryPolicySchema,
@@ -198,6 +232,7 @@ async function loadEngine(config: BootConfig): Promise<Engine> {
       alertCategorySchema: settingsSchemas.alertCategorySchema,
       trackerSectionSchema: settingsSchemas.trackerSectionSchema,
     },
+    dev,
   };
 }
 
@@ -235,7 +270,16 @@ function runWorldMutatingCommand<T>(engine: Engine, fn: () => T): Promise<{ resu
   });
 }
 
-async function runCommand(engine: Engine, envelope: GameCommandEnvelope): Promise<GameCommandResultMessage> {
+/** Dev commands are unavailable in this build (`Engine.dev` is `null`) — a production worker never
+ *  hits this because the case bodies below are unreachable without a dev registry, but a dev
+ *  build's own worker answers it the same discriminated-error way every other command failure does,
+ *  never a thrown exception. */
+const DEV_COMMANDS_UNAVAILABLE = "Dev commands unavailable in this build.";
+
+async function runCommand(
+  engine: Engine,
+  envelope: GameCommandEnvelope | DevCommandEnvelope,
+): Promise<GameCommandResultMessage | DevCommandResultMessage> {
   const { id } = envelope;
   try {
     switch (envelope.type) {
@@ -346,6 +390,51 @@ async function runCommand(engine: Engine, envelope: GameCommandEnvelope): Promis
         const result = await engine.saveGame(parsed.data.name);
         return { type: "commandResult", id, result };
       }
+      case "exportSave": {
+        const parsed = engine.schemas.exportSaveSchema.safeParse(envelope.payload);
+        if (!parsed.success) {
+          return { type: "commandResult", id, result: { ok: false, error: zodIssueMessage(parsed.error) } };
+        }
+        const result = await engine.exportSave(parsed.data.name);
+        return { type: "commandResult", id, result };
+      }
+      case "importSave": {
+        const parsed = engine.schemas.importSaveSchema.safeParse(envelope.payload);
+        if (!parsed.success) {
+          return { type: "commandResult", id, result: { ok: false, error: zodIssueMessage(parsed.error) } };
+        }
+        const result = await engine.importSave(parsed.data.name, parsed.data.json);
+        return { type: "commandResult", id, result };
+      }
+      case "advanceTicks": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        const result = await dev.advanceTicks(envelope.payload);
+        return { type: "commandResult", id, result };
+      }
+      case "spawnEvent": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        const { result } = await runWorldMutatingCommand(engine, () => dev.spawnEvent(envelope.payload));
+        return { type: "commandResult", id, result };
+      }
+      case "resetEconomy": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        const { result } = await runWorldMutatingCommand(engine, () => dev.resetEconomy());
+        return { type: "commandResult", id, result };
+      }
+      case "economySnapshot": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        // A pure read (no `setWorld`) — never queued, same as `listSaves` above.
+        return { type: "commandResult", id, result: dev.economySnapshot() };
+      }
+      case "inspectWorld": {
+        const dev = engine.dev;
+        if (!dev) return { type: "commandResult", id, result: { ok: false, error: DEV_COMMANDS_UNAVAILABLE } };
+        return { type: "commandResult", id, result: dev.inspectWorld() };
+      }
       default: {
         // Exhaustiveness: every `GameCommandType` is a case above, so `envelope` (and therefore
         // this branch) is unreachable — TS narrows it to `never` here, which is also why nothing
@@ -445,6 +534,9 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
         pushPacingFrame(broadcast);
         pushStateFrame();
       });
+      engine.tickLoop.subscribeAutosave((error) => {
+        host.post({ type: "autosaveResult", error });
+      });
     });
   }
 
@@ -470,7 +562,7 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
     pushStateFrame();
   }
 
-  async function handleCommand(envelope: GameCommandEnvelope): Promise<void> {
+  async function handleCommand(envelope: GameCommandEnvelope | DevCommandEnvelope): Promise<void> {
     if (!bootPromise) {
       host.post({ type: "commandResult", id: envelope.id, result: { ok: false, error: "Worker not booted." } });
       return;

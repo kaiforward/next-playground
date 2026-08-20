@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createGameStore } from "../game-store";
+import { createGameStore, selectIsReplacing } from "../game-store";
 import type { StateFrame } from "@/lib/runtime/snapshot";
 import type { PacingFrame } from "@/lib/runtime/channel";
 
@@ -244,5 +244,60 @@ describe("createGameStore — beginWorldReplacement", () => {
     expect(snapshot.worldVersion).toBe(6);
     expect(snapshot.slices.visibility).toEqual({ systemIds: ["new-world"] });
     expect(notifications).toBe(1);
+  });
+
+  it("latches a floor even when called before any frame has ever landed (worldVersion null) — the never-booted restore caller", () => {
+    // The state `client/worker-connection.ts`'s `restoreFromDevReloadMarkerIfPending` calls this
+    // in: right after posting `subscribe`, before the worker's own world-less reply has arrived —
+    // `worldVersion` is still `null` (never a real prior version; a full page reload discards the
+    // whole JS heap, so there is no "outgoing world" here in the ordinary sense). A bare
+    // `current.worldVersion` floor (`null`) would leave `replacementFloor` at `null` too —
+    // `selectIsReplacing` reads that as "not replacing" — so the worker's own world-less subscribe
+    // reply would sail straight through and the route gate would redirect to `/start` before the
+    // real load's frame lands. This is the bug the review finding named.
+    const store = createGameStore();
+    store.beginWorldReplacement();
+    expect(selectIsReplacing(store.getSnapshot())).toBe(true);
+
+    // The worker's own world-less subscribe reply — must NOT end the replacement early.
+    store.applyStateFrame({ worldVersion: 0, slices: {} });
+    expect(selectIsReplacing(store.getSnapshot())).toBe(true);
+    expect(store.getSnapshot().worldVersion).toBe(0);
+
+    // The loaded world's own frame (version >= 1) is what actually clears it.
+    store.applyStateFrame({ worldVersion: 1, slices: { visibility: { systemIds: ["a"] } } });
+    expect(selectIsReplacing(store.getSnapshot())).toBe(false);
+    expect(store.getSnapshot().worldVersion).toBe(1);
+  });
+});
+
+describe("createGameStore — cancelWorldReplacement", () => {
+  it("drops the floor so a stuck replacement (a rejected newGame/loadGame) falls back to the ordinary no-world state", () => {
+    const store = createGameStore();
+    store.beginWorldReplacement();
+    expect(selectIsReplacing(store.getSnapshot())).toBe(true);
+
+    store.cancelWorldReplacement();
+
+    expect(selectIsReplacing(store.getSnapshot())).toBe(false);
+    // Already-coherent no-world state from beginWorldReplacement — cancel doesn't need to
+    // re-establish it, only drop the floor that was keeping "replacing" true.
+    expect(store.getSnapshot().worldVersion).toBe(0);
+    expect(store.getSnapshot().liveness).toBe("no-world");
+    expect(store.getSnapshot().slices).toEqual({});
+  });
+
+  it("a subsequent frame at the same version the floor would have blocked now applies normally", () => {
+    // Confirms cancel doesn't just flip a flag cosmetically — applyStateFrame's own floor guard is
+    // actually cleared, so a later frame the caller retries with isn't dropped as "stale".
+    const store = createGameStore();
+    store.applyStateFrame({ worldVersion: 5, slices: {} });
+    store.beginWorldReplacement(); // floor latched at 5
+    store.cancelWorldReplacement();
+
+    store.applyStateFrame({ worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+
+    expect(store.getSnapshot().worldVersion).toBe(5);
+    expect(store.getSnapshot().slices.visibility).toEqual({ systemIds: ["a"] });
   });
 });

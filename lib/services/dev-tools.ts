@@ -4,7 +4,7 @@
  */
 
 import { getWorld, hasWorld, setWorld } from "@/lib/world/store";
-import { runWorldTick } from "@/lib/world/tick";
+import { tickLoop } from "@/lib/world/tick-loop";
 import { EVENT_DEFINITIONS } from "@/lib/constants/events";
 import { getInitialStock } from "@/lib/constants/market-economy";
 import { GOODS } from "@/lib/constants/goods";
@@ -12,7 +12,7 @@ import { buildModifiersForPhase, rollPhaseDuration } from "@/lib/engine/events";
 import { spotPrice, curveForRow } from "@/lib/engine/market-pricing";
 import { yieldsOf } from "@/lib/engine/resources";
 import { isEventTypeId } from "@/lib/types/guards";
-import type { WorldEvent, WorldEventModifier } from "@/lib/world/types";
+import type { World, WorldEvent, WorldEventModifier } from "@/lib/world/types";
 
 // ── Result types ────────────────────────────────────────────────
 
@@ -22,6 +22,13 @@ type ServiceResult<T> =
 
 // ── Advance ticks ───────────────────────────────────────────────
 
+/**
+ * Runs `count` ticks through `TickLoop.runTicks` — the real loop's own `tickOnce`/`emit` path
+ * (build plan Task 13) — rather than looping `runWorldTick` locally and committing once at the
+ * end. Every tick's own `setWorld` and subscriber notification fire exactly as they do for a paced
+ * tick, so a worker (or any other `tickLoop.subscribe` consumer) sees the batch's progress the same
+ * way it sees ordinary ticks — the store is never left stale until the whole batch finishes.
+ */
 export async function advanceTicks(count: number): Promise<ServiceResult<{ newTick: number; elapsed: number }>> {
   if (count < 1 || count > 1000) {
     return { ok: false, error: "Count must be between 1 and 1000." };
@@ -31,18 +38,12 @@ export async function advanceTicks(count: number): Promise<ServiceResult<{ newTi
   }
 
   const start = performance.now();
-
-  let world = getWorld();
-  for (let i = 0; i < count; i++) {
-    const result = await runWorldTick(world);
-    world = result.world;
-  }
-  setWorld(world);
+  await tickLoop.runTicks(count);
 
   return {
     ok: true,
     data: {
-      newTick: world.meta.currentTick,
+      newTick: getWorld().meta.currentTick,
       elapsed: Math.round(performance.now() - start),
     },
   };
@@ -202,4 +203,66 @@ export function resetEconomy(): ServiceResult<{ marketsReset: number; eventsClea
   setWorld({ ...world, markets, events: [], modifiers: [] });
 
   return { ok: true, data: { marketsReset: markets.length, eventsCleared } };
+}
+
+// ── Inspect world ───────────────────────────────────────────────
+
+/**
+ * A whole-world summary for console inspection (client-runtime spec §10: "Dev inspection of the
+ * world — today possible by poking the server process — is a dev-only command exposing the current
+ * snapshot"). Counts rather than full arrays deliberately — the point is a cheap at-a-glance shape
+ * check from the browser console, not a second `saveGame`/export path (those already move the raw
+ * world).
+ */
+export interface WorldInspection {
+  meta: World["meta"];
+  counts: {
+    regions: number;
+    systems: number;
+    bodies: number;
+    buildings: number;
+    constructionProjects: number;
+    connections: number;
+    markets: number;
+    factions: number;
+    relations: number;
+    alliancePacts: number;
+    treasuries: number;
+    events: number;
+    modifiers: number;
+    ships: number;
+    flowEvents: number;
+  };
+  nextId: number;
+}
+
+export function inspectWorld(): ServiceResult<WorldInspection> {
+  if (!hasWorld()) {
+    return { ok: false, error: "No world loaded." };
+  }
+  const world = getWorld();
+  return {
+    ok: true,
+    data: {
+      meta: world.meta,
+      counts: {
+        regions: world.regions.length,
+        systems: world.systems.length,
+        bodies: world.bodies.length,
+        buildings: world.buildings.length,
+        constructionProjects: world.constructionProjects.length,
+        connections: world.connections.length,
+        markets: world.markets.length,
+        factions: world.factions.length,
+        relations: world.relations.length,
+        alliancePacts: world.alliancePacts.length,
+        treasuries: world.treasuries.length,
+        events: world.events.length,
+        modifiers: world.modifiers.length,
+        ships: world.ships.length,
+        flowEvents: world.flowEvents.length,
+      },
+      nextId: world.nextId,
+    },
+  };
 }

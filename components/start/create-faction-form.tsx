@@ -20,9 +20,7 @@ const DOC_OPTIONS = ALL_DOCTRINES.map((d) => ({ value: d, label: DOCTRINES[d].na
 
 interface CreateFactionFormProps {
   /** Called after a successful `newGame` command, before navigating to the map root — the start
-   *  screen's dialog (`components/start/start-screen.tsx`) closes itself here. Optional so the old
-   *  standalone `/start/new` Next route (`app/start/new/page.tsx`, kept compiling until Task 14)
-   *  needs no change of its own. */
+   *  screen's dialog (`components/start/start-screen.tsx`) closes itself here. Optional. */
   onSuccess?: () => void;
 }
 

@@ -75,7 +75,7 @@ One-time market jolts applied when a phase starts. Directly modify supply or dem
 
 ## Event Surfaces
 
-- **Notifications**: SSE broadcasts on event spawn, phase transition, expiration, and spread. Displayed as toasts and in the Activity Panel ship log.
+- **Notifications**: the worker's pacing frame carries a notification on event spawn, phase transition, expiration, and spread. Displayed as toasts and in the Activity Panel ship log.
 - **Map markers**: Active events show colored borders/icons on system nodes. Color and icon vary by event type (red for war, amber for plague, green for mining, etc.).
 - **Activity Panel**: Economy tab shows all active events sorted by danger priority, with phase name, system link, and ticks remaining.
 - **System detail**: Events section shows active events at that system with phase and modifier details.

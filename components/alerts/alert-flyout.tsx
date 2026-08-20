@@ -132,8 +132,8 @@ export interface AlertFlyoutProps {
  * `collisionBoundary={runRef?.current}`, Radix's own supported hook for constraining collision
  * detection to a boundary narrower than the viewport (`@radix-ui/react-popper`'s `shift`+`flip`,
  * `avoidCollisions: true` by default) rather than a hand-rolled measurement effect. Capped to the map
- * area's own height: the map fills exactly `calc(100vh - var(--topbar-height))` (`app/(game)/page.tsx`),
- * and the chip run sits `FLYOUT_TOP_OFFSET` above where this flyout's own top lands, so
+ * area's own height: the map fills exactly `calc(100vh - var(--topbar-height))` (`client/main.tsx`'s
+ * `MapRoot`), and the chip run sits `FLYOUT_TOP_OFFSET` above where this flyout's own top lands, so
  * `100vh - var(--topbar-height) - FLYOUT_TOP_OFFSET` is exactly the room left below it before the map
  * itself runs out.
  *

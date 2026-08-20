@@ -9,8 +9,8 @@ const EMPTY_ENTRIES: MarketEntry[] = [];
  * Market entries for one system — read from the store's `market` slice. A non-developed system
  * already reads no entries (`getMarket` returns `{ entries: [] }` for a system with no station,
  * `lib/services/market.ts`), and every existing caller already treats an empty list as "nothing to
- * show here" (`app/(game)/@panel/system/[systemId]/market/page.tsx`'s `market.length === 0` guard)
- * — so a systemId absent from the world reuses that same empty-array reading rather than adding a
+ * show here" (`components/panels/system-market.tsx`'s `market.length === 0` guard) — so a systemId
+ * absent from the world reuses that same empty-array reading rather than adding a
  * new discriminant this hook's only caller would need to learn.
  */
 export function useMarket(systemId: string) {

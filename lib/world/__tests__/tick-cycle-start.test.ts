@@ -81,10 +81,10 @@ describe("runWorldTick: cycle start", () => {
 
   it("broadcasts economyTick on every tick, cycle or not, with the resolving tick the only one reporting systems", async () => {
     // The cycle-start gate skips the economy stage mid-cycle, so runWorldTick emits the
-    // mid-cycle payload in its place. That signal must not go missing: the client
-    // (useTickInvalidation) refetches market/population/ownership data on every
-    // economyTick, so a gate that swallowed it would leave the UI stale for a cycle
-    // rather than fail loudly. systemCount is what distinguishes a resolving tick.
+    // mid-cycle payload in its place. That signal must not go missing: the client re-derives
+    // market/population/ownership data from the state frame on every economyTick, so a gate
+    // that swallowed it would leave the UI stale for a cycle rather than fail loudly.
+    // systemCount is what distinguishes a resolving tick.
     let world = generateWorld({ systemCount: 40, seed: 7 });
 
     for (let t = 1; t <= CYCLE_LENGTH; t++) {

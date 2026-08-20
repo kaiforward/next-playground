@@ -22,10 +22,6 @@ import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 // `MapControlsDock` is stubbed out:
 // its own render tree (Pixi colour ramps, tooltips) is unrelated to what's under test here.
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-}));
-
 vi.mock("@/lib/hooks/use-player-pins", () => ({
   useSetSystemPin: () => ({ mutate: vi.fn() }),
 }));

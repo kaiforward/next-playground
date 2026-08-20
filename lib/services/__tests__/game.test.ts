@@ -5,7 +5,7 @@ import * as path from "node:path";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, getWorld, clearWorld, hasWorld } from "@/lib/world/store";
 import { setSavesDirForTesting } from "@/lib/world/save-files";
-import { newGame, saveGame, loadGame, listGameSaves } from "@/lib/services/game";
+import { newGame, saveGame, loadGame, listGameSaves, exportSave, importSave } from "@/lib/services/game";
 
 describe("game lifecycle services (save/load)", () => {
   const world = generateWorld({ systemCount: 60, seed: 7 });
@@ -91,6 +91,61 @@ describe("game lifecycle services (save/load)", () => {
     const times = saves.map((s) => Date.parse(s.savedAt));
     const sorted = [...times].sort((a, b) => b - a);
     expect(times).toEqual(sorted);
+  });
+});
+
+// Proves 4 (build plan Task 12): export then import round-trips byte-equal.
+describe("exportSave / importSave — round trip", () => {
+  const world = generateWorld({ systemCount: 60, seed: 11 });
+
+  afterEach(() => {
+    clearWorld();
+  });
+
+  it("exports a save's exact raw JSON", async () => {
+    setWorld(world);
+    await saveGame("exportme");
+
+    const result = await exportSave("exportme");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.name).toBe("exportme");
+    const parsed = JSON.parse(result.data.json);
+    expect(parsed.world.meta.seed).toBe(world.meta.seed);
+  });
+
+  it("fails with ok:false exporting a save that does not exist", async () => {
+    const result = await exportSave("no-such-export");
+    expect(result.ok).toBe(false);
+  });
+
+  it("export -> import round-trips the raw JSON byte-for-byte", async () => {
+    setWorld(world);
+    await saveGame("roundtrip-export");
+    const exported = await exportSave("roundtrip-export");
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) return;
+
+    const imported = await importSave("roundtrip-import", exported.data.json);
+    expect(imported).toEqual({
+      ok: true,
+      data: { name: "roundtrip-import", tick: world.meta.currentTick },
+    });
+
+    const reExported = await exportSave("roundtrip-import");
+    expect(reExported.ok).toBe(true);
+    if (!reExported.ok) return;
+    // The load-bearing assertion: the bytes written by importSave are IDENTICAL to what export
+    // produced, not merely equivalent after a re-serialise round trip.
+    expect(reExported.data.json).toBe(exported.data.json);
+  });
+
+  it("rejects an invalid save file without writing anything", async () => {
+    const result = await importSave("bad-import", "{ not a valid save at all");
+    expect(result.ok).toBe(false);
+
+    const listed = await listGameSaves();
+    expect(listed.some((s) => s.name === "bad-import")).toBe(false);
   });
 });
 

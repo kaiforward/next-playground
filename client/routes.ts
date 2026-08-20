@@ -53,7 +53,7 @@ export function useRoute(): Route {
 // href builders (`mapHref`, `startHref`, `systemHref`, etc.) moved to `lib/utils/route-hrefs.ts` —
 // see that module's own docstring for why: they're plain string builders with no router dependency,
 // but living in this file would still pull `wouter` (imported above for `useRoute`) into anything
-// that imports one, including `components/start/*`, which the still-live Next app also compiles.
+// that imports one, including `components/start/*`.
 
 // ── World-existence gate (client-runtime spec §3, §9, build plan Task 11) ───
 //

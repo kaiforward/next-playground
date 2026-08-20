@@ -14,12 +14,16 @@ import { useGameSlice } from "@/lib/store/use-game-store";
  * `bg-status-{color}/10 border-status-{color}/20 text-status-{color}-light`) rather than a new
  * pattern — square corners, no new shape language.
  *
- * **Honest about what pre-Task-12 can actually do**: the web save backend (IndexedDB) doesn't exist
- * yet — the worker's save/load commands still dynamic-import the Node file backend, which fails at
- * runtime in a browser (a known, by-design Gate B finding). So neither state below offers a button
- * that claims to restore an autosave; "Reload App" does exactly what it says (a fresh page load,
- * fresh worker, world-less) and no more. Task 12 is what makes a real restore possible, at which
- * point this component's buttons are the seam that gets a real handler.
+ * **What "Reload App" actually does, post-Task-12**: the web save backend is now IndexedDB
+ * (`client/save-indexeddb.ts`), and autosave persists there for real — a page reload boots a fresh
+ * worker, lands world-less on the start screen, and the player's own Continue/Load picks the
+ * autosave back up (`lib/services/game.ts`'s `listGameSaves`/`loadGame`, now IndexedDB-backed).
+ * "Reload App" genuinely recovers the last autosave for the dead-worker and paused-by-failure
+ * states below; it does not (and could not) auto-load it itself — the start screen owns that choice,
+ * same as any other session start. The autosave-failure state below has no reload path to offer
+ * (the write itself is what failed) — it points at the start screen's Export control
+ * (`components/start/start-screen.tsx`) instead, so a player can get bytes off the machine before
+ * closing the tab.
  */
 export function LivenessBanner() {
   const liveness = useGameSlice((state) => state.liveness);
@@ -37,8 +41,7 @@ export function LivenessBanner() {
         className="flex items-center justify-between gap-3 border-b border-status-red/20 bg-status-red/10 px-4 py-2 text-sm text-status-red-light"
       >
         <span>
-          Connection to the game was lost. Browser autosave restore isn&apos;t available in this
-          build yet — reloading starts a new session.
+          Connection to the game was lost. Reload to recover from the autosave.
         </span>
         <Button variant="outline" size="sm" onClick={reload}>
           Reload App
@@ -54,8 +57,7 @@ export function LivenessBanner() {
         className="flex items-center justify-between gap-3 border-b border-status-amber/20 bg-status-amber/10 px-4 py-2 text-sm text-status-amber-light"
       >
         <span>
-          Game paused — {failureCause}. Browser autosave restore isn&apos;t available in this build
-          yet — reloading starts a new session.
+          Game paused — {failureCause}. Reload to recover from the autosave.
         </span>
         <Button variant="outline" size="sm" onClick={reload}>
           Reload App
@@ -71,8 +73,8 @@ export function LivenessBanner() {
         className="flex items-center justify-between gap-3 border-b border-status-amber/20 bg-status-amber/10 px-4 py-2 text-sm text-status-amber-light"
       >
         <span>
-          Autosave failed — {autosaveFailure}. Manual export isn&apos;t available in this build yet
-          — avoid closing this tab until you&apos;ve saved manually.
+          Autosave failed — {autosaveFailure}. Export your save from the start screen before
+          closing this tab.
         </span>
       </div>
     );

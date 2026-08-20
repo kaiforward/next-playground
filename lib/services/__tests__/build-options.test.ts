@@ -65,24 +65,24 @@ describe("getSystemBuildOptions", () => {
     expect(afterHousing.etaCycles).toBeGreaterThanOrEqual(housing.etaCycles);
   });
 
-  it("throws ServiceError(409) when no world is loaded", () => {
+  it('throws ServiceError("no_world") when no world is loaded', () => {
     clearWorld();
     expect(() => getSystemBuildOptions("any-system")).toThrow(ServiceError);
     try {
       getSystemBuildOptions("any-system");
     } catch (err) {
       if (!(err instanceof ServiceError)) throw err;
-      expect(err.status).toBe(409);
+      expect(err.kind).toBe("no_world");
     }
   });
 
-  it("throws ServiceError(404) naming the id for an unknown system", () => {
+  it('throws ServiceError("not_found") naming the id for an unknown system', () => {
     expect(() => getSystemBuildOptions("no-such-system")).toThrow(ServiceError);
     try {
       getSystemBuildOptions("no-such-system");
     } catch (err) {
       if (!(err instanceof ServiceError)) throw err;
-      expect(err.status).toBe(404);
+      expect(err.kind).toBe("not_found");
       expect(err.message).toContain("no-such-system");
     }
   });
