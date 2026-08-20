@@ -5,7 +5,6 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, useDialog } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/empty-state";
-import { FormError } from "@/components/form/form-error";
 import { CreateFactionForm } from "@/components/start/create-faction-form";
 import { useSavesList, useLoadGameMutation } from "@/lib/hooks/use-game-lifecycle";
 import { useNavigate } from "@/components/ui/link-provider";
@@ -16,6 +15,16 @@ import { formatDate } from "@/lib/utils/calendar";
 function formatSavedAt(iso: string): string {
   return new Date(iso).toLocaleString();
 }
+
+/**
+ * The Task-12 seam (Gate C smoke finding B): `listSaves`/`loadGame`/`saveGame` all dynamic-import
+ * the Node file backend (`lib/services/game.ts`), which cannot load in a browser — every save
+ * operation fails identically until Task 12 ships the IndexedDB backend. Rather than surface that
+ * raw failure ("Failed to fetch dynamically imported module …/lib/world/save-files.ts") to the
+ * player, both the saves-list read and a load attempt render this one honest, quiet message — New
+ * Game (`newGame`, which never touches the save backend) stays fully functional regardless.
+ */
+const SAVES_UNAVAILABLE_MESSAGE = "Saves aren't available in the browser yet.";
 
 /**
  * The entry screen (client-runtime spec §9, build plan Task 11) — listing saves, loading and
@@ -88,7 +97,7 @@ export function StartScreen() {
       <Card>
         <CardHeader title="Load Game" />
         {listError ? (
-          <FormError message={listError} />
+          <EmptyState message={SAVES_UNAVAILABLE_MESSAGE} />
         ) : saves === null ? (
           <EmptyState message="Loading saves…" />
         ) : manualSaves.length === 0 ? (
@@ -116,7 +125,9 @@ export function StartScreen() {
             ))}
           </ul>
         )}
-        {loadError && <FormError message={loadError} />}
+        {/* Same Task-12 seam as `listError` above — `loadGame` dynamic-imports the same Node
+            backend, so it fails identically until Task 12; the raw message is never shown. */}
+        {loadError && <EmptyState message={SAVES_UNAVAILABLE_MESSAGE} className="mt-2" />}
       </Card>
 
       <Dialog open={newGameDialog.open} onClose={newGameDialog.onClose} modal size="sm">

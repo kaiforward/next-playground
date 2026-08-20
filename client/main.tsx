@@ -4,6 +4,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import "./fonts.css";
 import "@/app/globals.css";
 import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
+import { selectIsReplacing } from "@/lib/store/game-store";
 import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";
 import { applyOutboundMessage, markWorkerDead, handlePageHideSave } from "./worker-connection";
 import { useAtlas } from "@/lib/hooks/use-atlas";
@@ -19,7 +20,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useNavigate } from "@/components/ui/link-provider";
 import { AUTOSAVE_NAME } from "@/lib/world/save";
 import { WouterRuntimeProvider } from "./wouter-link";
-import { useRoute, resolveRouteGate } from "./routes";
+import { useRoute, resolveRouteGate, shouldRedirectToStart } from "./routes";
 import { startHref } from "@/lib/utils/route-hrefs";
 import type { InboundMessage } from "./worker/game-worker";
 
@@ -127,15 +128,20 @@ function RouteBody() {
   const route = useRoute();
   const navigate = useNavigate();
   const worldVersion = useGameSlice((state) => state.worldVersion);
-  const noWorld = worldVersion === 0;
+  // A world replacement in flight (`GameStore.beginWorldReplacement()`) also reads `worldVersion
+  // === 0`, but is NOT "no world" — the new world is already on its way, just not landed yet. See
+  // `client/routes.ts`'s own docstring (Gate C smoke finding: without this distinction, New Game
+  // navigated to the map route and was immediately redirected straight back to `/start`).
+  const isReplacing = useGameSlice(selectIsReplacing);
+  const routeIsStart = route.name === "start";
 
   useEffect(() => {
-    if (noWorld && route.name !== "start") {
+    if (shouldRedirectToStart(worldVersion, routeIsStart, isReplacing)) {
       navigate(startHref(), { replace: true });
     }
-  }, [noWorld, route.name, navigate]);
+  }, [worldVersion, routeIsStart, isReplacing, navigate]);
 
-  const gate = resolveRouteGate(worldVersion, route.name === "start");
+  const gate = resolveRouteGate(worldVersion, routeIsStart, isReplacing);
 
   if (gate === "boot-loading") return <BootLoading />;
   if (gate === "start") {

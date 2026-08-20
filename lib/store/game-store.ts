@@ -201,3 +201,18 @@ export function createGameStore(): GameStore {
     readonlyApi: api,
   };
 }
+
+/**
+ * Whether a world replacement is in flight — a `useGameSlice`-ready selector over `replacementFloor`
+ * (see that field's own docstring) rather than a raw field read, so every consumer names the SAME
+ * derived fact instead of re-deriving `replacementFloor !== null` at each call site. The route gate
+ * (`client/routes.ts`'s `resolveRouteGate`/`shouldRedirectToStart`) reads this to distinguish the
+ * swap window — `worldVersion === 0` but a new world is already on the way — from a genuine no-world
+ * boot, which must still redirect to `/start` (Gate C smoke finding: without this distinction, New
+ * Game navigated to the map route and was immediately redirected straight back to `/start`, because
+ * the command result — and the mutation's own `navigate()` call — resolves before the new world's
+ * state frame is even built, let alone posted).
+ */
+export function selectIsReplacing(state: StoreState): boolean {
+  return state.replacementFloor !== null;
+}

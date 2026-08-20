@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
-import { useRoute, resolveRouteGate } from "../routes";
+import { useRoute, resolveRouteGate, shouldRedirectToStart } from "../routes";
+import { createGameStore, selectIsReplacing } from "@/lib/store/game-store";
 
 function RouteProbe() {
   const route = useRoute();
@@ -104,26 +105,25 @@ describe("useRoute", () => {
   });
 });
 
-// Build plan Task 11's world-existence gate — pinned as a pure function so the exact bug it fixes
-// (a mid-game world-replacement reset tearing the already-mounted start screen down into the
-// generic boot-loading state) has a fast, no-Worker regression test.
+// Build plan Task 11's world-existence gate — pinned as pure functions so the bugs they fix (both
+// found on real-browser Gate C smoke) have fast, no-Worker regression tests.
 describe("resolveRouteGate", () => {
   it("shows boot-loading before the very first frame lands, regardless of route", () => {
-    expect(resolveRouteGate(null, true)).toBe("boot-loading");
-    expect(resolveRouteGate(null, false)).toBe("boot-loading");
+    expect(resolveRouteGate(null, true, false)).toBe("boot-loading");
+    expect(resolveRouteGate(null, false, false)).toBe("boot-loading");
   });
 
   it("shows boot-loading for a non-start route while no world exists (briefly, before the redirect effect fires)", () => {
-    expect(resolveRouteGate(0, false)).toBe("boot-loading");
+    expect(resolveRouteGate(0, false, false)).toBe("boot-loading");
   });
 
   it("renders the start route normally once the first frame has landed, world or no world", () => {
-    expect(resolveRouteGate(0, true)).toBe("start");
-    expect(resolveRouteGate(42, true)).toBe("start");
+    expect(resolveRouteGate(0, true, false)).toBe("start");
+    expect(resolveRouteGate(42, true, false)).toBe("start");
   });
 
   it("renders the matched route normally once a world exists", () => {
-    expect(resolveRouteGate(42, false)).toBe("route");
+    expect(resolveRouteGate(42, false, false)).toBe("route");
   });
 
   it("does not fall back to boot-loading on a mid-game world-replacement reset (worldVersion 0, still on /start)", () => {
@@ -131,6 +131,80 @@ describe("resolveRouteGate", () => {
     // already mounted (routeIsStart=true) and dispatches newGame/loadGame, which resets
     // worldVersion to 0 — this must render "start", never "boot-loading", or the dialog showing
     // the pending "Generating…" button would be torn down mid-submit.
-    expect(resolveRouteGate(0, true)).toBe("start");
+    expect(resolveRouteGate(0, true, false)).toBe("start");
+  });
+
+  it("shows boot-loading (not start) on a non-start route while a replacement is in flight", () => {
+    expect(resolveRouteGate(0, false, true)).toBe("boot-loading");
+  });
+});
+
+describe("shouldRedirectToStart", () => {
+  it("redirects on a genuine no-world boot", () => {
+    expect(shouldRedirectToStart(0, false, false)).toBe(true);
+  });
+
+  it("never redirects while a route replacement is in flight", () => {
+    expect(shouldRedirectToStart(0, false, true)).toBe(false);
+  });
+
+  it("never redirects while already on /start", () => {
+    expect(shouldRedirectToStart(0, true, false)).toBe(false);
+  });
+
+  it("never redirects once a world exists", () => {
+    expect(shouldRedirectToStart(42, false, false)).toBe(false);
+  });
+});
+
+// The real Gate C smoke finding (owner, `npx vite dev`): "New Game kicks the user straight back to
+// the start screen." Root cause — `beginWorldReplacement()` resets `worldVersion` to `0` for the
+// WHOLE swap window, but `useNewGameMutation`'s `mutateAsync` resolves (and the caller navigates to
+// the map route) on the command RESULT, a separate and EARLIER postMessage than the new world's own
+// state frame. Gating on `worldVersion === 0` alone reads that window as "no world" and redirects
+// straight back to `/start` before the frame ever lands. Reproduced here against the REAL store
+// (`createGameStore`), driving `resolveRouteGate`/`shouldRedirectToStart` exactly the way
+// `client/main.tsx`'s `RouteBody` does, at exactly the point in the sequence the bug lives.
+describe("the New Game swap-window redirect (Gate C smoke finding A)", () => {
+  it("stays on the map route as boot-loading, never redirecting to /start, between the command result and the new world's frame — then renders the route once the frame lands", () => {
+    const store = createGameStore();
+    // The player is mid-game: a live world is already seeded.
+    store.applyStateFrame({ worldVersion: 5, slices: {} });
+
+    // New Game dispatched — `useNewGameMutation` resets the store synchronously (Proves 4).
+    store.beginWorldReplacement();
+
+    // The command RESULT resolves here (the mutation's own `mutateAsync` continuation) and the
+    // caller navigates to the map route — `route.name === "start"` is now false. The new world's
+    // state frame has NOT arrived yet: this is the exact window the real bug lives in.
+    let snapshot = store.getSnapshot();
+    const isReplacing = selectIsReplacing(snapshot);
+    const routeIsStart = false;
+
+    expect(isReplacing).toBe(true);
+    expect(shouldRedirectToStart(snapshot.worldVersion, routeIsStart, isReplacing)).toBe(false);
+    expect(resolveRouteGate(snapshot.worldVersion, routeIsStart, isReplacing)).toBe("boot-loading");
+
+    // The new world's own frame lands (worldVersion climbs past the replacement floor).
+    store.applyStateFrame({ worldVersion: 6, slices: {} });
+    snapshot = store.getSnapshot();
+    const isReplacingAfter = selectIsReplacing(snapshot);
+
+    expect(isReplacingAfter).toBe(false);
+    expect(resolveRouteGate(snapshot.worldVersion, routeIsStart, isReplacingAfter)).toBe("route");
+  });
+
+  it("still redirects to /start on a genuine fresh-boot no-world frame (no replacement in flight)", () => {
+    const store = createGameStore();
+    // The worker's own world-less boot frame (`noWorldStateFrame`, worldVersion: 0) — never
+    // preceded by `beginWorldReplacement`, so `replacementFloor` was never latched.
+    store.applyStateFrame({ worldVersion: 0, slices: {} });
+
+    const snapshot = store.getSnapshot();
+    const isReplacing = selectIsReplacing(snapshot);
+
+    expect(isReplacing).toBe(false);
+    expect(shouldRedirectToStart(snapshot.worldVersion, false, isReplacing)).toBe(true);
+    expect(resolveRouteGate(snapshot.worldVersion, false, isReplacing)).toBe("boot-loading");
   });
 });

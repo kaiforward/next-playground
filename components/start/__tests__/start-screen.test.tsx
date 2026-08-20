@@ -63,6 +63,40 @@ describe("StartScreen — saves list", () => {
     expect(await screen.findByText("No saved games yet.")).toBeInTheDocument();
     expect(posted.some((e) => e.type === "listSaves")).toBe(true);
   });
+
+  // Gate C smoke finding B (owner, `npx vite dev`): the saves list showed the raw
+  // "Failed to fetch dynamically imported module …/lib/world/save-files.ts" error — the worker's
+  // `listSaves` handler dynamic-importing the Node file backend, which cannot load in a browser
+  // until Task 12. This pins the honest replacement and that New Game stays unaffected.
+  it("shows an honest, quiet message (never the raw import-failure text) when listSaves rejects, and leaves New Game usable", async () => {
+    configureCommandTransport({
+      postCommand: (envelope) => {
+        posted.push(envelope);
+        if (envelope.type === "listSaves") {
+          deliverCommandResult({
+            type: "commandResult",
+            id: envelope.id,
+            result: {
+              ok: false,
+              error: "Failed to fetch dynamically imported module '/lib/world/save-files.ts'",
+            },
+          });
+        }
+      },
+    });
+    renderStartScreen();
+
+    expect(await screen.findByText("Saves aren't available in the browser yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/dynamically imported module/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/save-files\.ts/)).not.toBeInTheDocument();
+
+    // New Game is a wholly separate command (`newGame` never touches the save backend) — the
+    // saves-list failure must not disable it.
+    const newGameButton = screen.getByRole("button", { name: "New Game" });
+    expect(newGameButton).toBeEnabled();
+    await userEvent.click(newGameButton);
+    expect(await screen.findByLabelText("Faction name")).toBeInTheDocument();
+  });
 });
 
 describe("StartScreen — load", () => {
@@ -104,6 +138,46 @@ describe("StartScreen — load", () => {
     });
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
+  });
+
+  // The same Task-12 seam as the saves-list finding: `loadGame` dynamic-imports the identical Node
+  // backend, so it rejects with the same raw import-failure text pre-Task-12.
+  it("shows the same honest, quiet message (never the raw import-failure text) when loadGame rejects", async () => {
+    configureCommandTransport({
+      postCommand: (envelope) => {
+        posted.push(envelope);
+        if (envelope.type === "listSaves") {
+          deliverCommandResult({
+            type: "commandResult",
+            id: envelope.id,
+            result: {
+              ok: true,
+              data: [{ name: AUTOSAVE_NAME, tick: 42, savedAt: new Date().toISOString(), bytes: 1000 }],
+            },
+          });
+        }
+      },
+    });
+    renderStartScreen();
+
+    const continueButton = await screen.findByRole("button", { name: "Continue" });
+    await userEvent.click(continueButton);
+
+    await waitFor(() => expect(posted.some((e) => e.type === "loadGame")).toBe(true));
+    const loadEnvelope = posted.find((e) => e.type === "loadGame");
+    if (!loadEnvelope) throw new Error("loadGame envelope not posted");
+
+    deliverCommandResult({
+      type: "commandResult",
+      id: loadEnvelope.id,
+      result: {
+        ok: false,
+        error: "Failed to fetch dynamically imported module '/lib/world/save-files.ts'",
+      },
+    });
+
+    expect(await screen.findByText("Saves aren't available in the browser yet.")).toBeInTheDocument();
+    expect(screen.queryByText(/dynamically imported module/i)).not.toBeInTheDocument();
   });
 });
 
