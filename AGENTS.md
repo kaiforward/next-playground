@@ -19,8 +19,8 @@ Design-stage hazard worksheet: `.agents/skills/shared/design-hazards.md` — fil
 
 ## Commands
 
-- `npm run dev` — dev server
-- `npx next build --webpack` — **the build gate**. `npm run build` uses Turbopack and has other quirks.
+- `npm run dev` — dev server (Vite)
+- `npm run build` — **the build gate**: `tsc && vite build`.
 - `npx vitest run` — unit tests
 - `npm run simulate` — headless run of the real tick at two horizons: 1000 ticks (founding) and 10,000 ticks (equilibrium). ~2 min. `-- --config <file>` runs a YAML experiment into `experiments/`. **Exits 1 on a failed conservation identity** — read the report anyway; a failed identity means the founding ledger is out, not mistuned.
 - `npm run impact -- <SYMBOL>` — every module reading a constant/field/signal, which processors declare vs. silently write it, and run-order position. Run before leaning on any shared quantity.
@@ -29,7 +29,7 @@ Design-stage hazard worksheet: `.agents/skills/shared/design-hazards.md` — fil
 
 ## Tech Stack
 
-Next.js 16 (App Router), TypeScript 5 strict, Tailwind v4 + tailwind-variants, TanStack Query v5 (Suspense), react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4. World is an in-memory singleton in the server process, saved as JSON on local disk.
+Vite + React 19, TypeScript 5 strict, Tailwind v4 + tailwind-variants, Zustand, wouter, react-error-boundary, React Flow v12, Recharts, React Hook Form + Zod v4, Vitest 4. The world runs entirely in-browser inside a Web Worker (`client/worker/`) — the game boots, ticks and answers commands with no server; the worker's own singleton store persists across HMR the way the old server process's `globalThis` did. Saved as JSON to IndexedDB (web) or local disk (Node hosts: `npm run simulate`, tests).
 
 ## Project Structure
 
@@ -40,8 +40,11 @@ Each layer has one job. Prefer extra boilerplate (a hook, a schema, a service) o
 - `lib/services/` — all world-state reads and business logic.
 - `lib/tick/` — typed `World` interface (`world/`), in-memory adapter (`adapters/memory/`), pure processor bodies (`processors/`).
 - `lib/tick-harness/` — the `npm run simulate` harness. A dev instrument: drives the real `runWorldTick`, no harness-only bots. Scope is processors and their data, nothing else.
-- `app/api/game/` — thin wrappers: service → `NextResponse.json`.
-- `app/(game)/` — game UI. `app/start/` — start screen.
+- `lib/runtime/` — the frame/command wire types shared by the worker and the shell (`channel.ts`, `snapshot.ts`, `command-client.ts`).
+- `lib/store/` — the UI-side snapshot store: a Zustand container (`game-store.ts`) with structural-sharing merge (`replace-equal-deep.ts`) and the `useGameSlice` hook.
+- `client/worker/` — the game worker: boots the world, drives `TickLoop`, answers subscribe/command messages (`game-worker.ts`, `host.ts`, `boot.ts`, `entry.ts`); dev-only commands (`dev-commands.ts`, `dev-teardown.ts`) build-time excluded from production.
+- `client/` — the Vite shell: entry (`main.tsx`), router table over wouter (`routes.ts`), fonts, the IndexedDB save backend (`save-indexeddb.ts`).
+- `components/panels/` — the system/faction/styleguide panel roots the shell docks over the map.
 
 Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.md`.
 
@@ -70,8 +73,8 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 - **Clean up what your change strands.** A field, prop or helper left without readers is part of that change, not a follow-up. `tsc` does not reach object literals typed by inference (a `map` callback return) — finish with a text grep, not a clean typecheck. The same sweep covers references in docs, skills and memory, and it runs **before the PR opens**, not after the merge.
 - **Comments describe the code, not the plan** — never name the plan/phase/PR that produced them.
 - Engine functions are pure — no `fs`/`process.env`/DB imports. World state comes from `getWorld()`.
-- Services own world-state and business logic; routes are thin wrappers. Read services throw `ServiceError`; mutation services return discriminated unions. Responses use `ApiResponse<T>`.
-- Client fetching uses TanStack Query hooks (`lib/hooks/`) with `useSuspenseQuery` inside `QueryBoundary` — no inline loading/error checks. Keys in `lib/query/keys.ts`. Ship-arrival invalidation lives in `useTickInvalidation`.
+- Services own world-state and business logic; worker command handlers are thin wrappers. Read services throw `ServiceError` (`kind: "not_found" | "no_world"`, a discriminant — there is no HTTP layer to translate a status code into); mutation services return discriminated unions.
+- Client reads are synchronous store selectors (`lib/hooks/`) via `useGameSlice` — no inline loading/error checks, no client-side cache to invalidate. The worker pushes a `StateFrame` per tick (throttled) and the store applies it with structural sharing, so a hook re-renders only when its own slice actually changed. Mutations dispatch a worker command (`lib/runtime/command-client.ts`) and await its `CommandResult`.
 - Forms use React Hook Form + Zod (`lib/schemas/`) with `components/form/` controls — never raw `<input>`/`<select>`.
 - `"use client"` only where hooks, state or handlers exist.
 - Tailwind v4 theme lives in `globals.css` (`@theme inline {}`); there is no `tailwind.config.js`.
@@ -95,20 +98,15 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` m
 - **A component test asserts roles, accessible names, text and what interaction changes — never classes or styles.** jsdom has no CSS or layout, so a class assertion would pass with the stylesheet deleted. Carve-out: whether an element renders at all. Where a number's only observable is a style (bar width, rule position), move the maths to a node-tested helper.
 - Three ways such a test passes vacuously: an accessible name built from props rather than the DOM can't fail when the element stops rendering; `toHaveTextContent` can't see a `NaN` in a style attribute (assert on `container.innerHTML`); a mutation mocked over a fixed data object never removes the row, so anything downstream of unmounting (focus handoff, empty states) is asserted in a state the app never reaches.
 
-**Next.js 16 / React / TanStack Query**
-- `useSuspenseQuery` fires during SSR render — relative-URL `fetch()` crashes on the server. `QueryBoundary`'s mounted guard defers children past hydration.
-- Parallel-route `@slot`s go stale on soft-nav with no URL match — add `[...catchAll]/page.tsx` returning `null`, plus `default.tsx`.
+**React / forms / error boundaries**
 - Never `.sort()` a state array during render.
 - Await async callbacks passed to children; type the prop `() => Promise<void>` (TS won't warn on `() => void`).
-- SSE-driven hooks must seed initial state from REST on mount.
-- A parent "reset on input change" effect clobbers a child's lifted data when the child's query is cached. Tag lifted state with the input it was fetched for; don't clear via a competing effect.
 - Zod v4: `superRefine` uses `code: "custom"` and runs only after base validation passes.
 - RHF: a resolver swapped via `useMemo` does not revalidate — `useEffect` + `trigger()`.
 - react-error-boundary v5 `fallbackRender`: `error` is `unknown` — coerce it.
-- A `process.env.X` read at module load is `undefined` in the **client bundle** unless `NEXT_PUBLIC_*` or in `next.config.ts` `env` — including through a transitively-imported constant derived from it. Keep such envs server-only and let the client consume resolved API data (`ECONOMY_SCALE` is deliberately server-only).
+- A `process.env.X` read at module load resolves under Node (`npm run simulate`, tests) but is `undefined` in the browser bundle. The worker's boot handshake resolves such config from `BootConfig` before the constants graph is imported (`resolveHostConfig`, `lib/constants/economy-scale.ts`) — the client never reads the env var directly. Keep such envs Node/worker-side only and let the UI consume resolved state-frame data (`ECONOMY_SCALE` is deliberately never read by value on the UI thread).
 
-**Caching / data shapes**
-- Never `immutable` or a long `max-age` on an API response — **New game** replaces the world, so cached ids mismatch. Use `private, no-cache` + TanStack `staleTime`.
+**Data shapes**
 - `ECONOMY_PRODUCTION`/`ECONOMY_CONSUMPTION` are Records — use `getProducedGoods()`/`getConsumedGoods()` or `in`, never `.includes()`.
 
 **Map / Pixi** — seven traps, none of which apply off that surface. Read `docs/active/engineering/map-rendering.md` → Gotchas before touching the map or any WebGL code.

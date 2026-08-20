@@ -65,12 +65,12 @@ describe("listFactions", () => {
 });
 
 describe("getFactionDetail", () => {
-  it("throws ServiceError(404) for an unknown factionId", () => {
+  it('throws ServiceError("not_found") for an unknown factionId', () => {
     expect(() => getFactionDetail("does-not-exist")).toThrow(ServiceError);
     try {
       getFactionDetail("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 

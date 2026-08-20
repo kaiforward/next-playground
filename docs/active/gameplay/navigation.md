@@ -35,7 +35,7 @@ Players start with one Shuttle. Fleets are fixed — there is no ship purchase (
 - Ships are locked in transit until arrival tick
 
 ### Arrival
-The ship-arrivals processor docks any in-transit ship whose arrival tick has come due (status → docked, destination/arrival fields cleared) and emits a `shipArrived` SSE event that drives client cache invalidation.
+The ship-arrivals processor docks any in-transit ship whose arrival tick has come due (status → docked, destination/arrival fields cleared).
 
 ---
 

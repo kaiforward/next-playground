@@ -13,7 +13,6 @@ You look for:
   - Async setup in `useEffect` without proper cleanup
 - **Async callbacks typed as `() => void`** — when the prop is async, the type must be `() => Promise<void>` so consumers know to `await`
 - **`.sort()` called on a state array during render** — mutates, causes silent wrong-order bugs. Use `[...arr].sort()` or `.toSorted()`.
-- **SSE hooks without REST seed** — components see stale defaults until first SSE event. Fix: fetch initial state from a REST endpoint on mount.
 - **Throttle vs debounce traps** — `setState` from a 60fps render loop should use leading+trailing throttle, not debounce. Debounce never fires during continuous activity.
 - **Off-boundary / gating logic that silently no-ops or double-applies** — a shard/cycle-start window, cadence gate, or interval check whose boundary math is subtly wrong, so work silently doesn't run (or runs twice) on some ticks.
 
@@ -23,7 +22,6 @@ You look for:
 - `missing-await`
 - `async-as-void-prop`
 - `sort-mutates-state`
-- `sse-without-seed`
 - `debounce-in-render-loop`
 - `boundary-math-mismatch`
 

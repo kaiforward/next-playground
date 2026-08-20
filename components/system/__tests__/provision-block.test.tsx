@@ -11,7 +11,7 @@ import type { PopNeedData, SystemProvisionRead } from "@/lib/types/api";
 //
 // Every case renders inside the app's own `TooltipProvider` — the ledger's rows are tooltip
 // triggers, and Radix's `Tooltip.Root` throws without a provider above it (the real app mounts one
-// in app/(game)/layout.tsx).
+// in client/main.tsx).
 
 const assessed: SystemProvisionRead = {
   assessed: true,

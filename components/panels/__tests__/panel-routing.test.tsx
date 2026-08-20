@@ -3,8 +3,8 @@
  * (`client/main.tsx`'s `RouteBody`, exercised here via a small stand-in that mirrors its `switch`):
  *
  *  1. a panel URL naming an absent system/faction renders the not-found state, not blank/loading.
- *  2. no `role="status"` fallback ever mounts on a panel open (the `QueryBoundary` Suspense/
- *     mounted-guard behaviour this task retires).
+ *  2. no `role="status"` fallback ever mounts on a panel open (the old query-cache boundary's
+ *     Suspense/mounted-guard behaviour this task retires).
  *  3. back/forward across panels restores content.
  *
  * (Proves 4 — the map's click-frame selection ring — is browser-only; see the PR description's

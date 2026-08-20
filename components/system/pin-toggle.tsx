@@ -19,8 +19,8 @@ import { useSetSystemPin } from "@/lib/hooks/use-player-pins";
  *
  * Wrapped in its own `ErrorBoundary` rather than reading `useTracker`/`useAtlas` inline in the
  * header: a read failure here must never blank the header's OTHER actions (the cadence countdown,
- * "Show on Map") — only this control's own slot goes quiet, matching the old `QueryBoundary`'s
- * `loadingFallback={null}` contract for this slot (now moot — both hooks are synchronous store
+ * "Show on Map") — only this control's own slot goes quiet, matching the old query-cache
+ * boundary's silent-loading contract for this slot (now moot — both hooks are synchronous store
  * reads, Task 7 — but the silent-degrade-on-error behaviour still holds).
  */
 export function PinToggle({ systemId }: { systemId: string }) {
@@ -38,8 +38,8 @@ function PinToggleContent({ systemId }: { systemId: string }) {
 
   // No player seat (e.g. the calibration harness has none): there is no Tracker list to join, and
   // `setSystemPin` rejects the write past the service boundary. Absent rather than rendered and
-  // erroring on activation. `atlas.player` is the established client-side signal for this (already
-  // read the same way in app/(game)/page.tsx) — `useTracker()`'s own empty sections read identically
+  // erroring on activation. `atlas.player` is the established client-side signal for this (the same
+  // one `client/main.tsx`'s `MapRoot` reads) — `useTracker()`'s own empty sections read identically
   // whether the player has no seat or simply has nothing pinned yet, so it can't answer this alone.
   if (!atlas.player) return null;
 

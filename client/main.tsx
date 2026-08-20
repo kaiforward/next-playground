@@ -2,7 +2,7 @@ import { StrictMode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "react-error-boundary";
 import "./fonts.css";
-import "@/app/globals.css";
+import "./globals.css";
 import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
 import { selectIsReplacing } from "@/lib/store/game-store";
 import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";

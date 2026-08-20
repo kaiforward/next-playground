@@ -149,9 +149,8 @@ interface PanelTabsProps {
   label: string;
   /**
    * The current pathname, for `resolvePanelTabs` to test hrefs against. Taken as a prop rather than
-   * read via `usePathname()` (as before Task 9): the two callers of this component are both panel
-   * roots that already know their own current path from `useRoute()` (`components/panels/**`), and
-   * `next/navigation`'s `usePathname()` has no meaning under the Vite shell's wouter router.
+   * read via a router hook: the two callers of this component are both panel roots that already
+   * know their own current path from `useRoute()` (`components/panels/**`).
    */
   pathname: string;
 }

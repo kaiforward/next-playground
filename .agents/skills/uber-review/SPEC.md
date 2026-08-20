@@ -94,7 +94,7 @@ agents'.
 | 3 | **Data contract** | Types flowing store/adapter → service → API → hook → component. Guards used only at the boundary. Service-returned types not re-validated downstream. | `strong` |
 | 4 | **Boundary safety** | Zod validation at API/form boundaries, never trusting client state for writes, save-name path safety, no `immutable` cache on APIs, server-only env not leaking to the client bundle | `strong` |
 | 5 | **Silent failures** | Swallowed errors, missing `await`, async callbacks typed as `() => void`, `.sort()` on render, throttle-vs-debounce traps, SSE-driven state without REST seed | `fast` |
-| 6 | **User journey (UI/UX)** | Hydration safety, `QueryBoundary` usage, accessibility on actionable elements, loading/error boundaries, navigation flow | `strong` |
+| 6 | **User journey (UI/UX)** | Store-backed data reads (no reintroduced fetch/cache pattern), accessibility on actionable elements, error boundaries, navigation flow | `strong` |
 | 7 | **Tests** | Engine/service/processor changes have appropriate Vitest coverage and meaningful assertions. Flags missing coverage. | `strong` |
 | 8 | **Performance** | Expensive per-tick work / peak-latency concentration, missing memoisation, expensive renders, viewport-keyed queries causing flicker, Pixi callbacks debounced where throttle is needed | `strong` |
 
@@ -115,7 +115,7 @@ agents'.
 **Example blocker triggers in this codebase:**
 - Engine/world code statically imports `fs`/`process.env` in the pure path → restructure behind a dynamic `import()`
 - New mutating API route touches the world store inline → extract a service; restructure the handler
-- New data-fetching pattern used across many components instead of `useSuspenseQuery + QueryBoundary` → each consumer must be rewritten
+- New data-fetching pattern used across many components instead of a store selector (`useGameSlice`) → each consumer must be rewritten
 - A service returns `Record<string, unknown>` that propagates → fix retypes the service AND rewrites every consumer's destructuring
 - Tick processor body reaches into raw world state / an adapter directly → split into World interface + memory adapter + pure body
 
@@ -143,8 +143,8 @@ If PR > 20 files:
     1. Strip layer prefixes to extract a "feature stem":
          lib/services/ships/buy.ts          → "ships"
          lib/services/ships.ts              → "ships"
-         app/api/game/ships/buy/route.ts    → "ships"
-         app/(game)/ships/page.tsx          → "ships"
+         client/worker/ships.ts             → "ships"
+         components/panels/ships-panel.tsx  → "ships"
          lib/hooks/use-ships.ts             → "ships"   (drop "use-" prefix)
          components/ships/ship-card.tsx     → "ships"
          lib/engine/ships.ts                → "ships"
@@ -154,7 +154,7 @@ If PR > 20 files:
        Recognised layer prefixes:
          lib/services/, lib/hooks/, lib/engine/, lib/tick/processors/,
          lib/tick/world/, lib/tick/adapters/memory/,
-         app/api/game/, app/(game)/, components/
+         client/worker/, components/
 
     2. Group files by feature stem → semantic clusters.
 
@@ -180,7 +180,7 @@ Every reviewer emits a JSON array of findings:
 ```jsonc
 {
   "agent": "boundary-safety",                   // identifies the reviewer
-  "file": "app/api/game/save/route.ts",         // repo-relative path
+  "file": "client/worker/game-worker.ts",       // repo-relative path
   "line": "42-48",                              // single line "42" or range "42-48"
   "category": "missing-zod-validation",         // free-form short slug
   "severity": "major",                          // blocker | major | minor | info
@@ -220,10 +220,10 @@ Every reviewer emits a JSON array of findings:
 | Architect | Always (runs once on full PR, not per chunk) |
 | Conventions | Any `.ts` / `.tsx` source file; skips docs-only / config-only chunks |
 | World integrity | `lib/world/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/`, `lib/engine/`, `lib/services/` |
-| Data contract | Files spanning ≥2 layers from {lib/world, services, tick, app/api, hooks, components, app pages} |
-| Boundary safety | `app/api/`, `lib/services/`, `lib/schemas/`, `lib/world/` (save/load), or any `.ts`/`.tsx` source file that reads `process.env`, sets a `Cache-Control` header, or builds a save-file path (grep restricted to source files — markdown/docs that merely describe these do not trigger) |
+| Data contract | Files spanning ≥2 layers from {lib/world, services, tick, client/worker, hooks, components} |
+| Boundary safety | `client/worker/`, `lib/services/`, `lib/schemas/`, `lib/world/` (save/load), or any `.ts`/`.tsx` source file that reads `process.env` or builds a save-file/storage-key path (grep restricted to source files — markdown/docs that merely describe these do not trigger) |
 | Silent failures | Any `.ts` / `.tsx` source file; skips docs-only chunks |
-| User journey | `app/(game)/`, `components/` |
+| User journey | `components/` |
 | Tests | Source changes in `lib/engine/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/` (regardless of whether matching test files are present) |
 | Performance | Any `.ts` / `.tsx` source file; skips docs-only chunks |
 

@@ -15,7 +15,4 @@ export function mergeGlobalEvents(
   if (src.eventNotifications) {
     target.eventNotifications = target.eventNotifications ? [...target.eventNotifications, ...src.eventNotifications] : [...src.eventNotifications];
   }
-  if (src.shipArrived) {
-    target.shipArrived = target.shipArrived ? [...target.shipArrived, ...src.shipArrived] : [...src.shipArrived];
-  }
 }

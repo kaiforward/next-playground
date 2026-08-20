@@ -101,7 +101,7 @@ export function resolveUnrestBreakdown(
 export function getSystemPopulation(systemId: string): SystemPopulationData {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
-  if (!system) throw new ServiceError("System not found.", 404);
+  if (!system) throw new ServiceError("System not found.", "not_found");
   if (!isEconomicallyActive(system.control)) return { visibility: "unknown" };
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};

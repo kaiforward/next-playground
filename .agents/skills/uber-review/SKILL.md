@@ -124,8 +124,8 @@ For each file, strip recognised layer prefixes to extract a feature stem:
 | `lib/tick/processors/<feature>.ts` | `<feature>` |
 | `lib/tick/world/<feature>.ts` | `<feature>` |
 | `lib/tick/adapters/memory/<feature>.ts` | `<feature>` |
-| `app/api/game/<feature>/...` | `<feature>` |
-| `app/(game)/<feature>/...` | `<feature>` |
+| `client/worker/<feature>.ts` | `<feature>` |
+| `components/panels/<feature>...` | `<feature>` |
 | `components/<feature>/...` | `<feature>` |
 | anything else | `shared` |
 
@@ -282,10 +282,10 @@ Skip this section if:
 |----------|------------------------------|
 | Conventions | At least one `source` file (skips docs-only / config-only) |
 | World integrity | At least one file under `lib/world/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/`, `lib/engine/`, or `lib/services/` |
-| Data contract | Files spanning ≥2 layers from {lib/world, lib/services, lib/tick, app/api, lib/hooks, components, app/(game)} |
-| Boundary safety | At least one file under `app/api/`, `lib/services/`, `lib/schemas/`, or `lib/world/` (save/load path), OR any `.ts`/`.tsx` source file that reads `process.env`, sets a `Cache-Control` header, or builds a save-file path (grep the diff body, restricted to source files — never trigger on markdown/docs that merely *describe* these) |
+| Data contract | Files spanning ≥2 layers from {lib/world, lib/services, lib/tick, client/worker, lib/hooks, components} |
+| Boundary safety | At least one file under `client/worker/`, `lib/services/`, `lib/schemas/`, or `lib/world/` (save/load path), OR any `.ts`/`.tsx` source file that reads `process.env` or builds a save-file/storage-key path (grep the diff body, restricted to source files — never trigger on markdown/docs that merely *describe* these) |
 | Silent failures | At least one `source` file |
-| User journey | At least one file under `app/(game)/`, `components/` |
+| User journey | At least one file under `components/` |
 | Tests | **Any** of: (a) a source file under `lib/engine/`, `lib/services/`, `lib/tick/processors/`, `lib/tick/world/`, `lib/tick/adapters/`; **or** (b) a changed test file (path under `**/__tests__/**` or matching `*.test.{ts,tsx}`); **or** (c) a changed pure-logic `.ts` module (not `.tsx`) anywhere that has a co-located test — i.e. a `__tests__/` sibling dir or a `<name>.test.ts` next to it. Rationale: testable logic isn't confined to the `lib/` dirs (e.g. `components/map/pixi/lod.ts` is pure LOD math with `__tests__/lod.test.ts`), and a changed test file should always be reviewed for meaningfulness even when its source sits outside `lib/`. |
 | Performance | At least one `source` file |
 
@@ -515,7 +515,7 @@ Optional, human-gated, and **only** in PR mode. The review pipeline itself never
 
 1. **Apply the accepted fixes.** Edit the PR branch to address the findings the user wants fixed (skip the ones they wave off). Keep changes scoped to the review — don't fold in unrelated work.
 
-2. **Re-verify.** Run the project's checks and confirm they pass before claiming done: `tsc` clean, the relevant Vitest suites green (`npx vitest run`), and — for a change with a build surface — the webpack build gate (`npx next build --webpack`). Quote the actual output — never assert "tests pass" without running them.
+2. **Re-verify.** Run the project's checks and confirm they pass before claiming done: `tsc` clean, the relevant Vitest suites green (`npx vitest run`), and — for a change with a build surface — the build gate (`npm run build` — `tsc && vite build`). Quote the actual output — never assert "tests pass" without running them.
 
 3. **Doc lifecycle is NOT done here** — it predates the final review (see step 1.2), so the fold was part of the reviewed diff and Lens 2 checked it. If it is somehow missing at this point, complete it now (promote spec → `docs/active/`, umbrella + `docs/SPEC.md`, delete the build plan) and note in the report that the fold went unreviewed.
 

@@ -57,13 +57,13 @@ export function getUniverse(): UniverseData {
  * Get a single star system with full detail. All systems are visible in
  * single-player (fog-of-war returns in Phase 3 — the `visibility` field and
  * the "unknown" branch of the response type stay for it).
- * Throws ServiceError(404) if not found.
+ * Throws ServiceError("not_found") if not found.
  */
 export function getSystemDetail(systemId: string): SystemDetailData {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) {
-    throw new ServiceError("System not found.", 404);
+    throw new ServiceError("System not found.", "not_found");
   }
 
   return {
@@ -86,13 +86,13 @@ export function getSystemDetail(systemId: string): SystemDetailData {
 /**
  * Physical substrate for one system — the static "what is physically here".
  * Resolves catalog display data (archetype names) server-side.
- * Throws ServiceError(404) if the system does not exist.
+ * Throws ServiceError("not_found") if the system does not exist.
  */
 export function getSystemSubstrate(systemId: string): SystemSubstrateData {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) {
-    throw new ServiceError("System not found.", 404);
+    throw new ServiceError("System not found.", "not_found");
   }
 
   const bodies: BodyView[] = world.bodies
@@ -118,14 +118,14 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
 
 /**
  * Industrial base and supply-chain state for one system.
- * Throws ServiceError(404) if the system does not exist.
+ * Throws ServiceError("not_found") if the system does not exist.
  * Stock is read from the system's markets to compute per-good input gates.
  */
 export function getSystemIndustry(systemId: string): SystemIndustryData {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
   if (!system) {
-    throw new ServiceError("System not found.", 404);
+    throw new ServiceError("System not found.", "not_found");
   }
   if (!isEconomicallyActive(system.control)) return { visibility: "unknown" };
 

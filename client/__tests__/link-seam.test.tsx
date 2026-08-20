@@ -1,10 +1,8 @@
 /**
  * Proves the router-agnostic link seam (`components/ui/link-provider.tsx`) actually drives
  * `Button` link-mode and `TabLink` through wouter when `client/wouter-link.tsx`'s adapter is
- * mounted — the shape the Vite shell (`client/main.tsx`) uses. Deliberately imports nothing from
- * `next/navigation` and mocks nothing from it: `TabLink`'s active-state and `Button`'s navigation
- * both have to work through wouter alone for this file to pass at all, which is the "without
- * next/navigation" half of Task 6's Proves entry.
+ * mounted — the shape the Vite shell (`client/main.tsx`) uses. `TabLink`'s active-state and
+ * `Button`'s navigation both have to work through wouter alone for this file to pass at all.
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";

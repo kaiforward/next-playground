@@ -38,9 +38,9 @@ interface UseTickResult {
  * nothing left to seed ahead of a first broadcast (`buildStateFrame`'s "not yet observed" case is
  * simply `pacing === null`, read as the pre-tick defaults below).
  *
- * `subscribeToEvent`'s dispatch registry is preserved verbatim (Task 11's `use-tick-invalidation.ts`,
- * the events processor, and any future channel subscriber all still call it the same way) — it now
- * fires off the store's own pacing updates rather than an `EventSource.onmessage`: an effect watches
+ * `subscribeToEvent`'s dispatch registry is preserved verbatim (the events processor and any future
+ * channel subscriber all still call it the same way) — it now fires off the store's own pacing
+ * updates rather than an `EventSource.onmessage`: an effect watches
  * `pacing` by reference and dispatches once per NEWLY-applied frame (the store only ever hands out a
  * new `pacing` object when `applyPacingFrame` actually changed something, `lib/store/game-store.ts`),
  * so a re-render that doesn't correspond to a new frame dispatches nothing — the same "no
@@ -56,7 +56,6 @@ export function useTick(): UseTickResult {
   const eventListeners = useRef<EventListeners>({
     economyTick: new Set(),
     eventNotifications: new Set(),
-    shipArrived: new Set(),
   });
   const lastDispatched = useRef<typeof pacing>(null);
 
@@ -77,7 +76,6 @@ export function useTick(): UseTickResult {
 
     dispatch("economyTick", pacing.events.economyTick);
     dispatch("eventNotifications", pacing.events.eventNotifications);
-    dispatch("shipArrived", pacing.events.shipArrived);
   }, [pacing]);
 
   const subscribeToEvent = useCallback(

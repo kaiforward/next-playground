@@ -1,44 +1,7 @@
-import type {
-  GameWorldState,
-  UniverseData,
-  AtlasData,
-  StarSystemInfo,
-  StaticTileSystem,
-  MarketEntry,
-  MarketComparisonEntry,
-  ActiveEvent,
-  SunClass,
-  GoodTier,
-  BodyArchetypeId,
-  StabilityEntry,
-  PopulationEntry,
-  DevelopmentEntry,
-  MigrationEntry,
-  ProvisionEntry,
-  OwnershipEntry,
-  ResourceVector,
-} from "./game";
+import type { StarSystemInfo, SunClass, GoodTier, BodyArchetypeId, ResourceVector } from "./game";
 import type { SubstrateGoodRate, ConsumptionBreakdown } from "@/lib/engine/physical-economy";
 import type { SupplyRegime } from "@/lib/engine/population";
-import type { SaveInfo } from "@/lib/world/save-backend";
-import type { WorldMeta } from "@/lib/world/types";
 
-// ── Responses ────────────────────────────────────────────────────
-
-export interface ApiResponse<T> {
-  data?: T;
-  error?: string;
-}
-
-export type GameWorldResponse = ApiResponse<GameWorldState>;
-export type SavesResponse = ApiResponse<SaveInfo[]>;
-export type SaveGameResponse = ApiResponse<{ name: string; tick: number }>;
-export type LoadGameResponse = ApiResponse<WorldMeta>;
-export type NewGameResponse = ApiResponse<WorldMeta>;
-export type UniverseResponse = ApiResponse<UniverseData>;
-export type AtlasResponse = ApiResponse<AtlasData>;
-export type StaticTileResponse = ApiResponse<{ systems: StaticTileSystem[] }>;
-export type VisibilityResponse = ApiResponse<{ systemIds: string[] }>;
 export interface TradeFlowEdgeInfo {
   /** Net source system for the dominant good (where particles spawn). */
   fromSystemId: string;
@@ -54,13 +17,6 @@ export interface TradeFlowEdgeInfo {
 export interface TradeFlowEdges {
   logisticsEdges: TradeFlowEdgeInfo[];
 }
-export type TradeFlowResponse = ApiResponse<TradeFlowEdges>;
-export type StabilityResponse = ApiResponse<{ systems: StabilityEntry[] }>;
-export type PopulationResponse = ApiResponse<{ systems: PopulationEntry[] }>;
-export type DevelopmentResponse = ApiResponse<{ systems: DevelopmentEntry[] }>;
-export type MigrationResponse = ApiResponse<{ systems: MigrationEntry[] }>;
-export type ProvisionResponse = ApiResponse<{ systems: ProvisionEntry[] }>;
-export type OwnershipResponse = ApiResponse<{ systems: OwnershipEntry[] }>;
 /** Aggregate trading partner for a single good (top-N source or destination). */
 export interface TradeFlowPartner {
   systemId: string;
@@ -134,8 +90,6 @@ export interface SystemCadence {
   /** Group in [0, CYCLE_LENGTH): when the whole galaxy resolves. Always 0 under the cycle resolution; kept so the client counts down with ticksUntilShard(resolutionGroup, tick, CYCLE_LENGTH). */
   resolutionGroup: number;
 }
-export type SystemCadenceResponse = ApiResponse<SystemCadence>;
-export type SystemLogisticsResponse = ApiResponse<SystemLogisticsData>;
 
 /** Full system detail — discriminated union on visibility. */
 export type SystemDetailData =
@@ -151,7 +105,6 @@ export type SystemDetailData =
       isGateway: boolean;
       visibility: "unknown";
     };
-export type SystemDetailResponse = ApiResponse<SystemDetailData>;
 
 // ── System population ────────────────────────────────────────────
 /** One good's pop-needs snapshot — how well the population's want for it is met. */
@@ -253,7 +206,6 @@ export type SystemPopulationData =
       unrestBreakdown: SystemUnrestRead;
     }
   | { visibility: "unknown" };
-export type SystemPopulationResponse = ApiResponse<SystemPopulationData>;
 
 // ── System vitals (overview vital tiles: stability / development / population) ──
 export interface SystemVitalsStability {
@@ -292,7 +244,6 @@ export type SystemVitalsData =
       provision: SystemProvisionRead;
     }
   | { visibility: "unknown" };
-export type SystemVitalsResponse = ApiResponse<SystemVitalsData>;
 
 // ── System substrate (physical / static — astrography flavour) ───────────────
 export interface BodyView {
@@ -323,7 +274,6 @@ export type SystemSubstrateData =
       bodies: BodyView[];
     }
   | { visibility: "unknown" };
-export type SystemSubstrateResponse = ApiResponse<SystemSubstrateData>;
 
 // ── System industry (built base + supply-chain + output — functional/dynamic) ─
 import type {
@@ -351,7 +301,6 @@ export type SystemIndustryData =
       popNeeds: PopNeedData[];
     } & SystemIndustryReadout)
   | { visibility: "unknown" };
-export type SystemIndustryResponse = ApiResponse<SystemIndustryData>;
 
 // ── Construction (build-queue / colony-visibility) ────────────────────────────
 import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
@@ -384,8 +333,6 @@ export interface FactionConstructionData {
   orderedCount: number;
 }
 
-export type SystemConstructionResponse = ApiResponse<SystemConstructionData>;
-export type FactionConstructionResponse = ApiResponse<FactionConstructionData>;
 
 // ── Tracker (docs/active/gameplay/tracker.md — pinned/building/colonising roll-up) ──
 import type { TrackerSections } from "@/lib/types/tracker";
@@ -455,13 +402,11 @@ export interface TrackerData {
   colonising: TrackerColonyRow[];
   /** Which sections the player wants rendered — stored on `world.player`, so it travels with the
    *  save. It rides this payload rather than having a read of its own, the same split
-   *  `pinnedSystemIds` uses: read here, written on `POST /api/game/player/tracker`. A world with no
-   *  player seat reads `DEFAULT_TRACKER_SECTIONS`. */
+   *  `pinnedSystemIds` uses: read here, written by the `setTrackerSection` worker command. A world
+   *  with no player seat reads `DEFAULT_TRACKER_SECTIONS`. */
   sections: TrackerSections;
 }
-export type TrackerResponse = ApiResponse<TrackerData>;
 /** A section write's answer: the full record after the merge, never the one flag that was sent. */
-export type TrackerSectionsResponse = ApiResponse<TrackerSections>;
 
 // ── Player build-options surface (per-system verbs: colonise / build) ────────
 import type { BuildOption } from "@/lib/engine/build-options";
@@ -506,27 +451,6 @@ export type SystemBuildOptionsData =
           };
     }
   | { mode: "build"; options: BuildOptionData[] };
-export type SystemBuildOptionsResponse = ApiResponse<SystemBuildOptionsData>;
-
-// ── Player construction verbs (build/colony orders, cancel, automation) ──────
-export type OrderBuildResponse = ApiResponse<{ projectId: string; levels: number }>;
-export type OrderColonyResponse = ApiResponse<{ projectId: string }>;
-export type CancelOrderResponse = ApiResponse<{ projectId: string }>;
-export type AutomationResponse = ApiResponse<{ build: boolean; colonisation: boolean }>;
-export type PinsResponse = ApiResponse<string[]>;
-
-export type MarketResponse = ApiResponse<{ stationId: string; entries: MarketEntry[] }>;
-export type MarketComparisonResponse = ApiResponse<{ goodId: string; entries: MarketComparisonEntry[] }>;
-export type EventsResponse = ApiResponse<ActiveEvent[]>;
-
-import type {
-  FactionSummary,
-  FactionDetail,
-  RelationsMatrixData,
-} from "@/lib/services/factions";
-export type FactionListResponse = ApiResponse<FactionSummary[]>;
-export type FactionDetailResponse = ApiResponse<FactionDetail>;
-export type RelationsMatrixResponse = ApiResponse<RelationsMatrixData>;
 
 // ── Faction vitals (Overview aggregate tiles: territory / population / stability / development) ──
 /**
@@ -552,7 +476,6 @@ export interface FactionVitalsData {
   /** clamp(Σpoints / Σpotential, 0, 1) × 100 — the faction's overall build-out vs its ceiling. */
   developmentPct: number;
 }
-export type FactionVitalsResponse = ApiResponse<FactionVitalsData>;
 
 // ── Faction treasury (the purse — player surfaces) ───────────────
 import type { TreasuryBands } from "@/lib/engine/treasury";
@@ -581,14 +504,12 @@ export interface FactionTreasuryData {
   foundingCommitted: number;
   lastSettlement: WorldTreasurySettlement | null;
 }
-export type FactionTreasuryResponse = ApiResponse<FactionTreasuryData>;
 
 /** The mutable policy pair the PATCH route returns after a successful write. */
 export interface TreasuryPolicyData {
   taxLevel: TaxLevel;
   bands: TreasuryBands;
 }
-export type UpdateTreasuryPolicyResponse = ApiResponse<TreasuryPolicyData>;
 
 // ── Alert bar ──────────────────────────────────────────────────────────────
 import type { AlertCategoryId, AlertCategorySettings } from "@/lib/types/alerts";
@@ -689,11 +610,9 @@ export interface AlertData {
   /** Which categories the player wants on the bar — stored on `world.player`, so it travels with
    *  the save. Distinct from `categories` above: that is what each category currently SAYS, this is
    *  whether the player wants to be shown it at all. It rides this payload rather than having a read
-   *  of its own, the same split `pinnedSystemIds` uses: read here, written on
-   *  `POST /api/game/player/alerts`. A world with no player seat reads
+   *  of its own, the same split `pinnedSystemIds` uses: read here, written by the
+   *  `setAlertCategory` worker command. A world with no player seat reads
    *  `DEFAULT_ALERT_CATEGORIES`. */
   categorySettings: AlertCategorySettings;
 }
-export type AlertResponse = ApiResponse<AlertData>;
 /** A category write's answer: the full record after the merge, never the one flag that was sent. */
-export type AlertCategoriesResponse = ApiResponse<AlertCategorySettings>;

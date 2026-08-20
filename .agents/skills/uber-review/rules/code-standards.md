@@ -16,10 +16,8 @@ When you flag a violation, use the matching slug below so dedup is deterministic
 | `generic-widened` | a generic `T` intersected with `Record<string, unknown>` or accessed by string key |
 | `boundary-validation-leak` | re-validating downstream a type already validated in the service layer |
 | `loose-mutation-result` | a mutation result that isn't a discriminated union (`{ ok: true; data }` / `{ ok: false; error }`) |
-| `api-response-shape` | an API response that isn't `ApiResponse<T>` (`{ data?, error? }`) |
 | `raw-form-element` | raw `<input>` / `<select>` instead of the `components/form/` controls |
 | `unnecessary-use-client` | `"use client"` on a component with no hooks / state / handlers |
-| `non-suspense-data-fetch` | client data fetch not via `useSuspenseQuery` + `QueryBoundary` |
 | `comment-references-plan` | a comment naming a plan / phase / PR / migration instead of describing the code |
 | `duplicate-implementation` | the same decision implemented a second time instead of extracted — see nuance below |
 | `name-misdescribes-behaviour` | an identifier named for its introducing role, or half its behaviour, rather than what it does |
@@ -32,10 +30,8 @@ When you flag a violation, use the matching slug below so dedup is deterministic
 | `static-node-edge-in-pure-path` | static `fs`/`process.env` import in `lib/engine` / `lib/services` / `lib/world` (except `save-files.ts`) — use a dynamic `import()` |
 | `nondeterministic-tick` | `Date.now` / `Math.random` / `new Date()` inside a processor body or tick math (use seeded `tickRng`) |
 | `record-includes` | `.includes()` on a `Record` (e.g. `ECONOMY_PRODUCTION[type]`) — use the `in` operator / an accessor |
-| `immutable-on-api` | `Cache-Control: immutable` (or a long `max-age`) on an API response — a new game replaces world state |
 | `sort-mutates-state` | `.sort()` on a React state array during render (use `[...arr].sort()` / `.toSorted()`) |
 | `unawaited-async-callback` | a child not awaiting an async callback prop (type it `() => Promise<void>`) |
-| `sse-without-seed` | an SSE-driven hook with no REST seed of initial state |
 | `debounce-in-render-loop` | debounce (not throttle) on a Pixi-ticker → `setState` loop |
 | `simulate-not-run` | a game-logic change (tick processor, engine economy behaviour, or a constant feeding one) with no quoted `npm run simulate` output at both horizons — see nuance below |
 | `component-test-asserts-style` | a `.test.tsx` asserting classes or inline styles instead of roles / accessible names / text — see nuance below |

@@ -5,8 +5,8 @@ import path from "path";
 /**
  * Vite config for the client-only shell (client-runtime spec §7, §9; build plan Task 6). `root:
  * "client"` — `client/index.html` is the entry document, `client/main.tsx` the entry module. The
- * `@/*` alias mirrors `tsconfig.json`'s `paths` so `lib/`, `components/` and `app/globals.css`
- * resolve identically to the Next build; it is set to the PROJECT root (not `client/`) so `@/lib/…`
+ * `@/*` alias mirrors `tsconfig.json`'s `paths` so `lib/`, `components/` and `client/globals.css`
+ * resolve the same way from any depth; it is set to the PROJECT root (not `client/`) so `@/lib/…`
  * keeps working regardless of where Vite's own root sits.
  *
  * `worker.format: "es"` matches `client/worker/entry.ts`'s use of dynamic `import()` — a classic
@@ -14,12 +14,10 @@ import path from "path";
  * built on a dynamic `import()` running after the boot-config global is set.
  *
  * `process.env.NODE_ENV` is set explicitly here rather than relied on implicitly: `lib/utils/dev-
- * flag.ts`'s `isDevBuild()` (build plan Task 10) reads it as its fallback for the two components
- * shared with the still-live Next build (`components/game-shell.tsx`,
+ * flag.ts`'s `isDevBuild()` (build plan Task 10) reads it as its fallback (`components/game-shell.tsx`,
  * `components/dev-tools/axe-accessibility.tsx`) — Vite's `import.meta.env.DEV` is this helper's
  * primary path and is what actually resolves under this bundler, but the fallback expression is
- * still part of the module Vite bundles, so this define keeps it well-formed. `app/layout.tsx`
- * stays on the bare `process.env.NODE_ENV` check (Next-side only, never bundled by Vite at all).
+ * still part of the module Vite bundles, so this define keeps it well-formed.
  */
 
 /**
@@ -36,8 +34,13 @@ import path from "path";
  * the emitted chunk instead of erroring. Needed on BOTH the main build and the worker sub-build
  * (`worker.plugins`) — Vite does not share the top-level `plugins` list with the worker bundle.
  *
- * **Verified still needed at Task 12 (build plan), NOT removed — the reachability moved, it did not
- * disappear.** The Task-6 note this docstring used to carry expected `client/save-indexeddb.ts` (the
+ * **Verified still needed at Task 12, RE-VERIFIED at Task 14 after the `app/` deletion (build plan)
+ * — NOT removed. The reachability moved, it did not disappear**, and deleting `app/` does not touch
+ * it: `client/worker/entry.ts`'s module graph into `lib/services/game.ts` → `save-backend.ts` →
+ * the dynamic `import("./save-files")` fallback was never routed through `app/` at all. Re-tested
+ * empirically at Task 14 (remove the plugin, `vite build`, same three-line `node:fs/promises`
+ * failure as below) rather than assumed. The Task-6 note this docstring used to carry expected
+ * `client/save-indexeddb.ts` (the
  * browser `SaveBackend` Task 12 adds) to make this plugin removable; it doesn't, because of WHERE the
  * Node fallback lives. `lib/world/save-backend.ts`'s `getSaveBackend()` — the shared resolution point
  * `lib/services/game.ts`/`lib/world/tick-loop.ts` both call, and the ONLY module that may reach

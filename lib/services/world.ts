@@ -4,7 +4,7 @@ import type { GameWorldState } from "@/lib/types/game";
 
 /**
  * Current world meta plus tick-loop pacing state.
- * Throws ServiceError(409) via the store when no world is loaded.
+ * Throws ServiceError("no_world") via the store when no world is loaded.
  */
 export function getGameWorld(): GameWorldState {
   return {

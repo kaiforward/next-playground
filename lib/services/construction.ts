@@ -117,7 +117,7 @@ export function foundingReadoutInputs(
 export function readoutForFaction(factionId: string): FactionConstructionReadout {
   const world = getWorld();
   const faction = world.factions.find((f) => f.id === factionId);
-  if (!faction) throw new ServiceError(`Faction ${factionId} not found.`, 404);
+  if (!faction) throw new ServiceError(`Faction ${factionId} not found.`, "not_found");
 
   const buildings = buildingsBySystem();
   const systems: ConstructionSystemInfo[] = world.systems
@@ -178,7 +178,7 @@ export function getFactionConstruction(factionId: string): FactionConstructionDa
 export function getSystemConstruction(systemId: string): SystemConstructionData {
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
-  if (!system) throw new ServiceError(`System ${systemId} not found.`, 404);
+  if (!system) throw new ServiceError(`System ${systemId} not found.`, "not_found");
   // Unclaimed/independent systems have no faction pool → nothing to show.
   if (!system.factionId) return { visibility: "hidden" };
 

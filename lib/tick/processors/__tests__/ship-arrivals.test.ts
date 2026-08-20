@@ -38,7 +38,7 @@ const SYSTEMS = [
 ];
 
 describe("runShipArrivalsProcessor", () => {
-  it("docks a ship whose arrivalTick is due and emits one shipArrived event", async () => {
+  it("docks a ship whose arrivalTick is due", async () => {
     const world = new InMemoryShipArrivalsWorld(
       { ships: [ship({ id: "ship-1", arrivalTick: 10 })] },
       SYSTEMS,
@@ -53,9 +53,7 @@ describe("runShipArrivalsProcessor", () => {
     expect(docked.departureTick).toBeNull();
     expect(docked.arrivalTick).toBeNull();
 
-    expect(result.globalEvents?.shipArrived).toEqual([
-      { shipId: "ship-1", shipName: "ship-1", systemId: "dest", destName: "Destination" },
-    ]);
+    expect(result).toEqual({});
   });
 
   it("leaves a ship with a future arrivalTick untouched and returns no event", async () => {
@@ -74,7 +72,7 @@ describe("runShipArrivalsProcessor", () => {
     expect(result).toEqual({});
   });
 
-  it("docks every ship arriving the same tick and lists them all in one shipArrived array", async () => {
+  it("docks every ship arriving the same tick", async () => {
     const world = new InMemoryShipArrivalsWorld(
       {
         ships: [
@@ -92,10 +90,6 @@ describe("runShipArrivalsProcessor", () => {
     expect(world.ships.find((s) => s.id === "ship-2")!.status).toBe("docked");
     expect(world.ships.find((s) => s.id === "ship-3")!.status).toBe("in_transit");
 
-    expect(result.globalEvents?.shipArrived).toHaveLength(2);
-    expect(result.globalEvents?.shipArrived?.map((e) => e.shipId).sort()).toEqual([
-      "ship-1",
-      "ship-2",
-    ]);
+    expect(result).toEqual({});
   });
 });

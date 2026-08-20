@@ -1,13 +1,12 @@
 /**
  * The wouter side of the link seam (`components/ui/link-provider.tsx`) — mounted by
- * `client/main.tsx`, never imported from `components/ui` itself, so the still-live
- * Next build never pulls wouter's runtime into a component that never renders it there.
+ * `client/main.tsx`, never imported from `components/ui` itself.
  *
  * Adapts wouter's `Link` (which accepts a much richer prop set — `to`, `replace`, `state`, `asChild`,
  * every anchor attribute) down to the shared `LinkComponentProps` contract, the same way
- * `NextLinkAdapter` narrows `next/link` in `link-provider.tsx`. wouter's `Link` renders an `<a>` and
- * intercepts its click to call `history.pushState`/`replaceState` instead of letting the browser
- * navigate — the mechanism `Button`/`TabLink`/`BackLink` link-mode gets "for free" once this
+ * `link-provider.tsx`'s own anchor default narrows its underlying element. wouter's `Link` renders
+ * an `<a>` and intercepts its click to call `history.pushState`/`replaceState` instead of letting the
+ * browser navigate — the mechanism `Button`/`TabLink`/`BackLink` link-mode gets "for free" once this
  * component is what `useLinkComponent()` resolves to.
  */
 import type { ReactNode } from "react";

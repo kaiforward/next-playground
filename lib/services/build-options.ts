@@ -22,10 +22,10 @@ import type { SystemBuildOptionsData, BuildOptionData } from "@/lib/types/api";
 import type { WorldConstructionProject } from "@/lib/world/types";
 
 export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData {
-  if (!hasWorld()) throw new ServiceError("No world loaded", 409);
+  if (!hasWorld()) throw new ServiceError("No world loaded", "no_world");
   const world = getWorld();
   const system = world.systems.find((s) => s.id === systemId);
-  if (!system) throw new ServiceError(`System ${systemId} not found.`, 404);
+  if (!system) throw new ServiceError(`System ${systemId} not found.`, "not_found");
 
   const player = world.player;
   if (!player || system.factionId !== player.controlledFactionId) return { mode: "none" };

@@ -105,12 +105,12 @@ describe("getSystemPopulation", () => {
     }
   });
 
-  it("throws ServiceError(404) for an unknown system", () => {
+  it('throws ServiceError("not_found") for an unknown system', () => {
     expect(() => getSystemPopulation("does-not-exist")).toThrow(ServiceError);
     try {
       getSystemPopulation("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 });

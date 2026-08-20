@@ -95,12 +95,12 @@ describe("getFactionVitals", () => {
     expect(Number.isNaN(v.stabilityPct)).toBe(false);
   });
 
-  it("throws ServiceError(404) for an unknown faction", () => {
+  it('throws ServiceError("not_found") for an unknown faction', () => {
     expect(() => getFactionVitals("does-not-exist")).toThrow(ServiceError);
     try {
       getFactionVitals("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 });

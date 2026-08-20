@@ -13,7 +13,7 @@ const store: WorldStore = (globalStore.__world ??= { world: null, version: 0 });
 
 export function hasWorld(): boolean { return store.world !== null; }
 export function getWorld(): World {
-  if (!store.world) throw new ServiceError("No world loaded", 409);
+  if (!store.world) throw new ServiceError("No world loaded", "no_world");
   return store.world;
 }
 export function setWorld(world: World): void { store.world = world; store.version += 1; }

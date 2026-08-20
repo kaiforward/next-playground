@@ -10,11 +10,9 @@
  * string builders with no router dependency, but `client/routes.ts` imports `wouter` at module scope
  * for `useRoute` itself. A component importing ONLY an href builder from `client/routes.ts` would
  * still pull that `wouter` import along with it — the same leak `components/ui/link-provider.tsx`
- * is written to avoid (its own docstring: wouter stays out of `components/ui` so the still-live Next
- * build, which still compiles `components/start/*` and therefore this module, never ships wouter's
- * runtime for a component that never renders it there). `components/start/start-screen.tsx` and
- * `create-faction-form.tsx` — both still compiled under the Next app (`app/start/**`) until Task 14
- * — import these builders, so they live here rather than beside `useRoute`.
+ * is written to avoid (its own docstring: wouter stays out of `components/ui`). `components/start/
+ * start-screen.tsx` and `create-faction-form.tsx` import these builders, so they live here rather
+ * than beside `useRoute`.
  */
 
 export const mapHref = (): string => "/";

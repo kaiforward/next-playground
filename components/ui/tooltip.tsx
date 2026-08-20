@@ -11,7 +11,7 @@ import { twMerge } from "tailwind-merge";
  * its container or nests block content inside an interactive trigger.
  *
  * A single app-wide `<TooltipProvider>` is mounted near the root (in
- * `app/(game)/layout.tsx`) — consumers don't add their own, just use:
+ * `client/main.tsx`) — consumers don't add their own, just use:
  *   <Tooltip><TooltipTrigger asChild>{control}</TooltipTrigger>
  *     <TooltipContent>{legend}</TooltipContent></Tooltip>
  */

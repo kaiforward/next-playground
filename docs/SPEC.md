@@ -166,8 +166,6 @@ flowchart TD
     TR -- "economy type derivation<br/>(body resources + population)" --> EC
 
     SH -- "speed → travel ticks" --> NF
-
-    SA -- "dock + shipArrived SSE" --> NF
 ```
 
 Key interactions:
@@ -191,7 +189,7 @@ Key interactions:
 - **Relations → Events**: The relations processor spawns `border_conflict` (when a pair turns unfriendly), `pact_under_negotiation` (alliance telegraph), and `alliance_dissolved` (warning before pact removal) events. The events processor then applies the production modifiers
 - **Substrate → Economy**: A system's bodies (finite available space → per-resource deposit slots × quality + general/habitable space) seed its industrial base and population at world-gen, which then drive capacity-driven, input-gated production each tick (tier-0 output scaled by deposit quality); consumption is population-scaled plus the production-input draw, and each market's stock band is demand-priced (floor) and infrastructure-stocked (ceiling). Economy type is a derived display label
 - **Ships → Navigation**: Speed determines transit duration; fuel range bounds routes. Combat stats are inert until war
-- **Tick Engine → All**: Orchestrates processor execution order and broadcasts results via SSE
+- **Tick Engine → All**: Orchestrates processor execution order and broadcasts results over the worker's frame channel
 
 ---
 

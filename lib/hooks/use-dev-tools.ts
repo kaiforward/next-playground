@@ -11,17 +11,16 @@ import type { EconomySnapshotSystem, WorldInspection } from "@/lib/services/dev-
  * `useCommandMutation`'s `{mutate, mutateAsync, isPending}` surface
  * (`lib/hooks/use-command-mutation.ts`): the dev panel's components
  * (`components/dev-tools/advance-ticks-section.tsx` etc.) read `.data`/`.error.message` too — the
- * old `@tanstack/react-query` `useMutation` shape those components were written against. Widening
+ * old query-library mutation shape those components were written against. Widening
  * `useCommandMutation` itself for one dev-only caller would change a production-facing hook's
  * contract for no production benefit, so this file keeps its own small local state instead.
  *
  * The commands dispatched here (`advanceTicks`, `spawnEvent`, `resetEconomy`, `economySnapshot`)
  * only exist in a build where `client/worker/dev-commands.ts` was actually loaded
- * (`import.meta.env.DEV` — see that module's header docstring). Under the old Next/webpack app
- * (still compiling until Task 14), nothing ever calls `configureCommandTransport`, so `sendCommand`
- * resolves `{ok:false, error:"Command transport not configured."}` — the same degrade every other
- * Stage-C mutation hook already accepted (`lib/hooks/use-construction-orders.ts` etc.), not a new
- * failure mode this file introduces.
+ * (`import.meta.env.DEV` — see that module's header docstring). Without a command transport
+ * configured, `sendCommand` resolves `{ok:false, error:"Command transport not configured."}` — the
+ * same degrade every other mutation hook already accepts
+ * (`lib/hooks/use-construction-orders.ts` etc.), not a new failure mode this file introduces.
  */
 
 interface DevMutationState<TData> {
