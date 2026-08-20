@@ -405,6 +405,12 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
+- **[S] Rebuild lint for the Vite stack** — eslint left the repo with the Next retirement (its
+  config was `eslint-config-next`-bound; nothing in CI ran it). Wanted back for what tsc can't
+  see: `react-hooks` (`rules-of-hooks`, `exhaustive-deps` — stale-closure bugs in the store-hook
+  layer) and `jsx-a11y` (the component tests lean on roles/accessible names). Flat config,
+  `typescript-eslint` + the two plugins, a `lint` script; owner decides whether it joins the CI
+  gate. *Next step:* write the flat config and run it once over the tree to size the fix-up.
 - **[S/M] Overnight mutation re-sweep** — the first Stryker cycle (merged 2026-08-09) swept 40 files;
   the remaining ~66 `lib/` files have never been swept at all. Owed: an overnight re-sweep of the 40
   (incremental cache invalidates most of them anyway) plus a first sweep of the rest, same
