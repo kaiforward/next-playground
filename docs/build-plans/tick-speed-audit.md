@@ -8,8 +8,9 @@ and no 600-scale reading was spent on it — dismissed, not ruled out. Claim C m
 the Node engine sustains ~10.5 TPS at 10,000 systems at the 10,000-tick horizon — above the 5 TPS
 reference, so no ceiling inside the current presets — but the crossing extrapolates to ~19-20K
 systems, inside the owner's 10-20K aspiration band, at the CHEAPEST era (founding, ~490 developed).
-Next: `/brainstorm` the pull-based frame architecture (new session; roadmap row "Frame
-architecture" carries the agreed direction and the merge-blocking decision). Instruments were
+The `/brainstorm` ran 2026-08-20; the chosen direction and committed falsifier are in `## Idea`
+at the end of this file (roadmap row "Frame architecture" carries the merge-blocking decision).
+Instruments were
 reverted per the measure rule; temp/tick-timing-diag.ts and temp/tps-scale-diag.ts (gitignored)
 survive, and the `?tickdiag` worker instrument can be re-created from this file's description +
 git history of the session if the spec pass wants live readings again.
@@ -190,3 +191,88 @@ Instrumented `runWorldTick` (tagged patch, validated: byte-identical world evolu
 largest cycle-start line everywhere (scans the full system list). Extrapolated equilibrium TPS:
 ~56 at 2000 systems, ~19.5 at 10K (two-point exponent fit — unmeasured, the parked big runs
 would confirm). Raw JSONL in temp/tick-timing-*.jsonl (gitignored).
+
+## Idea — pull-based frame architecture (brainstorm 2026-08-20)
+
+### Problem
+
+Every state push rebuilds panel-level detail for every system in the galaxy
+(`buildStateFrame`, `lib/runtime/snapshot.ts:210-289` — eight per-id families × every system,
+~120K derived objects at 20K), even though the UI shows the map plus at most one system panel and
+one faction panel at a time. At 20K systems that is ~8.7 s per push against a ~0.1 s tick (B1
+above), and the main thread then merges the same ~120K objects per frame. The 60 s autosave
+(~47 s at 20K) shares the hot path and is folded into this feature as its own sub-decision
+(direction not yet chosen — see Premises).
+
+### Chosen direction (owner call, 2026-08-20)
+
+**Interest subscriptions with a read command as a first-class part of it** ("B with A inside"):
+
+- Pushes carry the **coarse set** every tick-window as today: pacing, the flat full-galaxy map
+  layers (ownership, stability, population, development, migration, provision, universe/atlas,
+  visibility), events, alerts, tracker, playerSettings, faction summaries/relations, and the
+  aggregate slices — everything the map and the attention layer need with the whole galaxy
+  visible at 20K zoom-out (owner watch-item; wars/battles/ship units will widen this set later).
+- The UI declares an **interest set** (the ids of the panels currently open); each push carries
+  per-id detail for only those ids. Hooks stay synchronous store selectors; the command-result →
+  state-frame ordering the command overlay depends on (`client/worker/game-worker.ts:589-594`)
+  is preserved.
+- A **read command** over the existing command channel serves one-shot or rarely-open reads —
+  a worker round-trip is a postMessage pair, not HTTP + route rendering (owner: the old
+  TanStack/Next slowness was plausibly sub-page routing, not the async-read concept).
+- Which slice rides which mechanism (pushed-coarse vs subscribed vs read-command — e.g.
+  `marketComparison`, `colonyEligibility`) is a per-slice call for the spec, not fixed here.
+
+### Killed alternatives
+
+- **Pure request/response pull (A alone)** — reintroduces per-panel loading states and
+  refetch-on-tick machinery for always-on surfaces, violating the synchronous-store-selector
+  convention the migration just established. Kept *inside* B for one-shot reads instead.
+- **Incremental/dirty frames (C)** — no dirty signal exists: the tick adapters hand back fresh
+  rows whether or not anything changed (`lib/runtime/snapshot.ts:17-24`), and building one is
+  the separate "Markets need a real dirty/ownership model" roadmap row, which this feature
+  explicitly does not gate on. Dirty-sets only where a processor makes them free.
+
+### Premises
+
+**Checkable** (become `/measure` claims; fixture = 20K-system galaxy, seed 42, founding era —
+the roadmap row's acceptance fixture — measured in the real browser worker or a Node driver of
+the same call path):
+
+1. **Single-id detail derivation is cheap.** Deriving one system's full panel detail (vitals,
+   population, industry, logistics, construction, buildOptions, substrate, market) for a single
+   id at 20K systems costs ≤ ~10 ms per call. Risk: the read services were built for batch
+   derivation and may do galaxy-scale work per call (e.g. `getMarketComparison` scans every
+   system per good; trade-flow/logistics may derive network-wide intermediates).
+2. **The coarse pushed set is cheap.** A per-slice cost breakdown of `buildStateFrame` at 20K
+   shows the per-system detail families dominate, and the coarse set (map layers + attention +
+   aggregates as listed above) builds in ≤ ~250 ms per push.
+3. **Autosave cost split.** How the ~47 s autosave divides between `JSON.stringify` and the
+   IndexedDB write, and what a structured-clone handoff of the `World` to a second worker costs
+   at 20K — the numbers that pick the autosave sub-direction.
+
+**Definitional** (owner decisions, no measurement):
+
+- Client reads stay synchronous store selectors; no loading/error checks return (AGENTS.md
+  convention; reaffirmed in this brainstorm's B-over-A call).
+- Alerts and tracker remain worker-derived aggregate slices in the pushed coarse set
+  (`lib/runtime/snapshot.ts:259-260`) — they never widen the interest set.
+- The interest set is the open panels, not the player's controlled systems.
+- 20K systems is the acceptance fixture (owner aspiration band 10-20K).
+
+**Hypothesis** (carried forward, labelled):
+
+- Main-thread merge cost (`replaceEqualDeep` over ~120K objects per frame) shrinks
+  proportionally once frames shrink — unmeasured.
+- The 600-system 4-vs-75 TPS anecdote is this same mechanism (Claim A was dismissed, not ruled
+  out; no 600-scale reading exists).
+
+### Terminal falsifier
+
+**If deriving one system's full panel detail at the 20K fixture measures ≥ ~500 ms per call —
+within an order of magnitude of building the full frame — and cannot be brought under ~10 ms by
+scoping the existing read services (i.e. their galaxy-scale intermediates are irreducible per
+call), the direction is dead:** subscribed detail would cost like full frames the moment a few
+panels are open, and the fix must instead be incremental push gated on the markets
+dirty/ownership model row. Units: ms per single-id detail derivation; fixture: 20K systems,
+seed 42, founding era.
