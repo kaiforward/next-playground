@@ -28,36 +28,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[XL] Retire Next.js and TanStack Query — this is a single-page game, not a web app.** Packaging
-   path B from [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §6: the engine in a Web
-   Worker, fully client-side, shippable as static web plus Tauri/Electron from one codebase. The
-   Next.js server, the App Router, the `app/api/game/` handlers and the query layer all retire
-   together.
-   That section says "A migrates into B; don't decide today" — written when the pivot was young.
-   Everything else in it has since shipped (Postgres and Prisma gone, world in memory, saves as JSON
-   on disk), so the packaging path is the last undecided piece of a finished pivot, and the
-   non-decision is the stale part.
-   Queued to the head by Kai (2026-08-19): the last leftover of the old game — both frameworks carry
-   web-app quirks the game still pays for, and the felt cost is now concrete: **a loading panel on
-   every system click**. The genre bar is EU5, where a system detail panel opens instantly; a visible
-   load on a detail panel is not acceptable in a grand-strategy game. His read (2026-08-12) stands:
-   real performance gains, no delay opening panels, the coupling below all solvable, the end state
-   simpler than what it replaces — and the retirement holds even for future multiplayer.
-   **What it actually touches**, so nobody sizes this as a framework swap: the entire client data
-   layer. TanStack Query is load-bearing today — `useTickInvalidation`, the map atlas held at
-   `staleTime: Infinity`, and the SSE-driven hooks that seed initial state from REST. The route
-   handlers are thin, but every hook in `lib/hooks/` reads through them.
-   Spec (measured, written, spec-reviewed 2026-08-19, amendments applied):
-   [client-runtime.md](./planned/client-runtime.md). Both measure falsifiers fired — the benefit
-   claim is architectural (no RSC gate / waterfall / fallback flash), not "remove the server hop";
-   the replacement is a snapshot store with UI-side structural sharing, never a cache. Booked end
-   task (rides this migration): `/measure` tick speed at high system/population counts to set the
-   acceptable maximum — the spec's §11 carries the JS-tick ceiling and the compiled-engine escape
-   the channel boundary preserves.
-   *Next step:* `/build-plan` against the spec.
-   *Don't:* port TanStack across as-is. Caching in front of an in-process world is the indirection
-   this work exists to remove, and keeping it would leave both layers in place for none of the gain.
-2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
@@ -95,12 +66,13 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
 
 **Packaging**
 - **[M] Desktop shell packaging (Tauri vs Electron)** — booked out of the client-runtime migration
-  by explicit decision (2026-08-19, "we should do it at some point soon"). Gated on that migration
-  shipping: its save-backend seam and worker channel are the prerequisites, both built there.
-  Desktop gets real transferable `.json` save files via the existing Node file backend
-  (`lib/world/save-files.ts`), owns its window chrome (no accidental refresh), and can hold
-  window-close for the save. The shell choice itself is the row's first decision.
-  *Next step:* pick the shell (Tauri vs Electron) once the client runtime is merged.
+  by explicit decision (2026-08-19, "we should do it at some point soon"). The client runtime has
+  shipped ([client-runtime.md](./active/engineering/client-runtime.md)): the save-backend seam and
+  worker channel this row depends on are both built. Desktop gets real transferable `.json` save
+  files via the existing Node file backend (`lib/world/save-files.ts`), owns its window chrome (no
+  accidental refresh), and can hold window-close for the save. The shell choice itself is the row's
+  first decision.
+  *Next step:* pick the shell (Tauri vs Electron).
 
 **Economy / simulation**
 - **[M] Relief — a player-funded intervention buys a viable world out of the strike loop** by
@@ -290,6 +262,13 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   not waste: it de-aliases rows the previous world still holds. *Next step:* a design pass on copy-on-write
   rows or a dirty flag. *Don't:* reference-identity dirty-checking — the adapter hands back fresh rows
   whether or not anything changed, so it always reports dirty. Real save-corruption risk if aliasing leaks.
+- **[S] Tick-speed acceptable-maximum audit** — booked as an end task of the client-runtime migration
+  (Kai, 2026-08-19): "an audit of the tick speed at a high number of systems and population to see
+  what our acceptable max is." Never run — feeds the two rows above (the events processor's scaling,
+  the dirty/ownership model) with the ceiling they're sized against; the JS-tick ceiling and the
+  compiled-engine escape the worker channel boundary preserves are recorded in
+  [client-runtime.md](./active/engineering/client-runtime.md). *Next step:* `/measure` tick speed at
+  high system and population counts.
 
 **Types / correctness**
 - **[S] `.get(...)!`-in-tests idiom decision** — 8 sites use a postfix-`!` `Map.get` in tests (against

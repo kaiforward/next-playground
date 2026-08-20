@@ -134,8 +134,8 @@ authoring time (`EVENT_BAND`, `lib/constants/ui.ts`), so an event chip's tier is
 every other category's. An event chip's count is **instances, not systems** — a region-target phase
 applies its modifiers to a whole region from one instance, and two event types (`pact_under_negotiation`,
 `alliance_dissolved`) spawn with no system at all, so counting systems would misreport both. Event chips
-also refresh on their own SSE channel (`eventNotifications`), separately from the `economyTick` channel
-every other category moves on.
+also refresh on their own dispatch channel (`eventNotifications`, part of the worker's pacing frame),
+separately from the `economyTick` channel every other category moves on.
 
 ## The flyout
 
