@@ -1,19 +1,27 @@
 "use client";
 
-import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useContext, useEffect } from "react";
+import { QueryClientContext } from "@tanstack/react-query";
 import { useTickContext } from "./use-tick-context";
 import { queryKeys } from "@/lib/query/keys";
 
 /**
  * Subscribes to SSE events and invalidates relevant queries.
  * Mount once in GameShellInner — replaces per-page arrival useEffects.
+ *
+ * Reads the QueryClient context directly (`useContext`, not `useQueryClient`) so a missing
+ * provider no-ops instead of throwing (build plan Task 10 — `GameShellInner` now also mounts under
+ * the Vite shell, `client/main.tsx`, which has no `QueryClientProvider`: every hook this effect
+ * would invalidate is store-backed there already, so there is nothing for this module to do under
+ * that host). Under the Next app (`app/(game)/layout.tsx`'s `GameQueryProvider`) the context is
+ * always present and behaviour is unchanged.
  */
 export function useTickInvalidation() {
   const { subscribeToEvent } = useTickContext();
-  const queryClient = useQueryClient();
+  const queryClient = useContext(QueryClientContext);
 
   useEffect(() => {
+    if (!queryClient) return;
     const unsubs = [
       // Economy ticks → refresh market data, trade flow, stability, and population
       // (market + unrest + population are all written by the economy processor on the same tick)

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useLinkComponent } from "@/components/ui/link-provider";
 import type { ConstructionProjectRow } from "@/lib/engine/construction-readout";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,7 @@ export function ConstructionRow({
   showSystem: boolean;
   onCancel?: (projectId: string) => void;
 }) {
+  const LinkComponent = useLinkComponent();
   const stalled = row.etaCycles === null;
   const baseTitle =
     row.kind === "colony_establish" ? "Establish Colony" : `${row.buildingLabel} ×${row.levels}`;
@@ -44,12 +45,12 @@ export function ConstructionRow({
           {showSystem && (
             <>
               {" — "}
-              <Link
+              <LinkComponent
                 href={`/system/${row.systemId}`}
                 className="text-text-accent hover:text-text-accent-hover transition-colors"
               >
                 {row.systemName}
-              </Link>
+              </LinkComponent>
             </>
           )}
         </span>
@@ -76,12 +77,12 @@ export function ConstructionRow({
                 seed <span className="font-mono text-text-primary">{formatMagnitude(row.seedPop)}</span> pop ·{" "}
                 <span className="font-mono text-text-primary">{row.housingLevels}</span> housing bundled ·{" "}
                 <span className="text-text-tertiary">from </span>
-                <Link
+                <LinkComponent
                   href={`/system/${row.sourceSystemId}`}
                   className="text-text-accent hover:text-text-accent-hover transition-colors"
                 >
                   {row.sourceSystemName}
-                </Link>
+                </LinkComponent>
                 {" · "}
                 <span className="font-mono text-text-primary">{fractionPct(row.stagedFraction)}%</span>
                 <span className="text-text-tertiary"> of stores staged</span>

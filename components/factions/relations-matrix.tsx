@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { tv } from "tailwind-variants";
+import { useLinkComponent } from "@/components/ui/link-provider";
 import type { RelationTier } from "@/lib/constants/relations";
 import type {
   RelationsMatrixData,
@@ -118,9 +118,10 @@ export function RelationsMatrix({ data }: RelationsMatrixProps) {
 }
 
 function ColumnHeader({ faction }: { faction: RelationsMatrixFaction }) {
+  const LinkComponent = useLinkComponent();
   return (
     <th scope="col" className="h-32 w-9 border border-border bg-surface-hover/30 align-bottom">
-      <Link
+      <LinkComponent
         href={`/factions/${faction.id}`}
         title={`${faction.name} — ${faction.governmentType}`}
         className="flex flex-col items-center gap-1.5 py-2 hover:text-text-accent transition-colors"
@@ -136,15 +137,16 @@ function ColumnHeader({ faction }: { faction: RelationsMatrixFaction }) {
         >
           {faction.name}
         </span>
-      </Link>
+      </LinkComponent>
     </th>
   );
 }
 
 function RowHeader({ faction }: { faction: RelationsMatrixFaction }) {
+  const LinkComponent = useLinkComponent();
   return (
     <th scope="row" className="h-9 w-56 border border-border bg-surface-hover/30 text-left">
-      <Link
+      <LinkComponent
         href={`/factions/${faction.id}`}
         className="flex items-center gap-2 px-3 py-1.5 hover:text-text-accent transition-colors"
       >
@@ -156,7 +158,7 @@ function RowHeader({ faction }: { faction: RelationsMatrixFaction }) {
         <span className="font-display text-xs text-text-primary truncate">
           {faction.name}
         </span>
-      </Link>
+      </LinkComponent>
     </th>
   );
 }

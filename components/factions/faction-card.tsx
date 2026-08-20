@@ -1,6 +1,8 @@
-import Link from "next/link";
+"use client";
+
 import { tv, type VariantProps } from "tailwind-variants";
 import { Badge } from "@/components/ui/badge";
+import { useLinkComponent } from "@/components/ui/link-provider";
 import { FactionStatusBadge } from "./faction-status-badge";
 import type { FactionSummary } from "@/lib/services/factions";
 
@@ -40,6 +42,7 @@ export function FactionCard({
   showDescription,
   className,
 }: FactionCardProps) {
+  const LinkComponent = useLinkComponent();
   const interactive = !!href;
   const renderDescription =
     showDescription ?? (size === "md");
@@ -90,9 +93,9 @@ export function FactionCard({
 
   if (href) {
     return (
-      <Link href={href} className={className_} style={style}>
+      <LinkComponent href={href} className={className_} style={style}>
         {body}
-      </Link>
+      </LinkComponent>
     );
   }
   return (

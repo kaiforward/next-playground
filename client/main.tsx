@@ -1,31 +1,32 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { ErrorBoundary } from "react-error-boundary";
+import "./fonts.css";
 import "@/app/globals.css";
-import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
+import { gameStore } from "@/lib/store/use-game-store";
 import { configureCommandTransport, deliverCommandResult } from "@/lib/runtime/command-client";
 import { useAtlas } from "@/lib/hooks/use-atlas";
-import { TickProvider } from "@/lib/hooks/use-tick-context";
-import { DevOverlayProvider } from "@/components/dev-tools/dev-overlay-context";
+import { GameShell } from "@/components/game-shell";
+import { AxeAccessibility } from "@/components/dev-tools/axe-accessibility";
 import { StarMap } from "@/components/map/star-map";
 import { SystemPanel } from "@/components/panels/system-panel";
 import { FactionPanel } from "@/components/panels/faction-panel";
 import { StyleguidePanel } from "@/components/panels/styleguide-panel";
 import { renderErrorFallback } from "@/components/ui/error-fallback";
-import type { Speed } from "@/lib/world/tick-loop";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import type { NewGameInput } from "@/lib/schemas/game-setup";
 import { WouterRuntimeProvider } from "./wouter-link";
 import { useRoute } from "./routes";
 import type { InboundMessage, OutboundMessage, GameCommandEnvelope } from "./worker/game-worker";
 
 /**
- * The Vite shell's entry (client-runtime spec §9, build plan Task 6) — boots the real game worker,
- * feeds every posted frame into the one module-level `gameStore` (`lib/store/use-game-store.ts`),
- * and renders the router + top-bar clock/speed control. Task 9 wires the real map and panels onto
- * this shell (`RouteBody` below): the map root always renders `StarMap`, and a `/system/:id/:tab`
- * or `/factions/:id/:tab` route additionally docks the matching panel over it — mirroring the old
- * Next app's page + `@panel` parallel-route split, but as one component switching on `useRoute()`
- * rather than two route trees. The start screen is still Task 11's job.
+ * The Vite shell's entry (client-runtime spec §9, build plan Task 6) — boots the real game worker
+ * and feeds every posted frame into the one module-level `gameStore` (`lib/store/use-game-store.ts`).
+ * `RouteBody` below renders the real map, panels and `GameShell` (Task 10): the map root always
+ * renders `StarMap`, and a `/system/:id/:tab` or `/factions/:id/:tab` route additionally docks the
+ * matching panel over it — mirroring the old Next app's page + `@panel` parallel-route split, but as
+ * one component switching on `useRoute()` rather than two route trees. The start screen is still
+ * Task 11's job.
  */
 
 const worker = new Worker(new URL("./worker/entry.ts", import.meta.url), { type: "module" });
@@ -121,46 +122,6 @@ if (import.meta.env.DEV) {
 post({ type: "boot", config: { economyScale: 100, debugEconomy: false, debugEvents: false } });
 post({ type: "subscribe" });
 
-const SPEEDS: readonly Speed[] = ["paused", 1, 5, "max"];
-
-function speedLabel(speed: Speed): string {
-  if (speed === "paused") return "Pause";
-  if (speed === "max") return "Max";
-  return `${speed}x`;
-}
-
-function TopBarClock() {
-  const pacing = useGameSlice((state) => state.pacing);
-  if (!pacing) {
-    return <span>Booting…</span>;
-  }
-  return (
-    <span>
-      Tick {pacing.currentTick} · {speedLabel(pacing.speed)} · {pacing.achievedTps.toFixed(1)} tps
-    </span>
-  );
-}
-
-function SpeedControl() {
-  const speed = useGameSlice((state) => state.pacing?.speed ?? "paused");
-  return (
-    <div role="group" aria-label="Game speed">
-      {SPEEDS.map((candidate) => (
-        <button
-          key={String(candidate)}
-          type="button"
-          aria-pressed={speed === candidate}
-          onClick={() =>
-            postCommand({ id: crypto.randomUUID(), type: "setSpeed", payload: { speed: candidate } })
-          }
-        >
-          {speedLabel(candidate)}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /** The map root — always mounted (a panel docks over it, never instead of it): `StarMap` reads its
  *  own selection off `useRouteInfo()` (`components/ui/link-provider.tsx`), so it needs no route
  *  prop from here, only the atlas. Wrapped in its own boundary so a map read failure doesn't take
@@ -169,64 +130,69 @@ function MapRoot() {
   const { atlas } = useAtlas();
   return (
     <div className="h-[calc(100vh-var(--topbar-height))] w-full relative">
-      <StarMap atlas={atlas} initialSelectedSystemId={atlas.player?.homeworldSystemId} />
+      <ErrorBoundary fallbackRender={renderErrorFallback}>
+        <StarMap atlas={atlas} initialSelectedSystemId={atlas.player?.homeworldSystemId} />
+      </ErrorBoundary>
     </div>
   );
 }
 
+/**
+ * `GameShell` (`components/game-shell.tsx`) is the real in-game shell the old Next app mounted at
+ * `app/(game)/layout.tsx` — `TickProvider`, `DevOverlayProvider`, the real `TopBar` (save/exit,
+ * speed, tick/tps, faction stats) and the dev-tools panel now come from there instead of this
+ * file's Task 6 stand-ins (removed this task; `SystemCadenceCountdown` and `star-map.tsx`'s
+ * `useDevOverlay()` calls, the reason those stand-ins existed, are satisfied by `GameShell`'s own
+ * providers). Only the map + system/faction/styleguide routes are wrapped — `GameQueryProvider`
+ * (TanStack, retired from this host already) is dropped, and the world-existence redirect
+ * `app/(game)/layout.tsx` also did (`hasWorld()` → `/start`) stays Task 11's job: the "start" route
+ * below renders its placeholder OUTSIDE `GameShell`, since `TopBar` reads faction/treasury data
+ * that assumes a world already exists.
+ */
 function RouteBody() {
   const route = useRoute();
   switch (route.name) {
     case "map":
-      return <MapRoot />;
+      return (
+        <GameShell>
+          <MapRoot />
+        </GameShell>
+      );
     case "start":
       // Task 11's job — the start screen becomes reachable world-less (listSaves/newGame/loadGame
-      // as worker commands). Until then the dev auto-newGame below stands in.
+      // as worker commands). Until then the dev auto-newGame below stands in. Deliberately NOT
+      // wrapped in GameShell: TopBar assumes a live world.
       return <div>Start screen (placeholder — Task 11)</div>;
     case "system":
       return (
-        <>
+        <GameShell panel={<SystemPanel systemId={route.systemId} tab={route.tab} />}>
           <MapRoot />
-          <SystemPanel systemId={route.systemId} tab={route.tab} />
-        </>
+        </GameShell>
       );
     case "faction":
       return (
-        <>
+        <GameShell panel={<FactionPanel factionId={route.factionId} tab={route.tab} />}>
           <MapRoot />
-          <FactionPanel factionId={route.factionId} tab={route.tab} />
-        </>
+        </GameShell>
       );
     case "styleguide":
-      return <StyleguidePanel />;
+      return (
+        <GameShell>
+          <StyleguidePanel />
+        </GameShell>
+      );
   }
 }
 
 function App() {
   return (
     <WouterRuntimeProvider>
-      {/* Task 10/11 wire the real `GameShell` (dev tools, overlay context) onto this shell — until
-          then, `TickProvider` and `DevOverlayProvider` are mounted directly here because
-          `SystemCadenceCountdown` (`components/system/system-cadence-countdown.tsx`, from
-          `SystemPanel`'s header) needs `useTickContext()`, and `star-map.tsx` needs
-          `useDevOverlay()` — both throw without a provider, which would crash the panel/map open
-          rather than merely look unfinished. Judgment call, named in the PR description; grepped
-          every `createContext`/`useContext` pair in the repo (`components/ui/link-provider.tsx`,
-          `components/ui/popover.tsx` — self-contained, provides its own context per `<Popover>`
-          instance — and these two) to confirm no third one is still unwired. */}
-      <TickProvider>
-        <DevOverlayProvider>
-          <header>
-            <TopBarClock />
-            <SpeedControl />
-          </header>
-          <main>
-            <ErrorBoundary fallbackRender={renderErrorFallback}>
-              <RouteBody />
-            </ErrorBoundary>
-          </main>
-        </DevOverlayProvider>
-      </TickProvider>
+      {/* One app-wide Radix tooltip provider, matching `app/(game)/layout.tsx`'s today — every
+          Tooltip consumer (panels, map controls, form legends) expects exactly one ancestor. */}
+      <TooltipProvider delayDuration={150}>
+        <RouteBody />
+      </TooltipProvider>
+      {import.meta.env.DEV && <AxeAccessibility />}
     </WouterRuntimeProvider>
   );
 }

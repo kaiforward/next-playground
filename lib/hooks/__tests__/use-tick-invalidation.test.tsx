@@ -97,6 +97,34 @@ function stubAlertFetch() {
   return fetchMock;
 }
 
+/** Calls only the hook under test — unlike `AlertsProbe`, no sibling `useQuery` (that call itself
+ *  throws with no `QueryClientProvider` ancestor, which would test jsdom's own TanStack guard
+ *  rather than this hook's). */
+function InvalidationOnlyProbe() {
+  useTickInvalidation();
+  return null;
+}
+
+describe("useTickInvalidation — host-agnostic without a QueryClientProvider (build plan Task 10)", () => {
+  it("does not throw when mounted with no QueryClientProvider ancestor", () => {
+    // GameShell (components/game-shell.tsx) now mounts under the Vite shell too, which has no
+    // QueryClientProvider — every store-backed hook already gets its data from applied state
+    // frames, so this effect has nothing to invalidate there. Reproduces that exact host: render
+    // the hook with no provider at all.
+    expect(() => render(<InvalidationOnlyProbe />)).not.toThrow();
+  });
+
+  it("does not throw when a broadcast fires with no QueryClientProvider ancestor", async () => {
+    render(<InvalidationOnlyProbe />);
+
+    await expect(
+      act(async () => {
+        dispatch("economyTick", [{ systemCount: 12, shardIndex: 0, shardCount: CYCLE_LENGTH }]);
+      }),
+    ).resolves.not.toThrow();
+  });
+});
+
 describe("useTickInvalidation — the alerts query key (module now inert pending Task 14 deletion)", () => {
   it("refetches the probe query on an economyTick broadcast", async () => {
     const queryClient = makeQueryClient();

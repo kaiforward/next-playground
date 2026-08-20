@@ -26,7 +26,7 @@
  * real implementation the Vite shell supplies (`client/wouter-link.tsx`'s `WouterRuntimeProvider`,
  * backed by wouter's `useLocation`/`useSearch`).
  */
-import { createContext, useContext, type ComponentType, type ReactNode } from "react";
+import { createContext, useContext, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import NextLink from "next/link";
 
 export interface LinkComponentProps {
@@ -35,6 +35,11 @@ export interface LinkComponentProps {
   children?: ReactNode;
   "aria-label"?: string;
   "aria-current"?: "page" | undefined;
+  /** `TopBar`'s faction flag (`components/top-bar.tsx`) needs a native tooltip + the faction's
+   *  colour as an inline style — both adapters already spread unrecognised props through to their
+   *  underlying anchor, so adding these here is the only change either adapter needs. */
+  title?: string;
+  style?: CSSProperties;
 }
 
 export type LinkComponent = ComponentType<LinkComponentProps>;
