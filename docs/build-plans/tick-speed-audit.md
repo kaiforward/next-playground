@@ -369,3 +369,190 @@ Licenses:   Supports: the autosave sub-direction does NOT need a serialisation f
 **Outcome vs the terminal falsifier: the direction SURVIVES** — single-id derivation is ~0.2-1 ms
 against the 500 ms kill line, and both checkable premises are confirmed at the committed fixture.
 Next: `/feature-spec` from this evidence.
+
+## Spec — frame architecture
+
+```
+What changes:  The game worker stops rebuilding every system's panel detail on every push. Each
+               push now carries only what the whole screen can show at once — the map layers, the
+               attention surfaces, and per-faction summaries — plus full detail for just the
+               panels the player currently has open. The UI tells the worker which panels those
+               are, and the worker answers a panel opening with a fresh frame immediately. At
+               20,000 systems the game becomes playable at max speed instead of freezing for
+               seconds per frame; autosave cadence is unchanged and its remaining cost is
+               re-measured once frames are fixed.
+Why:           At 20K systems a tick costs ~0.1 s but one state frame costs ~8.7 s and the 60 s
+               autosave ~47 s — the worker spends 87-99% of its time on host work (B1). Owner
+               decisions encoded: direction "pull-based frames — push coarse map slices +
+               aggregates; derive panel detail on demand over the command channel; dirty-sets
+               only where processors make them free; autosave off the hot path separately"
+               (2026-08-20, roadmap row); the shape "B with A's read command as a first-class
+               part of it" — proposed with "which slice uses which mechanism becomes a per-slice
+               call at spec time", owner: "Yeah sounds good thanks for the explanation";
+               interest-set scope — owner questioned "the 'handful' of systems… the tracker,
+               alerts etc." and accepted that alerts/tracker are worker-derived pushed slices,
+               so the interest set is the open panels; watch-item "at 20K full-map zoom-out
+               everything is visible, and wars/battles/ship units will widen what the map needs"
+               (2026-08-20); 20K galaxy is the acceptance fixture (roadmap row).
+Evidence:      I1 — single-id panel detail is ~0.2-1 ms/id (max 4.7) at 20K; licenses: confirmed
+               at founding era only, per-id cost scales with content, equilibrium unmeasured.
+               I2 — detail families are ~99.5% of frame cost (~3.5 s); coarse set ~17 ms;
+               licenses: alerts/tracker measured with no player seat (~0, unrepresentative);
+               marketComparison/tradeFlow grow with market/flow population; substrate (1.65 s)
+               is static per-system data. I3 — serialiseWorld ~120 ms / 37 MB, structuredClone
+               ~130 ms; licenses: the browser 47 s is loop saturation + IDB write, attribution
+               between them unmeasured — the post-frame-fix browser re-read is the gate on
+               whether autosave needs its own mechanism. B1 — browser worker share%
+               tick/frame/idle ≈ 1/99/0 at 20K; licenses: founding era, dev build.
+Not claimed:   No engine tick speedup — the ~5-10 TPS engine ceiling at 20K (C1) is untouched;
+               this feature removes the HOST bottleneck only. No dirty-sets or incremental
+               frames — every frame is still fully rebuilt, just smaller; the markets
+               dirty/ownership row stays independent. No map-rendering (Pixi) changes. No
+               save-format or autosave-cadence change, and no save worker in this feature — that
+               is a gated follow-up. No equilibrium-era performance guarantee: every number is
+               founding-era, and coarse-set cost grows with content (I2 licenses). A skimmer
+               might read "pull-based" as request/response reads with loading states — wrong:
+               open-panel detail still arrives by push, and hooks stay synchronous.
+```
+
+### Frame contents — the per-slice assignment
+
+Two delivery classes replace today's all-slices frame (`buildStateFrame` derives every per-id
+slice for every system, `lib/runtime/snapshot.ts:210-289`):
+
+**Pushed coarse set** — in every state frame, exactly as assembled today (receipts:
+`lib/runtime/snapshot.ts:254-286`): `atlas`, `universe`, `visibility`, `events`, `alerts`,
+`tracker`, `playerSettings`, `ownership`, `stability`, `population`, `development`, `migration`,
+`provision`, `factions`, `relations`, `tradeFlow`, `factionVitals`, `factionConstruction`,
+`factionTreasury`, `factionDetail`, `constructionStalls`. Measured sum ~17 ms at 20K (I2;
+faction aggregates 10.4 ms of it, scaling with faction count ~29, not system count). This is the
+"whole screen at once" set: full-galaxy map layers (owner watch-item), the attention layer, and
+every faction surface. Wars/battles/ship-unit layers join this class when they exist.
+
+**Interest-keyed detail** — in a frame only for ids in the current interest set:
+
+- keyed by **system id**: `systemVitals`, `systemPopulation`, `systemIndustry`,
+  `systemLogistics`, `systemConstruction`, `systemBuildOptions`, `systemSubstrate`, `market`
+  (the 8 families, `snapshot.ts:220-234`), plus `colonyEligibility` for that system when
+  controlled (`snapshot.ts:183-190`). Measured ~0.2-1 ms per id (I1).
+- keyed by **good id**: `marketComparison` — the comparison panel opens on one good across
+  systems (`snapshot.ts:79-82`), so its interest key is the good, not a system.
+
+No slice is assigned to request/response reads at introduction: the read-command mechanism
+already exists (pure-read commands `listSaves`, dev `economySnapshot`/`inspectWorld` —
+`client/worker/game-worker.ts:355-358,427-436`) and new one-shot reads join `GameCommandMap`
+the ordinary way; nothing currently needs one.
+
+**Self-containment invariant:** every frame carries the ENTIRE current interest set's detail,
+never a delta — the drop-harmless guarantee (`snapshot.ts:22-24`) continues to hold with "full"
+redefined as "coarse set + whole interest set".
+
+### Interest protocol
+
+A new inbound worker message alongside `subscribe` (`client/worker/game-worker.ts:104-107`):
+`{ type: "interest", systems: string[], factions: string[], goods: string[] }` — new, emitted by
+the UI-side worker connection. Semantics:
+
+- **Replace-whole-set, idempotent.** The worker holds exactly the last-received set; no
+  ref-counting, no incremental add/remove. `factions` is accepted for forward-compatibility and
+  unused at introduction (every faction slice is pushed-coarse).
+- **Immediate reply.** An interest message that GROWS the set is answered with a state frame at
+  once (same pattern as `subscribe`'s immediate reply, `game-worker.ts:560-563`), so opening a
+  panel costs one postMessage round trip (~ms), not a wait for the next throttle window. A
+  shrink-only change waits for the next scheduled frame.
+- **UI derivation.** The shell derives the set from what is open — the routed panel's id plus
+  any open detail popovers — and re-posts it on route/popover change. The empty set is valid
+  (map only): frames carry the coarse set alone.
+- **First-paint gate.** Between a panel opening and its frame landing, the panel's id is absent
+  from the detail slices. Exactly ONE presence gate, at the panel root, holds the panel's shell
+  until the id's entry exists; every hook below it stays a synchronous non-null selector — the
+  no-loading-checks convention holds everywhere except that single root gate.
+- **Command ordering preserved.** A command's result is still followed immediately by a state
+  frame with no interleaving await (`game-worker.ts:589-594`); that frame carries the interest
+  set's detail, so the panel the player is acting in updates in the same message pair the
+  command-overlay contract requires.
+
+### Store and signature consequences
+
+- **Store merge is already correct for partial frames**: `applyStateFrame` spreads
+  `frame.slices` over held slices — a slice present in the frame replaces wholesale, an absent
+  slice persists (`lib/store/game-store.ts:160`). Consequence: each detail record contains only
+  the current interest set's ids (closing a panel drops its entry on the next frame), and every
+  coarse slice stays complete. `worldVersion` freshness, the replacement floor, and liveness
+  semantics are untouched (`game-store.ts:155-170,190-216`).
+- **`buildStateFrame(world, since)` becomes `buildStateFrame(world, interest)`**: the `since`
+  parameter has been `void`-ed since introduction (`snapshot.ts:210-211`) and its dirty-set
+  future is explicitly not this feature (roadmap "Markets need a real dirty/ownership model");
+  it retires now rather than surviving as a stranded parameter. The world-less frame
+  (`worldVersion: 0`, empty slices — `game-worker.ts:501-503`) is unchanged.
+- **`StateFrame`'s shape is unchanged** (`Partial<SnapshotSlices>` + `worldVersion`,
+  `snapshot.ts:154-157`) — what changes is which keys a frame populates.
+
+### Autosave
+
+Cadence, trigger points and mechanism are all unchanged: 60 s interval + on pause
+(`lib/world/tick-loop.ts:58,119,236-237`), write-then-swap IndexedDB backend
+(`client/save-indexeddb.ts:136-151`), serialisation via `serialiseWorld`
+(`tick-loop.ts:332-338`). I3 exonerates serialisation (~120 ms at 37 MB), so this feature
+changes autosave only by unsaturating the loop around it. **Gate:** the acceptance smoke
+re-measures autosave wall time in the browser at the 20K fixture; if a player-visible stall
+(> ~2 s of unresponsiveness attributable to the autosave window) remains, the follow-up is a
+dedicated save worker fed by `structuredClone` (~130 ms, I3) — booked as a roadmap row at that
+point, never built speculatively in this PR.
+
+### Acceptance (browser, real Chrome, 20K fixture — seed 42, founding era; re-create the
+`?tickdiag` relay instrument from this file's description)
+
+1. Frame work (build + post) < 10% of worker busy time at max speed with one system panel and
+   one faction panel open — inverts falsifier B (B1 measured 87-99%).
+2. Frame build ≤ 100 ms per push under the same conditions (I2 coarse ~17 ms + detail ~1 ms/id
+   + assembly headroom; the bound is deliberately loose for the dev build).
+3. Tick work dominates: share% tick ≥ 80% at max speed, i.e. achieved TPS is engine-limited,
+   not host-limited (no absolute TPS promise — the engine ceiling at 20K is C1's extrapolated
+   ~5 TPS and not this feature's to move).
+4. Autosave gate as above; record the reading either way.
+5. 600-system smoke: no order-of-magnitude browser-vs-Node TPS gap at matched era (closes the
+   4-vs-75 anecdote's mechanism to the extent B's content-scaling explanation covers it —
+   Claim A stays dismissed-not-ruled-out).
+
+### Hazard worksheet (scope: runtime/UI delivery change — rows 3 and 6 per the worksheet's own
+scope rule; no economy, processor, world-state or shared-constant surface. Row 5-style producer
+receipts are folded into the body's sentences above.)
+
+**Row 3 — systems sweep:**
+
+| System | Interaction with this change | Reason if none |
+|---|---|---|
+| Events | Delivery only: `events` slice stays pushed-coarse (`snapshot.ts:259`); pacing-frame notifications unchanged (`lib/runtime/channel.ts:9-15`) | — |
+| Population + migration | Delivery only: map layers stay pushed (`snapshot.ts:264-267`); `systemPopulation` becomes interest-keyed | — |
+| Unrest / regime | none | `stability` layer stays pushed (`snapshot.ts:263`); no data change |
+| Industry + staffing | Delivery only: `systemIndustry` becomes interest-keyed | data content unchanged |
+| Infrastructure decay | none | engine-side; frames are read-only derivations |
+| Directed logistics | Delivery only: `tradeFlow` pushed, `systemLogistics` interest-keyed | — |
+| Directed build / planner | Delivery only: `systemConstruction`/`systemBuildOptions` interest-keyed; `constructionStalls` stays pushed (`snapshot.ts:195-204`) | — |
+| Colonisation + founding manifest | Delivery only: `colonyEligibility` rides the system detail bundle (`snapshot.ts:183-190`) | — |
+| Treasury / purse | none | `factionTreasury` stays pushed-coarse (`snapshot.ts:249-251`) |
+| Factions + relations | none | all faction slices stay pushed-coarse |
+| Save format (`World` shape) | none | frames are never persisted; `serialiseWorld` serialises `World`, not frames (`lib/world/save.ts:54`); autosave cadence unchanged |
+| Harness's own metrics | none | `npm run impact -- buildStateFrame`: "No production readers found" — the impact scan covers `lib/`/tick/harness and finds zero readers there (+1 test); the real callers are `client/worker/game-worker.ts:143,205,509` (client/ is outside the tool's scan — verified by direct read) and the harness never builds frames |
+
+**Row 6 — metrics this spec targets:**
+
+| Metric | Read at which cohort | What else moves this number |
+|---|---|---|
+| share% tick/frame/idle | 20K fixture, founding era, max speed, panels open as stated | era/content mass (developed cohort fattens both tick and frame terms); machine; dev-vs-prod build (B1 licenses); how many panels are open |
+| frame build ms/push | same | interest-set size; content per subscribed system (I1 licenses: developed ≫ undeveloped); JIT warmup (first-run 2-4× — I2 full-run spread) |
+| achieved TPS | same + 600-system smoke | ENGINE cost (C1 curve) — the reason acceptance is share-based, not TPS-based |
+| autosave wall ms | 20K fixture, browser | IDB write on the user's real disk; content growth over a campaign (I3 licenses) |
+
+### Falsifier (committed at `8f518222`, moved here unedited)
+
+**If deriving one system's full panel detail at the 20K fixture measures ≥ ~500 ms per call —
+within an order of magnitude of building the full frame — and cannot be brought under ~10 ms by
+scoping the existing read services (i.e. their galaxy-scale intermediates are irreducible per
+call), the direction is dead:** subscribed detail would cost like full frames the moment a few
+panels are open, and the fix must instead be incremental push gated on the markets
+dirty/ownership model row. Units: ms per single-id detail derivation; fixture: 20K systems,
+seed 42, founding era.
+
+*(Measured outcome: I1 — cleared by three orders of magnitude.)*
