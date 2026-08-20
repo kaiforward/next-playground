@@ -13,10 +13,13 @@ import path from "path";
  * (non-module) worker cannot use ESM imports, and the worker entry's whole boot seam (spec §6) is
  * built on a dynamic `import()` running after the boot-config global is set.
  *
- * `process.env.NODE_ENV` is set explicitly here rather than relied on implicitly: three components
- * (`app/layout.tsx`, `components/game-shell.tsx`, `components/dev-tools/axe-accessibility.tsx`, per
- * spec §6) read it at render and move to this define at Task 10 — stated here so the seam exists
- * before that task needs it, rather than discovered as a build break then.
+ * `process.env.NODE_ENV` is set explicitly here rather than relied on implicitly: `lib/utils/dev-
+ * flag.ts`'s `isDevBuild()` (build plan Task 10) reads it as its fallback for the two components
+ * shared with the still-live Next build (`components/game-shell.tsx`,
+ * `components/dev-tools/axe-accessibility.tsx`) — Vite's `import.meta.env.DEV` is this helper's
+ * primary path and is what actually resolves under this bundler, but the fallback expression is
+ * still part of the module Vite bundles, so this define keeps it well-formed. `app/layout.tsx`
+ * stays on the bare `process.env.NODE_ENV` check (Next-side only, never bundled by Vite at all).
  */
 
 /**

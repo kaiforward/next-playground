@@ -59,7 +59,7 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 
 ## Conventions
 
-- **No `as` assertions** — only `as const` and casts inside runtime guards in `lib/types/guards.ts`. If TS can't infer it, fix the type at source.
+- **No `as` assertions** — only `as const` and casts inside runtime guards in `lib/types/guards.ts`. One named non-guard exception: `narrowCommandResult` (worker command results — our own typed code across structured clone, id-correlated; a cast, not a guard, accepted 2026-08-20). If TS can't infer it, fix the type at source.
 - **No `unknown`** — including `Record<string, unknown>` and untyped maps/arrays. Only exception: a `JSON.parse` result at a true boundary, narrowed immediately with `typeof`/`in`.
 - **Type at the boundary, trust downstream** — narrow once with `lib/types/guards.ts`; tick adapters narrow string columns to unions on the way in. Components, hooks and processors never re-validate. If a component needs a guard, the service returns the wrong type.
 - **Generics stay generic** — never intersect `T` with `Record<string, unknown>` or index it by string key. Require explicit accessors (`render(row: T)`, `getValue(row: T)`).

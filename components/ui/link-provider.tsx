@@ -15,8 +15,18 @@
  * — only what `Button`/`TabLink`/`BackLink` actually pass (`href`, `className`, `children`, and the
  * two ARIA attributes `TabLink`/`BackLink` set) is in the contract, so swapping the implementation can
  * never silently drop a prop neither adapter forwards.
+ *
+ * Task 9 extends the same file with two more router-agnostic seams — `useNavigate()` (programmatic
+ * navigation: `DetailPanel`'s close, `use-system-focus.ts`'s fly-to, `star-map.tsx`'s click handlers,
+ * `alert-run.tsx`'s flyout row activation, none of which are a `<Link>` click) and `useRouteInfo()`
+ * (the current pathname + query params `star-map.tsx` reads for selection/camera state). Both follow
+ * the exact shape above: a context with a harmless Next-side default (no `NavigateProvider`/
+ * `RouteInfoProvider` is mounted under the old Next app, so both read as inert there — acceptable
+ * because the Next runtime only has to compile on this branch, not behave, per the build plan), and a
+ * real implementation the Vite shell supplies (`client/wouter-link.tsx`'s `WouterRuntimeProvider`,
+ * backed by wouter's `useLocation`/`useSearch`).
  */
-import { createContext, useContext, type ComponentType, type ReactNode } from "react";
+import { createContext, useContext, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import NextLink from "next/link";
 
 export interface LinkComponentProps {
@@ -25,6 +35,11 @@ export interface LinkComponentProps {
   children?: ReactNode;
   "aria-label"?: string;
   "aria-current"?: "page" | undefined;
+  /** `TopBar`'s faction flag (`components/top-bar.tsx`) needs a native tooltip + the faction's
+   *  colour as an inline style — both adapters already spread unrecognised props through to their
+   *  underlying anchor, so adding these here is the only change either adapter needs. */
+  title?: string;
+  style?: CSSProperties;
 }
 
 export type LinkComponent = ComponentType<LinkComponentProps>;
@@ -60,4 +75,58 @@ export function LinkProvider({
 
 export function useLinkComponent(): LinkComponent {
   return useContext(LinkComponentContext);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Programmatic navigation seam                                       */
+/* ------------------------------------------------------------------ */
+
+export type NavigateFunction = (path: string, options?: { replace?: boolean }) => void;
+
+/** The Next-side default: no `NavigateProvider` is mounted under the old Next app (Task 9 moves
+ *  every caller of programmatic navigation onto this seam, and nothing re-wires the Next app to
+ *  supply a real implementation — that app only has to compile after this task, not navigate). */
+const noopNavigate: NavigateFunction = () => {};
+
+const NavigateContext = createContext<NavigateFunction>(noopNavigate);
+
+export function NavigateProvider({
+  navigate,
+  children,
+}: {
+  navigate: NavigateFunction;
+  children: ReactNode;
+}) {
+  return <NavigateContext.Provider value={navigate}>{children}</NavigateContext.Provider>;
+}
+
+export function useNavigate(): NavigateFunction {
+  return useContext(NavigateContext);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Current-route seam (pathname + query params)                       */
+/* ------------------------------------------------------------------ */
+
+export interface RouteInfo {
+  pathname: string;
+  searchParams: URLSearchParams;
+}
+
+const defaultRouteInfo: RouteInfo = { pathname: "/", searchParams: new URLSearchParams() };
+
+const RouteInfoContext = createContext<RouteInfo>(defaultRouteInfo);
+
+export function RouteInfoProvider({
+  value,
+  children,
+}: {
+  value: RouteInfo;
+  children: ReactNode;
+}) {
+  return <RouteInfoContext.Provider value={value}>{children}</RouteInfoContext.Provider>;
+}
+
+export function useRouteInfo(): RouteInfo {
+  return useContext(RouteInfoContext);
 }

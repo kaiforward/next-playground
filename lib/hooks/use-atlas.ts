@@ -1,16 +1,11 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
-import type { AtlasData } from "@/lib/types/game";
+import { useGameSlice } from "@/lib/store/use-game-store";
+import { EMPTY_ATLAS } from "./empty-slices";
 
+/** The lightweight map atlas — read from the store's `atlas` slice, falling back to an empty
+ *  player-less atlas before the first frame lands. */
 export function useAtlas() {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.atlas,
-    queryFn: () => apiFetch<AtlasData>("/api/game/atlas"),
-    staleTime: Infinity, // static data — never refetch
-  });
-
-  return { atlas: data };
+  const atlas = useGameSlice((state) => state.slices.atlas ?? EMPTY_ATLAS);
+  return { atlas };
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { tv, type VariantProps } from "tailwind-variants";
 import { TabCountBadge } from "./tab-count-badge";
 import { resolvePanelTabs, type PanelTabDef } from "./tabs-helpers";
@@ -148,18 +147,22 @@ interface PanelTabsProps {
   tabs: readonly PanelTabDef[];
   /** Accessible name for the strip, e.g. "System tabs". */
   label: string;
+  /**
+   * The current pathname, for `resolvePanelTabs` to test hrefs against. Taken as a prop rather than
+   * read via `usePathname()` (as before Task 9): the two callers of this component are both panel
+   * roots that already know their own current path from `useRoute()` (`components/panels/**`), and
+   * `next/navigation`'s `usePathname()` has no meaning under the Vite shell's wouter router.
+   */
+  pathname: string;
 }
 
 /**
  * A detail panel's tab strip, where each tab is a route under the panel's own path. Owns both the
  * href a tab links to and which tab counts as current (`resolvePanelTabs`), so two panels can't
- * answer either question differently — the callers supply only their base path and their tab list.
- *
- * Reads the pathname itself rather than taking it as a prop: it is the only input a caller would
- * have no other use for.
+ * answer either question differently — the callers supply only their base path, tab list and current
+ * pathname.
  */
-export function PanelTabs({ basePath, tabs, label }: PanelTabsProps) {
-  const pathname = usePathname();
+export function PanelTabs({ basePath, tabs, label, pathname }: PanelTabsProps) {
   return (
     <TabList aria-label={label}>
       {resolvePanelTabs(basePath, tabs, pathname).map((tab) => (

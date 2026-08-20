@@ -1,15 +1,15 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { useGameSlice } from "@/lib/store/use-game-store";
 import type { SystemConstructionData } from "@/lib/types/api";
 
-/** In-flight construction for one system. Tick-invalidated (see useTickInvalidation). */
+/** `SystemConstructionData` has no `unknown` visibility arm (it isn't fog-of-war gated) — its own
+ *  "nothing to show" arm is `{ visibility: "hidden" }`, reused here for an absent id the same way
+ *  the other per-system hooks reuse their own type's existing fallback. */
+const NOT_FOUND: SystemConstructionData = { visibility: "hidden" };
+
+/** In-flight construction for one system — read from the store's `systemConstruction` slice,
+ *  tick-current by construction. An absent id renders `{ visibility: "hidden" }`. */
 export function useSystemConstruction(systemId: string): SystemConstructionData {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.systemConstruction(systemId),
-    queryFn: () => apiFetch<SystemConstructionData>(`/api/game/systems/${systemId}/construction`),
-  });
-  return data;
+  return useGameSlice((state) => state.slices.systemConstruction?.[systemId] ?? NOT_FOUND);
 }

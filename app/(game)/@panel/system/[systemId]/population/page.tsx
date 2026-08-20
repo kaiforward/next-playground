@@ -1,8 +1,7 @@
 "use client";
 
 import { use } from "react";
-import { PopulationPanel } from "@/components/system/population-panel";
-import { QueryBoundary } from "@/components/ui/query-boundary";
+import { SystemPanel } from "@/components/panels/system-panel";
 
 export default function PopulationPage({
   params,
@@ -10,9 +9,5 @@ export default function PopulationPage({
   params: Promise<{ systemId: string }>;
 }) {
   const { systemId } = use(params);
-  return (
-    <QueryBoundary>
-      <PopulationPanel systemId={systemId} />
-    </QueryBoundary>
-  );
+  return <SystemPanel systemId={systemId} tab="population" />;
 }

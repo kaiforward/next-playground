@@ -1,10 +1,9 @@
-import { Suspense } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, waitFor } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { useTickInvalidation } from "@/lib/hooks/use-tick-invalidation";
-import { useAlerts } from "@/lib/hooks/use-alerts";
 import { makeQueryClient } from "@/lib/query/client";
+import { queryKeys } from "@/lib/query/keys";
 import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import type { SubscribeToEvent } from "@/lib/hooks/use-tick";
 import type { GlobalEventMap } from "@/lib/tick/types";
@@ -61,26 +60,27 @@ afterEach(() => {
 });
 
 /**
- * Mounts useTickInvalidation alongside the REAL `useAlerts`, so the query key the invalidation must
- * hit and the key the alert bar actually subscribes on are the same object by construction. A
- * hand-rolled probe query on `queryKeys.alerts` would keep both tests green if `useAlerts` moved to
- * a different key — the bar would then silently never refresh on tick.
- *
- * `useAlerts` is a `useSuspenseQuery`, so it needs a Suspense boundary and it must not sit in the
- * same component as the effect: a suspending component's effects do not run until it resolves.
+ * `useAlerts` no longer touches TanStack at all (client-runtime build plan Task 8 — it reads the
+ * store's `alerts` slice directly, fed by the worker's own state frames, not query invalidation), so
+ * the "mount alongside the real hook" coupling this suite used to rely on no longer exists to
+ * couple against: there is no real hook left reading `queryKeys.alerts` for this test to reuse. A
+ * hand-rolled probe query on the SAME key `use-tick-invalidation.ts` invalidates is what remains —
+ * this file is itself an inert-pending-Task-14 module now (nothing subscribes to `queryKeys.alerts`
+ * in production either), so this suite only proves the invalidation call itself still fires on each
+ * channel, which is what keeps `use-tick-invalidation.ts` compiling and behaviourally unchanged
+ * until its Task 14 deletion.
  */
 function AlertCountProbe() {
-  const alerts = useAlerts();
-  return <div data-testid="alert-count">{alerts.categories.length}</div>;
+  const { data } = useQuery({
+    queryKey: queryKeys.alerts,
+    queryFn: () => fetch("/api/game/player/alerts").then((r) => r.json()),
+  });
+  return <div data-testid="alert-count">{data ? "loaded" : "loading"}</div>;
 }
 
 function AlertsProbe() {
   useTickInvalidation();
-  return (
-    <Suspense fallback={<div data-testid="loading">loading</div>}>
-      <AlertCountProbe />
-    </Suspense>
-  );
+  return <AlertCountProbe />;
 }
 
 /** A fresh Response per call — a single shared one has its body consumed after the first read. */
@@ -97,8 +97,36 @@ function stubAlertFetch() {
   return fetchMock;
 }
 
-describe("useTickInvalidation — the alert bar's key", () => {
-  it("refetches the real useAlerts query on an economyTick broadcast", async () => {
+/** Calls only the hook under test — unlike `AlertsProbe`, no sibling `useQuery` (that call itself
+ *  throws with no `QueryClientProvider` ancestor, which would test jsdom's own TanStack guard
+ *  rather than this hook's). */
+function InvalidationOnlyProbe() {
+  useTickInvalidation();
+  return null;
+}
+
+describe("useTickInvalidation — host-agnostic without a QueryClientProvider (build plan Task 10)", () => {
+  it("does not throw when mounted with no QueryClientProvider ancestor", () => {
+    // GameShell (components/game-shell.tsx) now mounts under the Vite shell too, which has no
+    // QueryClientProvider — every store-backed hook already gets its data from applied state
+    // frames, so this effect has nothing to invalidate there. Reproduces that exact host: render
+    // the hook with no provider at all.
+    expect(() => render(<InvalidationOnlyProbe />)).not.toThrow();
+  });
+
+  it("does not throw when a broadcast fires with no QueryClientProvider ancestor", async () => {
+    render(<InvalidationOnlyProbe />);
+
+    await expect(
+      act(async () => {
+        dispatch("economyTick", [{ systemCount: 12, shardIndex: 0, shardCount: CYCLE_LENGTH }]);
+      }),
+    ).resolves.not.toThrow();
+  });
+});
+
+describe("useTickInvalidation — the alerts query key (module now inert pending Task 14 deletion)", () => {
+  it("refetches the probe query on an economyTick broadcast", async () => {
     const queryClient = makeQueryClient();
     const fetchMock = stubAlertFetch();
 
@@ -118,7 +146,7 @@ describe("useTickInvalidation — the alert bar's key", () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
   });
 
-  it("refetches the real useAlerts query on an eventNotifications broadcast", async () => {
+  it("refetches the probe query on an eventNotifications broadcast", async () => {
     const queryClient = makeQueryClient();
     const fetchMock = stubAlertFetch();
 

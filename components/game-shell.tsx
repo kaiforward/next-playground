@@ -1,10 +1,12 @@
 "use client";
 
 import { TopBar } from "@/components/top-bar";
+import { LivenessBanner } from "@/components/runtime/liveness-banner";
 import { TickProvider } from "@/lib/hooks/use-tick-context";
 import { useTickInvalidation } from "@/lib/hooks/use-tick-invalidation";
 import { DevToolsPanel } from "@/components/dev-tools/dev-tools-panel";
 import { DevOverlayProvider } from "@/components/dev-tools/dev-overlay-context";
+import { isDevBuild } from "@/lib/utils/dev-flag";
 
 /* ------------------------------------------------------------------ */
 /*  Shell                                                             */
@@ -31,6 +33,7 @@ function GameShellInner({ panel, children }: GameShellProps) {
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
       <TopBar />
+      <LivenessBanner />
       <main className="flex-1 relative overflow-hidden">
         {children}
         {panel}
@@ -39,7 +42,7 @@ function GameShellInner({ panel, children }: GameShellProps) {
             controls dock so the map is the only route the Tracker renders on. Routes without a
             map (there are none currently — every game route renders `StarMap`) would lose it. */}
       </main>
-      {process.env.NODE_ENV === "development" && <DevToolsPanel />}
+      {isDevBuild() && <DevToolsPanel />}
     </div>
   );
 }

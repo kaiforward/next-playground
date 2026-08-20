@@ -1,0 +1,84 @@
+/*
+ * Replaces `next/font/local` + the `geist` package (client-runtime spec §7; build plan Task 10)
+ * as the producer of the three theme font variables `app/globals.css`'s `@theme inline` block
+ * consumes (lines ~22-24 there) — that block is UNTOUCHED, only what feeds it changes.
+ *
+ * `app/layout.tsx` today gets these three variables from `localFont()` (Chakra Petch, weights
+ * 400/500/600/700, `variable: "--font-chakra"`) plus the `geist` package's `GeistSans`/`GeistMono`
+ * (each a single variable-weight woff2, `variable: "--font-geist-sans"` / `"--font-geist-mono"`,
+ * weight range "100 900" — confirmed by reading `node_modules/geist/dist/{sans,mono}.js`, not
+ * assumed). Next's `localFont` mechanism does two things per font: emits an `@font-face` and sets
+ * the CSS variable to the generated font-family name. This file does both by hand: an `@font-face`
+ * per face below, then a `:root` block setting each variable to the matching `font-family` — the
+ * same two-step next/font performs, just not through its build-time plugin.
+ *
+ * Self-hosted here (`client/fonts/*.woff2`, copied from `node_modules/geist/dist/fonts/` — the
+ * npm package ships the files, this only stops relying on the Next-only loader to reference them).
+ * Chakra Petch stays at `app/fonts/*.woff2` until Task 14 moves the whole `app/` tree — referenced
+ * with a relative `../app/fonts/...` URL from here. Verified this resolves under Vite: `vite dev`
+ * serves it and `vite build` inlines/copies it into `dist/assets/` (Task 10 red-proof), so no
+ * deviation was needed — `app/fonts/` is NOT deleted by this task.
+ */
+
+@font-face {
+  font-family: "Geist";
+  src: url("./fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("./fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("../app/fonts/chakra-petch-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("../app/fonts/chakra-petch-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("../app/fonts/chakra-petch-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Chakra Petch";
+  src: url("../app/fonts/chakra-petch-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * The variables `app/globals.css`'s `@theme inline` block reads. Each carries a real fallback
+ * stack (AGENTS.md: "give every face a real fallback stack") mirroring what next/font generated
+ * for the same font today (Geist Mono's `adjustFontFallback: false` + explicit monospace fallback
+ * list in `node_modules/geist/dist/mono.js`; Geist Sans and Chakra Petch use next/font's default
+ * generic-family fallback, `sans-serif`).
+ */
+:root {
+  --font-geist-sans: "Geist", sans-serif;
+  --font-geist-mono:
+    "Geist Mono", ui-monospace, SFMono-Regular, "Roboto Mono", Menlo, Monaco,
+    "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace;
+  --font-chakra: "Chakra Petch", sans-serif;
+}

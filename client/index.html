@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Mirrors app/layout.tsx's `Metadata` export (title/description) — that file still produces
+         Next's <head> for the still-live Next build until Task 14; this is the same two fields,
+         hand-written, for the document Vite actually serves (build plan Task 10). -->
+    <meta name="description" content="A browser-based space trading game" />
     <title>Stellar Trader</title>
   </head>
   <body>

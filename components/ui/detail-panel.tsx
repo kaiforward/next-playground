@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { tv } from "tailwind-variants";
+import { useNavigate } from "@/components/ui/link-provider";
 import { X } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
@@ -48,7 +48,7 @@ interface DetailPanelProps {
 }
 
 export function DetailPanel({ title, subtitle, headerAction, subHeader, backPath = "/", scrollResetKey, children }: DetailPanelProps) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const styles = panel();
   const [mounted, setMounted] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -66,8 +66,8 @@ export function DetailPanel({ title, subtitle, headerAction, subHeader, backPath
   }, [scrollResetKey]);
 
   const close = useCallback(() => {
-    router.push(backPath);
-  }, [router, backPath]);
+    navigate(backPath);
+  }, [navigate, backPath]);
 
   // Close on Escape — only when focus is not inside an input/textarea/select
   useEffect(() => {

@@ -1,9 +1,10 @@
 "use client";
 
 import { memo } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import type { MapMode } from "@/lib/types/map";
 import type { MapOverlayKey, MapOverlays } from "@/lib/hooks/use-map-overlays";
-import { QueryBoundary } from "@/components/ui/query-boundary";
+import { renderErrorFallback } from "@/components/ui/error-fallback";
 import { TrackerPanel } from "@/components/tracker/tracker-panel";
 import { TrackerSettingsPanel } from "@/components/tracker/tracker-settings";
 import { MapControlsDock } from "@/components/map/map-controls-dock";
@@ -48,17 +49,11 @@ interface MapRightRailProps {
  * (which panel is open right now), unlike section visibility, which is a standing preference stored
  * on `world.player` and carried by the save.
  *
- * The settings panel gets its own `QueryBoundary` rather than sharing `TrackerPanel`'s: they are
+ * The settings panel gets its own `ErrorBoundary` rather than sharing `TrackerPanel`'s: they are
  * siblings, so a failed read degrades whichever panel is asking rather than blanking the pair, and
- * the Tracker's own header — the only way to close this panel again — stays outside both.
- *
- * `loadingFallback={null}` on it, for the same reason the alert run passes it: this boundary is
- * constructed FRESH on every open (it is mounted conditionally, so closing unmounts it), and
- * `QueryBoundary` paints its fallback once before its mounted-guard effect fires — regardless of the
- * query already being cached by `TrackerPanel` beside it. The default `LoadingFallback` has no width
- * of its own while this panel is `w-44`, so every open would flash a mis-sized spinner, and announce
- * a `role="status"`, before the panel snapped to its real width. Nothing is the right loading state
- * here: the panel simply arrives, as it did when the state was local.
+ * the Tracker's own header — the only way to close this panel again — stays outside both. Both
+ * hooks it reads are synchronous store reads (Task 7), so there is no loading state to reserve —
+ * the panel simply arrives, as it did when the state was local.
  *
  * `pointer-events-none` on this column, `pointer-events-auto` on each real panel: the column spans
  * the full map height (`inset-y-2`) so empty space above/below/around the panels — including the
@@ -89,9 +84,9 @@ export const MapRightRail = memo(function MapRightRail({
     <div className="pointer-events-none absolute inset-y-2 right-2 z-20 flex flex-col items-end gap-2">
       <div className="flex min-h-0 flex-1 gap-2">
         {settingsOpen && (
-          <QueryBoundary loadingFallback={null}>
+          <ErrorBoundary fallbackRender={renderErrorFallback}>
             <TrackerSettingsPanel />
-          </QueryBoundary>
+          </ErrorBoundary>
         )}
         <TrackerPanel settingsOpen={settingsOpen} onToggleSettings={onToggleSettings} />
       </div>

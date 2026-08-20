@@ -1,20 +1,16 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { useGameSlice } from "@/lib/store/use-game-store";
 import type { SystemIndustryData } from "@/lib/types/api";
 
+/** See `use-system-substrate.ts`'s NOT_FOUND docstring — same reasoning, this type's own arm. */
+const NOT_FOUND: SystemIndustryData = { visibility: "unknown" };
+
 /**
- * Industrial base and supply-chain state for one system. Changes every economy
- * tick — tick-invalidated (see useTickInvalidation). Visibility-gated
- * server-side.
+ * Industrial base and supply-chain state for one system — read from the store's `systemIndustry`
+ * slice, tick-current by construction. Visibility-gated in the slice itself; an absent id renders
+ * the same `visibility: "unknown"` state.
  */
 export function useSystemIndustry(systemId: string): SystemIndustryData {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.systemIndustry(systemId),
-    queryFn: () =>
-      apiFetch<SystemIndustryData>(`/api/game/systems/${systemId}/industry`),
-  });
-  return data;
+  return useGameSlice((state) => state.slices.systemIndustry?.[systemId] ?? NOT_FOUND);
 }

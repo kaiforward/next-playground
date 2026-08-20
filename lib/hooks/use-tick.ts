@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { apiFetch } from "@/lib/query/fetcher";
-import type { Speed, TickBroadcast } from "@/lib/world/tick-loop";
-import type { GameWorldState } from "@/lib/types/game";
+import { useEffect, useRef, useCallback } from "react";
+import { useGameSlice } from "@/lib/store/use-game-store";
+import type { Speed } from "@/lib/world/tick-loop";
 import type { GlobalEventMap } from "@/lib/tick/types";
 
 /**
@@ -24,23 +23,6 @@ type EventListeners = {
   [K in keyof GlobalEventMap]: Set<(events: GlobalEventMap[K]) => void>;
 };
 
-/** Narrows a parsed SSE frame before it's trusted as a TickBroadcast. */
-function isTickBroadcast(value: unknown): value is TickBroadcast {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "currentTick" in value &&
-    typeof value.currentTick === "number" &&
-    "speed" in value &&
-    (typeof value.speed === "string" || typeof value.speed === "number") &&
-    "achievedTps" in value &&
-    typeof value.achievedTps === "number" &&
-    "events" in value &&
-    typeof value.events === "object" &&
-    value.events !== null
-  );
-}
-
 interface UseTickResult {
   currentTick: number;
   speed: Speed;
@@ -50,36 +32,38 @@ interface UseTickResult {
 }
 
 /**
- * Connects to the SSE tick stream. Returns current tick and
- * subscription mechanisms for tick events.
+ * Reads pacing state (tick/speed/achievedTps) from the store's `pacing` field, fed by the worker's
+ * `PacingFrame`s (client-runtime spec §1, §4) — the SSE stream and its REST seeding effect are both
+ * gone; the worker's subscribe handshake replies with a full pacing frame immediately, so there is
+ * nothing left to seed ahead of a first broadcast (`buildStateFrame`'s "not yet observed" case is
+ * simply `pacing === null`, read as the pre-tick defaults below).
  *
- * Intended to be called once (in TickProvider) and shared via context.
+ * `subscribeToEvent`'s dispatch registry is preserved verbatim (Task 11's `use-tick-invalidation.ts`,
+ * the events processor, and any future channel subscriber all still call it the same way) — it now
+ * fires off the store's own pacing updates rather than an `EventSource.onmessage`: an effect watches
+ * `pacing` by reference and dispatches once per NEWLY-applied frame (the store only ever hands out a
+ * new `pacing` object when `applyPacingFrame` actually changed something, `lib/store/game-store.ts`),
+ * so a re-render that doesn't correspond to a new frame dispatches nothing — the same "no
+ * edge-counting consumer" cadence the old broadcast throttle guaranteed.
+ *
+ * `isConnected` used to mean "the SSE connection is open" — no component reads it today (grep,
+ * 2026-08-20), so rather than build out Task 11's full worker-liveness state machine early, this
+ * reads the narrowest thing that keeps the field meaningful: whether the store has observed at
+ * least one pacing frame from the worker at all. Judgment call, named in the PR description.
  */
 export function useTick(): UseTickResult {
-  const [currentTick, setCurrentTick] = useState(0);
-  const [speed, setSpeed] = useState<Speed>("paused");
-  const [achievedTps, setAchievedTps] = useState(0);
-  const [isConnected, setIsConnected] = useState(false);
+  const pacing = useGameSlice((state) => state.pacing);
   const eventListeners = useRef<EventListeners>({
     economyTick: new Set(),
     eventNotifications: new Set(),
     shipArrived: new Set(),
   });
-
-  // Seed tick/speed/TPS from world state so the sidebar is correct before the
-  // SSE connection establishes. apiFetch types the response as GameWorldState,
-  // so speed lands as a real `Speed` (no untyped `any` into setSpeed).
-  useEffect(() => {
-    apiFetch<GameWorldState>("/api/game/world")
-      .then((state) => {
-        setCurrentTick(state.meta.currentTick);
-        setSpeed(state.speed);
-        setAchievedTps(state.achievedTps);
-      })
-      .catch(() => {}); // SSE will provide the values shortly anyway
-  }, []);
+  const lastDispatched = useRef<typeof pacing>(null);
 
   useEffect(() => {
+    if (!pacing || pacing === lastDispatched.current) return;
+    lastDispatched.current = pacing;
+
     /** Hands one channel's payload to that channel's listeners. Generic per call, because the
      *  payload type is only known channel by channel — a loop over the frame's entries would put
      *  every channel back on one erased type, which is what the callers would then have to undo. */
@@ -91,37 +75,10 @@ export function useTick(): UseTickResult {
       for (const cb of eventListeners.current[eventName]) cb(events);
     };
 
-    const es = new EventSource("/api/game/tick-stream");
-
-    es.onopen = () => setIsConnected(true);
-
-    es.onmessage = (e) => {
-      try {
-        const parsed: unknown = JSON.parse(e.data);
-        if (!isTickBroadcast(parsed)) return;
-        const event = parsed;
-        setCurrentTick(event.currentTick);
-        setSpeed(event.speed);
-        setAchievedTps(event.achievedTps);
-
-        // Dispatch global events to listeners, one channel at a time.
-        dispatch("economyTick", event.events.economyTick);
-        dispatch("eventNotifications", event.events.eventNotifications);
-        dispatch("shipArrived", event.events.shipArrived);
-      } catch {
-        // Ignore malformed messages
-      }
-    };
-
-    es.onerror = () => {
-      setIsConnected(false);
-    };
-
-    return () => {
-      es.close();
-      setIsConnected(false);
-    };
-  }, []);
+    dispatch("economyTick", pacing.events.economyTick);
+    dispatch("eventNotifications", pacing.events.eventNotifications);
+    dispatch("shipArrived", pacing.events.shipArrived);
+  }, [pacing]);
 
   const subscribeToEvent = useCallback(
     <K extends keyof GlobalEventMap>(eventName: K, cb: (events: GlobalEventMap[K]) => void) => {
@@ -134,5 +91,11 @@ export function useTick(): UseTickResult {
     [],
   );
 
-  return { currentTick, speed, achievedTps, isConnected, subscribeToEvent };
+  return {
+    currentTick: pacing?.currentTick ?? 0,
+    speed: pacing?.speed ?? "paused",
+    achievedTps: pacing?.achievedTps ?? 0,
+    isConnected: pacing !== null,
+    subscribeToEvent,
+  };
 }

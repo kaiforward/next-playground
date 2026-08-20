@@ -61,6 +61,7 @@ describe("PlayerFactionSummary — the flag opens the faction panel, the stats q
     renderSummary();
     const flag = screen.getByRole("link", { name: /Meridian Combine/ });
     expect(flag).toHaveAttribute("href", "/factions/f1");
+    expect(flag).toHaveAttribute("title", "Meridian Combine");
   });
 
   it("quotes the AVAILABLE credits (balance minus committed founding money), never the raw balance", () => {

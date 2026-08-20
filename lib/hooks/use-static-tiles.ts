@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useCallback, useMemo, useRef } from "react";
-import { useQueries } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
-import { frustumToTiles } from "@/lib/engine/tiles";
+import { useGameSlice } from "@/lib/store/use-game-store";
+import { EMPTY_UNIVERSE } from "./empty-slices";
+import { frustumToTiles, tileBounds } from "@/lib/engine/tiles";
 import type { ViewportBounds, StaticTileSystem } from "@/lib/types/game";
 
 /** Zoom threshold: start fetching tiles before names appear (0.45) but after universe view. */
@@ -14,18 +13,21 @@ const NAME_ZOOM_THRESHOLD = 0.35;
 const THROTTLE_MS = 150;
 
 /**
- * Fetches static tile data (system names + economy types) for tiles visible
- * in the current camera frustum. Activates before system labels appear (0.35)
- * so data is ready by the time names render (0.45). Uses immutable TanStack
- * Query caching — tiles are never refetched once loaded.
+ * System names + economy types for tiles visible in the current camera frustum. Activates before
+ * system labels appear (0.35) so data is ready by the time names render (0.45).
+ *
+ * A pure client-side filter of the store's `universe` slice (`getStaticTile`'s own selection —
+ * `lib/services/static-tiles.ts` — filtered by `x`/`y` within `tileBounds`) rather than a fetch:
+ * the store already carries every system's name/economyType/x/y at all times (client-runtime build
+ * plan Task 7's derivation ledger), so there is nothing to cache-and-fetch that isn't already held.
  *
  * Returns an `onViewportChange` callback matching the PixiMapCanvas contract.
- *
- * `mapSize` comes from the atlas meta (world state) — tile geometry and query
- * keys derive from it, so a new world with a different extent can never serve
- * stale tiles.
  */
 export function useStaticTiles(mapSize: number) {
+  const universeSystems = useGameSlice(
+    (state) => state.slices.universe?.systems ?? EMPTY_UNIVERSE.systems,
+  );
+
   const [viewport, setViewport] = useState<ViewportBounds | null>(null);
   const [zoom, setZoom] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(null);
@@ -59,32 +61,23 @@ export function useStaticTiles(mapSize: number) {
   const active = viewport !== null && zoom >= NAME_ZOOM_THRESHOLD;
 
   const visibleTiles = useMemo(
-    () => (active ? frustumToTiles(viewport, mapSize) : []),
+    () => (active && viewport ? frustumToTiles(viewport, mapSize) : []),
     [active, viewport, mapSize],
   );
 
-  const queries = useQueries({
-    queries: visibleTiles.map((tile) => ({
-      queryKey: queryKeys.staticTile(tile.col, tile.row, mapSize),
-      queryFn: () =>
-        apiFetch<{ systems: StaticTileSystem[] }>(
-          `/api/game/systems/tile/static?col=${tile.col}&row=${tile.row}`,
-        ),
-      staleTime: Infinity,
-      gcTime: Infinity,
-      enabled: active,
-    })),
-  });
-
   const systems = useMemo(() => {
+    if (visibleTiles.length === 0) return [];
     const result: StaticTileSystem[] = [];
-    for (const query of queries) {
-      if (query.data) {
-        result.push(...query.data.systems);
+    for (const tile of visibleTiles) {
+      const bounds = tileBounds(tile.col, tile.row, mapSize);
+      for (const s of universeSystems) {
+        if (s.x >= bounds.minX && s.x < bounds.maxX && s.y >= bounds.minY && s.y < bounds.maxY) {
+          result.push({ id: s.id, name: s.name, economyType: s.economyType });
+        }
       }
     }
     return result;
-  }, [queries]);
+  }, [visibleTiles, mapSize, universeSystems]);
 
   // `zoom` is the throttled camera zoom (leading + trailing edge above). Exposed
   // so consumers — e.g. the dev zoom-debug overlay — can read it without adding

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
+import { ErrorBoundary } from "react-error-boundary";
 import { useTracker } from "@/lib/hooks/use-tracker";
 import { useSystemFocus } from "@/lib/hooks/use-system-focus";
 import { useSetSystemPin } from "@/lib/hooks/use-player-pins";
-import { QueryBoundary } from "@/components/ui/query-boundary";
+import { renderErrorFallback } from "@/components/ui/error-fallback";
 import { SectionHeader } from "@/components/ui/section-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
@@ -32,10 +33,10 @@ export interface TrackerPanelProps {
 
 /**
  * The Tracker panel (docs/active/gameplay/tracker.md) — pinned systems, the player faction's
- * funded construction front, and its forming colonies. Owns `useTracker()` inside a
- * `QueryBoundary` so a fetch failure here degrades the panel, not the map behind it.
+ * funded construction front, and its forming colonies. Owns `useTracker()` inside an
+ * `ErrorBoundary` so a read failure here degrades the panel, not the map behind it.
  *
- * The header — title plus the settings toggle button — renders OUTSIDE the `QueryBoundary`, so it
+ * The header — title plus the settings toggle button — renders OUTSIDE the `ErrorBoundary`, so it
  * stays reachable both with every section hidden and with the read itself failing: it is the only
  * way back into the settings panel.
  *
@@ -67,9 +68,9 @@ export function TrackerPanel({ settingsOpen, onToggleSettings }: TrackerPanelPro
           <SettingsIcon aria-hidden className="h-3.5 w-3.5" />
         </Button>
       </div>
-      <QueryBoundary>
+      <ErrorBoundary fallbackRender={renderErrorFallback}>
         <TrackerPanelContent fallbackFocusRef={settingsButtonRef} />
-      </QueryBoundary>
+      </ErrorBoundary>
     </div>
   );
 }

@@ -9,7 +9,8 @@ import { formatCredits } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
 import { SegmentedControl } from "@/components/form/segmented-control";
 import { EmptyState } from "@/components/ui/empty-state";
-import { QueryBoundary } from "@/components/ui/query-boundary";
+import { ErrorBoundary } from "react-error-boundary";
+import { renderErrorFallback } from "@/components/ui/error-fallback";
 
 const MAX_HOPS = 6;
 const GRID_COLS = "grid-cols-[1.4fr_0.6fr_0.7fr_0.7fr_64px]";
@@ -40,9 +41,9 @@ interface MarketComparisonPanelProps {
 
 export function MarketComparisonPanel(props: MarketComparisonPanelProps) {
   return (
-    <QueryBoundary>
+    <ErrorBoundary fallbackRender={renderErrorFallback}>
       <MarketComparisonContent {...props} />
-    </QueryBoundary>
+    </ErrorBoundary>
   );
 }
 

@@ -50,18 +50,68 @@ export function useRoute(): Route {
   return { name: "map" };
 }
 
-// ── href builders ────────────────────────────────────────────────────────
-//
-// The inverse of `useRoute` — every place that needs to construct a URL (a `Button`/`TabLink`
-// `href`, or a test asserting where a click landed) builds it from here rather than hand-formatting
-// a template string, so the route table has exactly one producer of each shape as well as one
-// consumer. `tab: ""` builds the bare base path, never a trailing-slash `/system/<id>/` — matching
-// the same "empty string = Overview, no segment" convention `useRoute` reads back.
+// href builders (`mapHref`, `startHref`, `systemHref`, etc.) moved to `lib/utils/route-hrefs.ts` —
+// see that module's own docstring for why: they're plain string builders with no router dependency,
+// but living in this file would still pull `wouter` (imported above for `useRoute`) into anything
+// that imports one, including `components/start/*`, which the still-live Next app also compiles.
 
-export const mapHref = (): string => "/";
-export const startHref = (): string => "/start";
-export const styleguideHref = (): string => "/styleguide";
-export const systemHref = (systemId: string, tab: string): string =>
-  tab === "" ? `/system/${systemId}` : `/system/${systemId}/${tab}`;
-export const factionHref = (factionId: string, tab: string): string =>
-  tab === "" ? `/factions/${factionId}` : `/factions/${factionId}/${tab}`;
+// ── World-existence gate (client-runtime spec §3, §9, build plan Task 11) ───
+//
+// Pulled out of `client/main.tsx`'s `RouteBody` as pure functions so the ordering they encode —
+// bugs this task found and fixed, both from real browser smoke — has a fast unit test that needs no
+// real `Worker`:
+//
+// 1. `worldVersion === null` (no state frame has EVER landed, i.e. still booting) must be checked
+//    only AFTER "is this the start route", because `GameStore.beginWorldReplacement()` uses `0`, not
+//    `null`, precisely so a newGame/loadGame dispatched FROM the start screen never re-triggers the
+//    boot-loading branch and tears the (already-mounted, already showing its own pending state)
+//    start screen down into a generic "Booting…" screen.
+// 2. `worldVersion === 0` does NOT always mean "no world exists". `GameStore.beginWorldReplacement()`
+//    resets `worldVersion` to `0` for the whole swap window, but the mutation hook navigates to the
+//    map route as soon as the command RESULT resolves — a separate, EARLIER postMessage than the new
+//    world's own state frame (`client/worker/game-worker.ts`'s `handleCommand`: the `commandResult`
+//    posts before `pushStateFrame`, and even that gap is dwarfed by however long the new world takes
+//    to generate/load before its frame is even built). Gating purely on `worldVersion === 0` would
+//    redirect straight back to `/start` for that whole window — a real Gate C smoke finding (New
+//    Game "kicks the user straight back to the start screen"). The store already latches
+//    `replacementFloor !== null` for exactly this window (`lib/store/game-store.ts`,
+//    `selectIsReplacing`); both functions below take it as `isReplacing` so a replacement in flight
+//    reads as boot-loading — never a redirect — while a genuine no-world boot (fresh load,
+//    `replacementFloor === null`) still redirects to `/start` exactly as before.
+
+export type RouteGateDecision =
+  /** No state frame has landed yet, OR a world replacement is in flight — neither has anything
+   *  defined to read yet; render the boot-loading state regardless of route. */
+  | "boot-loading"
+  /** Render the start screen — either the route IS `/start`, or the store reports no world (and no
+   *  replacement is in flight) and the redirect effect (`client/main.tsx`) hasn't landed on
+   *  `/start` yet. */
+  | "start"
+  /** Render the matched route's normal content (map root, a panel, the styleguide). */
+  | "route";
+
+export function resolveRouteGate(
+  worldVersion: number | null,
+  routeIsStart: boolean,
+  isReplacing: boolean,
+): RouteGateDecision {
+  if (routeIsStart) return worldVersion === null ? "boot-loading" : "start";
+  if (isReplacing) return "boot-loading";
+  if (worldVersion === null || worldVersion === 0) return "boot-loading";
+  return "route";
+}
+
+/**
+ * Whether `RouteBody`'s no-world redirect effect should navigate to `/start` — split out from
+ * `resolveRouteGate` because the two questions are genuinely different: `resolveRouteGate` answers
+ * "what does THIS render" (boot-loading either way while replacing), this answers "should the URL
+ * itself change" (never, while replacing — the map route the mutation just navigated to must stick,
+ * even though its content is boot-loading until the new frame lands).
+ */
+export function shouldRedirectToStart(
+  worldVersion: number | null,
+  routeIsStart: boolean,
+  isReplacing: boolean,
+): boolean {
+  return worldVersion === 0 && !isReplacing && !routeIsStart;
+}

@@ -2,8 +2,9 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { useRouter } from "next/navigation";
-import { QueryBoundary } from "@/components/ui/query-boundary";
+import { ErrorBoundary } from "react-error-boundary";
+import { useNavigate } from "@/components/ui/link-provider";
+import { renderNothingFallback } from "@/components/ui/error-fallback";
 import { SettingsIcon } from "@/components/ui/icons";
 import { Popover, PopoverTrigger } from "@/components/ui/popover";
 import { AlertChip, chip } from "@/components/alerts/alert-chip";
@@ -102,10 +103,10 @@ export const AlertRun = memo(function AlertRun({ settingsOpen }: AlertRunProps) 
  * empty run and pass vacuously. `AlertRun` above is the only thing that measures; this is what
  * `alert-run.test.tsx` renders directly, supplying `availableWidth` as a literal.
  *
- * Owns `useAlerts()` inside a `QueryBoundary`, same as `TrackerPanel` — a fetch failure degrades the
- * run, not the map behind it. `loadingFallback={null}`: the run reserves no layout height on
- * purpose (nothing behind an empty galaxy), so the loading state is the same as the empty state,
- * nothing, rather than a spinner floating over the map for one round trip.
+ * Owns `useAlerts()` inside an `ErrorBoundary` — a read failure degrades the run, not the map behind
+ * it. `useAlerts()` is a synchronous store read (Task 7), so there is no loading state to reserve
+ * layout height for any more — the run either renders its chips or, on an error, nothing (the same
+ * "reserves no layout height" contract the old `loadingFallback={null}` stated explicitly).
  *
  * `runRef` is forwarded, unread, straight through to `AlertRunChips` and on to every `AlertFlyout` —
  * this component still measures nothing itself. It is `AlertRun`'s own measuring ref (above), not a
@@ -120,9 +121,9 @@ export function AlertRunContent({
   runRef?: RefObject<HTMLDivElement | null>;
 }) {
   return (
-    <QueryBoundary loadingFallback={null}>
+    <ErrorBoundary fallbackRender={renderNothingFallback}>
       <AlertRunChips availableWidth={availableWidth} runRef={runRef} />
-    </QueryBoundary>
+    </ErrorBoundary>
   );
 }
 
@@ -295,7 +296,7 @@ function AlertRunChips({
 }
 
 /**
- * The one place `useSystemFocus()`/`useRouter()` actually run for the alert bar — kept in this small
+ * The one place `useSystemFocus()`/`useNavigate()` actually run for the alert bar — kept in this small
  * wrapper rather than inside `alert-flyout.tsx` itself so `AlertFlyout`'s own tests keep rendering it
  * directly with a spy `onNavigate`, no router or atlas provider required (`alert-flyout.test.tsx`'s
  * own stated convention).
@@ -306,11 +307,10 @@ function AlertRunChips({
  * conditionally render this component on, and `ActiveAlertFlyout` sits ABOVE `AlertFlyout`'s own
  * `PopoverContent` in the tree — outside the boundary Radix's `Presence` gates — so mounting it is
  * not itself deferred by the popover being closed. This is safe here specifically: `useSystemFocus()`
- * calls `useAtlas()` (`lib/hooks/use-atlas.ts`), a `useSuspenseQuery` with `staleTime: Infinity`
- * already read once at the page root (`app/(game)/page.tsx`) to draw the map itself, so every extra
- * mount here subscribes to an already-resolved, indefinitely-fresh cache entry rather than triggering
- * a fetch or a fresh suspend — verified by reading `use-atlas.ts` and grepping every `useAtlas()`
- * call site. `useRouter()` reads context only, no fetch of any kind.
+ * calls `useAtlas()` (`lib/hooks/use-atlas.ts`), a synchronous read off the store's `atlas` slice
+ * (Task 7) — every extra mount here is a cheap selector subscription, not a fetch or a suspend, so
+ * mounting one per visible chip costs nothing beyond the subscription itself. `useNavigate()` reads
+ * context only, no fetch of any kind.
  *
  * Resolves an `AlertFlyout` row's already-decided target (`resolveAlertTarget`,
  * `components/alerts/alert-flyout.tsx`) into the actual navigation: `focusSystem` for a system
@@ -326,7 +326,7 @@ function ActiveAlertFlyout({
   category: AlertCategory;
   runRef?: RefObject<HTMLDivElement | null>;
 }) {
-  const router = useRouter();
+  const navigate = useNavigate();
   const focusSystem = useSystemFocus();
   const { atlas } = useAtlas();
 
@@ -334,7 +334,7 @@ function ActiveAlertFlyout({
     if (target.kind === "system") focusSystem(target.systemId, target.tab);
     else if (target.kind === "faction") {
       const factionId = atlas.player?.controlledFactionId;
-      if (factionId) router.push(`/factions/${factionId}${target.tab ? `/${target.tab}` : ""}`);
+      if (factionId) navigate(`/factions/${factionId}${target.tab ? `/${target.tab}` : ""}`);
     }
   }
 
