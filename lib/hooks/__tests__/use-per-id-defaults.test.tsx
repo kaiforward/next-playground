@@ -9,7 +9,7 @@ import { seedSlices } from "./store-fixture";
 import type { StarSystemInfo } from "@/lib/types/game";
 
 // These four hooks' return types carry no discriminant of their own (unlike the per-system reads)
-// and their only callers dereference fields directly — the Task 7 judgment call (see each hook's
+// and their only callers dereference fields directly — the judgment call (see each hook's
 // NOT_FOUND docstring) is a benign zero/empty default rather than a new union member. This suite
 // pins that default and that it never throws, for a systemId/factionId absent from every slice.
 //

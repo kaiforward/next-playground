@@ -112,7 +112,7 @@ export type OutboundMessage =
   | { type: "pacing"; frame: PacingFrame }
   | { type: "state"; frame: StateFrame }
   | { type: "tickFailed"; msg: TickFailedMsg }
-  /** An autosave attempt's result (build plan Task 12, spec §5) — `error: null` on a clean write,
+  /** An autosave attempt's result (spec §5) — `error: null` on a clean write,
    *  the failure's message otherwise. Relayed from `TickLoop.subscribeAutosave`
    *  (`lib/world/tick-loop.ts`); `client/worker-connection.ts` turns this into
    *  `GameStore.setAutosaveFailure`, so a persistently failing autosave reaches the player rather
@@ -513,7 +513,7 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
    * `lib/world/store.ts`'s `version` starts at 0 and every `setWorld`/`clearWorld` bumps it to at
    * least 1) paired with empty slices. This is the "defined no-world frame" the subscribe handshake
    * proves is never silence, and the resolution to this task's world-less-shape decision: a later
-   * consumer (the UI store, Task 8/11) reads `worldVersion === 0` as `liveness: "no-world"`.
+   * consumer (the UI store) reads `worldVersion === 0` as `liveness: "no-world"`.
    */
   function noWorldStateFrame(seq: number): StateFrame {
     return { worldVersion: 0, slices: {}, frameSeq: seq };

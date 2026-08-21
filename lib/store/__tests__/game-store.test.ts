@@ -225,7 +225,7 @@ describe("createGameStore — beginWorldReplacement", () => {
     store.applyStateFrame({ frameSeq: 1, worldVersion: 50, slices: { visibility: { systemIds: ["a"] } } });
 
     store.beginWorldReplacement();
-    // The world-store's version counter is monotonic across a replacement (Task 5) — the new
+    // The world-store's version counter is monotonic across a replacement — the new
     // world's own frame is always newer than anything the outgoing world could have posted, never
     // a low/reset-looking number.
     store.applyStateFrame({ frameSeq: 1, worldVersion: 51, slices: { visibility: { systemIds: ["b"] } } });

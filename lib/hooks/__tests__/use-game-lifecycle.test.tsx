@@ -10,7 +10,7 @@ afterEach(() => {
   configureCommandTransport(null);
 });
 
-// Coordinator-flagged stuck-forever edge (build plan Task 13 correction, part 2): a rejected
+// Coordinator-flagged stuck-forever edge: a rejected
 // newGame/loadGame command leaves `replacementFloor` latched forever unless something clears it —
 // the route gate would then sit on boot-loading indefinitely instead of falling back to `/start`.
 

@@ -24,11 +24,11 @@ import { SystemLogistics } from "@/components/panels/system-logistics";
 import { SystemMarket } from "@/components/panels/system-market";
 
 /**
- * The system panel's route component (client-runtime build plan Task 9) — replaces
+ * The system panel's route component (client-runtime spec) — replaces
  * `app/(game)/@panel/system/layout.tsx` + `[systemId]/**\/page.tsx`. Existence is checked HERE, once,
  * against the atlas/universe lookup (`useSystemInfo`), never against a per-tab hook's own nothing-arm
  * — `visibility: "unknown"` on a tab hook is indistinguishable from a real undeveloped/fogged system
- * (ledger note from the Task 7/8 review), so a stale panel URL (after New Game/Load, or a bad direct
+ * (ledger note from review), so a stale panel URL (after New Game/Load, or a bad direct
  * navigation) has to be told apart from "developed but nothing to show yet" up here, before any tab
  * body ever renders.
  */
@@ -43,11 +43,11 @@ export function SystemPanel({ systemId, tab }: { systemId: string; tab: string }
   // Pre-boot guard: `worldVersion` is null until the worker's first state frame lands, and every
   // hook above reads its slice's empty default until then — indistinguishable at this point from a
   // genuinely absent id. Render nothing rather than flashing not-found for an entity that is really
-  // just not loaded yet. Stopgap until Task 11 builds the real boot/liveness UX.
+  // just not loaded yet. Stopgap until the real boot/liveness UX is built.
   const booted = useGameSlice((state) => state.worldVersion !== null);
   // First-paint presence gate (frame-architecture spec, "Interest protocol"): any interest-keyed
   // family works here since a subscribed system's whole bundle lands atomically in one frame
-  // (Task 1 Proves 3) — `systemVitals` is the pick. This is PRESENCE, distinct from the EXISTENCE
+  // (Proves 3) — `systemVitals` is the pick. This is PRESENCE, distinct from the EXISTENCE
   // check above (`systemInfo`, sourced from `universe`): an id can exist in the galaxy but not yet
   // be in the current interest set (panel just opened, frame not landed) or the game is paused.
   const detailPresent = useGameSlice(

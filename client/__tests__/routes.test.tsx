@@ -105,7 +105,7 @@ describe("useRoute", () => {
   });
 });
 
-// Build plan Task 11's world-existence gate — pinned as pure functions so the bugs they fix (both
+// The world-existence gate — pinned as pure functions so the bugs they fix (both
 // found on real-browser Gate C smoke) have fast, no-Worker regression tests.
 describe("resolveRouteGate", () => {
   it("shows boot-loading before the very first frame lands, regardless of route", () => {

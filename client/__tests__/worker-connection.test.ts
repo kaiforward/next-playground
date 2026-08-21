@@ -112,7 +112,7 @@ describe("applyOutboundMessage — tickFailed", () => {
   });
 });
 
-// Proves 3 (build plan Task 12): the in-game autosave's own failure channel — distinct from
+// Proves 3: the in-game autosave's own failure channel — distinct from
 // `handlePageHideSave`'s command-result path below, this is `TickLoop.subscribeAutosave` relayed
 // through the worker's `autosaveResult` message.
 describe("applyOutboundMessage — autosaveResult", () => {
@@ -232,7 +232,7 @@ describe("handlePageHideSave", () => {
   });
 });
 
-// Build plan Task 13 correction (Gate D smoke finding): a worker-graph edit under `vite dev`
+// Gate D smoke finding: a worker-graph edit under `vite dev`
 // triggers a full PAGE reload, not a worker-side HMR dispose — see `client/dev-reload-marker.ts`'s
 // header docstring for the diagnosis. These two functions are the page-side mechanism's pure logic.
 

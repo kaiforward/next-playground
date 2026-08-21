@@ -27,7 +27,7 @@ if (typeof HTMLDialogElement !== "undefined") {
   };
 }
 
-// Proves 1's client half (client-runtime build plan Task 11): listSaves/loadGame/newGame are all
+// Proves 1's client half: listSaves/loadGame/newGame are all
 // worker commands valid world-less, and a successful load/new-game navigates to the map root.
 
 let posted: AnyCommandEnvelope[];
@@ -67,8 +67,8 @@ describe("StartScreen — saves list", () => {
     expect(posted.some((e) => e.type === "listSaves")).toBe(true);
   });
 
-  // Build plan Task 12: the browser save backend is real now (IndexedDB), so a `listSaves`
-  // rejection is a genuine failure (quota, corruption) worth showing verbatim — the Task-12-seam
+  // The browser save backend is real now (IndexedDB), so a `listSaves`
+  // rejection is a genuine failure (quota, corruption) worth showing verbatim — the old
   // "Saves aren't available in the browser yet" placeholder this test used to pin is gone.
   it("shows the real error text when listSaves rejects, and leaves New Game usable", async () => {
     configureCommandTransport({
@@ -137,7 +137,7 @@ describe("StartScreen — load", () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/"));
   });
 
-  // Build plan Task 12: same reasoning as the saves-list finding above — `loadGame`'s failure is
+  // Same reasoning as the saves-list finding above — `loadGame`'s failure is
   // now real and shown verbatim.
   it("shows the real error text when loadGame rejects", async () => {
     configureCommandTransport({

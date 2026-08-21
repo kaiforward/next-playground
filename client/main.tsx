@@ -32,7 +32,7 @@ import { startHref } from "@/lib/utils/route-hrefs";
 import type { InboundMessage } from "./worker/game-worker";
 
 /**
- * The Vite shell's entry (client-runtime spec §9, build plan Task 6/11) — boots the real game
+ * The Vite shell's entry (client-runtime spec §9) — boots the real game
  * worker, feeds every posted frame into the one module-level `gameStore`
  * (`lib/store/use-game-store.ts`), and gates the game routes on the store's own world-existence
  * state (spec §3: "the game route renders only after the worker's ready message reports a world,
@@ -98,7 +98,7 @@ window.addEventListener("pagehide", () => {
 });
 
 /**
- * Dev worker-graph-edit restore (build plan Task 13 correction, spec §10) — see
+ * Dev worker-graph-edit restore (spec §10) — see
  * `client/dev-reload-marker.ts`'s header docstring for the full diagnosis and mechanism, and
  * `client/worker-connection.ts`'s `markDevReloadIfWorldLive`/`restoreFromDevReloadMarkerIfPending`
  * for the pure logic under test. `import.meta.hot` is `undefined` outside `vite dev` (statically

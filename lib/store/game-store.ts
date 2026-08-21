@@ -65,7 +65,7 @@ export interface StoreState {
    * <= 0` is false for any such frame). `beginWorldReplacement` latches this to the pre-reset
    * `worldVersion` (the highest version any stale in-flight frame could possibly carry); the first
    * frame whose `worldVersion` exceeds the floor is by construction the NEW world's frame — the
-   * worker's version counter climbs monotonically across a replacement (Task 5) — and clears it.
+   * worker's version counter climbs monotonically across a replacement — and clears it.
    */
   replacementFloor: number | null;
 }

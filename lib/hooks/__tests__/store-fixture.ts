@@ -1,5 +1,5 @@
 /**
- * The store-backed hook test setup (client-runtime build plan Task 7) — every hook in `lib/hooks/`
+ * The store-backed hook test setup (client-runtime) — every hook in `lib/hooks/`
  * now reads the module-level `gameStore` singleton (`lib/store/use-game-store.ts`) instead of a
  * `useSuspenseQuery`, so a hook test seeds that singleton directly rather than wrapping a component
  * tree in a `QueryClientProvider`. This is the "hook test setup" the build plan names.

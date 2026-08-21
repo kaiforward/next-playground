@@ -1,5 +1,5 @@
 /**
- * Review finding (2026-08-20, Task 9 review): before the worker's first state frame lands,
+ * Review finding (2026-08-20): before the worker's first state frame lands,
  * `worldVersion` is null and every store-backed hook (`useSystemInfo`, `useFaction`) reads its
  * slice's empty default — indistinguishable, at the panel root, from a genuinely absent id. Without
  * a pre-boot guard, opening a panel URL for an entity that simply hasn't loaded YET would flash the

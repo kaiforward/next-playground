@@ -145,7 +145,7 @@ describe("createGameWorker — subscribe handshake, world-less", () => {
     expect(pacing.frame).toEqual({ currentTick: 0, speed: "paused", achievedTps: 0, events: {} });
     expect(state.frame).toMatchObject({ worldVersion: 0, slices: {} });
     // frameSeq starts at 1 (this is the worker's very first state post) and is a per-worker send
-    // counter, not a stand-in — see the Task 2 tests below for the counter's own behaviour.
+    // counter, not a stand-in — see the interest-protocol tests below for the counter's own behaviour.
     expect(state.frame.frameSeq).toBe(1);
   });
 
@@ -463,7 +463,7 @@ describe("createGameWorker — boot-in-flight command race (Gate B vite-dev smok
   });
 });
 
-describe("createGameWorker — interest protocol (Task 2)", () => {
+describe("createGameWorker — interest protocol", () => {
   it("interest grow with no intervening world commit pushes a state frame with a higher frameSeq and unchanged worldVersion (paused-panel case)", async () => {
     const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
     createGameWorker(scope);
@@ -525,7 +525,7 @@ describe("createGameWorker — interest protocol (Task 2)", () => {
     // Same seed/systemCount as ng1: `generateWorld` mints ids from a counter that restarts at 0
     // every call (lib/world/gen.ts), so world 2 is byte-identical in its id assignment — the fresh
     // world genuinely contains a system with this exact id. That makes the empty detail asserted
-    // below proof of the RESET specifically, not just Task 1's ordinary stale-id skip (which would
+    // below proof of the RESET specifically, not just the ordinary stale-id skip (which would
     // also produce empty detail for an id truly foreign to the new world).
     send(scope, { id: "ng2", type: "newGame", payload: SMALL_NEW_GAME });
     const result = await waitForCommandResult(scope, "ng2");
@@ -592,7 +592,7 @@ describe("createGameWorker — interest protocol (Task 2)", () => {
   }, 15_000);
 });
 
-describe("createGameWorker — dev commands (Task 13)", () => {
+describe("createGameWorker — dev commands", () => {
   it("advanceTicks advances the world and pushes a fresh state frame — the worker-level half of Proves 1", async () => {
     const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
     createGameWorker(scope);

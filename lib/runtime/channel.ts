@@ -23,7 +23,7 @@ export interface TickFailedMsg {
 /**
  * One command posted to the worker — a build/colony order, a treasury policy write, a speed change,
  * a pin, a settings flag, save/load, or a dev cheat. `id` is the correlation key a result is matched
- * back to (Task 5); `type` and `payload` are left generic here rather than widened into one big union
+ * back to; `type` and `payload` are left generic here rather than widened into one big union
  * — the command registry that enumerates every concrete `type`/`payload` pairing is a later task's
  * interface, not this one's.
  */
@@ -44,7 +44,7 @@ export type CommandResult<T> = { ok: true; data: T } | { ok: false; error: strin
  * Boot configuration the worker entry resolves first, before the dynamic import that evaluates the
  * engine/constants graph — `ECONOMY_SCALE` and the two debug flags are read at module-evaluation time
  * by ~10 constant tables (spec §6), so nothing that imports them may run before this is resolved.
- * `resolveHostConfig` (Task 4) is what produces one; this task only names the shape it produces.
+ * `resolveHostConfig` is what produces one; this only names the shape it produces.
  */
 export interface BootConfig {
   /** Positive, finite — see `toEconomyScale` (`lib/constants/economy-scale.ts`). Default 100. */

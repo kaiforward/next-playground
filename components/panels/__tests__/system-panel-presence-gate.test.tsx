@@ -1,5 +1,5 @@
 /**
- * Task 5's own Proves entries for the system panel's presence gate (frame-architecture spec,
+ * Proves entries for the system panel's presence gate (frame-architecture spec,
  * "Interest protocol" — "First-paint gate"; "Store and signature consequences"):
  *
  *  1. store-level: the gate holds while a subscribed id's `systemVitals` entry is absent (the
@@ -9,7 +9,7 @@
  *     detail hooks that could warn).
  *  5. once the gate clears, no hook below it can observe its fallback for that id — asserted
  *     against a frame carrying the WHOLE interest bundle (not just `systemVitals`), proving the
- *     atomic-bundle guarantee (Task 1 Proves 3) end to end.
+ *     atomic-bundle guarantee (Proves 3) end to end.
  */
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { act, render, screen } from "@testing-library/react";
