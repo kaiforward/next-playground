@@ -92,7 +92,7 @@ describe("useLoadGameMutation — cancel on a rejected command", () => {
     expect(selectIsReplacing(gameStore.getSnapshot())).toBe(true);
 
     // Confirm the frame landing is what actually clears it, closing the loop.
-    gameStore.applyStateFrame({ worldVersion: 1, slices: {} });
+    gameStore.applyStateFrame({ frameSeq: 1, worldVersion: 1, slices: {} });
     expect(selectIsReplacing(gameStore.getSnapshot())).toBe(false);
   });
 });

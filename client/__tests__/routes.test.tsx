@@ -169,7 +169,7 @@ describe("the New Game swap-window redirect (Gate C smoke finding A)", () => {
   it("stays on the map route as boot-loading, never redirecting to /start, between the command result and the new world's frame — then renders the route once the frame lands", () => {
     const store = createGameStore();
     // The player is mid-game: a live world is already seeded.
-    store.applyStateFrame({ worldVersion: 5, slices: {} });
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: {} });
 
     // New Game dispatched — `useNewGameMutation` resets the store synchronously (Proves 4).
     store.beginWorldReplacement();
@@ -186,7 +186,7 @@ describe("the New Game swap-window redirect (Gate C smoke finding A)", () => {
     expect(resolveRouteGate(snapshot.worldVersion, routeIsStart, isReplacing)).toBe("boot-loading");
 
     // The new world's own frame lands (worldVersion climbs past the replacement floor).
-    store.applyStateFrame({ worldVersion: 6, slices: {} });
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 6, slices: {} });
     snapshot = store.getSnapshot();
     const isReplacingAfter = selectIsReplacing(snapshot);
 
@@ -198,7 +198,7 @@ describe("the New Game swap-window redirect (Gate C smoke finding A)", () => {
     const store = createGameStore();
     // The worker's own world-less boot frame (`noWorldStateFrame`, worldVersion: 0) — never
     // preceded by `beginWorldReplacement`, so `replacementFloor` was never latched.
-    store.applyStateFrame({ worldVersion: 0, slices: {} });
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 0, slices: {} });
 
     const snapshot = store.getSnapshot();
     const isReplacing = selectIsReplacing(snapshot);

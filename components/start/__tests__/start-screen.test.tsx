@@ -116,7 +116,7 @@ describe("StartScreen — load", () => {
     const { navigate } = renderStartScreen();
     // Simulate the "New game from a live game" scenario (Proof 1): a real world's data is already
     // sitting in the store (e.g. the player Exit-ed a live game to reach /start).
-    gameStore.applyStateFrame({ worldVersion: 99, slices: { visibility: { systemIds: ["sys-1"] } } });
+    gameStore.applyStateFrame({ frameSeq: 1, worldVersion: 99, slices: { visibility: { systemIds: ["sys-1"] } } });
 
     const continueButton = await screen.findByRole("button", { name: "Continue" });
     await userEvent.click(continueButton);

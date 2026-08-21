@@ -52,3 +52,22 @@ export interface BootConfig {
   debugEconomy: boolean;
   debugEvents: boolean;
 }
+
+/**
+ * The panels a client currently has open (frame-architecture spec, "Interest protocol") — the ids
+ * `buildStateFrame` (`lib/runtime/snapshot.ts`) derives per-id detail for, on top of the coarse set
+ * every frame always carries. Replace-whole-set, not incremental: a client posts its entire current
+ * set on every change, and the worker holds exactly the last-received one (no ref-counting at the
+ * worker; that lives client-side in the interest registry, a later task). `factions` is accepted for
+ * forward-compatibility and unused at introduction — every faction slice stays pushed-coarse.
+ */
+export interface InterestSet {
+  systems: string[];
+  factions: string[];
+  goods: string[];
+}
+
+/** The empty interest set — every panel closed, coarse slices only. Frozen so it can be shared as a
+ *  single constant (the worker's initial held set, a client's "nothing open" post) without a caller
+ *  accidentally mutating the shared instance. */
+export const EMPTY_INTEREST: InterestSet = Object.freeze({ systems: [], factions: [], goods: [] });

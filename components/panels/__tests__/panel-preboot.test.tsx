@@ -108,7 +108,7 @@ describe("SystemPanel — pre-boot render (no state frame applied yet)", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     act(() => {
-      gameStore.applyStateFrame({ worldVersion: 1, slices: { universe: UNIVERSE } });
+      gameStore.applyStateFrame({ frameSeq: 1, worldVersion: 1, slices: { universe: UNIVERSE } });
     });
 
     expect(screen.getByRole("heading", { name: "Sunnyvale" })).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe("FactionPanel — pre-boot render (no state frame applied yet)", () => 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     act(() => {
-      gameStore.applyStateFrame({
+      gameStore.applyStateFrame({ frameSeq: 1,
         worldVersion: 1,
         slices: { factionDetail: { "fac-a": FACTION_DETAIL } },
       });

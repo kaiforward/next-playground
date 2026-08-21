@@ -52,13 +52,13 @@ describe("applyOutboundMessage — state frame liveness driving", () => {
   it("flips liveness to no-world for the worldVersion:0 sentinel", () => {
     const store = createGameStore();
     store.setLiveness("live");
-    applyOutboundMessage(store, { type: "state", frame: { worldVersion: 0, slices: {} } });
+    applyOutboundMessage(store, { type: "state", frame: { frameSeq: 1, worldVersion: 0, slices: {} } });
     expect(store.getSnapshot().liveness).toBe("no-world");
   });
 
   it("flips liveness to live for a normal worldVersion frame", () => {
     const store = createGameStore();
-    applyOutboundMessage(store, { type: "state", frame: { worldVersion: 1, slices: {} } });
+    applyOutboundMessage(store, { type: "state", frame: { frameSeq: 1, worldVersion: 1, slices: {} } });
     expect(store.getSnapshot().liveness).toBe("live");
   });
 
@@ -67,7 +67,7 @@ describe("applyOutboundMessage — state frame liveness driving", () => {
     store.setLiveness("live");
     // A failed tick's own three posted messages: pacing, tickFailed, then state — in that order.
     applyOutboundMessage(store, { type: "tickFailed", msg: { error: "processor threw" } });
-    applyOutboundMessage(store, { type: "state", frame: { worldVersion: 12, slices: {} } });
+    applyOutboundMessage(store, { type: "state", frame: { frameSeq: 1, worldVersion: 12, slices: {} } });
 
     const snapshot = store.getSnapshot();
     expect(snapshot.liveness).toBe("paused");
@@ -79,7 +79,7 @@ describe("applyOutboundMessage — state frame liveness driving", () => {
   it("does not resurrect a dead worker's liveness off a stray state frame", () => {
     const store = createGameStore();
     store.setLiveness("dead");
-    applyOutboundMessage(store, { type: "state", frame: { worldVersion: 3, slices: {} } });
+    applyOutboundMessage(store, { type: "state", frame: { frameSeq: 1, worldVersion: 3, slices: {} } });
     expect(store.getSnapshot().liveness).toBe("dead");
   });
 
@@ -90,15 +90,15 @@ describe("applyOutboundMessage — state frame liveness driving", () => {
     // worldVersion happened to be > 0. Derived from the store's post-apply worldVersion, never the
     // incoming message directly (see this file's own docstring).
     const store = createGameStore();
-    applyOutboundMessage(store, { type: "state", frame: { worldVersion: 5, slices: {} } });
+    applyOutboundMessage(store, { type: "state", frame: { frameSeq: 1, worldVersion: 5, slices: {} } });
     store.beginWorldReplacement();
 
     // Stale — same version as the outgoing world's last applied frame.
-    applyOutboundMessage(store, { type: "state", frame: { worldVersion: 5, slices: {} } });
+    applyOutboundMessage(store, { type: "state", frame: { frameSeq: 1, worldVersion: 5, slices: {} } });
     expect(store.getSnapshot().liveness).toBe("no-world");
 
     // The new world's own frame — past the floor — lands and liveness follows it.
-    applyOutboundMessage(store, { type: "state", frame: { worldVersion: 6, slices: {} } });
+    applyOutboundMessage(store, { type: "state", frame: { frameSeq: 1, worldVersion: 6, slices: {} } });
     expect(store.getSnapshot().liveness).toBe("live");
   });
 });
@@ -239,7 +239,7 @@ describe("handlePageHideSave", () => {
 describe("markDevReloadIfWorldLive", () => {
   it("marks when a world is live (worldVersion > 0)", () => {
     const store = createGameStore();
-    store.applyStateFrame({ worldVersion: 5, slices: {} });
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: {} });
     const storage = createFakeStorage();
 
     markDevReloadIfWorldLive(store, storage);
@@ -253,7 +253,7 @@ describe("markDevReloadIfWorldLive", () => {
     expect(storage.getItem("stellar-trader:dev-reload-restore")).toBeNull();
 
     const worldLessStore = createGameStore();
-    worldLessStore.applyStateFrame({ worldVersion: 0, slices: {} });
+    worldLessStore.applyStateFrame({ frameSeq: 1, worldVersion: 0, slices: {} });
     markDevReloadIfWorldLive(worldLessStore, storage);
     expect(storage.getItem("stellar-trader:dev-reload-restore")).toBeNull();
   });
@@ -292,12 +292,12 @@ describe("restoreFromDevReloadMarkerIfPending", () => {
 
     // The worker's own world-less subscribe reply lands next (it always does, independent of this
     // restore) — must NOT end the replacement early or let the route gate redirect to `/start`.
-    store.applyStateFrame({ worldVersion: 0, slices: {} });
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 0, slices: {} });
     expect(selectIsReplacing(store.getSnapshot())).toBe(true);
     expect(shouldRedirectToStart(store.getSnapshot().worldVersion, false, selectIsReplacing(store.getSnapshot()))).toBe(false);
 
     // The loaded world's own frame (version >= 1) is what actually clears it.
-    store.applyStateFrame({ worldVersion: 1, slices: {} });
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 1, slices: {} });
     expect(selectIsReplacing(store.getSnapshot())).toBe(false);
   });
 
@@ -338,5 +338,5 @@ describe("restoreFromDevReloadMarkerIfPending", () => {
 });
 
 // Type-only sanity: OutboundMessage's "state" branch is what the tests above construct directly.
-const _typeCheck: OutboundMessage = { type: "state", frame: { worldVersion: 0, slices: {} } };
+const _typeCheck: OutboundMessage = { type: "state", frame: { frameSeq: 1, worldVersion: 0, slices: {} } };
 void _typeCheck;

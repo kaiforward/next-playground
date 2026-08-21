@@ -9,6 +9,7 @@ import type { DevCommandEnvelope } from "@/client/worker/dev-commands";
 import { createFakeWorkerScope } from "@/client/worker/host";
 import { narrowCommandResult } from "@/lib/types/guards";
 import type { BootConfig } from "@/lib/runtime/channel";
+import { EMPTY_INTEREST } from "@/lib/runtime/channel";
 
 import { tickLoop } from "@/lib/world/tick-loop";
 import { getWorld, getWorldVersion, clearWorld } from "@/lib/world/store";
@@ -142,7 +143,7 @@ describe("createGameWorker — subscribe handshake, world-less", () => {
     if (!state || state.type !== "state") throw new Error("expected a state message");
 
     expect(pacing.frame).toEqual({ currentTick: 0, speed: "paused", achievedTps: 0, events: {} });
-    expect(state.frame).toEqual({ worldVersion: 0, slices: {} });
+    expect(state.frame).toEqual({ frameSeq: 0, worldVersion: 0, slices: {} });
   });
 
   it("subscribing after boot but before newGame/loadGame still returns the no-world frame", async () => {
@@ -156,7 +157,7 @@ describe("createGameWorker — subscribe handshake, world-less", () => {
 
     const state = scope.sent.find((m) => m.type === "state");
     if (!state || state.type !== "state") throw new Error("expected a state message");
-    expect(state.frame).toEqual({ worldVersion: 0, slices: {} });
+    expect(state.frame).toEqual({ frameSeq: 0, worldVersion: 0, slices: {} });
   });
 });
 
@@ -237,7 +238,7 @@ describe("createGameWorker — throttle coalescing", () => {
     // nothing lost to latest-wins.
     const store = createGameStore();
     store.applyStateFrame(lastState.frame);
-    const directFrame = buildStateFrame(getWorld(), null);
+    const directFrame = buildStateFrame(getWorld(), EMPTY_INTEREST);
     expect(store.getSnapshot().slices).toEqual(directFrame.slices);
     expect(store.getSnapshot().worldVersion).toBe(directFrame.worldVersion);
   }, 15_000);

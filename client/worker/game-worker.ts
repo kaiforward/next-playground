@@ -22,6 +22,7 @@
  * (see that module's docstring for the resolution).
  */
 import type { BootConfig, CommandEnvelope, CommandResult, PacingFrame, TickFailedMsg } from "@/lib/runtime/channel";
+import { EMPTY_INTEREST } from "@/lib/runtime/channel";
 import type { StateFrame } from "@/lib/runtime/snapshot";
 import type { Speed } from "@/lib/world/tick-loop";
 import type { WorldMeta } from "@/lib/world/types";
@@ -499,14 +500,18 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
    * consumer (the UI store, Task 8/11) reads `worldVersion === 0` as `liveness: "no-world"`.
    */
   function noWorldStateFrame(): StateFrame {
-    return { worldVersion: 0, slices: {} };
+    // `frameSeq: 0` is a stand-in: this worker does not yet track a real send counter, so every
+    // frame is stamped 0. `buildStateFrame` returns no `frameSeq` (it is not world-derived) —
+    // every `StateFrame` this module produces supplies its own.
+    return { worldVersion: 0, slices: {}, frameSeq: 0 };
   }
 
   function currentStateFrame(): StateFrame {
     if (!engine || !engine.hasWorld()) return noWorldStateFrame();
     // Per `lib/runtime/snapshot.ts`'s contract: pass the exact reference `getWorld()` returns,
-    // never a separately-held one — see this module's header docstring.
-    return engine.buildStateFrame(engine.getWorld(), null);
+    // never a separately-held one — see this module's header docstring. Interest is EMPTY_INTEREST
+    // (coarse-only frames) until the worker holds a real interest set; `frameSeq` as above.
+    return { ...engine.buildStateFrame(engine.getWorld(), EMPTY_INTEREST), frameSeq: 0 };
   }
 
   function pushStateFrame(): void {

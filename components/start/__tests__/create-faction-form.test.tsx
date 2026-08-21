@@ -43,7 +43,7 @@ async function fillAndSubmit() {
 
 describe("CreateFactionForm — success", () => {
   it("resets the store to no-world immediately on submit, then navigates to the map root once newGame succeeds", async () => {
-    gameStore.applyStateFrame({ worldVersion: 5, slices: { visibility: { systemIds: ["sys-1"] } } });
+    gameStore.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["sys-1"] } } });
     const onSuccess = vi.fn();
     const { navigate } = renderForm(onSuccess);
 

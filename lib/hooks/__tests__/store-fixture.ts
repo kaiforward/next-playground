@@ -25,6 +25,6 @@ let version = 0;
 export function seedSlices(slices: Partial<SnapshotSlices>): void {
   version += 1;
   act(() => {
-    gameStore.applyStateFrame({ worldVersion: version, slices });
+    gameStore.applyStateFrame({ frameSeq: 1, worldVersion: version, slices });
   });
 }
