@@ -282,6 +282,19 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   era: ~350→250 / ~55 / ~16 / ~6 TPS at 600 / 5K / 10K / 20K).
   *Don't:* tune against the 10,000-tick horizon's TPS as if it were equilibrium — it is founding
   era (~year 7), the cheapest era; late-game numbers are strictly worse and unmeasured.
+- **[XL] Native engine core (Rust) for tick speed** — port the pure tick (engine + processors) to
+  Rust once JS-side work stops paying. The seam already exists: the worker channel isolates the
+  engine behind subscribe/command messages, so a native core behind a desktop shell is a contained
+  swap ([client-runtime.md](./active/engineering/client-runtime.md), "Rust behind a desktop
+  shell") — same messages, same React UI. Gated on two things from the aspiration-scale umbrella
+  row above: the comparative-target research sprint setting the actual goal ("at N units, a
+  game-year in ≤X s"), and the algorithmic sibling rows (toTickSystems, events scaling, market
+  dirty model) being fixed or judged first — a port buys a constant factor, and the measured
+  bottleneck is total-system-scaled machinery, which ports along with everything else.
+  *Next step:* nothing until the comparative target exists; then a design pass on the seam
+  (what crosses the boundary per tick, and where the world state lives).
+  *Don't:* start the port to fix a specific slow processor — that's the sibling rows' job in JS,
+  where the fix is cheap to iterate on.
 
 **Types / correctness**
 - **[S] `.get(...)!`-in-tests idiom decision** — 8 sites use a postfix-`!` `Map.get` in tests (against
