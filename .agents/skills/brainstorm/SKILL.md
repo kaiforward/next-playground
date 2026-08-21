@@ -73,7 +73,7 @@ direction**, in the units and at the horizon `/measure` will read.
 
 Then `git commit` the file, before any instrument runs. A falsifier written after the number exists
 is not a falsifier; committing first turns a later edit into a visible diff (mechanism A,
-`docs/build-plans/process-overhaul.md`).
+`docs/active/engineering/feature-process.md` → Ranks of guarantee).
 
 ## Exit
 

@@ -11,10 +11,10 @@ by each skill's effort dial plus `.agents/model-tiers.md`, not duplicated here.
 ## The pipeline
 
 ```
-brainstorm     → chosen idea + its falsifier   (prose discussion, no forced-choice lists)
-/measure       → concrete evidence             (falsified → back to brainstorm; that is a success —
+/brainstorm    → chosen idea + its falsifier   (prose discussion, no forced-choice lists)
+/measure       → concrete evidence             (falsified → back to /brainstorm; that is a success —
                                                 it cost one measurement instead of a PR)
-feature spec   → functional spec               (entry condition: evidence exists; hazard worksheet filled)
+/feature-spec  → functional spec               (entry condition: evidence exists; hazard worksheet filled)
 /spec-review   → revised spec                  (cross-mechanic surface only; rubric = the design hazards)
 /build-plan    → implementation plan           (files, task order, interfaces — not the code)
 /implement-plan → PR                           (SDD ledger, per-task gates below, closing fix wave)
@@ -22,9 +22,11 @@ feature spec   → functional spec               (entry condition: evidence exis
 merge                                          (human-gated — everything known goes on the table first)
 ```
 
-Brainstorming and spec authoring are done directly in conversation (no dedicated skills yet); the
-other stages have skills. The design-hazards worksheet (`.agents/skills/shared/design-hazards.md`)
-is filled at design time and audited as `/spec-review`'s first step.
+Every stage has a skill (`.agents/skills/`). The design-hazards worksheet
+(`.agents/skills/shared/design-hazards.md`) is filled at design time and audited as
+`/spec-review`'s first step. A `/measure` claim that is purely descriptive — no plausible
+alternative to falsify against — is labelled `descriptive, no kill-line` in the measure plan
+rather than given an artificial falsifier; the skill owns the details.
 
 ## Handoff is a file
 
