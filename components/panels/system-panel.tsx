@@ -4,6 +4,7 @@ import { ErrorBoundary } from "react-error-boundary";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { useGameSlice } from "@/lib/store/use-game-store";
+import { useInterest } from "@/lib/store/interest";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,9 @@ import { SystemMarket } from "@/components/panels/system-market";
  * body ever renders.
  */
 export function SystemPanel({ systemId, tab }: { systemId: string; tab: string }) {
+  // Declares interest so the worker's next frame carries this system's detail families
+  // (frame-architecture spec, "Interest protocol") — released automatically on unmount/id change.
+  useInterest("system", systemId);
   const { systemInfo, regionInfo } = useSystemInfo(systemId);
   const ownership = useOwnership();
   const navigate = useNavigate();

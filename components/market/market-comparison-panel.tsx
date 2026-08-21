@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { boundedHopsFromOrigin } from "@/lib/engine/pathfinding";
 import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
+import { useInterest } from "@/lib/store/interest";
 import { priceRampColor } from "@/lib/utils/price-ramp";
 import { formatCredits } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,9 @@ function MarketComparisonContent({
   onSelectSystem,
   onClose,
 }: MarketComparisonPanelProps) {
+  // Declares interest so the worker's next frame carries this good's `marketComparison` entries
+  // (frame-architecture spec, "Interest protocol") — released automatically on unmount/id change.
+  useInterest("good", goodId);
   const { entries } = useMarketComparison(goodId);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDir, setSortDir] = useState<SortDir>("asc");

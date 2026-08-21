@@ -5,6 +5,7 @@ import "./fonts.css";
 import "./globals.css";
 import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
 import { selectIsReplacing } from "@/lib/store/game-store";
+import { bindInterestRegistry } from "@/lib/store/interest";
 import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";
 import {
   applyOutboundMessage,
@@ -48,6 +49,27 @@ function post(message: InboundMessage): void {
 
 configureCommandTransport({
   postCommand: (envelope) => post({ type: "command", envelope }),
+});
+
+// The one real interest registry instance (frame-architecture spec, "Interest protocol") — bound to
+// this module's real Worker so `lib/store/interest.ts` itself never has to import it.
+// `system-panel.tsx`/`market-comparison-panel.tsx`'s `useInterest` calls read this same instance.
+const interestRegistry = bindInterestRegistry((interest) => post({ type: "interest", interest }));
+
+// Re-post interest after a world replacement completes (spec: "the shell re-posts interest after
+// the replacement's first frame lands") — the worker clears its held interest set when a
+// newGame/loadGame command commits, but the UI's own registry state is untouched by a world swap,
+// so a panel that was already open before the swap would otherwise never get its detail back.
+// Watching the store's own `isReplacing` transition (true -> false) rather than the command promise
+// keeps this correct regardless of which caller triggered the replacement (start screen, dev
+// reload restore, …).
+let wasReplacing = selectIsReplacing(gameStore.getSnapshot());
+gameStore.subscribe(() => {
+  const isReplacing = selectIsReplacing(gameStore.getSnapshot());
+  if (wasReplacing && !isReplacing) {
+    interestRegistry.resend();
+  }
+  wasReplacing = isReplacing;
 });
 
 // Liveness drivers (spec §4): `worker.onerror`/`onmessageerror` mean the worker is gone — flip
