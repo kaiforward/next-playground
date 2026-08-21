@@ -143,7 +143,10 @@ describe("createGameWorker — subscribe handshake, world-less", () => {
     if (!state || state.type !== "state") throw new Error("expected a state message");
 
     expect(pacing.frame).toEqual({ currentTick: 0, speed: "paused", achievedTps: 0, events: {} });
-    expect(state.frame).toEqual({ frameSeq: 0, worldVersion: 0, slices: {} });
+    expect(state.frame).toMatchObject({ worldVersion: 0, slices: {} });
+    // frameSeq starts at 1 (this is the worker's very first state post) and is a per-worker send
+    // counter, not a stand-in — see the Task 2 tests below for the counter's own behaviour.
+    expect(state.frame.frameSeq).toBe(1);
   });
 
   it("subscribing after boot but before newGame/loadGame still returns the no-world frame", async () => {
@@ -157,7 +160,10 @@ describe("createGameWorker — subscribe handshake, world-less", () => {
 
     const state = scope.sent.find((m) => m.type === "state");
     if (!state || state.type !== "state") throw new Error("expected a state message");
-    expect(state.frame).toEqual({ frameSeq: 0, worldVersion: 0, slices: {} });
+    expect(state.frame).toMatchObject({ worldVersion: 0, slices: {} });
+    // The boot probe's own successful command already posted one state frame (frameSeq 1) before
+    // `scope.sent` was cleared — this subscribe reply is the worker's second post.
+    expect(state.frame.frameSeq).toBe(2);
   });
 });
 
@@ -455,6 +461,135 @@ describe("createGameWorker — boot-in-flight command race (Gate B vite-dev smok
     expect(state.frame.worldVersion).toBeGreaterThan(0);
     expect(state.frame.slices.universe).toBeDefined();
   });
+});
+
+describe("createGameWorker — interest protocol (Task 2)", () => {
+  it("interest grow with no intervening world commit pushes a state frame with a higher frameSeq and unchanged worldVersion (paused-panel case)", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng");
+
+    const baseline = [...scope.sent].reverse().find((m) => m.type === "state");
+    if (!baseline || baseline.type !== "state") throw new Error("expected a state message after newGame");
+    const versionBefore = baseline.frame.worldVersion;
+    const seqBefore = baseline.frame.frameSeq;
+    const tickBefore = getWorld().meta.currentTick;
+    scope.sent.length = 0;
+
+    // The world is still paused (newGame never called setSpeed) — no tick can run underneath this,
+    // so any observed change is purely the interest reply, matching the spec's paused-panel case.
+    const systemId = getWorld().systems[0].id;
+    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [] } });
+
+    expect(getWorld().meta.currentTick).toBe(tickBefore);
+    const state = scope.sent.find((m) => m.type === "state");
+    if (!state || state.type !== "state") throw new Error("expected an immediate state push on interest grow");
+    expect(state.frame.frameSeq).toBeGreaterThan(seqBefore);
+    expect(state.frame.worldVersion).toBe(versionBefore);
+    expect(state.frame.slices.systemVitals?.[systemId]).toBeDefined();
+  });
+
+  it("a shrink-only interest change does not trigger an immediate push", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng");
+
+    const systemId = getWorld().systems[0].id;
+    // Grow first, so there is a non-empty held set to shrink away from.
+    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [] } });
+    scope.sent.length = 0;
+
+    scope.receive({ type: "interest", interest: { systems: [], factions: [], goods: [] } });
+
+    expect(scope.sent).toHaveLength(0);
+  });
+
+  it("newGame issued while stale system ids are held still posts its follow-up frame, with empty detail records", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    send(scope, { id: "ng1", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng1");
+    const systemId = getWorld().systems[0].id;
+
+    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [] } });
+    scope.sent.length = 0;
+
+    // Same seed/systemCount as ng1: `generateWorld` mints ids from a counter that restarts at 0
+    // every call (lib/world/gen.ts), so world 2 is byte-identical in its id assignment — the fresh
+    // world genuinely contains a system with this exact id. That makes the empty detail asserted
+    // below proof of the RESET specifically, not just Task 1's ordinary stale-id skip (which would
+    // also produce empty detail for an id truly foreign to the new world).
+    send(scope, { id: "ng2", type: "newGame", payload: SMALL_NEW_GAME });
+    const result = await waitForCommandResult(scope, "ng2");
+    expect(result.result.ok).toBe(true);
+    expect(getWorld().systems[0].id).toBe(systemId);
+
+    const state = [...scope.sent].reverse().find((m) => m.type === "state");
+    if (!state || state.type !== "state") throw new Error("expected a follow-up state frame after newGame");
+    expect(state.frame.slices.systemVitals).toEqual({});
+  });
+
+  it("a command's result is immediately followed by its own state frame, nothing interleaved", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng");
+    scope.sent.length = 0;
+
+    const systemId = getWorld().systems[0].id;
+    send(scope, { id: "pin", type: "setSystemPin", payload: { systemId, pinned: true } });
+    await waitForCommandResult(scope, "pin");
+
+    const resultIndex = scope.sent.findIndex((m) => m.type === "commandResult" && m.id === "pin");
+    expect(resultIndex).toBeGreaterThanOrEqual(0);
+    const next = scope.sent[resultIndex + 1];
+    expect(next?.type).toBe("state");
+  });
+
+  it("frameSeq strictly increases across mixed triggers: subscribe reply, tick broadcast, command follow-up, interest reply", async () => {
+    const scope = createFakeWorkerScope<InboundMessage, OutboundMessage>();
+    createGameWorker(scope);
+    scope.receive({ type: "boot", config: BOOT_CONFIG });
+    await waitForBoot(scope);
+    scope.sent.length = 0;
+
+    // command follow-up
+    send(scope, { id: "ng", type: "newGame", payload: SMALL_NEW_GAME });
+    await waitForCommandResult(scope, "ng");
+
+    // subscribe reply
+    scope.receive({ type: "subscribe" });
+
+    // interest reply (grow)
+    const systemId = getWorld().systems[0].id;
+    scope.receive({ type: "interest", interest: { systems: [systemId], factions: [], goods: [] } });
+
+    // tick broadcast(s) — real timers: "max" speed's tick budget reads Date.now(), same constraint
+    // the throttle-coalescing test above documents.
+    send(scope, { id: "sp", type: "setSpeed", payload: { speed: "max" } });
+    await waitForCommandResult(scope, "sp");
+    await new Promise<void>((resolve) => setTimeout(resolve, 300));
+    send(scope, { id: "stop", type: "setSpeed", payload: { speed: "paused" } });
+    await waitForCommandResult(scope, "stop");
+
+    const seqs = scope.sent
+      .filter((m): m is Extract<OutboundMessage, { type: "state" }> => m.type === "state")
+      .map((m) => m.frame.frameSeq);
+    expect(seqs.length).toBeGreaterThanOrEqual(4);
+    for (let i = 1; i < seqs.length; i++) {
+      expect(seqs[i]).toBeGreaterThan(seqs[i - 1]);
+    }
+  }, 15_000);
 });
 
 describe("createGameWorker — dev commands (Task 13)", () => {
