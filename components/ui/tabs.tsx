@@ -105,7 +105,7 @@ export function Tab({
   );
 }
 
-// ── TabLink (Next.js Link trigger) ──────────────────────────────
+// ── TabLink (Link trigger) ──────────────────────────────
 
 interface TabLinkProps extends Omit<TabVariants, "active"> {
   href: string;

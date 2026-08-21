@@ -113,7 +113,7 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` m
 
 **Misc**
 - **`git ls-files` is the instrument; `ls` lies.** A `.gitignore` negation under an excluded *directory* is a silent no-op — exclude the directory's *contents* (`/experiments/*`) instead.
-- **Tailwind v4 scans the whole project for class candidates, including `docs/*.md`.** A backslash-hex sequence in scanned prose (Windows path, regex `\d`) aborts `next build` with `Invalid code point`. `docs/` is excluded via `@source not "../docs"` — keep non-source prose out of the scan. Only surfaces on a real build.
+- **Tailwind v4 scans the whole project for class candidates, including `docs/*.md`.** A backslash-hex sequence in scanned prose (Windows path, regex `\d`) aborts `npm run build` (vite build) with `Invalid code point`. `docs/` is excluded via `@source not "../docs"` — keep non-source prose out of the scan. Only surfaces on a real build.
 
 **Tooling (Windows)**
 - **A "stopped" background process is often still running.** `TaskStop` kills the wrapper, not the node tree. Verify with `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select ProcessId, CommandLine` (identify by CommandLine) and `Stop-Process -Id <ids> -Force`.
