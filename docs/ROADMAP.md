@@ -262,24 +262,8 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   not waste: it de-aliases rows the previous world still holds. *Next step:* a design pass on copy-on-write
   rows or a dirty flag. *Don't:* reference-identity dirty-checking — the adapter hands back fresh rows
   whether or not anything changed, so it always reports dirty. Real save-corruption risk if aliasing leaks.
-- **[M] Frame architecture: stop deriving the whole galaxy every push** — the tick-speed audit's
-  `/measure` ran (evidence: [tick-speed-audit.md](./build-plans/tick-speed-audit.md) — this is the
-  frame-architecture feature's working file; its PR deletes it, git keeps the full record): at 20K
-  systems the tick costs ~0.1 s but `buildStateFrame` costs ~8.7 s per push (per-id slices derived
-  for ALL systems, throttled to at most 4×/s but achieving ~0.1 pushes/s because builds are
-  serial) and the 60 s autosave costs ~47 s — the
-  worker spends 87-99% of its time on host work, ~1% ticking; the engine matches its Node
-  projections and is not the bottleneck. Direction agreed with Kai (2026-08-20): pull-based frames
-  — push coarse map slices + aggregates, derive panel detail on demand over the command channel,
-  dirty-sets only where the processors make them free; autosave off the hot path separately.
-  **BLOCKS the shared→main client-runtime merge (Kai decision 2026-08-20)** — a 600-system galaxy
-  was once observed at ~4 TPS (anecdote, conditions unrecorded; no 600-scale reading attributes it
-  to this mechanism). Watch-item from Kai: the full map is visible at once at 20K zoom-out
-  and future layers (wars, battles, ship units) will widen what the map needs pushed. *Next step:*
-  `/brainstorm` the frame architecture in a fresh session, 20K galaxy as the acceptance fixture.
 - **[L] Engine tick at aspiration scale (10-20K systems)** — the tick-speed audit's measured curve
-  (C1 in [tick-speed-audit.md](./build-plans/tick-speed-audit.md); that file dies with the
-  frame-architecture PR — the numbers in this row are the durable copy): sustained Node TPS at the
+  (C1 in [tick-speed-audit.md](./build-plans/tick-speed-audit.md)): sustained Node TPS at the
   10,000-tick horizon is 118.8 / 56.4 / 22.7 / 10.5 at 600 / 2K / 5K / 10K systems, with the
   developed cohort FLAT (~440-500) across scales — so the cost is total-system-scaled machinery
   (join/merge ~46% of tick time; directed-build scans the full system list), and the 5 TPS
