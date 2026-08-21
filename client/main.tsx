@@ -5,6 +5,8 @@ import "./fonts.css";
 import "./globals.css";
 import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
 import { selectIsReplacing } from "@/lib/store/game-store";
+import { bindInterestRegistry } from "@/lib/store/interest";
+import { resetDetailReadWarnings } from "@/lib/hooks/detail-read";
 import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";
 import {
   applyOutboundMessage,
@@ -31,7 +33,7 @@ import { startHref } from "@/lib/utils/route-hrefs";
 import type { InboundMessage } from "./worker/game-worker";
 
 /**
- * The Vite shell's entry (client-runtime spec §9, build plan Task 6/11) — boots the real game
+ * The Vite shell's entry (client-runtime spec §9) — boots the real game
  * worker, feeds every posted frame into the one module-level `gameStore`
  * (`lib/store/use-game-store.ts`), and gates the game routes on the store's own world-existence
  * state (spec §3: "the game route renders only after the worker's ready message reports a world,
@@ -48,6 +50,33 @@ function post(message: InboundMessage): void {
 
 configureCommandTransport({
   postCommand: (envelope) => post({ type: "command", envelope }),
+});
+
+// The one real interest registry instance (frame-architecture spec, "Interest protocol") — bound to
+// this module's real Worker so `lib/store/interest.ts` itself never has to import it.
+// `system-panel.tsx`/`market-comparison-panel.tsx`'s `useInterest` calls read this same instance.
+const interestRegistry = bindInterestRegistry((interest) => post({ type: "interest", interest }));
+
+// Re-post interest after a world replacement completes (spec: "the shell re-posts interest after
+// the replacement's first frame lands") — the worker clears its held interest set when a
+// newGame/loadGame command commits, but the UI's own registry state is untouched by a world swap,
+// so a panel that was already open before the swap would otherwise never get its detail back.
+// Watching the store's own `isReplacing` transition (true -> false) rather than the command promise
+// keeps this correct regardless of which caller triggered the replacement (start screen, dev
+// reload restore, …).
+let wasReplacing = selectIsReplacing(gameStore.getSnapshot());
+gameStore.subscribe(() => {
+  const isReplacing = selectIsReplacing(gameStore.getSnapshot());
+  if (wasReplacing && !isReplacing) {
+    interestRegistry.resend();
+    // A replacement's new world can re-mint ids that coincide with the outgoing world's (world-gen
+    // can produce the same system id sequence; every good id is drawn from the one fixed catalog
+    // regardless of world) — clear any warning already latched for a (family, id) pair so a genuine
+    // missing-interest bug in the new world isn't permanently suppressed by the old one's warning
+    // (`lib/hooks/detail-read.ts`).
+    resetDetailReadWarnings();
+  }
+  wasReplacing = isReplacing;
 });
 
 // Liveness drivers (spec §4): `worker.onerror`/`onmessageerror` mean the worker is gone — flip
@@ -76,7 +105,7 @@ window.addEventListener("pagehide", () => {
 });
 
 /**
- * Dev worker-graph-edit restore (build plan Task 13 correction, spec §10) — see
+ * Dev worker-graph-edit restore (spec §10) — see
  * `client/dev-reload-marker.ts`'s header docstring for the full diagnosis and mechanism, and
  * `client/worker-connection.ts`'s `markDevReloadIfWorldLive`/`restoreFromDevReloadMarkerIfPending`
  * for the pure logic under test. `import.meta.hot` is `undefined` outside `vite dev` (statically

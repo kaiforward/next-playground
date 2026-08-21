@@ -30,6 +30,30 @@ services the API routes used to wrap. Both ride the tick loop's existing throttl
 A coalesced frame *replaces* the pending one, so **each frame is self-contained latest state for
 the slices it carries** — a dropped frame is harmless.
 
+**Every state frame carries a complete coarse set plus detail for the current interest set —
+never every id in the galaxy.** The coarse set — every frame, unconditionally — is what the whole
+screen can show at once with nothing open: the map layers (ownership, stability, population,
+development, migration, provision, atlas, universe, visibility), the attention layer (events,
+alerts, tracker), player settings, and every faction surface (summaries, relations, vitals,
+construction, treasury, detail). On top of that, a frame carries per-id detail only for the ids in
+the UI's current **interest set**: the eight system-keyed families (vitals, population, industry,
+logistics, construction, build options, substrate, market), and `marketComparison` keyed by good id.
+An interest id absent from the world (or a good absent from the catalog) is skipped rather than
+thrown on — a stale id is an
+ordinary race, not a caller bug. Every frame carries the *entire* current interest set's detail,
+never a delta, so the drop-harmless guarantee holds with "full" redefined as "coarse set + whole
+interest set" rather than "every id in the world".
+
+**The UI declares interest** through a ref-counted registry (`lib/store/interest.ts`,
+`createInterestRegistry`/`useInterest`) — more than one consumer can want the same id open (a route
+panel and a popover on the same system), so an id leaves the posted set only once every registrant
+releases it. `useInterest` is called at the system panel root and the market-comparison panel root;
+faction panels register nothing, since every faction slice is pushed-coarse. A registration change
+posts the client's **entire current set, replacing the worker's held one** — no incremental
+add/remove — and the worker answers a set that *grows* with an immediate state frame (same pattern
+as the subscribe handshake below), so opening a panel costs one postMessage round trip rather than
+a wait for the next throttle window; a shrink-only change waits for the next scheduled frame.
+
 **Subscribe handshake:** on `{type: "subscribe"}` the worker immediately replies with a full pacing
 frame plus a full state frame — including a defined no-world frame before any game exists — so a UI
 attaching to a paused or world-less worker renders current state without waiting for a tick.
@@ -49,25 +73,37 @@ subscribe/getState container, with the merge/notify/liveness logic layered on to
 system or per-faction, per entity id. Components read via `useGameSlice` (`lib/store/use-game-
 store.ts`) and never cross an async boundary except to issue a command.
 
-**Notify contract: once per committed world version, not per tick.** `applyStateFrame` adopts a
-frame only when its `worldVersion` is strictly newer than the held one — an out-of-order or
-already-observed frame is dropped without notifying. Version bumps come from ticks and from every
-non-tick writer (pins, tracker/alert settings, treasury policy, construction/colony orders,
-automation, dev cheats, new/load), so a player acting while paused sees the change immediately.
+**Notify contract: freshness is judged on a send counter, not on world version.** Every `StateFrame`
+carries `frameSeq` — a worker-side monotonic counter bumped on every send, across every trigger
+(subscribe reply, tick broadcast, command follow-up, interest reply). `applyStateFrame` adopts a
+frame only when its `frameSeq` is strictly newer than the held one; an out-of-order or
+already-observed frame is dropped without notifying. `frameSeq` exists because frame content now
+varies with the interest set as well as with world state: two frames at one `worldVersion` can
+legitimately differ (a panel opens while the game is paused, so `worldVersion` hasn't moved but the
+new frame carries detail the previous one didn't), and a `worldVersion`-keyed guard would drop that
+reply. `worldVersion` keeps its other jobs unchanged: the no-world sentinel (`0`), the replacement
+floor a world swap latches (below), and world-swap detection — version bumps still come from ticks
+and from every non-tick writer (pins, tracker/alert settings, treasury policy, construction/colony
+orders, automation, dev cheats, new/load), so a player acting while paused sees the change
+immediately once its frame lands.
 
 **Derived views compute on the UI thread, on read, against the snapshot.** The two services that
 read `ECONOMY_SCALE` for its value — colony-eligibility pricing and construction-stall pricing —
-run inside the worker instead, their already-priced results riding the snapshot (`colonyEligibility`
-and `constructionStalls` slices), so `ECONOMY_SCALE` itself never crosses the channel.
+run inside the worker instead, their already-priced results riding the snapshot. Colony-eligibility
+pricing rides the `systemBuildOptions` slice (its `colony` mode already carries the priced
+eligibility check — no separate slice); construction-stall pricing rides its own `constructionStalls`
+slice. Either way, `ECONOMY_SCALE` itself never crosses the channel.
 
 **Identity stability by UI-side structural sharing.** When a frame arrives, the store merges it
 value-wise against what it holds, per slice (`replaceEqualDeep`, `lib/store/replace-equal-deep.ts`):
 where a subtree is deep-equal, the previous object is kept, so unchanged views keep object identity
 with no per-entity bookkeeping. This is the mechanism, not worker-side dirty-knowledge — the tick
 adapters hand back fresh rows whether or not anything changed, and reference-identity dirty-checking
-is explicitly off the table (see the roadmap's *Markets need a real dirty/ownership model* row).
-Worker-side dirty-sets that would let a frame carry only changed slices are an optimisation gated on
-that row landing, not this design's mechanism — every frame today is a full frame.
+is explicitly off the table (see the roadmap's *Markets need a real dirty/ownership model* row). A
+detail slice is already scoped to the interest set rather than to every id in the galaxy, but each
+slice it does carry is still fully rebuilt on every push — worker-side dirty-sets that would let a
+push skip rebuilding an unchanged id are a further optimisation gated on that row landing, not this
+design's mechanism.
 
 **Shared reads.** Every component reads the same store instance, so sibling surfaces that must agree
 (the Tracker panel and its settings panel, synchronised through one shared slice) agree by
@@ -100,6 +136,24 @@ remain. Loading UI exists exactly three places: boot, new game, load game.
 A panel whose URL names an entity absent from the current snapshot renders a *not found* state (the
 existing `EmptyState`, composed rather than rebuilt) — the normal outcome after new game or load game
 replaces the world, and after back/forward returns to a pre-replacement URL.
+
+**A detail slice's absence carries two meanings**, disambiguated only at the panel root: the id
+never existed (or, for a good, was never in the catalog), or it exists but the worker hasn't yet
+delivered its detail (the panel just mounted and its interest reply hasn't landed, or the game is
+paused). The system panel gates on BOTH, in order: *existence* against the always-pushed `universe`
+slice (a systemId absent there renders the not-found `EmptyState`), then *presence* against the
+detail slice itself (an id that exists but is still absent holds the panel shell — title, tabs —
+without its detail sections until the entry lands). The market-comparison panel gates on *presence*
+only — a goodId's existence is trivial from the fixed goods catalog (`lib/constants/goods.ts`), never
+absent for any id a caller could construct the panel with, so there is no separate existence check to
+gate on. Every hook below either gate stays a synchronous non-null selector; a subscribed id's whole
+family bundle lands atomically in one frame, so once the gate clears, no hook beneath it can observe
+the fallback for that id. In
+dev builds only, a detail hook read for an id that exists in `universe` but is absent from its
+detail slice logs a console warning once per (family, id) naming the missing `useInterest`
+registration, so a future surface calling a detail hook without wiring interest announces itself at
+first render instead of silently rendering fallback data. Production pays only the gate and the
+fallback, never the warning.
 
 Panels stay URL-addressable with working back/forward over a five-route table (`client/routes.ts`,
 built on wouter): the map root, `/start`, `/system/:id/:tab?`, `/factions/:id/:tab?`, and
@@ -185,6 +239,13 @@ outgoing world's version — a stale frame still in flight from the world being 
 rather than transiently re-merged, and only the new world's own frame (whose version exceeds the
 floor) clears it. Reads during the swap window get the defined no-world state rather than a thrown
 error; panels reached afterwards via back/forward whose entity is absent render the not-found state.
+
+The interest set is world-scoped state, so the worker clears its held interest set the moment a
+newGame/loadGame command commits — a live worker that survives exit-to-menu into a new game must
+not carry the outgoing world's stale interest into the replacement. The shell re-posts the UI's
+still-open panels' interest once the replacement's first frame applies (the store's `isReplacing`
+transitioning true → false), since the UI-side registry's own set never changed and would otherwise
+sit un-announced to the freshly-booted worker.
 
 ## Entry and lifecycle
 

@@ -28,7 +28,7 @@ type CardVariants = VariantProps<typeof cardVariants>;
 
 interface FactionCardProps extends CardVariants {
   faction: FactionSummary;
-  /** When set, the card renders as a Next.js Link to this href. */
+  /** When set, the card renders as a Link to this href. */
   href?: string;
   /** Override description display. By default, `md` shows it and `sm` hides it. */
   showDescription?: boolean;

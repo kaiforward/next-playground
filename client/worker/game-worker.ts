@@ -21,7 +21,8 @@
  * `ensureWorldCommitted` safe to throw on a mismatch instead of silently adopting a foreign world
  * (see that module's docstring for the resolution).
  */
-import type { BootConfig, CommandEnvelope, CommandResult, PacingFrame, TickFailedMsg } from "@/lib/runtime/channel";
+import type { BootConfig, CommandEnvelope, CommandResult, InterestSet, PacingFrame, TickFailedMsg } from "@/lib/runtime/channel";
+import { EMPTY_INTEREST } from "@/lib/runtime/channel";
 import type { StateFrame } from "@/lib/runtime/snapshot";
 import type { Speed } from "@/lib/world/tick-loop";
 import type { WorldMeta } from "@/lib/world/types";
@@ -52,8 +53,8 @@ import { createWorkerHost, type WorkerHost, type RawWorkerScope } from "./host";
 //
 // Every command the worker answers, and the exact result each yields — reused verbatim from the
 // mutation services' own exported result types (never a parallel DTO), same rule
-// `lib/runtime/snapshot.ts` follows for `ColonyEligibilityResult`/`MarketSlice`. Dev cheats are out
-// of scope (a later task); every other mutation hook in `lib/hooks/` today has an entry here.
+// `lib/runtime/snapshot.ts` follows for `MarketSlice`. Dev cheats are out of scope (a later task);
+// every other mutation hook in `lib/hooks/` today has an entry here.
 
 type OrderBuildData = Extract<OrderBuildResult, { ok: true }>["data"];
 type OrderColonyData = Extract<OrderColonyResult, { ok: true }>["data"];
@@ -104,13 +105,14 @@ export type GameCommandResultMessage = {
 export type InboundMessage =
   | { type: "boot"; config: BootConfig }
   | { type: "subscribe" }
+  | { type: "interest"; interest: InterestSet }
   | { type: "command"; envelope: GameCommandEnvelope | DevCommandEnvelope };
 
 export type OutboundMessage =
   | { type: "pacing"; frame: PacingFrame }
   | { type: "state"; frame: StateFrame }
   | { type: "tickFailed"; msg: TickFailedMsg }
-  /** An autosave attempt's result (build plan Task 12, spec §5) — `error: null` on a clean write,
+  /** An autosave attempt's result (spec §5) — `error: null` on a clean write,
    *  the failure's message otherwise. Relayed from `TickLoop.subscribeAutosave`
    *  (`lib/world/tick-loop.ts`); `client/worker-connection.ts` turns this into
    *  `GameStore.setAutosaveFailure`, so a persistently failing autosave reaches the player rather
@@ -455,9 +457,10 @@ async function runCommand(
 /**
  * Wires a `RawWorkerScope` (a real worker's `self` via `host.ts`, or a fake host in tests) up to
  * the game worker's message protocol. `boot` resolves the boot config and dynamically imports the
- * engine graph (spec §6); `subscribe` replies immediately with a full pacing + state frame, world-
- * less included (spec §1, §9); `command` runs the matching handler and pushes a fresh state frame
- * once it commits (the "version frame", this task's job per the architecture note — no
+ * engine graph (spec §6); `subscribe` replies immediately with the current pacing + state frame
+ * (coarse slices complete, detail scoped to the held interest set), world-less included (spec §1,
+ * §9); `interest` replaces the held interest set and answers a grow with an immediate state frame;
+ * `command` runs the matching handler and pushes a fresh state frame once it commits (no
  * `TickLoop.emit` hook). A failing tick (`lib/world/tick-loop.ts`'s hard-pause path, which now
  * carries the error on the broadcast — see that file's `TickBroadcast.error` field) is surfaced as
  * a `tickFailed` message alongside the pause pacing frame, never a silent stop (spec §4).
@@ -491,26 +494,64 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
    *  before an engine has even been loaded. */
   const NO_ENGINE_PACING_FRAME: PacingFrame = { currentTick: 0, speed: "paused", achievedTps: 0, events: {} };
 
+  /** The worker's send counter (frame-architecture spec, "Interest protocol") — starts at 0 here so
+   *  the first `pushStateFrame()` call stamps 1; bumped on EVERY state post, regardless of trigger
+   *  (subscribe reply, tick broadcast, command follow-up, interest reply), since frame freshness is
+   *  judged on this counter rather than `worldVersion` once interest can vary a frame's content
+   *  independently of the world (`lib/runtime/snapshot.ts`'s `StateFrame` docstring). */
+  let frameSeq = 0;
+
+  /** The panels currently declared open (frame-architecture spec, "Interest protocol") —
+   *  replace-whole-set, no ref-counting at this layer. Starts empty (coarse-only frames) and is
+   *  reset to `EMPTY_INTEREST` when a `newGame`/`loadGame` command commits (the set is
+   *  world-scoped; a live worker outlives exit-to-menu → new game, so a stale held id must not
+   *  survive the world it named). */
+  let currentInterest: InterestSet = EMPTY_INTEREST;
+
   /**
    * The world-less state frame: `worldVersion: 0` (the store's own pre-any-commit value,
    * `lib/world/store.ts`'s `version` starts at 0 and every `setWorld`/`clearWorld` bumps it to at
    * least 1) paired with empty slices. This is the "defined no-world frame" the subscribe handshake
    * proves is never silence, and the resolution to this task's world-less-shape decision: a later
-   * consumer (the UI store, Task 8/11) reads `worldVersion === 0` as `liveness: "no-world"`.
+   * consumer (the UI store) reads `worldVersion === 0` as `liveness: "no-world"`.
    */
-  function noWorldStateFrame(): StateFrame {
-    return { worldVersion: 0, slices: {} };
+  function noWorldStateFrame(seq: number): StateFrame {
+    return { worldVersion: 0, slices: {}, frameSeq: seq };
   }
 
-  function currentStateFrame(): StateFrame {
-    if (!engine || !engine.hasWorld()) return noWorldStateFrame();
+  function currentStateFrame(seq: number): StateFrame {
+    if (!engine || !engine.hasWorld()) return noWorldStateFrame(seq);
     // Per `lib/runtime/snapshot.ts`'s contract: pass the exact reference `getWorld()` returns,
     // never a separately-held one — see this module's header docstring.
-    return engine.buildStateFrame(engine.getWorld(), null);
+    return { ...engine.buildStateFrame(engine.getWorld(), currentInterest), frameSeq: seq };
   }
 
   function pushStateFrame(): void {
-    host.post({ type: "state", frame: currentStateFrame() });
+    frameSeq += 1;
+    host.post({ type: "state", frame: currentStateFrame(frameSeq) });
+  }
+
+  /** True when `next` names a system or good id `previous` did not — the grow/shrink distinction
+   *  an interest reply's immediate-push decision is made on (spec: "an interest message that grows
+   *  the set… triggers one immediate state push; shrink-only does not"). `factions` is excluded
+   *  deliberately: it is accepted on the type for forward-compatibility and unused by
+   *  `buildStateFrame` (every faction slice is pushed-coarse), so a faction-only change can never
+   *  affect a frame's content and must not trigger a push. */
+  function interestGrew(previous: InterestSet, next: InterestSet): boolean {
+    return (
+      next.systems.some((id) => !previous.systems.includes(id)) ||
+      next.goods.some((id) => !previous.goods.includes(id))
+    );
+  }
+
+  /** Replaces the held interest set wholesale and, only on growth, pushes one immediate state frame
+   *  — same "answer at once, no throttle wait" pattern `subscribe` already gets (spec: "opening a
+   *  panel costs one postMessage round trip, not a wait for the next throttle window"). Works
+   *  world-less too: `pushStateFrame`/`currentStateFrame` already handle no engine/no world. */
+  function handleInterest(interest: InterestSet): void {
+    const grew = interestGrew(currentInterest, interest);
+    currentInterest = interest;
+    if (grew) pushStateFrame();
   }
 
   function pushPacingFrame(frame: PacingFrame): void {
@@ -586,6 +627,14 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
       return;
     }
     const message = await runCommand(engine, envelope);
+    // A committed newGame/loadGame replaces the world out from under any held interest — reset
+    // BEFORE the follow-up frame is built (spec: "the worker clears its held interest set when a
+    // newGame/loadGame command commits"), so that frame's detail slices are empty for the fresh
+    // world rather than keyed by ids from the world just replaced. A failed command (`ok: false`)
+    // leaves the held set alone — nothing committed, so nothing to clear.
+    if ((envelope.type === "newGame" || envelope.type === "loadGame") && message.result.ok) {
+      currentInterest = EMPTY_INTEREST;
+    }
     // No await between these two posts: lib/store/command-overlay.ts clears its in-flight
     // overlays on the store's next notification and relies on a command's own state frame
     // being the very next message after its result — an interleaved pacing/tick frame here
@@ -601,6 +650,9 @@ export function createGameWorker(scope: RawWorkerScope<InboundMessage, OutboundM
         return;
       case "subscribe":
         handleSubscribe();
+        return;
+      case "interest":
+        handleInterest(message.interest);
         return;
       case "command":
         void handleCommand(message.envelope);

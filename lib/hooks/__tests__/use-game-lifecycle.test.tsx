@@ -10,7 +10,7 @@ afterEach(() => {
   configureCommandTransport(null);
 });
 
-// Coordinator-flagged stuck-forever edge (build plan Task 13 correction, part 2): a rejected
+// Coordinator-flagged stuck-forever edge: a rejected
 // newGame/loadGame command leaves `replacementFloor` latched forever unless something clears it —
 // the route gate would then sit on boot-loading indefinitely instead of falling back to `/start`.
 
@@ -92,7 +92,7 @@ describe("useLoadGameMutation — cancel on a rejected command", () => {
     expect(selectIsReplacing(gameStore.getSnapshot())).toBe(true);
 
     // Confirm the frame landing is what actually clears it, closing the loop.
-    gameStore.applyStateFrame({ worldVersion: 1, slices: {} });
+    gameStore.applyStateFrame({ frameSeq: 1, worldVersion: 1, slices: {} });
     expect(selectIsReplacing(gameStore.getSnapshot())).toBe(false);
   });
 });

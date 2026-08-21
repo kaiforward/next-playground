@@ -69,8 +69,10 @@ value that is globally constant per run).
     would risk a cycle.
 - **Default `1` ⇒ zero behaviour change.** The calibration pass sets the real value via the
   `ECONOMY_SCALE` env var on the simulator run.
-- **Server-only — NOT exposed in `next.config.ts`.** The client receives already-scaled market data
-  (prices, stock, per-cycle quantities) from the API; it never recomputes economy magnitudes. The two
+- **Worker/Node-side only — never read by the UI thread.** The worker resolves it from its boot
+  config before the constants graph is imported (`resolveHostConfig`, `lib/constants/economy-scale.ts`);
+  the UI receives already-scaled market data (prices, stock, per-cycle quantities) in state frames and
+  never recomputes economy magnitudes. The two
   client components that import scaled-constant modules read only **unscaled** sibling fields
   (`industry-panel.tsx` → `BUILDING_TYPES[...].resource`; the cadence countdown → a shard interval), so
   no client reads a scaled value. Exposing the env would only matter for a hypothetical future client

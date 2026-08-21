@@ -1,5 +1,5 @@
 /**
- * Review finding (2026-08-20, Task 9 review): before the worker's first state frame lands,
+ * Review finding (2026-08-20): before the worker's first state frame lands,
  * `worldVersion` is null and every store-backed hook (`useSystemInfo`, `useFaction`) reads its
  * slice's empty default — indistinguishable, at the panel root, from a genuinely absent id. Without
  * a pre-boot guard, opening a panel URL for an entity that simply hasn't loaded YET would flash the
@@ -108,7 +108,7 @@ describe("SystemPanel — pre-boot render (no state frame applied yet)", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     act(() => {
-      gameStore.applyStateFrame({ worldVersion: 1, slices: { universe: UNIVERSE } });
+      gameStore.applyStateFrame({ frameSeq: 1, worldVersion: 1, slices: { universe: UNIVERSE } });
     });
 
     expect(screen.getByRole("heading", { name: "Sunnyvale" })).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe("FactionPanel — pre-boot render (no state frame applied yet)", () => 
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
     act(() => {
-      gameStore.applyStateFrame({
+      gameStore.applyStateFrame({ frameSeq: 1,
         worldVersion: 1,
         slices: { factionDetail: { "fac-a": FACTION_DETAIL } },
       });

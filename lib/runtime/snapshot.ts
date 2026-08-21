@@ -7,24 +7,28 @@
  * the `getWorld()` singleton (the read services it reuses all read the singleton internally), so it
  * REQUIRES its `world` argument to already be the singleton's held value — `ensureWorldCommitted`
  * below throws rather than silently adopting a mismatched world. This used to adopt (call
- * `setWorld(world)` on a mismatch) until the game worker (client-runtime build plan, Task 5) became
- * the mechanism's first real caller and settled the call pattern: every caller fetches `getWorld()`
+ * `setWorld(world)` on a mismatch) until the game worker became the mechanism's first real caller
+ * and settled the call pattern: every caller fetches `getWorld()`
  * immediately before passing it here, so a mismatch can only mean a caller is holding a stale or
  * foreign reference — exactly the bug a silent adopt would hide (a stale closure's world quietly
  * becoming live state, with only an unexplained version-counter jump as a trace). Callers MUST call
  * `setWorld(world)` themselves first if `world` is not already the singleton's value.
  *
- * **Full frame only, for now.** `buildStateFrame`'s `since` parameter is accepted for interface
- * stability (later tasks' callers pass the last-acked world version) but is not yet consulted — every
- * call returns every slice. Worker-side dirty-sets that would let `since` narrow the frame are an
- * optimisation explicitly gated on the roadmap's *Markets need a real dirty/ownership model* row
- * (spec §2), not this task's mechanism: the tick adapters hand back fresh rows whether or not anything
- * changed, so there is no cheaper "what changed" signal to consult yet. Every returned frame is
- * therefore already self-contained latest state, which is what makes the drop-harmless guarantee hold
- * trivially rather than needing a merge rule.
+ * **Coarse always, detail per interest (frame-architecture spec).** `buildStateFrame` takes an
+ * `InterestSet` (`lib/runtime/channel.ts`) instead of a `since` version. Every call returns the full
+ * coarse set (map layers, the attention layer, every faction surface, and the other galaxy-wide
+ * aggregates — the "whole screen at once" set) unconditionally, plus per-id detail for exactly the
+ * ids named in the interest set: the eight system-keyed families, and `marketComparison` for an
+ * interest good. An interest id absent from the world (or good absent from the catalog) is skipped —
+ * its key is simply missing from that record, never a throw, since a stale id is an ordinary race (a
+ * panel closing between the UI posting interest and the world advancing) rather than a caller bug.
+ * Every returned frame carries the ENTIRE current interest set's detail, never a delta, so the
+ * drop-harmless guarantee continues to hold trivially: "full" is now "coarse set + whole interest
+ * set" rather than "every id in the world".
  */
 import { getWorld, getWorldVersion, hasWorld } from "@/lib/world/store";
 import type { World } from "@/lib/world/types";
+import type { InterestSet } from "@/lib/runtime/channel";
 import { DEFAULT_ALERT_CATEGORIES, DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 import type { AlertCategorySettings } from "@/lib/types/alerts";
 import type { TrackerSections } from "@/lib/types/tracker";
@@ -51,7 +55,6 @@ import { getSystemIndustry, getSystemSubstrate } from "@/lib/services/universe";
 import { getSystemLogistics, getTradeFlowEdges } from "@/lib/services/trade-flow";
 import { getSystemConstruction, getFactionConstruction, readoutForFaction } from "@/lib/services/construction";
 import { getSystemBuildOptions } from "@/lib/services/build-options";
-import { colonyEligibility } from "@/lib/services/colony-eligibility";
 import { getFactionVitals } from "@/lib/services/faction-vitals";
 import { getFactionTreasury } from "@/lib/services/treasury";
 import { getMarket } from "@/lib/services/market";
@@ -68,16 +71,13 @@ import type {
   FactionConstructionData, FactionTreasuryData, SystemSubstrateData, TradeFlowEdges,
 } from "@/lib/types/api";
 
-/** The two worker-priced pricing results — reused verbatim rather than re-declared, per the
- *  "reuse the existing service/API types" rule; neither service exports a name for its own return
- *  union, so this pins it once from the function signature. */
-export type ColonyEligibilityResult = ReturnType<typeof colonyEligibility>;
-
-/** `getMarket`'s return shape, reused verbatim — same rule as `ColonyEligibilityResult` above. */
+/** `getMarket`'s return shape, reused verbatim rather than re-declared, per the "reuse the existing
+ *  service/API types" rule — the service exports no name for its own return type, so this pins it
+ *  once from the function signature. */
 export type MarketSlice = ReturnType<typeof getMarket>;
 
-/** `getMarketComparison`'s return shape, reused verbatim — same rule as `ColonyEligibilityResult`
- *  above. Keyed by good id (the goods catalog, `lib/constants/goods.ts`) rather than by system:
+/** `getMarketComparison`'s return shape, reused verbatim — same rule as `MarketSlice` above. Keyed
+ *  by good id (the goods catalog, `lib/constants/goods.ts`) rather than by system:
  *  `use-market-comparison.ts` opens on one good across every system, not one system. */
 export type MarketComparisonSlice = ReturnType<typeof getMarketComparison>;
 
@@ -91,20 +91,26 @@ export interface PlayerSettingsSlice {
 }
 
 /**
- * The UI-facing slices of world state — one property per today's query key (or key family). Every
- * per-id slice is a `Record` keyed by system or faction id, carrying an entry for every id that
- * exists in the world (not just ids some panel currently has open), so a frame is complete regardless
- * of which panels are mounted when it lands. `marketComparison` is the one per-id slice keyed by
- * *good* id (the goods catalog) rather than system/faction id — see `MarketComparisonSlice`.
+ * The UI-facing slices of world state — one property per today's query key (or key family). Two
+ * delivery classes (frame-architecture spec, "Frame contents"): the FACTION-keyed per-id `Record`s
+ * below (`factionDetail`, `factionVitals`, `factionConstruction`, `factionTreasury`) are coarse —
+ * always complete, one entry per faction in the world, regardless of which panels are open. The
+ * SYSTEM-keyed families (`systemVitals` through `systemSubstrate`, `market`), and the GOOD-keyed
+ * `marketComparison`, are interest-keyed instead: a frame carries an entry only for the ids in the
+ * current `InterestSet` (`lib/runtime/channel.ts`) that exist in the world — never every system/good
+ * in the galaxy. `marketComparison` is the one per-id slice keyed by *good* id (the goods catalog)
+ * rather than system id — see `MarketComparisonSlice`.
  *
- * `colonyEligibility` and `constructionStalls` are the two WORKER-PRICED slices (spec §2): both read
- * `ECONOMY_SCALE` internally (`lib/services/colony-eligibility.ts`, `lib/services/construction.ts`),
- * so they are computed here and ride the snapshot already resolved — `ECONOMY_SCALE` itself never
- * crosses the channel. `colonyEligibility` covers every CONTROLLED system (the only ones the verb
- * applies to); `constructionStalls` covers every open colony-establish project's stall reason, keyed
- * by project id, across every faction (the faction screen is a god-view — not player-gated).
+ * `constructionStalls` is the one WORKER-PRICED slice (spec §2): it reads `ECONOMY_SCALE` internally
+ * (`lib/services/construction.ts`), so it is computed here and rides the snapshot already resolved —
+ * `ECONOMY_SCALE` itself never crosses the channel. It stays coarse — every open colony-establish
+ * project's stall reason, keyed by project id, across every faction (the faction screen is a
+ * god-view — not player-gated). Colony-eligibility pricing (`lib/services/colony-eligibility.ts`)
+ * reaches the UI through `systemBuildOptions` instead — no separate `colonyEligibility` slice: an
+ * earlier one carried a system-keyed `colonyEligibility` record with zero UI readers and was removed; the service function and its mutation-service callers
+ * (`build-options.ts`, `construction-orders.ts`) are untouched.
  *
- * Two query keys that Task 7 rewires read no slice here at all, deliberately:
+ * Two store-backed hooks read no slice here at all, deliberately:
  *   - `systemCadence` is `{ resolutionGroup: 0 }` for every existing system unconditionally — the
  *     whole galaxy resolves on one shared cycle boundary (`lib/services/system-cadence.ts`). The
  *     store-backed hook returns the literal, no read required.
@@ -144,17 +150,24 @@ export interface SnapshotSlices {
   factionVitals: Record<string, FactionVitalsData>;
   factionConstruction: Record<string, FactionConstructionData>;
   factionTreasury: Record<string, FactionTreasuryData>;
-  colonyEligibility: Record<string, ColonyEligibilityResult>;
   constructionStalls: Record<string, ColonyStallReason | null>;
 }
 
-/** One state frame — the committed world version it was built from, and the slices it carries. Every
- *  slice named in `SnapshotSlices` is present on a full frame (`since: null`); see the module
- *  docstring for why a non-null `since` carries the same full set today. */
-export interface StateFrame {
+/** One state frame's world-derived content — the committed world version it was built from, and the
+ *  slices it carries. Every coarse slice named in `SnapshotSlices` is always present; a detail slice
+ *  carries exactly the current interest set's ids (see the module docstring). `buildStateFrame`
+ *  returns this — `frameSeq` is not world-derived, so it is not this type's job to carry it. */
+export interface StateFrameBody {
   worldVersion: number;
   slices: Partial<SnapshotSlices>;
 }
+
+/** A `StateFrameBody` plus the worker's send counter (frame-architecture spec, "Interest protocol") —
+ *  what actually crosses the worker→UI channel. The worker stamps `frameSeq` at post time, not here:
+ *  `buildStateFrame` has no notion of "which send this is". Frame freshness is judged on `frameSeq`,
+ *  not `worldVersion` — two frames at one `worldVersion` can legitimately differ once interest grows
+ *  between world commits (e.g. the game is paused and a panel opens). */
+export type StateFrame = StateFrameBody & { frameSeq: number };
 
 /**
  * Every read service below reads the store singleton (`getWorld()`), not the `world` parameter
@@ -179,16 +192,6 @@ function buildPlayerSettings(world: World): PlayerSettingsSlice {
     : { alertCategories: DEFAULT_ALERT_CATEGORIES, trackerSections: DEFAULT_TRACKER_SECTIONS };
 }
 
-/** Every controlled system's colony-verb pricing, faction-scoped to whichever faction controls it. */
-function buildColonyEligibility(world: World): Record<string, ColonyEligibilityResult> {
-  const out: Record<string, ColonyEligibilityResult> = {};
-  for (const system of world.systems) {
-    if (system.control !== "controlled" || !system.factionId) continue;
-    out[system.id] = colonyEligibility(world, system.factionId, system);
-  }
-  return out;
-}
-
 /** Every open colony-establish project's priced stall reason, across every faction's construction
  *  readout — the same rows `readoutForFaction` already computes for `factionConstruction`/
  *  `systemConstruction`, walked again here only to pull out the one already-priced field. */
@@ -204,12 +207,18 @@ function buildConstructionStalls(world: World): Record<string, ColonyStallReason
 }
 
 /**
- * Assembles the full state frame for `world` — every UI-facing slice, keyed per system/faction id
- * where the slice is per-id. `since` is accepted but not yet consulted (see module docstring).
+ * Assembles one state frame's world-derived content for `world`: every coarse slice unconditionally,
+ * plus per-id detail for exactly `interest`'s ids that exist in the world (the eight system-keyed
+ * families, and good-keyed `marketComparison`) — see the module docstring.
  */
-export function buildStateFrame(world: World, since: number | null): StateFrame {
-  void since;
+export function buildStateFrame(world: World, interest: InterestSet): StateFrameBody {
   ensureWorldCommitted(world);
+
+  // Built only when there's system interest to resolve against — skips an O(every system in the
+  // world) map build on a push with no system panels open, the common case for
+  // most frames (an empty or good-only interest set).
+  const existingSystemIds =
+    interest.systems.length > 0 ? new Set(world.systems.map((s) => s.id)) : new Set<string>();
 
   const systemVitals: Record<string, SystemVitalsData> = {};
   const systemPopulation: Record<string, SystemPopulationData> = {};
@@ -217,24 +226,24 @@ export function buildStateFrame(world: World, since: number | null): StateFrame 
   const systemLogistics: Record<string, SystemLogisticsData> = {};
   const systemConstruction: Record<string, SystemConstructionData> = {};
   const systemBuildOptions: Record<string, SystemBuildOptionsData> = {};
-  for (const system of world.systems) {
-    systemVitals[system.id] = getSystemVitals(system.id);
-    systemPopulation[system.id] = getSystemPopulation(system.id);
-    systemIndustry[system.id] = getSystemIndustry(system.id);
-    systemLogistics[system.id] = getSystemLogistics(system.id);
-    systemConstruction[system.id] = getSystemConstruction(system.id);
-    systemBuildOptions[system.id] = getSystemBuildOptions(system.id);
-  }
-
   const systemSubstrate: Record<string, SystemSubstrateData> = {};
   const market: Record<string, MarketSlice> = {};
-  for (const system of world.systems) {
-    systemSubstrate[system.id] = getSystemSubstrate(system.id);
-    market[system.id] = getMarket(system.id);
+  for (const systemId of interest.systems) {
+    if (!existingSystemIds.has(systemId)) continue; // stale/unknown interest id — skip, never throw (spec: "stale or unknown ids never throw")
+    systemVitals[systemId] = getSystemVitals(systemId);
+    systemPopulation[systemId] = getSystemPopulation(systemId);
+    systemIndustry[systemId] = getSystemIndustry(systemId);
+    systemLogistics[systemId] = getSystemLogistics(systemId);
+    systemConstruction[systemId] = getSystemConstruction(systemId);
+    systemBuildOptions[systemId] = getSystemBuildOptions(systemId);
+    systemSubstrate[systemId] = getSystemSubstrate(systemId);
+    market[systemId] = getMarket(systemId);
   }
 
   const marketComparison: Record<string, MarketComparisonSlice> = {};
-  for (const goodId of Object.keys(GOODS)) {
+  const goodIds = new Set(Object.keys(GOODS));
+  for (const goodId of interest.goods) {
+    if (!goodIds.has(goodId)) continue; // stale/unknown interest id — skip, never throw
     marketComparison[goodId] = getMarketComparison(goodId);
   }
 
@@ -281,7 +290,6 @@ export function buildStateFrame(world: World, since: number | null): StateFrame 
     factionVitals,
     factionConstruction,
     factionTreasury,
-    colonyEligibility: buildColonyEligibility(world),
     constructionStalls: buildConstructionStalls(world),
   };
 

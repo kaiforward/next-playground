@@ -23,7 +23,7 @@ export interface TickFailedMsg {
 /**
  * One command posted to the worker — a build/colony order, a treasury policy write, a speed change,
  * a pin, a settings flag, save/load, or a dev cheat. `id` is the correlation key a result is matched
- * back to (Task 5); `type` and `payload` are left generic here rather than widened into one big union
+ * back to; `type` and `payload` are left generic here rather than widened into one big union
  * — the command registry that enumerates every concrete `type`/`payload` pairing is a later task's
  * interface, not this one's.
  */
@@ -44,7 +44,7 @@ export type CommandResult<T> = { ok: true; data: T } | { ok: false; error: strin
  * Boot configuration the worker entry resolves first, before the dynamic import that evaluates the
  * engine/constants graph — `ECONOMY_SCALE` and the two debug flags are read at module-evaluation time
  * by ~10 constant tables (spec §6), so nothing that imports them may run before this is resolved.
- * `resolveHostConfig` (Task 4) is what produces one; this task only names the shape it produces.
+ * `resolveHostConfig` is what produces one; this only names the shape it produces.
  */
 export interface BootConfig {
   /** Positive, finite — see `toEconomyScale` (`lib/constants/economy-scale.ts`). Default 100. */
@@ -52,3 +52,22 @@ export interface BootConfig {
   debugEconomy: boolean;
   debugEvents: boolean;
 }
+
+/**
+ * The panels a client currently has open (frame-architecture spec, "Interest protocol") — the ids
+ * `buildStateFrame` (`lib/runtime/snapshot.ts`) derives per-id detail for, on top of the coarse set
+ * every frame always carries. Replace-whole-set, not incremental: a client posts its entire current
+ * set on every change, and the worker holds exactly the last-received one (no ref-counting at the
+ * worker; that lives client-side in the interest registry, a later task). `factions` is accepted for
+ * forward-compatibility and unused at introduction — every faction slice stays pushed-coarse.
+ */
+export interface InterestSet {
+  systems: string[];
+  factions: string[];
+  goods: string[];
+}
+
+/** The empty interest set — every panel closed, coarse slices only. Frozen so it can be shared as a
+ *  single constant (the worker's initial held set, a client's "nothing open" post) without a caller
+ *  accidentally mutating the shared instance. */
+export const EMPTY_INTEREST: InterestSet = Object.freeze({ systems: [], factions: [], goods: [] });
