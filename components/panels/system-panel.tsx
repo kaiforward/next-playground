@@ -45,6 +45,14 @@ export function SystemPanel({ systemId, tab }: { systemId: string; tab: string }
   // genuinely absent id. Render nothing rather than flashing not-found for an entity that is really
   // just not loaded yet. Stopgap until Task 11 builds the real boot/liveness UX.
   const booted = useGameSlice((state) => state.worldVersion !== null);
+  // First-paint presence gate (frame-architecture spec, "Interest protocol"): any interest-keyed
+  // family works here since a subscribed system's whole bundle lands atomically in one frame
+  // (Task 1 Proves 3) — `systemVitals` is the pick. This is PRESENCE, distinct from the EXISTENCE
+  // check above (`systemInfo`, sourced from `universe`): an id can exist in the galaxy but not yet
+  // be in the current interest set (panel just opened, frame not landed) or the game is paused.
+  const detailPresent = useGameSlice(
+    (state) => state.slices.systemVitals?.[systemId] !== undefined,
+  );
 
   if (!booted) return null;
 
@@ -112,9 +120,11 @@ export function SystemPanel({ systemId, tab }: { systemId: string; tab: string }
         />
       }
     >
-      <ErrorBoundary fallbackRender={renderErrorFallback}>
-        <SystemTabBody systemId={systemId} tab={tab} />
-      </ErrorBoundary>
+      {detailPresent && (
+        <ErrorBoundary fallbackRender={renderErrorFallback}>
+          <SystemTabBody systemId={systemId} tab={tab} />
+        </ErrorBoundary>
+      )}
     </DetailPanel>
   );
 }

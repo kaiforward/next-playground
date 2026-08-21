@@ -5,6 +5,7 @@ import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { boundedHopsFromOrigin } from "@/lib/engine/pathfinding";
 import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
 import { useInterest } from "@/lib/store/interest";
+import { useGameSlice } from "@/lib/store/use-game-store";
 import { priceRampColor } from "@/lib/utils/price-ramp";
 import { formatCredits } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
@@ -62,6 +63,13 @@ function MarketComparisonContent({
   // (frame-architecture spec, "Interest protocol") — released automatically on unmount/id change.
   useInterest("good", goodId);
   const { entries } = useMarketComparison(goodId);
+  // First-paint presence gate (frame-architecture spec, "Interest protocol"): `undefined` means
+  // this good's comparison rows haven't landed yet (panel just opened, or the game is paused) —
+  // hold the rows region rather than showing the "no visible systems" empty state prematurely.
+  // Panel chrome (header/filter/sort controls) renders regardless.
+  const present = useGameSlice(
+    (state) => state.slices.marketComparison?.[goodId] !== undefined,
+  );
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filter, setFilter] = useState<FilterMode>("all");
@@ -175,10 +183,10 @@ function MarketComparisonContent({
 
       {/* Rows */}
       <div className="flex-1 overflow-y-auto">
-        {rows.length === 0 && (
+        {present && rows.length === 0 && (
           <EmptyState message={`No visible systems carry ${goodName} matching this filter.`} />
         )}
-        {rows.map((r) => {
+        {present && rows.map((r) => {
           const color = priceRampColor(
             r.currentPrice,
             r.basePrice,
