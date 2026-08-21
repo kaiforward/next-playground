@@ -263,7 +263,7 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   rows or a dirty flag. *Don't:* reference-identity dirty-checking — the adapter hands back fresh rows
   whether or not anything changed, so it always reports dirty. Real save-corruption risk if aliasing leaks.
 - **[L] Engine tick at aspiration scale (10-20K systems)** — the tick-speed audit's measured curve
-  (C1 in [tick-speed-audit.md](./build-plans/tick-speed-audit.md)): sustained Node TPS at the
+  (reading C1 of the deleted tick-speed-audit working file; git keeps it): sustained Node TPS at the
   10,000-tick horizon is 118.8 / 56.4 / 22.7 / 10.5 at 600 / 2K / 5K / 10K systems, with the
   developed cohort FLAT (~440-500) across scales — so the cost is total-system-scaled machinery
   (join/merge ~46% of tick time; directed-build scans the full system list), and the 5 TPS
