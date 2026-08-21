@@ -37,9 +37,9 @@ development, migration, provision, atlas, universe, visibility), the attention l
 alerts, tracker), player settings, and every faction surface (summaries, relations, vitals,
 construction, treasury, detail). On top of that, a frame carries per-id detail only for the ids in
 the UI's current **interest set**: the eight system-keyed families (vitals, population, industry,
-logistics, construction, build options, substrate, market) plus `colonyEligibility` for a
-controlled interest system, and `marketComparison` keyed by good id. An interest id absent from the
-world (or a good absent from the catalog) is skipped rather than thrown on — a stale id is an
+logistics, construction, build options, substrate, market), and `marketComparison` keyed by good id.
+An interest id absent from the world (or a good absent from the catalog) is skipped rather than
+thrown on — a stale id is an
 ordinary race, not a caller bug. Every frame carries the *entire* current interest set's detail,
 never a delta, so the drop-harmless guarantee holds with "full" redefined as "coarse set + whole
 interest set" rather than "every id in the world".
@@ -89,8 +89,10 @@ immediately once its frame lands.
 
 **Derived views compute on the UI thread, on read, against the snapshot.** The two services that
 read `ECONOMY_SCALE` for its value — colony-eligibility pricing and construction-stall pricing —
-run inside the worker instead, their already-priced results riding the snapshot (`colonyEligibility`
-and `constructionStalls` slices), so `ECONOMY_SCALE` itself never crosses the channel.
+run inside the worker instead, their already-priced results riding the snapshot. Colony-eligibility
+pricing rides the `systemBuildOptions` slice (its `colony` mode already carries the priced
+eligibility check — no separate slice); construction-stall pricing rides its own `constructionStalls`
+slice. Either way, `ECONOMY_SCALE` itself never crosses the channel.
 
 **Identity stability by UI-side structural sharing.** When a frame arrives, the store merges it
 value-wise against what it holds, per slice (`replaceEqualDeep`, `lib/store/replace-equal-deep.ts`):
@@ -136,14 +138,17 @@ existing `EmptyState`, composed rather than rebuilt) — the normal outcome afte
 replaces the world, and after back/forward returns to a pre-replacement URL.
 
 **A detail slice's absence carries two meanings**, disambiguated only at the panel root: the id
-never existed in the galaxy, or it exists but the worker hasn't yet delivered its detail (the panel
-just mounted and its interest reply hasn't landed, or the game is paused). The panel root — the
-system panel and the market-comparison panel — gates on both, in order: *existence* against the
-always-pushed `universe` slice (an id absent there renders the not-found `EmptyState`), then
-*presence* against the detail slice itself (an id that exists but is still absent holds the panel
-shell — title, tabs — without its detail sections until the entry lands). Every hook below that
-gate stays a synchronous non-null selector; a subscribed id's whole family bundle lands atomically
-in one frame, so once the gate clears, no hook beneath it can observe the fallback for that id. In
+never existed (or, for a good, was never in the catalog), or it exists but the worker hasn't yet
+delivered its detail (the panel just mounted and its interest reply hasn't landed, or the game is
+paused). The system panel gates on BOTH, in order: *existence* against the always-pushed `universe`
+slice (a systemId absent there renders the not-found `EmptyState`), then *presence* against the
+detail slice itself (an id that exists but is still absent holds the panel shell — title, tabs —
+without its detail sections until the entry lands). The market-comparison panel gates on *presence*
+only — a goodId's existence is trivial from the fixed goods catalog (`lib/constants/goods.ts`), never
+absent for any id a caller could construct the panel with, so there is no separate existence check to
+gate on. Every hook below either gate stays a synchronous non-null selector; a subscribed id's whole
+family bundle lands atomically in one frame, so once the gate clears, no hook beneath it can observe
+the fallback for that id. In
 dev builds only, a detail hook read for an id that exists in `universe` but is absent from its
 detail slice logs a console warning once per (family, id) naming the missing `useInterest`
 registration, so a future surface calling a detail hook without wiring interest announces itself at

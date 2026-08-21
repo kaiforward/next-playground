@@ -13,12 +13,5 @@ const NOT_FOUND: SystemBuildOptionsData = { mode: "none" };
  *  current interest set yet (see `lib/hooks/detail-read.ts`). Telling those apart is the panel
  *  root's job (`system-panel.tsx`'s presence gate), not this hook's. */
 export function useSystemBuildOptions(systemId: string): SystemBuildOptionsData {
-  return (
-    useDetailEntry(
-      (slices) => slices.systemBuildOptions?.[systemId],
-      "systemBuildOptions",
-      systemId,
-      "system",
-    ) ?? NOT_FOUND
-  );
+  return useDetailEntry("systemBuildOptions", systemId, "system") ?? NOT_FOUND;
 }

@@ -9,7 +9,6 @@ import { getSystemVitals } from "@/lib/services/system-vitals";
 import { getSystemSubstrate } from "@/lib/services/universe";
 import { getMarket } from "@/lib/services/market";
 import { getMarketComparison } from "@/lib/services/market-comparison";
-import { colonyEligibility } from "@/lib/services/colony-eligibility";
 
 /**
  * The full, authoritative slice-key list `SnapshotSlices` names — kept here (not imported) so the
@@ -22,8 +21,7 @@ const EXPECTED_SLICE_KEYS: (keyof SnapshotSlices)[] = [
   "stability", "population", "development", "migration", "provision", "factions", "factionDetail",
   "relations", "systemVitals", "systemPopulation", "systemIndustry", "systemLogistics",
   "systemConstruction", "systemBuildOptions", "systemSubstrate", "market", "marketComparison",
-  "tradeFlow", "factionVitals", "factionConstruction", "factionTreasury",
-  "colonyEligibility", "constructionStalls",
+  "tradeFlow", "factionVitals", "factionConstruction", "factionTreasury", "constructionStalls",
 ];
 
 /** The coarse slices — always complete, regardless of interest (frame-architecture spec, "Frame
@@ -38,7 +36,7 @@ const COARSE_KEYS: (keyof SnapshotSlices)[] = [
 /** The interest-keyed detail slices — present only for the current interest set's ids. */
 const DETAIL_KEYS: (keyof SnapshotSlices)[] = [
   "systemVitals", "systemPopulation", "systemIndustry", "systemLogistics", "systemConstruction",
-  "systemBuildOptions", "systemSubstrate", "market", "colonyEligibility", "marketComparison",
+  "systemBuildOptions", "systemSubstrate", "market", "marketComparison",
 ];
 
 let world: World;
@@ -113,7 +111,7 @@ describe("buildStateFrame — Proves 2: stale interest ids", () => {
 });
 
 describe("buildStateFrame — Proves 3: atomic per-system bundle", () => {
-  it("a subscribed controlled system's 8 family entries and colonyEligibility all land in the same frame", () => {
+  it("a subscribed controlled system's 8 family entries all land in the same frame", () => {
     const target = world.systems.find((s) => s.control === "developed");
     if (!target) throw new Error("fixture: expected at least one developed system");
     // Repurpose one non-target system into a controlled test fixture of the player's own faction.
@@ -137,7 +135,6 @@ describe("buildStateFrame — Proves 3: atomic per-system bundle", () => {
     ] as const) {
       expect(Object.prototype.hasOwnProperty.call(frame.slices[key] ?? {}, controlled.id)).toBe(true);
     }
-    expect(Object.prototype.hasOwnProperty.call(frame.slices.colonyEligibility ?? {}, controlled.id)).toBe(true);
   });
 });
 
@@ -168,10 +165,6 @@ describe("buildStateFrame — Proves 5: vacuity (full interest reproduces today'
       expect(Object.keys(frame.slices[key] ?? {}).sort()).toEqual(systemIds);
     }
     expect(Object.keys(frame.slices.marketComparison ?? {}).sort()).toEqual(goodIds);
-    // colonyEligibility: exactly every CONTROLLED system, not every system (matches the pre-change
-    // builder's `buildColonyEligibility`, which the same condition gated).
-    const controlledIds = world.systems.filter((s) => s.control === "controlled" && s.factionId).map((s) => s.id).sort();
-    expect(Object.keys(frame.slices.colonyEligibility ?? {}).sort()).toEqual(controlledIds);
   });
 
   it("spot-checks per-id detail content against the same read services the builder calls directly, for one sampled system per family", () => {
@@ -184,12 +177,6 @@ describe("buildStateFrame — Proves 5: vacuity (full interest reproduces today'
 
     const goodId = Object.keys(GOODS)[0];
     expect(frame.slices.marketComparison?.[goodId]).toEqual(getMarketComparison(goodId));
-
-    if (sample.control === "controlled" && sample.factionId) {
-      expect(frame.slices.colonyEligibility?.[sample.id]).toEqual(
-        colonyEligibility(world, sample.factionId, sample),
-      );
-    }
   });
 });
 

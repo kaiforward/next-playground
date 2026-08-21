@@ -16,11 +16,6 @@ export function useMarketComparison(goodId: string): {
   goodId: string;
   entries: MarketComparisonEntry[];
 } {
-  const slice = useDetailEntry(
-    (slices) => slices.marketComparison?.[goodId],
-    "marketComparison",
-    goodId,
-    "good",
-  );
+  const slice = useDetailEntry("marketComparison", goodId, "good");
   return { goodId, entries: slice?.entries ?? EMPTY_ENTRIES };
 }

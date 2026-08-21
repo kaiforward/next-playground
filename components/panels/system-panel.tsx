@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useSystemInfo } from "@/lib/hooks/use-system-info";
 import { useOwnership } from "@/lib/hooks/use-ownership";
 import { useGameSlice } from "@/lib/store/use-game-store";
+import { useDetailPresent } from "@/lib/hooks/detail-read";
 import { useInterest } from "@/lib/store/interest";
 import { SYSTEM_TABS } from "@/lib/constants/system-tabs";
 import { DetailPanel } from "@/components/ui/detail-panel";
@@ -32,6 +34,55 @@ import { SystemMarket } from "@/components/panels/system-market";
  * navigation) has to be told apart from "developed but nothing to show yet" up here, before any tab
  * body ever renders.
  */
+
+/** How long the presence gate may hold before the dev diagnostic below fires. */
+const HELD_TOO_LONG_MS = 2000;
+
+/** The "gate held forever" diagnostic message — a pure function so it's unit-testable independent
+ *  of the timer/effect machinery driving it (`useHeldTooLongWarning` below). */
+export function buildDetailHeldTooLongWarning(systemId: string, systemName: string): string {
+  return (
+    `[system-panel] detail for system "${systemName}" (${systemId}) has been held for ` +
+    `${HELD_TOO_LONG_MS}ms without landing — likely a missing useInterest() registration for ` +
+    `this id, or the panel opened while the game is paused.`
+  );
+}
+
+/**
+ * Dev-only diagnostic: if `detailPresent` stays `false` for
+ * `HELD_TOO_LONG_MS` after a mount/systemId change, the presence gate has no way to tell "still
+ * waiting for the next frame" apart from "interest wiring silently broke" — both render the same
+ * title-and-tabs-over-nothing shell forever, with zero output anywhere. This warns once per
+ * mount/systemId change, only for an id that actually exists (`systemName` non-null — a genuinely
+ * absent id already gets its own not-found `EmptyState`, no diagnostic needed). No prod cost: the
+ * whole body is behind the `import.meta.env.DEV` literal, the same dead-code-elimination idiom
+ * `detail-read.ts` uses.
+ */
+function useHeldTooLongWarning(
+  systemId: string,
+  systemName: string | null,
+  detailPresent: boolean,
+): void {
+  // Read through a ref inside the timeout rather than closing over `detailPresent` directly — the
+  // timer is armed once per (systemId, systemName) and must see the LATEST presence value when it
+  // fires, not whatever was current at the moment the timer was scheduled.
+  const detailPresentRef = useRef(detailPresent);
+  useEffect(() => {
+    detailPresentRef.current = detailPresent;
+  }, [detailPresent]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || systemName === null) return;
+    const timer = setTimeout(() => {
+      if (!detailPresentRef.current) {
+        // eslint-disable-next-line no-console -- deliberate dev-only diagnostic, guarded by import.meta.env.DEV above
+        console.warn(buildDetailHeldTooLongWarning(systemId, systemName));
+      }
+    }, HELD_TOO_LONG_MS);
+    return () => clearTimeout(timer);
+  }, [systemId, systemName]);
+}
+
 export function SystemPanel({ systemId, tab }: { systemId: string; tab: string }) {
   // Declares interest so the worker's next frame carries this system's detail families
   // (frame-architecture spec, "Interest protocol") — released automatically on unmount/id change.
@@ -50,9 +101,8 @@ export function SystemPanel({ systemId, tab }: { systemId: string; tab: string }
   // (Proves 3) — `systemVitals` is the pick. This is PRESENCE, distinct from the EXISTENCE
   // check above (`systemInfo`, sourced from `universe`): an id can exist in the galaxy but not yet
   // be in the current interest set (panel just opened, frame not landed) or the game is paused.
-  const detailPresent = useGameSlice(
-    (state) => state.slices.systemVitals?.[systemId] !== undefined,
-  );
+  const detailPresent = useDetailPresent("systemVitals", systemId);
+  useHeldTooLongWarning(systemId, systemInfo?.name ?? null, detailPresent);
 
   if (!booted) return null;
 

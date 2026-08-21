@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import type { ConnectionInfo } from "@/lib/engine/navigation";
 import { boundedHopsFromOrigin } from "@/lib/engine/pathfinding";
 import { useMarketComparison } from "@/lib/hooks/use-market-comparison";
+import { useDetailPresent } from "@/lib/hooks/detail-read";
 import { useInterest } from "@/lib/store/interest";
-import { useGameSlice } from "@/lib/store/use-game-store";
 import { priceRampColor } from "@/lib/utils/price-ramp";
 import { formatCredits } from "@/lib/utils/format";
 import { Button } from "@/components/ui/button";
@@ -62,14 +62,13 @@ function MarketComparisonContent({
   // Declares interest so the worker's next frame carries this good's `marketComparison` entries
   // (frame-architecture spec, "Interest protocol") — released automatically on unmount/id change.
   useInterest("good", goodId);
-  const { entries } = useMarketComparison(goodId);
-  // First-paint presence gate (frame-architecture spec, "Interest protocol"): `undefined` means
-  // this good's comparison rows haven't landed yet (panel just opened, or the game is paused) —
-  // hold the rows region rather than showing the "no visible systems" empty state prematurely.
-  // Panel chrome (header/filter/sort controls) renders regardless.
-  const present = useGameSlice(
-    (state) => state.slices.marketComparison?.[goodId] !== undefined,
-  );
+  // First-paint presence gate (frame-architecture spec, "Interest protocol"): `false` means this
+  // good's comparison rows haven't landed yet (panel just opened, or the game is paused) — hold the
+  // rows region rather than showing the "no visible systems" empty state prematurely. Panel chrome
+  // (header/filter/sort controls) renders regardless. The detail read itself (`useMarketComparison`)
+  // lives entirely inside `MarketComparisonRows`, below this gate — reading it up here would warn on
+  // every ordinary first render, before the gate had a chance to hold the id back.
+  const present = useDetailPresent("marketComparison", goodId);
   const [sortKey, setSortKey] = useState<SortKey>("price");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [filter, setFilter] = useState<FilterMode>("all");
@@ -82,37 +81,6 @@ function MarketComparisonContent({
     () => boundedHopsFromOrigin(fromSystemId, connections, MAX_HOPS),
     [fromSystemId, connections],
   );
-
-  const rows = useMemo(() => {
-    const decorated = entries.map((e) => ({
-      ...e,
-      hops: hopsMap.get(e.systemId) ?? null,
-      ratio: e.basePrice > 0 ? e.currentPrice / e.basePrice : 1,
-      name: nameById.get(e.systemId) ?? "Unknown",
-    }));
-    const filtered = decorated.filter((d) => {
-      if (filter === "buy") return d.ratio < 1.0;
-      if (filter === "sell") return d.ratio > 1.0;
-      return true;
-    });
-    const sign = sortDir === "asc" ? 1 : -1;
-    const sorted = [...filtered].sort((a, b) => {
-      const av =
-        sortKey === "hops"
-          ? a.hops ?? Number.POSITIVE_INFINITY
-          : sortKey === "price"
-            ? a.currentPrice
-            : a.stock;
-      const bv =
-        sortKey === "hops"
-          ? b.hops ?? Number.POSITIVE_INFINITY
-          : sortKey === "price"
-            ? b.currentPrice
-            : b.stock;
-      return (av - bv) * sign;
-    });
-    return sorted;
-  }, [entries, filter, hopsMap, nameById, sortKey, sortDir]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -131,9 +99,7 @@ function MarketComparisonContent({
             {goodName}
           </h2>
           <p className="text-xs text-text-tertiary">
-            from <span className="text-text-secondary">{fromSystemName}</span>{" "}
-            &middot; {rows.length} visible{" "}
-            {rows.length === 1 ? "market" : "markets"}
+            from <span className="text-text-secondary">{fromSystemName}</span>
           </p>
         </div>
         <button
@@ -181,54 +147,139 @@ function MarketComparisonContent({
         <span></span>
       </div>
 
-      {/* Rows */}
+      {/* Rows — held entirely behind the presence gate, including the visible-market count that used
+          to render "0 visible markets" from the fallback while the gate held. */}
       <div className="flex-1 overflow-y-auto">
-        {present && rows.length === 0 && (
-          <EmptyState message={`No visible systems carry ${goodName} matching this filter.`} />
+        {present && (
+          <MarketComparisonRows
+            goodId={goodId}
+            goodName={goodName}
+            fromSystemId={fromSystemId}
+            filter={filter}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            nameById={nameById}
+            hopsMap={hopsMap}
+            onSelectSystem={onSelectSystem}
+          />
         )}
-        {present && rows.map((r) => {
-          const color = priceRampColor(
-            r.currentPrice,
-            r.basePrice,
-            filter === "sell" ? "sell" : "buy",
-          );
-          const isOrigin = r.systemId === fromSystemId;
-          return (
-            <div
-              key={r.systemId}
-              className={`grid ${GRID_COLS} gap-2 px-4 py-2 text-xs border-b border-border ${
-                isOrigin ? "bg-surface-active" : "hover:bg-surface-hover"
-              }`}
-            >
-              <span className="text-text-primary truncate">
-                {r.name}{" "}
-                {isOrigin && (
-                  <span className="text-text-tertiary text-[10px]">(here)</span>
-                )}
-              </span>
-              <span className="text-text-secondary font-mono">
-                {r.hops != null ? r.hops : "—"}
-              </span>
-              <span
-                style={{ color: color ?? undefined }}
-                className="font-mono"
-              >
-                {formatCredits(r.currentPrice)}
-              </span>
-              <span className="text-text-secondary font-mono">{r.stock}</span>
-              {!isOrigin && (
-                <Button
-                  onClick={() => onSelectSystem(r.systemId)}
-                  variant="ghost"
-                  size="xs"
-                >
-                  Go &rarr;
-                </Button>
-              )}
-            </div>
-          );
-        })}
       </div>
     </aside>
+  );
+}
+
+interface MarketComparisonRowsProps {
+  goodId: string;
+  goodName: string;
+  fromSystemId: string;
+  filter: FilterMode;
+  sortKey: SortKey;
+  sortDir: SortDir;
+  nameById: Map<string, string>;
+  hopsMap: Map<string, number>;
+  onSelectSystem: (systemId: string) => void;
+}
+
+/**
+ * The gated rows region — the ONLY caller of `useMarketComparison` for this panel. Only ever
+ * mounted while the parent's presence gate holds `true`, so this component's first
+ * render already has a landed entry to read; nothing here can observe the "not yet subscribed"
+ * fallback the dev warning exists to catch.
+ */
+function MarketComparisonRows({
+  goodId,
+  goodName,
+  fromSystemId,
+  filter,
+  sortKey,
+  sortDir,
+  nameById,
+  hopsMap,
+  onSelectSystem,
+}: MarketComparisonRowsProps) {
+  const { entries } = useMarketComparison(goodId);
+
+  const rows = useMemo(() => {
+    const decorated = entries.map((e) => ({
+      ...e,
+      hops: hopsMap.get(e.systemId) ?? null,
+      ratio: e.basePrice > 0 ? e.currentPrice / e.basePrice : 1,
+      name: nameById.get(e.systemId) ?? "Unknown",
+    }));
+    const filtered = decorated.filter((d) => {
+      if (filter === "buy") return d.ratio < 1.0;
+      if (filter === "sell") return d.ratio > 1.0;
+      return true;
+    });
+    const sign = sortDir === "asc" ? 1 : -1;
+    const sorted = [...filtered].sort((a, b) => {
+      const av =
+        sortKey === "hops"
+          ? a.hops ?? Number.POSITIVE_INFINITY
+          : sortKey === "price"
+            ? a.currentPrice
+            : a.stock;
+      const bv =
+        sortKey === "hops"
+          ? b.hops ?? Number.POSITIVE_INFINITY
+          : sortKey === "price"
+            ? b.currentPrice
+            : b.stock;
+      return (av - bv) * sign;
+    });
+    return sorted;
+  }, [entries, filter, hopsMap, nameById, sortKey, sortDir]);
+
+  return (
+    <>
+      <p className="px-4 py-1.5 text-[11px] text-text-tertiary border-b border-border">
+        {rows.length} visible {rows.length === 1 ? "market" : "markets"}
+      </p>
+      {rows.length === 0 && (
+        <EmptyState message={`No visible systems carry ${goodName} matching this filter.`} />
+      )}
+      {rows.map((r) => {
+        const color = priceRampColor(
+          r.currentPrice,
+          r.basePrice,
+          filter === "sell" ? "sell" : "buy",
+        );
+        const isOrigin = r.systemId === fromSystemId;
+        return (
+          <div
+            key={r.systemId}
+            className={`grid ${GRID_COLS} gap-2 px-4 py-2 text-xs border-b border-border ${
+              isOrigin ? "bg-surface-active" : "hover:bg-surface-hover"
+            }`}
+          >
+            <span className="text-text-primary truncate">
+              {r.name}{" "}
+              {isOrigin && (
+                <span className="text-text-tertiary text-[10px]">(here)</span>
+              )}
+            </span>
+            <span className="text-text-secondary font-mono">
+              {r.hops != null ? r.hops : "—"}
+            </span>
+            <span
+              style={{ color: color ?? undefined }}
+              className="font-mono"
+            >
+              {formatCredits(r.currentPrice)}
+            </span>
+            <span className="text-text-secondary font-mono">{r.stock}</span>
+            {!isOrigin && (
+              <Button
+                onClick={() => onSelectSystem(r.systemId)}
+                variant="ghost"
+                size="xs"
+              >
+                Go &rarr;
+              </Button>
+            )}
+          </div>
+        );
+      })}
+    </>
   );
 }

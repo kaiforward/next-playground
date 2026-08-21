@@ -19,12 +19,5 @@ const NOT_FOUND: SystemSubstrateData = { visibility: "unknown" };
  * docstring for the two reasons that can mean).
  */
 export function useSystemSubstrate(systemId: string): SystemSubstrateData {
-  return (
-    useDetailEntry(
-      (slices) => slices.systemSubstrate?.[systemId],
-      "systemSubstrate",
-      systemId,
-      "system",
-    ) ?? NOT_FOUND
-  );
+  return useDetailEntry("systemSubstrate", systemId, "system") ?? NOT_FOUND;
 }

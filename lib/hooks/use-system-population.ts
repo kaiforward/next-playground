@@ -16,12 +16,5 @@ const NOT_FOUND: SystemPopulationData = { visibility: "unknown" };
  * root's job (`system-panel.tsx`'s presence gate), not this hook's.
  */
 export function useSystemPopulation(systemId: string): SystemPopulationData {
-  return (
-    useDetailEntry(
-      (slices) => slices.systemPopulation?.[systemId],
-      "systemPopulation",
-      systemId,
-      "system",
-    ) ?? NOT_FOUND
-  );
+  return useDetailEntry("systemPopulation", systemId, "system") ?? NOT_FOUND;
 }

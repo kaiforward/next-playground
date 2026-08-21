@@ -53,8 +53,8 @@ import { createWorkerHost, type WorkerHost, type RawWorkerScope } from "./host";
 //
 // Every command the worker answers, and the exact result each yields — reused verbatim from the
 // mutation services' own exported result types (never a parallel DTO), same rule
-// `lib/runtime/snapshot.ts` follows for `ColonyEligibilityResult`/`MarketSlice`. Dev cheats are out
-// of scope (a later task); every other mutation hook in `lib/hooks/` today has an entry here.
+// `lib/runtime/snapshot.ts` follows for `MarketSlice`. Dev cheats are out of scope (a later task);
+// every other mutation hook in `lib/hooks/` today has an entry here.
 
 type OrderBuildData = Extract<OrderBuildResult, { ok: true }>["data"];
 type OrderColonyData = Extract<OrderColonyResult, { ok: true }>["data"];

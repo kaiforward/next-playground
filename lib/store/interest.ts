@@ -16,7 +16,7 @@
  * every panel to thread a registry prop through.
  */
 import { useEffect } from "react";
-import type { InterestSet } from "@/lib/runtime/channel";
+import { EMPTY_INTEREST, type InterestSet } from "@/lib/runtime/channel";
 
 export type InterestKind = "system" | "good";
 
@@ -36,8 +36,6 @@ export interface InterestRegistry {
   resend(): void;
 }
 
-const EMPTY_SET: InterestSet = { systems: [], factions: [], goods: [] };
-
 function sortedKeys(counts: Map<string, number>): string[] {
   return Array.from(counts.keys()).sort();
 }
@@ -56,7 +54,7 @@ export function createInterestRegistry(post: (interest: InterestSet) => void): I
     system: new Map(),
     good: new Map(),
   };
-  let lastPosted: InterestSet = EMPTY_SET;
+  let lastPosted: InterestSet = EMPTY_INTEREST;
 
   function currentSet(): InterestSet {
     return { systems: sortedKeys(counts.system), goods: sortedKeys(counts.good), factions: [] };

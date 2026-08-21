@@ -14,12 +14,5 @@ const NOT_FOUND: SystemConstructionData = { visibility: "hidden" };
  *  `lib/hooks/detail-read.ts`). Telling those apart is the panel root's job (`system-panel.tsx`'s
  *  presence gate), not this hook's. */
 export function useSystemConstruction(systemId: string): SystemConstructionData {
-  return (
-    useDetailEntry(
-      (slices) => slices.systemConstruction?.[systemId],
-      "systemConstruction",
-      systemId,
-      "system",
-    ) ?? NOT_FOUND
-  );
+  return useDetailEntry("systemConstruction", systemId, "system") ?? NOT_FOUND;
 }

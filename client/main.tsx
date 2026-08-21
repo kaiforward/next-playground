@@ -6,6 +6,7 @@ import "./globals.css";
 import { gameStore, useGameSlice } from "@/lib/store/use-game-store";
 import { selectIsReplacing } from "@/lib/store/game-store";
 import { bindInterestRegistry } from "@/lib/store/interest";
+import { resetDetailReadWarnings } from "@/lib/hooks/detail-read";
 import { configureCommandTransport, sendCommand } from "@/lib/runtime/command-client";
 import {
   applyOutboundMessage,
@@ -68,6 +69,12 @@ gameStore.subscribe(() => {
   const isReplacing = selectIsReplacing(gameStore.getSnapshot());
   if (wasReplacing && !isReplacing) {
     interestRegistry.resend();
+    // A replacement's new world can re-mint ids that coincide with the outgoing world's (world-gen
+    // can produce the same system id sequence; every good id is drawn from the one fixed catalog
+    // regardless of world) — clear any warning already latched for a (family, id) pair so a genuine
+    // missing-interest bug in the new world isn't permanently suppressed by the old one's warning
+    // (`lib/hooks/detail-read.ts`).
+    resetDetailReadWarnings();
   }
   wasReplacing = isReplacing;
 });

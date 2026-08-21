@@ -123,6 +123,34 @@ describe("createGameStore — applyStateFrame", () => {
 
     expect(notifications).toBe(0);
   });
+
+  it("drops a frame whose worldVersion regresses below the held one, even at a higher frameSeq (the world-less-frame-after-live-world defensive clause)", () => {
+    const store = createGameStore();
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+
+    // A higher frameSeq alone would otherwise pass the freshness guard — the worldVersion regression
+    // is what this clause exists to catch.
+    store.applyStateFrame({ frameSeq: 2, worldVersion: 0, slices: {} });
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.worldVersion).toBe(5);
+    expect(snapshot.frameSeq).toBe(1);
+    expect(snapshot.slices.visibility).toEqual({ systemIds: ["a"] });
+    expect(notifications).toBe(0);
+  });
+
+  it("still applies a frame at an EQUAL worldVersion to the held one (interest-driven replies must not be caught by the regression guard)", () => {
+    const store = createGameStore();
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+
+    store.applyStateFrame({ frameSeq: 2, worldVersion: 5, slices: { visibility: { systemIds: ["b"] } } });
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.worldVersion).toBe(5);
+    expect(snapshot.slices.visibility).toEqual({ systemIds: ["b"] });
+  });
 });
 
 describe("createGameStore — applyPacingFrame", () => {
@@ -283,6 +311,54 @@ describe("createGameStore — beginWorldReplacement", () => {
     expect(snapshot.worldVersion).toBe(6);
     expect(snapshot.frameSeq).toBe(1);
     expect(snapshot.slices.visibility).toEqual({ systemIds: ["new-world"] });
+    expect(notifications).toBe(1);
+  });
+
+  it("applies the new world's frame when its frameSeq is HIGHER than the outgoing world's — the sequence the single-worker-per-page architecture actually produces (one Worker never resets its counter across a replacement)", () => {
+    const store = createGameStore();
+    store.applyStateFrame({ frameSeq: 10, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+    store.setLiveness("live");
+
+    store.beginWorldReplacement();
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+
+    // The SAME worker keeps climbing its own frameSeq counter across the swap — the new world's
+    // first post-replacement frame carries a frameSeq higher than anything the outgoing world ever
+    // reached, not a reset-to-1 counter.
+    store.applyStateFrame({ frameSeq: 11, worldVersion: 6, slices: { visibility: { systemIds: ["new-world"] } } });
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.worldVersion).toBe(6);
+    expect(snapshot.frameSeq).toBe(11);
+    expect(snapshot.slices.visibility).toEqual({ systemIds: ["new-world"] });
+    expect(notifications).toBe(1);
+  });
+
+  it("a re-entrant beginWorldReplacement call keeps the floor at the highest version any in-flight frame could carry, across both replacements", () => {
+    // Reachable sequence: a failed load's cancelWorldReplacement() immediately followed by a second
+    // newGame/loadGame before any frame has landed. A bare `current.worldVersion ?? 0` floor would
+    // read the FIRST call's reset `0` and collapse the floor, re-admitting a frame stale from before
+    // the first replacement even started.
+    const store = createGameStore();
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+
+    store.beginWorldReplacement(); // floor latched at 5
+    store.beginWorldReplacement(); // re-entrant: worldVersion is already 0 here
+
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+
+    // A stale in-flight frame from BEFORE the first replacement, at a high frameSeq — must still be
+    // dropped by the floor even after the second (re-entrant) call.
+    store.applyStateFrame({ frameSeq: 99, worldVersion: 5, slices: { visibility: { systemIds: ["STALE"] } } });
+    expect(store.getSnapshot().slices).toEqual({});
+    expect(notifications).toBe(0);
+
+    // The new world's own frame (past the floor) still applies normally.
+    store.applyStateFrame({ frameSeq: 1, worldVersion: 6, slices: { visibility: { systemIds: ["new-world"] } } });
+    expect(store.getSnapshot().worldVersion).toBe(6);
+    expect(store.getSnapshot().slices.visibility).toEqual({ systemIds: ["new-world"] });
     expect(notifications).toBe(1);
   });
 

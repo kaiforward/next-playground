@@ -17,13 +17,5 @@ const NOT_FOUND: SystemVitalsData = { visibility: "unknown" };
  * presence gate), not this hook's.
  */
 export function useSystemVitals(systemId: string): SystemVitalsData {
-  return (
-    useDetailEntry(
-      (slices) => slices.systemVitals?.[systemId],
-      "systemVitals",
-      systemId,
-      "system",
-    ) ??
-    NOT_FOUND
-  );
+  return useDetailEntry("systemVitals", systemId, "system") ?? NOT_FOUND;
 }

@@ -14,13 +14,5 @@ const NOT_FOUND: SystemIndustryData = { visibility: "unknown" };
  * apart is the panel root's job (`system-panel.tsx`'s presence gate), not this hook's.
  */
 export function useSystemIndustry(systemId: string): SystemIndustryData {
-  return (
-    useDetailEntry(
-      (slices) => slices.systemIndustry?.[systemId],
-      "systemIndustry",
-      systemId,
-      "system",
-    ) ??
-    NOT_FOUND
-  );
+  return useDetailEntry("systemIndustry", systemId, "system") ?? NOT_FOUND;
 }

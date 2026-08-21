@@ -16,7 +16,7 @@ const EMPTY_ENTRIES: MarketEntry[] = [];
  * `lib/hooks/detail-read.ts`) — telling the two apart is the panel root's job, not this hook's.
  */
 export function useMarket(systemId: string) {
-  const slice = useDetailEntry((slices) => slices.market?.[systemId], "market", systemId, "system");
+  const slice = useDetailEntry("market", systemId, "system");
   return {
     market: slice?.entries ?? EMPTY_ENTRIES,
     stationId: slice?.stationId ?? systemId,

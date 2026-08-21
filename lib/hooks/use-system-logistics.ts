@@ -15,12 +15,5 @@ const NOT_FOUND: SystemLogisticsData = { visibility: "unknown" };
  * presence gate), not this hook's.
  */
 export function useSystemLogistics(systemId: string): SystemLogisticsData {
-  return (
-    useDetailEntry(
-      (slices) => slices.systemLogistics?.[systemId],
-      "systemLogistics",
-      systemId,
-      "system",
-    ) ?? NOT_FOUND
-  );
+  return useDetailEntry("systemLogistics", systemId, "system") ?? NOT_FOUND;
 }

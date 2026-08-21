@@ -78,6 +78,70 @@ describe("createInterestRegistry", () => {
     releaseA();
   });
 
+  it("calling a release function twice is a no-op the second time (review finding 4)", () => {
+    // A broken guard would double-decrement the ref count, starving a still-open second registrant.
+    const { posts, post } = recorder();
+    const registry = createInterestRegistry(post);
+
+    registry.register("system", "sys-a"); // two registrants of the same id
+    const release = registry.register("system", "sys-a");
+    const postsAfterRegister = posts.length;
+
+    release();
+    const postsAfterFirstRelease = posts.length;
+    // First release: two registrants -> one remains, id still held, no net change, no post.
+    expect(postsAfterFirstRelease).toBe(postsAfterRegister);
+
+    release(); // calling it again must not double-decrement past the remaining registrant
+    expect(posts.length).toBe(postsAfterFirstRelease); // still no post — count is unchanged, not gone
+    const last = posts[posts.length - 1];
+    expect(last.systems).toContain("sys-a"); // the id is still held, proving the count wasn't zeroed
+  });
+
+  it("a goods-only session posts exactly the grow/shrink pair, no spurious extras (review finding 5)", () => {
+    // Exercises sameSet's systems comparison with `systems` empty on BOTH sides throughout, including
+    // a re-registration that leaves goods unchanged too — the only shape that reaches
+    // `a.systems.every(...)` with a real vacuous-truth decision to make (a goods-length mismatch
+    // short-circuits sameSet before `systems.every` runs on every other step here). If that `every`
+    // ever flipped to `some`, `[].some(...)` on the empty systems arrays would read as "different"
+    // and this no-op re-registration would wrongly post again.
+    const { posts, post } = recorder();
+    const registry = createInterestRegistry(post);
+
+    const releaseFirst = registry.register("good", "ore");
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toEqual({ systems: [], factions: [], goods: ["ore"] });
+
+    const releaseSecond = registry.register("good", "ore"); // no-op: same good, already held
+    expect(posts).toHaveLength(1); // must NOT post again — goods unchanged, systems still equal-empty
+
+    releaseSecond();
+    expect(posts).toHaveLength(1); // one registrant remains — still no post
+
+    releaseFirst();
+    expect(posts).toHaveLength(2);
+    expect(posts[1]).toEqual({ systems: [], factions: [], goods: [] });
+  });
+
+  it("keeps the posted systems list sorted and stable when one of two concurrent ids is released and re-registered", () => {
+    // Registered out of alphabetical order (sys-b before sys-a) — a posted list that merely reflects
+    // Map insertion order (no explicit sort) would read ["sys-b", "sys-a"] here, not sorted.
+    const { posts, post } = recorder();
+    const registry = createInterestRegistry(post);
+
+    const releaseB = registry.register("system", "sys-b");
+    registry.register("system", "sys-a");
+    expect(posts[posts.length - 1].systems).toEqual(["sys-a", "sys-b"]);
+
+    // Releasing and re-registering sys-b moves it to the END of the Map's insertion order (delete +
+    // re-set) without touching sys-a — the posted list must stay sorted regardless.
+    releaseB();
+    registry.register("system", "sys-b");
+
+    const last = posts[posts.length - 1];
+    expect(last.systems).toEqual(["sys-a", "sys-b"]);
+  });
+
   it("resend() after a simulated replacement posts the currently-held set verbatim", () => {
     // Simulates the worker having forgotten its interest across a world swap (spec: "the shell
     // re-posts interest after the replacement's first frame lands") — the UI-side held set hasn't

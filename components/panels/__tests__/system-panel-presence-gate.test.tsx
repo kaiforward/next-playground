@@ -156,3 +156,58 @@ describe("SystemPanel presence gate — cleared with the full interest bundle (P
     expect(container.textContent).toContain("1 bodies");
   });
 });
+
+describe("SystemPanel presence gate — held too long (review finding 3)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("warns once, ~2s after mount, when the gate is still held for an id that exists in universe", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Explicitly clears systemVitals — an earlier test in this file (module-scoped store singleton,
+    // per store-fixture's own docstring) may have already landed a "sys-a" entry, which would leave
+    // the gate already clear here.
+    seedSlices({ universe: UNIVERSE, systemVitals: {} });
+    window.history.pushState(null, "", "/system/sys-a");
+    renderPanel("sys-a");
+
+    // Not yet — the warning is timer-gated, not immediate. `Async` flushes any microtask-driven
+    // re-render (zustand's `useSyncExternalStore` subscription commits between ticks) alongside the
+    // fake-timer advance, so a re-armed timer from a post-mount re-render is still accounted for.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1999);
+    });
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toContain("sys-a");
+    expect(warnSpy.mock.calls[0][0]).toContain("Sunnyvale");
+
+    warnSpy.mockRestore();
+  });
+
+  it("does not warn once the gate clears before the deadline", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    seedSlices({ universe: UNIVERSE });
+    window.history.pushState(null, "", "/system/sys-a");
+    renderPanel("sys-a");
+
+    act(() => {
+      seedSlices({ systemVitals: { "sys-a": VISIBLE_VITALS } });
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000);
+    });
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+});

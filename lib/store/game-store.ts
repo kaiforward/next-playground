@@ -55,17 +55,18 @@ export interface StoreState {
   autosaveFailure: string | null;
   /**
    * The replacement-epoch floor (spec §8) — `null` outside a world replacement; while set,
-   * `applyStateFrame` drops any frame whose `worldVersion` is at or below it, independently of
-   * `worldVersion` itself. Needed because `worldVersion` does double duty as both the freshness
-   * guard AND the no-world sentinel: `beginWorldReplacement` resets `worldVersion` to `0`, but the
-   * WORLD-STORE's own version counter (`lib/world/store.ts`) is monotonic and never resets, so a
-   * frame from the OUTGOING world — already in flight on the postMessage channel when the swap
-   * command commits, since the tick loop keeps broadcasting right up to that point — still carries
-   * a real `worldVersion > 0` and would otherwise sail past the freshness check (`frame.worldVersion
-   * <= 0` is false for any such frame). `beginWorldReplacement` latches this to the pre-reset
-   * `worldVersion` (the highest version any stale in-flight frame could possibly carry); the first
-   * frame whose `worldVersion` exceeds the floor is by construction the NEW world's frame — the
-   * worker's version counter climbs monotonically across a replacement — and clears it.
+   * `applyStateFrame` drops any frame whose `worldVersion` is at or below it, independently of the
+   * `frameSeq` freshness guard above. This is the SOLE swap-window guard: `beginWorldReplacement`
+   * resets `frameSeq` to `null` (so the freshness guard alone would let ANY incoming `frameSeq`
+   * through, including a stale one), which is exactly why the floor exists on `worldVersion`
+   * instead. The WORLD-STORE's own version counter (`lib/world/store.ts`) is monotonic and never
+   * resets, so a frame from the OUTGOING world — already in flight on the postMessage channel when
+   * the swap command commits, since the tick loop keeps broadcasting right up to that point — still
+   * carries a real `worldVersion > 0` after the reset. `beginWorldReplacement` latches this field to
+   * the pre-reset `worldVersion` (the highest version any stale in-flight frame could possibly
+   * carry); the first frame whose `worldVersion` exceeds the floor is by construction the NEW
+   * world's frame — the worker's version counter climbs monotonically across a replacement — and
+   * clears it.
    */
   replacementFloor: number | null;
 }
@@ -97,10 +98,18 @@ export interface GameStore {
    * A frame at or below the `replacementFloor` (see that field's own docstring) is ALSO dropped —
    * a stale in-flight frame from the world a replacement is discarding, not merely an out-of-order
    * one — so a swap window never transiently re-merges the outgoing world's slices or resurrects
-   * its liveness before the new world's own frame lands. This check stays on `worldVersion`
-   * (unchanged): the floor is latched from the outgoing world's `worldVersion`, and a fresh
-   * worker's `frameSeq` restarts at 1 across a replacement, so `worldVersion` is what actually
-   * distinguishes the outgoing world's frames from the new one's here, not `frameSeq`.
+   * its liveness before the new world's own frame lands. This check stays on `worldVersion`, and
+   * has to: `beginWorldReplacement` resets the held `frameSeq` to `null`, so the freshness guard
+   * above would let ANY frameSeq through during the swap window — including a high, stale one from
+   * the outgoing world's still-climbing counter — which is exactly why `replacementFloor` is the
+   * sole real guard here, not a backstop to `frameSeq`.
+   *
+   * A frame whose `worldVersion` is strictly LOWER than the currently held one is ALSO dropped —
+   * independent of `replacementFloor` and `frameSeq` — guarding against a world-less `worldVersion:
+   * 0` frame arriving after a live world's frame has already been applied (a race the floor alone
+   * doesn't cover once it's cleared). An EQUAL `worldVersion` still passes: interest-driven replies
+   * (a panel opening while paused) legitimately share the held world's version and must not be
+   * dropped by this check.
    */
   applyStateFrame(frame: StateFrame): void;
   /**
@@ -175,6 +184,10 @@ export function createGameStore(): GameStore {
     const current = api.getState();
     if (current.frameSeq !== null && frame.frameSeq <= current.frameSeq) return;
     if (current.replacementFloor !== null && frame.worldVersion <= current.replacementFloor) return;
+    // A world-less (or otherwise stale) frame arriving strictly BEHIND the currently held world
+    // version must never be adopted — equal stays allowed (interest-driven replies at the same
+    // worldVersion, see the docstring above), only a real regression is dropped.
+    if (current.worldVersion !== null && frame.worldVersion < current.worldVersion) return;
 
     const mergedSlices = replaceEqualDeep(current.slices, { ...current.slices, ...frame.slices });
     api.setState({
@@ -212,10 +225,15 @@ export function createGameStore(): GameStore {
     api.setState({
       slices: {},
       worldVersion: 0,
-      // A fresh worker (post-swap) restarts its send counter at 1, so the held `frameSeq` must
-      // reset to `null` too — otherwise the new world's first frame (seq 1) would read as "at or
-      // behind" whatever seq the outgoing world had reached and be dropped by the freshness guard
-      // above, on top of the (unchanged) `replacementFloor` check on `worldVersion`.
+      // Reset alongside worldVersion — belt-and-braces, not the swap window's real guard (the
+      // `replacementFloor` check on `worldVersion`, above, is what actually does that job; see its
+      // own docstring). One `Worker` runs for the whole page lifetime today, so its `frameSeq`
+      // counter never actually resets across a replacement — the SAME worker keeps climbing it, and
+      // the new world's first post-swap frame carries whatever seq the counter had already reached,
+      // not `1`. This reset is what makes a hypothetical future FRESH worker (a full page reload
+      // mid-replacement, or a worker respawn) safe too: if one ever restarts its counter at `1`,
+      // a stale held `frameSeq` from the outgoing worker would otherwise read that `1` as "at or
+      // behind" and drop it.
       frameSeq: null,
       pacing: null,
       liveness: "no-world",
@@ -238,7 +256,16 @@ export function createGameStore(): GameStore {
       // `worldVersion: 0 <= 0` still fails the floor check, and `0` still latches
       // `replacementFloor !== null` so `isReplacing` stays true until the loaded world's own frame
       // (version >= 1) clears it.
-      replacementFloor: current.worldVersion ?? 0,
+      //
+      // `Math.max(current.replacementFloor ?? 0, current.worldVersion ?? 0)`, not bare
+      // `current.worldVersion ?? 0`: a RE-ENTRANT call (a failed load's `cancelWorldReplacement()`
+      // immediately followed by a second `newGame`/`loadGame` before any frame has landed) would
+      // otherwise read `current.worldVersion` as the reset `0` this same function set on the FIRST
+      // call, collapsing the floor back to `0` — re-admitting an outgoing-world frame still in
+      // flight from BEFORE the first replacement even started, ending the second replacement early.
+      // Taking the max with any already-latched floor preserves the highest version any stale
+      // in-flight frame could still carry, across any number of re-entrant calls.
+      replacementFloor: Math.max(current.replacementFloor ?? 0, current.worldVersion ?? 0),
     });
   }
 
