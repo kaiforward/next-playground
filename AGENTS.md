@@ -87,7 +87,7 @@ Detail: `docs/active/engineering/{single-player-runtime,processor-architecture}.
 Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` mirrors these — adding a rule here means adding its review slug there.)
 
 **In-memory world & saves**
-- The world is **process state** — a dev-server restart loses unsaved progress; HMR survives (`globalThis` singleton). `TickLoop` autosaves every 60 s and on pause. If boot behaviour looks stale, `rm -rf .next`.
+- The world is **process state** — a dev-server restart loses unsaved progress; HMR survives (`globalThis` singleton). `TickLoop` autosaves every 60 s and on pause. If boot behaviour looks stale, clear Vite's cache: `rm -rf node_modules/.vite`.
 - `World` must stay **JSON-serialisable**: no `Map`/`Set`/`Date`/class instances, no `Infinity`/`NaN` — `JSON.stringify` turns those into `null` and silently corrupts the save.
 - `save-files.ts` is the only `fs` importer in `lib/` — reach it (and any Node-edge code) via **dynamic** `import()`. Static `fs`/`process.env` imports in `lib/engine|services|world` break worker portability.
 - A failing tick hard-pauses the loop; the store only accepts a fully-successful tick.
