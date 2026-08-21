@@ -1,13 +1,12 @@
 # Stellar Trader
 
-A browser-based multiplayer space trading game built with Next.js. Navigate star systems, trade goods between stations, and grow your wealth in a living economy.
+A single-player grand-strategy game in a procedurally generated galaxy — colonise, develop worlds under physical constraints, and steer a living simulated economy. The whole simulation runs in-browser inside a Web Worker: no server, no login, no database. Saves are JSON snapshots stored in IndexedDB.
 
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v18+
 - npm (included with Node.js)
 - Git
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) — runs the PostgreSQL container
 
 ## Getting Started
 
@@ -15,47 +14,23 @@ A browser-based multiplayer space trading game built with Next.js. Navigate star
 # Install dependencies
 npm install
 
-# Start PostgreSQL (Docker Desktop must be running)
-docker compose up -d
-
-# Set up the database
-npx prisma db push
-npx prisma db seed
-
 # Start the dev server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — register an account to start playing.
-
-If you see `ECONNREFUSED` from Prisma, the Postgres container isn't running. Start Docker Desktop, then `docker compose up -d`.
+Open the dev server URL, then **New game** to generate a galaxy.
 
 ## Scripts
 
 | Command | Description |
 |---|---|
-| `docker compose up -d` | Start the PostgreSQL container |
-| `docker compose down` | Stop the PostgreSQL container |
-| `npm run dev` | Start dev server (Turbopack) |
-| `npm run build` | Production build |
+| `npm run dev` | Start the dev server (Vite) |
+| `npm run build` | Build gate: `tsc && vite build` |
 | `npx vitest run` | Run unit tests |
-| `npx prisma db seed` | Seed the database |
-| `npx prisma db push` | Push schema changes to PostgreSQL |
-| `npx prisma studio` | Browse database in browser |
-
-## Environment Variables
-
-Copy `.env` or create one with:
-
-```
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/stellar_trader"
-AUTH_SECRET="dev-secret-change-in-production"
-AUTH_URL="http://localhost:3000"
-UNIVERSE_SCALE="default"   # "default" (600 systems) or "10k" (10,000 systems)
-```
+| `npm run simulate` | Headless run of the real tick loop, for economy evidence |
 
 ## Tech Stack
 
-Next.js 16, TypeScript, Tailwind CSS v4, PostgreSQL (Prisma 7), NextAuth v5, React Flow, Recharts.
+Vite + React 19, TypeScript (strict), Tailwind CSS v4, Zustand, wouter, React Flow, Recharts, Vitest.
 
-See `docs/` for detailed architecture documentation.
+See `docs/SPEC.md` for the functional spec and `docs/active/` for shipped-system documentation.

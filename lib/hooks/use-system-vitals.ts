@@ -1,20 +1,21 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { useDetailEntry } from "@/lib/hooks/detail-read";
 import type { SystemVitalsData } from "@/lib/types/api";
+
+/** See `use-system-substrate.ts`'s NOT_FOUND docstring — same reasoning, this type's own arm. */
+const NOT_FOUND: SystemVitalsData = { visibility: "unknown" };
 
 /**
  * Dynamic vitals snapshot (stability, development-vs-own-potential, population composition, the
- * Provisioned/band/memory read) for one system's overview vital tiles. Changes every
- * economy tick — so, unlike the static substrate read, it uses the default staleTime and is
- * tick-invalidated (see useTickInvalidation). Visibility-gated server-side.
+ * Provisioned/band/memory read) for one system's overview vital tiles — read from the store's
+ * `systemVitals` slice, which updates every economy tick (the store's structural-sharing merge
+ * keeps this hook's result referentially stable when a tick leaves it unchanged). Visibility-gated
+ * in the slice itself; an absent id renders the same `visibility: "unknown"` state — for either of
+ * two reasons: the id doesn't exist, or it exists but isn't in the current interest set yet (see
+ * `lib/hooks/detail-read.ts`). Telling those apart is the panel root's job (`system-panel.tsx`'s
+ * presence gate), not this hook's.
  */
 export function useSystemVitals(systemId: string): SystemVitalsData {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.systemVitals(systemId),
-    queryFn: () => apiFetch<SystemVitalsData>(`/api/game/systems/${systemId}/vitals`),
-  });
-  return data;
+  return useDetailEntry("systemVitals", systemId, "system") ?? NOT_FOUND;
 }

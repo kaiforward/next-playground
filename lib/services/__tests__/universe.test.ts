@@ -88,12 +88,12 @@ describe("getSystemDetail", () => {
     });
   });
 
-  it("throws ServiceError(404) for an unknown system", () => {
+  it('throws ServiceError("not_found") for an unknown system', () => {
     expect(() => getSystemDetail("does-not-exist")).toThrow(ServiceError);
     try {
       getSystemDetail("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 });
@@ -133,12 +133,12 @@ describe("getSystemSubstrate", () => {
     expect(bodyView.quality).toEqual(expectedQuality);
   });
 
-  it("throws ServiceError(404) for an unknown system", () => {
+  it('throws ServiceError("not_found") for an unknown system', () => {
     expect(() => getSystemSubstrate("does-not-exist")).toThrow(ServiceError);
     try {
       getSystemSubstrate("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 });

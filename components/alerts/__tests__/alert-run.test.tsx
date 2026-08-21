@@ -55,8 +55,8 @@ vi.mock("@/lib/hooks/use-player-settings", () => ({
 // above this point ever click a chip, so these mocks change nothing for them — they exist for the
 // "only one flyout open" describe block below.
 const push = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace: vi.fn() }),
+vi.mock("@/components/ui/link-provider", () => ({
+  useNavigate: () => push,
 }));
 
 // One real system, because `useSystemFocus()` resolves a row's systemId against the atlas's own

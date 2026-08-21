@@ -60,16 +60,14 @@ vi.mock("@/lib/hooks/use-development", () => ({ useDevelopment: () => new Map() 
 vi.mock("@/lib/hooks/use-migration", () => ({ useMigration: () => new Map() }));
 vi.mock("@/lib/hooks/use-provision", () => ({ useProvision: () => new Map() }));
 
-// A mutable stand-in for the router/URL state — `usePathname`/`useSearchParams` read it fresh on
-// every call, so mutating it between renders and calling `rerender` is what simulates a client-side
-// navigation (mirrors alert-run.test.tsx's own `transport` convention for a controllable hook read).
+// A mutable stand-in for the route/URL state — `useRouteInfo()` reads it fresh on every call, so
+// mutating it between renders and calling `rerender` is what simulates a client-side navigation
+// (mirrors alert-run.test.tsx's own `transport` convention for a controllable hook read).
 const nav = { pathname: "/", search: new URLSearchParams() };
 const push = vi.fn();
-const replace = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace }),
-  usePathname: () => nav.pathname,
-  useSearchParams: () => nav.search,
+vi.mock("@/components/ui/link-provider", () => ({
+  useNavigate: () => push,
+  useRouteInfo: () => ({ pathname: nav.pathname, searchParams: nav.search }),
 }));
 
 const GOV: GovernmentType = "frontier";

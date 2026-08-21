@@ -26,8 +26,9 @@ import {
   type SupplyState,
 } from "@/lib/engine/population";
 import { cycleStartShard, isCycleStart, catchUpFactor } from "@/lib/tick/shard";
+import { resolveHostConfig } from "@/lib/constants/economy-scale";
 
-const DEBUG = process.env.DEBUG_ECONOMY === "1";
+const DEBUG = resolveHostConfig().debugEconomy;
 
 /**
  * The broadcast this processor emits on a tick where it resolves nothing.

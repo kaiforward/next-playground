@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "@/components/ui/link-provider";
 import { useAtlas } from "@/lib/hooks/use-atlas";
 import type { SystemTabSegment } from "@/lib/constants/system-tabs";
 
@@ -39,7 +39,7 @@ let locSeq = 0;
  */
 export function useSystemFocus() {
   const { atlas } = useAtlas();
-  const router = useRouter();
+  const navigate = useNavigate();
 
   const coordsById = useMemo(
     () => new Map(atlas.systems.map((s) => [s.id, { x: s.x, y: s.y }] as const)),
@@ -51,6 +51,6 @@ export function useSystemFocus() {
     if (!coords) return; // stale id (shouldn't happen — the service filters abandoned pins/instances)
     locSeq += 1;
     const path = segment ? `/system/${systemId}/${segment}` : `/system/${systemId}`;
-    router.push(`${path}?focus=${coords.x},${coords.y}&loc=${locSeq}`);
+    navigate(`${path}?focus=${coords.x},${coords.y}&loc=${locSeq}`);
   };
 }

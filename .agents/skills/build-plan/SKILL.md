@@ -114,7 +114,7 @@ After the tasks, these sections — the first three always, the fourth whenever 
 `New:`:
 
 **Verification** — how the finished feature is proven in the galaxy, not in fixtures: which sim
-metric moves, read at **both horizons**, cohorted; the build gate (`npx next build --webpack`); and
+metric moves, read at **both horizons**, cohorted; the build gate (`npm run build` — `tsc && vite build`); and
 any new harness metric needed because the symptom would otherwise hide inside an aggregate.
 
 **Doc fold** — which active docs this feature makes stale, which planned docs it supersedes, and the

@@ -1,15 +1,11 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
-import type { ActiveEvent } from "@/lib/types/game";
+import { useGameSlice } from "@/lib/store/use-game-store";
+import { EMPTY_EVENTS } from "./empty-slices";
 
+/** The tick's active events — read from the store's `events` slice, falling back to an empty list
+ *  before the first frame lands (see `empty-slices.ts`'s judgment-call docstring). */
 export function useEvents() {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.events,
-    queryFn: () => apiFetch<ActiveEvent[]>("/api/game/events"),
-  });
-
-  return { events: data };
+  const events = useGameSlice((state) => state.slices.events ?? EMPTY_EVENTS);
+  return { events };
 }

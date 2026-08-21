@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useNavigate, useRouteInfo } from "@/components/ui/link-provider";
 
 import type { AtlasData, UniverseData, StarSystemInfo } from "@/lib/types/game";
 import { MapRightRail } from "@/components/map/map-right-rail";
@@ -205,9 +205,8 @@ export function StarMap({
   );
 
   // ── Selection = the open /system/[id] panel route (single source of truth) ──
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
+  const navigate = useNavigate();
+  const { pathname, searchParams } = useRouteInfo();
   const selectedSystemId = useMemo(() => {
     const match = /^\/system\/([^/]+)/.exec(pathname);
     return match ? decodeURIComponent(match[1]) : null;
@@ -251,22 +250,22 @@ export function StarMap({
       const isDeveloped = ownership.get(systemId)?.developed ?? true;
       const segment = resolveCarriedSegment(pathname, isDeveloped);
       const path = segment ? `/system/${systemId}/${segment}` : `/system/${systemId}`;
-      router.push(path);
+      navigate(path);
     },
-    [router, pathname, ownership],
+    [navigate, pathname, ownership],
   );
 
   const onEmptyClick = useCallback(() => {
-    router.push("/");
-  }, [router]);
+    navigate("/");
+  }, [navigate]);
 
   // Zoomed-out click on a faction's territory — opens the faction panel, which re-normalises the
   // value scope to it (see selectedFactionId above / ValueChoroplethLayer.setScope).
   const onSelectFaction = useCallback(
     (factionId: string) => {
-      router.push(`/factions/${factionId}`);
+      navigate(`/factions/${factionId}`);
     },
-    [router],
+    [navigate],
   );
 
   // ── Camera focus target (generic: centre the map on any location) ──────

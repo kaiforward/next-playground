@@ -40,12 +40,12 @@ const settlementFixture: WorldTreasurySettlement = {
 };
 
 describe("getFactionTreasury", () => {
-  it("throws ServiceError(404) for an unknown factionId", () => {
+  it('throws ServiceError("not_found") for an unknown factionId', () => {
     expect(() => getFactionTreasury("does-not-exist")).toThrow(ServiceError);
     try {
       getFactionTreasury("does-not-exist");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 

@@ -1,10 +1,11 @@
 "use client";
 
-import Link from "next/link";
+import { ErrorBoundary } from "react-error-boundary";
 import { Save, DoorOpen, Coins, Hexagon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useLinkComponent } from "@/components/ui/link-provider";
 import { useDialog } from "@/components/ui/dialog";
-import { QueryBoundary } from "@/components/ui/query-boundary";
+import { renderNothingFallback } from "@/components/ui/error-fallback";
 import { SaveGameDialog } from "@/components/save-game-dialog";
 import { SpeedControls } from "@/components/speed-controls";
 import { useTickContext } from "@/lib/hooks/use-tick-context";
@@ -27,6 +28,7 @@ import { formatDate, formatTimeOfDay } from "@/lib/utils/calendar";
  * own. Renders nothing when the world has no player seat.
  */
 export function PlayerFactionSummary() {
+  const LinkComponent = useLinkComponent();
   const { atlas } = useAtlas();
   const factionId = atlas.player?.controlledFactionId;
   const faction = atlas.factions.find((f) => f.id === factionId);
@@ -34,7 +36,7 @@ export function PlayerFactionSummary() {
 
   return (
     <>
-      <Link
+      <LinkComponent
         href={`/factions/${faction.id}`}
         aria-label={`${faction.name} — open faction panel`}
         title={faction.name}
@@ -120,9 +122,9 @@ export function TopBar() {
 
       {/* Left: player faction flag + stats. The boundary degrades this cluster
           alone — a treasury fetch failure must not take the save/exit verbs with it. */}
-      <QueryBoundary loadingFallback={null} errorFallback={() => null}>
+      <ErrorBoundary fallbackRender={renderNothingFallback}>
         <PlayerFactionSummary />
-      </QueryBoundary>
+      </ErrorBoundary>
 
       <div className="flex-1" />
 

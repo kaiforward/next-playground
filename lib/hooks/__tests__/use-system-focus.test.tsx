@@ -11,8 +11,8 @@ import type { AtlasData } from "@/lib/types/game";
 // consumers rather than one.
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, replace: vi.fn() }),
+vi.mock("@/components/ui/link-provider", () => ({
+  useNavigate: () => push,
 }));
 
 const ATLAS: AtlasData = {

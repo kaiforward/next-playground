@@ -150,7 +150,7 @@ export function getFactionDetail(factionId: string): FactionDetail {
   const world = getWorld();
   const faction = world.factions.find((f) => f.id === factionId);
   if (!faction) {
-    throw new ServiceError(`Faction ${factionId} not found.`, 404);
+    throw new ServiceError(`Faction ${factionId} not found.`, "not_found");
   }
 
   const counts = territoryCounts(world);

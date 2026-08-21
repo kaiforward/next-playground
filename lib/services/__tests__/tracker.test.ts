@@ -5,7 +5,6 @@ import { setWorld, getWorld, clearWorld } from "@/lib/world/store";
 import { getTrackerData } from "@/lib/services/tracker";
 import { seatWorld } from "./seat-world";
 import { getSystemVitals } from "@/lib/services/system-vitals";
-import { GET } from "@/app/api/game/player/tracker/route";
 import type { World } from "@/lib/world/types";
 
 afterEach(() => {
@@ -454,13 +453,5 @@ describe("getTrackerData", () => {
     // more cycle than the exact-arithmetic count to clear the remainder.
     expect(data.building[0].etaCycles).toBe(51);
     expect(data.colonising[0].etaCycles).toBe(151);
-  });
-});
-
-describe("GET /api/game/player/tracker", () => {
-  it("carries no Cache-Control beyond private, no-cache, so a New game cannot serve stale system ids", async () => {
-    setWorld(seatWorld());
-    const res = await GET();
-    expect(res.headers.get("Cache-Control")).toBe("private, no-cache");
   });
 });

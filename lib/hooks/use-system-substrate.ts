@@ -1,23 +1,23 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { useDetailEntry } from "@/lib/hooks/detail-read";
 import type { SystemSubstrateData } from "@/lib/types/api";
 
+/** `systemSubstrate` is now interest-keyed (frame-architecture spec): a frame carries an entry only
+ *  for a system in the current interest set, not every system in the world. `NOT_FOUND` therefore
+ *  fires for either of two reasons: a systemId absent from the world entirely (a stale panel URL),
+ *  or a real systemId that simply isn't subscribed yet (see `lib/hooks/detail-read.ts`). Reuses the
+ *  type's own fog-of-war fallback arm rather than adding a new discriminant — `visibility:
+ *  "unknown"` already means "nothing to show for this id" to every existing reader; telling the two
+ *  reasons apart is the panel root's job (`system-panel.tsx`'s presence gate), not this hook's. */
+const NOT_FOUND: SystemSubstrateData = { visibility: "unknown" };
+
 /**
- * Physical substrate (sun class, population, bodies) for
- * one system. Static — only changes on reseed — so staleTime is Infinity and
- * it is not tick-invalidated. Visibility-gated server-side: unsurveyed systems
- * return `{ visibility: "unknown" }` so the panel renders a locked state.
+ * Physical substrate (sun class, population, bodies) for one system — read from the store's
+ * `systemSubstrate` slice. Visibility-gated: unsurveyed systems carry `{ visibility: "unknown" }`
+ * in the slice itself, and an id absent from the slice renders the same state (see `NOT_FOUND`'s
+ * docstring for the two reasons that can mean).
  */
 export function useSystemSubstrate(systemId: string): SystemSubstrateData {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.systemSubstrate(systemId),
-    queryFn: () =>
-      apiFetch<SystemSubstrateData>(`/api/game/systems/${systemId}/substrate`),
-    staleTime: Infinity,
-    gcTime: Infinity,
-  });
-  return data;
+  return useDetailEntry("systemSubstrate", systemId, "system") ?? NOT_FOUND;
 }

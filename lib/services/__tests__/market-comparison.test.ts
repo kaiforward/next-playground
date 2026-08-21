@@ -45,12 +45,12 @@ describe("getMarketComparison", () => {
     expect(entry.stock).toBe(23);
   });
 
-  it("throws ServiceError(404) for an unknown good key", () => {
+  it('throws ServiceError("not_found") for an unknown good key', () => {
     expect(() => getMarketComparison("nonexistent")).toThrow(ServiceError);
     try {
       getMarketComparison("nonexistent");
     } catch (error) {
-      expect(error).toMatchObject({ status: 404 });
+      expect(error).toMatchObject({ kind: "not_found" });
     }
   });
 });

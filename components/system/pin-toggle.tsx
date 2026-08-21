@@ -1,8 +1,9 @@
 "use client";
 
+import { ErrorBoundary } from "react-error-boundary";
 import { Button } from "@/components/ui/button";
 import { StarIcon } from "@/components/ui/icons";
-import { QueryBoundary } from "@/components/ui/query-boundary";
+import { renderNothingFallback } from "@/components/ui/error-fallback";
 import { useAtlas } from "@/lib/hooks/use-atlas";
 import { useTracker } from "@/lib/hooks/use-tracker";
 import { useSetSystemPin } from "@/lib/hooks/use-player-pins";
@@ -16,17 +17,17 @@ import { useSetSystemPin } from "@/lib/hooks/use-player-pins";
  * A star, not the map-pin glyph "Show on Map" already uses in this same header — two pin glyphs
  * side by side would read as "find it" and "watch it" ambiguously (spec: "Pinning").
  *
- * Wrapped in its own `QueryBoundary` rather than reading `useTracker`/`useAtlas` inline in the
- * header: both are `useSuspenseQuery`s that refetch on every system change, and suspending here
- * must never blank the header's OTHER actions (the cadence countdown, "Show on Map") — only this
- * control's own slot goes quiet while its data loads. `loadingFallback={null}` keeps that slot
- * empty rather than substituting a spinner into a compact header row.
+ * Wrapped in its own `ErrorBoundary` rather than reading `useTracker`/`useAtlas` inline in the
+ * header: a read failure here must never blank the header's OTHER actions (the cadence countdown,
+ * "Show on Map") — only this control's own slot goes quiet, matching the old query-cache
+ * boundary's silent-loading contract for this slot (now moot — both hooks are synchronous store
+ * reads, Task 7 — but the silent-degrade-on-error behaviour still holds).
  */
 export function PinToggle({ systemId }: { systemId: string }) {
   return (
-    <QueryBoundary loadingFallback={null}>
+    <ErrorBoundary fallbackRender={renderNothingFallback}>
       <PinToggleContent systemId={systemId} />
-    </QueryBoundary>
+    </ErrorBoundary>
   );
 }
 
@@ -37,8 +38,8 @@ function PinToggleContent({ systemId }: { systemId: string }) {
 
   // No player seat (e.g. the calibration harness has none): there is no Tracker list to join, and
   // `setSystemPin` rejects the write past the service boundary. Absent rather than rendered and
-  // erroring on activation. `atlas.player` is the established client-side signal for this (already
-  // read the same way in app/(game)/page.tsx) — `useTracker()`'s own empty sections read identically
+  // erroring on activation. `atlas.player` is the established client-side signal for this (the same
+  // one `client/main.tsx`'s `MapRoot` reads) — `useTracker()`'s own empty sections read identically
   // whether the player has no seat or simply has nothing pinned yet, so it can't answer this alone.
   if (!atlas.player) return null;
 

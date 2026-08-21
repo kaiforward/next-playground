@@ -1,6 +1,8 @@
-import Link from "next/link";
+"use client";
+
 import { tv, type VariantProps } from "tailwind-variants";
 import { Badge } from "@/components/ui/badge";
+import { useLinkComponent } from "@/components/ui/link-provider";
 import { FactionStatusBadge } from "./faction-status-badge";
 import type { FactionSummary } from "@/lib/services/factions";
 
@@ -26,7 +28,7 @@ type CardVariants = VariantProps<typeof cardVariants>;
 
 interface FactionCardProps extends CardVariants {
   faction: FactionSummary;
-  /** When set, the card renders as a Next.js Link to this href. */
+  /** When set, the card renders as a Link to this href. */
   href?: string;
   /** Override description display. By default, `md` shows it and `sm` hides it. */
   showDescription?: boolean;
@@ -40,6 +42,7 @@ export function FactionCard({
   showDescription,
   className,
 }: FactionCardProps) {
+  const LinkComponent = useLinkComponent();
   const interactive = !!href;
   const renderDescription =
     showDescription ?? (size === "md");
@@ -90,9 +93,9 @@ export function FactionCard({
 
   if (href) {
     return (
-      <Link href={href} className={className_} style={style}>
+      <LinkComponent href={href} className={className_} style={style}>
         {body}
-      </Link>
+      </LinkComponent>
     );
   }
   return (

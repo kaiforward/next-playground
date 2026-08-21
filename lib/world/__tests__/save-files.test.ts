@@ -3,14 +3,10 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { generateWorld } from "../gen";
-import {
-  writeSave,
-  readSave,
-  listSaves,
-  setSavesDirForTesting,
-} from "../save-files";
+import { serialiseWorld } from "../save";
+import { nodeSaveBackend, setSavesDirForTesting } from "../save-files";
 
-describe("save-files", () => {
+describe("save-files (nodeSaveBackend)", () => {
   const world = generateWorld({ systemCount: 60, seed: 7 });
   let tempDir: string;
 
@@ -23,31 +19,31 @@ describe("save-files", () => {
     await rm(tempDir, { recursive: true, force: true });
   });
 
-  describe("name sanitisation (via the public writeSave/listSaves API)", () => {
+  describe("name sanitisation (via the public write/list API)", () => {
     it("strips path-traversal sequences so a save can never escape saves/", async () => {
-      await writeSave("../../etc/passwd", world);
-      const names = (await listSaves()).map((s) => s.name);
+      await nodeSaveBackend.write("../../etc/passwd", serialiseWorld(world));
+      const names = (await nodeSaveBackend.list()).map((s) => s.name);
       expect(names).toContain("etcpasswd");
       expect(names.every((n) => !n.includes("/") && !n.includes("\\") && !n.includes(".."))).toBe(true);
     });
 
     it("lowercases and strips spaces/uppercase/garbage characters", async () => {
-      await writeSave("My Save! #1", world);
-      const names = (await listSaves()).map((s) => s.name);
+      await nodeSaveBackend.write("My Save! #1", serialiseWorld(world));
+      const names = (await nodeSaveBackend.list()).map((s) => s.name);
       expect(names).toContain("mysave1");
     });
   });
 
   it("round-trips a save through write -> list -> read", async () => {
-    await writeSave("roundtrip", world);
+    await nodeSaveBackend.write("roundtrip", serialiseWorld(world));
 
-    const saves = await listSaves();
+    const saves = await nodeSaveBackend.list();
     const info = saves.find((s) => s.name === "roundtrip")!;
     expect(info).toBeDefined();
     expect(info.tick).toBe(world.meta.currentTick);
     expect(info.bytes).toBeGreaterThan(0);
 
-    const raw = await readSave("roundtrip");
+    const raw = await nodeSaveBackend.read("roundtrip");
     const parsed = JSON.parse(raw);
     expect(parsed.world.meta.seed).toBe(world.meta.seed);
     expect(parsed.world.meta.currentTick).toBe(world.meta.currentTick);
@@ -56,10 +52,20 @@ describe("save-files", () => {
   it("skips a malformed save file without throwing", async () => {
     await writeFile(path.join(tempDir, "corrupt.json"), "{ not valid json", "utf-8");
 
-    await expect(listSaves()).resolves.not.toThrow();
-    const saves = await listSaves();
+    await expect(nodeSaveBackend.list()).resolves.not.toThrow();
+    const saves = await nodeSaveBackend.list();
     expect(saves.some((s) => s.name === "corrupt")).toBe(false);
     // The valid saves written by earlier tests still list fine alongside it.
     expect(saves.some((s) => s.name === "roundtrip")).toBe(true);
+  });
+
+  it("remove() deletes a save so it no longer lists or reads", async () => {
+    await nodeSaveBackend.write("disposable", serialiseWorld(world));
+    expect((await nodeSaveBackend.list()).some((s) => s.name === "disposable")).toBe(true);
+
+    await nodeSaveBackend.remove("disposable");
+
+    expect((await nodeSaveBackend.list()).some((s) => s.name === "disposable")).toBe(false);
+    await expect(nodeSaveBackend.read("disposable")).rejects.toThrow();
   });
 });

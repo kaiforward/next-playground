@@ -7,17 +7,28 @@ import { NumberInput } from "@/components/form/number-input";
 import { TextInput } from "@/components/form/text-input";
 import { SelectInput } from "@/components/form/select-input";
 import { FormError } from "@/components/form/form-error";
-import { apiMutate } from "@/lib/query/fetcher";
+import { useNewGameMutation } from "@/lib/hooks/use-game-lifecycle";
+import { useNavigate } from "@/components/ui/link-provider";
+import { mapHref } from "@/lib/utils/route-hrefs";
 import { newGameSchema, type NewGameInput } from "@/lib/schemas/game-setup";
 import { GOVERNMENT_TYPES } from "@/lib/constants/government";
 import { DOCTRINES } from "@/lib/constants/doctrines";
 import { ALL_GOVERNMENT_TYPES, ALL_DOCTRINES } from "@/lib/types/guards";
-import type { WorldMeta } from "@/lib/world/types";
 
 const GOV_OPTIONS = ALL_GOVERNMENT_TYPES.map((g) => ({ value: g, label: GOVERNMENT_TYPES[g].name }));
 const DOC_OPTIONS = ALL_DOCTRINES.map((d) => ({ value: d, label: DOCTRINES[d].name }));
 
-export function CreateFactionForm() {
+interface CreateFactionFormProps {
+  /** Called after a successful `newGame` command, before navigating to the map root — the start
+   *  screen's dialog (`components/start/start-screen.tsx`) closes itself here. Optional. */
+  onSuccess?: () => void;
+}
+
+/** Author the faction that generates a fresh galaxy (`newGame` command, world-less-valid,
+ *  client-runtime spec §9) and land on the map root on success. */
+export function CreateFactionForm({ onSuccess }: CreateFactionFormProps) {
+  const navigate = useNavigate();
+  const newGame = useNewGameMutation();
   const {
     register,
     control,
@@ -36,16 +47,17 @@ export function CreateFactionForm() {
 
   const onSubmit = handleSubmit(async (values) => {
     try {
-      await apiMutate<WorldMeta>("/api/game/new", values);
-      // Hard navigation on purpose — fresh document, fresh TanStack cache
-      // against the newly generated world (the map auto-focuses the homeworld).
-      window.location.href = "/";
+      await newGame.mutateAsync(values);
+      onSuccess?.();
+      navigate(mapHref());
     } catch (error) {
       setError("root", {
         message: error instanceof Error ? error.message : "Failed to create game",
       });
     }
   });
+
+  const pending = isSubmitting || newGame.isPending;
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
@@ -103,8 +115,8 @@ export function CreateFactionForm() {
         })}
       />
       <FormError message={errors.root?.message} />
-      <Button type="submit" fullWidth disabled={isSubmitting}>
-        {isSubmitting ? "Generating…" : "Launch New Galaxy"}
+      <Button type="submit" fullWidth disabled={pending}>
+        {pending ? "Generating…" : "Launch New Galaxy"}
       </Button>
     </form>
   );

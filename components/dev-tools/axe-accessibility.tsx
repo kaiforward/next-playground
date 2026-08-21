@@ -1,10 +1,11 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { isDevBuild } from "@/lib/utils/dev-flag";
 
 export function AxeAccessibility() {
   useEffect(() => {
-    if (process.env.NODE_ENV === "development") {
+    if (isDevBuild()) {
       Promise.all([
         import("@axe-core/react"),
         import("react-dom"),

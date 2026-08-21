@@ -46,14 +46,14 @@ describe("world store", () => {
     expect(hasWorld()).toBe(false);
   });
 
-  it("throws a 409 ServiceError from getWorld() when no world is loaded", () => {
+  it('throws a "no_world" ServiceError from getWorld() when no world is loaded', () => {
     expect(() => getWorld()).toThrow(ServiceError);
     try {
       getWorld();
       expect.fail("expected getWorld() to throw");
     } catch (err) {
       expect(err).toBeInstanceOf(ServiceError);
-      expect(err).toMatchObject({ status: 409 });
+      expect(err).toMatchObject({ kind: "no_world" });
     }
   });
 

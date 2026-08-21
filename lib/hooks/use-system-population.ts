@@ -1,21 +1,20 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { useDetailEntry } from "@/lib/hooks/detail-read";
 import type { SystemPopulationData } from "@/lib/types/api";
+
+/** See `use-system-substrate.ts`'s NOT_FOUND docstring — same reasoning, this type's own arm. */
+const NOT_FOUND: SystemPopulationData = { visibility: "unknown" };
 
 /**
  * Dynamic population & social state (population, popCap, unrest, needs ledger, the
- * Provisioned/band/memory read, and the unrest contributor breakdown/trend) for one
- * system. Changes every economy tick — so, unlike the static substrate read, it uses the default
- * staleTime and is tick-invalidated (see useTickInvalidation). Visibility-gated server-side.
+ * Provisioned/band/memory read, and the unrest contributor breakdown/trend) for one system — read
+ * from the store's `systemPopulation` slice, tick-current by construction (no invalidation to
+ * wire). Visibility-gated in the slice itself; an absent id renders the same `visibility:
+ * "unknown"` state — for either of two reasons: the id doesn't exist, or it exists but isn't in
+ * the current interest set yet (see `lib/hooks/detail-read.ts`). Telling those apart is the panel
+ * root's job (`system-panel.tsx`'s presence gate), not this hook's.
  */
 export function useSystemPopulation(systemId: string): SystemPopulationData {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.systemPopulation(systemId),
-    queryFn: () =>
-      apiFetch<SystemPopulationData>(`/api/game/systems/${systemId}/population`),
-  });
-  return data;
+  return useDetailEntry("systemPopulation", systemId, "system") ?? NOT_FOUND;
 }

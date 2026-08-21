@@ -7,10 +7,9 @@ import type { AtlasData } from "@/lib/types/game";
 import type { TrackerData, TrackerPinnedRow } from "@/lib/types/api";
 import { DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
 
-// PinToggle owns two suspense-backed hooks (useTracker, useAtlas) and a mutation
+// PinToggle owns two store-backed hooks (useTracker, useAtlas) and a mutation
 // (useSetSystemPin). All three are mocked directly, the same approach tracker-panel.test.tsx
-// uses — QueryBoundary's Suspense/ErrorBoundary/QueryErrorResetBoundary machinery needs no
-// QueryClient context of its own (only useSuspenseQuery does, and that call never runs here).
+// uses — the hooks are synchronous store reads with no client-side cache/context of their own.
 
 const setPinMutate = vi.fn();
 

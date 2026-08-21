@@ -1,15 +1,10 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
-import type { FactionSummary } from "@/lib/services/factions";
+import { useGameSlice } from "@/lib/store/use-game-store";
+import { EMPTY_FACTIONS } from "./empty-slices";
 
+/** The galaxy-wide faction list — read from the store's `factions` slice. */
 export function useFactions() {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.factions,
-    queryFn: () => apiFetch<FactionSummary[]>("/api/game/factions"),
-  });
-
-  return { factions: data };
+  const factions = useGameSlice((state) => state.slices.factions ?? EMPTY_FACTIONS);
+  return { factions };
 }

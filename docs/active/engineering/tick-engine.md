@@ -37,7 +37,7 @@ Events ────────────────────────�
 
 | Processor | Frequency | Dependencies | What It Does |
 |---|---|---|---|
-| Ship Arrivals | Every tick | None | Docks ships that have reached their arrival tick (status → docked, destination/arrival fields cleared) and emits `shipArrived` events. Currently dormant — world-gen seeds no ships (player fleets are planned) — but present in the pipeline |
+| Ship Arrivals | Every tick | None | Docks ships that have reached their arrival tick (status → docked, destination/arrival fields cleared). Currently dormant — world-gen seeds no ships (player fleets are planned) — but present in the pipeline |
 | Events | Every tick | None | Advances event phases, expires completed events, spreads events to neighbors, spawns new events (every 20 ticks) |
 | Economy | Cycle start | Events | On the cycle boundary (`tick % CYCLE_LENGTH === 0`) resolves the **whole galaxy** at once (`cycleStartShard`); no-ops otherwise. Applies event modifiers and government effects to each market's stock; applies strike suppression to production (derived from last cycle's `unrest`). Applied rates × `catchUpFactor` (= 1 at the reference interval → one full cycle's magnitude per resolution). Records per-system satisfaction (`delivered / demanded`) into `ctx.results` for infrastructure-decay and population |
 | Infrastructure Decay | Cycle start | Economy | Shrinks `WorldBuilding.count` **downward only** toward what is *used* — disuse decay where built exceeds staffed-and-selling (`count × min(labourFulfilment, sellingFactor)`) or housing occupancy (`population / POP_CENTRE_DENSITY`), plus a catastrophic unrest teardown above θ_decay. Runs only when the economy resolved this tick (reads its `economySignals` off `ctx.results`, incl. per-good `sellingFactorBySystem` — the brake's knee ceiling at start-of-cycle stock), so it inherits the cycle start; applies `count` deltas in one pass and recomputes `popCap` live from the surviving housing. Never raises a count or goes below 0 |
@@ -54,13 +54,13 @@ Events ────────────────────────�
 
 ---
 
-## Event Delivery (SSE)
+## Event Delivery (worker frame channel)
 
-After a successful tick, the `TickLoop` broadcasts a `TickBroadcast` frame (`{ currentTick, speed, achievedTps, events }`) to SSE subscribers. Single-player, so the stream is **single-client transport** — the old multiplayer fan-out and per-player event scoping are gone.
+After a successful tick, the `TickLoop` broadcasts a `TickBroadcast` frame (`{ currentTick, speed, achievedTps, events }`) to its subscribers. The whole game — worker and UI — runs in one browser tab, so the channel is **single-client transport**: a `postMessage` from the game worker (`client/worker/`) to the UI thread, structured-cloned, no network involved.
 
-- **Throttled to ~4 emits/sec** (250 ms, latest-wins) so `max` speed can't melt the client — per-tick delivery was never a contract.
-- A connecting client seeds its tick state from `GET /api/game/world` so its position is correct before the first frame.
-- A client-side hook dispatches events to listeners; a query-invalidation hook refreshes the relevant TanStack Query caches as the world advances.
+- **Throttled to ~4 emits/sec** (250 ms, latest-wins) so `max` speed can't melt the UI thread — per-tick delivery was never a contract.
+- A subscribing UI thread gets a full pacing frame immediately as the subscribe handshake's reply, so its position is correct before the first tick-driven broadcast — there is nothing to seed ahead of it.
+- `useTick`'s `subscribeToEvent` dispatches each pacing frame's events to listeners; the UI-side store (`lib/store/`) applies every frame — pacing and state — with structural sharing, so a hook reading one slice re-renders only when that slice actually changed as the world advances.
 
 ---
 

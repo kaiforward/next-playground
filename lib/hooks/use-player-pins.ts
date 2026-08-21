@@ -1,26 +1,39 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiMutate } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { sendCommand } from "@/lib/runtime/command-client";
+import { narrowCommandResult } from "@/lib/types/guards";
+import { useCommandMutation, type CommandMutation } from "@/lib/hooks/use-command-mutation";
+import { clearOnNextFrame } from "@/lib/store/command-overlay";
+import { pinnedSystemIdsOverlay, GLOBAL_TRACKER_KEY } from "./use-tracker";
 import type { PinInput } from "@/lib/schemas/player-pins";
-import type { TrackerData } from "@/lib/types/api";
+import type { CommandResult } from "@/lib/runtime/channel";
+import type { SetSystemPinResult } from "@/lib/services/player-pins";
 
-/** Pin or unpin a system on the player's Tracker list (`POST /api/game/player/pins`). */
-export function useSetSystemPin() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: PinInput) => apiMutate<string[]>(`/api/game/player/pins`, input),
-    onSuccess: (pinnedSystemIds) => {
-      // Write the authoritative post-write id list into the cache immediately so the star toggle's
-      // pressed state flips on this response, not on the next refetch — `pinnedSystemIds` is exactly
-      // the field `PinToggle` joins against (see its own docstring on why: the unfiltered id list,
-      // never the display-filtered `pinned` rows). The rest of `TrackerData` (rows, building,
-      // colonising) still comes from the invalidation below; this is not a full server response.
-      queryClient.setQueryData<TrackerData>(queryKeys.tracker, (old) =>
-        old ? { ...old, pinnedSystemIds } : old,
-      );
-      void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
-    },
+type SetSystemPinData = Extract<SetSystemPinResult, { ok: true }>["data"];
+
+function sendSetSystemPin(input: PinInput): Promise<CommandResult<SetSystemPinData>> {
+  const id = crypto.randomUUID();
+  return sendCommand({ id, type: "setSystemPin", payload: input }).then((message) =>
+    narrowCommandResult<SetSystemPinData>(message.result),
+  );
+}
+
+/**
+ * Pin or unpin a system on the player's Tracker list (`setSystemPin` command).
+ *
+ * The command's result already carries the whole post-write id list (`SetSystemPinData`), so on a
+ * successful commit this writes it straight into `useTracker`'s pin overlay — the client-runtime
+ * in-flight rule (spec §2, `lib/store/command-overlay.ts`): a star toggle's pressed state flips on
+ * this response, not on the next state frame, and a rapid second pin/unpin reads the first's
+ * committed id list rather than a stale one (`use-tracker.ts`'s `useTracker` is the merge point).
+ */
+export function useSetSystemPin(): CommandMutation<PinInput, SetSystemPinData> {
+  return useCommandMutation(async (input) => {
+    const result = await sendSetSystemPin(input);
+    if (result.ok) {
+      pinnedSystemIdsOverlay.set(GLOBAL_TRACKER_KEY, result.data);
+      clearOnNextFrame(pinnedSystemIdsOverlay, GLOBAL_TRACKER_KEY);
+    }
+    return result;
   });
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useLinkComponent } from "@/components/ui/link-provider";
 import { useFactionConstruction } from "@/lib/hooks/use-faction-construction";
 import { useFactionTreasury } from "@/lib/hooks/use-faction-treasury";
 import { useSetAutomation } from "@/lib/hooks/use-construction-orders";
@@ -18,6 +18,7 @@ import { bandShortfall } from "@/lib/engine/treasury";
  * Industry tab.
  */
 export function FactionConstructionCard({ factionId }: { factionId: string }) {
+  const LinkComponent = useLinkComponent();
   const data = useFactionConstruction(factionId);
   const treasury = useFactionTreasury(factionId);
   const runsPct = fractionPct(treasury.funded.construction);
@@ -76,9 +77,9 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
               <ul>
                 {data.buildSystems.map((s) => (
                   <li key={s.systemId} className="flex items-baseline justify-between py-0.5 text-sm">
-                    <Link href={`/system/${s.systemId}/industry`} className="text-text-accent transition-colors hover:text-text-accent-hover">
+                    <LinkComponent href={`/system/${s.systemId}/industry`} className="text-text-accent transition-colors hover:text-text-accent-hover">
                       {s.systemName}
-                    </Link>
+                    </LinkComponent>
                     <span className="font-mono text-xs text-text-secondary">{s.count}</span>
                   </li>
                 ))}
@@ -89,9 +90,9 @@ export function FactionConstructionCard({ factionId }: { factionId: string }) {
               <ul>
                 {data.colonies.map((c) => (
                   <li key={c.systemId} className="py-0.5 text-sm">
-                    <Link href={`/system/${c.systemId}/industry`} className="text-text-accent transition-colors hover:text-text-accent-hover">
+                    <LinkComponent href={`/system/${c.systemId}/industry`} className="text-text-accent transition-colors hover:text-text-accent-hover">
                       {c.systemName}
-                    </Link>
+                    </LinkComponent>
                   </li>
                 ))}
               </ul>

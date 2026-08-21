@@ -1,45 +1,39 @@
 "use client";
 
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
+import { useGameSlice } from "@/lib/store/use-game-store";
+import type { StoreState } from "@/lib/store/game-store";
 
 /**
- * The shared body of the value-mode choropleth hooks: one tick-scoped all-systems fetch reduced to a
- * `systemId → number` Map for the map layer. Tick-scoped means no viewport dependency — the route
- * answers for every system and the cache stales on its own.
+ * The shared body of the value-mode choropleth hooks: reads one all-systems slice from the store and
+ * reduces it to a `systemId → number` Map for the map layer.
  *
- * `active` gates two things. It gates the request, so a mode that isn't selected pays nothing; and it
- * gates the reduction, so an inactive caller gets an empty Map *even when the query still holds cached
- * data* and the Pixi layer tears its geometry down immediately instead of drawing a mode nobody
- * selected. Reading `data` unconditionally would resurrect the last mode's fill on every remount.
+ * `active` gates the reduction, not a fetch (there is no fetch — the slice already rides every state
+ * frame regardless of which map mode is selected): an inactive caller reads an empty Map even though
+ * the slice itself still holds the last data, so the Pixi layer tears its geometry down immediately
+ * instead of drawing a mode nobody selected. Reading the slice unconditionally would resurrect the
+ * last mode's fill on every remount.
  *
- * `pick` is an explicit accessor, not a field name: the entry shapes name their value differently
- * (`unrest`, `population`, `attraction`, …) and nothing here indexes a row by string key. Pass a
- * module-scope function — an inline arrow is a fresh identity each render and rebuilds the Map.
+ * `select` and `pick` are explicit accessors, not field names: the entry shapes name their value
+ * differently (`unrest`, `population`, `attraction`, …) and nothing here indexes a row by string key.
+ * Pass module-scope functions — an inline arrow is a fresh identity each render and defeats the
+ * store's own identity guarantee on top of rebuilding the Map unnecessarily.
  *
  * `useOwnership` and `useTradeFlow` are deliberately not members of this family: ownership carries a
  * record per system rather than a number and is always enabled, and trade flow returns an edge list.
  */
 export function useSystemValueMap<T extends { systemId: string }>(
-  queryKey: readonly string[],
-  url: string,
+  select: (state: StoreState) => T[] | undefined,
   pick: (entry: T) => number,
   active: boolean,
 ): Map<string, number> {
-  const { data } = useQuery({
-    queryKey,
-    queryFn: () => apiFetch<{ systems: T[] }>(url),
-    staleTime: 10_000,
-    gcTime: 30_000,
-    enabled: active,
-  });
+  const entries = useGameSlice(select);
 
   return useMemo(() => {
     const m = new Map<string, number>();
-    if (active && data) {
-      for (const s of data.systems) m.set(s.systemId, pick(s));
+    if (active && entries) {
+      for (const s of entries) m.set(s.systemId, pick(s));
     }
     return m;
-  }, [active, data, pick]);
+  }, [active, entries, pick]);
 }

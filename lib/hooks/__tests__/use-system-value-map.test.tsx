@@ -1,28 +1,17 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { makeQueryClient } from "@/lib/query/client";
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 import { useSystemValueMap } from "@/lib/hooks/use-system-value-map";
 import { useStability } from "@/lib/hooks/use-stability";
+import { seedSlices } from "./store-fixture";
 import type { StabilityEntry } from "@/lib/types/game";
+import type { StoreState } from "@/lib/store/game-store";
 
 const pickUnrest = (e: StabilityEntry) => e.unrest;
-
-function jsonResponse(systems: StabilityEntry[]): Response {
-  return new Response(JSON.stringify({ data: { systems } }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+const selectStability = (state: StoreState) => state.slices.stability;
 
 /** Renders the map's entries as `id=value` pairs so an emptied map is observable as empty text. */
 function Probe({ active }: { active: boolean }) {
-  const values = useSystemValueMap(
-    ["stability"],
-    "/api/game/systems/stability",
-    pickUnrest,
-    active,
-  );
+  const values = useSystemValueMap(selectStability, pickUnrest, active);
   return (
     <div data-testid="values">
       {[...values].map(([id, v]) => `${id}=${v}`).join(",")}
@@ -35,79 +24,33 @@ function StabilityProbe({ active }: { active: boolean }) {
   return <div data-testid="values">{[...values].map(([id, v]) => `${id}=${v}`).join(",")}</div>;
 }
 
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
 describe("useSystemValueMap", () => {
-  it("empties the map when inactive even though the fetched data is still cached", async () => {
+  it("empties the map when inactive even though the slice still holds the last data", () => {
     // The teardown contract: an inactive caller must read empty, not the last mode's cached fill.
-    // One QueryClient across both renders keeps the resolved data in cache, so a hook that reduced
-    // `data` without consulting `active` would still report the entries here.
-    const queryClient = makeQueryClient();
-    const fetchMock = vi
-      .fn()
-      .mockImplementation(() =>
-        Promise.resolve(jsonResponse([{ systemId: "sys-1", unrest: 0.4 }])),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    // The slice itself is not re-seeded between renders, so a hook that reduced it without
+    // consulting `active` would still report the entries here.
+    seedSlices({ stability: [{ systemId: "sys-1", unrest: 0.4 }] });
 
-    const { rerender } = render(
-      <QueryClientProvider client={queryClient}>
-        <Probe active />
-      </QueryClientProvider>,
-    );
+    const { rerender } = render(<Probe active />);
+    expect(screen.getByTestId("values")).toHaveTextContent("sys-1=0.4");
 
-    await waitFor(() => expect(screen.getByTestId("values")).toHaveTextContent("sys-1=0.4"));
-
-    rerender(
-      <QueryClientProvider client={queryClient}>
-        <Probe active={false} />
-      </QueryClientProvider>,
-    );
+    rerender(<Probe active={false} />);
 
     // `toHaveTextContent("")` matches anything — assert the raw text instead.
     expect(screen.getByTestId("values").textContent).toBe("");
   });
 
-  it("does not fetch while inactive", () => {
-    const queryClient = makeQueryClient();
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <Probe active={false} />
-      </QueryClientProvider>,
-    );
-
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("keys the map by systemId and reads the value through the caller's accessor", async () => {
+  it("keys the map by systemId and reads the value through the caller's accessor", () => {
     // useStability picks `unrest`; a hook wired to the wrong field would render `undefined` here.
-    const queryClient = makeQueryClient();
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockImplementation((url: string) => {
-        expect(url).toBe("/api/game/systems/stability");
-        return Promise.resolve(
-          jsonResponse([
-            { systemId: "sys-1", unrest: 0.25 },
-            { systemId: "sys-2", unrest: 0.75 },
-          ]),
-        );
-      }),
-    );
+    seedSlices({
+      stability: [
+        { systemId: "sys-1", unrest: 0.25 },
+        { systemId: "sys-2", unrest: 0.75 },
+      ],
+    });
 
-    render(
-      <QueryClientProvider client={queryClient}>
-        <StabilityProbe active />
-      </QueryClientProvider>,
-    );
+    render(<StabilityProbe active />);
 
-    await waitFor(() =>
-      expect(screen.getByTestId("values")).toHaveTextContent("sys-1=0.25,sys-2=0.75"),
-    );
+    expect(screen.getByTestId("values")).toHaveTextContent("sys-1=0.25,sys-2=0.75");
   });
 });

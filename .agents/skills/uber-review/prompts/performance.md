@@ -6,7 +6,7 @@ You are the performance reviewer. You look for runtime performance issues — ex
 
 You look for:
 
-- **Expensive per-tick work** — a processor that does a whole-collection pass or a superlinear (O(n²)) computation on every tick, or that concentrates the whole galaxy's work onto a single boundary/cycle-start tick (a latency spike). The tick loop is single-threaded Node — a multi-second tick blocks SSE broadcasts and concurrent API requests, not just pacing. Weigh average throughput against peak per-tick cost.
+- **Expensive per-tick work** — a processor that does a whole-collection pass or a superlinear (O(n²)) computation on every tick, or that concentrates the whole galaxy's work onto a single boundary/cycle-start tick (a latency spike). The tick loop is single-threaded — a multi-second tick blocks the worker's frame broadcasts and any pending command replies, not just pacing. Weigh average throughput against peak per-tick cost.
 - **Missing memoisation on expensive computations** — `useMemo` for results derived from large arrays that re-compute every render
 - **Inline-defined objects/arrays in JSX** causing unnecessary child re-renders (`<Comp data={{...}} />`)
 - **Viewport-keyed React Query keys** causing flicker and redundant calls on every pan/zoom — tick-scoped data should be fetched once per tick, filtered client-side

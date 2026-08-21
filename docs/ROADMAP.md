@@ -28,33 +28,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 The attention layer — how the player finds what to do — is two surfaces, both shipped:
 [the Tracker](./active/gameplay/tracker.md) and [the alert bar](./active/gameplay/alert-bar.md).
 
-1. **[XL] Retire Next.js and TanStack Query — this is a single-page game, not a web app.** Packaging
-   path B from [grand-strategy-vision.md](./planned/grand-strategy-vision.md) §6: the engine in a Web
-   Worker, fully client-side, shippable as static web plus Tauri/Electron from one codebase. The
-   Next.js server, the App Router, the `app/api/game/` handlers and the query layer all retire
-   together.
-   That section says "A migrates into B; don't decide today" — written when the pivot was young.
-   Everything else in it has since shipped (Postgres and Prisma gone, world in memory, saves as JSON
-   on disk), so the packaging path is the last undecided piece of a finished pivot, and the
-   non-decision is the stale part.
-   Queued to the head by Kai (2026-08-19): the last leftover of the old game — both frameworks carry
-   web-app quirks the game still pays for, and the felt cost is now concrete: **a loading panel on
-   every system click**. The genre bar is EU5, where a system detail panel opens instantly; a visible
-   load on a detail panel is not acceptable in a grand-strategy game. His read (2026-08-12) stands:
-   real performance gains, no delay opening panels, the coupling below all solvable, the end state
-   simpler than what it replaces — and the retirement holds even for future multiplayer.
-   **What it actually touches**, so nobody sizes this as a framework swap: the entire client data
-   layer. TanStack Query is load-bearing today — `useTickInvalidation`, the map atlas held at
-   `staleTime: Infinity`, and the SSE-driven hooks that seed initial state from REST. The route
-   handlers are thin, but every hook in `lib/hooks/` reads through them.
-   *Next step:* `/measure` where a system-panel open actually spends its time (server round-trip vs
-   query cache vs Suspense fallback flash), and inventory the query layer's load-bearing surface —
-   that evidence sizes the design pass that settles what replaces the query layer. With the world
-   in-process there may be no cache to invalidate at all — that is the simplification being claimed,
-   and proving or killing it decides the size of everything else.
-   *Don't:* port TanStack across as-is. Caching in front of an in-process world is the indirection
-   this work exists to remove, and keeping it would leave both layers in place for none of the gain.
-2. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
+1. **[L] Fewer viable systems at the start; growth gated behind habitation technology.** Early
    colonisation is overwhelming — too many viable targets at once, with nothing pacing which to take.
    Direction (Kai, 2026-08-12): cut how many systems are viable at generation so expansion starts
    slow, and let the rest of the galaxy open up later, when terraforming and specialist-housing
@@ -89,6 +63,16 @@ The attention layer — how the player finds what to do — is two surfaces, bot
 ## Unqueued
 
 No order. Pull from here when the queue empties, or fold one in when a PR is already in the file.
+
+**Packaging**
+- **[M] Desktop shell packaging (Tauri vs Electron)** — booked out of the client-runtime migration
+  by explicit decision (2026-08-19, "we should do it at some point soon"). The client runtime has
+  shipped ([client-runtime.md](./active/engineering/client-runtime.md)): the save-backend seam and
+  worker channel this row depends on are both built. Desktop gets real transferable `.json` save
+  files via the existing Node file backend (`lib/world/save-files.ts`), owns its window chrome (no
+  accidental refresh), and can hold window-close for the save. The shell choice itself is the row's
+  first decision.
+  *Next step:* pick the shell (Tauri vs Electron).
 
 **Economy / simulation**
 - **[M] Relief — a player-funded intervention buys a viable world out of the strike loop** by
@@ -278,6 +262,39 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   not waste: it de-aliases rows the previous world still holds. *Next step:* a design pass on copy-on-write
   rows or a dirty flag. *Don't:* reference-identity dirty-checking — the adapter hands back fresh rows
   whether or not anything changed, so it always reports dirty. Real save-corruption risk if aliasing leaks.
+- **[L] Engine tick at aspiration scale (10-20K systems)** — the tick-speed audit's measured curve
+  (reading C1 of the deleted tick-speed-audit working file; git keeps it): sustained Node TPS at the
+  10,000-tick horizon is 118.8 / 56.4 / 22.7 / 10.5 at 600 / 2K / 5K / 10K systems, with the
+  developed cohort FLAT (~440-500) across scales — so the cost is total-system-scaled machinery
+  (join/merge ~46% of tick time; directed-build scans the full system list), and the 5 TPS
+  reference crosses at ~19-20K systems extrapolated, at the cheapest era the game has. No current
+  preset hits the ceiling, so this is not urgent — it becomes real work when content pushes past
+  ~10K systems or a later era fattens the developed cohort. The frame-architecture fix cannot
+  carry 20K alone: engine and host both need their pass before anything steers players toward
+  galaxies above ~10K. The sibling rows above (toTickSystems, events scaling, market dirty model)
+  are the known mechanisms; this row is the umbrella target that decides when they come forward.
+  *Next step:* a comparative-target research sprint — for Stellaris, Vicky 3, EU5 and peers,
+  establish wall-clock per game-year at max speed (our tick is 4/day, 24-tick week, so cross-game
+  comparison is by game-time rate, not raw TPS) and the count of selectable/controllable units
+  (Stellaris ~1K systems but multiple controllable bodies per system; EU5 ~22K locations) — then
+  set this row's explicit target ("at N units, a game-year in ≤X s") and decide which sibling row
+  moves first against the post-frame-architecture browser curve (measured 2026-08-21, founding
+  era: ~350→250 / ~55 / ~16 / ~6 TPS at 600 / 5K / 10K / 20K).
+  *Don't:* tune against the 10,000-tick horizon's TPS as if it were equilibrium — it is founding
+  era (~year 7), the cheapest era; late-game numbers are strictly worse and unmeasured.
+- **[XL] Native engine core (Rust) for tick speed** — port the pure tick (engine + processors) to
+  Rust once JS-side work stops paying. The seam already exists: the worker channel isolates the
+  engine behind subscribe/command messages, so a native core behind a desktop shell is a contained
+  swap ([client-runtime.md](./active/engineering/client-runtime.md), "Rust behind a desktop
+  shell") — same messages, same React UI. Gated on two things from the aspiration-scale umbrella
+  row above: the comparative-target research sprint setting the actual goal ("at N units, a
+  game-year in ≤X s"), and the algorithmic sibling rows (toTickSystems, events scaling, market
+  dirty model) being fixed or judged first — a port buys a constant factor, and the measured
+  bottleneck is total-system-scaled machinery, which ports along with everything else.
+  *Next step:* nothing until the comparative target exists; then a design pass on the seam
+  (what crosses the boundary per tick, and where the world state lives).
+  *Don't:* start the port to fix a specific slow processor — that's the sibling rows' job in JS,
+  where the fix is cheap to iterate on.
 
 **Types / correctness**
 - **[S] `.get(...)!`-in-tests idiom decision** — 8 sites use a postfix-`!` `Map.get` in tests (against
@@ -414,6 +431,12 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   ships **inert but tested**. Wire it when the player-agency phase reaches it.
 
 **Tooling**
+- **[S] Rebuild lint for the Vite stack** — eslint left the repo with the Next retirement (its
+  config was `eslint-config-next`-bound; nothing in CI ran it). Wanted back for what tsc can't
+  see: `react-hooks` (`rules-of-hooks`, `exhaustive-deps` — stale-closure bugs in the store-hook
+  layer) and `jsx-a11y` (the component tests lean on roles/accessible names). Flat config,
+  `typescript-eslint` + the two plugins, a `lint` script; owner decides whether it joins the CI
+  gate. *Next step:* write the flat config and run it once over the tree to size the fix-up.
 - **[S/M] Overnight mutation re-sweep** — the first Stryker cycle (merged 2026-08-09) swept 40 files;
   the remaining ~66 `lib/` files have never been swept at all. Owed: an overnight re-sweep of the 40
   (incremental cache invalidates most of them anyway) plus a first sweep of the rest, same

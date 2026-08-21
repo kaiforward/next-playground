@@ -1,15 +1,17 @@
 "use client";
 
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { apiFetch } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { useDetailEntry } from "@/lib/hooks/detail-read";
 import type { SystemBuildOptionsData } from "@/lib/types/api";
 
-/** The player's build surface for one system (verbs + feasibility). Tick-invalidated. */
+/** `SystemBuildOptionsData`'s own "nothing to build here" arm — reused for an absent id, same
+ *  pattern as the other per-system hooks. */
+const NOT_FOUND: SystemBuildOptionsData = { mode: "none" };
+
+/** The player's build surface for one system (verbs + feasibility) — read from the store's
+ *  `systemBuildOptions` slice, tick-current by construction. An absent id renders `{ mode:
+ *  "none" }` — for either of two reasons: the id doesn't exist, or it exists but isn't in the
+ *  current interest set yet (see `lib/hooks/detail-read.ts`). Telling those apart is the panel
+ *  root's job (`system-panel.tsx`'s presence gate), not this hook's. */
 export function useSystemBuildOptions(systemId: string): SystemBuildOptionsData {
-  const { data } = useSuspenseQuery({
-    queryKey: queryKeys.systemBuildOptions(systemId),
-    queryFn: () => apiFetch<SystemBuildOptionsData>(`/api/game/systems/${systemId}/build-options`),
-  });
-  return data;
+  return useDetailEntry("systemBuildOptions", systemId, "system") ?? NOT_FOUND;
 }

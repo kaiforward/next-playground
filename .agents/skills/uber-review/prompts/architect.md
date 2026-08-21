@@ -13,12 +13,12 @@ Take the spec's *design* as given. Whether the design itself is sound is decided
 
 You look for **approach-level** problems — issues whose fix requires rewriting how something is done, not patching a line. Specifically:
 
-- **Pattern drift** — a new approach that contradicts an established one in the codebase (e.g., a new data-fetching path that isn't `useSuspenseQuery + QueryBoundary`; a new form that isn't `components/form/` + RHF + Zod)
-- **Library / framework misuse** — hand-rolled solutions where the project's stack has an idiom (e.g., custom client cache when TanStack Query is the standard; raw `<dialog>` handling when `components/ui/dialog.tsx` exists; custom retry logic when the existing pattern handles it)
+- **Pattern drift** — a new approach that contradicts an established one in the codebase (e.g., a new data-fetching path that isn't a store selector (`useGameSlice`); a new form that isn't `components/form/` + RHF + Zod)
+- **Library / framework misuse** — hand-rolled solutions where the project's stack has an idiom (e.g., a hand-rolled cache/subscription when the Zustand store is the standard; raw `<dialog>` handling when `components/ui/dialog.tsx` exists; a new worker message shape when the existing command/frame protocol handles it)
 - **Module-boundary violations** — code crossing the layered architecture lines:
   - `lib/engine/` must be pure — no `fs` / `process.env` / Node-edge imports (except the sanctioned dynamic `import()`)
   - `lib/tick/processors/` bodies must access world state only through their typed `World` interface (`lib/tick/world/`) + the in-memory adapter (`lib/tick/adapters/memory/`), never the raw store or adapter internals directly
-  - `lib/services/` owns world-state reads and business logic; route handlers (`app/api/`) are thin wrappers over the in-memory store
+  - `lib/services/` owns world-state reads and business logic; worker command handlers (`client/worker/game-worker.ts`) are thin wrappers over the in-memory store
 - **Type-safety bypass at scale** — `unknown`, `Record<string, unknown>`, or broad `as` casts proliferating through service returns
 - **Missing critical abstraction** — e.g., a new mutating route without a service layer
 

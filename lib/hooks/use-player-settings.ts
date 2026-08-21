@@ -1,46 +1,60 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiMutate } from "@/lib/query/fetcher";
-import { queryKeys } from "@/lib/query/keys";
+import { sendCommand } from "@/lib/runtime/command-client";
+import { narrowCommandResult } from "@/lib/types/guards";
+import { useCommandMutation, type CommandMutation } from "@/lib/hooks/use-command-mutation";
+import { clearOnNextFrame } from "@/lib/store/command-overlay";
+import { alertCategoriesOverlay, GLOBAL_ALERTS_KEY } from "./use-alerts";
+import { trackerSectionsOverlay, GLOBAL_TRACKER_KEY } from "./use-tracker";
 import type { AlertCategoryInput, TrackerSectionInput } from "@/lib/schemas/player-settings";
-import type { AlertData, TrackerData } from "@/lib/types/api";
+import type { CommandResult } from "@/lib/runtime/channel";
 import type { AlertCategorySettings } from "@/lib/types/alerts";
 import type { TrackerSections } from "@/lib/types/tracker";
+import type { SetAlertCategoryResult, SetTrackerSectionResult } from "@/lib/services/player-settings";
+
+type SetAlertCategoryData = Extract<SetAlertCategoryResult, { ok: true }>["data"];
+type SetTrackerSectionData = Extract<SetTrackerSectionResult, { ok: true }>["data"];
+
+function sendSetAlertCategory(input: AlertCategoryInput): Promise<CommandResult<AlertCategorySettings>> {
+  const id = crypto.randomUUID();
+  return sendCommand({ id, type: "setAlertCategory", payload: input }).then((message) =>
+    narrowCommandResult<SetAlertCategoryData>(message.result),
+  );
+}
+
+function sendSetTrackerSection(input: TrackerSectionInput): Promise<CommandResult<TrackerSections>> {
+  const id = crypto.randomUUID();
+  return sendCommand({ id, type: "setTrackerSection", payload: input }).then((message) =>
+    narrowCommandResult<SetTrackerSectionData>(message.result),
+  );
+}
 
 /**
- * Turn one alert category on or off (`POST /api/game/player/alerts`).
- *
- * Both hooks here follow `useSetSystemPin`'s pattern: write the authoritative post-write record into
- * the cache on success so the checkbox flips on this response rather than on the next refetch, then
- * invalidate for the rest of the payload. Without the immediate cache write the box would visibly
- * lag a round trip, since the settings ride a payload that is otherwise only refetched on a tick.
+ * Turn one alert category on or off (`setAlertCategory` command). The result already carries the
+ * full merged `categorySettings` record, written into `useAlerts`'s overlay on success — the
+ * client-runtime in-flight rule (spec §2): the checkbox flips on this response, not the next state
+ * frame.
  */
-export function useSetAlertCategory() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: AlertCategoryInput) =>
-      apiMutate<AlertCategorySettings>(`/api/game/player/alerts`, input),
-    onSuccess: (categorySettings) => {
-      queryClient.setQueryData<AlertData>(queryKeys.alerts, (old) =>
-        old ? { ...old, categorySettings } : old,
-      );
-      void queryClient.invalidateQueries({ queryKey: queryKeys.alerts });
-    },
+export function useSetAlertCategory(): CommandMutation<AlertCategoryInput, AlertCategorySettings> {
+  return useCommandMutation(async (input) => {
+    const result = await sendSetAlertCategory(input);
+    if (result.ok) {
+      alertCategoriesOverlay.set(GLOBAL_ALERTS_KEY, result.data);
+      clearOnNextFrame(alertCategoriesOverlay, GLOBAL_ALERTS_KEY);
+    }
+    return result;
   });
 }
 
-/** Show or hide one Tracker section (`POST /api/game/player/tracker`). */
-export function useSetTrackerSection() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: TrackerSectionInput) =>
-      apiMutate<TrackerSections>(`/api/game/player/tracker`, input),
-    onSuccess: (sections) => {
-      queryClient.setQueryData<TrackerData>(queryKeys.tracker, (old) =>
-        old ? { ...old, sections } : old,
-      );
-      void queryClient.invalidateQueries({ queryKey: queryKeys.tracker });
-    },
+/** Show or hide one Tracker section (`setTrackerSection` command) — same pattern as
+ *  `useSetAlertCategory`, overlaid into `useTracker`. */
+export function useSetTrackerSection(): CommandMutation<TrackerSectionInput, TrackerSections> {
+  return useCommandMutation(async (input) => {
+    const result = await sendSetTrackerSection(input);
+    if (result.ok) {
+      trackerSectionsOverlay.set(GLOBAL_TRACKER_KEY, result.data);
+      clearOnNextFrame(trackerSectionsOverlay, GLOBAL_TRACKER_KEY);
+    }
+    return result;
   });
 }

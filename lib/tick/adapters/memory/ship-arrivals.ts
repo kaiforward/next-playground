@@ -13,9 +13,9 @@ import type { WorldShip } from "@/lib/world/types";
  *
  * Phase 2 ships are ownerless (no `Player` entity exists yet — see
  * `WorldShip`'s doc comment), but the shared `ShipArrivalsWorld` interface
- * still requires a `playerId` per arriving ship (it drives the live game's
- * per-player `shipArrived` SSE event). There is no real value to supply until
- * fleets/players exist (Phase 3), so this adapter reports an empty string.
+ * still requires a `playerId` per arriving ship. There is no real value to
+ * supply until fleets/players exist (Phase 3), so this adapter reports an
+ * empty string.
  */
 export class InMemoryShipArrivalsWorld implements ShipArrivalsWorld {
   ships: WorldShip[];
