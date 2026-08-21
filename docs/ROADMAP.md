@@ -273,8 +273,13 @@ earlier estimate had it at 12.3%); "it's the systems/buildings merge" (no — `m
   carry 20K alone: engine and host both need their pass before anything steers players toward
   galaxies above ~10K. The sibling rows above (toTickSystems, events scaling, market dirty model)
   are the known mechanisms; this row is the umbrella target that decides when they come forward.
-  *Next step:* after the frame architecture ships, re-measure the curve in the browser worker and
-  decide which sibling row moves first.
+  *Next step:* a comparative-target research sprint — for Stellaris, Vicky 3, EU5 and peers,
+  establish wall-clock per game-year at max speed (our tick is 4/day, 24-tick week, so cross-game
+  comparison is by game-time rate, not raw TPS) and the count of selectable/controllable units
+  (Stellaris ~1K systems but multiple controllable bodies per system; EU5 ~22K locations) — then
+  set this row's explicit target ("at N units, a game-year in ≤X s") and decide which sibling row
+  moves first against the post-frame-architecture browser curve (measured 2026-08-21, founding
+  era: ~350→250 / ~55 / ~16 / ~6 TPS at 600 / 5K / 10K / 20K).
   *Don't:* tune against the 10,000-tick horizon's TPS as if it were equilibrium — it is founding
   era (~year 7), the cheapest era; late-game numbers are strictly worse and unmeasured.
 
