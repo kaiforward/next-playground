@@ -46,6 +46,14 @@ Nobody can audit an intention; they can audit a diff.
 State the falsifier in the same units and at the same horizon you intend to measure. "If it looks
 fine" is not a falsifier.
 
+**Descriptive claims carry no falsifier.** A fact with no plausible alternative to falsify against
+(a timeline fact like "when does the first colony complete", a count, a who-reads-this listing) is
+labelled `descriptive, no kill-line` in the plan instead of being given an artificial one. The
+label is itself the negative statement — it declares up front that the claim rules nothing out —
+and the reading still carries its `Licenses` line like any other. If you find yourself building a
+design decision on a descriptive claim, that is the sign it was a checkable premise after all: go
+back and give it a real falsifier.
+
 ### 3. Choose the instrument
 
 The wrong instrument is the second most common failure here, and it produces confident numbers.
