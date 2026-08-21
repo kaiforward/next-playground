@@ -41,7 +41,7 @@ describe("createGameStore — applyStateFrame", () => {
     });
     const first = store.getSnapshot();
 
-    store.applyStateFrame({ frameSeq: 1,
+    store.applyStateFrame({ frameSeq: 2,
       worldVersion: 2,
       slices: {
         // Same value, freshly-allocated object — must be recognised as deep-equal.
@@ -56,27 +56,48 @@ describe("createGameStore — applyStateFrame", () => {
     expect(second.slices.tradeFlow).toEqual({ logisticsEdges: [edge(20)] });
   });
 
-  it("ignores a frame older than the held version (out-of-order safety)", () => {
+  it("applies a frame with an equal worldVersion but a higher frameSeq, and notifies (paused-panel case)", () => {
+    // The finding-1 fix: frame contents now vary with the interest set too, so a second frame can
+    // legitimately arrive at the SAME worldVersion (e.g. an interest reply built while paused,
+    // between world commits) and must still be recognised as a newer observation.
     const store = createGameStore();
+    let notifications = 0;
     store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+    store.subscribe(() => notifications++);
 
-    store.applyStateFrame({ frameSeq: 1, worldVersion: 3, slices: { visibility: { systemIds: ["b"] } } });
+    store.applyStateFrame({ frameSeq: 2, worldVersion: 5, slices: { visibility: { systemIds: ["b"] } } });
 
     const snapshot = store.getSnapshot();
     expect(snapshot.worldVersion).toBe(5);
+    expect(snapshot.frameSeq).toBe(2);
+    expect(snapshot.slices.visibility).toEqual({ systemIds: ["b"] });
+    expect(notifications).toBe(1);
+  });
+
+  it("ignores a frame whose frameSeq is behind the held frameSeq, even if its worldVersion is higher (out-of-order safety)", () => {
+    const store = createGameStore();
+    store.applyStateFrame({ frameSeq: 5, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+
+    store.applyStateFrame({ frameSeq: 3, worldVersion: 9, slices: { visibility: { systemIds: ["b"] } } });
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.worldVersion).toBe(5);
+    expect(snapshot.frameSeq).toBe(5);
     expect(snapshot.slices.visibility).toEqual({ systemIds: ["a"] });
   });
 
-  it("ignores a frame at the same version as the one already held (no re-notify)", () => {
+  it("ignores a frame at the same frameSeq as the one already held, even with a different worldVersion, and does not notify", () => {
     const store = createGameStore();
+    store.applyStateFrame({ frameSeq: 5, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
     let notifications = 0;
     store.subscribe(() => notifications++);
 
-    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
-    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["b"] } } });
+    store.applyStateFrame({ frameSeq: 5, worldVersion: 7, slices: { visibility: { systemIds: ["b"] } } });
 
-    expect(notifications).toBe(1);
-    expect(store.getSnapshot().slices.visibility).toEqual({ systemIds: ["a"] });
+    expect(notifications).toBe(0);
+    const snapshot = store.getSnapshot();
+    expect(snapshot.worldVersion).toBe(5);
+    expect(snapshot.slices.visibility).toEqual({ systemIds: ["a"] });
   });
 
   it("notifies subscribers exactly once per applied frame, including non-tick version jumps", () => {
@@ -87,18 +108,18 @@ describe("createGameStore — applyStateFrame", () => {
     // A tick-driven bump...
     store.applyStateFrame({ frameSeq: 1, worldVersion: 1, slices: { visibility: { systemIds: ["a"] } } });
     // ...and a non-tick writer's bump (a pin/settings write can jump the version by more than 1).
-    store.applyStateFrame({ frameSeq: 1, worldVersion: 7, slices: { visibility: { systemIds: ["b"] } } });
+    store.applyStateFrame({ frameSeq: 2, worldVersion: 7, slices: { visibility: { systemIds: ["b"] } } });
 
     expect(notifications).toBe(2);
   });
 
   it("does not notify for a dropped (stale) frame", () => {
     const store = createGameStore();
-    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: {} });
+    store.applyStateFrame({ frameSeq: 5, worldVersion: 5, slices: {} });
     let notifications = 0;
     store.subscribe(() => notifications++);
 
-    store.applyStateFrame({ frameSeq: 1, worldVersion: 4, slices: {} });
+    store.applyStateFrame({ frameSeq: 4, worldVersion: 4, slices: {} });
 
     expect(notifications).toBe(0);
   });
@@ -214,12 +235,17 @@ describe("createGameStore — beginWorldReplacement", () => {
     expect(snapshot.slices.visibility).toEqual({ systemIds: ["b"] });
   });
 
-  it("drops a stale in-flight frame from the OUTGOING world during the swap window — the swap-window bug (Proves 4)", () => {
+  it("drops a stale in-flight frame from the OUTGOING world during the swap window, even with a HIGHER frameSeq than the new world's first frame — worldVersion is what the floor checks (Proves 3)", () => {
     // The scenario a naive `worldVersion: 0` reset alone does not cover: the tick loop keeps
     // broadcasting the outgoing world right up to the moment the swap command commits, so a frame
     // carrying a real, pre-reset `worldVersion` can still be in flight on the postMessage channel
     // when `beginWorldReplacement` fires. It must not transiently re-merge the outgoing world's
-    // slices or resurrect its liveness before the new world's own frame lands.
+    // slices or resurrect its liveness before the new world's own frame lands — and this must hold
+    // even though `beginWorldReplacement` resets the held `frameSeq` to `null`, which alone would
+    // let ANY frameSeq (including a stale, high one) pass the freshness guard: the outgoing frame
+    // here carries frameSeq 50 (the OLD worker's counter, still climbing), well above the frameSeq
+    // 1 the new (fresh) worker's own first frame will carry — proving the floor, not frameSeq,
+    // guards the swap window.
     const store = createGameStore();
     store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
     store.setLiveness("live");
@@ -228,20 +254,34 @@ describe("createGameStore — beginWorldReplacement", () => {
     let notifications = 0;
     store.subscribe(() => notifications++);
 
-    // The stale in-flight frame — same version as the one already applied before the reset.
-    store.applyStateFrame({ frameSeq: 1, worldVersion: 5, slices: { visibility: { systemIds: ["STALE"] } } });
+    // The stale in-flight frame — same worldVersion as the one already applied before the reset,
+    // but a HIGH frameSeq (the old worker's counter never stopped climbing).
+    store.applyStateFrame({ frameSeq: 50, worldVersion: 5, slices: { visibility: { systemIds: ["STALE"] } } });
 
-    let snapshot = store.getSnapshot();
+    const snapshot = store.getSnapshot();
     expect(snapshot.worldVersion).toBe(0);
+    expect(snapshot.frameSeq).toBeNull();
     expect(snapshot.slices).toEqual({});
     expect(snapshot.liveness).toBe("no-world");
     expect(notifications).toBe(0);
+  });
 
-    // The new world's own frame — version 6, past the floor — lands and applies normally.
+  it("applies a fresh worker's restarted frameSeq (seq 1) after a replacement reset, even though it is lower than the outgoing world's last frameSeq (Proves 4)", () => {
+    const store = createGameStore();
+    store.applyStateFrame({ frameSeq: 50, worldVersion: 5, slices: { visibility: { systemIds: ["a"] } } });
+    store.setLiveness("live");
+
+    store.beginWorldReplacement();
+    let notifications = 0;
+    store.subscribe(() => notifications++);
+
+    // The new world's own frame — worldVersion 6 (past the floor), frameSeq 1 (a fresh worker's
+    // restarted counter, LOWER than the outgoing world's last-seen frameSeq of 50).
     store.applyStateFrame({ frameSeq: 1, worldVersion: 6, slices: { visibility: { systemIds: ["new-world"] } } });
 
-    snapshot = store.getSnapshot();
+    const snapshot = store.getSnapshot();
     expect(snapshot.worldVersion).toBe(6);
+    expect(snapshot.frameSeq).toBe(1);
     expect(snapshot.slices.visibility).toEqual({ systemIds: ["new-world"] });
     expect(notifications).toBe(1);
   });
