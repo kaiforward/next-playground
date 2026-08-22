@@ -187,7 +187,37 @@ Licenses: Kills the "migration needs adjacency tweaking" worry for THIS change. 
 Owner decision (Kai): fold the **deposit-space / general-space rationalisation** into this
 feature rather than booking it — "Wont we just be tuning it twice if we put it off?" The
 archetype tables are the shared surface; a deferred pass would re-open every number this
-retune sets. The `## Spec` below is therefore superseded pending a rewrite that folds in
+retune sets. The `### Claim 5 evidence (measured 2026-08-22, instrument `temp/space-utilisation-diag.ts`)
+
+```
+Meaning:  The claim's second half is right and its first half is wrong at every measurable
+          horizon: deposit-slot caps are unfillably huge (worked counts 1-30 against caps in
+          the hundreds), but general space is nowhere near exhausted — the mature cohort uses
+          about a third of it.
+Claim:    Most developed worlds exhaust general space while most deposit slots sit unworked.
+Number:   t=10,000: median developed system general-space use 0.4% (colonies 0.3%, homeworlds
+          36.0% p90 47.3%); slots worked median 0.3% (homeworlds 8.9%). Worked extractors per
+          resource (homeworlds, t=1000): median 6-18, p90 ≤ 20, max 30 — against slot caps
+          median 57-252, p90 up to 489. Composition of USED general space at 10K: housing
+          63.1%, factories 29.5%, academies 5.6%, complexes 1.7%, centres 0.1%.
+Horizon:  t=1,000 (pre-founding, homeworlds only) and t=10,000 (founding era ≈ year 7).
+          NOT equilibrium — colonies are near-empty by construction at this horizon.
+Cohort:   All developed systems, split homeworld/colony and habitable-bearing/zero-habitable.
+          Validation: 0 general-space overpack violations, 0 slot-cap violations, both samples.
+Licenses: FALSIFIES the committed claim (median general use 0.4% < 60%): "general space runs
+          out miles before anything else" is not current observed behaviour at any measurable
+          horizon — it is a hypothesis about late-game/live-save maturity, and is relabelled
+          as one. CONFIRMS decisively that slot caps are meaningless (a 10-30× gap between
+          worked counts and caps), which is the deposit-count model's real justification.
+          Licenses sizing authored slot counts against worked medians (~5-20 per resource on
+          a mature world, max seen 30). Does NOT license any claim about what binds at true
+          equilibrium, and does not explain the owner's in-play "worlds out of space"
+          experience — candidate explanation, unmeasured: housing is 63-78% of all used
+          general space and is bounded by min(habitable, general) remaining, so the binding
+          wall a player sees may be HABITABLE space, which this census did not read.
+```
+
+## Spec` below is therefore superseded pending a rewrite that folds in
 (1) the spec review's accepted amendments, (2) sizing decision (b) — pop increase delivered
 by shifting the general/deposit split + habitableFraction, size raised only ~1.8× — and
 (3) the deposit-space model designed from the measurement below.
