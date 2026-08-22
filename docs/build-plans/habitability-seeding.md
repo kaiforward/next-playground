@@ -229,6 +229,34 @@ experience needs another explanation.
 ticks is 3× further out but still short of true equilibrium; the reading shows the trend, and
 licenses only a direction, never an equilibrium level).
 
+### Claims 6-7 evidence (measured 2026-08-22, `temp/space-utilisation-diag.ts`, 30K ticks)
+
+```
+Meaning:  The habitable-space wall is real but lives on the OPPOSITE cohort from the
+          hypothesis: dead-world outposts are pinned against their tiny habitable budgets
+          (median 79% used, p90 96%) while their general space sits empty (2%); homeworlds
+          show only a small habitable-vs-general gap. And general space never tightens —
+          homeworld use plateaus around 39% across 20 in-world years.
+Claim 6:  On mature systems, habitable utilisation runs far ahead of general utilisation.
+Number:   t=30,000 medians — homeworlds: habitable 43.3% vs general 38.8% (gap 4.5 pts,
+          INSIDE the 10-pt kill-line → falsified as committed). Zero-habitable systems:
+          habitable 78.9% (p10 35.3% / p90 95.7%) vs general 2.0% — a 77-point gap.
+          Habitable-bearing colonies: 4.5% vs 1.3%.
+Claim 7:  General-space use trajectory, homeworlds: 36.0% (10K) → 38.4% (20K) → 38.8% (30K).
+          Flattening, not tightening. Colonies: 0.3% → 0.9% → 1.4%. Descriptive.
+Horizon:  t=1K/10K/20K/30K in one run (30K ≈ in-world year 20; still short of equilibrium).
+Cohort:   Developed systems split homeworld/colony and habitable-bearing/zero-habitable.
+          Validation: 0 overpack violations, 0 slot-cap violations at every sample.
+Licenses: Claim 6 as committed (homeworld-scoped) is FALSIFIED; the same mechanism is
+          CONFIRMED on the zero-habitable cohort — the wall players meet is the habitable
+          sub-budget on low-habitability worlds, which is ALSO what barren-but-alive intends
+          (outposts read small because they are small). Claim 7 licenses "general space is
+          not on a path to exhaustion at any measurable horizon" and nothing about true
+          equilibrium. Slot-cap meaninglessness re-confirmed at 30K (worked max 36 vs caps
+          50-500). The 63-79% housing share of USED space is a share of a nearly-empty
+          budget, not of capacity.
+```
+
 ## Spec` below is therefore superseded pending a rewrite that folds in
 (1) the spec review's accepted amendments, (2) sizing decision (b) — pop increase delivered
 by shifting the general/deposit split + habitableFraction, size raised only ~1.8× — and
