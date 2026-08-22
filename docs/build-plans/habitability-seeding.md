@@ -108,7 +108,12 @@ Horizon:  t=0 generation census (gen-time fact; horizon-independent)
 Cohort:   2,900 natural-gen systems over 5 seeds × 600-system preset; 100 prefab capitals excluded
 Licenses: Confirms the retune direction (terminal falsifier: <40% any / <10% multi — not met).
           Does NOT say which systems are *viable founding targets* — viability is an aggregate
-          over deposits + space, not the habitable flag.
+          over deposits + space, not the habitable flag. The 34.3% zero-habitable cohort is NOT
+          "dead": dead archetypes' 2-3% habitable fractions aggregate past the colonisation
+          floor, so only 2.5% of systems (≈14.6 per 600, stable across 5 seeds) fall below
+          DEVELOP_HABITABLE_FLOOR (habitableSpace < 1, lib/constants/expansion.ts:27) —
+          essentially gas-giant-dominated systems. Nearly the whole galaxy is colonisable
+          today; the retune moves the habitable-WORLD mix, not colonisability.
 ```
 
 Raw:
