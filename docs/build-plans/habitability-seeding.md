@@ -217,6 +217,18 @@ Licenses: FALSIFIES the committed claim (median general use 0.4% < 60%): "genera
           wall a player sees may be HABITABLE space, which this census did not read.
 ```
 
+### Claims 6-7 (follow-ups to claim 5's falsification; committed before the instrument runs)
+
+**Claim 6 — the wall is habitable space:** on mature systems, housing's use of the habitable
+sub-budget runs far ahead of general-space use (habitable utilisation ≫ general utilisation).
+*Falsifier:* if homeworld median habitable utilisation is within ~10 points of general
+utilisation (no gap), the habitable-wall hypothesis is dead and the owner's in-play
+experience needs another explanation.
+
+**Claim 7 — general space tightens at maturity** (descriptive trajectory, no kill-line: 30K
+ticks is 3× further out but still short of true equilibrium; the reading shows the trend, and
+licenses only a direction, never an equilibrium level).
+
 ## Spec` below is therefore superseded pending a rewrite that folds in
 (1) the spec review's accepted amendments, (2) sizing decision (b) — pop increase delivered
 by shifting the general/deposit split + habitableFraction, size raised only ~1.8× — and
