@@ -182,7 +182,28 @@ Licenses: Kills the "migration needs adjacency tweaking" worry for THIS change. 
           later, sparse habitables become its concern, not this retune's.
 ```
 
-## Spec
+## Scope amendment (2026-08-22, post-spec-review)
+
+Owner decision (Kai): fold the **deposit-space / general-space rationalisation** into this
+feature rather than booking it — "Wont we just be tuning it twice if we put it off?" The
+archetype tables are the shared surface; a deferred pass would re-open every number this
+retune sets. The `## Spec` below is therefore superseded pending a rewrite that folds in
+(1) the spec review's accepted amendments, (2) sizing decision (b) — pop increase delivered
+by shifting the general/deposit split + habitableFraction, size raised only ~1.8× — and
+(3) the deposit-space model designed from the measurement below.
+
+### Claim 5 (new checkable premise)
+
+Most developed worlds exhaust (or nearly exhaust) their general space while most of their
+deposit slots sit unworked — the binding constraint on a built-out world is general space,
+not deposits, and there is no designed relationship between the two.
+
+**Falsifier (committed before the instrument runs):** if at the 10,000-tick horizon the
+median developed system uses **less than ~60% of its general space**, or uses **more than
+~50% of its deposit slots**, the claim is false — general space is not the binding side (or
+deposits are not idle), and the rationalisation goes back to design with that evidence.
+Cohorted: read separately for homeworlds and colonies, and by habitable-bearing vs
+zero-habitable systems.
 
 **What changes:** Habitable worlds become rare and big instead of common and small. Most systems
 are fields of dead rock, ice, gas and asteroids — still colonisable as small outposts — and
