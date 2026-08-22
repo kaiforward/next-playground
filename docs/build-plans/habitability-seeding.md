@@ -257,6 +257,43 @@ Licenses: Claim 6 as committed (homeworld-scoped) is FALSIFIED; the same mechani
           budget, not of capacity.
 ```
 
+### Comparative research — how the reference games budget land (2026-08-22)
+
+External references are definitional inputs, verified against current wikis (sources in the
+session log; stellaris.paradoxwikis.com/Districts, eu5.paradoxwikis.com/Resource_gathering_operation,
+vic3.paradoxwikis.com/Building + State).
+
+- **Stellaris**: one shared surface pool — district slots = planet size — that housing (urban),
+  industry and resource districts all compete for, PLUS resource districts individually capped
+  by small per-planet deposit features, PLUS a separate small building-slot track unlocked by
+  urban districts. Habitability is a percentage *multiplier* on pop growth/upkeep, not land.
+- **Victoria 3**: explicitly no building slots ("limitations on buildings function in a
+  sensible and realistic way"). Agriculture capped by per-state arable land (authored number);
+  mines capped by per-state per-resource `capped_resources` (small authored counts); urban
+  industry land-UNLIMITED — bounded by population/labour only.
+- **EU5**: RGO levels capped per location by a formula growing with population + development
+  (base 2); buildings bounded by employment and settlement rank, never by a land budget.
+
+The cross-game pattern, against our three questions:
+1. **Extraction**: all three cap it with small authored per-site counts (or a slow
+   development-scaled cap). Strongly validates the deposit decoupling — nobody derives slot
+   counts from surface area.
+2. **People land**: NO reference game has a "habitable subset of shared land" construct.
+   Housing either competes in the same pool as industry in discrete legible units (Stellaris)
+   or is not land-limited at all (Vic3/EU5 — population binds through other systems). Our
+   subset model is the odd one out, confirming the legibility complaint.
+3. **Industry land**: Stellaris caps it (planet size); Vic3/EU5 let labour bind instead. Our
+   measurement says labour/demand binds miles before land — the Vic3 read.
+4. **A trick we are NOT adopting now, noted for terraforming**: Stellaris expresses marginal
+   worlds through a habitability *multiplier* (growth/upkeep penalty), not tiny land. That is
+   a candidate mechanic for the tundra/marginal tier and for terraforming later — booked as a
+   design input, not folded into this pass.
+
+Verdict: the separation decision stands, reinforced — three independent budgets (people land /
+industry land / authored deposit counts) is the closest continuous-space equivalent of what
+the reference games do, and the subset construct we are deleting has no precedent in any of
+them.
+
 ## Spec` below is therefore superseded pending a rewrite that folds in
 (1) the spec review's accepted amendments, (2) sizing decision (b) — pop increase delivered
 by shifting the general/deposit split + habitableFraction, size raised only ~1.8× — and
