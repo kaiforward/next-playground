@@ -182,6 +182,164 @@ Licenses: Kills the "migration needs adjacency tweaking" worry for THIS change. 
           later, sparse habitables become its concern, not this retune's.
 ```
 
+## Spec
+
+**What changes:** Habitable worlds become rare and big instead of common and small. Most systems
+are fields of dead rock, ice, gas and asteroids — still colonisable as small outposts — and
+roughly a third hold one large habitable world; a second habitable world in the same system is
+uncommon, a third is exceptional, a fourth never happens. The average habitable world, fully
+built out, can now hold an Earth's worth of people, with rare giants at about double that.
+Garden Worlds are renamed Temperate Worlds, and two new world kinds appear: a very rare
+paradise world with almost all of its land habitable, and a marginal tundra world.
+
+**Why:** From `## Idea` — the mix is inverted from the solar-system shape the game aims at, and
+too many viable targets at once make early colonisation overwhelming (roadmap row 1). Owner
+decisions encoded, quoted:
+- "up to 3 rarely is acceptable, but any more than that starts to feel really unrealistic"
+- "increasing the max size contribution of each world, we want the average to be earth
+  equivalent which is 10B people or 10,000pops"
+- "the earth anchor is strictly an average, we can have rare huge worlds (20,000pops) and
+  everything in between"
+- "I would like to rename garden to temperate, and maybe have some kind of utopia type world
+  like stellaris. The more variety we have the more interesting it is."
+- Barren-but-alive stands (roadmap Don't line; reconfirmed by the solar-system framing — the
+  seven dead worlds are outposts, not voids).
+- Concurrency/charter pricing split off ("I think for that we need to introduce some kind of
+  currency…" — its own pass, composing with this one).
+
+**Evidence** (full frames in `## Evidence` above):
+- Claim 1 — two-thirds of systems have a habitable world, a third have 2+. *Licenses the
+  retune; does not identify viable founding targets; only 2.5% of systems sit below the
+  colonisation floor, so colonisability is near-universal and stays so.*
+- Claim 2 — the mean habitable body caps at ~1,719 pops, ~6× under the anchor; capitals ~14,150.
+  *Licenses the size retune; a ceiling, not an outcome — says nothing about reached population.*
+- Claim 3 — 292 colonies by t=10K, 267 concurrent, 96.4% of colony-cycles ungated. *Licenses
+  "the burst is real" and supports the split-off pricing row; licenses no constant tuning.*
+- Claim 4 — colonist delivery is distance-agnostic within a faction by code. *Kills the
+  adjacency worry for this change.*
+
+**Not claimed:** No terraforming or technology system — nothing here gates anything behind
+tech; that remains the row's later half. No change to colonisation pricing, pacing mechanics,
+`DEVELOP_HABITABLE_FLOOR`, the prefab homeworld, or migration/delivery routing. No promise
+that big worlds *fill* — growth is rate-anchored (~3%/year), so reaching 10,000 pops is a
+centuries-scale outcome; the anchor is a capacity definition, not a population forecast. No
+economy retune beyond the coarse health bar: deposit-side effects of more bodies per system
+are read at calibration, not tuned to a target. A skimmer might read "fewer habitable systems"
+as "fewer colonisable systems" — false: the below-floor share stays ~2-3%.
+
+### Behaviour
+
+All generation-time; nothing in the tick changes. Every mechanic below is observable in the
+t=0 census (`temp/habitability-census.ts`, promoted or re-run at calibration) and the standard
+`npm run simulate` pair.
+
+1. **Per-archetype size bands replace the global size roll.** Today every body rolls uniform
+   size 0.5–1.5 from `SUBSTRATE_GEN.SIZE_MIN/MAX` (`lib/engine/body-gen.ts:87`,
+   `lib/constants/substrate-gen.ts:9-10`). New: each archetype carries its own `sizeRange`
+   (new — read in `rollBody`), habitable kinds rolling large, dead kinds keeping today's band
+   so deposit space does not balloon. `SPACE_PER_SIZE` (400) is untouched — it stays the one
+   global space anchor.
+2. **Habitable-count damping in the archetype roll.** `rollArchetype`
+   (`lib/engine/body-gen.ts:70-83`) gains the system's habitable-so-far count: habitable
+   archetype weights are multiplied by a damping ladder (new constant, proposed
+   `[1, 0.25, 0.05, 0]`) — so a 4th habitable body is impossible by construction, satisfying
+   the ≤3 decision as a hard edge, not a tuning outcome.
+3. **Weight and body-count retune.** Sun-class `archetypeWeights` shift toward dead bodies and
+   `bodyCount` ranges rise (proposal: yellow 4–8, orange 3–7, blue/red 2–5) so a system reads
+   as a solar-system-like field. Known side effect, accepted and read at calibration: total
+   deposit slots per system rise with body count.
+4. **Rename + new archetypes.** `garden_world` → `temperate_world` (id and display name;
+   `lib/constants/bodies.ts:26-31`, `lib/types/game.ts:40-41`, prefab reference
+   `lib/engine/homeworld-prefab.ts:167`). New rows: `gaia_world` (habitable, very rare, small
+   deposit base, habitableFraction ~0.85, largest size band) and `tundra_world` (habitable,
+   marginal, habitableFraction ~0.12). Rows only — no archetype-specific behaviour anywhere.
+5. **Calibration targets** (defaults set by measurement against the census, definitions above
+   set by meaning): ≥1 habitable body in 30–40% of natural systems; ≥2 in 5–10%; exactly 3 in
+   ≤1.5%; 4+ never. Mean full-build-out popCap over habitable bodies ≈ 10,000 pops
+   (`habitablePotentialPop`, `lib/engine/development.ts:78-81`), p99 approaching ~20,000.
+   Below-colonisation-floor share (habitableSpace < 1, `lib/constants/expansion.ts:27`) stays
+   ≤ ~3%. Sim health bar (no NaN/runaway/pinning, founding still occurs, dispersion sane) at
+   both horizons; conservation identities green.
+6. **Save compatibility:** renaming a `BodyArchetypeId` member invalidates existing saves'
+   body rows (no load-time guard narrows `bodyType`; `BODY_ARCHETYPES[b.bodyType]` on an old
+   id is undefined and crashes read surfaces). Accepted under the pre-1.0 "saves break on
+   world-shape change" rule and stated in the PR.
+
+First-cut value tables (proposals with rationale; calibration owns the final numbers):
+
+| Archetype | habitable | habitableFraction | sizeRange | note |
+|---|---|---|---|---|
+| temperate_world | yes | 0.7 → **0.8** | **[2.5, 4.5]** | mean ≈ 11,200 pops at mean size 3.5 |
+| gaia_world (new) | yes | **0.85** | **[3.0, 5.0]** | rare; low deposit weights (biomass/arable/water 2) |
+| ocean_world | yes | 0.45 → **0.6** | **[2.0, 4.0]** | mean ≈ 7,200 pops |
+| jungle_world | yes | 0.5 → **0.65** | **[2.0, 4.0]** | |
+| arid_world | yes | 0.22 | **[1.0, 2.5]** | stays marginal by design |
+| tundra_world (new) | yes | **0.12** | [0.8, 1.8] | marginal frontier world |
+| volcanic / frozen / barren / asteroid / gas | no | unchanged | [0.5, 1.5] (today's band) | dead-side space and deposits stay put |
+
+### Hazard worksheet
+
+**1. One quantity, several jobs** (impact output in session log; key excerpts):
+
+| Quantity | Readers today | Moved by this design | Intended? |
+|---|---|---|---|
+| `BODY_ARCHETYPES` | `lib/engine/body-gen.ts` (roll + danger sum), `components/system/system-danger-badge.tsx:30`, `lib/services/universe.ts:103` (display name) | values + one id + two new rows | yes — all three readers deliberately stay coupled; the table is the single source of body identity |
+| `SUN_CLASSES` | `lib/engine/body-gen.ts` only | weights + bodyCount | yes, contained |
+| `SUBSTRATE_GEN.SIZE_MIN/MAX` | `lib/engine/body-gen.ts:87` only | **retired** in favour of per-archetype `sizeRange` | yes — separation, removes a global knob |
+| `habitableSpace` | directed-build (housing fit, colony sizing `:1387,1391`), `development.ts:78-103` (potential pop → development points), `colonisation-value.ts:87,163` (land premium), tick assembly, build-options, services | its *values* shift up on habitable worlds, down galaxy-wide share | yes — every reader is meant to see bigger prime worlds; the field's meaning is unchanged |
+| `SPACE_PER_SIZE` | substrate-space partition | **not moved** | deliberate — moving it would rescale deposits too |
+| `DEVELOP_HABITABLE_FLOOR` | colony-eligibility `:83`, directed-build `:1387` | **not moved**; below-floor share held ≤ ~3% | deliberate — colonisability is not the lever |
+
+**2. Constants read for their authored meaning:**
+
+| Constant | Docstring says | Used as | Same? |
+|---|---|---|---|
+| `habitableFraction` | "Fraction of general space that is habitable (supports population centres)" (`bodies.ts:21-22`) | same | yes |
+| `SPACE_PER_SIZE` | "Sized so a developed system supports billions of people" (`substrate-gen.ts:17-19`) | left as the global anchor; billions-per-world now realised via size | yes |
+| `POP_CENTRE_DENSITY` | "popCap one population-centre building provides. Below a building's labour total by design" (`industry.ts:178`) | ceiling conversion habitableSpace→pops | yes |
+
+**3. Systems sweep:**
+
+| System | Interaction | Reason if none |
+|---|---|---|
+| Events | none | no event reads bodyType/habitability; `asteroid_strike` is an event id, unrelated to the belt archetype; fewer developed systems just means fewer spawn targets |
+| Population + migration | popCap ceilings and headroom shift → attractiveness gradients steepen toward big worlds | — |
+| Unrest / regime | indirect only — crowding on big worlds is rate-gated for centuries | — |
+| Industry + staffing | bigger habitable worlds carry more general space → more industry land; dead-world extraction stays staffing-bound by tiny habitable fractions (the intended outpost shape) | — |
+| Infrastructure decay | none | decays toward use; gen-time values don't enter |
+| Directed logistics | outcome-level: sharper specialisation (big habitable importers, dead extractors) → more hauling; read at calibration | — |
+| Directed build / planner | colony ROI reordering (land premium on big worlds), housing fit ceilings rise | — |
+| Colonisation + founding manifest | candidate mix changes; eligibility mechanics untouched | — |
+| Treasury / purse | none | charter formula reads maintenance bill, not substrate |
+| Factions + relations | homeworld site-selection bias re-checked at calibration (habitable systems rarer); prefab itself unchanged | — |
+| Save format (`World` shape) | shape unchanged; `bodyType` union member renamed → old saves invalid (behaviour §6) | — |
+| Harness metrics | every cohort baseline shifts by design; census is the new gen-side metric; conservation identities unaffected | — |
+
+**4. Claims with evidence:** all carried in `## Evidence` (frames with horizon + cohort).
+
+**5. Signals consumed:**
+
+| Consumes | Produced at | Shape today | Design assumes |
+|---|---|---|---|
+| `habitableSpace` (body/system) | `partitionBody`, `lib/engine/substrate-space.ts:46`; aggregated `body-gen.ts:156` | ≥0, continuous | same, larger on habitable worlds |
+| full-build-out potential | `habitablePotentialPop`, `development.ts:78-81` | habitableSpace/spaceCost × 20 | unchanged formula |
+| eligibility floor | `colony-eligibility.ts:83` | habitableSpace < 1 → blocked | unchanged |
+
+**6. Aggregates and what else moves them:**
+
+| Metric | Cohort | What else moves it |
+|---|---|---|
+| habitable-count distribution | natural-gen systems (capitals excluded) | seed (validated stable over 5 seeds); body-count ranges |
+| mean habitable popCap ceiling | habitable bodies, natural-gen | archetype mix shift (more tundra drags the mean — read per-archetype too) |
+| founding pacing (colonies, concurrency) | per faction, both horizons | charter/pool gates (the split-off row); settler supply |
+
+### Falsifiers (provenance: committed at d572dc8e and e60dc0d2, moved here unedited)
+
+Per-claim falsifiers and the terminal falsifier remain above in this file exactly as
+committed; the evidence outcome was **confirmed** on all four claims (correction 0603db9a
+narrowed claim 1's licenses only). Post-change acceptance is behaviour §5's calibration
+targets, measured with the same census instrument.
+
 ### Terminal falsifier
 
 At the t=0 generation census (whole-galaxy cohort, default 600-system preset): if **fewer than
