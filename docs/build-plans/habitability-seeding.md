@@ -89,6 +89,94 @@ both simulate horizons):
 - **Claim 4** (delivery reach): descriptive, no kill-line — a reach reading rules nothing out;
   it sizes whether sparser habitables need a migration tweak.
 
+## Evidence (measured 2026-08-22)
+
+Instruments: `temp/habitability-census.ts` (t=0 generation census, 5 seeds × 600 systems,
+validated against an analytic expectation derived independently from the weight tables:
+measured per-body habitable rate 35.7% vs 35.1% analytic) and one unmodified
+`npm run simulate` baseline (`temp/habitability-simulate-baseline.txt`). No tracked code was
+instrumented.
+
+### Claim 1 — habitable-bodies-per-system distribution
+
+```
+Meaning:  Two-thirds of systems have a habitable world and a third have two or more —
+          the mix is habitable-heavy, though "almost every system" was an overstatement.
+Claim:    Most systems carry ≥1 habitable body; multi-habitable systems are common.
+Number:   ≥1 habitable: 65.7%; ≥2: 31.4% (0: 34.3%, 1: 34.2%, 2: 22.1%, 3: 8.0%, 4: 1.2%, 5: 0.1%)
+Horizon:  t=0 generation census (gen-time fact; horizon-independent)
+Cohort:   2,900 natural-gen systems over 5 seeds × 600-system preset; 100 prefab capitals excluded
+Licenses: Confirms the retune direction (terminal falsifier: <40% any / <10% multi — not met).
+          Does NOT say which systems are *viable founding targets* — viability is an aggregate
+          over deposits + space, not the habitable flag.
+```
+
+Raw:
+
+```
+0 habitable: 996 systems (34.3%)   1: 993 (34.2%)   2: 641 (22.1%)   3: 232 (8.0%)
+4: 35 (1.2%)   5: 3 (0.1%)          ≥1: 65.7%   ≥2: 31.4%
+```
+
+### Claim 2 — full-build-out popCap vs the 10,000-pop Earth anchor
+
+```
+Meaning:  The average habitable world can hold about a sixth of an Earth even fully built out;
+          only prefab capitals reach the anchor today.
+Claim:    Most habitable worlds' full-build-out popCap sits far below 10,000 pops.
+Number:   Per habitable body: mean 1,719 / median 1,638 / max 4,198 pops.
+          Per system (all bodies): mean 1,949 / max 10,845. Capitals: mean 14,150 (prefab).
+Horizon:  t=0 census (ceiling is a gen-time fact: habitableSpace × POP_CENTRE_DENSITY 20,
+          housing spaceCost 1.0 — lib/constants/industry.ts:179,256-260)
+Cohort:   3,126 habitable bodies / 2,900 natural systems / 100 capitals, 5 seeds
+Licenses: Confirms the size retune is needed (falsifier ≥10,000 — not met; gap ~6×).
+          A ceiling, not an outcome: says nothing about what population is actually reached,
+          which staffing, growth and supply gate long before the housing ceiling.
+```
+
+### Claim 3 — colonisation pacing at the 10K horizon
+
+```
+Meaning:  Colonisation is effectively unpaced — half the galaxy is colonised within ~7 in-world
+          years and the money/pool gates almost never bite.
+Claim:    Early colonisation runs as a burst with many concurrent foundings per faction.
+Number:   292 colonies founded by t=10,000; 267 establishes open CONCURRENTLY at run end
+          (~13 per faction across 20 factions); gating split over 55.8K colony-cycles:
+          ungated 96.4% (53.8K), funds 3.4% (1.9K), pool 0.2% (96), charter 0.
+Horizon:  Both: 1,000t (pre-founding — 0 founded, 48 establishes already open) and 10,000t
+          (founding era ≈ year 7; run-end concurrency is censored — still rising).
+Cohort:   All 20 factions (8 major + 12 minor), default 600-system preset, harness baseline seed
+Licenses: Confirms the burst claim (falsifier: median ≤1 concurrent per faction — not met by
+          an order of magnitude). Also supports the split-off concurrency-pricing row: the
+          charter gate bit ZERO colony-cycles. Does NOT license tuning any constant against
+          these numbers — 10K is founding era, not equilibrium.
+```
+
+Raw (10K arm):
+
+```
+Founding stock: 292 colonies founded (292 reached a first assessment)
+what gated in-flight colonies (55.8K colony-cycles): charter 0 | funds 1.9K | pool 96 | ungated 53.8K
+tonnes in the ledgers of 267 open establishes ... peak 267 concurrent
+Developed systems | homeworld 20 | colony 292
+```
+
+### Claim 4 — colonist delivery reach (descriptive, no kill-line)
+
+```
+Meaning:  Delivered colonists travel any distance — delivery ignores topology inside a faction,
+          so sparser habitable systems cannot strand the primary colony-populating flow.
+Claim:    How far does colonist delivery actually reach?
+Number:   n/a — answered by code: allocateColonists pools per faction and water-fills with no
+          distance term (lib/engine/colonist-delivery.ts:15-17, documented as deliberate;
+          "a topology/blockade-aware routing layer layers on later").
+Horizon:  n/a (structural code fact)
+Cohort:   n/a
+Licenses: Kills the "migration needs adjacency tweaking" worry for THIS change. One-hop
+          diffusion stays local, but it is the secondary channel. If a routing layer lands
+          later, sparse habitables become its concern, not this retune's.
+```
+
 ### Terminal falsifier
 
 At the t=0 generation census (whole-galaxy cohort, default 600-system preset): if **fewer than
