@@ -49,9 +49,11 @@ The attention layer — how the player finds what to do — is two surfaces, bot
    two together, not twice.
    *Next step:* `/measure` how many systems are viable at founding today and how fast the galaxy
    actually colonises, before touching any constant.
-   *Don't:* buy scarcity by making systems dead. Barren-but-alive is a deliberate decision — rocky
-   barrens carry tiny artificial habitation so they read as small mining outposts, and only pure gas
-   giants are truly uninhabitable.
+   *Don't:* re-propose barren-but-alive (tiny artificial habitation on dead worlds so they read as
+   mining outposts). It shipped, was measured (78→140 near-empty outpost colonies by in-world year
+   20 — the early-game sprawl this row exists to cut), and was retired by owner decision 2026-08-23:
+   dead bodies carry zero people land and dead systems are uncolonisable until the technology phase
+   (working file: docs/build-plans/habitability-seeding.md).
 ---
 
 ## Unqueued
