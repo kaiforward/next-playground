@@ -76,6 +76,19 @@ both simulate horizons):
 - Fewer, larger habitable worlds slows early expansion without breaking the economy — the
   simulation slows rather than stalls (Kai's read on the roadmap row, 2026-08-12).
 
+### Per-claim falsifiers (committed before any instrument ran)
+
+- **Claim 1** (mix inverted): the terminal falsifier below.
+- **Claim 2** (worlds too small): if the mean habitable body's full-build-out popCap —
+  `habitableSpace × POP_CENTRE_DENSITY` (20) at housing `spaceCost` 1.0 — reads **≥ 10,000 pops**
+  at the t=0 census, the size-retune premise is false.
+- **Claim 3** (colonisation bursts): if at the 10,000-tick horizon the median count of
+  *concurrent* colony-establish projects per founding faction is **≤ 1**, pacing is already
+  gated and the burst claim is false — the motivation falls back to the mix/realism argument
+  alone.
+- **Claim 4** (delivery reach): descriptive, no kill-line — a reach reading rules nothing out;
+  it sizes whether sparser habitables need a migration tweak.
+
 ### Terminal falsifier
 
 At the t=0 generation census (whole-galaxy cohort, default 600-system preset): if **fewer than
