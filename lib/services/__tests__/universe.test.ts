@@ -4,7 +4,7 @@ import { setWorld, clearWorld } from "@/lib/world/store";
 import { getUniverse, getSystemDetail, getSystemSubstrate } from "@/lib/services/universe";
 import { ServiceError } from "@/lib/services/errors";
 import { regionInfos } from "@/lib/services/world-index";
-import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 import type { World } from "@/lib/world/types";
 import type { ResourceVector } from "@/lib/types/game";
 
@@ -130,8 +130,68 @@ describe("getSystemSubstrate", () => {
       water: body.qualWater,
       radioactive: body.qualRadioactive,
     };
-    expect(bodyView.slots).toEqual(expectedSlots);
+    expect(bodyView.counts).toEqual(expectedSlots);
     expect(bodyView.quality).toEqual(expectedQuality);
+    expect(bodyView.peopleLand).toBe(body.peopleLand);
+    expect(bodyView.industryLand).toBe(body.industryLand);
+    expect(bodyView.extractionModifier).toBe(BODY_ARCHETYPES[body.bodyType].extractionModifier);
+  });
+
+  it("marks occupied bodies from the cached fill-best-first fold, not every people-land body", () => {
+    // A system whose EXISTING bodies are all sub-threshold/locked (no other contributor to tie
+    // with), plus two above-threshold, unlocked bodies of our own and a cached fold whose
+    // frontierIndex stops at the first (best-score) one — the second must read unoccupied, proving
+    // the marking tracks the SPECIFIC cached prefix rather than "any habitable body" or "every body".
+    const system = world.systems.find((s) => {
+      const existing = world.bodies.filter((b) => b.systemId === s.id);
+      return existing.length > 0
+        && existing.every((b) => BODY_ARCHETYPES[b.bodyType].techLocked
+          || BODY_ARCHETYPES[b.bodyType].scores.default < HABITABILITY_THRESHOLD);
+    })!;
+    const existing = world.bodies.filter((b) => b.systemId === system.id)[0];
+    const best: World["bodies"][number] = {
+      ...existing, id: "occ-best", systemId: system.id, bodyType: "gaia_world", peopleLand: 500,
+    };
+    const worse: World["bodies"][number] = {
+      ...existing, id: "occ-worse", systemId: system.id, bodyType: "boreal_world", peopleLand: 500,
+    };
+    const patched: World = {
+      ...world,
+      bodies: [...world.bodies, best, worse],
+      systems: world.systems.map((s) =>
+        s.id === system.id ? { ...s, habitabilityQuality: { quality: 1, frontierIndex: 0 } } : s),
+    };
+    setWorld(patched);
+
+    const data = getSystemSubstrate(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.bodies.find((b) => b.id === "occ-best")!.occupied).toBe(true);
+    expect(data.bodies.find((b) => b.id === "occ-worse")!.occupied).toBe(false);
+  });
+
+  it("marks no body occupied when the system has never been assessed (no cached habitabilityQuality)", () => {
+    const system = world.systems.find((s) => world.bodies.filter((b) => b.systemId === s.id).length > 0)!;
+    const patched: World = {
+      ...world,
+      systems: world.systems.map((s) => (s.id === system.id ? { ...s, habitabilityQuality: undefined } : s)),
+    };
+    setWorld(patched);
+
+    const data = getSystemSubstrate(system.id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.bodies.every((b) => !b.occupied)).toBe(true);
+  });
+
+  it("reads absolute people land, 0 for a system with none — never NaN", () => {
+    const zeroed: World = {
+      ...world,
+      systems: world.systems.map((s) => (s.id === world.systems[1].id ? { ...s, peopleLand: 0 } : s)),
+    };
+    setWorld(zeroed);
+    const data = getSystemSubstrate(world.systems[1].id);
+    if (data.visibility !== "visible") throw new Error("expected visible");
+    expect(data.peopleLand).toBe(0);
+    expect(Number.isNaN(data.peopleLand)).toBe(false);
   });
 
   it('throws ServiceError("not_found") for an unknown system', () => {

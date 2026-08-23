@@ -14,6 +14,7 @@ import {
 import { systemPopNeeds } from "@/lib/services/pop-needs";
 import { readSystemIndustry } from "@/lib/services/system-industry-readout";
 import { BODY_ARCHETYPES } from "@/lib/constants/bodies";
+import { occupiedBodyIds } from "@/lib/utils/substrate";
 
 /**
  * Get all regions, star systems, and connections.
@@ -95,18 +96,37 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
     throw new ServiceError("System not found.", "not_found");
   }
 
-  const bodies: BodyView[] = world.bodies
-    .filter((b) => b.systemId === systemId)
-    .map((b) => ({
+  const systemBodies = world.bodies.filter((b) => b.systemId === systemId);
+  // Same contributing-set filter + score-descending sort as the habitability fold (lib/engine/habitability.ts) and
+  // `habitabilityBodiesBySystem` (lib/world/tick.ts) — re-derives WHICH bodies the cached
+  // `frontierIndex` covers, never a second occupancy opinion.
+  const occupied = occupiedBodyIds(
+    systemBodies.map((b) => ({
+      id: b.id,
+      score: BODY_ARCHETYPES[b.bodyType].scores.default,
+      peopleLand: b.peopleLand,
+      locked: BODY_ARCHETYPES[b.bodyType].techLocked,
+    })),
+    system.habitabilityQuality,
+  );
+
+  const bodies: BodyView[] = systemBodies.map((b) => {
+    const arch = BODY_ARCHETYPES[b.bodyType];
+    return {
       id: b.id,
       bodyType: b.bodyType,
-      archetypeName: BODY_ARCHETYPES[b.bodyType].name,
-      score: BODY_ARCHETYPES[b.bodyType].scores.default,
-      locked: BODY_ARCHETYPES[b.bodyType].techLocked,
+      archetypeName: arch.name,
+      score: arch.scores.default,
+      locked: arch.techLocked,
       size: b.size,
-      slots: depositCountsOf(b),
+      counts: depositCountsOf(b),
       quality: qualityOf(b),
-    }));
+      peopleLand: b.peopleLand,
+      industryLand: b.industryLand,
+      extractionModifier: arch.extractionModifier,
+      occupied: occupied.has(b.id),
+    };
+  });
 
   return {
     visibility: "visible",

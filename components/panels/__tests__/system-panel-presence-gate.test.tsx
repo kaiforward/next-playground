@@ -80,8 +80,12 @@ const VISIBLE_SUBSTRATE: SystemSubstrateData = {
       score: 0,
       locked: false,
       size: 1,
-      slots: ZERO_RESOURCES,
+      counts: ZERO_RESOURCES,
       quality: ZERO_RESOURCES,
+      peopleLand: 0,
+      industryLand: 0,
+      extractionModifier: 0.7,
+      occupied: false,
     },
   ],
 };

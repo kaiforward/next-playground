@@ -250,16 +250,30 @@ export interface BodyView {
   id: string;
   bodyType: BodyArchetypeId;
   archetypeName: string;
-  /** This body's default-pop habitability score — the archetype's static rating, not clamped to
-   *  a band here (band presentation is a later task). */
+  /** This body's default-pop habitability score — the archetype's static rating. Presented as a
+   *  BAND (`habitabilityScoreBand`, `lib/utils/substrate.ts`), never a bare number or the retired
+   *  per-body `habitable: boolean`. */
   score: number;
   /** True when this body's archetype is tech-locked (contributes no land or counts yet). */
   locked: boolean;
   size: number;
-  /** Per-resource deposit slots on this body (0 = no deposit). */
-  slots: ResourceVector;
+  /** Per-resource deposit slot counts on this body (0 = no deposit). */
+  counts: ResourceVector;
   /** Per-resource intrinsic quality multiplier on this body (0 = no deposit). */
   quality: ResourceVector;
+  /** This body's authored people-land budget — dark (present but non-functional) when locked or
+   *  below `HABITABILITY_THRESHOLD`. */
+  peopleLand: number;
+  /** This body's authored industry-land budget. */
+  industryLand: number;
+  /** Extraction work modifier in (0,1]. Extractors are a per-system pool with no body attribution,
+   *  so this is presented as a contribution WEIGHT to the system's shared effective yield, never
+   *  the yield of an extractor placed on this body specifically (spec §1). */
+  extractionModifier: number;
+  /** True when this body sits inside the system's current fill-best-first occupied prefix (the
+   *  cached habitability quality fold, derived by the service via `occupiedBodyIds` — the component computes
+   *  nothing). False for an unassessed system as well as for a body past the frontier. */
+  occupied: boolean;
 }
 /**
  * Physical substrate for one system — the static "what is physically here":
