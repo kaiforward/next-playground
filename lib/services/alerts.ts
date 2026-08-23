@@ -90,6 +90,11 @@ const SURVIVAL_STOCK_CYCLES_THRESHOLD = 3;
  * (a decline rate below roughly 1e-6 of itself per cycle) sorts as if it were non-shrinking. That is
  * judged an acceptable trade over the alternative (an unbounded two-key sort the flat `sortKey:
  * number` interface cannot express) rather than a silent bug.
+ * Abandonment Rule 2 no longer requires famine (population below the floor alone is enough), so
+ * this countdown — computed only for famine systems here — reads exactly one of the two ways a
+ * world can now reach the floor; a shrinking, well-fed world (quality-starved growth losing to
+ * unrest) counts down toward the same abandonment with no alert-side formula, since it never sets
+ * `supplyBand === "famine"` and so never reaches this branch.
  */
 const FAMINE_NON_SHRINKING_SORT_BASE = 1_000_000;
 

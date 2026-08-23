@@ -62,8 +62,8 @@ export async function runPopulationProcessor(
   // identically in both runs), so the difference isolates it exactly with no defensive clamp.
   // Absent system ⇒ 0, kept sparse for the same reason.
   const growthBySystem = new Map<string, number>();
-  // Abandonment Rule 2 (the death line): systems this cycle found in survival shortfall with
-  // post-delta population below ABANDON_POP_FLOOR. Reported, never applied here — this processor
+  // Abandonment Rule 2 (the death line): systems this cycle found with post-delta population
+  // below ABANDON_POP_FLOOR, famine or not. Reported, never applied here — this processor
   // stays pure and leaves the control-flip/reset to the tick body (lib/world/tick.ts), the sole
   // owner of `control` writes.
   const abandonedSystems: string[] = [];
@@ -107,23 +107,40 @@ export async function runPopulationProcessor(
     const grievance = grievanceShortfall(effective, P);
     const supplyTerm = supplyUnrestTerm(grievance, d, supply, scaledUnrest);
     const unrest = accumulateUnrest(s.unrest, supplyTerm, floor, scaledUnrest);
+    // Fill-best-first habitability quality (lib/engine/habitability.ts) multiplies the growth
+    // term only, and reads THIS CYCLE'S OPENING cached reading (`s.habitabilityQuality`) — never
+    // a fresh per-cycle fold, so growth moves with the fold-site caching policy below (recompute
+    // only on a frontier-index crossing), not every tick's raw occupancy. A system the processor
+    // has never assessed before (no opening cache — its first fold since colonisation) falls back
+    // to a fresh compute over this cycle's OPENING population, mirroring crowdingPressure's
+    // cycle-start read just above, rather than a neutral default — a real colony always has at
+    // least one positive-people-land body (the colonisability floor), so this reads a real score.
+    // With no body summary at all (nothing cached, nothing to fold — real play never produces
+    // this, the cache-write below skips the same case) growth runs at the raw rate.
+    const opening = s.habitabilityQuality
+      ?? (s.habitabilityBodies && s.habitabilityBodies.length > 0
+        ? systemHabitabilityQuality(s.habitabilityBodies, s.population)
+        : undefined);
+    const growthQuality = opening ? opening.quality : 1;
     // The delta reads the unrest this cycle just produced, so unrest resolves forward within the
     // cycle while crowding lags it by one. Growth/decline keep the absolute d — the
     // political/biological split: unrest (political) judges against memory, population change
     // (biological) reads the goods themselves.
-    const delta = populationDelta(s.population, s.popCap, d, unrest, params.population);
+    const delta = populationDelta(s.population, s.popCap, d, unrest, params.population, growthQuality);
     const population = Math.max(0, s.population + delta * catchUp);
-    // Abandonment Rule 2: famine (survival shortfall) AND the post-delta population has collapsed
-    // below the floor — the colony is over. Reads the SAME `supply` this cycle already resolved
-    // (the famine conjunct is the newborn guard: an unlucky opening never reads this on its own).
-    if (supply.survivalShortfall && population < ABANDON_POP_FLOOR) abandonedSystems.push(s.systemId);
+    // Abandonment Rule 2 (the death line): the post-delta population alone decides — famine is no
+    // longer a conjunct. A colony that declines to empty under sustained non-famine stress (a
+    // marginal-land world whose quality-scaled growth can't clear unrest, see populationDelta's
+    // docstring) abandons exactly the same as a starved one; ABANDON_POP_FLOOR (1, well under
+    // COLONY_SEED_POP 2) is the newborn guard now — an unlucky first cycle can't cross it alone.
+    if (population < ABANDON_POP_FLOOR) abandonedSystems.push(s.systemId);
     // Isolates the death component of `delta` by re-running the same pure fold with the death rate
     // zeroed — growth and decline are unaffected by that rate, so the difference is exactly what the
     // gate removed, without re-implementing populationDelta's internal formula here (which would
     // silently drift from the engine if its shape ever changed). Observational only: `delta` itself,
     // and therefore `population` above, is untouched.
     const deltaWithoutDeath = populationDelta(
-      s.population, s.popCap, d, unrest, { ...params.population, overshootDeathRate: 0 },
+      s.population, s.popCap, d, unrest, { ...params.population, overshootDeathRate: 0 }, growthQuality,
     );
     const overshootDeath = Math.max(0, deltaWithoutDeath - delta) * catchUp;
     if (overshootDeath > 0) overshootDeathBySystem.set(s.systemId, overshootDeath);
@@ -131,7 +148,7 @@ export async function runPopulationProcessor(
     // cancels decline and death exactly (both subtract identically in each run), leaving the growth
     // product alone.
     const deltaWithoutGrowth = populationDelta(
-      s.population, s.popCap, d, unrest, { ...params.population, growthRate: 0 },
+      s.population, s.popCap, d, unrest, { ...params.population, growthRate: 0 }, growthQuality,
     );
     const growth = (delta - deltaWithoutGrowth) * catchUp;
     if (growth > 0) growthBySystem.set(s.systemId, growth);
@@ -143,9 +160,15 @@ export async function runPopulationProcessor(
     // with one body in the prefix, quality is mathematically the top body's score at every
     // population level, so re-applying a fresh compute there would always be a no-op anyway. A
     // never-before-assessed system (habitabilityQuality absent) always takes the fresh reading.
-    const freshQuality = systemHabitabilityQuality(s.habitabilityBodies ?? [], population);
-    const habitabilityQuality = (s.habitabilityQuality === undefined
-        || s.habitabilityQuality.frontierIndex !== freshQuality.frontierIndex)
+    // With no body summary there is nothing to fold: the cache stays unwritten (same rule as
+    // supplyBand/provision below — an unclassifiable reading is left absent, never fabricated).
+    const bodies = s.habitabilityBodies ?? [];
+    const freshQuality = bodies.length > 0
+      ? systemHabitabilityQuality(bodies, population)
+      : undefined;
+    const habitabilityQuality = freshQuality !== undefined
+        && (s.habitabilityQuality === undefined
+          || s.habitabilityQuality.frontierIndex !== freshQuality.frontierIndex)
       ? freshQuality
       : s.habitabilityQuality;
     // The memory advances only now that this cycle's unrest has already been judged against it.

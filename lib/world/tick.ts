@@ -798,8 +798,8 @@ export function applyDevelopments(systems: TickSystem[], developments: SystemDev
 /**
  * Abandonment's death line (docs/active/gameplay/colonisation.md, "A colony is allowed to die"):
  * reset each system the
- * population processor reported (famine AND post-delta population below `ABANDON_POP_FLOOR`) back
- * to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
+ * population processor reported (post-delta population below `ABANDON_POP_FLOOR`, famine or not)
+ * back to unclaimed, factionless frontier — a genuine reset, not a mothballing. Population, unrest and
  * collapse debt zero; the stored Provision memory, this cycle's Provisioned reading, its band and
  * its critical-good weight are all deleted (the same resettlement rule `applyDevelopments`
  * observes above — a previous life's readings must not survive into the next one); buildings and
@@ -1306,8 +1306,8 @@ export async function runWorldTick(
   let overshootDeathBySystem: TickInstrumentation["overshootDeathBySystem"];
   // Calibration-only: per-cycle growth-term amount, keyed by system. Same reason as above.
   let growthBySystem: TickInstrumentation["growthBySystem"];
-  // Abandonment Rule 2 (the death line): systems the population processor found in famine with
-  // post-delta population below ABANDON_POP_FLOOR this cycle. Applied just below, outside the
+  // Abandonment Rule 2 (the death line): systems the population processor found with post-delta
+  // population below ABANDON_POP_FLOOR this cycle, famine or not. Applied just below, outside the
   // gate — the tick body is the sole owner of the control-flip/reset the processor only reports.
   let abandonedSystemIds: string[] = [];
   // The realised per-cycle population change's opening snapshot — captured here, BEFORE the

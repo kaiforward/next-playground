@@ -1414,13 +1414,21 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     expect("populationChange" in reloaded).toBe(false);
   });
 
-  it("a cycle in which population holds steady reports 0, distinguishably from absent", async () => {
-    // occupancy 0 ⇒ population 0 throughout: growth, decline and death all scale with population,
-    // so the pre-migration delta is EXACTLY 0 regardless of d/unrest — and a well-fed (ample-stock)
-    // system never enters famine, so this never risks the abandonment branch despite population
-    // sitting below ABANDON_POP_FLOOR.
-    const { world, systemId } = populationFixture(0, 0);
-    const after = await runTicks(world, CYCLE_LENGTH, POPULATION_CADENCE);
+  it("a stored populationChange of exactly 0 survives the tick's join/merge pair, distinguishably from absent", async () => {
+    // The hazard is representational: 0 is falsy, so a merge written as `value || undefined`
+    // (or a truthiness-guarded copy) would silently turn a legitimate steady-cycle reading into
+    // "absent". There is no world state that deterministically produces an exact-zero realised
+    // change under the live constants (every zero-growth arrangement raises unrest, making the
+    // decline term nonzero; a zero-population system abandons at ABANDON_POP_FLOOR instead), so
+    // the 0 is planted directly and carried through a real non-cycle tick — the same
+    // `toTickSystems`/`mergeSystemsIntoWorld` pair the absence test above drives, exercised on
+    // every tick. The write-site arithmetic itself is pinned by the definitional test below.
+    const { world, systemId } = populationFixture(0.5, 0);
+    const planted: World = {
+      ...world,
+      systems: world.systems.map((s) => (s.id === systemId ? { ...s, populationChange: 0 } : s)),
+    };
+    const after = (await runWorldTick(planted)).world;
 
     const change = fixtureSystem(after, systemId).populationChange;
     expect(change).not.toBeUndefined();

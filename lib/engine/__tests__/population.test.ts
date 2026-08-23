@@ -796,31 +796,72 @@ describe("populationDelta (crowd-braked growth, gated overshoot death)", () => {
 
   it("grows at full rate right up against the cap (r = 0.99), unlike the old logistic", () => {
     // Old logistic headroom (1 - 0.99) throttled growth to ~1% here; the crowd brake keeps it full.
-    const delta = populationDelta(990, 1000, 0, 0, p);
+    const delta = populationDelta(990, 1000, 0, 0, p, 1);
     expect(delta).toBeCloseTo(p.growthRate * 990, 6); // full rate, ~19.8
     expect(delta).toBeGreaterThan(1); // old logistic would give ~0.198
   });
 
   it("still grows at full rate at exactly the cap (r = 1)", () => {
-    expect(populationDelta(1000, 1000, 0, 0, p)).toBeCloseTo(p.growthRate * 1000, 6);
+    expect(populationDelta(1000, 1000, 0, 0, p, 1)).toBeCloseTo(p.growthRate * 1000, 6);
   });
 
   it("has zero growth at or beyond the brake end (r >= 1.15)", () => {
-    expect(populationDelta(1150, 1000, 0, 0, p)).toBeCloseTo(0, 6);
-    expect(populationDelta(1200, 1000, 0, 0, p)).toBeCloseTo(0, 6);
+    expect(populationDelta(1150, 1000, 0, 0, p, 1)).toBeCloseTo(0, 6);
+    expect(populationDelta(1200, 1000, 0, 0, p, 1)).toBeCloseTo(0, 6);
   });
 
   it("declines with unrest exactly as before (growth suppressed by full dissatisfaction)", () => {
     // D = 1 zeroes growth, isolating the unchanged decline term: declineRate * pop * unrest.
-    expect(populationDelta(500, 1000, 1, 0.5, p)).toBeCloseTo(-(p.declineRate * 500 * 0.5), 6);
+    expect(populationDelta(500, 1000, 1, 0.5, p, 1)).toBeCloseTo(-(p.declineRate * 500 * 0.5), 6);
   });
 
   it("has no growth term when popCap is 0", () => {
-    expect(populationDelta(100, 0, 0, 0, p)).toBe(0);
+    expect(populationDelta(100, 0, 0, 0, p, 1)).toBe(0);
   });
 
   it("stays at 0 when population is already 0", () => {
-    expect(populationDelta(0, 1000, 0.5, 0.5, p)).toBe(0);
+    expect(populationDelta(0, 1000, 0.5, 0.5, p, 1)).toBe(0);
+  });
+
+  it("quality multiplies the growth term only — decline and overshoot-death are bit-identical", () => {
+    // Same growth-bearing state (r < 1, D = 0) at three quality values: growth scales linearly
+    // with quality, nothing else in the formula moves.
+    const full = populationDelta(500, 1000, 0, 0, p, 1);
+    const half = populationDelta(500, 1000, 0, 0, p, 0.5);
+    const zero = populationDelta(500, 1000, 0, 0, p, 0);
+    expect(full).toBeCloseTo(p.growthRate * 500, 6);
+    expect(half).toBeCloseTo(full / 2, 6);
+    expect(zero).toBeCloseTo(0, 6);
+
+    // Decline (unrest > 0, D = 1 so growth is zeroed by satisfaction anyway) is bit-identical
+    // across quality — the decline term never reads quality at all.
+    const declineAtQ1 = populationDelta(500, 1000, 1, 0.5, p, 1);
+    const declineAtQ0 = populationDelta(500, 1000, 1, 0.5, p, 0);
+    expect(declineAtQ1).toBe(declineAtQ0);
+
+    // Overshoot-death (past the cap, above the unrest gate) is bit-identical across quality too.
+    const deathParams: PopulationParams = { ...p, overshootDeathRate: 0.1 };
+    const deathAtQ1 = populationDelta(1200, 1000, 0, 0.7, deathParams, 1);
+    const deathAtQ0 = populationDelta(1200, 1000, 0, 0.7, deathParams, 0);
+    expect(deathAtQ1).toBe(deathAtQ0);
+  });
+
+  it("sign condition: with growthRate == declineRate, net is negative once quality * crowdFactor * (1-d) < unrest", () => {
+    // r = 0.5 (well under the cap) -> crowdFactor = 1. d = 0 -> satisfactionFactor = 1. quality =
+    // 0.6. growth = growthRate * pop * 1 * 1 * 0.6 = 0.02 * 500 * 0.6 = 6. decline needs unrest such
+    // that declineRate * pop * unrest > 6: 0.02 * 500 * unrest > 6 <=> unrest > 0.6. Pin the exact
+    // boundary and one point on each side.
+    const equalRates: PopulationParams = { ...p, growthRate: 0.02, declineRate: 0.02 };
+    const atBoundary = populationDelta(500, 1000, 0, 0.6, equalRates, 0.6);
+    expect(atBoundary).toBeCloseTo(0, 6); // growth 6, decline 0.02*500*0.6 = 6 -> net 0
+
+    const belowUnrest = populationDelta(500, 1000, 0, 0.5, equalRates, 0.6);
+    expect(belowUnrest).toBeCloseTo(6 - 0.02 * 500 * 0.5, 6); // 6 - 5 = 1, still positive
+    expect(belowUnrest).toBeGreaterThan(0);
+
+    const aboveUnrest = populationDelta(500, 1000, 0, 0.7, equalRates, 0.6);
+    expect(aboveUnrest).toBeCloseTo(6 - 0.02 * 500 * 0.7, 6); // 6 - 7 = -1, genuinely negative
+    expect(aboveUnrest).toBeLessThan(0);
   });
 });
 
@@ -835,18 +876,18 @@ describe("populationDelta — gated overshoot death", () => {
   };
 
   it("displaces no one at or under the cap regardless of unrest", () => {
-    expect(populationDelta(1000, 1000, 0, 1, deathOnly)).toBeCloseTo(0, 6);
-    expect(populationDelta(800, 1000, 0, 1, deathOnly)).toBeCloseTo(0, 6);
+    expect(populationDelta(1000, 1000, 0, 1, deathOnly, 1)).toBeCloseTo(0, 6);
+    expect(populationDelta(800, 1000, 0, 1, deathOnly, 1)).toBeCloseTo(0, 6);
   });
 
   it("does not fire at or below the unrest gate (0.65)", () => {
-    expect(populationDelta(1200, 1000, 0, 0.65, deathOnly)).toBeCloseTo(0, 6);
-    expect(populationDelta(1200, 1000, 0, 0.5, deathOnly)).toBeCloseTo(0, 6);
+    expect(populationDelta(1200, 1000, 0, 0.65, deathOnly, 1)).toBeCloseTo(0, 6);
+    expect(populationDelta(1200, 1000, 0, 0.5, deathOnly, 1)).toBeCloseTo(0, 6);
   });
 
   it("fires above the unrest gate, scaled by overshoot and unrest", () => {
     // overshoot = 200, unrest 0.7 -> death = 0.1 * 200 * 0.7 = 14.
-    const delta = populationDelta(1200, 1000, 0, 0.7, deathOnly);
+    const delta = populationDelta(1200, 1000, 0, 0.7, deathOnly, 1);
     expect(delta).toBeCloseTo(-14, 6);
     expect(delta).toBeLessThan(0);
   });
@@ -860,7 +901,7 @@ describe("populationDelta — gated overshoot death", () => {
       overshootDeathUnrestGate: 0.65,
     };
     // pop 1200, cap 1000: growth 0 (r > brakeEnd), decline 0.015*1200*1 = 18, death 0.1*200*1 = 20.
-    expect(populationDelta(1200, 1000, 0, 1, violent)).toBeCloseTo(-(18 + 20), 6);
+    expect(populationDelta(1200, 1000, 0, 1, violent, 1)).toBeCloseTo(-(18 + 20), 6);
   });
 });
 
