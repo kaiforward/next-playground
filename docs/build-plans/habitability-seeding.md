@@ -617,3 +617,493 @@ At the t=0 generation census (whole-galaxy cohort, default 600-system preset): i
 ~10%**, then the mix is not inverted, premise 1 is false, and the retune direction dies —
 the felt problem would have to be coming from somewhere other than the seeding mix (e.g.
 founding eligibility or pacing), and the design restarts from that evidence.
+
+## Build plan
+
+Four stages on `feat/habitability-seeding`, each ending in a sim gate — stages are check-in
+pauses, one branch, one squash PR. Every `Files` list is a floor, not a ceiling. All citations
+below re-verified against the working tree this session (2026-08-23).
+
+### Resolution table
+
+Every quantity a task's Interface names, resolved before the tasks were written.
+
+| Measure (spec prose) | State | Producer / receipt |
+|---|---|---|
+| habitability score per class × pop type | new | T1 (`BODY_ARCHETYPES` column) |
+| `HABITABILITY_THRESHOLD` (0.5) | new | T1 |
+| people-land range per class | new | T1 |
+| industry-land range per class | new | T1 |
+| per-resource deposit-count ranges | new | T1 — derived from `GOOD_CONSUMPTION` (`lib/constants/physical-economy.ts:60-69`) ÷ `OUTPUT_PER_UNIT` (`lib/constants/industry.ts:181+`), formula spec-authored, carried verbatim |
+| extraction work modifier per class | new | T1 |
+| tech-lock flag per class | new | T1 (class-level constant; no per-body world field — locks only release, unlock is future tech) |
+| habitable-count damping ladder (hard 0 at 3) | new | T1 |
+| sun-class weights / body counts | exists | `lib/constants/bodies.ts:93-120` (retuned T1) |
+| per-body peopleLand / industryLand / counts | new | T2 (`GeneratedBody` re-cut) |
+| system people-land aggregate ("clears the threshold") | new | T2 (`substrateAggregates`) |
+| system industry-land aggregate | new | T2 |
+| `extractionEfficiency[r]` (count-weighted mean modifier) | new | T2 |
+| `yieldMult` (pure ground grade — kept) | exists | `depositGradeVector`, `lib/engine/body-gen.ts:158` |
+| `rollQualityBand` (kept) | exists | `lib/engine/substrate-space.ts:52-58` |
+| extraction output = count × yieldMult × efficiency | new seam | T2, at `lib/engine/industry.ts:480-481` (the one tier-0 yield application) |
+| `SAVE_FORMAT_VERSION` 15→16 | exists | `lib/world/save.ts:29` (bumped T2) |
+| `generalSpaceUsed` → `industryLandUsed` | exists | `lib/engine/industry.ts:329-337`; six readers verified: `build-options.ts:77`, `construction-centre.ts:86`, `directed-build.ts:247,564,1005`, `development.ts:132` (T3) |
+| `habitableHousingHeadroom` single-bound | exists | `lib/engine/directed-build.ts:243-250` (T3) |
+| `SubstrateSpace` / `summariseSpace` three pairs | exists | `lib/engine/industry.ts:976-1025` (T3) |
+| colonisability floor = `effectiveSpaceCost(HOUSING_TYPE)` | exists | `DEFAULT_SPACE_COST` 1.0 (`lib/constants/industry.ts:177,256-260`) = `DEVELOP_HABITABLE_FLOOR` 1 (`lib/constants/expansion.ts:27`) — numerically identical, verified (T4) |
+| floor call sites | exists | `lib/services/colony-eligibility.ts:83`, `lib/world/tick.ts:1574` → `directed-build.ts:1236-1237,1387` (T4) |
+| "fill-best-first" quality (sorted prefix mean) | new | T7 (`lib/engine/habitability.ts`) |
+| `POP_CENTRE_DENSITY` (prefix denominator) | exists | `lib/constants/industry.ts:179` |
+| growth coupling ("multiplies growth") | exists fn | `populationDelta`, `lib/engine/population.ts:458-474` — new param T8 |
+| growth/death isolations that must stay exact | exists | `lib/tick/processors/population.ts:124-136` (T8) |
+| abandonment famine-bit drop | exists | `lib/tick/processors/population.ts:118`; `ABANDON_POP_FLOOR` 1 < `COLONY_SEED_POP` 2, so no newborn insta-abandon (verified `lib/constants/population.ts:141`, `lib/constants/expansion.ts:32`) (T8) |
+| claim scoring ("normalise on the placeHomeworlds pattern") | exists | `lib/engine/expansion.ts:46-52`; pattern at `lib/engine/faction-gen.ts:184,195` (T10) |
+| `homeworldResourceDiversity` | exists | `lib/engine/faction-gen.ts:158-162` (T10) |
+| `colonyValue` land coefficients + σ | exists | `lib/engine/colonisation-value.ts:80-92,150-168`; `SEED_POP_COST_WEIGHT` `lib/constants/colonisation.ts:35` (T11) |
+| `popRef`/`industryRef` galaxy maxes | exists | `lib/engine/development.ts:99-107` (T12) |
+| `industryPotential` deposit→land coefficient | exists | `lib/engine/development.ts:89-91` via `DEPOSIT_SLOT_FOOTPRINT` (`substrate-gen.ts:22`, re-authored T12) |
+| `developmentPotential` (vitals) | exists | `lib/engine/development-points.ts:126-136` (T12) |
+| `(1−dev)` consumers (calibration reads only) | exists | `directed-build.ts:610`; `processors/directed-build.ts:532-533` → `construction.ts:156` |
+| economy-type classifier (share-based, scale-invariant) | exists | `lib/engine/economy-type.ts` (guard read T6) |
+| `bodyDanger` / `dangerBand` | exists | aggregate `body-gen.ts:159`; bands `lib/utils/system.ts:4-10` (census read T6; re-cut booked at Gate A) |
+| events cap (accepted dilution) | exists | `lib/constants/events.ts:89-96` — no change; events-revisit row verified in `docs/ROADMAP.md:77` |
+| `survival-short` cohort re-cut | exists | `lib/tick-harness/cohort-analysis.ts:241-248` (T9) |
+| coherence instrument + alias | exists | `scripts/substrate-coherence.ts`, `package.json:14` `report:coherence` (re-cut T6) |
+| `no_housing_headroom` alert | exists | `lib/constants/alerts.ts:128`, `lib/services/alerts.ts:653` — follows T3 automatically; smoke Gate D |
+| migration untouched (reads built popCap) | exists | `lib/engine/migration.ts:52,63` |
+| delivery quality-blind (watched, not changed) | exists | `lib/engine/colonist-delivery.ts` header (T9 watch metric) |
+| `homeworldGardenBody` direct authoring | exists | `lib/engine/homeworld-prefab.ts:141-168`; prefab prepend `universe-gen.ts:621`; `economyType` writes `universe-gen.ts:351,633` (T2) |
+| `habitable: boolean` deletion set | exists | `bodies.ts:15`, `body-gen.ts:19,98`, `world/types.ts:262`, `world/gen.ts:153`, `api.ts:253`, `services/universe.ts:104`, `body-card.tsx:16,21` (T5/T13) |
+| `availableSpace` deletion set | exists | 7 modules per `npm run impact -- availableSpace`: substrate-space, body-gen, universe-gen, world/gen, world/types, system-astrography, services/universe (+ coherence script) (T5) |
+| new per-resource column family floor | walked | sibling `yield*`: `engine/resources.ts:59-83,155`, `world/types.ts:247`, `world/gen.ts:144`, `world/tick.ts:234`, `tick/processors/good-market-state.ts:78-101`, services construction/system-industry-readout/trade-flow/dev-tools (T2) |
+
+No measure resolved unresolvable. Rename reader sets sized with `npm run impact`:
+`habitableSpace` 22 modules, `generalSpace` 18, `availableSpace` 7 — pasted receipts in session;
+the spec's §2 reader list matches.
+
+### Stage 1 — three-budget substrate
+
+### Task 1 — Author the archetype tables, scores, budgets, counts and ladder
+Files:      `lib/constants/bodies.ts`, `lib/constants/substrate-gen.ts`,
+            `lib/constants/industry.ts` (OUTPUT_PER_UNIT overrides authored jointly with counts),
+            `lib/types/game.ts` (BodyArchetypeId union: +tundra_world, boreal_world, gaia_world;
+            garden_world→temperate_world), `lib/constants/__tests__/archetype-weights.test.ts`,
+            every `garden_world` literal (grep set incl. `lib/engine/homeworld-prefab.ts:167`).
+Interface:  `BodyArchetype` gains: `scores: { default: number }` (per-pop-type columns, one row
+            ships), `peopleLand: {min,max}`, `industryLand: {min,max}`,
+            `depositCounts: Partial<Record<ResourceType, {min,max}>>` (integers),
+            `extractionModifier: number` in (0,1], `techLocked: boolean`, kept `dangerBaseline`.
+            New constants: `HABITABILITY_THRESHOLD = 0.5`; `HABITABLE_COUNT_DAMPING` ladder whose
+            entry at count 3 is a FIXED hard 0 (steps 1-2 calibration-owned). Sun-class weights and
+            body counts retuned per spec §5 (yellow 4-8, orange 3-7, blue/red 2-5; boreal on
+            orange; gaia very rare). Score table per spec §1, verbatim. Transitional: the legacy
+            `habitable`/`generalWeight`/`habitableFraction`/`resourceBase` columns stay on every
+            row (new rows author placeholder legacy values) so the old partition compiles until T2
+            deletes both.
+Proves:     (1) every sun class keeps ≥1 positive-weight dead class; (2) yellow and orange keep
+            ≥1 positive-weight above-threshold class; (3) the ladder's terminal entry is exactly 0
+            (a 4th habitable is impossible by table, not by tuning); (4) gaia_world holds the top
+            people-land band (restates `archetype-weights.test.ts:27-34`); (5) every authored count
+            range is integer with min ≤ max, and the water band contains the spec's anchor
+            derivation (≈35 at 10,000 pops) — fails on an empty or unauthored table (vacuity).
+Consumes:   —
+
+### Task 2 — Generation rewrite: bodies author budgets; aggregates; save bump
+Files:      `lib/engine/body-gen.ts`, `lib/engine/substrate-space.ts` (partitionBody deleted;
+            rollQualityBand/depositDisplayName kept), `lib/engine/homeworld-prefab.ts`,
+            `lib/engine/universe-gen.ts`, `lib/engine/resources.ts` (extractionEfficiency column
+            helpers beside slot/yield families), `lib/world/types.ts`, `lib/world/gen.ts`,
+            `lib/world/tick.ts`, `lib/tick/rows.ts`, `lib/tick/processors/good-market-state.ts`,
+            `lib/engine/industry.ts` (:460-481 seam), `lib/world/save.ts`, services threading
+            `yields` (`construction.ts`, `system-industry-readout.ts`, `trade-flow.ts`,
+            `dev-tools.ts`).
+Interface:  `GeneratedBody { bodyType, size (display flavour), peopleLand, industryLand,
+            counts: ResourceVector, quality: ResourceVector }` — `habitable` and the partition
+            fields die here, along with T1's transitional legacy columns, `SIZE_MIN/MAX` and
+            `SPACE_PER_SIZE`. `rollBody` draws each budget uniform-in-range from the table;
+            counts integer. The damping ladder multiplies above-threshold class weights BEFORE the
+            `w > 0` candidate filter (site `body-gen.ts:73-74`), keyed on above-threshold bodies
+            already rolled. `substrateAggregates(bodies)` returns `{ habitableSpace (=Σ peopleLand
+            over score ≥ threshold ∧ unlocked), generalSpace (=Σ industryLand over unlocked),
+            slotCap (=Σ counts over unlocked), yieldMult (kept), extractionEfficiency:
+            ResourceVector (count-weighted mean extractionModifier; 1.0 where no counts),
+            bodyDanger, availableSpace (transitional identity: peopleLand + industryLand +
+            Σcounts × DEPOSIT_SLOT_FOOTPRINT — dies in T5) }` — NEW SEMANTICS UNDER THE OLD SYSTEM
+            FIELD NAMES; the mechanical rename is T5. Tier-0 production multiplies
+            `extractionEfficiency[resource]` at `industry.ts:480-481`, threaded on the same row
+            path as `yields`. `homeworldGardenBody()` authors temperate class, score 1.0, explicit
+            budgets and counts; the back-solve from buildings is deleted. `SAVE_FORMAT_VERSION = 16`
+            (one shipped bump; mid-branch shape changes ride the same 16 — dev saves are
+            disposable, the guarded boundary is 15→16 failing cleanly per `save.ts:78-83`).
+Proves:     (1) a tech-locked class contributes zero counts, zero extractionEfficiency weight AND
+            zero industry land to aggregates; (2) arid/tundra contribute 0 to system people land
+            while their authored peopleLand stays visible per-body (dark land) and their deposits
+            count; (3) with a forced all-habitable table a system never carries a 4th
+            above-threshold body, and dead classes remain rollable at every ladder step; (4) a
+            resource with zero counts reads extractionEfficiency 1.0 (no NaN — matches the
+            yieldMult convention); (5) an extractionModifier of 0.5 halves tier-0 output and
+            leaves tier-1+ untouched; (6) a v15 save refuses with the clean version error and a
+            fresh world round-trips through serialise/deserialise with the new columns finite.
+Consumes:   T1.
+
+### Task 3 — The build rule: housing bills people land, industry bills industry land
+Files:      `lib/engine/industry.ts` (:329-337, :976-1025), `lib/engine/directed-build.ts`
+            (:243-250, :564, :1005), `lib/engine/build-options.ts` (:77,:95),
+            `lib/engine/construction-centre.ts` (:86), `lib/engine/development.ts` (:132),
+            `lib/services/alerts.ts` (follows automatically — test only).
+Interface:  `industryLandUsed(buildings): number` (renamed `generalSpaceUsed`; housing excluded,
+            extractors excluded). `habitableHousingHeadroom` drops `min(…, remainingGeneral)` and
+            returns the people-land bound alone. `SubstrateSpace` re-cut as three independent
+            used/total pairs (people / industry / deposits); `summariseSpace(peopleLand,
+            industryLand, counts, buildings)` fills them. All six former `generalSpaceUsed` readers
+            consume the renamed measure; `development.ts:131-132`'s manual `− housingSpace` net-out
+            is deleted as redundant.
+Proves:     (1) a system with industry land exactly full still builds housing given free people
+            land; (2) people land full blocks housing despite vast free industry land; (3)
+            factories/academies/complexes/centres never bill people land; (4) extractors bill
+            neither budget (N extractors leave both used-readings unchanged); (5) the development
+            factory term is unchanged by the net-out deletion on a mixed build (the two
+            subtractions were equivalent — contradiction check against the old formula); (6)
+            `no_housing_headroom` fires only for genuinely people-land-full systems (a system the
+            OLD shared-general bound would have flagged no longer alerts).
+Consumes:   T2.
+
+### Task 4 — Colonisability: the floor is one housing level of people land
+Files:      `lib/services/colony-eligibility.ts` (:83-89), `lib/world/tick.ts` (:1574),
+            `lib/engine/directed-build.ts` (:1236-1237 docstring), `lib/constants/expansion.ts`
+            (:27 deleted).
+Interface:  Both gates read `effectiveSpaceCost(HOUSING_TYPE)` (verified numerically identical to
+            the retired `EXPANSION.DEVELOP_HABITABLE_FLOOR`); `habitableFloor` param keeps its
+            wire shape, sourced from the housing cost. Claims (control tier) untouched — dead
+            systems stay claimable territory and corridor.
+Proves:     (1) a zero-people-land system is never eligible and never proposed, at BOTH call
+            sites; (2) exactly one housing level of people land is eligible, just under is not;
+            (3) a dead system is still claimable; (4) the eligibility service's two floor checks
+            (`:83` and the null-sizing fallback `:87-89`) agree — no eligible-but-unsizeable gap.
+Consumes:   T2.
+
+### Task 5 — Mechanical renames and deletions, whole-tree
+Files:      (floor — tsc- and grep-driven from the impact receipts) `lib/world/types.ts:225-284`,
+            `lib/engine/{body-gen, substrate-space, directed-build, build-options,
+            colonisation-value, development, development-points, expansion, faction-gen,
+            homeworld-prefab, universe-gen, construction-centre, industry, resources}.ts`,
+            `lib/tick/rows.ts`, `lib/tick/world/directed-build-world.ts`, `lib/world/{gen,tick}.ts`,
+            `lib/services/{alerts, build-options, colony-eligibility, construction-orders,
+            system-development, universe}.ts`, `lib/types/api.ts:249-276`, `lib/types/guards.ts`,
+            compile-level UI (`system-astrography.tsx`, `body-card.tsx`, `industry-rows.ts`,
+            `industry-panel.tsx`, panel test fixtures), `scripts/substrate-coherence.ts`
+            (compile only — re-cut is T6), plus every test naming an old field.
+Interface:  `habitableSpace` → `peopleLand`; `generalSpace` → `industryLand`; `slotCap` →
+            `depositCounts` with columns `slot*` → `count*`; `availableSpace` DELETED from
+            `WorldSystem`/`WorldBody`/`api.ts:270`/aggregates (Astrography's percent read replaced
+            by absolute people land — compile-minimal here, redesign T13); per-body/`BodyView`
+            `habitable: boolean` DELETED, `BodyView` gains `score` + `locked` (band presentation
+            T13). Semantics identical to T2-T4 — this task moves names only.
+Proves:     (1) a repo text grep for the retired vocabulary (`habitableSpace`, `generalSpace`,
+            `slotGas`…, `availableSpace`, `garden_world`, `habitable:` on body shapes) returns
+            zero hits outside git history — the strand sweep IS the task's test; (2) a fresh world
+            round-trips save/load at version 16 with renamed columns; (3) the tick adapter's
+            column narrowing fails red when a `count*` column is absent (guards moved, not
+            widened); (4) `npm run build` and the full suite green with zero `as` casts introduced.
+Consumes:   T2, T3, T4.
+
+### Task 6 — Re-cut the coherence instrument as the tracked census
+Files:      `scripts/substrate-coherence.ts` (alias `report:coherence` unchanged,
+            `package.json:14`).
+Interface:  Reports over ≥5 seeds with per-seed spread, capitals separated: habitable-count
+            distribution overall and per sun class (target 1); people-land anchor stats over the
+            anchor cohort, max body, SYSTEM-level max (bounds popRef), arid/tundra dark land
+            separately (target 2); colonisable share = threshold-clearing share (target 3);
+            economy-type histogram before/after guard (target 6); bodyDanger per-system
+            distribution; invariants — dead classes exactly 0 people land, counts integer and
+            in-range, aggregates = Σ contributing unlocked bodies, zero below-floor eligibility
+            violations. Non-zero exit on any invariant breach. Replaces the retired partition
+            identity. The gitignored `temp/habitability-census.ts` becomes disposable.
+Proves:     (1) an invariant breach exits non-zero (seen red by breaking a table row); (2)
+            capitals never pollute natural-gen cohorts; (3) single-seed output is impossible
+            (per-seed spread always printed); (4) no assertion survives from the old partition
+            identity (a vacuous green against the new model fails).
+Consumes:   T2, T5.
+
+### Gate A — the substrate stands
+Arms:       T1-T6.
+Reads:      `npm run build`; `npx vitest run`; `npm run report:coherence` (targets 1-3, 6,
+            invariants, bodyDanger); `npm run simulate` BOTH horizons — health bar, conservation
+            identities, pacing direction (foundings + concurrency vs the claim-3 baseline,
+            expected DOWN).
+Merge condition: conservation identities pass (a failure means the founding ledger is out, not
+            mistuning); targets 1-3 inside bands — the constant-retune loop happens HERE against
+            T1's table, before any downstream task consumes the numbers; economy-type guard: no
+            class starved or flooded, per-capital labels stable. **Booked at this gate:** if the
+            bodyDanger distribution breaches the current badge bands, re-author `dangerBaseline`
+            values or re-cut `dangerBand` (`lib/utils/system.ts:5-9`) inside this stage.
+
+### Stage 2 — quality × growth
+
+### Task 7 — The fill-best-first quality fold
+Files:      `lib/engine/habitability.ts` (new), `lib/world/types.ts` (cached per-system quality),
+            `lib/tick/processors/population.ts`, `lib/tick/rows.ts` + the population processor's
+            world interface/adapters (static per-body `{score, peopleLand}` summary in),
+            `lib/world/tick.ts`, `lib/world/save.ts` (field rides version 16).
+Interface:  Pure `systemHabitabilityQuality(bodies: {score, peopleLand}[], population):
+            { quality, frontierIndex }` — bodies sorted by score desc (re-sorted on any aggregate
+            rebuild, not only at generation); quality = people-land-weighted mean score over the
+            occupied prefix (`population / POP_CENTRE_DENSITY` against cumulative people land);
+            population 0 / empty prefix reads the TOP body's score; prefix clamps at the last
+            body (overrun floors at the all-bodies mean). Cached on the system row; recomputed in
+            the per-cycle fold only when the occupied prefix crosses a body boundary.
+Proves:     (1) an empty system reads its best body's score, not a mean and not 0; (2) overrun
+            past all land reads the all-bodies mean (clamp arm); (3) a mid-body prefix weights the
+            partial last body by its occupied land only (boundary arithmetic); (4) population
+            movement WITHIN a body never recomputes and a boundary crossing always does — the
+            single-body common case computes once; (5) an unsorted input body list still folds
+            best-first (the sort is inside the seam, not assumed — vacuity check).
+Consumes:   T2, T5.
+
+### Task 8 — Growth coupling and the hard-world exit
+Files:      `lib/engine/population.ts` (:458-474), `lib/tick/processors/population.ts`
+            (:113, :118, :124-136), `lib/constants/population.ts` (docstrings),
+            `lib/services/alerts.ts` (:87,:308 countdown docstring follows the changed rule).
+Interface:  `populationDelta(population, popCap, d, unrest, params, quality)` — quality multiplies
+            the GROWTH term only, never the returned delta shape; processor passes the cached
+            quality. Abandonment Rule 2 drops the `supply.survivalShortfall` conjunct: fires on
+            post-delta population < `ABANDON_POP_FLOOR` alone (owner decision c).
+Proves:     (1) decline and overshoot-death are bit-identical across quality values, and the
+            processor's growth/death isolation folds still attribute exactly under quality ≠ 1;
+            (2) the sign condition: with growthRate = declineRate, net is negative when
+            quality × crowdFactor × (1−d) < unrest — a marginal-land system under sustained
+            stress genuinely shrinks; (3) a colony declining to empty WITHOUT famine now abandons
+            (red-proof: restore the conjunct, watch it fail); (4) a fresh seed colony
+            (`COLONY_SEED_POP` 2 > floor 1) survives an unlucky first cycle — the boundary sits
+            below the seed, not above it.
+Consumes:   T7.
+
+### Task 9 — Harness reads for the new cohorts
+Files:      `lib/tick-harness/cohort-analysis.ts` (:238-248) and the report assembly it feeds.
+Interface:  `survival-short` re-cut to zero-food-capacity among COLONISABLE systems; new
+            quality-band cohort (single- vs multi-people-land-body split); abandonment-by-cause
+            counts (famine-collapse vs decline-to-empty, distinguishable after T8); the pump
+            watch — net colonist-delivery inflow vs net population change by quality band.
+Proves:     (1) an uncolonisable dead rock no longer lands in `survival-short`; (2) quality-band
+            assignment holds at band boundaries; (3) the pump signature is detectable: a cohort
+            with positive delivery inflow and negative net population reads as such, not as noise
+            (vacuity: a metric that cannot disagree with growth is not the watch); (4)
+            abandonment-by-cause sums to total abandonments.
+Consumes:   T7, T8.
+
+### Gate B — quality lives in the galaxy
+Arms:       T7-T9.
+Reads:      `npm run simulate` BOTH horizons: quality distribution cohorted single- vs
+            multi-people-land-body (target 5); homeworld quality ≈ 1.0; population trajectory by
+            quality band (the fragile-worlds read); abandonment-by-cause; the pump watch; pacing
+            vs baseline unchanged in direction from Gate A.
+Merge condition: health bar green both horizons; conservation identities pass; homeworld quality
+            reads ≈ 1.0 (the prefab's authored score arriving intact end-to-end); no
+            quality-driven mass-death anomaly in the fragile cohort (shrinking is intended,
+            NaN/runaway is not).
+
+### Stage 3 — consequential re-anchorings
+
+### Task 10 — Expansion claim scoring and homeworld placement
+Files:      `lib/engine/expansion.ts` (:46-52), `lib/constants/expansion.ts` (SCORE_WEIGHTS,
+            SCORE_FLOOR), `lib/engine/faction-gen.ts` (:158-162, :184-195), `lib/world/tick.ts`
+            (claim-candidate assembly, diversity count at :666, galaxy people-land max threaded).
+Interface:  `scoreClaimCandidate` consumes normalised terms — people land ÷ galaxy max, diversity
+            ÷ `RESOURCE_TYPES.length`, both in [0,1] (the `placeHomeworlds` pattern) — with
+            `SCORE_WEIGHTS`/`SCORE_FLOOR` re-tuned on that scale. `homeworldResourceDiversity`
+            re-tuned in the same pass against the higher body counts.
+Proves:     (1) both substrate terms are bounded [0,1] for any candidate — a giant system cannot
+            dominate by raw scale (normalisation applied, not merely weights shrunk); (2)
+            SCORE_FLOOR still excludes exactly the zero-substrate candidates on the new scale;
+            (3) among equal-distance candidates, more people land still outranks (no term
+            silently dropped); (4) the diversity term still discriminates at the new body counts
+            (not saturated identical across candidates).
+Consumes:   T5.
+
+### Task 11 — Colonisation value coefficients
+Files:      `lib/engine/colonisation-value.ts` (:150-168 docstrings), `lib/constants/colonisation.ts`
+            (LAND_PREMIUM ↓~6×, LAND_DEPOSIT_WEIGHT ↑ by the count-collapse ratio,
+            LAND_GENERAL_WEIGHT against the authored industry-land scale; `SEED_POP_COST_WEIGHT`
+            re-checked).
+Interface:  Same `colonyValue` shape; three land coefficients re-authored on the new scales;
+            docstrings rewritten so "small secondary" stays true of the L term.
+Proves:     (1) on a representative candidate set the U term still leads and L is secondary — the
+            docstring's claim is asserted, not just written; (2) the σ gate arithmetic is
+            untouched (contradiction check); (3) a below-floor candidate never reaches valuation
+            (the T4 gate sits upstream at `directed-build.ts:1387`).
+Consumes:   T4, T5.
+
+### Task 12 — Development normaliser: accept and calibrate
+Files:      `lib/engine/development.ts` (:89-91, :99-107, :123-142), `lib/engine/development-points.ts`
+            (:126-136), `lib/constants/substrate-gen.ts` (`DEPOSIT_SLOT_FOOTPRINT` re-authored
+            against the count scale), `lib/engine/homeworld-prefab.ts` (consistency of the
+            authored budgets with the potentials).
+Interface:  `popRef`/`industryRef` stay galaxy maxes (owner: accept and calibrate);
+            `industryPotential(depositCounts, industryLand)` keeps the one explicit deposit→land
+            coefficient so counts (~5-35) and land (~40-300) stay commensurable;
+            `habitablePotentialPop(peopleLand)` unchanged in shape; `developmentPotential` moves
+            with the same coefficient.
+Proves:     (1) `systemDevelopment` stays finite in [0,1) for a zero-people-land system — the
+            industry-only arm (`development.ts:138`) still fires under the new budgets; (2) an
+            extractor-heavy and a factory-heavy system of equal converted footprint read
+            comparable `industryPotential` (the coefficient is applied, not vestigial); (3) vitals
+            `developmentPotential` and `systemDevelopment` share the one coefficient (no second,
+            disagreeing constant); (4) empty-galaxy refs still read zero without NaN.
+Consumes:   T3, T5.
+
+### Gate C — the anchors hold
+Arms:       T10-T12.
+Reads:      `npm run simulate` BOTH horizons: median/p10 `systemDevelopment`, speculative-build
+            volume, construction-reserve fade (target 8), cohorted vs baseline; σ and landGate
+            distributions plus the U-vs-L share (spec §7); homeworld-placement distribution;
+            per-faction floor — reachable-colonisable candidates at founding era (min/p10) and
+            factions with zero developments by 10K (target 9).
+Merge condition: health bar green; no faction starved of candidates below the target-9 floor;
+            development reads inside the coarse health bar. **Booked at this gate:** if the
+            development reads breach the health bar, switch `developmentRefs` to high-percentile
+            refs instead of max (the spec's pre-booked fix) inside this stage.
+
+### Stage 4 — surfaces
+
+### Task 13 — Astrography: bodies tell the three-budget story
+Files:      `components/panels/system-astrography.tsx`, `components/system/body-card.tsx`,
+            `lib/services/universe.ts` (:98-116), `lib/types/api.ts` (BodyView,
+            SystemSubstrateData), `lib/hooks/use-system-substrate.ts`,
+            `lib/utils/substrate.ts` (deposit features on counts).
+Interface:  `BodyView` carries class, `score`, `locked`, `peopleLand`, `industryLand`, `counts`,
+            `extractionModifier`, `occupied` (from the T7 fold via the service);
+            `SystemSubstrateData` header shows absolute people land (the percent-of-available
+            read at `system-astrography.tsx:21-22` died with `availableSpace`). The extraction
+            modifier is presented as a contribution weight to the system's effective yield, per
+            spec §1 — stated in the UI copy.
+Reuse:      `Card` (variant/padding), `Badge` (color/variant), `SectionHeader`, `EmptyState`,
+            `StatRow`/`StatList` (label/children), `Tooltip` (`TooltipTriggerLabel` +
+            `TooltipContent`), `QUALITY_BAND_DOT`/`QUALITY_BAND_TEXT` — all props read this
+            session. `BodyCard` is re-cut in place (existing component; name still matches
+            behaviour).
+Proves:     (1) a locked body states its lock in accessible text and shows a score band, never
+            the retired Habitable badge; (2) the contribution-weight wording renders (text
+            assertion, not class); (3) a zero-people-land system shows absolute 0, never NaN or a
+            percent; (4) the occupancy/frontier marking appears on the right body (role/text).
+Consumes:   T5, T7.
+
+### Task 14 — Population tab: the growth line and fill-order tooltip
+Files:      `components/system/population-panel.tsx`, `lib/services/system-population.ts`,
+            `lib/hooks/use-system-population.ts`, `lib/types/api.ts`,
+            `components/system/habitability-tooltip-content.tsx` (new).
+Interface:  The population read gains `{ growthMultiplier, fillOrder: [{className, score,
+            peopleLand, occupied, frontier}] }` composed in the service from the cached fold —
+            the component computes nothing. Renders "Growth ×0.93 — habitability" with the
+            decomposition tooltip; quality is always shown as a story about bodies, never a bare
+            number (spec §3).
+Reuse:      `StatRow`, `Tooltip` (`TooltipTriggerLabel`/`TooltipContent`), `Card`,
+            `SectionHeader` — props read this session.
+            New: `habitability-tooltip-content` — searched the words a user of the behaviour
+            would use ("fill order", "growth breakdown", "per-body occupancy"): nothing fits;
+            `need-tooltip-content.tsx` is the analogous pattern but is needs-specific. Named for
+            the behaviour.
+Proves:     (1) the rendered multiplier is the service value, format-only (a NaN from the service
+            is visible in DOM text — assert on text, not props); (2) the tooltip lists every
+            people-land body in score order with the frontier marked (accessible text); (3) a
+            single-body quality-1.0 world still renders the line at ×1.00 (the common case is not
+            hidden); (4) an uninhabited system renders no growth line (`populationPanelView`
+            interplay).
+Consumes:   T7, T13 (BodyView vocabulary).
+
+### Task 15 — Industry tab: one bar per budget
+Files:      `components/system/industry-rows.ts` (:244-272), `components/system/industry-panel.tsx`
+            (:670-680, :938-950, :1035-1045), `lib/services/system-industry-readout.ts`,
+            `lib/types/api.ts` (SubstrateSpace re-export).
+Interface:  The general-land partition type (`housing/factory/habitableFree/factoryFree`) is
+            deleted; each budget renders its own used/free bar from T3's three pairs; space
+            tables read the renamed budgets; deposits bar reads worked/authored counts.
+Reuse:      the panel's existing bar idiom (`COPPER_HATCH` legend rows), `CompositionBar`
+            (segments) where a split within one budget is needed — props read this session. No
+            new component.
+Proves:     (1) housing appears only in the people-land bar and factories only in the industry
+            bar (cross-contamination fails the test); (2) the bar partition maths lives in a
+            node-tested helper (jsdom style rule — the component test asserts text/roles, the
+            helper asserts sums); (3) the deposit bar reads counts, never land units; (4) the
+            retired habitableFree/factoryFree vocabulary is gone from DOM text and code.
+Consumes:   T3, T5.
+
+### Gate D — ship gate
+Arms:       T13-T15 (and the whole branch).
+Reads:      `npm run build`; full suite; `npm run report:coherence` final; `npm run simulate`
+            both horizons — the PR quote (targets 4, 5, 7, 8, 9 final read); ONE 30K run for the
+            target-5 trajectory (~8 min — state before launching; it overwrites the rolling
+            autosave slot, so confirm Kai has no live save in flight); `npm run duplication` on
+            the branch diff; browser smoke in one pass — Astrography, Population growth line,
+            Industry bars, `no_housing_headroom` alert (memory: budget one browser smoke per
+            browser-facing gate; Node can't see these).
+Merge condition: conservation identities pass; calibration targets 1-9 each read and inside
+            bands or explicitly accepted by Kai; the doc fold (below) done on the branch; smoke
+            go-ahead given by hand.
+
+### Verification
+
+The finished feature is proven in the galaxy, not in fixtures: `npm run report:coherence`
+(gen-time targets 1-3, 5-6 gen-side, capitals separated, ≥5 seeds) plus `npm run simulate` at
+BOTH horizons (run-time targets 4-9), with the 30K read for the quality/population trajectory
+only. The PR quotes the simulate runs per the game-logic rule; a failed conservation identity
+blocks the merge. Build gate `npm run build` (`tsc && vite build` — the Tailwind doc-scan trap
+only surfaces here). New harness metrics (T9) exist because quality, abandonment-cause and the
+delivery pump would otherwise hide inside aggregates. Scoped `npm run mutation` over the changed
+`lib/` files is the overnight batch, not an in-session gate. No equilibrium tuning is licensed —
+calibration is to the coarse health bar (no NaN/runaway/pinning; dispersion; liquidity), per the
+evidence's own Licenses lines.
+
+### Doc fold (on the branch, before the final review)
+
+- `docs/SPEC.md`: substrate/body model, colonisation floor, population growth, surfaces — and
+  the system interaction map rows touching space/habitability.
+- Active docs: grep `docs/active/` for `habitableSpace`, `generalSpace`, `garden_world`,
+  `availableSpace`, `habitable` at fold time and rewrite in present tense (colonisation.md's
+  floor language at minimum — it is referenced from `expansion.ts`'s header).
+- `docs/ROADMAP.md`: delete the habitability-seeding row; the events-revisit row (line 77) and
+  charter-pricing lever (line 43) stay — they are this feature's named deferrals.
+- This working file is deleted on the PR that ships the feature. Before deletion, re-run the
+  grep-for-deferrals check: everything this file defers is either in the roadmap (events
+  revisit, charter pricing, horizon re-pick at ROADMAP:516) or in Not covered below.
+- Memory: the `temp/habitability-census.ts` / `temp/space-utilisation-diag.ts` pointers retire
+  when T6 lands; the MEMORY.md in-flight paragraph retires at ship.
+
+### Not covered
+
+- **Charter/concurrency pricing** — booked: ROADMAP:43 (the split-off pacing lever).
+- **Technology / terraforming unlock flow** — dropped here by spec ("locks only release", unlock
+  = re-aggregate is stated interim `[PENDING: technology]`); no unlock code path is built.
+- **Events coverage dilution (~2.5× felt-rate drop)** — booked: ROADMAP:77 events-revisit row;
+  accepted this pass by owner quote.
+- **Stale `economyType` on future unlock** — dropped with the same `[PENDING: technology]`
+  label the spec carries.
+- **Topology/blockade-aware colonist routing** — dropped: claim-4 evidence kills the worry for
+  this change; a future routing layer owns it.
+- **Danger badge re-cut** — booked at Gate A (merge-condition text names it).
+- **High-percentile development refs** — booked at Gate C (the spec's pre-booked fix, applied
+  only on a health-bar breach).
+- **Simulate horizon re-pick** — booked: ROADMAP:516-520 owns re-picking both horizons; this
+  plan reads the existing 1K/10K meanings as pre-founding/founding-era throughout.
+- **Second pop type / demand-side quality coupling / stations / per-body population** — not
+  claimed by the spec; the preference lookup ships with one row.
+
+### Net-new UI
+
+One item: `habitability-tooltip-content` (T14) — the fill-order decomposition block (per-body
+score, people land, occupancy, frontier marker) inside the Population tab's growth-line tooltip.
+Everything else composes existing `components/ui` pieces or re-cuts existing components in place
+(`BodyCard`, the industry land bars). This list goes to Kai before `/implement-plan` starts.
+
+### Self-review record (2026-08-23)
+
+Checklist run by the author against the finished plan. Every named identifier grep- or
+read-verified this session (receipts in the resolution table); reader-set floors walked with
+`npm run impact` for `habitableSpace` (22 modules), `generalSpace` (18), `availableSpace` (7) and
+the `yield*` sibling family for the new `extractionEfficiency` columns. Spec-to-plan diff: every
+§1-§9 behaviour and §7 re-anchoring lands in a named task; the spec's deferrals land in Not
+covered with bookings verified in the roadmap by line number. Material findings fixed during the
+review: the abandonment change's newborn-guard interaction checked against real constants
+(`ABANDON_POP_FLOOR` 1 < `COLONY_SEED_POP` 2 — safe); the harness-reads task moved into Stage 2
+so Gates B-D can read the metrics they gate on; the save bump pinned to T2 with the
+one-shipped-bump rule stated. No task contains code, branch logic or a derived formula — the
+deposit-count derivation and score table are spec-authored and carried verbatim.
