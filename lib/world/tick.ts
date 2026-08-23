@@ -55,7 +55,7 @@ import { slotCapOf, yieldsOf, effOf, RESOURCE_TYPES } from "@/lib/engine/resourc
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
-import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { HOUSING_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { computeBoundedHopDistances } from "@/lib/engine/pathfinding";
 import { isEconomicallyActive } from "@/lib/engine/control";
@@ -1574,7 +1574,7 @@ export async function runWorldTick(
             sigmaFloor: COLONISATION.SIGMA_FLOOR,
             establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
             seedPop: EXPANSION.COLONY_SEED_POP,
-            habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+            habitableFloor: effectiveSpaceCost(HOUSING_TYPE),
             popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
             minSettlerSupply: COLONISATION.MIN_SETTLER_SUPPLY,
             employedLeakFraction: MIGRATION_PARAMS.employedLeakFraction,

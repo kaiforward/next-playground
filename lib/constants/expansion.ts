@@ -9,7 +9,10 @@
  * Claims are cheap and near-instant this phase (bounded by MAX_CLAIMS_PER_CYCLE + the reach radius +
  * the score floor). Developing a controlled system is NO longer instant or capped here — it is a
  * pool-funded, timed colony-establish project (docs/active/gameplay/colonisation.md); COLONY_SEED_POP
- * and DEVELOP_HABITABLE_FLOOR feed that project's sizing/eligibility, the construction pool paces it.
+ * feeds that project's sizing, the construction pool paces it. The colonisability floor itself is not
+ * an authored constant — a controlled system is developable once it holds one whole housing level of
+ * people land (`effectiveSpaceCost(HOUSING_TYPE)`, `lib/constants/industry.ts`), so the floor tracks
+ * housing's own cost rather than drifting from it.
  */
 export const EXPANSION = {
   /** Unclaimed systems within this many jumps of a faction's territory (any owned tier) are claim
@@ -23,8 +26,6 @@ export const EXPANSION = {
   /** Weights over the (absolute) substrate terms and the proximity discount. `proximity` feeds
    * 1 / (1 + proximity × minHops), so nearer candidates outscore equal-substrate distant ones. */
   SCORE_WEIGHTS: { habitable: 1.0, diversity: 3.0, proximity: 0.5 },
-  /** A controlled system is only worth developing if it can host housing — skip dead rocks. */
-  DEVELOP_HABITABLE_FLOOR: 1,
   /** Bootstrap-spark population a new colony receives, transferred (conserved) from the nearest
    * developed same-faction system. Deliberately tiny (seed model C): a big seed drains the source
    * and dumps pops on a jobless world faster than jobs form — instead the spark staffs a first

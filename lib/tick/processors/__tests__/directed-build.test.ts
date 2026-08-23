@@ -21,7 +21,7 @@ import type { ColonyEstablishCandidate, ColonyEstablishParams } from "@/lib/engi
 import { COLONISATION } from "@/lib/constants/colonisation";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { CONSTRUCTION } from "@/lib/constants/construction";
-import { HOUSING_TYPE, POP_CENTRE_DENSITY, CONSTRUCTION_CENTRE_TYPE } from "@/lib/constants/industry";
+import { HOUSING_TYPE, POP_CENTRE_DENSITY, CONSTRUCTION_CENTRE_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
 import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import { mulberry32 } from "@/lib/engine/universe-gen";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
@@ -533,7 +533,7 @@ const COLONY_PARAMS: ColonyEstablishParams = {
   sigmaFloor: COLONISATION.SIGMA_FLOOR,
   establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
   seedPop: EXPANSION.COLONY_SEED_POP,
-  habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+  habitableFloor: effectiveSpaceCost(HOUSING_TYPE),
   popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
   minSettlerSupply: 0, // gate disabled — these cases exercise proposal/funding wiring, not founding pace
   employedLeakFraction: 0,

@@ -49,6 +49,15 @@ describe("proposeFactionClaims", () => {
   it("proposes nothing when every candidate is below the floor", () => {
     expect(proposeFactionClaims("f1", [cand({ systemId: "dead" })], PARAMS)).toEqual([]);
   });
+  it("still proposes a zero-habitable-space system — the develop-tier floor does not gate claims", () => {
+    // A dead system (no people land at all) scores 0 on the habitable term but can still clear
+    // SCORE_FLOOR on diversity/proximity alone: claims stay territory-and-corridor, unlike the
+    // develop tier's colonisability floor (colony-eligibility.ts), which this candidate would fail.
+    const dead = cand({ systemId: "dead-but-claimable", habitableSpace: 0, resourceDiversity: 5 });
+    const out = proposeFactionClaims("f1", [dead], PARAMS);
+    expect(out).toHaveLength(1);
+    expect(out[0].systemId).toBe("dead-but-claimable");
+  });
   it("is deterministic and ranks by (score, systemId) — independent of input order", () => {
     const a = cand({ systemId: "a", habitableSpace: 100 });
     const b = cand({ systemId: "b", habitableSpace: 100 });

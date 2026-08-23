@@ -6,7 +6,7 @@ import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { EXPANSION } from "@/lib/constants/expansion";
 import type { World, WorldConnection, WorldBuildProject, WorldColonyEstablishProject } from "@/lib/world/types";
-import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { HOUSING_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
 
 function baseWorld(): World {
   return generateWorld({ systemCount: 60, seed: 42 });
@@ -200,16 +200,29 @@ describe("colonyEligibility", () => {
   });
 
   it("does not reject exactly AT the habitable floor — only strictly below it", () => {
-    // DEVELOP_HABITABLE_FLOOR is 1 and housing's space cost is 1, so a system exactly at the floor
-    // fits exactly one housing level: `<` must let it through, `<=` would wrongly reject it, and
-    // the two are only distinguishable exactly at this boundary.
+    // The floor is one whole housing level of people land (`effectiveSpaceCost(HOUSING_TYPE)`), so a
+    // system exactly at the floor fits exactly one housing level: `<` must let it through, `<=` would
+    // wrongly reject it, and the two are only distinguishable exactly at this boundary. This also
+    // proves the two floor checks agree (§4 proof 4): if the floor line passed but `sizeColonyEstablish`
+    // then nulled out, `eligible` would read false here, not true.
     const { faction, target } = eligibleFixture();
-    target.habitableSpace = EXPANSION.DEVELOP_HABITABLE_FLOOR;
+    target.habitableSpace = effectiveSpaceCost(HOUSING_TYPE);
     const check = colonyEligibility(getWorld(), faction.id, target);
     expect(check.eligible).toBe(true);
   });
 
-  it("rejects a system strictly below the habitable floor as below_habitable_floor", () => {
+  it("rejects a system just under one housing level of land as below_habitable_floor", () => {
+    // Strictly under a WHOLE housing level, not merely under some nonzero amount — a fractional level
+    // proves the floor tracks housing's own cost rather than any positive habitableSpace.
+    const { faction, target } = eligibleFixture();
+    target.habitableSpace = effectiveSpaceCost(HOUSING_TYPE) - 0.01;
+    const check = colonyEligibility(getWorld(), faction.id, target);
+    expect(check.eligible).toBe(false);
+    if (check.eligible) return;
+    expect(check.reason).toBe("below_habitable_floor");
+  });
+
+  it("rejects a zero-people-land system as below_habitable_floor, never proposing a colony there", () => {
     const { faction, target } = eligibleFixture();
     target.habitableSpace = 0;
     const check = colonyEligibility(getWorld(), faction.id, target);

@@ -1216,7 +1216,8 @@ export interface ColonyEstablishParams extends ColonyValueParams {
   establishWork: number;
   /** Starter colony population, land-capped at proposal (EXPANSION.COLONY_SEED_POP). */
   seedPop: number;
-  /** Minimum habitable space to consider a controlled system a colony candidate (EXPANSION.DEVELOP_HABITABLE_FLOOR). */
+  /** Minimum habitable space to consider a controlled system a colony candidate — one whole housing
+   *  level of people land (`effectiveSpaceCost(HOUSING_TYPE)`). */
   habitableFloor: number;
   /** Weight on the seed-pop opportunity cost netted off colony value (COLONISATION.SEED_POP_COST_WEIGHT). */
   popCostWeight: number;
@@ -1367,7 +1368,7 @@ export function assessColonyCandidates(
   const proposals: ColonyProposal[] = [];
   for (const c of candidates) {
     if (inFlight.has(c.systemId)) continue;                 // already being established
-    if (c.habitableSpace < params.habitableFloor) continue; // DEVELOP_HABITABLE_FLOOR gate stands
+    if (c.habitableSpace < params.habitableFloor) continue; // below one whole housing level of land
 
     // Land-sized seed + bundled housing, on WHOLE housing levels so popCap ≥ seedPop exactly (no rounding
     // gap): seed capped to the whole-level habitable capacity; housing sized to house it, land-bounded.

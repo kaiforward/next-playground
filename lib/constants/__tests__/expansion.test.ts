@@ -20,7 +20,6 @@ describe("EXPANSION constants", () => {
     for (const k of ["habitable", "diversity", "proximity"] as const) {
       expect(EXPANSION.SCORE_WEIGHTS[k]).toBeGreaterThan(0);
     }
-    expect(EXPANSION.DEVELOP_HABITABLE_FLOOR).toBeGreaterThan(0);
     expect(EXPANSION.COLONY_SEED_POP).toBeGreaterThan(0);
   });
 

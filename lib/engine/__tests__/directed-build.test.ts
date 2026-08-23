@@ -1902,7 +1902,7 @@ const COLONY_PARAMS: ColonyEstablishParams = {
   sigmaFloor: COLONISATION.SIGMA_FLOOR,
   establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
   seedPop: EXPANSION.COLONY_SEED_POP,
-  habitableFloor: EXPANSION.DEVELOP_HABITABLE_FLOOR,
+  habitableFloor: effectiveSpaceCost(HOUSING_TYPE),
   popCostWeight: COLONISATION.SEED_POP_COST_WEIGHT,
   minSettlerSupply: 0, // gate disabled by default — the valuation cases below isolate scoring, not founding pace
   employedLeakFraction: 0,
@@ -2857,8 +2857,16 @@ describe("factionGoodDeficits — the zero boundary", () => {
 describe("planFactionColonyProposals — floors, seed cost and settler supply", () => {
   it("accepts a candidate sitting exactly ON the habitable floor", () => {
     const home = homeState({ housing: 1, habitableSpace: 1000 });
-    const atFloor = candidate({ systemId: "at-floor", habitableSpace: EXPANSION.DEVELOP_HABITABLE_FLOOR });
+    const atFloor = candidate({ systemId: "at-floor", habitableSpace: effectiveSpaceCost(HOUSING_TYPE) });
     expect(planFactionColonyProposals("f1", [home], [atFloor], [], COLONY_PARAMS)).toHaveLength(1);
+  });
+
+  it("rejects a candidate just UNDER one whole housing level of land", () => {
+    // Strictly less than a whole housing level, not merely nonzero — the boundary that distinguishes
+    // "one housing level of people land" from "any positive habitableSpace".
+    const home = homeState({ housing: 1, habitableSpace: 1000 });
+    const justUnder = candidate({ systemId: "just-under", habitableSpace: effectiveSpaceCost(HOUSING_TYPE) - 0.01 });
+    expect(planFactionColonyProposals("f1", [home], [justUnder], [], COLONY_PARAMS)).toHaveLength(0);
   });
 
   it("charges nothing for a seed drawn from IDLE labour, however productive the source is", () => {
