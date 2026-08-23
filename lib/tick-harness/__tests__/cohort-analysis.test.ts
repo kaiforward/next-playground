@@ -404,6 +404,64 @@ describe("cohortsForSystem", () => {
     });
     expect(cohortsForSystem(farm, new Set())).not.toContain("survival-short");
   });
+
+  it("does not call an uncolonisable dead rock survival-short, even with no arable slot", () => {
+    // An industry-only outpost (peopleLand 0) was never a food-supply candidate — a mining outpost
+    // an economy failed to feed is a category error, not a finding. peopleLand 0 sits below the
+    // habitable floor (effectiveSpaceCost(HOUSING_TYPE) = 1.0), the same gate colonyEligibility founds
+    // against.
+    const deadRock = sys("s1", {
+      peopleLand: 0,
+      depositCounts: { gas: 0, minerals: 0, ore: 3, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    });
+    const cohorts = cohortsForSystem(deadRock, new Set());
+    expect(cohorts).not.toContain("survival-short");
+    // Still lands in its population band and homeworld/colony — only the habitability-scoped
+    // cohorts are gated on colonisability.
+    expect(cohorts).toContain("colony");
+  });
+
+  it("still calls a colonisable world with no arable slot survival-short — the floor gate does not over-exclude", () => {
+    const rock = sys("s1", {
+      peopleLand: 1, // exactly at the floor: colonisable
+      depositCounts: { gas: 0, minerals: 0, ore: 3, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    });
+    expect(cohortsForSystem(rock, new Set())).toContain("survival-short");
+  });
+
+  describe("quality-band cohort (single- vs multi-people-land-body)", () => {
+    it("assigns quality: single-body for exactly one contributing body", () => {
+      const world = sys("s1", { habitabilityBodies: [{ score: 0.8, peopleLand: 40 }] });
+      const cohorts = cohortsForSystem(world, new Set());
+      expect(cohorts).toContain("quality: single-body");
+      expect(cohorts).not.toContain("quality: multi-body");
+    });
+
+    it("assigns quality: multi-body at exactly two contributing bodies — the boundary crossing", () => {
+      const world = sys("s1", {
+        habitabilityBodies: [{ score: 0.8, peopleLand: 20 }, { score: 0.6, peopleLand: 20 }],
+      });
+      const cohorts = cohortsForSystem(world, new Set());
+      expect(cohorts).toContain("quality: multi-body");
+      expect(cohorts).not.toContain("quality: single-body");
+    });
+
+    it("assigns neither quality band to an uncolonisable system, whatever habitabilityBodies says", () => {
+      const world = sys("s1", { peopleLand: 0, habitabilityBodies: [{ score: 0.8, peopleLand: 40 }] });
+      const cohorts = cohortsForSystem(world, new Set());
+      expect(cohorts).not.toContain("quality: single-body");
+      expect(cohorts).not.toContain("quality: multi-body");
+    });
+
+    it("assigns neither quality band when a colonisable system carries no body summary at all", () => {
+      // habitabilityBodies is optional (fixtures built before the field existed) — absence must not
+      // be misread as either band.
+      const world = sys("s1");
+      const cohorts = cohortsForSystem(world, new Set());
+      expect(cohorts).not.toContain("quality: single-body");
+      expect(cohorts).not.toContain("quality: multi-body");
+    });
+  });
 });
 
 describe("computeWorldCohorts", () => {
@@ -772,6 +830,58 @@ describe("computeWorldCohorts", () => {
       expect(band.expectationLevels.median).toBeCloseTo(0.7, 9);
       expect(band.grievanceLevels.median).toBeCloseTo(normalState.grievance, 9);
       expect(band.grievanceLevels.median).not.toBeCloseTo(normalState.d, 6);
+    });
+  });
+
+  describe("the pump watch (colonistDeliveryInflow vs netPopulationChange)", () => {
+    it("reads a positive delivery inflow alongside a negative net population change — the signature the watch exists to catch", () => {
+      // A single-people-land-body colony that shrank overall (200 -> 150) despite receiving 80 of
+      // water-filled colonist delivery this run: growth/death/leak still net it down. A metric that
+      // could not disagree with growth (e.g. delivery as a fraction of growth) would hide exactly
+      // this — the vacuity check the watch's Prove exists to close.
+      const colony = sys("s1", {
+        population: 150,
+        habitabilityBodies: [{ score: 0.6, peopleLand: 40 }],
+      });
+      const start = new Map([["s1", 200]]);
+      const delivery = new Map([["s1", 80]]);
+
+      const entries = computeWorldCohorts([colony], [], new Set(), 0.8, [], start, delivery);
+      const band = entries.find((e) => e.cohort === "quality: single-body")!;
+
+      expect(band.colonistDeliveryInflow).toBe(80);
+      expect(band.netPopulationChange).toBe(-50);
+      // Both signs read independently — this is the disagreement itself, not a derived rate.
+      expect(band.colonistDeliveryInflow).toBeGreaterThan(0);
+      expect(band.netPopulationChange).toBeLessThan(0);
+    });
+
+    it("reads 0 delivery inflow for a cohort the accumulated map never mentions", () => {
+      const colony = sys("s1", { population: 50, habitabilityBodies: [{ score: 0.6, peopleLand: 40 }] });
+      const entries = computeWorldCohorts([colony], [], new Set(), 0.8, [], new Map(), new Map());
+      const band = entries.find((e) => e.cohort === "quality: single-body")!;
+      expect(band.colonistDeliveryInflow).toBe(0);
+    });
+  });
+
+  describe("qualityLevels", () => {
+    it("folds the cached habitabilityQuality.quality into the cohort's distribution, excluding an unassessed system", () => {
+      const assessed = sys("s1", {
+        population: 50,
+        habitabilityBodies: [{ score: 0.7, peopleLand: 40 }],
+        habitabilityQuality: { quality: 0.7, frontierIndex: 0 },
+      });
+      const unassessed = sys("s2", {
+        population: 50,
+        habitabilityBodies: [{ score: 0.9, peopleLand: 40 }],
+        // No habitabilityQuality — never assessed.
+      });
+      const entries = computeWorldCohorts([assessed, unassessed], [], new Set(), 0.8, []);
+      const band = entries.find((e) => e.cohort === "quality: single-body")!;
+
+      expect(band.n).toBe(2);
+      expect(band.qualityUnassessedCount).toBe(1);
+      expect(band.qualityLevels.median).toBeCloseTo(0.7, 9);
     });
   });
 });

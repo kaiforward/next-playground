@@ -211,4 +211,28 @@ describe("migration throughput instrumentation (migrationMoved)", () => {
     expect(result.migrationMoved?.diffusion).toBe(0);
     expect(result.migrationMoved?.colonists).toBeCloseTo(after - before, 5);
   });
+
+  it("colonistDeliveryBySystem carries the same delivery, keyed by the receiving system — the harness's pump-watch input", async () => {
+    const systems = [sys("core", "f1", 1000, 1000, 0), sys("colony", "f1", 10, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, [conn("core", "colony")]);
+    const params = {
+      ...PARAMS,
+      flow: { ...PARAMS.flow, maxOutflowFraction: 0 }, // isolates delivery — diffusion contributes nothing
+      delivery: { sourceOutflowCap: 0.05, minSourcePopulation: 100 },
+    };
+    const before = world.systems.find((s) => s.id === "colony")!.population;
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), params);
+    const after = world.systems.find((s) => s.id === "colony")!.population;
+    expect(result.colonistDeliveryBySystem?.get("colony")).toBeCloseTo(after - before, 5);
+    // The source's own row is a negative delta in the underlying deltas, deliberately excluded —
+    // only the positive (sink) side is instrumentation, matching colonistsMoved's own convention.
+    expect(result.colonistDeliveryBySystem?.has("core")).toBe(false);
+  });
+
+  it("omits colonistDeliveryBySystem entirely when nothing delivered — the sparse convention", async () => {
+    const systems = [sys("a", "f1", 500, 1000, 0)];
+    const world = new InMemoryMigrationWorld({ systems }, []);
+    const result = await runMigrationProcessor(world, ctx(EDGE_TICK), PARAMS);
+    expect(result.colonistDeliveryBySystem).toBeUndefined();
+  });
 });

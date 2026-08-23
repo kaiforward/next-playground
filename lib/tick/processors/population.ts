@@ -67,6 +67,12 @@ export async function runPopulationProcessor(
   // stays pure and leaves the control-flip/reset to the tick body (lib/world/tick.ts), the sole
   // owner of `control` writes.
   const abandonedSystems: string[] = [];
+  // Calibration-only: the same finding tagged with its cause, read at the SAME cycle the trigger
+  // fires — `supply.survivalShortfall` (already computed above from this cycle's supply state) is
+  // Rule 1's own famine flag, so a system abandoning while it holds is a famine-collapse and one
+  // abandoning without it declined to empty on non-famine stress alone (Task 8's dropped conjunct).
+  // Never applied, never gates a `control` write — purely observational, unlike `abandonedSystems`.
+  const abandonedSystemsByCause = new Map<string, "famine-collapse" | "decline-to-empty">();
   for (const s of states) {
     const d = signals.dissatisfactionBySystem.get(s.systemId) ?? 0;
     // Unreachable in real play: the economy processor writes dissatisfactionBySystem and
@@ -133,7 +139,10 @@ export async function runPopulationProcessor(
     // marginal-land world whose quality-scaled growth can't clear unrest, see populationDelta's
     // docstring) abandons exactly the same as a starved one; ABANDON_POP_FLOOR (1, well under
     // COLONY_SEED_POP 2) is the newborn guard now — an unlucky first cycle can't cross it alone.
-    if (population < ABANDON_POP_FLOOR) abandonedSystems.push(s.systemId);
+    if (population < ABANDON_POP_FLOOR) {
+      abandonedSystems.push(s.systemId);
+      abandonedSystemsByCause.set(s.systemId, supply.survivalShortfall ? "famine-collapse" : "decline-to-empty");
+    }
     // Isolates the death component of `delta` by re-running the same pure fold with the death rate
     // zeroed — growth and decline are unaffected by that rate, so the difference is exactly what the
     // gate removed, without re-implementing populationDelta's internal formula here (which would
@@ -212,5 +221,6 @@ export async function runPopulationProcessor(
   if (overshootDeathBySystem.size > 0) result.overshootDeathBySystem = overshootDeathBySystem;
   if (growthBySystem.size > 0) result.growthBySystem = growthBySystem;
   if (abandonedSystems.length > 0) result.abandonedSystems = abandonedSystems;
+  if (abandonedSystemsByCause.size > 0) result.abandonedSystemsByCause = abandonedSystemsByCause;
   return result;
 }

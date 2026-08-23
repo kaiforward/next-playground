@@ -475,6 +475,47 @@ function formatTable(results: HarnessResults): string {
         String(c.staleExpectationCount),
       ]),
     ));
+
+    // Target 5: quality distribution + the pump watch, cohorted single- vs multi-people-land-body —
+    // the fill-best-first fold's live audience. netPopulationChange and colonistDeliveryInflow are
+    // deliberately both absolute (not a ratio) so a cohort with positive inflow and negative net
+    // population reads as a visible sign disagreement, not a value a smoothing ratio could mask.
+    const qualityCohorts = worldCohorts.filter(
+      (c) => c.cohort === "quality: single-body" || c.cohort === "quality: multi-body",
+    );
+    if (qualityCohorts.length > 0) {
+      lines.push("");
+      lines.push("Habitability quality & the pump watch, by body-count cohort (end of simulation):");
+      lines.push(...renderTable(
+        ["Cohort", "n", "Quality median", "p10", "p90", "unassessed", "net pop chg", "delivery inflow"],
+        [20, 6, 14, 8, 8, 11, 12, 15],
+        qualityCohorts.map((c) => [
+          c.cohort,
+          String(c.n),
+          c.qualityLevels.median.toFixed(3),
+          c.qualityLevels.p10.toFixed(3),
+          c.qualityLevels.p90.toFixed(3),
+          String(c.qualityUnassessedCount),
+          c.netPopulationChange === null ? "n/a" : fmtNum(c.netPopulationChange),
+          fmtNum(c.colonistDeliveryInflow),
+        ]),
+      ));
+      lines.push("  net pop chg and delivery inflow are absolute (not %) so a cohort can show positive");
+      lines.push("  delivery alongside negative net population — the pump-watch disagreement signature.");
+    }
+  }
+
+  // Abandonment by cause (whole run) — Rule 2 fires on below-floor population alone since Task 8;
+  // this splits which of the two paths actually drove each abandonment: famine-collapse (Rule 1's
+  // crisis term) vs decline-to-empty (marginal-land stress alone, no famine). Printed
+  // unconditionally, like episode costs — 0/0 is itself evidence, not a skipped section.
+  {
+    const ac = results.abandonmentByCause;
+    lines.push("");
+    lines.push("Abandonment by cause (whole run):");
+    lines.push(
+      `famine-collapse: ${ac.famineCollapse}, decline-to-empty: ${ac.declineToEmpty}, total: ${ac.total}`,
+    );
   }
 
   // Episode costs — an episode's cost is real and irreversible (teardown, overshoot death), so the

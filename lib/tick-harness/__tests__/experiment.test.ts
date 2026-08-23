@@ -144,6 +144,7 @@ describe("ExperimentConfig", () => {
         marketRoles: {},
         demandHunting: { flipRate: 0, haulChurnRatio: 0 },
         worldCohorts: [],
+        abandonmentByCause: { famineCollapse: 0, declineToEmpty: 0, total: 0 },
         eventImpacts: [],
         logisticsActivity: {
           transferCount: 0, activeTicks: 0, totalQuantity: 0, meanTransferSize: 0,
@@ -268,6 +269,10 @@ describe("ExperimentConfig", () => {
         expectationLevels: { median: 0.9, p10: 0.7, p90: 0.99 },
         grievanceLevels: { median: 0, p10: 0, p90: 0.1 },
         staleExpectationCount: 0,
+        qualityLevels: { median: 0.8, p10: 0.5, p90: 1 },
+        qualityUnassessedCount: 0,
+        colonistDeliveryInflow: 12,
+        netPopulationChange: 40,
       }];
       const saved = buildExperimentResult(results);
       expect(saved.worldCohorts).toEqual(results.worldCohorts);

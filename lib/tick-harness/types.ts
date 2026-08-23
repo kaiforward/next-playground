@@ -121,14 +121,17 @@ export interface RoleCoverEntry {
 // ── World cohorts ───────────────────────────────────────────────
 
 /**
- * A settled system's cohorts. The three groupings are independent views, not one
- * partition: a system lands in exactly one population band and exactly one of
- * homeworld/colony, plus `survival-short` if it cannot feed itself. Rows therefore
- * overlap by design and each carries its own denominator.
+ * A settled system's cohorts. The groupings are independent views, not one partition: a system
+ * lands in exactly one population band, exactly one of homeworld/colony, exactly one of
+ * single-/multi-people-land-body (a COLONISABLE system always carries at least one contributing
+ * body, so this pair is exhaustive over the same membership `survival-short` and the population
+ * bands are drawn from), plus `survival-short` if it is colonisable and cannot feed itself. Rows
+ * therefore overlap by design and each carries its own denominator.
  */
 export type WorldCohort =
   | "pop <10" | "pop 10-100" | "pop 100-1K" | "pop >=1K"
-  | "survival-short" | "homeworld" | "colony";
+  | "survival-short" | "homeworld" | "colony"
+  | "quality: single-body" | "quality: multi-body";
 
 /** One cohort's supply and unrest reading. Cohorts overlap — see cohortsForSystem. */
 export interface WorldCohortEntry {
@@ -174,6 +177,28 @@ export interface WorldCohortEntry {
    *  empty at read time — see `SupplyRegimeSummary.staleExpectationCount` for why folding these in
    *  would read stale memory as current. */
   staleExpectationCount: number;
+  /** Distribution of the cached fill-best-first habitability quality (`s.habitabilityQuality.
+   *  quality`, `lib/engine/habitability.ts`) over the cohort's systems that carry a reading —
+   *  target 5's live read, most meaningful on the `quality: single-body` / `quality: multi-body`
+   *  cohorts (the fold's live audience) but reported for every cohort on the same basis as
+   *  `expectationLevels`. A system never assessed (no cached reading — should not occur for a
+   *  colonisable, settled system past its first cycle) is excluded, not folded in as 0. */
+  qualityLevels: QuantileLevels;
+  /** Cohort systems excluded from `qualityLevels` for carrying no cached `habitabilityQuality`
+   *  reading at all. */
+  qualityUnassessedCount: number;
+  /** Σ colonist-delivery inflow (`TickInstrumentation.colonistDeliveryBySystem`, accumulated across
+   *  the whole run) over the cohort's systems — the pump-watch numerator. Always >= 0: delivery is
+   *  the positive (sink) side only, never a source's outflow. */
+  colonistDeliveryInflow: number;
+  /** (end population − start population), summed over the cohort — the pump-watch's OTHER side, in
+   *  the same absolute units as `colonistDeliveryInflow` so the two can be read against each other
+   *  directly (unlike `netGrowthPct`, which is a percentage and cannot be compared to an inflow
+   *  count). A cohort can show `colonistDeliveryInflow > 0` alongside `netPopulationChange < 0` —
+   *  water-fill pushing people in while decline/death/leak still nets the cohort down — and that
+   *  disagreement is exactly the signature the pump watch exists to catch. Same null convention as
+   *  `netGrowthPct`: null when no tick-0 reading was taken at all, never a lying 0. */
+  netPopulationChange: number | null;
 }
 
 // ── Episode costs ────────────────────────────────────────────────
@@ -235,6 +260,25 @@ export interface RatchetBucketEntry {
 export interface RatchetCheckSummary {
   window: number;
   buckets: RatchetBucketEntry[];
+}
+
+// ── Abandonment by cause ────────────────────────────────────────
+//
+// Abandonment Rule 2 (`ABANDON_POP_FLOOR`, `lib/tick/processors/population.ts`) fires on
+// below-floor population alone since Task 8 — famine or not. `TickProcessorResult.
+// abandonedSystemsByCause` tags each finding with whether that system's supply state carried
+// `survivalShortfall` this cycle, so the two paths (famine-driven collapse vs a marginal-land
+// system declining to empty under non-famine stress) stay distinguishable in the aggregate.
+
+/** Whole-run counts, accumulated from every cycle's `abandonedSystemsByCause`. `total` is
+ *  `famineCollapse + declineToEmpty` — the identity this type exists to make checkable is proven
+ *  upstream, at the processor unit (`runPopulationProcessor`'s own tests): every system pushed to
+ *  `abandonedSystems` gets exactly one entry in `abandonedSystemsByCause`, from the same loop
+ *  iteration, so there is no third path this harness-level sum could silently drop. */
+export interface AbandonmentCauseSummary {
+  famineCollapse: number;
+  declineToEmpty: number;
+  total: number;
 }
 
 export interface MarketHealthSummary {
@@ -525,6 +569,10 @@ export interface HarnessResults {
   demandHunting: DemandHuntingSummary;
   /** Supply and unrest per world cohort. Cohorts overlap; each row carries its own denominator. */
   worldCohorts: WorldCohortEntry[];
+  /** Whole-run abandonment counts split by cause — famine-collapse (Rule 1's crisis term drove the
+   *  decline) vs decline-to-empty (Task 8's dropped famine conjunct: a marginal-land system that
+   *  never cleared unrest, no famine involved). */
+  abandonmentByCause: AbandonmentCauseSummary;
   /** Impact measurement for each event that occurred. */
   eventImpacts: EventImpact[];
   /** Whole-run directed-logistics activity — did goods actually move. */

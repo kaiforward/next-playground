@@ -157,6 +157,15 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   let migrationCycleCount = 0;
   let migrationColonistsTotal = 0;
   let migrationDiffusionTotal = 0;
+  // Per-system colonist-delivery inflow, accumulated across the whole run — the pump watch's
+  // numerator, folded by world cohort at the end via computeWorldCohorts. Transient instrumentation
+  // (`runWorldTick().instrumentation`), so like migrationMoved it is accumulated per tick.
+  const colonistDeliveryTotals = new Map<string, number>();
+  // Whole-run abandonment counts by cause (famine-collapse vs decline-to-empty), folded from
+  // `abandonedSystemsByCause` each cycle. Not cohorted: an abandoned system reverts to unclaimed
+  // this same cycle (`applyAbandonments`), so it never appears in a settled-only cohort read again.
+  let abandonedFamineCollapse = 0;
+  let abandonedDeclineToEmpty = 0;
   // Whole-run strike-suppression resolution (directed-build) — Σ suppressed / Σ eligible over every
   // cycle's per-(system,good) resolution. Transient instrumentation, accumulated per tick like the
   // migration totals above; read as a rate over eligible, never as the raw counts (the spec's
@@ -270,6 +279,19 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
       migrationCycleCount++;
       migrationColonistsTotal += result.instrumentation.migrationMoved.colonists;
       migrationDiffusionTotal += result.instrumentation.migrationMoved.diffusion;
+    }
+
+    if (result.instrumentation.colonistDeliveryBySystem) {
+      for (const [systemId, amount] of result.instrumentation.colonistDeliveryBySystem) {
+        colonistDeliveryTotals.set(systemId, (colonistDeliveryTotals.get(systemId) ?? 0) + amount);
+      }
+    }
+
+    if (result.instrumentation.abandonedSystemsByCause) {
+      for (const cause of result.instrumentation.abandonedSystemsByCause.values()) {
+        if (cause === "famine-collapse") abandonedFamineCollapse++;
+        else abandonedDeclineToEmpty++;
+      }
     }
 
     if (result.instrumentation.strikeSuppressedProposals) {
@@ -409,7 +431,7 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
   );
   const worldCohorts = computeWorldCohorts(
     finalTickSystems, currentMarkets, homeworldIds, STRIKE_PARAMS.threshold, world.events,
-    startPopulationBySystem,
+    startPopulationBySystem, colonistDeliveryTotals,
   );
   const kneeBinding = computeKneeBinding(finalTickSystems, currentMarkets);
 
@@ -452,6 +474,11 @@ export async function runTickHarness(config: HarnessConfig, label?: string): Pro
     marketRoles,
     demandHunting: summariseDemandHunting(demandHunting, logisticsFlows),
     worldCohorts,
+    abandonmentByCause: {
+      famineCollapse: abandonedFamineCollapse,
+      declineToEmpty: abandonedDeclineToEmpty,
+      total: abandonedFamineCollapse + abandonedDeclineToEmpty,
+    },
     eventImpacts,
     logisticsActivity: summariseLogistics(logisticsFlows, logisticsBudgetTotals, fundingBoundFlags),
     buildBurstSummary: summariseBuildBursts(buildCommitments),

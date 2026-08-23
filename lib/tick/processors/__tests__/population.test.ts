@@ -1318,6 +1318,105 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
   });
 });
 
+// ── Abandonment by cause: the same Rule 2 findings above, tagged with whether famine
+// (survivalShortfall) was present at the triggering cycle — famine-collapse vs decline-to-empty.
+// Purely observational (harness instrumentation only), built from the same loop as
+// abandonedSystems, so the two can never disagree on membership. ──
+
+describe("population processor: abandonment reporting (by cause)", () => {
+  function shortfallCtx(survivalShortfall: boolean): TickContext {
+    return {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["a", 0.5]]),
+          supplyStateBySystem: new Map([
+            ["a", { regime: "famine", survivalShortfall, criticalWeight: 0, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realisedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+  }
+
+  it("tags a famine-present abandonment famine-collapse", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, shortfallCtx(true), {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystemsByCause?.get("a")).toBe("famine-collapse");
+  });
+
+  it("tags a non-famine abandonment decline-to-empty — the dropped conjunct's other path", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sys("a", 0.5, 1000, 0)], markets: [] });
+    const result = await runPopulationProcessor(world, shortfallCtx(false), {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystemsByCause?.get("a")).toBe("decline-to-empty");
+  });
+
+  it("keeps the field absent entirely when nothing qualifies — the sparse convention", async () => {
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("a", 500, 1000, 0)],
+      markets: [market("a", "food")],
+    });
+    const result = await runPopulationProcessor(world, ctxWithD(new Map([["a", 0]])), PARAMS);
+    expect(result.abandonedSystemsByCause).toBeUndefined();
+    expect("abandonedSystemsByCause" in result).toBe(false);
+  });
+
+  it("sums to abandonedSystems — every reported abandonment carries exactly one cause tag, no orphans, no double count", async () => {
+    // A mixed cohort: one famine-driven collapse, one non-famine decline, one system that stays
+    // healthy — the same shape the harness's whole-run count folds over many cycles.
+    const world = new InMemoryPopulationWorld({
+      systems: [sys("dying-famine", 0.5, 1000, 0), sys("dying-decline", 0.5, 1000, 0), sys("fine", 5, 1000, 0)],
+      markets: [],
+    });
+    const ctx: TickContext = {
+      tick: 0,
+      results: new Map([["economy", {
+        economySignals: {
+          dissatisfactionBySystem: new Map([["dying-famine", 0.5], ["dying-decline", 0.5], ["fine", 0.5]]),
+          supplyStateBySystem: new Map([
+            ["dying-famine", { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+            ["dying-decline", { regime: "deprived", survivalShortfall: false, criticalWeight: 0, emptyBasket: false }],
+            ["fine", { regime: "famine", survivalShortfall: true, criticalWeight: 0, emptyBasket: false }],
+          ]),
+          sellingFactorBySystem: new Map(),
+          realisedProductionBySystem: new Map(),
+          productionSuppressBySystem: new Map(),
+        },
+      }]]),
+    };
+    const result = await runPopulationProcessor(world, ctx, {
+      unrest: { slopeBase: 1, slopeShortage: 1, decay: 0 },
+      population: FROZEN_POP,
+      expectation: EXPECTATION_PARAMS,
+      interval: 24,
+    });
+    expect(result.abandonedSystems).toEqual(
+      expect.arrayContaining(["dying-famine", "dying-decline"]),
+    );
+    expect(result.abandonedSystems?.length).toBe(2);
+    // The identity Prove 4 checks: cause-tag count sums to the total abandonments this cycle
+    // found, with no member left untagged and no extra member invented.
+    expect(result.abandonedSystemsByCause?.size).toBe(result.abandonedSystems?.length);
+    for (const id of result.abandonedSystems ?? []) {
+      expect(result.abandonedSystemsByCause?.has(id)).toBe(true);
+    }
+    expect(result.abandonedSystemsByCause?.get("dying-famine")).toBe("famine-collapse");
+    expect(result.abandonedSystemsByCause?.get("dying-decline")).toBe("decline-to-empty");
+  });
+});
+
 // ── Fill-best-first habitability quality: the fold-site cache (lib/engine/habitability.ts) ──
 // The cached value only advances when the occupied prefix crosses a body boundary
 // (frontierIndex changing) — population movement within the same body must leave it untouched,

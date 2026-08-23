@@ -1310,6 +1310,7 @@ export async function runWorldTick(
   // population below ABANDON_POP_FLOOR this cycle, famine or not. Applied just below, outside the
   // gate — the tick body is the sole owner of the control-flip/reset the processor only reports.
   let abandonedSystemIds: string[] = [];
+  let abandonedSystemsByCause: TickInstrumentation["abandonedSystemsByCause"];
   // The realised per-cycle population change's opening snapshot — captured here, BEFORE the
   // population processor mutates `population`, so the write below (after migration) reads the true
   // cycle-start value rather than an already-grown/declined one. Keyed by every system in this
@@ -1341,6 +1342,7 @@ export async function runWorldTick(
     overshootDeathBySystem = popResult.overshootDeathBySystem;
     growthBySystem = popResult.growthBySystem;
     abandonedSystemIds = popResult.abandonedSystems ?? [];
+    abandonedSystemsByCause = popResult.abandonedSystemsByCause;
     processorsRun.push("population");
   }
 
@@ -1386,6 +1388,7 @@ export async function runWorldTick(
   // Calibration-only: migration's per-cycle people-moved totals (colonist delivery + edge
   // diffusion). Declared here for the same reason as buildCommitmentsByGood above.
   let migrationMoved: TickInstrumentation["migrationMoved"];
+  let colonistDeliveryBySystem: TickInstrumentation["colonistDeliveryBySystem"];
   // Calibration-only: what each founding-stock manifest cost its founder. Same reason.
   let foundingManifests: TickInstrumentation["foundingManifests"];
   // Calibration-only: what held each in-flight colony back this cycle. Same reason.
@@ -1426,6 +1429,7 @@ export async function runWorldTick(
       });
       systems = migWorld.systems;
       migrationMoved = migResult.migrationMoved;
+      colonistDeliveryBySystem = migResult.colonistDeliveryBySystem;
       processorsRun.push("migration");
     }
 
@@ -1913,8 +1917,9 @@ export async function runWorldTick(
     events: tickEvents,
     markets,
     instrumentation: {
-      buildCommitmentsByGood, migrationMoved, foundingManifests, foundingStalls, logisticsBudget,
-      strikeSuppressedProposals, overshootDeathBySystem, growthBySystem, teardownLevelsBySystem,
+      buildCommitmentsByGood, migrationMoved, colonistDeliveryBySystem, foundingManifests, foundingStalls,
+      logisticsBudget, strikeSuppressedProposals, overshootDeathBySystem, growthBySystem,
+      teardownLevelsBySystem, abandonedSystemsByCause,
     },
   };
 }
