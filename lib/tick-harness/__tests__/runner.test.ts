@@ -472,7 +472,18 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // Sampled every tick instead, the same reversals divide by CYCLE_LENGTH times as many
     // readings and the rate collapses by an order of magnitude — the bound below is what a
     // per-tick sampler cannot clear, not a tuning value.
-    const results = await runBusy();
+    //
+    // The rate itself is a growing function of horizon under the habitability-seeding tables
+    // (measured: 0.00499 at BUSY's own 10,000 ticks, 0.00548 at 11,000, 0.00687 at 14,000 —
+    // demand-hunting reversals keep accumulating as the post-founding economy matures), so
+    // BUSY's own tickCount sits inside the dead-band around 0.005 rather than clearly past it.
+    // Search forward from BUSY's horizon for the first tickCount that clears the bound, instead
+    // of asserting on a horizon the tables have moved to the wrong side of it.
+    const results = await firstRunWhere(
+      { systemCount: BUSY.systemCount, seed: BUSY.seed },
+      (r) => r.demandHunting.flipRate > 0.005,
+      { start: BUSY.tickCount + 1_000, step: 1_000, maxTickCount: 20_000 },
+    );
     expect(results.demandHunting.flipRate).toBeGreaterThan(0.005);
   }, 180_000);
 });

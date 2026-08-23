@@ -187,12 +187,19 @@ export const HABITABILITY_THRESHOLD = 0.5;
 /**
  * Multiplies an above-threshold class's roll weight by the count of above-threshold bodies
  * already rolled in the system, applied BEFORE the `w > 0` candidate filter. Index 0 (the
- * first habitable body) is always 1 — not calibration-owned. Indices 1-2 are first-cut
- * calibration outputs (constrained by the ≥2-in-5-10%, =3-in-≤1.5% targets; `npm run
- * report:coherence` owns the final tuning). Index 3 is a FIXED hard 0 — not tunable — so a
- * 4th above-threshold body is impossible by table, never by chance.
+ * first habitable body) is always 1 — not calibration-owned. Indices 1-2 are Gate A
+ * calibration outputs: index 0 sets ≥1-habitable share alone (it never touches indices 1-2,
+ * so the two bands tune independently), while indices 1-2 set the ≥2/=3 shares against the
+ * yellow/orange archetype weights below. A closed-form per-body-roll model UNDERSTATES the
+ * real ≥2/=3 shares — 600 systems share one continuous PRNG stream per seed, so a table
+ * change ripples into every later system's draws; `npm run report:coherence` is the only
+ * reliable readout and must be re-run (not re-derived) after either table changes. At the
+ * retuned yellow/orange above-threshold weights, 1.1/0.3 lands the galaxy-wide ≥2 share at
+ * 5.9-9.0% (band 5-10%) and =3 at 0.0-0.2% (band ≤1.5%) across 6 census seeds. Index 3 is a
+ * FIXED hard 0 — not tunable — so a 4th above-threshold body is impossible by table, never by
+ * chance.
  */
-export const HABITABLE_COUNT_DAMPING: readonly number[] = [1, 0.35, 0.08, 0] as const;
+export const HABITABLE_COUNT_DAMPING: readonly number[] = [1, 1.1, 0.3, 0] as const;
 
 // ── Sun classes ───────────────────────────────────────────────────
 // weight = selection weight; archetypeWeights absent/0 = suppressed.
@@ -208,8 +215,11 @@ export interface SunClassDef {
 export const SUN_CLASSES: Record<SunClass, SunClassDef> = {
   yellow: {
     id: "yellow", name: "Yellow (Sol-like)", weight: 45, bodyCount: { min: 4, max: 8 },
+    // Above-threshold weights retuned at Gate A (from 9/6/6/3.5/0.8 = 25.3): the class needed to fall
+    // from ~81% to ~50% single-class ≥1-habitable share (bodyCount 4-8, dead sum 74 unchanged),
+    // solved as aboveSum/(aboveSum+74) ≈ 0.11, aboveSum ≈ 9.2 — same proportions, scaled by ~0.36.
     archetypeWeights: {
-      temperate_world: 9, ocean_world: 6, jungle_world: 6, boreal_world: 3.5, gaia_world: 0.8,
+      temperate_world: 3.25, ocean_world: 2.2, jungle_world: 2.2, boreal_world: 1.25, gaia_world: 0.3,
       arid_world: 12, tundra_world: 8, volcanic_world: 10, frozen_world: 8,
       barren_rock: 16, gas_giant: 10, asteroid_belt: 10,
     },
@@ -223,8 +233,11 @@ export const SUN_CLASSES: Record<SunClass, SunClassDef> = {
   },
   orange_dwarf: {
     id: "orange_dwarf", name: "Orange dwarf (cool)", weight: 30, bodyCount: { min: 3, max: 7 },
+    // Above-threshold weights retuned at Gate A (from 5/8/5/9/0.8 = 27.8): same derivation as
+    // yellow — dead sum 71.5 unchanged, aboveSum/(aboveSum+71.5) ≈ 0.11, aboveSum ≈ 8.8, same
+    // proportions scaled by ~0.318, landing single-class ≥1 at ~43%.
     archetypeWeights: {
-      temperate_world: 5, ocean_world: 8, jungle_world: 5, boreal_world: 9, gaia_world: 0.8,
+      temperate_world: 1.6, ocean_world: 2.5, jungle_world: 1.6, boreal_world: 2.85, gaia_world: 0.25,
       arid_world: 10, tundra_world: 10, frozen_world: 12,
       barren_rock: 14, gas_giant: 13, asteroid_belt: 12.5,
     },
