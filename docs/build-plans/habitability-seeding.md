@@ -624,6 +624,11 @@ Four stages on `feat/habitability-seeding`, each ending in a sim gate — stages
 pauses, one branch, one squash PR. Every `Files` list is a floor, not a ceiling. All citations
 below re-verified against the working tree this session (2026-08-23).
 
+**Execution rule (AGENTS.md → Tooling): long runs — full suite, `npm run simulate`, multi-seed
+measurements — are run by the MAIN session, foreground. Dispatched agents run only their
+scoped test files, synchronously; agent-designed measurements split into script (agent) →
+run (session) → analysis (agent).**
+
 ### Resolution table
 
 Every quantity a task's Interface names, resolved before the tasks were written.

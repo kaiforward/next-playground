@@ -117,6 +117,7 @@ Non-obvious, stack-specific traps. (`/uber-review`'s `rules/code-standards.md` m
 
 **Tooling (Windows)**
 - **A "stopped" background process is often still running.** `TaskStop` kills the wrapper, not the node tree. Verify with `Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select ProcessId, CommandLine` (identify by CommandLine) and `Stop-Process -Id <ids> -Force`.
+- **Long runs happen in the MAIN session, foreground — never inside a dispatched agent.** The same wrapper-vs-node-tree mismatch makes a subagent's `run_in_background` completion signal unreliable: the wake fires early (wrapper exits, sim still running) or never (real finish after the harness closed the book), and the agent strands until someone checks the process table. Full test suite, `npm run simulate`, and multi-seed measurements are session-run; dispatched agents run only their scoped test files, synchronously. For a measurement an agent designs, split it: agent writes the script → session runs it → agent analyses the output.
 - **Multi-line `perl`/`sed` one-liners silently no-op on CRLF files** and report success. Use a Python edit that detects the line ending, or edit line by line.
 - **Inside a worktree, an absolute path to the main checkout edits main.** Prefer normal branches.
 - **`\uXXXX` escapes cannot be written via Edit/Write** — the pipeline normalises them to the glyph. Regenerate via a PowerShell char-code loop and check `git diff`.
