@@ -16,7 +16,7 @@ const rngOn: RNG = () => 0.01;
 
 describe("partitionBody", () => {
   it("availableSpace equals SPACE_PER_SIZE × size", () => {
-    const arch = BODY_ARCHETYPES.garden_world;
+    const arch = BODY_ARCHETYPES.temperate_world;
     const size = 3;
     const result = partitionBody(arch, size, rngOff);
     expect(result.availableSpace).toBe(SUBSTRATE_GEN.SPACE_PER_SIZE * size);
@@ -67,17 +67,17 @@ describe("partitionBody", () => {
   });
 
   it("no ordering bias: two equal-weight resources get equal slots", () => {
-    // garden_world has minerals: 1, ore: 1 — genuine equal-weight pair
-    const arch = BODY_ARCHETYPES.garden_world;
+    // temperate_world has minerals: 1, ore: 1 — genuine equal-weight pair
+    const arch = BODY_ARCHETYPES.temperate_world;
     const size = 3;
     const result = partitionBody(arch, size, rngOff);
     expect(result.slots.minerals).toBeCloseTo(result.slots.ore, 10);
   });
 
   it("volatility: one resource spikes; partition still sums to availableSpace (within ε)", () => {
-    // garden_world present resources (weight > 0): minerals, ore, biomass, arable, water
+    // temperate_world present resources (weight > 0): minerals, ore, biomass, arable, water
     // rngOn = () => 0.01 → volatility fires (0.01 < 0.04), then picks index 0 of present list
-    const arch = BODY_ARCHETYPES.garden_world;
+    const arch = BODY_ARCHETYPES.temperate_world;
     const size = 2;
     const result = partitionBody(arch, size, rngOn);
 

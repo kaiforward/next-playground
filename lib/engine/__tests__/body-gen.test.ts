@@ -56,9 +56,10 @@ describe("generateSubstrate", () => {
   it("systems with no habitable land seed zero population and build nothing", () => {
     // The fill gate: habitableSpace === 0 → fill 0 → population 0 and an empty
     // build-out (an undeveloped deposit field). Only all-gas-giant systems (the
-    // sole habitableFraction-0 archetype) reach it; they occur naturally in the
-    // barren galaxy, so a large deterministic sample reliably contains some.
-    const undeveloped = sample(1000).filter((s) => s.habitableSpace === 0);
+    // sole habitableFraction-0 archetype) reach it — wider body counts make an all-gas-giant
+    // roll rarer per system, so the sample is large enough that a deterministic seed still
+    // reliably contains some (expected ~8 at this size).
+    const undeveloped = sample(5000).filter((s) => s.habitableSpace === 0);
     expect(undeveloped.length).toBeGreaterThan(0);
     for (const s of undeveloped) {
       expect(s.population).toBe(0);

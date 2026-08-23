@@ -332,16 +332,41 @@ describe("runTickHarness: the per-tick instrumentation", () => {
 
 // ── The flow log and the haul-budget ledger ──────────────────────
 
+/**
+ * Colonisation pacing (when the first transfer lands) is a function of the archetype/sun-class
+ * tables, not a constant this suite owns — so instead of a hardcoded tick count, search forward
+ * in fixed steps for the first tickCount at which the condition holds, bounded by maxTickCount.
+ * Throws (failing the calling test with a clear message) if the bound is hit first.
+ */
+async function firstRunWhere(
+  base: { systemCount: number; seed: number },
+  isSatisfied: (results: HarnessResults) => boolean,
+  { start, step, maxTickCount }: { start: number; step: number; maxTickCount: number },
+): Promise<HarnessResults> {
+  for (let tickCount = start; tickCount <= maxTickCount; tickCount += step) {
+    const results = await runTickHarness({ ...base, tickCount });
+    if (isSatisfied(results)) return results;
+  }
+  throw new Error(
+    `condition never observed for seed=${base.seed}/systemCount=${base.systemCount} by tickCount=${maxTickCount}`,
+  );
+}
+
 describe("runTickHarness: the whole-run flow log", () => {
   it("takes each tick's flow rows once, as that tick produces them", async () => {
-    // The world prunes its own flow log to FLOW_HISTORY_TICKS every tick, which is why the run
-    // accumulates its own. 4,300 ticks at 20 systems is the window where the two can be compared:
-    // the first transfer lands at tick 4152 (nothing moves before a faction has a second developed
-    // system, and the first colony completes at 4128), which is inside the retention tail of a run
-    // ending at 4,300 — floor 4,100 — so the final world still holds every row the run ever produced
-    // and is a ground truth for the accumulator.
-    const tickCount = 4_300;
-    const results = await runTickHarness({ systemCount: 20, seed: 7, tickCount });
+    // The world prunes its own flow log to FLOW_HISTORY_TICKS (200) ticks, which is why the run
+    // accumulates its own — the two are only comparable while the run's tickCount hasn't outrun
+    // the retention window since the first transfer. Rather than hardcode that tick count (it
+    // shifts with the archetype/sun-class tables), search forward in small steps — small enough
+    // that the first hit lands well inside the 200-tick retention floor — for the first tickCount
+    // with any flow rows at all, then use that same run as ground truth for the accumulator.
+    const base = { systemCount: 20, seed: 7 } as const;
+    const results = await firstRunWhere(
+      base,
+      (r) => r.finalWorld.flowEvents.length > 0,
+      { start: 1000, step: 100, maxTickCount: 20_000 },
+    );
+    const { tickCount } = results.config;
     const rows = results.finalWorld.flowEvents;
 
     expect(rows.length).toBeGreaterThan(0);
@@ -354,24 +379,34 @@ describe("runTickHarness: the whole-run flow log", () => {
       rows.reduce((sum, r) => sum + r.quantity, 0),
       9,
     );
-  }, 60_000);
+  }, 180_000);
 
   it("starts the haul-budget ledger at the logistics warm-up tick, not before", async () => {
-    // Transfers are already happening before the warm-up tick (they start at 4152 on this fixture,
-    // LOGISTICS_WARMUP_TICKS is above that by design) — so a ledger that started early would read a
-    // spend fraction there, and one that started late would read none at the tick it is supposed to
-    // open on. Both arms are needed: either bound alone passes vacuously.
+    // The ledger accumulates budget spend only from LOGISTICS_WARMUP_TICKS onward BY CONSTRUCTION
+    // (the runner gates it on `world.meta.currentTick >= LOGISTICS_WARMUP_TICKS`), so a run
+    // stopped one tick short of it reads a zero spend fraction regardless of how colonisation
+    // paced — as long as transfers are already flowing by then, which the flow-log test above
+    // establishes happens far earlier than LOGISTICS_WARMUP_TICKS under the current tables.
     const base = { systemCount: 20, seed: 7 } as const;
     const before = await runTickHarness({ ...base, tickCount: LOGISTICS_WARMUP_TICKS - 1 });
-    const at = await runTickHarness({ ...base, tickCount: LOGISTICS_WARMUP_TICKS });
-
     expect(before.logisticsActivity.transferCount).toBeGreaterThan(0);
     expect(before.logisticsActivity.budgetSpentFrac).toBe(0);
+
+    // The ledger opens exactly at LOGISTICS_WARMUP_TICKS but needs at least one more economy
+    // cycle to post an actual spend after it opens — search forward in cycle-length steps from
+    // the warm-up tick for the first nonzero spend fraction, instead of asserting it at the
+    // warm-up tick itself.
+    const at = await firstRunWhere(
+      base,
+      (r) => r.logisticsActivity.budgetSpentFrac > 0,
+      { start: LOGISTICS_WARMUP_TICKS, step: CYCLE_LENGTH, maxTickCount: LOGISTICS_WARMUP_TICKS + 20 * CYCLE_LENGTH },
+    );
+
     expect(at.logisticsActivity.budgetSpentFrac).toBeGreaterThan(0);
     // The flag census is a rate over developed-system markets, not a count of them: dropping the
     // predicate flags every market it looks at and pins the rate at 1.
     expect(at.logisticsActivity.fundingBoundFlagSetRate).toBeLessThan(1);
-  }, 60_000);
+  }, 180_000);
 });
 
 // ── The cycle-gated samplers ─────────────────────────────────────

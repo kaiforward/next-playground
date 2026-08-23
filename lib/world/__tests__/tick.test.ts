@@ -29,7 +29,8 @@ import type { TaxLevel } from "@/lib/types/game";
 import type { SystemDevelopment } from "@/lib/tick/world/directed-build-world";
 import type { TickSystem } from "@/lib/tick/rows";
 import type {
-  World, WorldBuildProject, WorldFactionTreasury, WorldMarket, WorldShip, WorldSystem,
+  World, WorldBuildProject, WorldColonyEstablishProject, WorldFactionTreasury, WorldMarket, WorldShip,
+  WorldSystem,
 } from "../types";
 
 async function runTicks(world: World, count: number, cadence?: TickCadence) {
@@ -1181,6 +1182,58 @@ function requirePopulationChange(world: World, systemId: string): number {
   return value;
 }
 
+/** One (donor, recipient) colony-founding pair, plus the two pre-tick world states the founding
+ *  tests below diverge from — derived by running the fixture forward and watching for the FIRST
+ *  colony_establish project, rather than hardcoding which pair forms and when: that pacing is a
+ *  function of the archetype/sun-class tables, not a constant these tests own. */
+interface FoundingFixture {
+  sourceSystemId: string;
+  targetSystemId: string;
+  /** World state one tick before the project's establish work completes (target still `controlled`). */
+  completionPreWorld: World;
+  /** World state one tick before a staging cycle that draws both survival goods from the donor. */
+  stagingPreWorld: World;
+}
+
+async function deriveFoundingFixture(base: World, maxTicks = 20_000): Promise<FoundingFixture> {
+  let world = base;
+  let project: WorldColonyEstablishProject | undefined;
+  let stagingPreWorld: World | undefined;
+
+  for (let t = 1; t <= maxTicks; t++) {
+    const preTickWorld = world;
+    const result = await runWorldTick(world);
+    world = result.world;
+
+    if (!project) {
+      project = world.constructionProjects.find(
+        (p): p is WorldColonyEstablishProject => p.kind === "colony_establish",
+      );
+    }
+    if (!project) continue;
+
+    if (!stagingPreWorld) {
+      const manifests = (result.instrumentation.foundingManifests ?? [])
+        .filter((m) => m.sourceSystemId === project!.sourceSystemId);
+      const goods = new Set(manifests.flatMap((m) => m.goodIds));
+      if (SURVIVAL_GOODS.every((g) => goods.has(g))) stagingPreWorld = preTickWorld;
+    }
+
+    const targetNow = world.systems.find((s) => s.id === project!.systemId);
+    const targetBefore = preTickWorld.systems.find((s) => s.id === project!.systemId);
+    if (targetNow?.control === "developed" && targetBefore?.control !== "developed") {
+      if (!stagingPreWorld) throw new Error("colony completed before any staging draw was ever observed");
+      return {
+        sourceSystemId: project.sourceSystemId,
+        targetSystemId: project.systemId,
+        completionPreWorld: preTickWorld,
+        stagingPreWorld,
+      };
+    }
+  }
+  throw new Error(`no colony_establish project completed within ${maxTicks} ticks`);
+}
+
 /** A developed homeworld reduced to housing alone (mirrors `populationFixture`), at a chosen
  *  occupancy and unrest, with no treasury override — used where the test needs the source system's
  *  starting row to be byte-identical across two worlds that only then diverge elsewhere. */
@@ -1419,20 +1472,19 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
   }, 30_000);
 
   // ── colony-founding donation, driven through runWorldTick, not applyDevelopments directly ──
-  // A specific, empirically-verified galaxy (seed 11, 90 systems) funds and completes a real
-  // colony-establish project — system-50 seeding system-40 — at tick 4128 under the DEFAULT cadence
-  // (re-derived for the slowed construction/founding rates; was tick 432 at the pre-timescale rates),
-  // found the same way `lib/world/__tests__/tick-colony-source.test.ts` does: run the real loop
-  // forward and watch `control`/`constructionProjects`. `EXPANSION.COLONY_SEED_POP` fixes the
-  // donation at exactly 2 regardless of fixture size, so "unmistakably different" comes from a
-  // same-tick counterfactual rather than a huge donor: two clones of the identical pre-tick world
-  // (same `meta.currentTick`, so `tickRng(seed, tick)` draws identically in both —
-  // `lib/world/tick.ts:1070`) diverge ONLY in whether directed-build resolves this tick, isolating
-  // the donation's contribution to the donor's populationChange exactly, with no other system's
-  // dynamics free to differ between the two branches.
+  // A galaxy (seed 11, 90 systems) funds and completes a real colony-establish project — which
+  // donor seeds which recipient, and on what tick, is derived programmatically by
+  // `deriveFoundingFixture` rather than hardcoded, since that pacing is a function of the
+  // archetype/sun-class tables. `EXPANSION.COLONY_SEED_POP` fixes the donation at exactly 2
+  // regardless of fixture size, so "unmistakably different" comes from a same-tick counterfactual
+  // rather than a huge donor: two clones of the identical pre-tick world (same `meta.currentTick`,
+  // so `tickRng(seed, tick)` draws identically in both — `lib/world/tick.ts:1070`) diverge ONLY in
+  // whether directed-build resolves this tick, isolating the donation's contribution to the
+  // donor's populationChange exactly, with no other system's dynamics free to differ between the
+  // two branches.
   it("includes a colony-founding donation: the donor's populationChange is NOT short by the seed it gave away", async () => {
     const base = generateWorld({ systemCount: 90, seed: 11 });
-    const preWorld = await runTicks(base, 4127);
+    const { sourceSystemId, targetSystemId, completionPreWorld: preWorld } = await deriveFoundingFixture(base);
 
     const withDonation = (await runWorldTick(preWorld)).world;
     const withoutDonation = (await runWorldTick(preWorld, {
@@ -1441,11 +1493,11 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
 
     // Premise: the two branches genuinely diverge on founding this exact tick, not on some
     // unrelated effect — the fixture's colony completes only when directed-build is allowed to run.
-    expect(fixtureSystem(withDonation, "system-40").control).toBe("developed");
-    expect(fixtureSystem(withoutDonation, "system-40").control).toBe("controlled");
+    expect(fixtureSystem(withDonation, targetSystemId).control).toBe("developed");
+    expect(fixtureSystem(withoutDonation, targetSystemId).control).toBe("controlled");
 
-    const donationInclusive = requirePopulationChange(withDonation, "system-50");
-    const migrationOnly = requirePopulationChange(withoutDonation, "system-50");
+    const donationInclusive = requirePopulationChange(withDonation, sourceSystemId);
+    const migrationOnly = requirePopulationChange(withoutDonation, sourceSystemId);
 
     expect(donationInclusive).toBeLessThan(migrationOnly);
     // The gap is exactly the seed transfer, denominated per reference cycle (catchUpFactor
@@ -1454,7 +1506,7 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     expect(migrationOnly - donationInclusive).toBeCloseTo(
       EXPANSION.COLONY_SEED_POP / catchUpFactor(CYCLE_LENGTH), 6,
     );
-  }, 30_000);
+  }, 120_000);
 
   it("a system that donates nothing is unaffected by the move — its figure is identical whether or not directed-build resolves this tick", async () => {
     const base = generateWorld({ systemCount: 90, seed: 11 });
@@ -1767,11 +1819,10 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
   // ── colony-founding staging draw, driven through runWorldTick, not applyFoundingStagingDraws ──
   // The same seed-11/90-system galaxy the populationChange suite above uses, but caught on a STAGING
   // cycle rather than the completion tick: a colony's manifest is staged cycle by cycle as its founder
-  // can spare the goods, and runs dry before the construction work finishes — system-40's draws from
-  // system-50 run every construction cycle from tick 48 to 3816, while the establish itself only
-  // completes at 4128, so the completion tick draws nothing at all and is the wrong tick to measure a
-  // draw on. Tick 480 is a mid-sequence staging cycle carrying both survival goods, with the draws
-  // either side of it the same size and the same goods.
+  // can spare the goods, and the completion tick itself draws nothing at all, so it is the wrong tick
+  // to measure a draw on. `deriveFoundingFixture` walks the fixture forward and records the pre-tick
+  // world of the FIRST staging cycle that carries both survival goods for the donor it finds, rather
+  // than a hardcoded tick — that cycle's position shifts with the archetype/sun-class tables.
   //
   // Two clones of one identical pre-tick world, diverging ONLY in whether directed-build resolves this
   // tick, so the staging draw's contribution to a founder's own survival-good rows is isolated exactly.
@@ -1782,7 +1833,7 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
   // than it has, on the cycle it can least afford one.
   it("includes a colony-founding staging draw: the donor's stockChange covers the survival goods it shipped out", async () => {
     const base = generateWorld({ systemCount: 90, seed: 11 });
-    const preWorld = await runTicks(base, 479);
+    const { sourceSystemId: donorId, stagingPreWorld: preWorld } = await deriveFoundingFixture(base);
 
     const staged = await runWorldTick(preWorld);
     const withStaging = staged.world;
@@ -1790,7 +1841,6 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
       cadence: { cycle: CYCLE_LENGTH, logistics: LOGISTICS_INTERVAL, construction: NEVER },
     })).world;
 
-    const donorId = "system-50"; // system-40's seed source, per the populationChange suite above
     // Premise: the two branches genuinely diverge on a staging draw this exact tick, and the draw
     // really carries the two survival goods asserted below. Read off the tick's own manifest record —
     // the colony is still `controlled` on both branches here, so control cannot be the premise.

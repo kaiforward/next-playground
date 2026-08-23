@@ -421,7 +421,7 @@ describe("generateConnections", () => {
 // ── Emergent starting condition (home-system prefab) ────────────
 
 describe("stampHomeworldPrefabs", () => {
-  it("stamps the home-system prefab onto a garden body for each homeworld, leaves the rest bare", () => {
+  it("stamps the home-system prefab onto a temperate body for each homeworld, leaves the rest bare", () => {
     const systems = [
       mkSys({ index: 0, population: 0, buildings: {} }),
       mkSys({ index: 1, population: 0, buildings: {} }),
@@ -430,12 +430,12 @@ describe("stampHomeworldPrefabs", () => {
 
     stampHomeworldPrefabs(systems, new Set([0]));
 
-    // Homeworld: stamped with the prefab, on a prepended guaranteed garden body.
+    // Homeworld: stamped with the prefab, on a prepended guaranteed temperate body.
     expect(systems[0].buildings).toEqual(HOME_SYSTEM_PREFAB.buildings);
     expect(systems[0].population).toBe(HOME_SYSTEM_PREFAB.population);
     expect(systems[0].popCap).toBe(HOME_SYSTEM_PREFAB.population); // housing sized so popCap == residents
     expect(systems[0].bodies.length).toBe(homeworldBodiesBefore + 1);
-    expect(systems[0].bodies[0].bodyType).toBe("garden_world");
+    expect(systems[0].bodies[0].bodyType).toBe("temperate_world");
     expect(systems[0].habitableSpace).toBeGreaterThan(0);
     // Recomputed label: the stamped capital's population clears the developed gate, so it lands on one of
     // the population-gated developed types (never a bare deposit-driven one).

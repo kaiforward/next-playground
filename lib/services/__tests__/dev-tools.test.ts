@@ -220,9 +220,15 @@ describe("getEconomySnapshot", () => {
     const names = result.data.systems.map((s) => s.systemName);
     expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
 
-    const first = result.data.systems[0];
-    expect(first.markets.length).toBeGreaterThan(0);
-    const food = first.markets.find((m) => m.goodId === "food");
+    // Sorting is asserted above; the market-entries assertion needs a system known to be
+    // developed (most systems are not, under habitability-seeding), so pick one from the live
+    // world state rather than assuming the alphabetically-first entry is settled.
+    const developed = world.systems.find((s) => s.control === "developed")!;
+    const developedEntry = result.data.systems.find((s) => s.systemId === developed.id);
+    expect(developedEntry).toBeDefined();
+    if (!developedEntry) return;
+    expect(developedEntry.markets.length).toBeGreaterThan(0);
+    const food = developedEntry.markets.find((m) => m.goodId === "food");
     expect(food).toBeDefined();
     expect(Number.isFinite(food?.price)).toBe(true);
     expect(Number.isFinite(food?.stock)).toBe(true);

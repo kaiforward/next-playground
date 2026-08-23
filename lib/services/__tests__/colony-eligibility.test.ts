@@ -150,21 +150,24 @@ describe("findSeedSource", () => {
 });
 
 describe("colonyEligibility", () => {
-  /** A funded faction with a developed seed source directly next to a controlled target. */
+  /**
+   * A funded faction with a developed seed source directly next to a controlled target, on a
+   * synthetic single-edge connection graph — isolated from the generated galaxy so BFS reach is
+   * pinned structurally (no other developed system can ever be in range), not by seed luck.
+   */
   function eligibleFixture() {
     const w = getWorld();
     const faction = w.factions[0];
-    const source = w.systems[0];
+    const [source, target] = w.systems;
     source.factionId = faction.id;
     source.control = "developed";
-    const conn = w.connections.find((c) => c.fromId === source.id || c.toId === source.id)!;
-    const otherId = conn.fromId === source.id ? conn.toId : conn.fromId;
-    const target = w.systems.find((s) => s.id === otherId)!;
     target.factionId = faction.id;
     target.control = "controlled";
     target.habitableSpace = 50;
+    const connections: WorldConnection[] = [{ fromId: source.id, toId: target.id, fuelCost: 1 }];
     setWorld({
-      ...w,
+      ...isolate(w),
+      connections,
       constructionProjects: [],
       treasuries: w.treasuries.map((t) =>
         t.factionId === faction.id ? { ...t, balance: Number.MAX_SAFE_INTEGER } : t,

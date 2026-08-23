@@ -164,5 +164,5 @@ export function homeworldGardenBody(): GeneratedBody {
   const slotsFootprint = RESOURCE_TYPES.reduce((s, r) => s + slots[r], 0) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
   const size = (slotsFootprint + generalSpace) / SUBSTRATE_GEN.SPACE_PER_SIZE;
 
-  return { bodyType: "garden_world", habitable: true, size, slots, quality, generalSpace, habitableSpace };
+  return { bodyType: "temperate_world", habitable: true, size, slots, quality, generalSpace, habitableSpace };
 }
