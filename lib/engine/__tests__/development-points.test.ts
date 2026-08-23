@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   developmentPoints,
   developmentPotential,
@@ -6,6 +8,8 @@ import {
   type DevelopmentPointsInput,
   type DevelopmentPotentialInput,
 } from "@/lib/engine/development-points";
+import { systemDevelopment, industryPotential, type DevelopmentInput } from "@/lib/engine/development";
+import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 
 /**
  * Fixture: a system's development-points inputs. Defaults are empty (no pop, no buildings) so each
@@ -133,7 +137,7 @@ describe("developmentPoints — map-only raw tier-weighted score", () => {
  * the fields it exercises.
  */
 function potentialInput(partial: Partial<DevelopmentPotentialInput>): DevelopmentPotentialInput {
-  return { peopleLand: 0, depositSlots: 0, industryLand: 0, ...partial };
+  return { peopleLand: 0, depositCounts: 0, industryLand: 0, ...partial };
 }
 
 describe("developmentPotential — full-build-out dev-points ceiling", () => {
@@ -143,7 +147,7 @@ describe("developmentPotential — full-build-out dev-points ceiling", () => {
     const population = 300;
     const currentPoints = developmentPoints(pointsInput({ population, buildings: { ore: 10 } }));
     const potential = developmentPotential(
-      potentialInput({ peopleLand: 400, depositSlots: 20, industryLand: 100 }),
+      potentialInput({ peopleLand: 400, depositCounts: 20, industryLand: 100 }),
     );
     expect(potential).toBeGreaterThan(currentPoints);
   });
@@ -153,21 +157,21 @@ describe("developmentPotential — full-build-out dev-points ceiling", () => {
   });
 
   it("rises with peopleLand (monotonic)", () => {
-    const base = { depositSlots: 5, industryLand: 10 };
+    const base = { depositCounts: 5, industryLand: 10 };
     const small = developmentPotential(potentialInput({ ...base, peopleLand: 100 }));
     const large = developmentPotential(potentialInput({ ...base, peopleLand: 200 }));
     expect(large).toBeGreaterThan(small);
   });
 
-  it("rises with depositSlots (monotonic)", () => {
+  it("rises with depositCounts (monotonic)", () => {
     const base = { peopleLand: 100, industryLand: 10 };
-    const few = developmentPotential(potentialInput({ ...base, depositSlots: 2 }));
-    const many = developmentPotential(potentialInput({ ...base, depositSlots: 20 }));
+    const few = developmentPotential(potentialInput({ ...base, depositCounts: 2 }));
+    const many = developmentPotential(potentialInput({ ...base, depositCounts: 20 }));
     expect(many).toBeGreaterThan(few);
   });
 
   it("rises with industryLand (monotonic)", () => {
-    const base = { peopleLand: 100, depositSlots: 5 };
+    const base = { peopleLand: 100, depositCounts: 5 };
     const small = developmentPotential(potentialInput({ ...base, industryLand: 5 }));
     const large = developmentPotential(potentialInput({ ...base, industryLand: 50 }));
     expect(large).toBeGreaterThan(small);
@@ -175,7 +179,7 @@ describe("developmentPotential — full-build-out dev-points ceiling", () => {
 
   it("stays finite and non-negative for a huge, fully substrate-rich system", () => {
     const potential = developmentPotential(
-      potentialInput({ peopleLand: 1_000_000, depositSlots: 10_000, industryLand: 100_000 }),
+      potentialInput({ peopleLand: 1_000_000, depositCounts: 10_000, industryLand: 100_000 }),
     );
     expect(Number.isFinite(potential)).toBe(true);
     expect(potential).toBeGreaterThanOrEqual(0);
@@ -183,10 +187,60 @@ describe("developmentPotential — full-build-out dev-points ceiling", () => {
 
   it("clamps negative/degenerate inputs to 0 rather than going negative or non-finite", () => {
     const potential = developmentPotential(
-      potentialInput({ peopleLand: -100, depositSlots: -5, industryLand: -10 }),
+      potentialInput({ peopleLand: -100, depositCounts: -5, industryLand: -10 }),
     );
     expect(Number.isFinite(potential)).toBe(true);
     expect(potential).toBeGreaterThanOrEqual(0);
     expect(potential).toBe(0);
+  });
+});
+
+// Prove 3: developmentPotential (this file) and systemDevelopment (development.ts) share the
+// ONE deposit→land coefficient (SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT) — no second, disagreeing constant.
+describe("Prove 3 — one shared deposit→land coefficient, no second constant", () => {
+  it("grep-level: development-points.ts never reads SUBSTRATE_GEN/DEPOSIT_SLOT_FOOTPRINT directly — it only reaches the coefficient via industryPotential", () => {
+    // If a second coefficient were ever inlined here (bypassing industryPotential), it could disagree
+    // with development.ts's without any test in THIS file catching it algebraically — a source check
+    // is the only thing that rules it out structurally.
+    const here = fileURLToPath(import.meta.url);
+    const srcPath = here.replace(/__tests__[\\/]development-points\.test\.ts$/, "development-points.ts");
+    const src = readFileSync(srcPath, "utf8");
+    expect(src.includes("SUBSTRATE_GEN")).toBe(false);
+    expect(src.includes("DEPOSIT_SLOT_FOOTPRINT")).toBe(false);
+  });
+
+  it("numeric contradiction: mutating SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT once moves BOTH developmentPotential's industry term and systemDevelopment's extraction term in lockstep", () => {
+    const original = SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
+    try {
+      const depositCounts = 20;
+      const industryLand = 10;
+      const peopleLand = 0;
+
+      const potentialBefore = developmentPotential({ peopleLand, depositCounts, industryLand });
+      const devInput: DevelopmentInput = {
+        buildings: { ore: depositCounts }, // built extractor levels = the same deposit count, fully worked
+        population: 100_000, // ample labour: staffing saturates to 1
+        peopleLand,
+      };
+      const refs = { popRef: 1, industryRef: industryPotential(depositCounts, industryLand) * 10 }; // generous, unsaturated
+      const devBefore = systemDevelopment(devInput, refs);
+
+      // Mutate the ONE shared coefficient (double it) — both readings must move, and by the same
+      // algebraic relationship, or they are not actually sharing it.
+      Object.assign(SUBSTRATE_GEN, { DEPOSIT_SLOT_FOOTPRINT: original * 2 });
+      const potentialAfter = developmentPotential({ peopleLand, depositCounts, industryLand });
+      const devAfter = systemDevelopment(devInput, refs);
+
+      expect(potentialAfter).not.toBeCloseTo(potentialBefore, 6);
+      expect(devAfter).not.toBeCloseTo(devBefore, 6);
+
+      // Both deltas trace back to the same doubled deposit contribution (depositCounts × Δcoefficient),
+      // scaled only by each formula's own OWN fixed multiplier (TIER_WEIGHT[1] vs staffing) — not by two
+      // independently-tunable coefficients.
+      const expectedPotentialDelta = depositCounts * original * DEVELOPMENT_POINTS.TIER_WEIGHT[1];
+      expect(potentialAfter - potentialBefore).toBeCloseTo(expectedPotentialDelta, 6);
+    } finally {
+      Object.assign(SUBSTRATE_GEN, { DEPOSIT_SLOT_FOOTPRINT: original });
+    }
   });
 });

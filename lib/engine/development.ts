@@ -61,8 +61,8 @@ export interface DevelopmentRefSystem {
   peopleLand: number;
   /** Fungible general space — factory land (and, netted, housing land). */
   industryLand: number;
-  /** Total worked-able deposit slots across all resources (Σ slot caps). */
-  depositSlots: number;
+  /** Total worked-able deposit counts across all resources (Σ per-resource counts). */
+  depositCounts: number;
 }
 
 /** Soft-saturation of an absolute magnitude against a reference → [0,1). 0 at 0, ≈0.63 at ref. */
@@ -86,8 +86,8 @@ export function habitablePotentialPop(peopleLand: number): number {
  * space given to factories, in the same space units `systemDevelopment` measures `staffedIndustry` in.
  * The absolute industry ceiling the universe-wide `industryRef` is a max over.
  */
-export function industryPotential(depositSlots: number, industryLand: number): number {
-  return Math.max(0, depositSlots) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT + Math.max(0, industryLand);
+export function industryPotential(depositCounts: number, industryLand: number): number {
+  return Math.max(0, depositCounts) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT + Math.max(0, industryLand);
 }
 
 /**
@@ -101,7 +101,7 @@ export function developmentRefs(systems: DevelopmentRefSystem[]): DevelopmentRef
   let industryRef = 0;
   for (const s of systems) {
     popRef = Math.max(popRef, habitablePotentialPop(s.peopleLand));
-    industryRef = Math.max(industryRef, industryPotential(s.depositSlots, s.industryLand));
+    industryRef = Math.max(industryRef, industryPotential(s.depositCounts, s.industryLand));
   }
   return { popRef, industryRef };
 }

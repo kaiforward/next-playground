@@ -56,9 +56,9 @@ describe("industryPotential — the staffed-industry footprint a system could ev
 describe("developmentRefs — universe-wide max potential", () => {
   it("takes the largest pop and industry potential across all systems", () => {
     const refs = developmentRefs([
-      { peopleLand: 20, industryLand: 10, depositSlots: 2 },
-      { peopleLand: 200, industryLand: 4, depositSlots: 1 }, // biggest pop potential
-      { peopleLand: 5, industryLand: 80, depositSlots: 30 }, // biggest industry potential
+      { peopleLand: 20, industryLand: 10, depositCounts: 2 },
+      { peopleLand: 200, industryLand: 4, depositCounts: 1 }, // biggest pop potential
+      { peopleLand: 5, industryLand: 80, depositCounts: 30 }, // biggest industry potential
     ]);
     expect(refs.popRef).toBeCloseTo(habitablePotentialPop(200), 6);
     expect(refs.industryRef).toBeCloseTo(industryPotential(30, 80), 6);
@@ -82,8 +82,8 @@ describe("systemDevelopment", () => {
     const bigHab = 400;
     const smallHab = 40; // one tenth of the biggest system's habitable land
     const refs = developmentRefs([
-      { peopleLand: bigHab, industryLand: 30, depositSlots: 20 },
-      { peopleLand: smallHab, industryLand: 3, depositSlots: 2 },
+      { peopleLand: bigHab, industryLand: 30, depositCounts: 20 },
+      { peopleLand: smallHab, industryLand: 3, depositCounts: 2 },
     ]);
     // The small colony, housing maxed to its own habitable cap, barely any industry.
     const fullSmallColony = devInput({
@@ -99,7 +99,7 @@ describe("systemDevelopment", () => {
     // knee (~0.63 per term), never at 1 — the top of the board is reserved for systems that later exceed
     // natural potential via robots / special housing.
     const bigHab = 400;
-    const refs = developmentRefs([{ peopleLand: bigHab, industryLand: 60, depositSlots: 40 }]);
+    const refs = developmentRefs([{ peopleLand: bigHab, industryLand: 60, depositCounts: 40 }]);
     const maxedCapital = devInput({
       buildings: { [HOUSING_TYPE]: 1000, ore: 40 },
       population: habitablePotentialPop(bigHab),
@@ -112,8 +112,8 @@ describe("systemDevelopment", () => {
 
   it("reads a small full colony far BELOW the universe's largest system", () => {
     const refs = developmentRefs([
-      { peopleLand: 100, industryLand: 40, depositSlots: 20 },
-      { peopleLand: 5, industryLand: 2, depositSlots: 1 },
+      { peopleLand: 100, industryLand: 40, depositCounts: 20 },
+      { peopleLand: 5, industryLand: 2, depositCounts: 1 },
     ]);
     const small = devInput({ buildings: { housing: 1, ore: 1 }, population: 20, peopleLand: 5 });
     const large = devInput({ buildings: { ore: 20 }, population: 240, peopleLand: 100 });
@@ -217,5 +217,54 @@ describe("systemDevelopment", () => {
     );
     expect(dev).toBe(0);
     expect(Number.isFinite(dev)).toBe(true);
+  });
+});
+
+// DEPOSIT_SLOT_FOOTPRINT is calibrated against the count scale (~5-45 per resource per body,
+// system-level sums median ~102) so it stays commensurable with industry land (system-level sums
+// median ~436). Proves below pin the recalibrated coefficient's behaviour under realistic magnitudes.
+describe("recalibrated DEPOSIT_SLOT_FOOTPRINT — count/land commensurability", () => {
+  it("Prove 1: the industry-only arm stays finite in [0,1) for a zero-people-land system under real-scale refs", () => {
+    // Realistic galaxy-scale refs (census order of magnitude: industryLand ~40-300/body,
+    // depositCounts system sums ~30-190) — not the small fixed REFS the other tests use.
+    const realisticRefs: DevelopmentRefs = {
+      popRef: 34_500,
+      industryRef: industryPotential(320, 1100), // ≈ a natural system's converted footprint
+    };
+    const dev = systemDevelopment(
+      devInput({ buildings: { ore: 12, minerals: 8 }, population: 400, peopleLand: 0 }),
+      realisticRefs,
+    );
+    expect(Number.isFinite(dev)).toBe(true);
+    expect(dev).toBeGreaterThan(0); // the industry-only arm must actually fire, not just fail to crash
+    expect(dev).toBeLessThan(1);
+  });
+
+  it("Prove 2: an extractor-heavy and a factory-heavy system of equal converted footprint read comparable industryPotential", () => {
+    // Deliberately hardcodes the authored coefficient (4.5, not read from SUBSTRATE_GEN) so this test
+    // pins the CURRENT calibration: it must fail if the coefficient is dropped (reverted to 1.0), left
+    // vestigial (multiplied by nothing), or a second, disagreeing constant is used for one arm only.
+    const AUTHORED_FOOTPRINT = 4.5;
+    const extractorHeavy = { depositCounts: 100, industryLand: 50 }; // 100×4.5 + 50 = 500
+    const factoryHeavy = { depositCounts: 20, industryLand: 410 }; // 20×4.5 + 410 = 500
+    expect(extractorHeavy.depositCounts * AUTHORED_FOOTPRINT + extractorHeavy.industryLand).toBeCloseTo(500, 6);
+    expect(factoryHeavy.depositCounts * AUTHORED_FOOTPRINT + factoryHeavy.industryLand).toBeCloseTo(500, 6);
+    expect(industryPotential(extractorHeavy.depositCounts, extractorHeavy.industryLand)).toBeCloseTo(
+      industryPotential(factoryHeavy.depositCounts, factoryHeavy.industryLand),
+      6,
+    );
+  });
+
+  it("Prove 4: empty-galaxy refs still read zero without NaN under the recalibrated coefficient", () => {
+    const emptyRefs = developmentRefs([]);
+    expect(emptyRefs).toEqual({ popRef: 0, industryRef: 0 });
+    expect(industryPotential(0, 0)).toBe(0);
+    const dev = systemDevelopment(
+      devInput({ buildings: { ore: 5, [HOUSING_TYPE]: 3 }, population: 50, peopleLand: 20 }),
+      emptyRefs,
+    );
+    expect(dev).toBe(0);
+    expect(Number.isFinite(dev)).toBe(true);
+    expect(Number.isNaN(dev)).toBe(false);
   });
 });

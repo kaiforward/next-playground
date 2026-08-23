@@ -18,7 +18,7 @@ export function developmentPointsAndPotential(
   const potential = developmentPotential({
     peopleLand: system.peopleLand,
     industryLand: system.industryLand,
-    depositSlots: sumResourceVector(depositCounts),
+    depositCounts: sumResourceVector(depositCounts),
   });
   return { points, potential };
 }

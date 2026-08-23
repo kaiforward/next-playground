@@ -69,7 +69,7 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
       this.systems.map((s) => ({
         peopleLand: s.peopleLand,
         industryLand: s.industryLand,
-        depositSlots: sumResourceVector(s.depositCounts),
+        depositCounts: sumResourceVector(s.depositCounts),
       })),
     );
   }

@@ -90,8 +90,8 @@ function finiteNonNegative(value: number): number {
 export interface DevelopmentPotentialInput {
   /** Habitable land — housed at full occupancy for the ceiling's population term. */
   peopleLand: number;
-  /** Total worked-able deposit slots across all resources (Σ slot caps) — every slot worked at the ceiling. */
-  depositSlots: number;
+  /** Total worked-able deposit counts across all resources (Σ per-resource counts) — every slot worked at the ceiling. */
+  depositCounts: number;
   /** Fungible general space — all given to staffed production at the ceiling. */
   industryLand: number;
 }
@@ -108,7 +108,7 @@ export interface DevelopmentPotentialInput {
  *    heads-to-level-equivalent conversion `developmentPoints` uses on raw population, base heads only
  *    (no skilled uplift — the simplest defensible ceiling). Population dominates the score for most
  *    systems, so this is the primary driver; the industry term below is second-order.
- *  - industryTerm: `industryPotential(depositSlots, industryLand)` — every deposit slot worked plus all
+ *  - industryTerm: `industryPotential(depositCounts, industryLand)` — every deposit slot worked plus all
  *    general space as factory, in the same space units `industryPotential` already defines — valued at
  *    a single middle tier (`TIER_WEIGHT[1]`, tier-1) rather than guessing a tier-0/1/2 mix; a real
  *    system's mixed build would generally score somewhere under this uniform ceiling.
@@ -125,11 +125,11 @@ export interface DevelopmentPotentialInput {
  */
 export function developmentPotential(input: DevelopmentPotentialInput): number {
   const peopleLand = finiteNonNegative(input.peopleLand);
-  const depositSlots = finiteNonNegative(input.depositSlots);
+  const depositCounts = finiteNonNegative(input.depositCounts);
   const industryLand = finiteNonNegative(input.industryLand);
 
   const populationTerm = habitablePotentialPop(peopleLand) / POP_CENTRE_DENSITY;
-  const industryTerm = industryPotential(depositSlots, industryLand) * DEVELOPMENT_POINTS.TIER_WEIGHT[1];
+  const industryTerm = industryPotential(depositCounts, industryLand) * DEVELOPMENT_POINTS.TIER_WEIGHT[1];
   const complexTerm = industryLand > 0 ? DEVELOPMENT_POINTS.COMPLEX_POINTS : 0;
 
   return populationTerm + industryTerm + complexTerm;
