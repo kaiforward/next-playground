@@ -7,10 +7,17 @@ import {
   type ClaimProposal,
   type ExpansionParams,
 } from "@/lib/engine/expansion";
-import { mulberry32 } from "@/lib/engine/universe-gen";
+import { mulberry32, generateUniverse } from "@/lib/engine/universe-gen";
+import { RESOURCE_TYPES } from "@/lib/engine/resources";
+import { EXPANSION } from "@/lib/constants/expansion";
+import { genConfigForSystemCount, DEFAULT_SYSTEM_COUNT, REGION_NAMES } from "@/lib/constants/universe-gen";
+import { buildGenParams } from "@/lib/world/gen";
 
 const WEIGHTS = { habitable: 1.0, diversity: 3.0, proximity: 0.5 };
-const PARAMS: ExpansionParams = { maxClaimsPerCycle: 1, scoreFloor: 0.001, weights: WEIGHTS };
+const PEOPLE_LAND_MAX = 1000;
+const PARAMS: ExpansionParams = {
+  maxClaimsPerCycle: 1, scoreFloor: 0.001, weights: WEIGHTS, peopleLandMax: PEOPLE_LAND_MAX,
+};
 
 function cand(p: Partial<ClaimCandidate> & { systemId: string }): ClaimCandidate {
   return { minHops: 1, peopleLand: 0, resourceDiversity: 0, ...p };
@@ -20,18 +27,112 @@ describe("scoreClaimCandidate", () => {
   it("rewards substrate and discounts distance", () => {
     const near = cand({ systemId: "a", peopleLand: 100, minHops: 1 });
     const far = cand({ systemId: "b", peopleLand: 100, minHops: 3 });
-    expect(scoreClaimCandidate(near, WEIGHTS)).toBeGreaterThan(scoreClaimCandidate(far, WEIGHTS));
+    expect(scoreClaimCandidate(near, WEIGHTS, PEOPLE_LAND_MAX))
+      .toBeGreaterThan(scoreClaimCandidate(far, WEIGHTS, PEOPLE_LAND_MAX));
   });
   it("scores a zero-substrate candidate at 0", () => {
-    expect(scoreClaimCandidate(cand({ systemId: "z" }), WEIGHTS)).toBe(0);
+    expect(scoreClaimCandidate(cand({ systemId: "z" }), WEIGHTS, PEOPLE_LAND_MAX)).toBe(0);
   });
   it("scores claims on substrate × proximity with no trait term", () => {
     const w = { habitable: 1, diversity: 1, proximity: 0.1 };
     const near = { systemId: "a", minHops: 1, peopleLand: 100, resourceDiversity: 3 };
     const far = { systemId: "b", minHops: 4, peopleLand: 100, resourceDiversity: 3 };
-    expect(scoreClaimCandidate(near, w)).toBeGreaterThan(scoreClaimCandidate(far, w)); // proximity discount
+    expect(scoreClaimCandidate(near, w, PEOPLE_LAND_MAX)).toBeGreaterThan(scoreClaimCandidate(far, w, PEOPLE_LAND_MAX)); // proximity discount
     // identical substrate + hops ⇒ identical score (nothing trait-derived left)
-    expect(scoreClaimCandidate({ ...near, systemId: "c" }, w)).toBeCloseTo(scoreClaimCandidate(near, w), 9);
+    expect(scoreClaimCandidate({ ...near, systemId: "c" }, w, PEOPLE_LAND_MAX))
+      .toBeCloseTo(scoreClaimCandidate(near, w, PEOPLE_LAND_MAX), 9);
+  });
+
+  // ── Prove 1: both substrate terms are normalised to [0,1] for ANY candidate ──────────────
+  it("clamps the habitable term at 1 regardless of how far peopleLand exceeds the galaxy max — a giant system cannot dominate by raw scale", () => {
+    const w = { habitable: 1, diversity: 0, proximity: 0 };
+    const atMax = cand({ systemId: "at-max", peopleLand: PEOPLE_LAND_MAX, minHops: 0 });
+    const huge = cand({ systemId: "huge", peopleLand: PEOPLE_LAND_MAX * 100, minHops: 0 });
+    const enormous = cand({ systemId: "enormous", peopleLand: PEOPLE_LAND_MAX * 1_000_000, minHops: 0 });
+    const scoreAtMax = scoreClaimCandidate(atMax, w, PEOPLE_LAND_MAX);
+    const scoreHuge = scoreClaimCandidate(huge, w, PEOPLE_LAND_MAX);
+    const scoreEnormous = scoreClaimCandidate(enormous, w, PEOPLE_LAND_MAX);
+    // A weights-only pseudo-fix (raw peopleLand × a smaller weight) would still scale linearly and
+    // never saturate — this asserts the term literally caps at the habitable weight itself, i.e. the
+    // normalised term saturates at exactly 1, not merely "grows more slowly".
+    expect(scoreAtMax).toBeCloseTo(w.habitable, 9);
+    expect(scoreHuge).toBeCloseTo(w.habitable, 9);
+    expect(scoreEnormous).toBeCloseTo(w.habitable, 9);
+  });
+
+  it("clamps the diversity term at 1 regardless of resourceDiversity exceeding RESOURCE_TYPES.length", () => {
+    const w = { habitable: 0, diversity: 1, proximity: 0 };
+    const atMax = cand({ systemId: "at-max", resourceDiversity: RESOURCE_TYPES.length, minHops: 0 });
+    const overCounted = cand({ systemId: "over", resourceDiversity: RESOURCE_TYPES.length * 50, minHops: 0 });
+    expect(scoreClaimCandidate(atMax, w, PEOPLE_LAND_MAX)).toBeCloseTo(w.diversity, 9);
+    expect(scoreClaimCandidate(overCounted, w, PEOPLE_LAND_MAX)).toBeCloseTo(w.diversity, 9);
+  });
+
+  it("bounds the pre-proximity substrate sum at habitable + diversity weights for any candidate", () => {
+    const w = { habitable: 1, diversity: 3, proximity: 0 }; // proximity 0 → discount is 1, substrate reads directly
+    const extreme = cand({
+      systemId: "extreme", minHops: 0,
+      peopleLand: PEOPLE_LAND_MAX * 1e9, resourceDiversity: RESOURCE_TYPES.length * 1e9,
+    });
+    expect(scoreClaimCandidate(extreme, w, PEOPLE_LAND_MAX)).toBeCloseTo(w.habitable + w.diversity, 9);
+  });
+
+  // ── Prove 2: SCORE_FLOOR still excludes exactly the zero-substrate candidates on the new scale ──
+  describe("EXPANSION.SCORE_FLOOR on the normalised scale", () => {
+    it("excludes an exactly-zero-substrate candidate", () => {
+      const zero = cand({ systemId: "dead" });
+      expect(scoreClaimCandidate(zero, EXPANSION.SCORE_WEIGHTS, PEOPLE_LAND_MAX))
+        .toBeLessThan(EXPANSION.SCORE_FLOOR);
+    });
+    it("clears the floor for the smallest realistic single-resource-type candidate, even at max reach", () => {
+      // One present resource type, no habitable land, at the worst (furthest) in-reach hop count.
+      const barelyDiverse = cand({
+        systemId: "corridor", peopleLand: 0, resourceDiversity: 1, minHops: EXPANSION.REACH_JUMPS,
+      });
+      const score = scoreClaimCandidate(barelyDiverse, EXPANSION.SCORE_WEIGHTS, PEOPLE_LAND_MAX);
+      expect(score).toBeGreaterThanOrEqual(EXPANSION.SCORE_FLOOR);
+    });
+    it("clears the floor for the smallest archetype-table peopleLand alone, even at max reach", () => {
+      // The smallest positive peopleLand a habitable body archetype can produce (lib/constants/bodies.ts,
+      // tundra dark land min=100), scored against a galaxy max in the low thousands, at worst reach.
+      const barelyHabitable = cand({
+        systemId: "tiny-world", peopleLand: 100, resourceDiversity: 0, minHops: EXPANSION.REACH_JUMPS,
+      });
+      const score = scoreClaimCandidate(barelyHabitable, EXPANSION.SCORE_WEIGHTS, 2000);
+      expect(score).toBeGreaterThanOrEqual(EXPANSION.SCORE_FLOOR);
+    });
+  });
+
+  // ── Prove 3: among equal-distance candidates, more peopleLand still outranks (no term dropped) ──
+  it("ranks more peopleLand higher among candidates with identical diversity and distance", () => {
+    const w = EXPANSION.SCORE_WEIGHTS;
+    const less = cand({ systemId: "less", peopleLand: 100, resourceDiversity: 4, minHops: 2 });
+    const more = cand({ systemId: "more", peopleLand: 900, resourceDiversity: 4, minHops: 2 });
+    expect(scoreClaimCandidate(more, w, PEOPLE_LAND_MAX))
+      .toBeGreaterThan(scoreClaimCandidate(less, w, PEOPLE_LAND_MAX));
+  });
+
+  // ── Prove 4: the diversity term still discriminates at realistic generated body counts ──────
+  it("the diversity term discriminates (isn't saturated identical) across a real generated galaxy", () => {
+    function realDiversity(depositCounts: Record<string, number>): number {
+      let n = 0;
+      for (const r of RESOURCE_TYPES) if (depositCounts[r] > 0) n++;
+      return n;
+    }
+    const config = genConfigForSystemCount(DEFAULT_SYSTEM_COUNT);
+    const params = buildGenParams(config.SEED, config);
+    const u = generateUniverse(params, REGION_NAMES);
+    const diversities = u.systems.map((s) => realDiversity(s.depositCounts));
+    const distinctValues = new Set(diversities);
+    // Not every system reads the same diversity term (saturation) and not every system is 0.
+    expect(distinctValues.size).toBeGreaterThan(1);
+    const maxTerm = Math.max(...diversities) / RESOURCE_TYPES.length;
+    const minTerm = Math.min(...diversities) / RESOURCE_TYPES.length;
+    expect(maxTerm).toBeGreaterThan(minTerm);
+    // Fewer than every system reads the fully-saturated max diversity term — the term still ranks
+    // most of the galaxy rather than collapsing most candidates to the same top score.
+    const saturatedShare = diversities.filter((d) => d === RESOURCE_TYPES.length).length / diversities.length;
+    expect(saturatedShare).toBeLessThan(0.9);
   });
 });
 

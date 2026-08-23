@@ -525,6 +525,7 @@ describe("construction centres", () => {
 
 const EXP_PARAMS: ExpansionParams = {
   maxClaimsPerCycle: 1, scoreFloor: 0.001, weights: { habitable: 1, diversity: 3, proximity: 0.5 },
+  peopleLandMax: 1000,
 };
 const COLONY_PARAMS: ColonyEstablishParams = {
   landPremium: COLONISATION.LAND_PREMIUM,

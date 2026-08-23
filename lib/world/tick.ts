@@ -1507,6 +1507,14 @@ export async function runWorldTick(
       const controlBySystem = new Map(systems.map((s) => [s.id, s.control]));
       const tickSystemById = new Map(systems.map((s) => [s.id, s]));
 
+      // Galaxy-wide max peopleLand this tick — normalises scoreClaimCandidate's habitable term to
+      // [0,1], the same ratio placeHomeworlds takes at world-gen (lib/engine/faction-gen.ts). Floored
+      // at 1 so an all-zero galaxy never divides by zero.
+      let galaxyPeopleLandMax = 1;
+      for (const s of systems) {
+        if (s.peopleLand > galaxyPeopleLandMax) galaxyPeopleLandMax = s.peopleLand;
+      }
+
       // Reach provider: a faction's in-reach UNCLAIMED candidates (reach extends from any owned tier).
       const reachProvider = (factionId: string): ClaimCandidate[] => {
         const minHopByCandidate = new Map<string, number>();
@@ -1594,7 +1602,12 @@ export async function runWorldTick(
         },
         claim: {
           reachProvider, rng,
-          params: { maxClaimsPerCycle: EXPANSION.MAX_CLAIMS_PER_CYCLE, scoreFloor: EXPANSION.SCORE_FLOOR, weights: EXPANSION.SCORE_WEIGHTS },
+          params: {
+            maxClaimsPerCycle: EXPANSION.MAX_CLAIMS_PER_CYCLE,
+            scoreFloor: EXPANSION.SCORE_FLOOR,
+            weights: EXPANSION.SCORE_WEIGHTS,
+            peopleLandMax: galaxyPeopleLandMax,
+          },
         },
         develop: {
           candidateProvider: developProvider,

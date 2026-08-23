@@ -21,10 +21,25 @@ export const EXPANSION = {
   /** Systems a faction claims per cycle start — small, so the map fills gradually. */
   MAX_CLAIMS_PER_CYCLE: 1,
   /** Minimum claim score; below it a candidate isn't worth claiming. Permissive — excludes only
-   * zero-substrate systems. */
-  SCORE_FLOOR: 0.001,
-  /** Weights over the (absolute) substrate terms and the proximity discount. `proximity` feeds
-   * 1 / (1 + proximity × minHops), so nearer candidates outscore equal-substrate distant ones. */
+   * zero-substrate systems. Scored on NORMALISED [0,1] substrate terms (`scoreClaimCandidate`), so
+   * the smallest achievable nonzero score is bounded well above float noise: one present resource
+   * type alone (diversity 1/`RESOURCE_TYPES.length` × its 3.0 weight ≈ 0.43) or the smallest
+   * archetype-table `peopleLand` alone (~100 of a galaxy max in the thousands, × its 1.0 weight
+   * ≈ 0.05), each still discounted by proximity at the worst in-reach case
+   * (`REACH_JUMPS` × `proximity` weight ⇒ ×0.4) — both comfortably above 1e-4. Set two orders of
+   * magnitude below that floor so it functions as a pure zero/nonzero gate, robust to future
+   * archetype-table retunes, rather than a near-miss threshold. */
+  SCORE_FLOOR: 0.0001,
+  /** Weights over the NORMALISED [0,1] substrate terms (`peopleLand` ÷ galaxy max, diversity ÷
+   * `RESOURCE_TYPES.length` — `scoreClaimCandidate`) and the proximity discount. `proximity` feeds
+   * 1 / (1 + proximity × minHops), so nearer candidates outscore equal-substrate distant ones.
+   * `diversity` outweighing `habitable` 3:1 is the authored intent from before normalisation — on
+   * the old absolute scale a system's raw `peopleLand` (often in the hundreds-to-thousands) swamped
+   * diversity's raw 0-7 regardless of this ratio, so the weight never actually took effect. On the
+   * normalised scale it does: claims deliberately favour resource-diverse territory (corridor/access
+   * value) over raw habitable land, since habitability itself is what the develop tier's own floor
+   * and `colonyValue` (colonisation-value.ts) gate on — claims stay "territory-and-corridor" per the
+   * module docstring above, not a habitability pre-filter. */
   SCORE_WEIGHTS: { habitable: 1.0, diversity: 3.0, proximity: 0.5 },
   /** Bootstrap-spark population a new colony receives, transferred (conserved) from the nearest
    * developed same-faction system. Deliberately tiny (seed model C): a big seed drains the source
