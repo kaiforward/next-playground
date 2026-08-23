@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { buildableUnits, buildableOutput, speculativeFloorExtra, planFactionBuilds, planFactionProposals, planFactionColonyProposals, assessColonyCandidates, factionGoodDeficits, fed, habitableHousingHeadroom, plannedHousingUnits, hopRouteCost, sizeColonyEstablish, type BuildSystemState, type BuildGoodState, type PlannedBuild, type Proposal, type ColonyEstablishCandidate, type ColonyEstablishParams } from "@/lib/engine/directed-build";
 import { systemDevelopment, type DevelopmentRefs } from "@/lib/engine/development";
 import { workCostPerLevel } from "@/lib/constants/construction";
@@ -2019,6 +2019,27 @@ describe("planFactionColonyProposals", () => {
     const developed = [homeState({ housing: 1, peopleLand: 1000 })];
     const belowFloor = candidate({ systemId: "dead", peopleLand: 0 });
     expect(planFactionColonyProposals("f1", developed, [belowFloor], [], COLONY_PARAMS)).toHaveLength(0);
+  });
+
+  // The colonisability floor gate (`peopleLand < habitableFloor`, directed-build.ts) sits UPSTREAM
+  // of valuation — a below-floor candidate never reaches `colonyValue` at all, not merely one that
+  // returns a proposal-suppressing result. Proposal-count assertions alone can't distinguish "gated
+  // before scoring" from "scored and happened to net out non-positive"; spying on the real
+  // `colonyValue` export makes the ordering itself the assertion.
+  it("never calls colonyValue for a below-floor candidate, but does for an above-floor one", async () => {
+    const colonisationValue = await import("@/lib/engine/colonisation-value");
+    const spy = vi.spyOn(colonisationValue, "colonyValue");
+    const developed = [homeState({ housing: 1, peopleLand: 1000 })];
+    const belowFloor = candidate({ systemId: "dead", peopleLand: 0 });
+    const aboveFloor = candidate({ systemId: "alive", peopleLand: 100 });
+
+    planFactionColonyProposals("f1", developed, [belowFloor], [], COLONY_PARAMS);
+    expect(spy).not.toHaveBeenCalled();
+
+    planFactionColonyProposals("f1", developed, [aboveFloor], [], COLONY_PARAMS);
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    spy.mockRestore();
   });
 
   it("skips a candidate that clears the floor but lacks one whole housing level of land", () => {

@@ -8,9 +8,15 @@ import {
   type FactionSystemState,
   type ColonyCandidate,
   type ColonyValueParams,
+  type GoodDeficit,
 } from "@/lib/engine/colonisation-value";
-import { emptyResourceVector } from "@/lib/engine/resources";
-import { HOUSING_TYPE } from "@/lib/constants/industry";
+import { emptyResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { HOUSING_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
+import { COLONISATION } from "@/lib/constants/colonisation";
+import { GOOD_NAMES } from "@/lib/constants/goods";
+import { GOOD_CONSUMPTION } from "@/lib/constants/physical-economy";
+import { ECONOMY_SCALE } from "@/lib/constants/economy-scale";
+import { generateWorld } from "@/lib/world/gen";
 import type { ResourceType } from "@/lib/types/game";
 
 describe("RESOURCE_CLOSURE", () => {
@@ -188,3 +194,136 @@ describe("factionSaturation — the potential is a pop-cap, not a land area", ()
     ).toBeCloseTo(0.5, 5);
   });
 });
+
+/**
+ * On a REPRESENTATIVE candidate set — every naturally-generated, T4-floor-passing
+ * candidate system across six seeds, not a hand-picked few — with the REAL production coefficients
+ * (`COLONISATION.LAND_*`), the U term still leads and L is secondary. "Representative" for U means the
+ * doc's own keystone case: a faction missing exactly ONE resource entirely, with demand sized off
+ * `GOOD_CONSUMPTION` at the archetype table's own 10,000-pop anchor and zero production of every good
+ * that resource gates (`RESOURCE_CLOSURE`) — the same derivation `bodies.ts` uses to author deposit
+ * counts. Run once per resource (whichever the candidate actually supplies), at both σ=0 (the doc's
+ * "grab it early" case) and σ=0.6 (mid-saturation) so the claim isn't cherry-picked to one saturation.
+ */
+describe("colonyValue: U leads, L is secondary (real coefficients, real candidates)", () => {
+  const ANCHOR_POP = 10000;
+  const floor = effectiveSpaceCost(HOUSING_TYPE);
+  type CountKey = "countGas" | "countMinerals" | "countOre" | "countBiomass"
+    | "countArable" | "countWater" | "countRadioactive";
+  const countColumn: Record<ResourceType, CountKey> = {
+    gas: "countGas", minerals: "countMinerals", ore: "countOre", biomass: "countBiomass",
+    arable: "countArable", water: "countWater", radioactive: "countRadioactive",
+  };
+
+  // U is a goods-magnitude term (demand-rate) and so scales linearly with ECONOMY_SCALE; L is
+  // physical land/deposit counts and does NOT (see COLONISATION.md / colonisation-value.ts header).
+  // The suite pins ECONOMY_SCALE=1 for cheap fixture magnitudes (vitest.config.ts), but that pin is
+  // sound only because the economy is S-invariant — L/U is NOT S-invariant, so this claim about their
+  // relative magnitude must be checked at the shipped default (100, `.env`), not the test pin.
+  // The 100 is a bare literal deliberately coupled to `.env`'s ECONOMY_SCALE default (no exported
+  // constant exists to reference) — if the shipped default moves, this must move with it by hand.
+  const REAL_ECONOMY_SCALE = 100;
+  function deficitsGatedBy(missing: Set<ResourceType>): GoodDeficit[] {
+    const out: GoodDeficit[] = [];
+    for (const g of GOOD_NAMES) {
+      const demand = (GOOD_CONSUMPTION[g] ?? 0) * (REAL_ECONOMY_SCALE / ECONOMY_SCALE) * ANCHOR_POP;
+      if (demand <= 0) continue;
+      if (RESOURCE_CLOSURE[g].some((r) => missing.has(r))) out.push({ goodId: g, rateDeficit: demand });
+    }
+    return out;
+  }
+
+  // Six seeds × 600 systems, natural-gen candidates only (peopleLand ≥ the T4 floor) — the same
+  // population `npm run report:coherence` reads its habitable-land bands from.
+  const SEEDS = [42, 1337, 7, 2026, 99, 555];
+  const candidates: ColonyCandidate[] = [];
+  for (const seed of SEEDS) {
+    const world = generateWorld({ systemCount: 600, seed });
+    const capitalIds = new Set(world.factions.map((f) => f.homeworldId));
+    for (const s of world.systems) {
+      if (capitalIds.has(s.id)) continue;
+      if (s.peopleLand < floor) continue;
+      const depositCounts = emptyResourceVector();
+      for (const r of RESOURCE_TYPES) depositCounts[r] = s[countColumn[r]];
+      candidates.push({ peopleLand: s.peopleLand, industryLand: s.industryLand, depositCounts });
+    }
+  }
+  it("has a non-trivial representative candidate set (sanity, not the claim)", () => {
+    expect(candidates.length).toBeGreaterThan(500);
+  });
+
+  // PER-RESOURCE, not pooled: common resources (arable/water/biomass sit on every habitable
+  // archetype) dominate a pooled sample by sheer candidate count and would mask a genuinely bad
+  // ratio on a rarer resource (radioactive: common on DEAD archetypes, but gates only a few
+  // low-`GOOD_CONSUMPTION` goods) — a pooled median stayed < 1 even at the rejected
+  // `LAND_DEPOSIT_WEIGHT` (39.5) that fails on radioactive specifically (median 1.45 at σ=0,
+  // `temp/task11-debug4.ts`). The claim is checked per resource so no single keystone case hides.
+  it.each([0, 0.6])("median L·landGate / U < 1 at σ=%s, for EVERY resource", (sigma) => {
+    const landGate = COLONISATION.SIGMA_FLOOR + (1 - COLONISATION.SIGMA_FLOOR) * sigma;
+    let resourcesChecked = 0;
+    for (const missResource of RESOURCE_TYPES) {
+      const missing = new Set<ResourceType>([missResource]);
+      const unblocked = unblockedDemandByResource(deficitsGatedBy(missing), missing);
+      const u = unblocked.get(missResource) ?? 0;
+      if (u <= 0) continue; // this resource gates no consumed good — nothing to unblock, skip
+      const ratios: number[] = [];
+      for (const c of candidates) {
+        if (c.depositCounts[missResource] <= 0) continue; // candidate doesn't supply it → U=0, not the claim under test
+        const value = colonyValue(c, unblocked, sigma, {
+          landPremium: COLONISATION.LAND_PREMIUM,
+          landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
+          landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
+          sigmaFloor: COLONISATION.SIGMA_FLOOR,
+        });
+        const l = (value - u) / landGate; // value = u + l*landGate ⇒ l = (value - u) / landGate
+        ratios.push((l * landGate) / u);
+      }
+      expect(ratios.length).toBeGreaterThan(50); // representative, not a handful of lucky picks
+      ratios.sort((a, b) => a - b);
+      const median = ratios[Math.floor(ratios.length / 2)];
+      expect(median).toBeLessThan(1); // U leads on the median for THIS resource at this saturation
+      resourcesChecked++;
+    }
+    expect(resourcesChecked).toBeGreaterThanOrEqual(6); // every gate-capable resource actually ran
+  });
+});
+
+/**
+ * The σ-gate arithmetic (`sigmaFloor + (1 − sigmaFloor)·σ`) is untouched by the
+ * coefficient re-authoring — a contradiction check against the pre-Task-11 behaviour. `colonyValue`
+ * factors as `U + L·landGate`; `landGate` depends only on σ and `sigmaFloor`, never on the land
+ * coefficients. So for ANY two coefficient sets (the retired pre-rewrite ones and the new ones) on the
+ * SAME candidate and σ, `landGate` recovered as `(value − U) / L` must be identical.
+ */
+describe("colonyValue: σ-gate arithmetic is independent of the land coefficients", () => {
+  const c = candidate({ peopleLand: 200, industryLand: 90, depositCounts: makeVec({ ore: 5, water: 12 }) });
+  const unblocked = new Map<ResourceType, number>([["ore", 30]]);
+
+  function landGateOf(params: ColonyValueParams, sigma: number): number {
+    const l = params.landPremium * c.peopleLand + params.landGeneralWeight * c.industryLand
+      + params.landDepositWeight * (c.depositCounts.ore + c.depositCounts.water);
+    const value = colonyValue(c, unblocked, sigma, params);
+    const u = c.depositCounts.ore > 0 ? (unblocked.get("ore") ?? 0) : 0;
+    return (value - u) / l;
+  }
+
+  const RETIRED_PARAMS: ColonyValueParams = {
+    landPremium: 3.0, landGeneralWeight: 0.5, landDepositWeight: 4.0, sigmaFloor: COLONISATION.SIGMA_FLOOR,
+  };
+  const NEW_PARAMS: ColonyValueParams = {
+    landPremium: COLONISATION.LAND_PREMIUM,
+    landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
+    landDepositWeight: 39.5,
+    sigmaFloor: COLONISATION.SIGMA_FLOOR,
+  };
+
+  it.each([0, 0.25, 0.6, 1])("recovers the same landGate at σ=%s regardless of the L coefficients", (sigma) => {
+    const expected = COLONISATION.SIGMA_FLOOR + (1 - COLONISATION.SIGMA_FLOOR) * sigma;
+    expect(landGateOf(RETIRED_PARAMS, sigma)).toBeCloseTo(expected, 8);
+    expect(landGateOf(NEW_PARAMS, sigma)).toBeCloseTo(expected, 8);
+  });
+});
+
+function makeVec(over: Partial<Record<ResourceType, number>>): ReturnType<typeof emptyResourceVector> {
+  return { ...emptyResourceVector(), ...over };
+}
