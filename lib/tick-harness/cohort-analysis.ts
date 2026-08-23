@@ -243,7 +243,7 @@ export function cohortsForSystem(s: TickSystem, homeworldIds: Set<string>): Worl
   const cohorts: WorldCohort[] = [band, homeworldIds.has(s.id) ? "homeworld" : "colony"];
   // No arable slot means no local food production — the physical limit that separates a
   // deprived rock from a world the economy is failing.
-  if (s.slotCap.arable <= 0) cohorts.push("survival-short");
+  if (s.depositCounts.arable <= 0) cohorts.push("survival-short");
   return cohorts;
 }
 

@@ -69,8 +69,8 @@ function sys(id: string, over: Partial<TickSystem> = {}): TickSystem {
     unrest: 0, buildings: {}, buildingIdleCycles: {}, collapseDebt: 0,
     yields: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     extractionEff: { gas: 1, minerals: 1, ore: 1, biomass: 1, arable: 1, water: 1, radioactive: 1 },
-    slotCap: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
-    generalSpace: 100, habitableSpace: 50,
+    depositCounts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    industryLand: 100, peopleLand: 50,
     ...over,
   };
 }
@@ -389,7 +389,7 @@ describe("cohortsForSystem", () => {
   it("adds survival-short for a world with no arable slot, alongside its other cohorts", () => {
     const rock = sys("s1", {
       population: 5,
-      slotCap: { gas: 0, minerals: 0, ore: 3, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+      depositCounts: { gas: 0, minerals: 0, ore: 3, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     });
     const cohorts = cohortsForSystem(rock, new Set());
 
@@ -400,7 +400,7 @@ describe("cohortsForSystem", () => {
 
   it("does not call a world with an arable slot survival-short", () => {
     const farm = sys("s1", {
-      slotCap: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 2, water: 0, radioactive: 0 },
+      depositCounts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 2, water: 0, radioactive: 0 },
     });
     expect(cohortsForSystem(farm, new Set())).not.toContain("survival-short");
   });
@@ -640,7 +640,7 @@ describe("computeWorldCohorts", () => {
   });
 
   it("gives each overlapping cohort its own row and its own denominator", () => {
-    // A rock: population 5 (band "pop <10"), no arable slot (default slotCap ⇒
+    // A rock: population 5 (band "pop <10"), no arable slot (default depositCounts ⇒
     // survival-short), not a homeworld ⇒ colony. Lands in three rows at once.
     const rock = sys("s1", { population: 5 });
     // A homeworld with an arable slot: population 500 (a different band, "pop
@@ -649,7 +649,7 @@ describe("computeWorldCohorts", () => {
     // as a wrong `n` on a specific cohort rather than a coincidental match.
     const homeworld = sys("s2", {
       population: 500,
-      slotCap: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 2, water: 0, radioactive: 0 },
+      depositCounts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 2, water: 0, radioactive: 0 },
     });
     const entries = computeWorldCohorts([rock, homeworld], [], new Set(["s2"]), 0.8, []);
     const byCohort = new Map(entries.map((e) => [e.cohort, e]));

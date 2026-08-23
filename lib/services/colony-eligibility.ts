@@ -83,10 +83,10 @@ export function colonyEligibility(
   }
   // The floor is one whole housing level of people land — below it a colony could never be housed,
   // so this check and `sizeColonyEstablish`'s own whole-level rounding read the same cost and agree.
-  if (system.habitableSpace < effectiveSpaceCost(HOUSING_TYPE)) {
+  if (system.peopleLand < effectiveSpaceCost(HOUSING_TYPE)) {
     return { eligible: false, reason: "below_habitable_floor" };
   }
-  const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
+  const sizing = sizeColonyEstablish(system.peopleLand, sizingParams());
   if (sizing === null) {
     return { eligible: false, reason: "below_habitable_floor" };
   }

@@ -163,7 +163,7 @@ describe("colonyEligibility", () => {
     source.control = "developed";
     target.factionId = faction.id;
     target.control = "controlled";
-    target.habitableSpace = 50;
+    target.peopleLand = 50;
     const connections: WorldConnection[] = [{ fromId: source.id, toId: target.id, fuelCost: 1 }];
     setWorld({
       ...isolate(w),
@@ -206,16 +206,16 @@ describe("colonyEligibility", () => {
     // proves the two floor checks agree (§4 proof 4): if the floor line passed but `sizeColonyEstablish`
     // then nulled out, `eligible` would read false here, not true.
     const { faction, target } = eligibleFixture();
-    target.habitableSpace = effectiveSpaceCost(HOUSING_TYPE);
+    target.peopleLand = effectiveSpaceCost(HOUSING_TYPE);
     const check = colonyEligibility(getWorld(), faction.id, target);
     expect(check.eligible).toBe(true);
   });
 
   it("rejects a system just under one housing level of land as below_habitable_floor", () => {
     // Strictly under a WHOLE housing level, not merely under some nonzero amount — a fractional level
-    // proves the floor tracks housing's own cost rather than any positive habitableSpace.
+    // proves the floor tracks housing's own cost rather than any positive peopleLand.
     const { faction, target } = eligibleFixture();
-    target.habitableSpace = effectiveSpaceCost(HOUSING_TYPE) - 0.01;
+    target.peopleLand = effectiveSpaceCost(HOUSING_TYPE) - 0.01;
     const check = colonyEligibility(getWorld(), faction.id, target);
     expect(check.eligible).toBe(false);
     if (check.eligible) return;
@@ -224,19 +224,19 @@ describe("colonyEligibility", () => {
 
   it("rejects a zero-people-land system as below_habitable_floor, never proposing a colony there", () => {
     const { faction, target } = eligibleFixture();
-    target.habitableSpace = 0;
+    target.peopleLand = 0;
     const check = colonyEligibility(getWorld(), faction.id, target);
     expect(check.eligible).toBe(false);
     if (check.eligible) return;
     expect(check.reason).toBe("below_habitable_floor");
   });
 
-  it("reads a non-finite habitableSpace as ineligible, not as a crash", () => {
-    // A NaN habitableSpace passes the `< FLOOR` comparison (every comparison with NaN is false), so
+  it("reads a non-finite peopleLand as ineligible, not as a crash", () => {
+    // A NaN peopleLand passes the `< FLOOR` comparison (every comparison with NaN is false), so
     // the sizing computation's own isFinite guard is the only thing standing between this and a
     // read that dereferences a null sizing.
     const { faction, target } = eligibleFixture();
-    target.habitableSpace = Number.NaN;
+    target.peopleLand = Number.NaN;
     let check: ReturnType<typeof colonyEligibility> | undefined;
     expect(() => { check = colonyEligibility(getWorld(), faction.id, target); }).not.toThrow();
     expect(check?.eligible).toBe(false);

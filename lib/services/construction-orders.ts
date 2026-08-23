@@ -128,7 +128,7 @@ export function orderColony(input: { systemId: string }): OrderColonyResult {
   if (!check.eligible) {
     return { ok: false, error: COLONY_BLOCK_COPY[check.reason] };
   }
-  const sizing = sizeColonyEstablish(system.habitableSpace, sizingParams());
+  const sizing = sizeColonyEstablish(system.peopleLand, sizingParams());
   if (sizing === null) return { ok: false, error: "Below the habitable floor — this world cannot hold a colony." };
 
   // The order buys its charter at the click: the same fee the eligibility quote carried, accrued

@@ -100,7 +100,7 @@ function infraSys(id: string, buildings: Record<string, number>, popCap: number)
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 50, popCap,
     unrest: 0, buildings, buildingIdleCycles: {}, collapseDebt: 0, yields: unitResourceVector(),
-    extractionEff: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    extractionEff: unitResourceVector(), depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0,
   };
 }
 
@@ -149,7 +149,7 @@ function popSys(id: string, population: number, popCap: number, unrest = 0): Tic
     governmentType: "frontier", population, popCap,
     unrest, buildings: {}, buildingIdleCycles: {}, collapseDebt: 0,
     yields: unitResourceVector(), extractionEff: unitResourceVector(),
-    slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0,
   };
 }
 
@@ -529,8 +529,8 @@ function sys(id: string, over: Partial<TickSystem> = {}): TickSystem {
     unrest: 0, buildings: {}, buildingIdleCycles: {}, collapseDebt: 0,
     yields: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     extractionEff: { gas: 1, minerals: 1, ore: 1, biomass: 1, arable: 1, water: 1, radioactive: 1 },
-    slotCap: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
-    generalSpace: 100, habitableSpace: 50,
+    depositCounts: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    industryLand: 100, peopleLand: 50,
     ...over,
   };
 }

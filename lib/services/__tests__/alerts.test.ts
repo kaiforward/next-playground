@@ -501,8 +501,8 @@ describe("getAlertData", () => {
             developedPatch(pid, {
               population: 61,
               popCap: 60,
-              generalSpace: 10,
-              habitableSpace: 5,
+              industryLand: 10,
+              peopleLand: 5,
             }),
           ],
         ]),
@@ -551,8 +551,8 @@ describe("getAlertData", () => {
             developedPatch(pid, {
               population: 61,
               popCap: 60,
-              generalSpace: 100,
-              habitableSpace: 5,
+              industryLand: 100,
+              peopleLand: 5,
             }),
           ],
         ]),
@@ -603,8 +603,8 @@ describe("getAlertData", () => {
             developedPatch(pid, {
               population: 50,
               popCap: 100, // NOT overcrowded
-              generalSpace: 100,
-              habitableSpace: 5,
+              industryLand: 100,
+              peopleLand: 5,
             }),
           ],
         ]),
@@ -630,11 +630,11 @@ describe("getAlertData", () => {
       const withTargets = withSystems(
         world,
         new Map([
-          // Both: 5 landed housing levels on habitableSpace 5 exhaust headroom outright
+          // Both: 5 landed housing levels on peopleLand 5 exhaust headroom outright
           // (min(5 − 5, 100 − 5) = 0), so both satisfy the category's third conjunct with no queue
           // fold needed, and neither has a housing level standing in its queue.
-          [milder, developedPatch(pid, { population: 61, popCap: 60, generalSpace: 100, habitableSpace: 5 })],
-          [worse, developedPatch(pid, { population: 100, popCap: 60, generalSpace: 100, habitableSpace: 5 })],
+          [milder, developedPatch(pid, { population: 61, popCap: 60, industryLand: 100, peopleLand: 5 })],
+          [worse, developedPatch(pid, { population: 100, popCap: 60, industryLand: 100, peopleLand: 5 })],
         ]),
       );
       setWorld(
@@ -1546,12 +1546,12 @@ describe("getAlertData", () => {
       // REAL planner, not a hand-authored fixture, so it breaks the moment the engine's own choice and
       // this file's band predicate (buildOpportunitySortKey) diverge — nothing else pins the two
       // independent SURVIVAL_GOODS reads together.
-      const slotCap = emptyResourceVector();
-      for (const k of RESOURCE_TYPES) slotCap[k] = 20;
+      const depositCounts = emptyResourceVector();
+      for (const k of RESOURCE_TYPES) depositCounts[k] = 20;
       const devRefs: DevelopmentRefs = { popRef: 150, industryRef: 12 };
       const builder = (): BuildSystemState => ({
         systemId: "B", factionId: "f1", population: 100_000, control: "developed", buildings: {},
-        slotCap, generalSpace: 50, habitableSpace: 0, goods: [],
+        depositCounts, industryLand: 50, peopleLand: 0, goods: [],
       });
       const survivalGood = SURVIVAL_GOODS[0];
       const survivalOnlyGoods: BuildGoodState[] = [
@@ -1562,7 +1562,7 @@ describe("getAlertData", () => {
       ];
       const sinkWith = (goods: BuildGoodState[]): BuildSystemState => ({
         systemId: "A", factionId: "f1", population: 100, control: "developed", buildings: {},
-        slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0, goods,
+        depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0, goods,
       });
 
       // Sanity, measured not assumed: ore's own opportunity genuinely outscores the survival good's

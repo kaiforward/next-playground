@@ -922,7 +922,7 @@ function expectDemandedSatisfaction(world: World, systemId: string, expected: nu
 function fixtureLandHeadroom(system: WorldSystem): number {
   const cost = effectiveSpaceCost(HOUSING_TYPE);
   const used = FIXTURE_HOUSING_LEVELS * cost;
-  return Math.floor(Math.min(system.habitableSpace - used, system.generalSpace - used) / cost);
+  return Math.floor(Math.min(system.peopleLand - used, system.industryLand - used) / cost);
 }
 
 /**

@@ -63,7 +63,7 @@ export interface ClassBuildStats {
   /** Developed systems with population but popCap ≈ 0 — housing never built, pop can't grow or be housed. */
   popCapStarved: number;
   totalPopulation: number;
-  /** Deposit-bearing systems (Σ slotCap > 0) in this class with no tier-0 extraction built. */
+  /** Deposit-bearing systems (Σ depositCounts > 0) in this class with no tier-0 extraction built. */
   depositsIdle: number;
 }
 
@@ -769,9 +769,9 @@ export interface ColonisationSummary {
   };
 }
 
-function slotCapTotal(s: TickSystem): number {
+function depositCountsTotal(s: TickSystem): number {
   let n = 0;
-  for (const v of Object.values(s.slotCap)) n += Math.max(0, v);
+  for (const v of Object.values(s.depositCounts)) n += Math.max(0, v);
   return n;
 }
 
@@ -817,7 +817,7 @@ export function summariseColonisation(
     if (b.housing > 0) cls.withHousing++;
     if (s.population > 1 && industry <= 0) cls.populatedButNoIndustry++;
     if (s.population > 1 && s.popCap < 1) cls.popCapStarved++;
-    if (slotCapTotal(s) > 0 && b.tier0 <= 0) cls.depositsIdle++;
+    if (depositCountsTotal(s) > 0 && b.tier0 <= 0) cls.depositsIdle++;
   }
 
   const homeworldSet = homeworldIds;

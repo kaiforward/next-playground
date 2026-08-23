@@ -56,9 +56,9 @@ function makeSystem(
     collapseDebt: 0,
     yields: unitResourceVector(),
     extractionEff: unitResourceVector(),
-    slotCap: emptyResourceVector(),
-    generalSpace: 0,
-    habitableSpace: 0,
+    depositCounts: emptyResourceVector(),
+    industryLand: 0,
+    peopleLand: 0,
   };
 }
 

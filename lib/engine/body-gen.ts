@@ -11,7 +11,6 @@ import {
   type SunClassDef,
 } from "@/lib/constants/bodies";
 import { emptyResourceVector, sumResourceVectors, unitResourceVector, RESOURCE_TYPES } from "./resources";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import type { RNG } from "./universe-gen";
 import { randInt } from "./universe-gen";
 import { depositGradeVector } from "@/lib/engine/deposit-grade";
@@ -45,15 +44,12 @@ export interface GeneratedSubstrate {
   bodyDanger: number;
   /** Seeded industrial base — buildingType → count. */
   buildings: Record<string, number>;
-  /** Transitional identity: Σ(peopleLand + industryLand + Σcounts × DEPOSIT_SLOT_FOOTPRINT) —
-   *  retained only until its remaining readers migrate off it. */
-  availableSpace: number;
   /** Sum of per-body industry land over unlocked bodies. */
-  generalSpace: number;
+  industryLand: number;
   /** Sum of per-body people land over above-threshold, unlocked bodies. */
-  habitableSpace: number;
+  peopleLand: number;
   /** Σ body deposit counts — total extractor capacity per resource across the system, over unlocked bodies. */
-  slotCap: ResourceVector;
+  depositCounts: ResourceVector;
   /**
    * Effective per-resource yield multiplier — the deposit-count-weighted mean quality of the system's
    * unlocked deposits, Σ(counts·quality) / Σ counts (1.0 where the system has no counts for that
@@ -166,10 +162,9 @@ export function generateSubstrate(rng: RNG): GeneratedSubstrate {
  * sums over ALL bodies regardless of lock — a locked volcanic world is still dangerous ground.
  */
 export function substrateAggregates(bodies: GeneratedBody[]): {
-  availableSpace: number;
-  generalSpace: number;
-  habitableSpace: number;
-  slotCap: ResourceVector;
+  industryLand: number;
+  peopleLand: number;
+  depositCounts: ResourceVector;
   yieldMult: ResourceVector;
   extractionEfficiency: ResourceVector;
   bodyDanger: number;
@@ -179,22 +174,16 @@ export function substrateAggregates(bodies: GeneratedBody[]): {
     (b) => BODY_ARCHETYPES[b.bodyType].scores.default >= HABITABILITY_THRESHOLD,
   );
 
-  const habitableSpace = aboveThreshold.reduce((s, b) => s + b.peopleLand, 0);
-  const generalSpace = unlocked.reduce((s, b) => s + b.industryLand, 0);
-  const slotCap = sumResourceVectors(unlocked.map((b) => b.counts));
+  const peopleLand = aboveThreshold.reduce((s, b) => s + b.peopleLand, 0);
+  const industryLand = unlocked.reduce((s, b) => s + b.industryLand, 0);
+  const depositCounts = sumResourceVectors(unlocked.map((b) => b.counts));
   const yieldMult = depositGradeVector(unlocked);
   const extractionEfficiency = extractionEfficiencyVector(unlocked);
 
-  const availableSpace = bodies.reduce((s, b) => {
-    const countFootprint = RESOURCE_TYPES.reduce((t, r) => t + b.counts[r], 0) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
-    return s + b.peopleLand + b.industryLand + countFootprint;
-  }, 0);
-
   return {
-    availableSpace,
-    generalSpace,
-    habitableSpace,
-    slotCap,
+    industryLand,
+    peopleLand,
+    depositCounts,
     yieldMult,
     extractionEfficiency,
     bodyDanger: bodies.reduce((sum, b) => sum + BODY_ARCHETYPES[b.bodyType].dangerBaseline, 0),

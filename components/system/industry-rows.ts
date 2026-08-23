@@ -105,7 +105,7 @@ export interface DepositRow {
   yieldMult: number;
   band: QualityBandId;
   /** Total deposit slots — the capacity ceiling. */
-  slotCap: number;
+  depositCounts: number;
   /** Extractor levels built on this resource's slots. */
   built: number;
   /**
@@ -176,13 +176,13 @@ export function depositRows(
     });
   }
   return deposits
-    .filter((d) => d.slotCap > 0)
+    .filter((d) => d.depositCounts > 0)
     .map((d) => {
       const agg: DepositResourceAgg = byResource.get(d.resource) ?? { built: 0, staffed: 0, output: 0, health: "stable" };
       const types = Object.keys(BUILDING_TYPES)
         .filter((t) => BUILDING_TYPES[t].resource === d.resource)
         .map((t): DepositTypeRow => byType.get(t) ?? { buildingType: t, outputGood: BUILDING_TYPES[t].outputGood, built: 0, staffed: 0, output: 0, health: "stable", staffedFraction: 0, idleReason: undefined });
-      return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, slotCap: d.slotCap, ...agg, types };
+      return { resource: d.resource, yieldMult: d.yieldMult, band: d.band, depositCounts: d.depositCounts, ...agg, types };
     });
 }
 

@@ -1,5 +1,5 @@
 import { developmentPoints, developmentPotential } from "@/lib/engine/development-points";
-import { slotCapOf, sumResourceVector } from "@/lib/engine/resources";
+import { depositCountsOf, sumResourceVector } from "@/lib/engine/resources";
 import type { WorldSystem } from "@/lib/world/types";
 
 /**
@@ -14,11 +14,11 @@ export function developmentPointsAndPotential(
   buildings: Record<string, number>,
 ): { points: number; potential: number } {
   const points = developmentPoints({ buildings, population: system.population });
-  const slotCap = slotCapOf(system);
+  const depositCounts = depositCountsOf(system);
   const potential = developmentPotential({
-    habitableSpace: system.habitableSpace,
-    generalSpace: system.generalSpace,
-    depositSlots: sumResourceVector(slotCap),
+    peopleLand: system.peopleLand,
+    industryLand: system.industryLand,
+    depositSlots: sumResourceVector(depositCounts),
   });
   return { points, potential };
 }

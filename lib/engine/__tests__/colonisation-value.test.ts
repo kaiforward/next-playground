@@ -33,12 +33,12 @@ describe("RESOURCE_CLOSURE", () => {
 });
 
 function sys(over: Partial<FactionSystemState>): FactionSystemState {
-  return { buildings: {}, habitableSpace: 0, slotCap: emptyResourceVector(), ...over };
+  return { buildings: {}, peopleLand: 0, depositCounts: emptyResourceVector(), ...over };
 }
 
 describe("factionMissingResources", () => {
-  it("returns resources with zero slotCap across developed systems", () => {
-    const oreOnly = sys({ slotCap: { ...emptyResourceVector(), ore: 5 } });
+  it("returns resources with zero depositCounts across developed systems", () => {
+    const oreOnly = sys({ depositCounts: { ...emptyResourceVector(), ore: 5 } });
     const missing = factionMissingResources([oreOnly]);
     expect(missing.has("ore")).toBe(false);
     expect(missing.has("radioactive")).toBe(true);
@@ -46,8 +46,8 @@ describe("factionMissingResources", () => {
   });
 
   it("treats a resource present on ANY developed system as not missing", () => {
-    const a = sys({ slotCap: { ...emptyResourceVector(), ore: 5 } });
-    const b = sys({ slotCap: { ...emptyResourceVector(), gas: 3 } });
+    const a = sys({ depositCounts: { ...emptyResourceVector(), ore: 5 } });
+    const b = sys({ depositCounts: { ...emptyResourceVector(), gas: 3 } });
     const missing = factionMissingResources([a, b]);
     expect(missing.has("ore")).toBe(false);
     expect(missing.has("gas")).toBe(false);
@@ -58,18 +58,18 @@ describe("factionMissingResources", () => {
 describe("factionSaturation", () => {
   it("is ~0 when habitable land is mostly unbuilt", () => {
     // 100 habitable / housing cost 1 → 2000 potential pop-cap; 0 housing built → σ ≈ 0
-    expect(factionSaturation([sys({ habitableSpace: 100 })])).toBeCloseTo(0, 5);
+    expect(factionSaturation([sys({ peopleLand: 100 })])).toBeCloseTo(0, 5);
   });
 
   it("is 1 when housing fills the habitable land", () => {
     // 100 housing × POP_CENTRE_DENSITY(20) = 2000 built = 2000 potential → σ = 1
     expect(
-      factionSaturation([sys({ habitableSpace: 100, buildings: { [HOUSING_TYPE]: 100 } })]),
+      factionSaturation([sys({ peopleLand: 100, buildings: { [HOUSING_TYPE]: 100 } })]),
     ).toBeCloseTo(1, 5);
   });
 
   it("treats zero habitable potential as fully saturated", () => {
-    expect(factionSaturation([sys({ habitableSpace: 0 })])).toBe(1);
+    expect(factionSaturation([sys({ peopleLand: 0 })])).toBe(1);
   });
 });
 
@@ -129,13 +129,13 @@ const PARAMS: ColonyValueParams = {
 };
 
 function candidate(over: Partial<ColonyCandidate>): ColonyCandidate {
-  return { habitableSpace: 0, generalSpace: 0, slotCap: emptyResourceVector(), ...over };
+  return { peopleLand: 0, industryLand: 0, depositCounts: emptyResourceVector(), ...over };
 }
 
 describe("colonyValue", () => {
   it("credits U for a missing resource the candidate supplies, even at σ=0", () => {
     const unblocked = new Map<ResourceType, number>([["radioactive", 12]]);
-    const c = candidate({ slotCap: { ...emptyResourceVector(), radioactive: 3 } });
+    const c = candidate({ depositCounts: { ...emptyResourceVector(), radioactive: 3 } });
     // U = 12; L = landDepositWeight(0.15) × depositRichness(3) = 0.45; landGate at σ=0 = sigmaFloor 0.25
     const v = colonyValue(c, unblocked, 0, PARAMS);
     expect(v).toBeCloseTo(12 + 0.45 * 0.25, 5);
@@ -143,7 +143,7 @@ describe("colonyValue", () => {
   });
 
   it("scales generic land value up with saturation via the σ_floor blend", () => {
-    const c = candidate({ habitableSpace: 100 }); // L = 0.4 × 100 = 40
+    const c = candidate({ peopleLand: 100 }); // L = 0.4 × 100 = 40
     const atLow = colonyValue(c, new Map(), 0, PARAMS); // landGate 0.25 → 10
     const atHigh = colonyValue(c, new Map(), 1, PARAMS); // landGate 1 → 40
     expect(atLow).toBeCloseTo(10, 5);
@@ -152,7 +152,7 @@ describe("colonyValue", () => {
   });
 
   it("σ_floor=0 makes generic land worthless until saturated; σ_floor=1 values it fully", () => {
-    const c = candidate({ habitableSpace: 100 });
+    const c = candidate({ peopleLand: 100 });
     const tall = colonyValue(c, new Map(), 0, { ...PARAMS, sigmaFloor: 0 });
     const rush = colonyValue(c, new Map(), 0, { ...PARAMS, sigmaFloor: 1 });
     expect(tall).toBeCloseTo(0, 5);
@@ -162,13 +162,13 @@ describe("colonyValue", () => {
   it("sums only supplied resources into U, weights all three L terms, and clamps σ", () => {
     // Candidate supplies ore but NOT gas, so only ore's unblocked demand reaches U.
     const c = candidate({
-      habitableSpace: 10,
-      generalSpace: 20,
-      slotCap: { ...emptyResourceVector(), ore: 2 },
+      peopleLand: 10,
+      industryLand: 20,
+      depositCounts: { ...emptyResourceVector(), ore: 2 },
     });
     const unblocked = new Map<ResourceType, number>([
       ["ore", 8], // supplied → counts
-      ["gas", 100], // NOT supplied → excluded by the slotCap[r] > 0 filter
+      ["gas", 100], // NOT supplied → excluded by the depositCounts[r] > 0 filter
     ]);
     // U = 8 (ore only; gas is filtered out despite its large demand)
     // L = landPremium·10 + landGeneralWeight·20 + landDepositWeight·depositRichness(2)
@@ -184,7 +184,7 @@ describe("factionSaturation — the potential is a pop-cap, not a land area", ()
     // 100 habitable ÷ housing footprint 1 = 100 levels = 2000 potential pop-cap; 50 levels built
     // = 1000 built pop-cap ⇒ σ = 0.5. Dividing by the density instead would read a saturated faction.
     expect(
-      factionSaturation([sys({ habitableSpace: 100, buildings: { [HOUSING_TYPE]: 50 } })]),
+      factionSaturation([sys({ peopleLand: 100, buildings: { [HOUSING_TYPE]: 50 } })]),
     ).toBeCloseTo(0.5, 5);
   });
 });

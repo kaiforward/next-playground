@@ -4,7 +4,7 @@ import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { slotCapOf, qualityOf, effOf } from "@/lib/engine/resources";
+import { depositCountsOf, qualityOf, effOf } from "@/lib/engine/resources";
 import {
   capacityGoodRates,
   extractorsByResource,
@@ -101,17 +101,17 @@ export function getSystemSubstrate(systemId: string): SystemSubstrateData {
       id: b.id,
       bodyType: b.bodyType,
       archetypeName: BODY_ARCHETYPES[b.bodyType].name,
-      habitable: b.habitable,
+      score: BODY_ARCHETYPES[b.bodyType].scores.default,
+      locked: BODY_ARCHETYPES[b.bodyType].techLocked,
       size: b.size,
-      slots: slotCapOf(b),
+      slots: depositCountsOf(b),
       quality: qualityOf(b),
     }));
 
   return {
     visibility: "visible",
     sunClass: system.sunClass,
-    availableSpace: system.availableSpace,
-    habitableSpace: system.habitableSpace,
+    peopleLand: system.peopleLand,
     bodies,
   };
 }
@@ -136,7 +136,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
   // production/consumption profile below.
   const { buildings, yields, readout } = readSystemIndustry(system);
 
-  const slotCap = slotCapOf(system);
+  const depositCounts = depositCountsOf(system);
   const worked = extractorsByResource(buildings);
 
   // The readout's labourAllocation IS the civilian demand basis — reuse it
@@ -147,8 +147,8 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     visibility: "visible",
     unrest: system.unrest,
     ...readout,
-    space: summariseSpace(system.habitableSpace, system.generalSpace, slotCap, buildings),
-    deposits: summariseDeposits(slotCap, worked, yields),
+    space: summariseSpace(system.peopleLand, system.industryLand, depositCounts, buildings),
+    deposits: summariseDeposits(depositCounts, worked, yields),
     goods: capacityGoodRates(buildings, system.population, yields, effOf(system)),
     popNeeds,
   };

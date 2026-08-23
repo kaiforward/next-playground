@@ -150,7 +150,7 @@ describe("treasury over the live tick", () => {
       ...world,
       systems: world.systems.map((s) =>
         s.id === neighbourId
-          ? { ...s, factionId: settlerId, control: "controlled", habitableSpace: Math.max(s.habitableSpace, 200) }
+          ? { ...s, factionId: settlerId, control: "controlled", peopleLand: Math.max(s.peopleLand, 200) }
           : s,
       ),
       treasuries: world.treasuries.map((t) => ({

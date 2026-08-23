@@ -8,10 +8,10 @@ import { emptyResourceVector } from "@/lib/engine/resources";
 
 const PARAMS = { pointsPerLevel: 5, paybackHorizon: 12, backlogWindow: 6 };
 
-function system(systemId: string, population: number, generalSpace = 50): BuildSystemState {
+function system(systemId: string, population: number, industryLand = 50): BuildSystemState {
   return {
     systemId, factionId: "f1", control: "developed", population,
-    buildings: {}, slotCap: emptyResourceVector(), generalSpace, habitableSpace: 10, goods: [],
+    buildings: {}, depositCounts: emptyResourceVector(), industryLand, peopleLand: 10, goods: [],
   };
 }
 

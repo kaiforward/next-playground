@@ -13,13 +13,13 @@ const WEIGHTS = { habitable: 1.0, diversity: 3.0, proximity: 0.5 };
 const PARAMS: ExpansionParams = { maxClaimsPerCycle: 1, scoreFloor: 0.001, weights: WEIGHTS };
 
 function cand(p: Partial<ClaimCandidate> & { systemId: string }): ClaimCandidate {
-  return { minHops: 1, habitableSpace: 0, resourceDiversity: 0, ...p };
+  return { minHops: 1, peopleLand: 0, resourceDiversity: 0, ...p };
 }
 
 describe("scoreClaimCandidate", () => {
   it("rewards substrate and discounts distance", () => {
-    const near = cand({ systemId: "a", habitableSpace: 100, minHops: 1 });
-    const far = cand({ systemId: "b", habitableSpace: 100, minHops: 3 });
+    const near = cand({ systemId: "a", peopleLand: 100, minHops: 1 });
+    const far = cand({ systemId: "b", peopleLand: 100, minHops: 3 });
     expect(scoreClaimCandidate(near, WEIGHTS)).toBeGreaterThan(scoreClaimCandidate(far, WEIGHTS));
   });
   it("scores a zero-substrate candidate at 0", () => {
@@ -27,8 +27,8 @@ describe("scoreClaimCandidate", () => {
   });
   it("scores claims on substrate × proximity with no trait term", () => {
     const w = { habitable: 1, diversity: 1, proximity: 0.1 };
-    const near = { systemId: "a", minHops: 1, habitableSpace: 100, resourceDiversity: 3 };
-    const far = { systemId: "b", minHops: 4, habitableSpace: 100, resourceDiversity: 3 };
+    const near = { systemId: "a", minHops: 1, peopleLand: 100, resourceDiversity: 3 };
+    const far = { systemId: "b", minHops: 4, peopleLand: 100, resourceDiversity: 3 };
     expect(scoreClaimCandidate(near, w)).toBeGreaterThan(scoreClaimCandidate(far, w)); // proximity discount
     // identical substrate + hops ⇒ identical score (nothing trait-derived left)
     expect(scoreClaimCandidate({ ...near, systemId: "c" }, w)).toBeCloseTo(scoreClaimCandidate(near, w), 9);
@@ -38,8 +38,8 @@ describe("scoreClaimCandidate", () => {
 describe("proposeFactionClaims", () => {
   it("proposes the highest-scoring in-reach candidate, capped at maxClaimsPerCycle", () => {
     const candidates = [
-      cand({ systemId: "poor", habitableSpace: 5 }),
-      cand({ systemId: "rich", habitableSpace: 200, resourceDiversity: 5 }),
+      cand({ systemId: "poor", peopleLand: 5 }),
+      cand({ systemId: "rich", peopleLand: 200, resourceDiversity: 5 }),
     ];
     const out = proposeFactionClaims("f1", candidates, PARAMS);
     expect(out).toHaveLength(1);
@@ -53,14 +53,14 @@ describe("proposeFactionClaims", () => {
     // A dead system (no people land at all) scores 0 on the habitable term but can still clear
     // SCORE_FLOOR on diversity/proximity alone: claims stay territory-and-corridor, unlike the
     // develop tier's colonisability floor (colony-eligibility.ts), which this candidate would fail.
-    const dead = cand({ systemId: "dead-but-claimable", habitableSpace: 0, resourceDiversity: 5 });
+    const dead = cand({ systemId: "dead-but-claimable", peopleLand: 0, resourceDiversity: 5 });
     const out = proposeFactionClaims("f1", [dead], PARAMS);
     expect(out).toHaveLength(1);
     expect(out[0].systemId).toBe("dead-but-claimable");
   });
   it("is deterministic and ranks by (score, systemId) — independent of input order", () => {
-    const a = cand({ systemId: "a", habitableSpace: 100 });
-    const b = cand({ systemId: "b", habitableSpace: 100 });
+    const a = cand({ systemId: "a", peopleLand: 100 });
+    const b = cand({ systemId: "b", peopleLand: 100 });
     const forward = proposeFactionClaims("f1", [a, b], { ...PARAMS, maxClaimsPerCycle: 2 });
     const reverse = proposeFactionClaims("f1", [b, a], { ...PARAMS, maxClaimsPerCycle: 2 });
     expect(forward.map((p) => p.systemId)).toEqual(["a", "b"]);

@@ -67,9 +67,9 @@ export class MemoryDirectedBuildWorld implements DirectedBuildWorld {
     // Universe-wide over the full system set (all factions + independents), not a per-faction shard.
     return developmentRefs(
       this.systems.map((s) => ({
-        habitableSpace: s.habitableSpace,
-        generalSpace: s.generalSpace,
-        depositSlots: sumResourceVector(s.slotCap),
+        peopleLand: s.peopleLand,
+        industryLand: s.industryLand,
+        depositSlots: sumResourceVector(s.depositCounts),
       })),
     );
   }

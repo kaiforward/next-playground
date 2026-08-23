@@ -229,22 +229,18 @@ export interface WorldSystem {
   colonyOpportunity?: { value: number; work: number };
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
-  /** Transitional identity: Σ(peopleLand + industryLand + Σcounts × DEPOSIT_SLOT_FOOTPRINT) over
-   *  the system's bodies (`lib/engine/body-gen.ts` substrateAggregates) — retained only until its
-   *  remaining readers migrate off it. */
-  availableSpace: number;
   /** Fungible (non-deposit) space — Σ industry land over unlocked bodies. */
-  generalSpace: number;
+  industryLand: number;
   /** Habitable fraction of general space — Σ people land over above-threshold, unlocked bodies. */
-  habitableSpace: number;
+  peopleLand: number;
   /** Extractor-slot caps, one per resource — Σ authored deposit counts over unlocked bodies. */
-  slotGas: number;
-  slotMinerals: number;
-  slotOre: number;
-  slotBiomass: number;
-  slotArable: number;
-  slotWater: number;
-  slotRadioactive: number;
+  countGas: number;
+  countMinerals: number;
+  countOre: number;
+  countBiomass: number;
+  countArable: number;
+  countWater: number;
+  countRadioactive: number;
   /** Effective quality multipliers, one per resource — deposit grade, a pure property of the ground. */
   yieldGas: number;
   yieldMinerals: number;
@@ -271,23 +267,20 @@ export interface WorldBody {
   id: string;
   systemId: string;
   bodyType: BodyArchetypeId;
-  /** True when this body's default-pop habitability score ≥ HABITABILITY_THRESHOLD — the ONE
-   *  consistent answer to "habitable"; retained only until readers move to the score band. */
-  habitable: boolean;
   /** Display flavour only — carries no budget meaning. */
   size: number;
   /** This body's authored industry-land budget. */
-  generalSpace: number;
+  industryLand: number;
   /** This body's authored people-land budget (dark land when below threshold or locked). */
-  habitableSpace: number;
+  peopleLand: number;
   /** Per-body slot counts, one per resource (0 = no deposit). */
-  slotGas: number;
-  slotMinerals: number;
-  slotOre: number;
-  slotBiomass: number;
-  slotArable: number;
-  slotWater: number;
-  slotRadioactive: number;
+  countGas: number;
+  countMinerals: number;
+  countOre: number;
+  countBiomass: number;
+  countArable: number;
+  countWater: number;
+  countRadioactive: number;
   /** Per-body quality multipliers, one per resource (0 = no deposit). */
   qualGas: number;
   qualMinerals: number;

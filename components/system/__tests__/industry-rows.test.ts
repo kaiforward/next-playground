@@ -8,9 +8,9 @@ const T = 0.75;
 /** `buildProblems`'s `inputLabel` — identity is enough for these fixtures. */
 const label = (id: string) => id;
 
-const deposit = (resource: SystemDepositSummary["resource"], slotCap: number): SystemDepositSummary => ({
+const deposit = (resource: SystemDepositSummary["resource"], depositCounts: number): SystemDepositSummary => ({
   resource,
-  slotCap,
+  depositCounts,
   worked: 0,
   yieldMult: 1,
   band: "average",

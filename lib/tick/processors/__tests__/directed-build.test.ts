@@ -64,13 +64,13 @@ const DUE_TICK = 0;      // cycle start: every faction plans on ticks where tick
 const NOT_DUE_TICK = 1;  // off-boundary tick: cycleStartShard window is empty, no faction is due
 
 function builderSlots(n: number) {
-  const slotCap = emptyResourceVector();
-  for (const k of RESOURCE_TYPES) slotCap[k] = n;
-  return slotCap;
+  const depositCounts = emptyResourceVector();
+  for (const k of RESOURCE_TYPES) depositCounts[k] = n;
+  return depositCounts;
 }
 
 // A: deep structural food deficit, no capacity. B: builder with arable slots + population, reachable from A.
-// generalSpace defaults to habitableSpace (100) so housing's habitable-capped headroom also exhausts B's
+// industryLand defaults to peopleLand (100) so housing's habitable-capped headroom also exhausts B's
 // general space, matching every pre-existing call site; the centre tests below widen it so a centre can
 // still site itself once housing has claimed its habitable-bounded share. `aOpts` lets the industry tests
 // mark A developed (only developed systems contribute counted deficits) and seed its persisted proposal
@@ -80,20 +80,20 @@ function scenario(
   bFood: number,
   bHousing: number,
   slots = 20,
-  generalSpace = 100,
+  industryLand = 100,
   aOpts?: { control?: SystemControl; foodCycles?: number },
 ): SystemBuildRow[] {
   return [
     {
       systemId: "A", factionId: "f1", control: aOpts?.control ?? "unclaimed", population: 100, buildings: {},
-      yields: unitResourceVector(), slotCap: emptyResourceVector(),
-      generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A", 1, aOpts?.foodCycles)],
+      yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+      industryLand: 0, peopleLand: 0, markets: [foodMarket("A", 1, aOpts?.foodCycles)],
     },
     {
       systemId: "B", factionId: "f1", control: "developed", population: 5000,
       buildings: { food: bFood, housing: bHousing },
-      yields: unitResourceVector(), slotCap: builderSlots(slots),
-      generalSpace, habitableSpace: 100, markets: [],
+      yields: unitResourceVector(), depositCounts: builderSlots(slots),
+      industryLand, peopleLand: 100, markets: [],
     },
   ];
 }
@@ -182,7 +182,7 @@ describe("runDirectedBuildProcessor — committed construction", () => {
   it("commits nothing when there is nothing to build (no deficit, no housing headroom)", async () => {
     const balanced: SystemBuildRow[] = [{
       systemId: "A", factionId: "f1", control: "developed", population: 0, buildings: {},
-      yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
+      yields: unitResourceVector(), depositCounts: builderSlots(10), industryLand: 0, peopleLand: 0,
       markets: [foodMarket("A", 1)], // population 0 → no consumption → no rate deficit; no habitable land → no housing
     }];
     const w = new MemoryDirectedBuildWorld(balanced);
@@ -196,8 +196,8 @@ describe("runDirectedBuildProcessor — committed construction", () => {
     // pool + cap fund a slice each cycle, so the level lands only after several cycles of work.
     const base: SystemBuildRow = {
       systemId: "B", factionId: "f1", control: "developed", population: 300,
-      buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-      generalSpace: 10, habitableSpace: 3, markets: [],
+      buildings: {}, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+      industryLand: 10, peopleLand: 3, markets: [],
     };
     let rows: SystemBuildRow[] = [base];
     let projects: WorldConstructionProject[] = [];
@@ -266,21 +266,21 @@ describe("runDirectedBuildProcessor — value-order funding", () => {
     const rows: SystemBuildRow[] = [
       {
         systemId: "A1", factionId: "f1", control: "developed", population: 10, buildings: {},
-        yields: unitResourceVector(), slotCap: emptyResourceVector(),
-        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A1", 1, 1)],
+        yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+        industryLand: 0, peopleLand: 0, markets: [foodMarket("A1", 1, 1)],
       },
       {
         systemId: "A2", factionId: "f1", control: "developed", population: 100000, buildings: {},
-        yields: unitResourceVector(), slotCap: emptyResourceVector(),
-        generalSpace: 0, habitableSpace: 0, markets: [foodMarket("A2", 1, 1)],
+        yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+        industryLand: 0, peopleLand: 0, markets: [foodMarket("A2", 1, 1)],
       },
       {
         systemId: "B1", factionId: "f1", control: "developed", population: 5000, buildings: {},
-        yields: unitResourceVector(), slotCap: builderSlots(20), generalSpace: 100, habitableSpace: 100, markets: [],
+        yields: unitResourceVector(), depositCounts: builderSlots(20), industryLand: 100, peopleLand: 100, markets: [],
       },
       {
         systemId: "B2", factionId: "f1", control: "developed", population: 5000, buildings: {},
-        yields: unitResourceVector(), slotCap: builderSlots(20), generalSpace: 100, habitableSpace: 100, markets: [],
+        yields: unitResourceVector(), depositCounts: builderSlots(20), industryLand: 100, peopleLand: 100, markets: [],
       },
     ];
     // B1 reaches only the shallow A1; B2 only the deep A2 (cross pairs unreachable) — so each food bundle
@@ -308,8 +308,8 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
   // the economy's squeeze clock — this counter is written by directed-build, keyed by market id.
   const sink = (systemId: string, population: number, foodCycles?: number): SystemBuildRow => ({
     systemId, factionId: "f1", control: "developed", population,
-    buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-    generalSpace: 0, habitableSpace: 0, markets: [foodMarket(systemId, 1, foodCycles)],
+    buildings: {}, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+    industryLand: 0, peopleLand: 0, markets: [foodMarket(systemId, 1, foodCycles)],
   });
 
   it("writes a saturating increment for a persistent deficit and a reset for a covered good", async () => {
@@ -379,8 +379,8 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
       ...scenario(0, 0, 20, 100, { control: "developed", foodCycles: 1 }),
       {
         systemId: "C", factionId: "f1", control: "developed", population: 0,
-        buildings: { food: 1 }, yields: unitResourceVector(), slotCap: { ...saturatedSlots },
-        generalSpace: 0, habitableSpace: 0, markets: [],
+        buildings: { food: 1 }, yields: unitResourceVector(), depositCounts: { ...saturatedSlots },
+        industryLand: 0, peopleLand: 0, markets: [],
       },
     ];
     const on = new MemoryDirectedBuildWorld(rows());
@@ -435,7 +435,7 @@ describe("runDirectedBuildProcessor — proposal-pressure persistence (the const
   // the squeeze-feedback gap, isolating the two guards that suppress it.
   const rationedSelfSupplier = (extra: Partial<MarketRowForLogistics>): SystemBuildRow => ({
     systemId: "S", factionId: "f1", control: "developed", population: 20,
-    buildings: { food: 10 }, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
+    buildings: { food: 10 }, yields: unitResourceVector(), depositCounts: builderSlots(50), industryLand: 100, peopleLand: 0,
     markets: [{
       id: "S|food", goodId: "food", stock: 50, anchorMult: 1, demandRate: 10, storageCapacity: 0,
       squeezeCycles: 2, satisfaction: 0, realisedProductionRate: 0, proposalCycles: 1, ...extra,
@@ -550,21 +550,21 @@ function saturatedHome(population: number): SystemBuildRow {
   return {
     systemId: "home", factionId: "f1", control: "developed", population,
     buildings: { [HOUSING_TYPE]: 5 },
-    yields: unitResourceVector(), slotCap: emptyResourceVector(),
-    generalSpace: 5, habitableSpace: 5, markets: [], // habitable fully housed (5 levels) → σ = 1, no housing headroom
+    yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+    industryLand: 5, peopleLand: 5, markets: [], // habitable fully housed (5 levels) → σ = 1, no housing headroom
   };
 }
 
-function colonyCand(systemId: string, habitableSpace = 100): ColonyEstablishCandidate {
-  return { systemId, habitableSpace, generalSpace: 50, slotCap: emptyResourceVector(), sourceSystemId: "home" };
+function colonyCand(systemId: string, peopleLand = 100): ColonyEstablishCandidate {
+  return { systemId, peopleLand, industryLand: 50, depositCounts: emptyResourceVector(), sourceSystemId: "home" };
 }
 
 // One developed owned system so the faction is in the shard, with no build needs.
 function ownedOnly(factionId: string): SystemBuildRow {
   return {
     systemId: `${factionId}-home`, factionId, control: "developed", population: 100,
-    buildings: {}, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-    generalSpace: 0, habitableSpace: 0, markets: [],
+    buildings: {}, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+    industryLand: 0, peopleLand: 0, markets: [],
   };
 }
 
@@ -573,8 +573,8 @@ describe("runDirectedBuildProcessor: claim phase", () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     const reachProvider = (f: string): ClaimCandidate[] =>
       f === "f1" ? [
-        { systemId: "u-poor", minHops: 1, habitableSpace: 5, resourceDiversity: 0 },
-        { systemId: "u-rich", minHops: 1, habitableSpace: 200, resourceDiversity: 4 },
+        { systemId: "u-poor", minHops: 1, peopleLand: 5, resourceDiversity: 0 },
+        { systemId: "u-rich", minHops: 1, peopleLand: 200, resourceDiversity: 4 },
       ] : [];
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
@@ -587,7 +587,7 @@ describe("runDirectedBuildProcessor: claim phase", () => {
     const w = new MemoryDirectedBuildWorld([ownedOnly("f1")]);
     await runDirectedBuildProcessor(w, { tick: NOT_DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(),
-      claim: { reachProvider: () => [{ systemId: "u1", minHops: 1, habitableSpace: 100, resourceDiversity: 3 }], rng: mulberry32(1), params: EXP_PARAMS },
+      claim: { reachProvider: () => [{ systemId: "u1", minHops: 1, peopleLand: 100, resourceDiversity: 3 }], rng: mulberry32(1), params: EXP_PARAMS },
     });
     expect(w.claims).toHaveLength(0);
   });
@@ -639,10 +639,10 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
 
   it("bounds the open queue: with many candidates and a small pool, only funded colonies persist", async () => {
     // Housing (5 levels) no longer bills industry land (build rule separation), so
-    // saturatedHome's default generalSpace: 5 would otherwise leave real industry-land headroom
+    // saturatedHome's default industryLand: 5 would otherwise leave real industry-land headroom
     // at home and let a Construction Centre site there, consuming the small pool this test
     // means to isolate on colony-establish funding alone. Zero it out to keep home siting-inert.
-    const w = new MemoryDirectedBuildWorld([{ ...saturatedHome(80), generalSpace: 0 }]); // pool = 80 × 0.05 = 4 → one cap-worth
+    const w = new MemoryDirectedBuildWorld([{ ...saturatedHome(80), industryLand: 0 }]); // pool = 80 × 0.05 = 4 → one cap-worth
     const candidates = ["c1", "c2", "c3", "c4", "c5"].map((id) => colonyCand(id));
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),
@@ -813,13 +813,13 @@ function homeWithFoodDeficit(population = 1000): SystemBuildRow {
   return {
     systemId: "home", factionId: "f1", control: "developed", population,
     buildings: { [HOUSING_TYPE]: 5 },
-    yields: unitResourceVector(), slotCap: builderSlots(20),
-    generalSpace: 5, habitableSpace: 5, markets: [foodMarket("home", 1)], // habitable fully housed → σ = 1
+    yields: unitResourceVector(), depositCounts: builderSlots(20),
+    industryLand: 5, peopleLand: 5, markets: [foodMarket("home", 1)], // habitable fully housed → σ = 1
   };
 }
 
-function colonyOf(systemId: string, habitableSpace: number, generalSpace = 0): ColonyEstablishCandidate {
-  return { systemId, habitableSpace, generalSpace, slotCap: emptyResourceVector(), sourceSystemId: "home" };
+function colonyOf(systemId: string, peopleLand: number, industryLand = 0): ColonyEstablishCandidate {
+  return { systemId, peopleLand, industryLand, depositCounts: emptyResourceVector(), sourceSystemId: "home" };
 }
 
 describe("runDirectedBuildProcessor: build-vs-colony ROI arbitration (one shared pool)", () => {
@@ -868,13 +868,13 @@ describe("runDirectedBuildProcessor — pool fairness floor", () => {
   const floorScenario = (): SystemBuildRow[] => [
     {
       systemId: "H", factionId: "f1", control: "developed", population: 400,
-      buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-      generalSpace: 0, habitableSpace: 20, markets: [],
+      buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+      industryLand: 0, peopleLand: 20, markets: [],
     },
     {
       systemId: "C", factionId: "f1", control: "developed", population: 2,
-      buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-      generalSpace: 0, habitableSpace: 20, markets: [],
+      buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+      industryLand: 0, peopleLand: 20, markets: [],
     },
   ];
   const inflight = (): WorldConstructionProject[] => [
@@ -903,8 +903,8 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
   // new and funding is purely the in-flight queue. Ample population sets a pool far above the cap.
   const idleBuilder = (population: number): SystemBuildRow => ({
     systemId: "B", factionId: "f1", control: "developed", population,
-    buildings: { [HOUSING_TYPE]: 5 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-    generalSpace: 5, habitableSpace: 5, markets: [],
+    buildings: { [HOUSING_TYPE]: 5 }, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+    industryLand: 5, peopleLand: 5, markets: [],
   });
 
   it("interval scaling preserves wall-clock minimum build time", async () => {
@@ -973,13 +973,13 @@ describe("runDirectedBuildProcessor — interval invariance", () => {
     const floorScenario = (): SystemBuildRow[] => [
       {
         systemId: "H", factionId: "f1", control: "developed", population: 400,
-        buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-        generalSpace: 0, habitableSpace: 20, markets: [],
+        buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+        industryLand: 0, peopleLand: 20, markets: [],
       },
       {
         systemId: "C", factionId: "f1", control: "developed", population: 2,
-        buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-        generalSpace: 0, habitableSpace: 20, markets: [],
+        buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+        industryLand: 0, peopleLand: 20, markets: [],
       },
     ];
     const inflight = (): WorldConstructionProject[] => [
@@ -1102,8 +1102,8 @@ describe("construction funding gate", () => {
   const row = (): SystemBuildRow => ({
     systemId: "s1", factionId: "f1", control: "developed" as const,
     population: 100, buildings: {},
-    yields: emptyResourceVector(), slotCap: emptyResourceVector(),
-    generalSpace: 0, habitableSpace: 0, markets: [],
+    yields: emptyResourceVector(), depositCounts: emptyResourceVector(),
+    industryLand: 0, peopleLand: 0, markets: [],
   });
   const order = (): WorldConstructionProject => ({
     kind: "build" as const, id: "p1", origin: "player" as const,
@@ -1224,7 +1224,7 @@ describe("runDirectedBuildProcessor — build-burst instrumentation (buildCommit
   it("reports no build commitments when nothing is proposed", async () => {
     const balanced: SystemBuildRow[] = [{
       systemId: "A", factionId: "f1", control: "developed", population: 0, buildings: {},
-      yields: unitResourceVector(), slotCap: builderSlots(10), generalSpace: 0, habitableSpace: 0,
+      yields: unitResourceVector(), depositCounts: builderSlots(10), industryLand: 0, peopleLand: 0,
       markets: [foodMarket("A", 1)], // population 0 → no consumption → no rate deficit; no habitable land → no housing
     }];
     const w = new MemoryDirectedBuildWorld(balanced);
@@ -1245,7 +1245,7 @@ describe("runDirectedBuildProcessor — strike-suppression instrumentation (stri
   // suite's `rationedSelfSupplier` fixture (capacity > 0 by construction: `buildings.food`).
   const strikingProducer = (productionSuppressed: boolean): SystemBuildRow => ({
     systemId: "S", factionId: "f1", control: "developed", population: 20,
-    buildings: { food: 10 }, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
+    buildings: { food: 10 }, yields: unitResourceVector(), depositCounts: builderSlots(50), industryLand: 100, peopleLand: 0,
     markets: [{
       id: "S|food", goodId: "food", stock: 50, anchorMult: 1, demandRate: 10, storageCapacity: 0,
       squeezeCycles: 2, satisfaction: 0, realisedProductionRate: 0, proposalCycles: 1, productionSuppressed,
@@ -1257,7 +1257,7 @@ describe("runDirectedBuildProcessor — strike-suppression instrumentation (stri
   // proposed regardless of the strike, unlike the feedback-gap term `strikingProducer` isolates.
   const strikingNoCapacity: SystemBuildRow = {
     systemId: "N", factionId: "f1", control: "developed", population: 100,
-    buildings: {}, yields: unitResourceVector(), slotCap: builderSlots(50), generalSpace: 100, habitableSpace: 0,
+    buildings: {}, yields: unitResourceVector(), depositCounts: builderSlots(50), industryLand: 100, peopleLand: 0,
     markets: [{ ...foodMarket("N", 1, 1), productionSuppressed: true }],
   };
 
@@ -1986,8 +1986,8 @@ class RowlessBuildWorld extends RecordingBuildWorld {
 /** A developed idle builder: fully housed, no markets, no slots — the planner proposes nothing at it. */
 const idleHome = (population: number, systemId = "home"): SystemBuildRow => ({
   systemId, factionId: "f1", control: "developed", population,
-  buildings: { [HOUSING_TYPE]: 5 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-  generalSpace: 5, habitableSpace: 5, markets: [],
+  buildings: { [HOUSING_TYPE]: 5 }, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+  industryLand: 5, peopleLand: 5, markets: [],
 });
 
 /** One long-running in-flight build that can absorb a whole cycle's pool without ever landing. */
@@ -2248,8 +2248,8 @@ describe("runDirectedBuildProcessor — the founding gate record", () => {
     // every fully-funded founding in the galaxy in the pool-throttled column.
     const bare: SystemBuildRow = {
       systemId: "home", factionId: "f1", control: "developed", population: 1, buildings: {},
-      yields: unitResourceVector(), slotCap: emptyResourceVector(),
-      generalSpace: 0, habitableSpace: 0, markets: [],
+      yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+      industryLand: 0, peopleLand: 0, markets: [],
     };
     const { result } = await runStaging(
       [bare], [sourceless()], 1_000_000, mkConstruction(MUT_CAP, MUT_CAP - 1e-9),
@@ -2276,7 +2276,7 @@ describe("runDirectedBuildProcessor — the founding gate record", () => {
 describe("runDirectedBuildProcessor — what the colony planner is shown", () => {
   /** A candidate seeded from an arbitrary source system. */
   const candFrom = (systemId: string, sourceSystemId: string): ColonyEstablishCandidate => ({
-    systemId, habitableSpace: 100, generalSpace: 50, slotCap: emptyResourceVector(), sourceSystemId,
+    systemId, peopleLand: 100, industryLand: 50, depositCounts: emptyResourceVector(), sourceSystemId,
   });
 
   it("shows the planner only economically-active systems", async () => {
@@ -2285,8 +2285,8 @@ describe("runDirectedBuildProcessor — what the colony planner is shown", () =>
     // value disappears under a pop cost that does not exist.
     const controlledSource: SystemBuildRow = {
       systemId: "src", factionId: "f1", control: "controlled", population: 0, buildings: {},
-      yields: unitResourceVector(), slotCap: emptyResourceVector(),
-      generalSpace: 0, habitableSpace: 0,
+      yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+      industryLand: 0, peopleLand: 0,
       markets: [{ ...stockedMarket("src", "food", 0), realisedProductionRate: 100_000 }],
     };
     const w = new MemoryDirectedBuildWorld([saturatedHome(1000), controlledSource]);
@@ -2358,7 +2358,7 @@ describe("runDirectedBuildProcessor — what the colony planner is shown", () =>
   it("proposes no construction centre while the player's build automation is off", async () => {
     // A centre is build-domain work. With the build switch off it must not slip in through the
     // colony proposals that are still being made — the switch gates the domain, not one emitter.
-    const roomyHome: SystemBuildRow = { ...saturatedHome(1000), generalSpace: 1000 };
+    const roomyHome: SystemBuildRow = { ...saturatedHome(1000), industryLand: 1000 };
     const w = new MemoryDirectedBuildWorld([roomyHome]);
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(2, 0.005),
@@ -2375,13 +2375,13 @@ describe("runDirectedBuildProcessor — what the colony planner is shown", () =>
 describe("runDirectedBuildProcessor — who the pool floor is reserved for", () => {
   const floorHome = (): SystemBuildRow => ({
     systemId: "H", factionId: "f1", control: "developed", population: 400,
-    buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-    generalSpace: 0, habitableSpace: 20, markets: [],
+    buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+    industryLand: 0, peopleLand: 20, markets: [],
   });
   const floorColony = (control: SystemControl): SystemBuildRow => ({
     systemId: "C", factionId: "f1", control, population: 2,
-    buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), slotCap: emptyResourceVector(),
-    generalSpace: 0, habitableSpace: 20, markets: [],
+    buildings: { [HOUSING_TYPE]: 20 }, yields: unitResourceVector(), depositCounts: emptyResourceVector(),
+    industryLand: 0, peopleLand: 20, markets: [],
   });
   const frontBuild = (): WorldConstructionProject => ({
     id: "pH", kind: "build", origin: "auto", factionId: "f1", systemId: "H",

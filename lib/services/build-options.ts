@@ -35,7 +35,7 @@ export function getSystemBuildOptions(systemId: string): SystemBuildOptionsData 
     // The money block is the one ineligible reason that still carries a quote, so the preview is
     // assembled for it exactly as for the eligible branch — same fields, same sizing.
     const priced = check.eligible || check.reason === "insufficient_funds" ? check : null;
-    const sizing = priced === null ? null : sizeColonyEstablish(system.habitableSpace, sizingParams());
+    const sizing = priced === null ? null : sizeColonyEstablish(system.peopleLand, sizingParams());
     const preview =
       priced === null || sizing === null
         ? null

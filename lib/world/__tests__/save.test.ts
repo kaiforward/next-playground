@@ -150,8 +150,8 @@ describe("serialiseWorld / deserialiseWorld", () => {
   });
 
   it("rejects a v15 (pre-habitability-seeding) save with the clean version error", () => {
-    // v15 systems/bodies carry the retired partition columns (habitableSpace/generalSpace/slot* under
-    // the OLD semantics) and no eff* columns at all — the version bump is what makes this fail cleanly
+    // v15 systems/bodies carry the retired partition-model columns under their pre-rename names
+    // and no eff* columns at all — the version bump is what makes this fail cleanly
     // instead of loading a stale shape the structural spot-checks below `meta` cannot see.
     const json = JSON.stringify({ formatVersion: 15, world });
     const result = deserialiseWorld(json);

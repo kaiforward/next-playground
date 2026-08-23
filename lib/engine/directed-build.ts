@@ -89,13 +89,13 @@ export interface BuildSystemState {
   /** Current building counts (production types + "housing"). */
   buildings: Record<string, number>;
   /** Per-resource deposit-slot cap (Σ body slots) — caps tier-0 extractor counts. */
-  slotCap: ResourceVector;
+  depositCounts: ResourceVector;
   /** Industry land — tier-1+ factories, academies, complexes and construction centres draw here.
-   *  Disjoint from `habitableSpace`: housing never draws on this budget. */
-  generalSpace: number;
+   *  Disjoint from `peopleLand`: housing never draws on this budget. */
+  industryLand: number;
   /** People land — housing's own budget, independent of industry land. Extractors and factories
    *  never draw on this budget. */
-  habitableSpace: number;
+  peopleLand: number;
   goods: BuildGoodState[];
 }
 
@@ -246,7 +246,7 @@ export function habitableHousingHeadroom(sys: BuildSystemState): number {
   const cost = effectiveSpaceCost(HOUSING_TYPE);
   if (cost <= 0) return 0;
   const housing = sys.buildings[HOUSING_TYPE] ?? 0;
-  const remainingHabitable = sys.habitableSpace - housing * cost;
+  const remainingHabitable = sys.peopleLand - housing * cost;
   return Math.max(0, remainingHabitable / cost);
 }
 
@@ -537,13 +537,13 @@ export function buildableUnits(sys: BuildSystemState, goodId: string): number {
   if (tier === 0) {
     const resource = BUILDING_TYPES[goodId]?.resource;
     if (!resource) return 0;
-    const cap = sys.slotCap[resource];
+    const cap = sys.depositCounts[resource];
     const remaining = cap - extractorsOnResource(sys.buildings, resource);
     return Math.max(0, remaining);
   }
   const cost = effectiveSpaceCost(goodId);
   if (cost <= 0) return 0;
-  const remainingIndustry = sys.generalSpace - industryLandUsed(sys.buildings);
+  const remainingIndustry = sys.industryLand - industryLandUsed(sys.buildings);
   return Math.max(0, remainingIndustry / cost);
 }
 
@@ -560,9 +560,9 @@ function hasCapacityCeiling(sys: BuildSystemState, goodId: string): boolean {
   if (tier === 0) {
     const resource = BUILDING_TYPES[goodId]?.resource;
     if (!resource) return false;
-    return sys.slotCap[resource] > 0;
+    return sys.depositCounts[resource] > 0;
   }
-  return effectiveSpaceCost(goodId) > 0 && sys.generalSpace > 0;
+  return effectiveSpaceCost(goodId) > 0 && sys.industryLand > 0;
 }
 
 /** Additional output of `goodId` a system can host = buildable units × per-unit output. */
@@ -984,7 +984,7 @@ function planFactionBundles(
     // small colony stand up its FIRST extractor (whose jobs then pull migration) instead of deadlocking
     // on a full-staffing gate. Housing built this cycle adds no labour now — industry follows the
     // people already resident, never population that doesn't yet exist.
-    const remainingGeneral = site.generalSpace - industryLandUsed(site.buildings);
+    const remainingGeneral = site.industryLand - industryLandUsed(site.buildings);
     // Tier-0 extractors sit on dedicated deposit slots, not industry land (mirrors industryLandUsed);
     // housing sits on its own people-land budget, also excluded here.
     const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
@@ -1203,9 +1203,9 @@ export function planFactionProposals(
 /** A controlled system a faction could settle: its substrate + the developed seed source (from hop data). */
 export interface ColonyEstablishCandidate {
   systemId: string;
-  habitableSpace: number;
-  generalSpace: number;
-  slotCap: ResourceVector;
+  peopleLand: number;
+  industryLand: number;
+  depositCounts: ResourceVector;
   /** Nearest developed same-faction system — the conserved seed source (non-null; the provider drops sourceless). */
   sourceSystemId: string;
 }
@@ -1287,7 +1287,7 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
   return [...byGood].map(([goodId, rateDeficit]) => ({ goodId, rateDeficit }));
 }
 
-/** Seed + bundled-housing sizing for a colony at `habitableSpace` — the planner's whole-level rule,
+/** Seed + bundled-housing sizing for a colony at `peopleLand` — the planner's whole-level rule,
  *  shared with the player's direct-colony verb so both order identical projects. Null = the site
  *  can't hold one whole housing level (not viable).
  *
@@ -1311,17 +1311,17 @@ export function factionGoodDeficits(developed: BuildSystemState[]): GoodDeficit[
 export interface ColonySizing { seedPop: number; housingLevels: number; work: number }
 
 export function sizeColonyEstablish(
-  habitableSpace: number,
+  peopleLand: number,
   params: Pick<ColonyEstablishParams, "seedPop" | "establishWork">,
 ): ColonySizing | null {
   const housingCost = effectiveSpaceCost(HOUSING_TYPE);
-  const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, habitableSpace) / housingCost) : 0;
+  const maxHousingLevels = housingCost > 0 ? Math.floor(Math.max(0, peopleLand) / housingCost) : 0;
   const habitableCap = maxHousingLevels * POP_CENTRE_DENSITY;
   const seedPop = Math.min(params.seedPop, habitableCap);
   const housingLevels = Math.min(maxHousingLevels, Math.ceil(seedPop / POP_CENTRE_DENSITY));
   const work = params.establishWork + housingLevels * workCostPerLevel(HOUSING_TYPE);
   // `Number.isFinite` and not `< 1` alone: every comparison against NaN is false, so a NaN
-  // habitableSpace would slip past the viability guard and put NaN seedPop/housingLevels/work into a
+  // peopleLand would slip past the viability guard and put NaN seedPop/housingLevels/work into a
   // construction project and thence into a save, where JSON.stringify turns them into null. `work`
   // is checked on its own account rather than inferred from the other two — it also carries
   // `establishWork` straight from the caller.
@@ -1354,7 +1354,7 @@ export function assessColonyCandidates(
   if (candidates.length === 0) return [];
 
   const factionSystems: FactionSystemState[] = developed.map((s) => ({
-    buildings: s.buildings, habitableSpace: s.habitableSpace, slotCap: s.slotCap,
+    buildings: s.buildings, peopleLand: s.peopleLand, depositCounts: s.depositCounts,
   }));
   const missing = factionMissingResources(factionSystems);
   const sigma = factionSaturation(factionSystems);
@@ -1368,11 +1368,11 @@ export function assessColonyCandidates(
   const proposals: ColonyProposal[] = [];
   for (const c of candidates) {
     if (inFlight.has(c.systemId)) continue;                 // already being established
-    if (c.habitableSpace < params.habitableFloor) continue; // below one whole housing level of land
+    if (c.peopleLand < params.habitableFloor) continue; // below one whole housing level of land
 
     // Land-sized seed + bundled housing, on WHOLE housing levels so popCap ≥ seedPop exactly (no rounding
     // gap): seed capped to the whole-level habitable capacity; housing sized to house it, land-bounded.
-    const sizing = sizeColonyEstablish(c.habitableSpace, params);
+    const sizing = sizeColonyEstablish(c.peopleLand, params);
     if (sizing === null) continue; // no whole housing level → not viable, skip
     const { seedPop, housingLevels, work } = sizing;
 

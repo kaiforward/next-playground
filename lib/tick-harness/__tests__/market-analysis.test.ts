@@ -33,7 +33,7 @@ function producerSystem(id: string, control: TickSystem["control"] = "developed"
     governmentType: "federation", population: 1000, popCap: 2000, unrest: 0,
     buildings: { food: 2 }, buildingIdleCycles: {}, collapseDebt: 0,
     yields: unitResourceVector(), extractionEff: unitResourceVector(),
-    slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0,
   };
 }
 

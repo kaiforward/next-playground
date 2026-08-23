@@ -893,14 +893,14 @@ describe("summariseSpace", () => {
 
 describe("summariseDeposits", () => {
   it("summarises present deposits: slot cap, worked slots, effective yield + its band", () => {
-    const slotCap = makeResourceVector({ ore: 12, gas: 2 });
+    const depositCounts = makeResourceVector({ ore: 12, gas: 2 });
     const worked = makeResourceVector({ ore: 5, gas: 0 });
     const yields = makeResourceVector({ ore: 1.55, gas: 1 }); // ore 1.55 → "good"; gas unworked 1.0 → "average"
-    const deposits = summariseDeposits(slotCap, worked, yields);
-    // Only ore + gas have slots; sorted by slotCap descending → ore first.
+    const deposits = summariseDeposits(depositCounts, worked, yields);
+    // Only ore + gas have slots; sorted by depositCounts descending → ore first.
     expect(deposits.map((d) => d.resource)).toEqual(["ore", "gas"]);
     const ore = deposits[0];
-    expect(ore.slotCap).toBe(12);
+    expect(ore.depositCounts).toBe(12);
     expect(ore.worked).toBe(5);
     expect(ore.yieldMult).toBeCloseTo(1.55, 6);
     expect(ore.band).toBe("good"); // 1.55 ≤ 1.8

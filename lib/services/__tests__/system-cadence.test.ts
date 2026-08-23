@@ -67,9 +67,9 @@ function makeTickSystem(id: string, factionId: string | null): TickSystem {
     collapseDebt: 0,
     yields: emptyResourceVector(),
     extractionEff: unitResourceVector(),
-    slotCap: emptyResourceVector(),
-    generalSpace: 100,
-    habitableSpace: 50,
+    depositCounts: emptyResourceVector(),
+    industryLand: 100,
+    peopleLand: 50,
   };
 }
 

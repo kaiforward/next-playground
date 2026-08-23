@@ -13,9 +13,9 @@ export const SUBSTRATE_GEN = {
   ECON_RAW_MIXED: 0.3,        // below this raw share + high pop → tech
   /**
    * Footprint consumed by one deposit extraction slot. Kept as the transitional deposit→land
-   * conversion `availableSpace` and `industryPotential` (`lib/engine/development.ts`)
-   * use to keep authored deposit counts and authored land commensurable — the surface-partition
-   * geometry it once fed (SIZE_MIN/MAX, SPACE_PER_SIZE) died with `partitionBody`.
+   * conversion `industryPotential` (`lib/engine/development.ts`) uses to keep authored deposit
+   * counts and authored land commensurable — the surface-partition geometry it once fed
+   * (SIZE_MIN/MAX, SPACE_PER_SIZE) died with `partitionBody`.
    */
   DEPOSIT_SLOT_FOOTPRINT: 1.0,
   /** Population baseline floor per body. */

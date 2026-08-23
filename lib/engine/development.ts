@@ -39,7 +39,7 @@ export interface DevelopmentInput {
   /** Resident population — the "used" housing that drives popTerm and staffs industry. */
   population: number;
   /** Habitable land — a system with none cannot hold population (the pop term is dropped). */
-  habitableSpace: number;
+  peopleLand: number;
 }
 
 /**
@@ -58,9 +58,9 @@ export interface DevelopmentRefs {
 /** The static substrate a system contributes to the universe-wide reference maxima. */
 export interface DevelopmentRefSystem {
   /** Habitable land — drives the system's pop potential. */
-  habitableSpace: number;
+  peopleLand: number;
   /** Fungible general space — factory land (and, netted, housing land). */
-  generalSpace: number;
+  industryLand: number;
   /** Total worked-able deposit slots across all resources (Σ slot caps). */
   depositSlots: number;
 }
@@ -75,10 +75,10 @@ function softSaturate(value: number, ref: number): number {
  * The population a system's habitable land could ever house — its habitable space packed with housing
  * at full occupancy. The absolute pop ceiling the universe-wide `popRef` is a max over.
  */
-export function habitablePotentialPop(habitableSpace: number): number {
+export function habitablePotentialPop(peopleLand: number): number {
   const per = effectiveSpaceCost(HOUSING_TYPE);
   if (per <= 0) return 0;
-  return (Math.max(0, habitableSpace) / per) * POP_CENTRE_DENSITY;
+  return (Math.max(0, peopleLand) / per) * POP_CENTRE_DENSITY;
 }
 
 /**
@@ -86,8 +86,8 @@ export function habitablePotentialPop(habitableSpace: number): number {
  * space given to factories, in the same space units `systemDevelopment` measures `staffedIndustry` in.
  * The absolute industry ceiling the universe-wide `industryRef` is a max over.
  */
-export function industryPotential(depositSlots: number, generalSpace: number): number {
-  return Math.max(0, depositSlots) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT + Math.max(0, generalSpace);
+export function industryPotential(depositSlots: number, industryLand: number): number {
+  return Math.max(0, depositSlots) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT + Math.max(0, industryLand);
 }
 
 /**
@@ -100,8 +100,8 @@ export function developmentRefs(systems: DevelopmentRefSystem[]): DevelopmentRef
   let popRef = 0;
   let industryRef = 0;
   for (const s of systems) {
-    popRef = Math.max(popRef, habitablePotentialPop(s.habitableSpace));
-    industryRef = Math.max(industryRef, industryPotential(s.depositSlots, s.generalSpace));
+    popRef = Math.max(popRef, habitablePotentialPop(s.peopleLand));
+    industryRef = Math.max(industryRef, industryPotential(s.depositSlots, s.industryLand));
   }
   return { popRef, industryRef };
 }
@@ -121,7 +121,7 @@ function extractorLevels(buildings: Record<string, number>): number {
  * non-finite / negative inputs are clamped away so the result is always a finite [0,1).
  */
 export function systemDevelopment(input: DevelopmentInput, refs: DevelopmentRefs): number {
-  const { buildings, population, habitableSpace } = input;
+  const { buildings, population, peopleLand } = input;
 
   // Staffed industry (absolute): extraction sits on deposit slots, factories/academies/complexes on
   // industry land; both converted to commensurate space units. Housing never enters this term —
@@ -135,7 +135,7 @@ export function systemDevelopment(input: DevelopmentInput, refs: DevelopmentRefs
   const indTerm = softSaturate(staffedIndustry, refs.industryRef);
 
   // Barren: no habitable land ⇒ no population possible ⇒ industry is the whole reading.
-  if (habitableSpace <= 0) return indTerm;
+  if (peopleLand <= 0) return indTerm;
 
   const popTerm = softSaturate(population, refs.popRef);
   return DEVELOPMENT.POP_WEIGHT * popTerm + DEVELOPMENT.INDUSTRY_WEIGHT * indTerm;

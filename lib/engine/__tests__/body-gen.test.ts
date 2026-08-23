@@ -115,16 +115,16 @@ describe("substrateAggregates — Proves (1): tech-locked classes contribute zer
       bodyType: "volcanic_world",
       size: 1,
       peopleLand: 0,
-      industryLand: 999, // would inflate generalSpace if the lock were not respected
+      industryLand: 999, // would inflate industryLand if the lock were not respected
       counts: { gas: 5, minerals: 5, ore: 5, biomass: 0, arable: 0, water: 0, radioactive: 5 },
       quality: { gas: 1, minerals: 1, ore: 1, biomass: 0, arable: 0, water: 0, radioactive: 1 },
     };
     const agg = substrateAggregates([locked]);
-    expect(agg.generalSpace).toBe(0);
-    expect(agg.slotCap.gas).toBe(0);
-    expect(agg.slotCap.minerals).toBe(0);
-    expect(agg.slotCap.ore).toBe(0);
-    expect(agg.slotCap.radioactive).toBe(0);
+    expect(agg.industryLand).toBe(0);
+    expect(agg.depositCounts.gas).toBe(0);
+    expect(agg.depositCounts.minerals).toBe(0);
+    expect(agg.depositCounts.ore).toBe(0);
+    expect(agg.depositCounts.radioactive).toBe(0);
     // No counts reach the aggregate ⇒ the neutral default, not a weighted mean including the locked body.
     expect(agg.extractionEfficiency.gas).toBe(1);
     expect(agg.extractionEfficiency.radioactive).toBe(1);
@@ -138,7 +138,7 @@ describe("substrateAggregates — Proves (2): arid/tundra dark land", () => {
     const arid: GeneratedBody = {
       bodyType: "arid_world",
       size: 1,
-      peopleLand: 200, // authored, dark — below threshold, never reaches habitableSpace
+      peopleLand: 200, // authored, dark — below threshold, never reaches peopleLand
       industryLand: 100,
       counts: { gas: 0, minerals: 3, ore: 3, biomass: 0, arable: 8, water: 0, radioactive: 3 },
       quality: { gas: 0, minerals: 1, ore: 1, biomass: 0, arable: 1, water: 0, radioactive: 1 },
@@ -148,10 +148,10 @@ describe("substrateAggregates — Proves (2): arid/tundra dark land", () => {
     expect(arid.peopleLand).toBe(200);
 
     const agg = substrateAggregates([arid]);
-    expect(agg.habitableSpace).toBe(0); // below threshold ⇒ never reaches the system aggregate
-    expect(agg.generalSpace).toBe(100); // industry land is unconditional on score
-    expect(agg.slotCap.minerals).toBe(3);
-    expect(agg.slotCap.arable).toBe(8);
+    expect(agg.peopleLand).toBe(0); // below threshold ⇒ never reaches the system aggregate
+    expect(agg.industryLand).toBe(100); // industry land is unconditional on score
+    expect(agg.depositCounts.minerals).toBe(3);
+    expect(agg.depositCounts.arable).toBe(8);
   });
 });
 
@@ -186,18 +186,6 @@ describe("substrateAggregates — Proves (4): extractionEfficiency defaults to 1
     // (6*1.0 + 2*0.6) / 8 = 0.9
     const agg = substrateAggregates([a, b]);
     expect(agg.extractionEfficiency.water).toBeCloseTo((6 * 1.0 + 2 * 0.6) / 8, 10);
-  });
-});
-
-describe("substrateAggregates — availableSpace transitional identity", () => {
-  it("equals Σ(peopleLand + industryLand + Σcounts × DEPOSIT_SLOT_FOOTPRINT) over ALL bodies", () => {
-    for (const s of sample(100)) {
-      const expected = s.bodies.reduce((sum, b) => {
-        const countFootprint = RESOURCE_TYPES.reduce((t, r) => t + b.counts[r], 0);
-        return sum + b.peopleLand + b.industryLand + countFootprint; // DEPOSIT_SLOT_FOOTPRINT === 1.0
-      }, 0);
-      expect(s.availableSpace).toBeCloseTo(expected, 6);
-    }
   });
 });
 

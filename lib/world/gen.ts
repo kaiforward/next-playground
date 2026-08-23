@@ -8,8 +8,7 @@
 import { createSystemMarkets } from "@/lib/world/markets";
 import { generateUniverse, type GenParams } from "@/lib/engine/universe-gen";
 import { deriveDominantEconomy, type PlayerFactionInput } from "@/lib/engine/faction-gen";
-import { slotColumns, qualColumns, yieldColumns, effColumns } from "@/lib/engine/resources";
-import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
+import { countColumns, qualColumns, yieldColumns, effColumns } from "@/lib/engine/resources";
 import { genConfigForSystemCount, REGION_NAMES } from "@/lib/constants/universe-gen";
 import { DEFAULT_TAX_LEVEL } from "@/lib/constants/treasury";
 import { DEFAULT_ALERT_CATEGORIES, DEFAULT_TRACKER_SECTIONS } from "@/lib/constants/attention";
@@ -138,10 +137,9 @@ export function generateWorld(options: GenerateWorldOptions): World {
     popCap: s.popCap,
     unrest: 0,
     bodyDanger: s.bodyDanger,
-    availableSpace: s.availableSpace,
-    generalSpace: s.generalSpace,
-    habitableSpace: s.habitableSpace,
-    ...slotColumns(s.slotCap),
+    industryLand: s.industryLand,
+    peopleLand: s.peopleLand,
+    ...countColumns(s.depositCounts),
     ...yieldColumns(s.yieldMult),
     ...effColumns(s.extractionEfficiency),
   }));
@@ -152,11 +150,10 @@ export function generateWorld(options: GenerateWorldOptions): World {
       id: mintId(minter, "body"),
       systemId: systemIds[i],
       bodyType: b.bodyType,
-      habitable: BODY_ARCHETYPES[b.bodyType].scores.default >= HABITABILITY_THRESHOLD,
       size: b.size,
-      generalSpace: b.industryLand,
-      habitableSpace: b.peopleLand,
-      ...slotColumns(b.counts),
+      industryLand: b.industryLand,
+      peopleLand: b.peopleLand,
+      ...countColumns(b.counts),
       ...qualColumns(b.quality),
     })),
   );

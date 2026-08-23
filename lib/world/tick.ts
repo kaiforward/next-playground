@@ -51,7 +51,7 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
-import { slotCapOf, yieldsOf, effOf, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { depositCountsOf, yieldsOf, effOf, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -233,9 +233,9 @@ export function toTickSystems(world: World): TickSystem[] {
       colonyOpportunity: s.colonyOpportunity,
       yields: yieldsOf(s),
       extractionEff: effOf(s),
-      slotCap: slotCapOf(s),
-      generalSpace: s.generalSpace,
-      habitableSpace: s.habitableSpace,
+      depositCounts: depositCountsOf(s),
+      industryLand: s.industryLand,
+      peopleLand: s.peopleLand,
     };
   });
 }
@@ -373,9 +373,9 @@ function buildBuildRows(
     buildings: s.buildings,
     yields: s.yields,
     extractionEff: s.extractionEff,
-    slotCap: s.slotCap,
-    generalSpace: s.generalSpace,
-    habitableSpace: s.habitableSpace,
+    depositCounts: s.depositCounts,
+    industryLand: s.industryLand,
+    peopleLand: s.peopleLand,
     markets: marketsBySystem.get(s.id) ?? [],
   }));
 }
@@ -666,7 +666,7 @@ export function applyColonyOpportunityUpdates(
 /** Count of resources this system has any deposit slot for — a claim/develop score input. */
 function countResourceDiversity(s: TickSystem): number {
   let n = 0;
-  for (const r of RESOURCE_TYPES) if (s.slotCap[r] > 0) n++;
+  for (const r of RESOURCE_TYPES) if (s.depositCounts[r] > 0) n++;
   return n;
 }
 
@@ -1496,7 +1496,7 @@ export async function runWorldTick(
           if (!cand) continue;
           candidates.push({
             systemId: candidateId, minHops,
-            habitableSpace: cand.habitableSpace,
+            peopleLand: cand.peopleLand,
             resourceDiversity: countResourceDiversity(cand),
           });
         }
@@ -1528,9 +1528,9 @@ export async function runWorldTick(
           if (sourceSystemId === null) continue; // no developed seed source reachable → cannot establish
           candidates.push({
             systemId: s.id,
-            habitableSpace: s.habitableSpace,
-            generalSpace: s.generalSpace,
-            slotCap: s.slotCap,
+            peopleLand: s.peopleLand,
+            industryLand: s.industryLand,
+            depositCounts: s.depositCounts,
             sourceSystemId,
           });
         }

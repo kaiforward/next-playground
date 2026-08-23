@@ -90,11 +90,11 @@ export interface TickSystem {
    *  bodies' extractionModifier; feeds tier-0 production alongside `yields` (never folded into it). */
   extractionEff: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */
-  slotCap: ResourceVector;
+  depositCounts: ResourceVector;
   /** Body-derived fungible build space — tier-1+ factories + housing draw here. */
-  generalSpace: number;
+  industryLand: number;
   /** Habitable subset of build space — additionally caps housing. */
-  habitableSpace: number;
+  peopleLand: number;
 }
 
 export interface TickConnection {

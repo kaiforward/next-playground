@@ -956,8 +956,8 @@ export function extractorsByResource(buildings: Record<string, number>): Resourc
 /** Per-resource deposit-fill summary — the functional extraction view for one system. */
 export interface SystemDepositSummary {
   resource: ResourceType;
-  /** Total extractor slots across all bodies (slotCap). */
-  slotCap: number;
+  /** Total extractor slots across all bodies (depositCounts). */
+  depositCounts: number;
   /** Slots worked by seeded extractors. */
   worked: number;
   /** Effective yield multiplier the worked slots deliver. 1.0 when none worked. */
@@ -973,19 +973,19 @@ export interface SystemDepositSummary {
  * ground" — is surfaced as per-body flavour on the astrography panel, not here.)
  */
 export function summariseDeposits(
-  slotCap: ResourceVector,
+  depositCounts: ResourceVector,
   worked: ResourceVector,
   yields: ResourceVector,
 ): SystemDepositSummary[] {
-  return RESOURCE_TYPES.filter((r) => slotCap[r] > 0)
+  return RESOURCE_TYPES.filter((r) => depositCounts[r] > 0)
     .map((r) => ({
       resource: r,
-      slotCap: slotCap[r],
+      depositCounts: depositCounts[r],
       worked: worked[r],
       yieldMult: yields[r],
       band: bandForMultiplier(yields[r]),
     }))
-    .sort((a, b) => b.slotCap - a.slotCap);
+    .sort((a, b) => b.depositCounts - a.depositCounts);
 }
 
 /** One budget's authored total vs. how much of it is currently built into. */

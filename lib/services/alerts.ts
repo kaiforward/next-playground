@@ -42,7 +42,7 @@ import { CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
 import { DEFAULT_ALERT_CATEGORIES } from "@/lib/constants/attention";
 import type { WorldSystem, World } from "@/lib/world/types";
 import { buildingsBySystem, marketsBySystem, systemNameById } from "@/lib/services/world-index";
-import { slotCapOf } from "@/lib/engine/resources";
+import { depositCountsOf } from "@/lib/engine/resources";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import {
   habitableHousingHeadroom, queuedBuildLevelsBySystem,
@@ -167,7 +167,7 @@ function buildOpportunitySortKey(goodId: string, score: number): number {
  * `SystemIndustryReadoutResult.buildings`, which is deliberately handed out uncopied precisely
  * because none of its readers write).
  *
- * `goods: []` and a real `slotCap` (unused by `habitableHousingHeadroom`, but not fabricated either)
+ * `goods: []` and a real `depositCounts` (unused by `habitableHousingHeadroom`, but not fabricated either)
  * fill out the rest of the interface honestly.
  */
 function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number>): boolean {
@@ -181,9 +181,9 @@ function hasNoHousingHeadroom(system: WorldSystem, queued: Record<string, number
     control: system.control,
     population: system.population,
     buildings,
-    slotCap: slotCapOf(system),
-    generalSpace: system.generalSpace,
-    habitableSpace: system.habitableSpace,
+    depositCounts: depositCountsOf(system),
+    industryLand: system.industryLand,
+    peopleLand: system.peopleLand,
     goods: [],
   };
   return habitableHousingHeadroom(state) < 1;

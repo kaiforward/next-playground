@@ -108,17 +108,18 @@ describe("getSystemSubstrate", () => {
 
     const bodyView = data.bodies.find((b) => b.id === body.id)!;
     expect(bodyView.archetypeName).toBe(BODY_ARCHETYPES[body.bodyType].name);
-    expect(bodyView.habitable).toBe(body.habitable);
+    expect(bodyView.score).toBe(BODY_ARCHETYPES[body.bodyType].scores.default);
+    expect(bodyView.locked).toBe(BODY_ARCHETYPES[body.bodyType].techLocked);
     expect(bodyView.size).toBe(body.size);
 
     const expectedSlots: ResourceVector = {
-      gas: body.slotGas,
-      minerals: body.slotMinerals,
-      ore: body.slotOre,
-      biomass: body.slotBiomass,
-      arable: body.slotArable,
-      water: body.slotWater,
-      radioactive: body.slotRadioactive,
+      gas: body.countGas,
+      minerals: body.countMinerals,
+      ore: body.countOre,
+      biomass: body.countBiomass,
+      arable: body.countArable,
+      water: body.countWater,
+      radioactive: body.countRadioactive,
     };
     const expectedQuality: ResourceVector = {
       gas: body.qualGas,

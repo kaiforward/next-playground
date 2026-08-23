@@ -181,7 +181,7 @@ function DepositTooltipBody({ row, contributors }: { row: DepositRow; contributo
     <div className="space-y-1">
       <p className="font-display text-[12px] font-semibold capitalize text-text-primary">{row.resource}</p>
       <p className="font-mono text-[10px] text-text-tertiary">
-        yield ×{row.yieldMult.toFixed(2)} · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.slotCap} slots built · {row.staffed.toFixed(1)} staffed
+        yield ×{row.yieldMult.toFixed(2)} · {QUALITY_BAND_LABEL[row.band]} · {row.built}/{row.depositCounts} slots built · {row.staffed.toFixed(1)} staffed
       </p>
       {contributors.length > 0 && (
         <div className="space-y-0.5 border-t border-border/60 pt-1.5">
@@ -465,7 +465,7 @@ function DepositTable({
                   <ProblemLine items={items} popNeed={rowPopNeed} />
                 </td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary"><Staffed staffed={row.staffed} total={row.built} health={row.health} /></td>
-                <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.slotCap)}</td>
+                <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-secondary">{Math.round(row.built)}/{Math.round(row.depositCounts)}</td>
                 <td className="px-1.5 py-1 align-top text-right"><YieldTag mult={row.yieldMult} band={row.band} /></td>
                 <td className="px-1.5 py-1 align-top text-right font-mono text-[12px] text-text-primary">{row.output > 0 ? formatUnitsShort(row.output) : "—"}</td>
                 {canOrder && (
@@ -936,7 +936,7 @@ export function IndustryPanel({ systemId }: { systemId: string }) {
     extractors.filter((b) => BUILDING_TYPES[b.buildingType]?.resource === resource);
 
   const depStaffed = depRows.reduce((s, r) => s + r.staffed, 0);
-  const depSlots = depRows.reduce((s, r) => s + r.slotCap, 0);
+  const depSlots = depRows.reduce((s, r) => s + r.depositCounts, 0);
   const land = generalLand(space);
   const generalUsed = land.housing + land.factory;
   const generalFree = land.habitableFree + land.factoryFree;

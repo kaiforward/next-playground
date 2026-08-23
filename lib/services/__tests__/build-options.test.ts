@@ -34,7 +34,7 @@ describe("getSystemBuildOptions", () => {
     const home = w.systems.find((s) => s.id === f.homeworldId)!;
     // Deterministically exhaust ore deposit slots regardless of what world-gen rolled, so there's
     // always a zero-maxLevels / null-etaCycles option to assert against.
-    home.slotOre = 0;
+    home.countOre = 0;
 
     const data = getSystemBuildOptions(f.homeworldId);
     expect(data.mode).toBe("build");
@@ -102,7 +102,7 @@ describe("getSystemBuildOptions", () => {
     const w = getWorld();
     const f = w.factions.find((x) => x.id === w.player?.controlledFactionId)!;
     const home = w.systems.find((s) => s.id === f.homeworldId)!;
-    home.slotOre = 100; // headroom so maxLevels tracks the committed subtraction 1:1, not space-capped
+    home.countOre = 100; // headroom so maxLevels tracks the committed subtraction 1:1, not space-capped
     const otherSystemId = w.systems.find((s) => s.id !== home.id)!.id;
 
     const baseline = getSystemBuildOptions(home.id);
@@ -144,7 +144,7 @@ describe("getSystemBuildOptions", () => {
     const w = getWorld();
     const f = w.factions.find((x) => x.id === w.player?.controlledFactionId)!;
     const home = w.systems.find((s) => s.id === f.homeworldId)!;
-    home.habitableSpace = 200; // plenty of room so housing maxLevels tracks existing housing 1:1
+    home.peopleLand = 200; // plenty of room so housing maxLevels tracks existing housing 1:1
     setWorld({
       ...getWorld(),
       buildings: [

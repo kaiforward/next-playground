@@ -219,7 +219,7 @@ all — the keystone-deposit case colonisation exists to grab early.
 production and demand, compounding independently of any current deficit:
 
 ```
-L(c) = LAND_PREMIUM · habitableSpace  +  LAND_GENERAL_WEIGHT · generalSpace  +  LAND_DEPOSIT_WEIGHT · depositRichness
+L(c) = LAND_PREMIUM · peopleLand  +  LAND_GENERAL_WEIGHT · industryLand  +  LAND_DEPOSIT_WEIGHT · depositRichness
 ```
 
 How much of `L` is live is gated by **territory saturation** `σ ∈ [0,1]` — the fraction of the faction's

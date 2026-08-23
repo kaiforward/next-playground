@@ -250,7 +250,11 @@ export interface BodyView {
   id: string;
   bodyType: BodyArchetypeId;
   archetypeName: string;
-  habitable: boolean;
+  /** This body's default-pop habitability score — the archetype's static rating, not clamped to
+   *  a band here (band presentation is a later task). */
+  score: number;
+  /** True when this body's archetype is tech-locked (contributes no land or counts yet). */
+  locked: boolean;
   size: number;
   /** Per-resource deposit slots on this body (0 = no deposit). */
   slots: ResourceVector;
@@ -267,10 +271,8 @@ export type SystemSubstrateData =
   | {
       visibility: "visible";
       sunClass: SunClass;
-      /** Total available surface space across all bodies (SPACE_PER_SIZE × Σ size). */
-      availableSpace: number;
       /** Habitable surface across all bodies. */
-      habitableSpace: number;
+      peopleLand: number;
       bodies: BodyView[];
     }
   | { visibility: "unknown" };

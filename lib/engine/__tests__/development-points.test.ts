@@ -133,7 +133,7 @@ describe("developmentPoints — map-only raw tier-weighted score", () => {
  * the fields it exercises.
  */
 function potentialInput(partial: Partial<DevelopmentPotentialInput>): DevelopmentPotentialInput {
-  return { habitableSpace: 0, depositSlots: 0, generalSpace: 0, ...partial };
+  return { peopleLand: 0, depositSlots: 0, industryLand: 0, ...partial };
 }
 
 describe("developmentPotential — full-build-out dev-points ceiling", () => {
@@ -143,7 +143,7 @@ describe("developmentPotential — full-build-out dev-points ceiling", () => {
     const population = 300;
     const currentPoints = developmentPoints(pointsInput({ population, buildings: { ore: 10 } }));
     const potential = developmentPotential(
-      potentialInput({ habitableSpace: 400, depositSlots: 20, generalSpace: 100 }),
+      potentialInput({ peopleLand: 400, depositSlots: 20, industryLand: 100 }),
     );
     expect(potential).toBeGreaterThan(currentPoints);
   });
@@ -152,30 +152,30 @@ describe("developmentPotential — full-build-out dev-points ceiling", () => {
     expect(developmentPotential(potentialInput({}))).toBe(0);
   });
 
-  it("rises with habitableSpace (monotonic)", () => {
-    const base = { depositSlots: 5, generalSpace: 10 };
-    const small = developmentPotential(potentialInput({ ...base, habitableSpace: 100 }));
-    const large = developmentPotential(potentialInput({ ...base, habitableSpace: 200 }));
+  it("rises with peopleLand (monotonic)", () => {
+    const base = { depositSlots: 5, industryLand: 10 };
+    const small = developmentPotential(potentialInput({ ...base, peopleLand: 100 }));
+    const large = developmentPotential(potentialInput({ ...base, peopleLand: 200 }));
     expect(large).toBeGreaterThan(small);
   });
 
   it("rises with depositSlots (monotonic)", () => {
-    const base = { habitableSpace: 100, generalSpace: 10 };
+    const base = { peopleLand: 100, industryLand: 10 };
     const few = developmentPotential(potentialInput({ ...base, depositSlots: 2 }));
     const many = developmentPotential(potentialInput({ ...base, depositSlots: 20 }));
     expect(many).toBeGreaterThan(few);
   });
 
-  it("rises with generalSpace (monotonic)", () => {
-    const base = { habitableSpace: 100, depositSlots: 5 };
-    const small = developmentPotential(potentialInput({ ...base, generalSpace: 5 }));
-    const large = developmentPotential(potentialInput({ ...base, generalSpace: 50 }));
+  it("rises with industryLand (monotonic)", () => {
+    const base = { peopleLand: 100, depositSlots: 5 };
+    const small = developmentPotential(potentialInput({ ...base, industryLand: 5 }));
+    const large = developmentPotential(potentialInput({ ...base, industryLand: 50 }));
     expect(large).toBeGreaterThan(small);
   });
 
   it("stays finite and non-negative for a huge, fully substrate-rich system", () => {
     const potential = developmentPotential(
-      potentialInput({ habitableSpace: 1_000_000, depositSlots: 10_000, generalSpace: 100_000 }),
+      potentialInput({ peopleLand: 1_000_000, depositSlots: 10_000, industryLand: 100_000 }),
     );
     expect(Number.isFinite(potential)).toBe(true);
     expect(potential).toBeGreaterThanOrEqual(0);
@@ -183,7 +183,7 @@ describe("developmentPotential — full-build-out dev-points ceiling", () => {
 
   it("clamps negative/degenerate inputs to 0 rather than going negative or non-finite", () => {
     const potential = developmentPotential(
-      potentialInput({ habitableSpace: -100, depositSlots: -5, generalSpace: -10 }),
+      potentialInput({ peopleLand: -100, depositSlots: -5, industryLand: -10 }),
     );
     expect(Number.isFinite(potential)).toBe(true);
     expect(potential).toBeGreaterThanOrEqual(0);

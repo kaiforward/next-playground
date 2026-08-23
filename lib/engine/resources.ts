@@ -45,9 +45,9 @@ export function makeResourceVector(partial: Partial<ResourceVector>): ResourceVe
  * whose `Record<string, number>` parameter only accepts a type with an index signature (implicit
  * for an alias, absent for an interface).
  */
-export type SlotColumns = {
-  slotGas: number; slotMinerals: number; slotOre: number; slotBiomass: number;
-  slotArable: number; slotWater: number; slotRadioactive: number;
+export type CountColumns = {
+  countGas: number; countMinerals: number; countOre: number; countBiomass: number;
+  countArable: number; countWater: number; countRadioactive: number;
 };
 
 export type QualColumns = {
@@ -70,11 +70,11 @@ export type EffColumns = {
   effArable: number; effWater: number; effRadioactive: number;
 };
 
-/** Spread a vector onto the SystemBody deposit-slot columns (slot*). */
-export function slotColumns(v: ResourceVector): SlotColumns {
+/** Spread a vector onto the SystemBody deposit-slot columns (count*). */
+export function countColumns(v: ResourceVector): CountColumns {
   return {
-    slotGas: v.gas, slotMinerals: v.minerals, slotOre: v.ore, slotBiomass: v.biomass,
-    slotArable: v.arable, slotWater: v.water, slotRadioactive: v.radioactive,
+    countGas: v.gas, countMinerals: v.minerals, countOre: v.ore, countBiomass: v.biomass,
+    countArable: v.arable, countWater: v.water, countRadioactive: v.radioactive,
   };
 }
 
@@ -132,7 +132,7 @@ const TRACE_FRACTION = 0.05;
  * ResourceVector.
  *
  * Supported prefixes:
- *   "slot"  — reads slotGas…slotRadioactive (deposit-slot counts)
+ *   "count" — reads countGas…countRadioactive (deposit-slot counts)
  *   "qual"  — reads qualGas…qualRadioactive (quality-band values)
  *   "yield" — reads yieldGas…yieldRadioactive (yield multipliers)
  *   "eff"   — reads effGas…effRadioactive (extraction-efficiency multipliers)
@@ -142,7 +142,7 @@ const TRACE_FRACTION = 0.05;
  */
 export function resourceVectorFromColumns(
   source: Record<string, number>,
-  prefix: "slot" | "qual" | "yield" | "eff",
+  prefix: "count" | "qual" | "yield" | "eff",
 ): ResourceVector {
   const fallback = prefix === "yield" || prefix === "eff" ? 1 : 0;
   const v = emptyResourceVector();
@@ -161,8 +161,8 @@ export function resourceVectorFromColumns(
  * an empty deposit (or a neutral ×1 yield) forever: the reader iterates the types, so it would pick
  * the new one up, but a hand-written bag never carries its column and nothing errors.
  */
-export function slotCapOf(row: SlotColumns): ResourceVector {
-  return resourceVectorFromColumns(row, "slot");
+export function depositCountsOf(row: CountColumns): ResourceVector {
+  return resourceVectorFromColumns(row, "count");
 }
 
 /** Read a row's quality-band columns as a ResourceVector. */

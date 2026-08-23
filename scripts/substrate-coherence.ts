@@ -28,7 +28,7 @@ for (const [k, v] of [...econ].sort((a, b) => b[1] - a[1])) {
   console.log(`  ${k.padEnd(12)} ${v} (${((v / u.systems.length) * 100).toFixed(1)}%)`);
 }
 
-const galaxy = sumResourceVectors(u.systems.map((s) => s.slotCap));
+const galaxy = sumResourceVectors(u.systems.map((s) => s.depositCounts));
 const totalAll = RESOURCE_TYPES.reduce((sum, t) => sum + galaxy[t], 0);
 console.log("\nGalaxy slot-cap mix:");
 for (const t of RESOURCE_TYPES) {
@@ -38,7 +38,7 @@ for (const t of RESOURCE_TYPES) {
 let worst = { region: -1, arableShare: Infinity };
 for (let ri = 0; ri < u.regions.length; ri++) {
   const agg = sumResourceVectors(
-    u.systems.filter((s) => s.regionIndex === ri).map((s) => s.slotCap),
+    u.systems.filter((s) => s.regionIndex === ri).map((s) => s.depositCounts),
   );
   const tot = RESOURCE_TYPES.reduce((sum, t) => sum + agg[t], 0);
   const share = tot > 0 ? agg.arable / tot : 0;
@@ -55,7 +55,7 @@ console.log(
 
 // ── NEW: Available-space coherence reports ────────────────────────
 
-// 1. Space distribution: min / median / max / mean of availableSpace, generalSpace, habitableSpace
+// 1. Space distribution: min / median / max / mean of industryLand, peopleLand
 function stats(values: number[]): { min: number; median: number; max: number; mean: number } {
   const sorted = [...values].sort((a, b) => a - b);
   const n = sorted.length;
@@ -69,9 +69,8 @@ function stats(values: number[]): { min: number; median: number; max: number; me
   };
 }
 
-const availStats = stats(u.systems.map((s) => s.availableSpace));
-const genStats   = stats(u.systems.map((s) => s.generalSpace));
-const habStats   = stats(u.systems.map((s) => s.habitableSpace));
+const genStats   = stats(u.systems.map((s) => s.industryLand));
+const habStats   = stats(u.systems.map((s) => s.peopleLand));
 
 console.log("\nSpace distribution (per system):");
 console.log("  " + "metric".padEnd(16) + "min".padStart(10) + "median".padStart(10) + "mean".padStart(10) + "max".padStart(10));
@@ -82,12 +81,11 @@ function fmtRow(label: string, s: ReturnType<typeof stats>): string {
     + s.mean.toFixed(1).padStart(10)
     + s.max.toFixed(1).padStart(10);
 }
-console.log(fmtRow("availableSpace", availStats));
-console.log(fmtRow("generalSpace", genStats));
-console.log(fmtRow("habitableSpace", habStats));
+console.log(fmtRow("industryLand", genStats));
+console.log(fmtRow("peopleLand", habStats));
 
 // 2. % systems with zero habitable space
-const zeroHab = u.systems.filter((s) => s.habitableSpace < 1e-9).length;
+const zeroHab = u.systems.filter((s) => s.peopleLand < 1e-9).length;
 console.log(
   `\n% systems with zero habitable space: ${zeroHab} / ${u.systems.length} (${((zeroHab / u.systems.length) * 100).toFixed(1)}%)`,
 );
@@ -104,7 +102,7 @@ for (const r of RESOURCE_TYPES) {
     if (sysList.length === 0) {
       row += "n/a".padStart(13);
     } else {
-      const mean = sysList.reduce((s, sys) => s + sys.slotCap[r], 0) / sysList.length;
+      const mean = sysList.reduce((s, sys) => s + sys.depositCounts[r], 0) / sysList.length;
       row += mean.toFixed(2).padStart(13);
     }
   }

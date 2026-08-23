@@ -11,7 +11,7 @@ export interface ClaimCandidate {
   systemId: string;
   /** Fewest jumps from any of the faction's owned systems (≥ 1 — the candidate is unclaimed). */
   minHops: number;
-  habitableSpace: number;
+  peopleLand: number;
   /** Count of resources this system has any deposit slot for. */
   resourceDiversity: number;
 }
@@ -45,7 +45,7 @@ export interface ExpansionParams {
 /** Absolute claim desirability: weighted substrate × a distance discount. Comparable across factions. */
 export function scoreClaimCandidate(c: ClaimCandidate, w: ExpansionScoreWeights): number {
   const substrate =
-    w.habitable * Math.max(0, c.habitableSpace) +
+    w.habitable * Math.max(0, c.peopleLand) +
     w.diversity * Math.max(0, c.resourceDiversity);
   const proximity = 1 / (1 + w.proximity * Math.max(0, c.minHops));
   return substrate * proximity;

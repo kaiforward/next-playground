@@ -1,6 +1,6 @@
 /**
  * Economy-type classifier — maps a system's effective deposit potential
- * (slotCap[r] × yieldMult[r], the extractor capacity weighted by deposit
+ * (depositCounts[r] × yieldMult[r], the extractor capacity weighted by deposit
  * quality) + population to one of the six `EconomyType` labels.
  *
  * Display-only: it drives UI economy badges and `Region.dominantEconomy`.
@@ -16,13 +16,13 @@ function clamp01(n: number): number {
 }
 
 export function deriveEconomyTypeLabel(
-  slotCap: ResourceVector,
+  depositCounts: ResourceVector,
   yieldMult: ResourceVector,
   population: number,
 ): EconomyType {
   // Effective deposit potential: extractor capacity weighted by deposit quality.
   const effective = emptyResourceVector();
-  for (const type of RESOURCE_TYPES) effective[type] = slotCap[type] * yieldMult[type];
+  for (const type of RESOURCE_TYPES) effective[type] = depositCounts[type] * yieldMult[type];
 
   const total = RESOURCE_TYPES.reduce((sum, type) => sum + effective[type], 0);
   if (total <= 0) return "extraction";

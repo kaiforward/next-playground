@@ -2,6 +2,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { bodyDepositFeatures } from "@/lib/utils/substrate";
 import { QUALITY_BAND_DOT, QUALITY_BAND_TEXT } from "@/lib/constants/ui";
+import { HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 import type { BodyView } from "@/lib/types/api";
 
 /**
@@ -12,13 +13,14 @@ import type { BodyView } from "@/lib/types/api";
  */
 export function BodyCard({ body }: { body: BodyView }) {
   const features = bodyDepositFeatures(body.slots, body.quality);
+  const habitable = !body.locked && body.score >= HABITABILITY_THRESHOLD;
   return (
-    <Card padding="sm" className={body.habitable ? "border-l-status-green" : undefined}>
+    <Card padding="sm" className={habitable ? "border-l-status-green" : undefined}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <h4 className="font-display text-sm font-semibold text-text-primary">
           {body.archetypeName}
         </h4>
-        {body.habitable && <Badge color="green">Habitable</Badge>}
+        {habitable && <Badge color="green">Habitable</Badge>}
       </div>
       <div className="flex gap-4 text-xs text-text-tertiary">
         <span>

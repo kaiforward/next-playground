@@ -40,7 +40,7 @@ function playerFactionId(): string {
  * the `controlled` tier with the space asked for. Mutates the stored world in place, so callers
  * must already have set it.
  */
-export function controlledNeighbour(habitableSpace: number): { target: WorldSystem; home: WorldSystem } {
+export function controlledNeighbour(peopleLand: number): { target: WorldSystem; home: WorldSystem } {
   const world = getWorld();
   const home = playerHome();
   const conn = world.connections.find((c) => c.fromId === home.id || c.toId === home.id)!;
@@ -48,6 +48,6 @@ export function controlledNeighbour(habitableSpace: number): { target: WorldSyst
   const target = world.systems.find((s) => s.id === otherId)!;
   target.factionId = playerFactionId();
   target.control = "controlled";
-  target.habitableSpace = habitableSpace;
+  target.peopleLand = peopleLand;
   return { target, home };
 }

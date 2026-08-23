@@ -86,7 +86,7 @@ export function planCentreProposal(
   let site: { systemId: string; spare: number; space: number } | null = null;
   for (const s of systems) {
     if (!isEconomicallyActive(s.control)) continue;
-    const space = s.generalSpace - industryLandUsed(s.buildings) - (committedSpace.get(s.systemId) ?? 0);
+    const space = s.industryLand - industryLandUsed(s.buildings) - (committedSpace.get(s.systemId) ?? 0);
     if (space < footprint) continue;
     const spare = Math.max(0, s.population - labourDemand(s.buildings));
     if (

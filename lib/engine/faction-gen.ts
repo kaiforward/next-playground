@@ -155,9 +155,9 @@ export function assignHomeworldOwnership(
 // ── Homeworld placement (spaced + seed-biased) ──────────────────
 
 /** Count of resources this system has any deposit slot for — the "resource diversity" term. */
-function homeworldResourceDiversity(slotCap: ResourceVector): number {
+function homeworldResourceDiversity(depositCounts: ResourceVector): number {
   let n = 0;
-  for (const r of RESOURCE_TYPES) if (slotCap[r] > 0) n++;
+  for (const r of RESOURCE_TYPES) if (depositCounts[r] > 0) n++;
   return n;
 }
 
@@ -181,7 +181,7 @@ export function placeHomeworlds(systems: GeneratedSystem[], count: number, mapSi
 
   let maxHab = 1, maxDanger = 1;
   for (const s of systems) {
-    if (s.habitableSpace > maxHab) maxHab = s.habitableSpace;
+    if (s.peopleLand > maxHab) maxHab = s.peopleLand;
     if (s.bodyDanger > maxDanger) maxDanger = s.bodyDanger;
   }
 
@@ -192,8 +192,8 @@ export function placeHomeworlds(systems: GeneratedSystem[], count: number, mapSi
       x: s.x,
       y: s.y,
       score:
-        w.habitable * (s.habitableSpace / maxHab) +
-        w.diversity * (homeworldResourceDiversity(s.slotCap) / RESOURCE_TYPES.length) -
+        w.habitable * (s.peopleLand / maxHab) +
+        w.diversity * (homeworldResourceDiversity(s.depositCounts) / RESOURCE_TYPES.length) -
         w.danger * (s.bodyDanger / maxDanger),
     }))
     .sort((a, b) => b.score - a.score || a.idx - b.idx);

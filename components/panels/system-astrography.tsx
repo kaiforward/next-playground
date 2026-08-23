@@ -18,8 +18,7 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
     );
   }
 
-  const { sunClass, availableSpace, habitableSpace, bodies } = substrate;
-  const habitablePct = availableSpace > 0 ? (habitableSpace / availableSpace) * 100 : 0;
+  const { sunClass, peopleLand, bodies } = substrate;
 
   return (
     <div className="space-y-6">
@@ -34,10 +33,8 @@ export function SystemAstrography({ systemId }: { systemId: string }) {
             <p className="mt-0.5 text-xs text-text-tertiary">
               <span className="font-mono text-text-secondary">{bodies.length}</span>{" "}
               {bodies.length === 1 ? "body" : "bodies"} ·{" "}
-              <span className="font-mono text-text-secondary">{availableSpace.toFixed(0)}</span>{" "}
-              surface units ·{" "}
-              <span className="font-mono text-text-secondary">{habitablePct.toFixed(0)}%</span>{" "}
-              habitable
+              <span className="font-mono text-text-secondary">{peopleLand.toFixed(0)}</span>{" "}
+              people land
             </p>
           </div>
         </div>

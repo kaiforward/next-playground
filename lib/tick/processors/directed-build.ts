@@ -278,9 +278,9 @@ function toBuildState(row: SystemBuildRow): BuildSystemState {
     control: row.control,
     population: row.population,
     buildings: row.buildings,
-    slotCap: row.slotCap,
-    generalSpace: row.generalSpace,
-    habitableSpace: row.habitableSpace,
+    depositCounts: row.depositCounts,
+    industryLand: row.industryLand,
+    peopleLand: row.peopleLand,
     goods: toGoodMarketStates(row),
   };
 }

@@ -13,7 +13,7 @@ function sys(id: string, over: Partial<TickSystem>): TickSystem {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "frontier", population: 100, popCap: 200,
     unrest: 0, buildings: { [HOUSING_TYPE]: 10, ore: 10 }, buildingIdleCycles: {}, collapseDebt: 0, yields: unitResourceVector(),
-    extractionEff: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    extractionEff: unitResourceVector(), depositCounts: emptyResourceVector(), industryLand: 0, peopleLand: 0,
     ...over,
   };
 }

@@ -27,11 +27,11 @@ export interface SystemBuildRow {
   /** Per-resource extraction-work efficiency, threaded alongside `yields`; absent ⇒ neutral 1.0. */
   extractionEff?: ResourceVector;
   /** Per-resource deposit-slot cap — caps tier-0 extractor builds. */
-  slotCap: ResourceVector;
+  depositCounts: ResourceVector;
   /** Fungible general build space — tier-1+ factories + housing. */
-  generalSpace: number;
+  industryLand: number;
   /** Habitable subset of build space — additionally caps housing. */
-  habitableSpace: number;
+  peopleLand: number;
   /** Raw market band inputs (shared shape with logistics). */
   markets: MarketRowForLogistics[];
 }

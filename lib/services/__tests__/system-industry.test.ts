@@ -30,8 +30,8 @@ describe("getSystemIndustry", () => {
     if (data.visibility !== "visible") throw new Error("expected visible");
 
     // Three independent budgets mirror the world columns' totals.
-    expect(data.space.people.total).toBe(system.habitableSpace);
-    expect(data.space.industry.total).toBe(system.generalSpace);
+    expect(data.space.people.total).toBe(system.peopleLand);
+    expect(data.space.industry.total).toBe(system.industryLand);
     for (const budget of [data.space.people, data.space.industry, data.space.deposit]) {
       expect(Number.isFinite(budget.used)).toBe(true);
       expect(budget.used).toBeGreaterThanOrEqual(0);
@@ -40,9 +40,9 @@ describe("getSystemIndustry", () => {
 
     // Deposits: one row per resource with slots, worked within cap, valid band.
     for (const d of data.deposits) {
-      expect(d.slotCap).toBeGreaterThan(0);
+      expect(d.depositCounts).toBeGreaterThan(0);
       expect(d.worked).toBeGreaterThanOrEqual(0);
-      expect(d.worked).toBeLessThanOrEqual(d.slotCap);
+      expect(d.worked).toBeLessThanOrEqual(d.depositCounts);
       expect(Number.isFinite(d.yieldMult)).toBe(true);
       expect(VALID_BANDS).toContain(d.band);
     }

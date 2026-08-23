@@ -15,14 +15,14 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { extractorsOnResource } from "@/lib/engine/directed-build";
 import { industryLandUsed, labourParts, labourStateFromParts } from "@/lib/engine/industry";
-import { slotCapOf } from "@/lib/engine/resources";
+import { depositCountsOf } from "@/lib/engine/resources";
 
 export interface BuildOptionSystem {
   population: number;
   buildings: Record<string, number>;
-  slotCap: ResourceVector;
-  generalSpace: number;
-  habitableSpace: number;
+  depositCounts: ResourceVector;
+  industryLand: number;
+  peopleLand: number;
 }
 
 /**
@@ -38,9 +38,9 @@ export function buildSiteFromSystem(
   return {
     population: system.population,
     buildings,
-    slotCap: slotCapOf(system),
-    generalSpace: system.generalSpace,
-    habitableSpace: system.habitableSpace,
+    depositCounts: depositCountsOf(system),
+    industryLand: system.industryLand,
+    peopleLand: system.peopleLand,
   };
 }
 
@@ -74,7 +74,7 @@ export function computeBuildOptions(
   committed: Record<string, number>,
 ): BuildOption[] {
   const effective = effectiveCounts(sys.buildings, committed);
-  const remainingIndustry = sys.generalSpace - industryLandUsed(effective);
+  const remainingIndustry = sys.industryLand - industryLandUsed(effective);
 
   return Object.keys(BUILDING_TYPES).map((buildingType) => {
     const def = BUILDING_TYPES[buildingType];
@@ -84,7 +84,7 @@ export function computeBuildOptions(
     let maxLevels: number;
     let blocked: BuildOptionBlockReason | null = null;
     if (isExtractor && def.resource !== undefined) {
-      const remaining = sys.slotCap[def.resource] - extractorsOnResource(effective, def.resource);
+      const remaining = sys.depositCounts[def.resource] - extractorsOnResource(effective, def.resource);
       maxLevels = Math.max(0, Math.floor(remaining));
       if (maxLevels === 0) blocked = "no_deposit_slots";
     } else {
@@ -94,7 +94,7 @@ export function computeBuildOptions(
       let space: number;
       if (buildingType === HOUSING_TYPE) {
         const housingUsed = (effective[HOUSING_TYPE] ?? 0) * cost;
-        space = sys.habitableSpace - housingUsed;
+        space = sys.peopleLand - housingUsed;
       } else {
         space = remainingIndustry;
       }
