@@ -320,205 +320,285 @@ industry land / authored deposit counts) is the closest continuous-space equival
 the reference games do, and the subset construct we are deleting has no precedent in any of
 them.
 
-## Spec (v2)
+## Spec (v2.1 — v2 amended with the second review's triage, all findings called 2026-08-23)
 
 **What changes:** Habitable worlds become rare and big, and a world's nature finally means
-something. Each body in a system is a climate class carrying three independent budgets —
-people land, industry land, and a handful of authored deposits — plus a habitability score
-for the pops that might live there. Only bodies whose score clears a threshold contribute
-people land, so a system with no habitable world cannot be colonised at all: the mining
-outposts are gone, and roughly a third of the galaxy is settleable until terraforming and
-technology open the rest. A colonised system works the deposits on all its bodies — mining
-the asteroid belt from the temperate world — at a difficulty set by each body's class, with
-hostile classes (volcanic and kin) locked until a future technology. Where a population lives
-on mixed worlds, it fills the best land first: a young colony reads its temperate world's
-quality, and only as it outgrows that do the marginal worlds drag its growth down. Garden
-Worlds are renamed Temperate Worlds; a very rare gaia world and a marginal tundra world join
-the roster.
+something. Each body is a climate class carrying three independent budgets — people land,
+industry land, and a handful of authored deposits — plus a habitability score per pop type.
+Only bodies whose score clears the default pop type's threshold contribute people land, so
+roughly a third of systems are settleable at start; hot and cold marginal worlds (arid,
+tundra) sit below the default threshold and wait for terraforming or for future pop types
+whose preferences favour them — blue-white and red-dwarf systems (25% of stars) are
+deliberately uncolonisable until then. A colonised system works the deposits on all its
+bodies at a per-body difficulty, with hostile classes locked until a future technology.
+Population fills the best land first: a young colony reads its best world's quality, and
+quality — which multiplies growth — drifts down as settlement overflows onto worse land.
+Systems that decline to empty now genuinely end, famine or no famine. Garden Worlds become
+Temperate Worlds; gaia, boreal and tundra worlds join the roster.
 
 **Why:** the `## Idea` problem plus the scope amendment. Owner decisions encoded, quoted:
 - "up to 3 rarely is acceptable, but any more than that starts to feel really unrealistic"
-- "we want the average to be earth equivalent which is 10B people or 10,000pops … strictly an
-  average, we can have rare huge worlds (20,000pops) and everything in between"
-- "rename garden to temperate, and maybe have some kind of utopia type world like stellaris"
-- Sizing decision (b): pop capacity delivered by authoring the land budgets directly, not by
-  scaling body size (review finding 2 — size scaled deposits identically).
-- "Wont we just be tuning it twice if we put it off?" — deposit/general rationalisation folded in.
-- "I wonder whether just separating them is just better for clarity for the player" — three
-  budgets, dual-use subset retired.
-- "Im fine retiring barren-but-alive" — dead bodies carry zero people land; dead systems
-  uncolonisable until the technology phase; stations/research posts booked to that phase.
-- "allow for different pop types with different habitability preferences … the habitability of
-  a body just has to be above a certain threshold which unlocks that bodies habitable land" —
-  the score/threshold model; single temperate-preference pop type for now.
-- "let's do fill-best-first" — population occupies best-scored land first; quality is computed
-  over the occupied prefix.
-- "maybe things like volcanic worlds … shouldnt contribute resources to the aggregates until
-  certain technologies are unlocked" — per-body lock tags, aggregate recompute on unlock.
+- "the average to be earth equivalent which is 10B people or 10,000pops … strictly an
+  average, we can have rare huge worlds (20,000pops)"
+- Sizing decision (b): capacity delivered by authoring budgets directly, never by body size.
+- "Wont we just be tuning it twice if we put it off?" — deposit rationalisation folded in.
+- "I wonder whether just separating them is just better for clarity" — three budgets.
+- "Im fine retiring barren-but-alive" — dead bodies carry zero people land.
+- "the habitability of a body just has to be above a certain threshold which unlocks that
+  bodies habitable land" + "let's do fill-best-first" — the score/threshold/quality model.
+- "we want asymmetry here more than homogenous" (2026-08-23) — arid/tundra score BELOW the
+  default threshold; each future pop type sees its own ~25-50% slice of the galaxy.
+- "temperate preference really only gets 100% on temperate … ocean … more like 50-75%" —
+  the score spread below; boreal added to even the freezing→volcanic spectrum.
+- Hard-world failure (2026-08-23): decline-to-empty ENDS — abandonment fires on population
+  < 1 regardless of famine (option c).
+- Events: "let's just leave events as is and we'll revisit and do the split properly" —
+  coverage dilution accepted, events-revisit row booked.
+- Development normaliser: "accept and calibrate".
+- Capitals: mid-sized is fine — "it doesnt necesarilly have to be the biggest worlds".
 
-**Evidence** (frames above): claims 1-2 license the mix cut and the capacity gap (~6× under
-anchor); claim 3 licenses the burst framing; claims 5-7 license the deposit-count model
-(worked extractors 1-36 vs caps 50-500), kill the "general space binds" premise, and locate
-the habitable wall on the outpost cohort this spec deletes. Each conclusion travels with its
-Licenses line; none licenses equilibrium tuning.
+**Evidence** (frames above): claims 1-2 license the mix cut and capacity gap (~6× under
+anchor); claim 3 the burst framing; claims 5-7 the deposit-count model (worked 1-36 vs caps
+50-500), the death of the "general space binds" premise, and the outpost-wall cohort this
+spec deletes. Each conclusion travels with its Licenses line; none licenses equilibrium
+tuning.
 
-**Not claimed:** No technology system ships here — locked bodies and uncolonisable dead
-systems are inert content until that phase (stated interim, owner-accepted); no terraforming;
-no stations; no second pop type (the preference lookup has one row); habitability quality
-feeds GROWTH only — no demand/upkeep coupling this pass (the pricing chokepoint stays
-untouched); no charter/concurrency pricing; no per-body population or per-body simulation —
-everything per-body resolves at generation, on unlock events, or in one per-cycle quality
-fold. Colonisation *pacing* improves only via target scarcity; the money gates stay as
-measured (claim 3) until the pricing row.
+**Not claimed:** No technology system (locked bodies, uncolonisable dead systems and stale
+`economyType` labels are stated interim); no terraforming; no stations; no second pop type
+(the preference lookup ships with one row); quality feeds GROWTH only — no demand/upkeep
+coupling; no charter/concurrency pricing; no per-body population or per-tick per-body work —
+everything per-body resolves at generation, on unlock, or in one per-cycle quality fold.
+The felt event rate per developed system drops ~2.5× with the colonisable-share cut
+(`maxEventsGlobal = totalSystems × EVENT_COVERAGE_TARGET`, `lib/constants/events.ts:89-96`,
+spawns galaxy-wide while effects land on developed systems only) — accepted this pass,
+booked to the events-revisit roadmap row. Colonisation pacing improves only via target
+scarcity; money gates stay as measured until the pricing row.
 
 ### Behaviour
 
-**1. The body model.** A body is a climate class (`temperate_world` — renamed from
-`garden_world` incl. the prefab literal `lib/engine/homeworld-prefab.ts:167` —, `gaia_world`
-(new), `ocean_world`, `jungle_world`, `arid_world`, `tundra_world` (new), `frozen_world`,
-`volcanic_world`, `barren_rock`, `asteroid_belt`, `gas_giant`) whose archetype row authors,
-per class (all "new — authored in `lib/constants/bodies.ts`", replacing the derived
-partition):
-- **habitability score** for the default temperate-preference pop type, in [0,1];
-- **people land** range (rolled per body; zero on every dead class);
-- **industry land** range;
-- **deposits**: per-resource authored count ranges (small integers) + the existing quality
-  band roll (`rollQualityBand`, `lib/engine/substrate-space.ts:52-58`, kept);
-- **extraction work modifier** in (0,1] — how efficiently a colonised system works this
-  body's deposits remotely;
-- **tech-lock flag** — hostile classes (volcanic at minimum) contribute NO deposits until a
-  future technology unlocks them (unlock = re-aggregate; no tick-time reads).
-`partitionBody`'s share arithmetic and `SUBSTRATE_GEN.SIZE_MIN/MAX`/`SPACE_PER_SIZE`/
-`DEPOSIT_SLOT_FOOTPRINT` are retired on the gen path (verified: SIZE_MIN/MAX has exactly one
-reader, `lib/engine/body-gen.ts:87`). Body `size` becomes display flavour derived from the
-budgets, not an input.
+**1. The body model.** A body is a climate class on a freezing→volcanic spectrum:
+`frozen_world` · `tundra_world` (new) · `boreal_world` (new) · `ocean_world` ·
+`temperate_world` (renamed from `garden_world`, incl. the prefab literal
+`lib/engine/homeworld-prefab.ts:167`) · `gaia_world` (new) · `jungle_world` · `arid_world` ·
+`volcanic_world`, plus athermal `barren_rock` · `asteroid_belt` · `gas_giant`. Each archetype
+row authors (new — `lib/constants/bodies.ts`, replacing the derived partition):
+- **habitability scores** — one column per pop type; ships with the default
+  temperate-preference column and `HABITABILITY_THRESHOLD = 0.5` (new constants):
 
-**2. Aggregation.** System aggregates are built at generation and rebuilt only on an unlock
-event:
-- **people land** = Σ people land over bodies with `score ≥ HABITABILITY_THRESHOLD` (new
-  constant) and not tech-locked;
-- **industry land** = Σ industry land over non-locked bodies (dead bodies contribute — a
-  colonised system may build on its barren rock);
-- **deposits** = per-resource Σ of authored counts over non-locked bodies, each body's
-  contribution carrying `count × workModifier` into effective extraction capacity (folds
-  where deposit quality already folds — `yieldMult`, `lib/engine/body-gen.ts:117-136` — so
-  the tick shape is unchanged).
-- Field renames ride the change (name-is-the-bug): `habitableSpace` → people land,
-  `generalSpace` → industry land, `slotCap`/`slot*` columns → authored counts, on
-  `WorldSystem`/`WorldBody` (`lib/world/types.ts:225-284`) and every reader.
+  | class | score (default pop) | contributes people land? |
+  |---|---|---|
+  | temperate_world | 1.0 | yes — the only 100% |
+  | gaia_world | 1.0 | yes (its edge is more land, never a >1 score) |
+  | jungle_world | 0.7 | yes |
+  | ocean_world | 0.65 | yes |
+  | boreal_world | 0.6 | yes |
+  | arid_world | 0.35 | no — hot-preference / terraforming territory |
+  | tundra_world | 0.3 | no — cold-preference / terraforming territory |
+  | frozen_world / volcanic_world / barren_rock / asteroid_belt | 0.1 / 0.05 / 0.05 / 0.02 | no |
+  | gas_giant | 0 | no |
 
-**3. Fill-best-first habitability quality.** Bodies with people land are sorted by score once
-at generation. Each population cycle, system quality = the people-land-weighted mean score
-over the prefix of that order the current population occupies (housing-equivalent heads:
-`population / POP_CENTRE_DENSITY` against cumulative people land). Quality multiplies the
-population growth rate (`populationDelta`, `lib/engine/population.ts:445-467`) — growth only,
-this pass. A young colony on a mixed system reads its best world's score; overcrowding into
-marginal land visibly slows growth. New per-cycle fold in the population processor —
-O(bodies-with-people-land) per developed system, no new per-tick state.
+- **people land** range — authored on every class that could ever host people: arid/tundra
+  CARRY people land that only an adapted pop type or terraforming can use (it exists, dark,
+  per the threshold model); truly dead classes author zero;
+- **industry land** range (first-cut bands ~40-300 by class, calibration-owned; a numeric
+  galaxy max is stated when the table is filled — it feeds `industryRef`);
+- **deposits**: per-resource authored count ranges + the kept quality-band roll
+  (`rollQualityBand`, `lib/engine/substrate-space.ts:52-58`);
+- **extraction work modifier** in (0,1] — kept as its OWN per-system aggregate
+  `extractionEfficiency[r]` (deposit-count-weighted mean over contributing bodies), NEVER
+  folded into `yieldMult`, whose authored meaning (pure ground grade,
+  `lib/engine/body-gen.ts:46-54` — the fold itself is `depositGradeVector` at
+  `body-gen.ts:158`) and UI band labels stay intact. Extraction output = count × yieldMult ×
+  extractionEfficiency. Counts stay integers. Because extractors are a per-system pool with
+  no body attribution, Astrography's per-body modifier is a contribution weight to the
+  system's effective yield, not the yield of an extractor placed there — stated in the UI.
+- **tech-lock flag** — hostile classes contribute NO deposits until a future technology
+  (unlock = re-aggregate; locks only release; `economyType` is NOT re-derived on unlock
+  (written only at `lib/engine/universe-gen.ts:351,633`) — stale label + event-targeting
+  accepted `[PENDING: technology]`).
+The per-archetype/per-body `habitable: boolean` is DELETED (a second, disagreeing answer to
+the score); `body-card.tsx`, `lib/services/universe.ts:104`, `lib/types/api.ts:253`,
+`lib/world/gen.ts:153` move to score band + lock state. `partitionBody`'s share arithmetic
+and `SUBSTRATE_GEN.SIZE_MIN/MAX` (single reader verified, `body-gen.ts:87`) are retired.
+Body `size` becomes display flavour. `SPACE_PER_SIZE` dies with the partition;
+`DEPOSIT_SLOT_FOOTPRINT` survives ONLY as the explicit deposit→land unit inside
+`industryPotential`/`systemDevelopment` (see §7) and is re-authored against the count scale.
 
-**4. Colonisability.** A system is a develop/colonise candidate iff its aggregate people land
-holds ≥ 1 housing level (`effectiveSpaceCost(HOUSING_TYPE)`, replacing
-`EXPANSION.DEVELOP_HABITABLE_FLOOR` at `lib/services/colony-eligibility.ts:83` and
-`lib/engine/directed-build.ts:1387`). Dead systems: zero people land → never eligible.
-Claims (`unclaimed → controlled`) remain free and unrestricted — dead systems stay claimable
-territory and open logistics corridor (edges open on shared faction, any owned tier). The
-colonisable share of the galaxy ≈ the habitable-bearing share (target 30-40%).
+**2. Aggregation and the build rule.** Aggregates build at generation, rebuild on unlock:
+- **people land** = Σ over bodies with default-pop score ≥ threshold and unlocked;
+- **industry land** = Σ over unlocked bodies (dead bodies contribute — factories on the
+  barren rock);
+- **deposits** = per-resource Σ authored counts over unlocked bodies, with
+  `extractionEfficiency[r]` alongside.
+**The build rule (the separation made operational): housing bills to people land ONLY;
+factories, academies, complexes and centres bill to industry land ONLY; extractors bill to
+neither.** `generalSpaceUsed` (`lib/engine/industry.ts:329-337`) becomes `industryLandUsed`
+and stops counting housing; `habitableHousingHeadroom` (`lib/engine/directed-build.ts:243-250`)
+drops its `min(…, remainingGeneral)` and returns the people-land bound alone — housing and
+industry no longer compete anywhere. All six readers migrate:
+`build-options.ts:77,95`, `directed-build.ts:247,564,1005`, `construction-centre.ts:86`, and
+`development.ts:132`, whose manual `− housingSpace` net-out is deleted as redundant.
+Field renames ride the change: `habitableSpace` → people land, `generalSpace` → industry
+land, `slot*` columns → authored counts (`lib/world/types.ts:225-284` and every reader).
+`availableSpace` is DELETED from `WorldSystem`/`WorldBody`/`lib/types/api.ts:270` and the
+aggregates; `SubstrateSpace` (`industry.ts:976-1025`) is re-cut as three independent
+used/total pairs; the Industry panel's segmented land bar (`industry-rows.ts:265-273`)
+becomes one bar per budget; Astrography's habitable-percent-of-available
+(`system-astrography.tsx:21-22`) is replaced by absolute people land + the per-body list.
 
-**5. Mix targets and the damping ladder.** Sun-class weights shift toward dead classes;
-body counts rise (proposal: yellow 4-8, orange 3-7, blue/red 2-5). The habitable-count
-damping ladder applies its multiplier BEFORE `rollArchetype`'s `w > 0` candidate filter
-(`lib/engine/body-gen.ts:73-74`), clamps beyond its last entry, and requires every sun class
-to keep ≥1 positive-weight dead class (unit-tested invariant) — so >3 habitable bodies is
-impossible among rolled bodies. Capitals are the stated exception (prefab garden body is
-prepended post-roll, `lib/engine/universe-gen.ts:621`) and the census reports them separately.
-Ladder values are a calibration OUTPUT constrained by the count targets (review finding 9:
-the ≥2 target owns the first damping step; the ≥3/≥4 steps own the cap).
+**3. Fill-best-first habitability quality.** People-land bodies are sorted by score
+(re-sorted on any aggregate rebuild, not only at generation). Quality = the
+people-land-weighted mean score over the prefix the current population occupies
+(`population / POP_CENTRE_DENSITY` against cumulative people land). Edge states: population
+0 (or an empty prefix) reads the top body's score, so a seed colony opens at its best
+world's quality; the prefix clamps at the last body (overrun via housing-rot overshoot
+floors quality at the all-bodies mean). Cached per system and recomputed only when the
+occupied prefix crosses a body boundary — most systems have one people-land body and a
+constant quality; the mechanic's live audience is mixed and ocean/jungle/boreal-led systems
+(quality 0.6-0.7), growing as pop types and terraforming arrive.
+**Coupling:** quality scales `growthRate` INSIDE `populationDelta` (a new parameter;
+`lib/engine/population.ts:465-467`), growth term only, never the returned delta — the
+population processor's growth/death isolations (`lib/tick/processors/population.ts:124-136`)
+stay exact. Sign condition, stated: with `growthRate == declineRate == 0.0005`
+(`lib/constants/population.ts:126-127`), net growth is positive only while
+`quality × crowdFactor × (1−shortfall) > unrest` — so a marginal-land system under sustained
+stress genuinely shrinks. That is intended (hard worlds are fragile, owner 2026-08-23), and
+the exit exists: **abandonment fires on population < `ABANDON_POP_FLOOR` regardless of the
+famine bit** (`lib/tick/processors/population.ts:118` drops the `survivalShortfall`
+requirement) — decline-to-empty ends the colony through the shipped abandonment reset.
+Colonist delivery and diffusion migration read popCap/unrest only and are deliberately
+quality-blind (a low-quality world still fills to its built housing, and being empty, fills
+first) — accepted as intended, watched by a calibration read.
+**Surfaces:** the Population tab's growth line shows the multiplier explicitly
+("Growth ×0.93 — habitability") with a fill-order decomposition tooltip (each body's score,
+people land, occupancy, the settlement frontier marked); Astrography shows the same per-body
+scores and occupancy. Quality is always shown as a story about bodies, never a bare number.
+
+**4. Colonisability.** Eligible iff aggregate people land ≥ 1 housing level
+(`effectiveSpaceCost(HOUSING_TYPE)`, replacing `EXPANSION.DEVELOP_HABITABLE_FLOOR` at
+`colony-eligibility.ts:83` and `directed-build.ts:1387` — verified numerically identical).
+Zero-people-land systems are never eligible; claims stay free (dead systems remain territory
+and corridor). Colonisable share ≈ the threshold-clearing share, target 30-40% — and
+deliberately asymmetric: blue-white and red-dwarf carry no above-threshold class for the
+default pop, so 25% of stars (by class weight) wait for terraforming or adapted pop types.
+
+**5. Mix targets and the ladder.** Sun-class weights shift toward dead classes; body counts
+rise (yellow 4-8, orange 3-7, blue/red 2-5); boreal seats mainly on orange (and lightly
+yellow/red), gaia very rare on yellow/orange. The habitable-count damping ladder multiplies
+BEFORE the `w > 0` candidate filter (`body-gen.ts:73-74`); its terminal entry is a FIXED
+hard 0 at count 3 (not a calibration output — that zero is what makes a 4th impossible);
+steps 1-2 are calibration outputs constrained by the count targets. Invariants, unit-tested:
+every sun class keeps ≥1 positive-weight dead class; yellow and orange keep ≥1
+positive-weight above-threshold class. Capitals are the stated exception (prefab prepended
+post-roll, `universe-gen.ts:621`); the census reports them separately.
 
 **6. Sizing anchors** (defaults from measurement, definitions from meaning):
-- People land: anchor cohort = temperate + gaia + ocean + jungle. Mean full-build-out
-  ≈ 10,000 pops (500 land at `POP_CENTRE_DENSITY` 20); gaia tops the spread near ~20,000
-  (≈1,000 land, "max habitable-body capacity ≈ 20,000" replaces the unreachable p99 target —
-  review finding 8). Arid/tundra are marginal by design, reported but excluded from the
-  anchor (review finding 7).
-- Deposit counts: authored against claims 5-7 evidence — typical present resource 5-20,
-  rich 30-50, poor 2-5 — so a genuinely worked field can approach its cap and "another
-  mining world" becomes a real expansion reason.
-- Industry land: generous (land is the container, not the contest — labour/logistics bind;
-  Vic3 lesson + claims 5/7). A cramped archetype is a deliberate authoring choice, not an
-  emergent accident.
+- People land: anchor cohort = temperate + gaia + ocean + jungle + boreal. Mean full-build-out
+  ≈ 10,000 pops (500 land at density 20); gaia tops the spread with max body capacity
+  ≈ 20,000 (≈1,000 land). Arid/tundra land is authored (for future unlocking) but excluded
+  from the anchor and from colonisability.
+- **Deposit counts are DERIVED from demand at the anchor population, not from measured
+  usage**: per resource, count band ≈ `Σ_goods(GOOD_CONSUMPTION[g] / OUTPUT_PER_UNIT[g]) ×
+  target pop` (arable sums food + textiles; gas includes its fuel/chemicals/polymers recipe
+  draw), evaluated at 10,000 and at the 20,000 max — e.g. water ≈ 35 extractors at the
+  anchor (`physical-economy.ts:62-63` ÷ `industry.ts:198-206`). The measured worked medians
+  (claims 5-7) are a demand reading at HOME_SYSTEM_POP 5,000, quoted as a floor sanity check
+  only. `OUTPUT_PER_UNIT`'s overrides — whose docstring premise "extractor count is
+  deposit-capped" becomes TRUE for the first time — are authored jointly with the counts.
+  Rich/poor bands spread around the derived typical so rich fields read rich and poor ones
+  genuinely bind.
+- Industry land: generous (labour and logistics bind, not land); a cramped archetype is a
+  deliberate authoring choice.
 
-**7. Consequential re-anchorings** (each a review finding, each stated here so no reader
-meets it as a surprise):
-- **Expansion claim scoring** (`lib/engine/expansion.ts:46-52`): the habitable term switches
-  to galaxy-max-normalised people land (the same normalisation `placeHomeworlds` already
-  uses, `lib/engine/faction-gen.ts:182-186`) so the proximity discount stays live;
-  `SCORE_WEIGHTS.diversity` is re-tuned at calibration since the 0-7 diversity count
-  saturates at the new body counts. Calibration read: share of claims on zero-people-land
-  systems, mean claim hop distance.
-- **Colonisation value** (`lib/engine/colonisation-value.ts:150-168, 80-92`): the land term
-  and the saturation denominator both re-anchor to people land — `LAND_PREMIUM` scaled down
-  by the same ~6× the land scale rose, σ read at calibration with `landGate` distribution.
-  `SEED_POP_COST_WEIGHT` was calibrated against the old `LAND_PREMIUM` scale
-  (`lib/constants/colonisation.ts:33`) and re-checks with it.
-- **Development normaliser** (`lib/engine/development.ts:99-107`; consumers
-  `lib/engine/directed-build.ts:610`, `lib/tick/processors/directed-build.ts:532-533` →
-  `lib/engine/construction.ts:156-158`): `popRef`/`industryRef` stay galaxy-wide MAXes over
-  the new budgets. Under authored land the max is bounded by authorship (gaia system ceiling
-  ~20-25K-pop potential vs today's 14,150) — a ~1.5-1.8× popRef rise, not the 3-4× the v1
-  sizing implied. DECISION OPEN (owner): accept-and-calibrate (recommended — reads: median/
-  p10 systemDevelopment and speculative-build volume, both horizons, vs baseline) or switch
-  the refs to a high percentile now.
-- **Economy-type labels / event targeting** (`lib/engine/economy-type.ts:20-49`; 11 event
-  templates filter on `economyType`, `lib/engine/events.ts:256-257,402-403`; label is
-  gen-time-only, `lib/engine/universe-gen.ts:351,633`): the classifier's shares now read
-  authored counts × quality. Calibration guard: economy-type histogram over natural systems
-  before/after, per-capital labels unchanged, and no class starved to near-zero membership
-  (a class with no members silently disables its filtered events).
-- **Harness cohorts**: `survival-short` (`lib/tick-harness/cohort-analysis.ts:246`,
-  `slotCap.arable ≤ 0`) is re-cut for the new model (candidate: zero-food-capacity among
-  COLONISABLE systems) — under the retune the zero-arable share of all systems is a
-  majority by design and the old cut stops discriminating. The zero-local-food *colonisable*
-  cohort (habitable systems whose deposits lack arable/biomass) is a first-class calibration
-  read with food satisfaction and famine/abandonment counts on it (review finding 11 —
-  food-import colonies feed the famine gate, `lib/engine/migration.ts:19-21`).
-- **Alert bar**: `no_housing_headroom` (`lib/services/alerts.ts:184-188`) reads the people-
-  land bound; its meaning narrows to genuinely land-full worlds. Accepted; browser-smoke it.
-- **`archetype-weights.test.ts:27-34`** (garden_world largest generalWeight): re-stated for
-  the new model — gaia_world holds the top people-land band; the invariant moves there.
+**7. Consequential re-anchorings** (each verified at review; none may surprise a reader):
+- **Expansion claim scoring** (`expansion.ts:46-52`): BOTH substrate terms normalise on the
+  `placeHomeworlds` pattern (people land ÷ galaxy max; diversity ÷ `RESOURCE_TYPES.length`),
+  then `SCORE_WEIGHTS` and `SCORE_FLOOR` re-tune together against the [0,1] scale.
+  `homeworldResourceDiversity` (`faction-gen.ts:158-160`) saturates on the same body-count
+  rise and re-tunes in the same pass; homeworld-placement distribution is a calibration read.
+- **Colonisation value** (`colonisation-value.ts:80-92,150-168`): all THREE land
+  coefficients re-anchor together — `LAND_PREMIUM` down ~6×, `LAND_DEPOSIT_WEIGHT` up by the
+  deposit-count collapse ratio, `LAND_GENERAL_WEIGHT` against the authored industry-land
+  scale — docstrings rewritten so "small secondary" stays true; `SEED_POP_COST_WEIGHT`
+  (`constants/colonisation.ts:35`) re-checks. σ and `landGate` distributions are calibration
+  reads alongside the U-vs-L share.
+- **Development normaliser — DECISION CLOSED: accept and calibrate** (owner, 2026-08-23).
+  `popRef`/`industryRef` stay galaxy MAXes (`development.ts:99-107`). Honest numbers: today's
+  popRef ≈ 20,465 pop-potential (largest capital, census max — NOT the 14,150 mean);
+  modelled post-change max ≈ 35-40K (gaia + 2 habitable siblings; capitals stack the
+  prefab) — the reference roughly DOUBLES and every development score deflates. Consumers
+  read `(1 − dev)` (`directed-build.ts:610`; `processors/directed-build.ts:532-533` →
+  `construction.ts:156-158`), so the low-dev majority moves ~1 point and the shift
+  concentrates on developed cores. `industryPotential` keeps an explicit deposit→land
+  coefficient (re-authored `DEPOSIT_SLOT_FOOTPRINT`) so counts and land stay commensurable;
+  its second consumer `developmentPotential` (`development-points.ts:126-136`, the vitals
+  readout) and the prefab (`homeworld-prefab.ts:164`) move with it. Calibration reads:
+  median/p10 `systemDevelopment`, speculative-build volume, construction-reserve fade —
+  cohorted, both horizons, vs baseline. Pre-booked fix if reads breach the health bar:
+  high-percentile refs instead of max.
+- **Economy-type / events guard** (unchanged from v2): histogram over natural systems
+  before/after (the classifier is share-based and scale-invariant to a common count factor —
+  verified), per-capital labels stable, no class starved OR flooded (`total ≤ 0 → extraction`
+  catches more zero-deposit systems).
+- **Homeworld prefab**: `homeworldGardenBody` (`homeworld-prefab.ts:141-167`) authors its
+  budgets DIRECTLY — temperate-class score 1.0, people land / industry land / per-resource
+  counts explicit, nesting back-solves deleted. `HOME_SYSTEM_POP` stays 5,000: capitals are
+  deliberately mid-sized against the 10,000 average (owner, 2026-08-23); calibration target
+  "homeworld quality ≈ 1.0" derives from the authored score.
+- **Instruments**: `scripts/substrate-coherence.ts` (`npm run report:coherence`) is re-cut as
+  the TRACKED home of the gen-time calibration targets (replacing the scratch census; ≥5
+  seeds, per-seed spread, capitals separated) — its partition identity is replaced by the
+  three budgets' own invariants (dead classes exactly 0 people land; counts integer and
+  in-range; aggregates = Σ contributing bodies). Harness: `survival-short`
+  (`cohort-analysis.ts:246`) re-cut to zero-food-capacity among COLONISABLE systems; the
+  zero-local-food colonisable cohort gets food-satisfaction + famine/abandonment reads.
+- **Body danger**: `bodyDanger` (Σ over bodies, volcanic-only 0.05) inflates with body
+  counts — `dangerBaseline` re-authored to hold the per-system distribution, or the badge
+  bands (`lib/utils/system.ts:5-9`) re-cut; census reports the before/after distribution.
+- **Alert bar**: `no_housing_headroom` follows the new single-bound headroom automatically;
+  meaning narrows to genuinely people-land-full worlds; browser-smoke it.
+- **Test invariant**: `archetype-weights.test.ts:27-34` re-states as "gaia_world holds the
+  top people-land band".
 
-**8. Save format and shape.** `SAVE_FORMAT_VERSION` 15 → 16 (`lib/world/save.ts:29`) is
-MANDATORY in this PR — the union rename plus field renames make old saves invalid, and the
-bump makes them fail cleanly at `deserialiseWorld` (`save.ts:78-83`) per the module contract
-(review finding 10). World stays JSON-serialisable; new per-body fields are plain numbers/
-booleans.
+**8. Save format.** `SAVE_FORMAT_VERSION` 15 → 16 (`save.ts:29`), MANDATORY — the rename +
+field changes invalidate old saves and the bump makes them fail cleanly (`save.ts:78-83`).
+World stays JSON-serialisable.
 
-**9. Surfaces.** Astrography lists each body with class, habitability score, lock state,
-deposits and work modifier — the legibility answer; the aggregate stays one number per
-budget on Industry. Space tables and build-fit readers move to the renamed budgets
-(`lib/engine/build-options.ts`, `lib/engine/directed-build.ts:243-250,1330-1391`,
-`components/panels/*`). Migration is untouched — attractiveness reads BUILT `popCap`
-(`lib/engine/migration.ts:52,63`), not land (review finding 13; the v1 claim that gradients
-"steepen" was wrong and is withdrawn).
+**9. Surfaces.** Astrography: per-body class, score, lock state, deposits + work modifier
+(as contribution weight), occupancy. Population tab: the quality/growth line and fill-order
+tooltip (§3). Industry: one land bar per budget; space tables on the renamed budgets. The
+migration engine is untouched (reads BUILT popCap — `migration.ts:52,63`; the v1 "gradients
+steepen" claim stays withdrawn).
 
-### Calibration targets (census `temp/habitability-census.ts` successor + `npm run simulate`,
-both horizons, plus the 30K trajectory read where named)
+### Calibration targets
 
-1. Habitable-count distribution (natural-gen, capitals separate): ≥1 in 30-40%, ≥2 in 5-10%,
-   =3 ≤1.5%, ≥4 zero across all seeds; read per sun class as well — no class exceeding ~60%
-   ≥1-habitable (review finding 12's bimodality guard).
-2. People-land anchor: mean full-build-out over the anchor cohort ≈ 10,000 pops; max ≈
-   20,000; arid/tundra reported separately.
-3. Colonisable share = habitable-bearing share, 30-40%; dead systems 0 people land by
-   construction (report any violation).
-4. Deposit realism: authored counts within reach of worked counts (a developed system's
-   worked/authored ratio can exceed ~0.5 on its main resources at the 30K read).
-5. Quality: distribution of system habitability quality at both horizons; homeworlds ≈ 1.0.
-6. Economy-type histogram guard; capital labels stable; no starved class.
-7. Sim health bar green both horizons (no NaN/runaway/pinning; founding occurs; conservation
-   identities pass); colonisation pacing (foundings + concurrency) reported vs claim 3's
-   baseline with expected direction DOWN (target scarcity), no numeric target.
-8. Development-normaliser reads (if accept-and-calibrate is chosen): median/p10
-   systemDevelopment and speculative-build volume vs baseline.
+Gen-time (targets 1-3, 5-6) read by the re-cut `npm run report:coherence` over ≥5 seeds,
+capitals separated; run-time (4, 7-9) by `npm run simulate` both horizons plus the 30K read.
+
+1. Habitable-count distribution (bodies with score ≥ threshold, natural-gen): ≥1 in 30-40%,
+   ≥2 in 5-10%, =3 ≤1.5%, ≥4 zero across all seeds. Per sun class: yellow and orange within
+   ~15-60% ≥1; blue-white and red-dwarf at 0 BY DESIGN (reported to confirm, not to fix).
+2. People-land anchor: mean full-build-out over the anchor cohort ≈ 10,000 pops; max body
+   ≈ 20,000; SYSTEM-level max reported (bounds popRef); arid/tundra land reported separately.
+3. Colonisable share 30-40% = threshold-clearing share; below-floor violations zero.
+4. Deposit sufficiency and realism: per-resource galaxy production and market cover for the
+   seven tier-0 resources vs the claim-3 baseline, gas separately; food and water
+   satisfaction + famine-band + abandonment-by-cause counts on the anchor cohort;
+   worked/authored ratio ≥0.5 median on homeworld top-2 resources (colony cohort reported,
+   no target — worked count is demand/staffing-bound).
+5. Quality: distribution at both horizons cohorted single- vs multi-people-land-body systems
+   (the fold's live audience); homeworlds ≈ 1.0; population trajectory cohorted by quality
+   band (the fragile-worlds read), with net colonist-delivery inflow vs net population
+   change by quality band (the pump watch).
+6. Economy-type histogram guard (above).
+7. Sim health bar green both horizons; conservation identities pass; colonisation pacing
+   (foundings, concurrency) vs claim-3 baseline, expected direction DOWN — licensed by the
+   review's check that founding appetite already consumes the whole colonisable galaxy.
+8. Development reads: median/p10 `systemDevelopment`, speculative-build volume,
+   construction-reserve fade — vs baseline, both horizons.
+9. Per-faction floor: reachable-colonisable candidates at founding era (min/p10 across
+   factions) and factions with zero developments by 10K.
+
 
 ### Falsifiers (provenance)
 

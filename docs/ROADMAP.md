@@ -71,6 +71,18 @@ No order. Pull from here when the queue empties, or fold one in when a PR is alr
   *Next step:* pick the shell (Tauri vs Electron).
 
 **Economy / simulation**
+- **[M] Events revisit — the developed/universal split and the coverage re-base.** Deferred by
+  explicit decision at the habitability-seeding spec review (2026-08-23): "let's just leave
+  events as is and we'll revisit and do the split properly". Two halves: (1) split event types
+  into developed-only (plague, strikes-adjacent) vs universal (solar_storm, asteroid_strike —
+  physical events that hit any system); (2) the coverage cap is `totalSystems ×
+  EVENT_COVERAGE_TARGET` (`lib/constants/events.ts:89-96`) spawned galaxy-wide while effects
+  land on developed systems only — the habitability retune cuts the colonisable share ~2.5×,
+  so the felt event rate per inhabited world drops by the same factor until this row re-bases
+  the cap (accepted at that review). Folds naturally into the events re-point
+  ([grand-strategy-vision.md](./planned/grand-strategy-vision.md) §4).
+  *Next step:* design pass alongside the events re-point; measure felt events-per-developed-
+  system first.
 - **[M] Relief — a player-funded intervention buys a viable world out of the strike loop** by
   moving goods through the real logistics simulation, never by deleting unrest. Design:
   [supply-response.md](./planned/supply-response.md) "Relief" (the arc's other items all shipped).
