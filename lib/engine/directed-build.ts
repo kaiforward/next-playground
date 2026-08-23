@@ -32,7 +32,7 @@ import {
 } from "@/lib/engine/colonisation-value";
 import {
   labourDemand, housingPopCap, skill1Demand, skill2Demand, skill1Cap, skill2Cap,
-  familyAnchorBuff, familyThroughput, inputDemandFromProduction,
+  familyAnchorBuff, familyThroughput, inputDemandFromProduction, industryLandUsed,
 } from "@/lib/engine/industry";
 
 /** Market state for one good at one system — the build planner's per-good input. */
@@ -90,9 +90,11 @@ export interface BuildSystemState {
   buildings: Record<string, number>;
   /** Per-resource deposit-slot cap (Σ body slots) — caps tier-0 extractor counts. */
   slotCap: ResourceVector;
-  /** Fungible general space — tier-1+ factories + housing draw here. */
+  /** Industry land — tier-1+ factories, academies, complexes and construction centres draw here.
+   *  Disjoint from `habitableSpace`: housing never draws on this budget. */
   generalSpace: number;
-  /** Habitable subset of space — additionally caps housing. */
+  /** People land — housing's own budget, independent of industry land. Extractors and factories
+   *  never draw on this budget. */
   habitableSpace: number;
   goods: BuildGoodState[];
 }
@@ -235,18 +237,17 @@ export function fed(sys: BuildSystemState): boolean {
 }
 
 /**
- * Additional housing units a site can build before hitting its physical bounds: the
- * habitable subset of space (minus the housing already standing) and the remaining
- * general space (housing competes with factories for it), in housing units. Never
- * negative. Mirrors the seeder's habitable bound.
+ * Additional housing units a site can build before hitting its physical bounds: the people-land
+ * budget minus the housing already standing, in housing units. Never negative. Housing draws on
+ * people land ALONE — industry land (factories, academies, complexes, centres) is a separate,
+ * disjoint budget that no longer bounds housing (the build rule's separation).
  */
 export function habitableHousingHeadroom(sys: BuildSystemState): number {
   const cost = effectiveSpaceCost(HOUSING_TYPE);
   if (cost <= 0) return 0;
   const housing = sys.buildings[HOUSING_TYPE] ?? 0;
-  const remainingGeneral = sys.generalSpace - generalSpaceUsed(sys.buildings);
   const remainingHabitable = sys.habitableSpace - housing * cost;
-  return Math.max(0, Math.min(remainingHabitable, remainingGeneral) / cost);
+  return Math.max(0, remainingHabitable / cost);
 }
 
 /**
@@ -515,25 +516,6 @@ function assessStructuralDeficits(
   };
 }
 
-/**
- * General space consumed by current buildings: every tier-1+ factory and housing
- * occupies general space (× its footprint). Tier-0 extractors sit on deposit slots,
- * NOT general space, so they are excluded.
- */
-function generalSpaceUsed(buildings: Record<string, number>): number {
-  let used = 0;
-  for (const [type, count] of Object.entries(buildings)) {
-    if (count <= 0) continue;
-    if (type === HOUSING_TYPE) {
-      used += count * effectiveSpaceCost(type);
-      continue;
-    }
-    if (GOOD_TIER_BY_KEY[type] === 0) continue; // extractors don't use general space
-    used += count * effectiveSpaceCost(type);
-  }
-  return used;
-}
-
 /** Deposit-slot units already used for `resource` (goods sharing the resource share the cap). */
 export function extractorsOnResource(buildings: Record<string, number>, resource: string): number {
   let used = 0;
@@ -561,8 +543,8 @@ export function buildableUnits(sys: BuildSystemState, goodId: string): number {
   }
   const cost = effectiveSpaceCost(goodId);
   if (cost <= 0) return 0;
-  const remainingGeneral = sys.generalSpace - generalSpaceUsed(sys.buildings);
-  return Math.max(0, remainingGeneral / cost);
+  const remainingIndustry = sys.generalSpace - industryLandUsed(sys.buildings);
+  return Math.max(0, remainingIndustry / cost);
 }
 
 /**
@@ -1002,8 +984,9 @@ function planFactionBundles(
     // small colony stand up its FIRST extractor (whose jobs then pull migration) instead of deadlocking
     // on a full-staffing gate. Housing built this cycle adds no labour now — industry follows the
     // people already resident, never population that doesn't yet exist.
-    const remainingGeneral = site.generalSpace - generalSpaceUsed(site.buildings);
-    // Tier-0 extractors sit on dedicated deposit slots, not general space (mirrors generalSpaceUsed).
+    const remainingGeneral = site.generalSpace - industryLandUsed(site.buildings);
+    // Tier-0 extractors sit on dedicated deposit slots, not industry land (mirrors industryLandUsed);
+    // housing sits on its own people-land budget, also excluded here.
     const prodSpacePerUnit = GOOD_TIER_BY_KEY[opp.goodId] === 0 ? 0 : effectiveSpaceCost(opp.goodId);
     // Full per-unit head count (unskilled + skill1 + skill2) — population staffs the WHOLE labour
     // draw of a production unit, not just its unskilled slice.

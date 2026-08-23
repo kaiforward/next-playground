@@ -148,18 +148,19 @@ function buildOpportunitySortKey(goodId: string, score: number): number {
 
 /**
  * No housing headroom's queue-adjusted headroom read. `habitableHousingHeadroom`
- * (lib/engine/directed-build.ts:213) takes a `BuildSystemState`, and its `buildings` here is folded
+ * (lib/engine/directed-build.ts) takes a `BuildSystemState`, and its `buildings` here is folded
  * with `queued` — the system's open BUILD-kind project levels — before the read, the same fold the
  * planner's own `effectiveBuildSystems` applies before its housing pass
  * (lib/engine/directed-build.ts:297-333).
  *
- * The fold is monotonically DOWNWARD, never up: `habitableHousingHeadroom` only ever subtracts
- * standing housing from both the habitable and general bounds, and `generalSpaceUsed` only ever
- * adds, so folding queued levels in can only lower headroom — this read can only move a system INTO
- * this category, never out of it. Queued HOUSING itself is excluded by the caller's separate
- * conjunct before this function is even reached, so what the fold actually earns its keep on here is
- * a committed FACTORY: general space a queued production building has already claimed, which would
- * otherwise still read as free room for the housing this category cares about.
+ * `habitableHousingHeadroom` now reads the people-land bound ALONE (housing bills to people land;
+ * industry land is a separate, disjoint budget that no longer bounds housing — the build rule's
+ * separation). So the only queued level that can move this read is queued HOUSING itself, and that
+ * is excluded by the caller's separate conjunct before this function is even reached: a queued
+ * factory, academy or complex claims industry land, which this category no longer looks at. The
+ * fold is kept (rather than dropped) because it costs nothing and keeps this function agnostic to
+ * which queued type, if any, turns out to matter — but today, with the caller's housing conjunct in
+ * place, folding the queue changes nothing this function reads.
  *
  * The buildings roster is shallow-copied before the fold because the fold WRITES to it — the record
  * the world index hands back is shared with every other reader this tick (see

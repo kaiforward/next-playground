@@ -39,7 +39,6 @@ import {
   type SpecialisationFamily,
   type CapacityKind,
 } from "@/lib/constants/industry";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPE_CONSUMERS, GOOD_RECIPES } from "@/lib/constants/recipes";
 import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { inputGate, inputDrawRatio } from "@/lib/engine/supply-chain";
@@ -323,14 +322,16 @@ export function perGradeStaffing(
 }
 
 /**
- * General-space footprint of the built base — factories + population centres.
- * Tier-0 extractors are excluded: they sit on dedicated deposit slots, not the
- * fungible general space that industry and housing compete for.
+ * Industry-land footprint of the built base — tier-1+ factories, academies, complexes and
+ * construction centres. Excludes tier-0 extractors (they sit on dedicated deposit slots, not
+ * industry land) AND housing (it bills to people land, a separate, disjoint budget that never
+ * competes with industry for the same space — the build rule's separation).
  */
-export function generalSpaceUsed(buildings: Record<string, number>): number {
+export function industryLandUsed(buildings: Record<string, number>): number {
   let used = 0;
   for (const [type, count] of Object.entries(buildings)) {
     if (count <= 0) continue;
+    if (type === HOUSING_TYPE) continue; // housing bills to people land, not industry land
     if (BUILDING_TYPES[type]?.resource) continue; // tier-0 extractor → deposit land
     used += count * effectiveSpaceCost(type);
   }
@@ -932,10 +933,10 @@ export function buildingStorageForGood(buildings: Record<string, number>, goodId
 }
 
 // ── Substrate display summaries (system-panel view helpers) ──────────────────
-// The space partition industry is built against: tier-0 extractors sit on dedicated deposit slots;
-// tier-1+ factories and population centres share fungible general space; pop-centres are additionally
-// bounded by the habitable subset. These pure helpers turn the denormalised substrate columns + built
-// base into the shapes the system panels render.
+// The three disjoint budgets industry is built against: tier-0 extractors sit on dedicated deposit
+// slots; tier-1+ factories, academies, complexes and construction centres bill industry land;
+// housing bills people land alone — none of the three bounds another. These pure helpers turn the
+// denormalised substrate columns + built base into the shapes the system panels render.
 
 /**
  * Tier-0 extractor count per resource from the built base — the worked deposit
@@ -987,53 +988,53 @@ export function summariseDeposits(
     .sort((a, b) => b.slotCap - a.slotCap);
 }
 
-/** A system's finite surface partition and how much of each part is built out. */
-export interface SubstrateSpace {
-  /** Total available space (SPACE_PER_SIZE × Σ size). */
-  available: number;
-  /** Dedicated extractor land (available − general). */
-  deposit: number;
-  /** Fungible factory + population-centre land. */
-  general: number;
-  /** Habitable subset of general space — caps population centres. */
-  habitable: number;
-  /** Deposit land worked by extractors. */
-  depositWorked: number;
-  /** General land consumed by factories + population centres. */
-  generalUsed: number;
-  /** General land consumed by population centres alone (a subset of generalUsed, drawn from habitable). */
-  habitableUsed: number;
+/** One budget's authored total vs. how much of it is currently built into. */
+export interface SpaceBudget {
+  used: number;
+  total: number;
 }
 
 /**
- * Partition a system's available space into deposit / general / habitable and
- * tally the built land in each. Extractors are billed to deposit land (one slot
- * footprint each); factories and population centres to general; population
- * centres additionally to habitable.
+ * A system's three independent land/deposit budgets and how much of each is built out — people
+ * land (billed by housing alone), industry land (billed by factories/academies/complexes/
+ * construction centres, never housing or extractors) and deposit slots (billed by extractor
+ * levels, one slot each). The three are disjoint: none is derived from another, and nothing here
+ * partitions a shared "available" total the way the old general/habitable subset once did.
+ */
+export interface SubstrateSpace {
+  /** People land: total budget and housing's built-in use of it. */
+  people: SpaceBudget;
+  /** Industry land: total budget and factories/academies/complexes/centres' built-in use of it. */
+  industry: SpaceBudget;
+  /** Deposit slots (all resources): total authored count and levels currently worked by extractors. */
+  deposit: SpaceBudget;
+}
+
+/**
+ * Summarise a system's three land/deposit budgets. `peopleLand` and `industryLand` are the
+ * system's authored aggregates; `depositCounts` is its per-resource authored slot cap
+ * (summed here into one total). Housing bills only `people`; factories, academies, complexes
+ * and construction centres bill only `industry` (via `industryLandUsed`); extractors bill only
+ * `deposit`, one worked level per slot.
  */
 export function summariseSpace(
-  available: number,
-  general: number,
-  habitable: number,
+  peopleLand: number,
+  industryLand: number,
+  depositCounts: ResourceVector,
   buildings: Record<string, number>,
 ): SubstrateSpace {
-  let habitableUsed = 0;
-  let depositWorked = 0;
-  for (const [type, count] of Object.entries(buildings)) {
-    if (count <= 0) continue;
-    if (BUILDING_TYPES[type]?.resource) {
-      depositWorked += count * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
-      continue;
-    }
-    if (type === HOUSING_TYPE) habitableUsed += count * effectiveSpaceCost(type);
+  const housingCount = buildings[HOUSING_TYPE] ?? 0;
+  const peopleUsed = housingCount > 0 ? housingCount * effectiveSpaceCost(HOUSING_TYPE) : 0;
+  const worked = extractorsByResource(buildings);
+  let depositTotal = 0;
+  let depositUsed = 0;
+  for (const r of RESOURCE_TYPES) {
+    depositTotal += depositCounts[r];
+    depositUsed += worked[r];
   }
   return {
-    available,
-    deposit: Math.max(0, available - general),
-    general,
-    habitable,
-    depositWorked,
-    generalUsed: generalSpaceUsed(buildings),
-    habitableUsed,
+    people: { used: peopleUsed, total: peopleLand },
+    industry: { used: industryLandUsed(buildings), total: industryLand },
+    deposit: { used: depositUsed, total: depositTotal },
   };
 }

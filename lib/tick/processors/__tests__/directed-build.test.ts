@@ -638,7 +638,11 @@ describe("runDirectedBuildProcessor: colony-establish phase", () => {
   });
 
   it("bounds the open queue: with many candidates and a small pool, only funded colonies persist", async () => {
-    const w = new MemoryDirectedBuildWorld([saturatedHome(80)]); // pool = 80 × 0.05 = 4 → one cap-worth
+    // Housing (5 levels) no longer bills industry land (build rule separation), so
+    // saturatedHome's default generalSpace: 5 would otherwise leave real industry-land headroom
+    // at home and let a Construction Centre site there, consuming the small pool this test
+    // means to isolate on colony-establish funding alone. Zero it out to keep home siting-inert.
+    const w = new MemoryDirectedBuildWorld([{ ...saturatedHome(80), generalSpace: 0 }]); // pool = 80 × 0.05 = 4 → one cap-worth
     const candidates = ["c1", "c2", "c3", "c4", "c5"].map((id) => colonyCand(id));
     await runDirectedBuildProcessor(w, { tick: DUE_TICK }, {
       interval: INTERVAL, routeCost: reachable, construction: mkConstruction(4),

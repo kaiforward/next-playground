@@ -12,7 +12,7 @@ import {
   extractorsByResource,
   summariseDeposits,
   summariseSpace,
-  generalSpaceUsed,
+  industryLandUsed,
   industryHealth,
   buildingHealth,
   computeLabourState,
@@ -58,7 +58,6 @@ import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { USED_SLACK } from "@/lib/constants/infrastructure";
 import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { GOOD_RECIPES } from "@/lib/constants/recipes";
 import { unitResourceVector, makeResourceVector, emptyResourceVector } from "@/lib/engine/resources";
 import { HEAVY_INDUSTRY_COMPLEX } from "@/lib/constants/industry";
@@ -281,14 +280,19 @@ describe("inputDemandFromProduction", () => {
   });
 });
 
-describe("generalSpaceUsed", () => {
-  it("sums factory + housing footprint; excludes tier-0 extractors (deposit land)", () => {
-    // ore is a tier-0 extractor (sits on a deposit slot); metals + housing sit on general space.
-    expect(generalSpaceUsed({ ore: 4, metals: 2, [HOUSING_TYPE]: 5 }))
-      .toBeCloseTo((2 + 5) * DEFAULT_SPACE_COST, 6);
+describe("industryLandUsed", () => {
+  it("sums factory footprint; excludes tier-0 extractors (deposit land) and housing (people land)", () => {
+    // ore is a tier-0 extractor (sits on a deposit slot); housing sits on the people-land budget;
+    // only metals sits on industry land.
+    expect(industryLandUsed({ ore: 4, metals: 2, [HOUSING_TYPE]: 5 }))
+      .toBeCloseTo(2 * DEFAULT_SPACE_COST, 6);
   });
   it("ignores non-positive counts", () => {
-    expect(generalSpaceUsed({ metals: -3, fuel: 2 })).toBeCloseTo(2 * DEFAULT_SPACE_COST, 6);
+    expect(industryLandUsed({ metals: -3, fuel: 2 })).toBeCloseTo(2 * DEFAULT_SPACE_COST, 6);
+  });
+  it("reads identically whether or not housing is built — housing never touches industry land (Proves 3/4)", () => {
+    expect(industryLandUsed({ metals: 3 }))
+      .toBeCloseTo(industryLandUsed({ metals: 3, [HOUSING_TYPE]: 500 }), 6);
   });
 });
 
@@ -864,20 +868,26 @@ describe("extractorsByResource", () => {
 });
 
 describe("summariseSpace", () => {
-  it("partitions available into deposit/general/habitable and tracks built land per partition", () => {
-    // available 100, general 40 → deposit 60; habitable 10.
-    // ore×4 extractors sit on deposit land; metals×2 factories + housing×5 sit on general; housing also on habitable.
-    const space = summariseSpace(100, 40, 10, { ore: 4, metals: 2, [HOUSING_TYPE]: 5 });
-    expect(space.available).toBe(100);
-    expect(space.general).toBe(40);
-    expect(space.habitable).toBe(10);
-    expect(space.deposit).toBe(60);
-    expect(space.depositWorked).toBeCloseTo(4 * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT, 6);
-    expect(space.generalUsed).toBeCloseTo((2 + 5) * DEFAULT_SPACE_COST, 6);
-    expect(space.habitableUsed).toBeCloseTo(5 * DEFAULT_SPACE_COST, 6);
+  it("computes three independent used/total pairs: people (housing), industry (factories), deposit (extractor levels)", () => {
+    // peopleLand 10, industryLand 40, deposit counts ore 20 + gas 5 = 25 total.
+    // ore×4 extractors work deposit slots; metals×2 sits on industry land; housing×5 sits on people land.
+    const counts = makeResourceVector({ ore: 20, gas: 5 });
+    const space = summariseSpace(10, 40, counts, { ore: 4, metals: 2, [HOUSING_TYPE]: 5 });
+    expect(space.people).toEqual({ used: 5 * DEFAULT_SPACE_COST, total: 10 });
+    expect(space.industry).toEqual({ used: 2 * DEFAULT_SPACE_COST, total: 40 });
+    expect(space.deposit).toEqual({ used: 4, total: 25 });
   });
-  it("clamps deposit to zero when general exceeds available (degenerate input)", () => {
-    expect(summariseSpace(10, 40, 5, {}).deposit).toBe(0);
+  it("reads zero used across all three budgets when nothing is built", () => {
+    const space = summariseSpace(10, 40, emptyResourceVector(), {});
+    expect(space.people.used).toBe(0);
+    expect(space.industry.used).toBe(0);
+    expect(space.deposit.used).toBe(0);
+  });
+  it("a housing-full system reads full industry-land headroom untouched (Proves 1/3: disjoint budgets)", () => {
+    // People land exhausted by housing; industry land carries no buildings at all.
+    const space = summariseSpace(5, 100, emptyResourceVector(), { [HOUSING_TYPE]: 5 });
+    expect(space.people.used).toBeCloseTo(space.people.total, 6);
+    expect(space.industry.used).toBe(0);
   });
 });
 

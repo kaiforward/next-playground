@@ -481,11 +481,15 @@ describe("getAlertData", () => {
   });
 
   describe("No housing headroom", () => {
-    it("evaluates headroom against queue-adjusted buildings: a queued FACTORY (not housing) build changes the read", () => {
-      // A queued HOUSING level would itself exclude this system via the separate "no housing
-      // standing in the queue" conjunct — see the test below — so this fixture queues a
-      // non-housing build (metals, tier 1) to isolate the queue-adjustment on conjunct 3 alone:
-      // a committed factory eats general space that would otherwise still read as room for housing.
+    // Proves (6): no_housing_headroom fires only for genuinely people-land-full systems — a system
+    // the OLD shared-general bound would have flagged (queued factory exhausts industry land, but
+    // people land still has room) no longer alerts, now that housing bills to people land alone.
+    it("a queued FACTORY (not housing) that exhausts industry land no longer touches this read", () => {
+      // Historically a committed factory (queued, non-housing) reduced the OLD shared general
+      // bound and could flag this category even with free people land. The build rule now bills
+      // housing to people land only, so an industry-land-exhausted queue no longer folds into
+      // this read: 3 landed housing levels leave people-land (habitable) headroom = 5 - 3 = 2
+      // (>= 1), regardless of how much industry land the queued metals levels claim.
       const world = seatWorld();
       const pid = world.player!.controlledFactionId;
       const [target] = spareSystemIds(world, 1);
@@ -528,14 +532,11 @@ describe("getAlertData", () => {
       };
       setWorld(withFixture);
 
-      // 3 landed housing levels leave headroom = min(5 - 3, 10 - 3) = 2 (>= 1) on RAW buildings —
-      // this system would NOT read "no housing headroom" if the queued metals levels were ignored.
-      // Once they fold in, remaining general space = 10 - 3 - 7 = 0, so headroom = min(2, 0) = 0
-      // (< 1, no room for a whole level), and the system is still Overcrowded (61 > 60) on the
-      // persisted, non-queue-adjusted popCap. The fixture is deliberately sized so raw and
-      // queue-adjusted disagree.
-      const noHousing = category("no_housing_headroom");
-      expect(noHousing.instances.map((i) => i.systemId)).toContain(target);
+      // Still Overcrowded (61 > 60, persisted popCap) — but people land alone has real headroom
+      // (5 - 3 = 2 >= 1), so this system does not read "no housing headroom" any more, even
+      // though the queued metals levels leave zero industry land free.
+      expect(category("overcrowded").instances.map((i) => i.systemId)).toContain(target);
+      expect(category("no_housing_headroom").instances.map((i) => i.systemId)).not.toContain(target);
     });
 
     it("excludes a system that is otherwise headroom-exhausted once a housing level is standing in its queue", () => {

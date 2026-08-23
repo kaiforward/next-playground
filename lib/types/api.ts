@@ -291,7 +291,7 @@ export type SystemIndustryData =
       visibility: "visible";
       /** Stored unrest integral 0…1. Drives the decay-loop and the coarse health read. */
       unrest: number;
-      /** Available-space partition + built-out land per partition (headroom). */
+      /** The three disjoint land/deposit budgets (people, industry, deposit) and built-out use of each. */
       space: SubstrateSpace;
       /** Per-resource deposit-fill rows: slot cap, worked slots, effective yield + band. */
       deposits: SystemDepositSummary[];

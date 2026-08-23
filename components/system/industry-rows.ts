@@ -241,33 +241,42 @@ export function depositRowProblems(
   return depositTypeProblems(row.types[0], popNeed, inputLabel);
 }
 
-/** The general-land partition, with the habitable subset broken out so housing headroom reads in units. */
+/**
+ * The general-land READOUT: people land and industry land are two disjoint budgets (housing
+ * never draws industry land and vice versa — see `SubstrateSpace`), combined here into one
+ * display total so the existing single-bar readout keeps compiling. `general`/`habitable` are
+ * NOT a partition of one shared pool any more; this shape is a display convenience, not a
+ * physical constraint — a full two-bar redesign is a later task.
+ */
 export interface GeneralLand {
-  /** Land under population centres (draws on the habitable subset). */
+  /** People land drawn by housing. */
   housing: number;
-  /** Land under factories / academies / complexes (non-housing general use). */
+  /** Industry land drawn by factories / academies / complexes / centres. */
   factory: number;
-  /** Free land still inside the habitable cap — housing can grow here. */
+  /** People land still free — housing can grow here. */
   habitableFree: number;
-  /** Free land beyond the habitable cap — factories only. */
+  /** Industry land still free — factories/academies/complexes/centres can grow here. */
   factoryFree: number;
-  /** Total general land. */
+  /** Combined display total: people land total + industry land total. */
   general: number;
-  /** Total habitable land — the population-centre ceiling. */
+  /** Total people land. */
   habitable: number;
 }
 
 /**
- * Split general land into housing / factory footprints + the free tail, breaking the free tail into
- * habitable-free (housing can still grow) vs factory-only-free (beyond the habitable cap). Housing +
- * factory + habitableFree + factoryFree always sum to `general`.
+ * Combine the two disjoint land budgets into one display readout: housing/factory used, each
+ * budget's own free remainder, and a combined total. Housing + factory + habitableFree +
+ * factoryFree always sum to `general` (people.total + industry.total) — an identity, not a
+ * partition, since people and industry land never compete for the same units.
  */
 export function generalLand(space: SubstrateSpace): GeneralLand {
-  const housing = Math.max(0, space.habitableUsed);
-  const factory = Math.max(0, space.generalUsed - space.habitableUsed);
-  const free = Math.max(0, space.general - space.generalUsed);
-  const habitableHeadroom = Math.max(0, space.habitable - space.habitableUsed);
-  const habitableFree = Math.min(free, habitableHeadroom);
-  const factoryFree = Math.max(0, free - habitableFree);
-  return { housing, factory, habitableFree, factoryFree, general: space.general, habitable: space.habitable };
+  const housing = Math.max(0, space.people.used);
+  const factory = Math.max(0, space.industry.used);
+  const habitableFree = Math.max(0, space.people.total - space.people.used);
+  const factoryFree = Math.max(0, space.industry.total - space.industry.used);
+  return {
+    housing, factory, habitableFree, factoryFree,
+    general: space.people.total + space.industry.total,
+    habitable: space.people.total,
+  };
 }

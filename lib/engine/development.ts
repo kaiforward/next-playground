@@ -30,7 +30,7 @@
 import { DEVELOPMENT } from "@/lib/constants/development";
 import { HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost, BUILDING_TYPES } from "@/lib/constants/industry";
 import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
-import { generalSpaceUsed, labourDemand, labourFulfilment } from "@/lib/engine/industry";
+import { industryLandUsed, labourDemand, labourFulfilment } from "@/lib/engine/industry";
 
 /** The built + physical inputs `systemDevelopment` reads (a structural subset of a build/world system). */
 export interface DevelopmentInput {
@@ -124,12 +124,12 @@ export function systemDevelopment(input: DevelopmentInput, refs: DevelopmentRefs
   const { buildings, population, habitableSpace } = input;
 
   // Staffed industry (absolute): extraction sits on deposit slots, factories/academies/complexes on
-  // general space; both converted to commensurate space units. Housing is netted out (it is not
-  // industry). The whole built base is discounted by headcount staffing — idle-because-understaffed
-  // capacity is not counted as development (used, not built).
+  // industry land; both converted to commensurate space units. Housing never enters this term —
+  // `industryLandUsed` excludes it outright (it bills to the disjoint people-land budget instead
+  // of needing a manual net-out here). The whole built base is discounted by headcount staffing —
+  // idle-because-understaffed capacity is not counted as development (used, not built).
   const extraction = extractorLevels(buildings) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
-  const housingSpace = (buildings[HOUSING_TYPE] ?? 0) * effectiveSpaceCost(HOUSING_TYPE);
-  const factory = Math.max(0, generalSpaceUsed(buildings) - housingSpace);
+  const factory = industryLandUsed(buildings);
   const staffing = labourFulfilment(population, labourDemand(buildings));
   const staffedIndustry = (extraction + factory) * staffing;
   const indTerm = softSaturate(staffedIndustry, refs.industryRef);

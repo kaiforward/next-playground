@@ -147,7 +147,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     visibility: "visible",
     unrest: system.unrest,
     ...readout,
-    space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
+    space: summariseSpace(system.habitableSpace, system.generalSpace, slotCap, buildings),
     deposits: summariseDeposits(slotCap, worked, yields),
     goods: capacityGoodRates(buildings, system.population, yields, effOf(system)),
     popNeeds,

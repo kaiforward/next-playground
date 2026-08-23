@@ -203,18 +203,20 @@ describe("staffedLevels", () => {
 });
 
 describe("generalLand", () => {
-  it("partitions general land and breaks out the habitable subset in units", () => {
+  it("combines the two disjoint budgets (people/industry) into one display readout", () => {
     const space: SubstrateSpace = {
-      available: 200, deposit: 80, general: 120, habitable: 70,
-      depositWorked: 40, generalUsed: 78, habitableUsed: 52,
+      people: { used: 52, total: 70 },
+      industry: { used: 26, total: 120 },
+      deposit: { used: 40, total: 80 },
     };
     const g = generalLand(space);
     expect(g.housing).toBe(52);
-    expect(g.factory).toBe(26); // 78 − 52
-    expect(g.habitableFree).toBe(18); // headroom 70 − 52, capped by free 42
-    expect(g.factoryFree).toBe(24); // free 42 − 18
+    expect(g.factory).toBe(26);
+    expect(g.habitableFree).toBe(18); // people 70 − 52
+    expect(g.factoryFree).toBe(94); // industry 120 − 26
     expect(g.habitable).toBe(70);
-    expect(g.housing + g.factory + g.habitableFree + g.factoryFree).toBeCloseTo(space.general);
+    expect(g.general).toBe(190); // 70 + 120, combined display total
+    expect(g.housing + g.factory + g.habitableFree + g.factoryFree).toBeCloseTo(g.general);
   });
 });
 

@@ -668,14 +668,16 @@ describe("runTickHarness: logistics instruments", () => {
     //
     // Faction count barely moves with galaxy size (8 majors plus a √N-interpolated dozen minors), so
     // systems-per-faction is what supplies that competition — and the systems a faction holds are
-    // almost all colonised in play, which is why the horizon matters as much as the galaxy size. At
-    // 120 systems the galaxy is fully developed (114 of 120) by ~10,000 ticks, but a donor is not yet
-    // contested: measured on this seed, the two arms are bit-identical at 6,000, 8,000 and 10,000
-    // ticks and first diverge between 10,000 and 13,000 — 18.2 units of 116,536 hauled at 13,000,
-    // 725 of 257,237 at 16,000. 13,000 is the cheapest horizon that clears the onset — the divergence
-    // is an outcome of the pin, not a coincidence, but it is a rare one and a shorter run reports the
-    // same zero a dropped wire would.
-    const config: HarnessConfig = { systemCount: 120, seed: 7, tickCount: 13_000 };
+    // almost all colonised in play, which is why both the galaxy size and the horizon matter.
+    // Since the build rule separated housing land from industry land, industry land is far freer
+    // galaxy-wide, so the 120-system/13,000-tick fixture that used to bind (18.2 of 116,536 hauled)
+    // is now bit-identical on both arms out to 16,000 ticks — donor contention needs more
+    // systems-per-faction to reappear. Measured on this seed: 120 systems stays bit-identical
+    // through 20,000 and 26,000 ticks too (diff only reappears there at 45,086 of 90.3M — too late
+    // to be the cheap fixture); 200 systems first shows a diff at 13,000 (533 of 8.6M, too close to
+    // the old dropped-wire zero to trust) and is solidly bound by 20,000 (268,365 of 38.2M hauled,
+    // 0.70% of the total — comfortably outside any float-precision coincidence).
+    const config: HarnessConfig = { systemCount: 200, seed: 7, tickCount: 20_000 };
     const live = await runTickHarness(config);
     const pinned = await runTickHarness({ ...config, drawBrakeCeiling: "anchor" });
     expect(live.logisticsActivity.transferCount).toBeGreaterThan(0);

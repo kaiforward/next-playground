@@ -198,7 +198,9 @@ describe("construction order services", () => {
 
   it("reports the exact not-enough-space message (distinct from the deposit-slot message)", () => {
     const h = playerHome();
-    h.generalSpace = 0; // housing is not an extractor, so this blocks it on "no_space", not deposit slots
+    // Housing bills to people land alone (build rule separation), so it's habitableSpace — not
+    // generalSpace — that blocks it on "no_space", not deposit slots.
+    h.habitableSpace = 0;
     const r = orderBuild({ systemId: h.id, buildingType: HOUSING_TYPE, levels: 1 });
     expect(r).toEqual({ ok: false, error: "Not enough space: 0 more level(s) fit here." });
   });

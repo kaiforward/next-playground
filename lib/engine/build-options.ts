@@ -14,7 +14,7 @@ import {
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { extractorsOnResource } from "@/lib/engine/directed-build";
-import { generalSpaceUsed, labourParts, labourStateFromParts } from "@/lib/engine/industry";
+import { industryLandUsed, labourParts, labourStateFromParts } from "@/lib/engine/industry";
 import { slotCapOf } from "@/lib/engine/resources";
 
 export interface BuildOptionSystem {
@@ -74,7 +74,7 @@ export function computeBuildOptions(
   committed: Record<string, number>,
 ): BuildOption[] {
   const effective = effectiveCounts(sys.buildings, committed);
-  const remainingGeneral = sys.generalSpace - generalSpaceUsed(effective);
+  const remainingIndustry = sys.generalSpace - industryLandUsed(effective);
 
   return Object.keys(BUILDING_TYPES).map((buildingType) => {
     const def = BUILDING_TYPES[buildingType];
@@ -89,10 +89,14 @@ export function computeBuildOptions(
       if (maxLevels === 0) blocked = "no_deposit_slots";
     } else {
       const cost = effectiveSpaceCost(buildingType);
-      let space = remainingGeneral;
+      // Housing bills to people land ALONE; every other type bills to industry land alone — the
+      // two budgets are disjoint and never bound each other (the build rule's separation).
+      let space: number;
       if (buildingType === HOUSING_TYPE) {
         const housingUsed = (effective[HOUSING_TYPE] ?? 0) * cost;
-        space = Math.min(space, sys.habitableSpace - housingUsed);
+        space = sys.habitableSpace - housingUsed;
+      } else {
+        space = remainingIndustry;
       }
       maxLevels = cost > 0 ? Math.max(0, Math.floor(space / cost)) : 0;
       if (maxLevels === 0) blocked = "no_space";

@@ -134,11 +134,11 @@ describe("systemDevelopment", () => {
     expect(heavy).toBeGreaterThan(light);
   });
 
-  it("counts non-extractor general-space buildings (the factory term), staffed not just built", () => {
-    // Extractors sit on deposit slots; factories, academies and complexes sit on general space and feed
-    // development through the `factory` = generalSpaceUsed − housingSpace term. A vocational school is
-    // such a general-space building (no deposit `resource`), so it exercises that term with no extractor
-    // present. Barren land isolates industry as the whole reading.
+  it("counts non-extractor industry-land buildings (the factory term), staffed not just built", () => {
+    // Extractors sit on deposit slots; factories, academies and complexes sit on industry land and feed
+    // development through the `factory` = industryLandUsed term (housing is excluded outright, never
+    // netted out). A vocational school is such an industry-land building (no deposit `resource`), so it
+    // exercises that term with no extractor present. Barren land isolates industry as the whole reading.
     const barren = { habitableSpace: 0 };
     const empty = systemDevelopment(devInput({ ...barren, population: 1000, buildings: {} }), REFS);
     const built = systemDevelopment(
@@ -171,6 +171,21 @@ describe("systemDevelopment", () => {
     const withoutHousing = systemDevelopment(devInput({ ...base, buildings: {} }), REFS);
     const withHousing = systemDevelopment(devInput({ ...base, buildings: { housing: 5 } }), REFS);
     expect(withHousing).toBe(withoutHousing);
+  });
+
+  // Proves (5): the factory term is unchanged by deleting the manual housingSpace net-out — a
+  // contradiction check. The OLD formula computed factory = max(0, generalSpaceUsed(buildings) −
+  // housingSpace), where generalSpaceUsed included housing; that is the algebraic identity
+  // (industryLandUsed + housingSpace) − housingSpace = industryLandUsed. On a MIXED build
+  // (extractor + factory + housing together, not just housing alone), the barren-isolated
+  // (industry-only) development reading must be identical whether or not housing is in the mix.
+  it("factory term on a MIXED build (extractor + factory + housing) matches the old subtract-housingSpace formula", () => {
+    const factoryOnly = { ore: 4, [VOCATIONAL_SCHOOL_TYPE]: 3 };
+    const mixedWithHousing = { ...factoryOnly, housing: 7 };
+    const barren = { habitableSpace: 0, population: 1000 };
+    const devFactoryOnly = systemDevelopment(devInput({ ...barren, buildings: factoryOnly }), REFS);
+    const devMixed = systemDevelopment(devInput({ ...barren, buildings: mixedWithHousing }), REFS);
+    expect(devMixed).toBe(devFactoryOnly);
   });
 
   it("reads a barren system on its industry alone (no habitable land)", () => {

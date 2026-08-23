@@ -13,9 +13,9 @@
 import type { WorldConstructionProject } from "@/lib/world/types";
 import type { BuildProposal, BuildSystemState, Proposal } from "@/lib/engine/directed-build";
 import { proposalRoi } from "@/lib/engine/construction";
-import { generalSpaceUsed, labourDemand } from "@/lib/engine/industry";
+import { industryLandUsed, labourDemand } from "@/lib/engine/industry";
 import { isEconomicallyActive } from "@/lib/engine/control";
-import { BUILDING_TYPES, CONSTRUCTION_CENTRE_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
+import { BUILDING_TYPES, CONSTRUCTION_CENTRE_TYPE, HOUSING_TYPE, effectiveSpaceCost } from "@/lib/constants/industry";
 import { workCostPerLevel } from "@/lib/constants/construction";
 
 export interface CentreValuationParams {
@@ -27,8 +27,11 @@ export interface CentreValuationParams {
   backlogWindow: number;
 }
 
-/** General space a queued build order will consume when it lands. Tier-0 sits on deposit slots → 0. */
+/** Industry land a queued build order will consume when it lands. Tier-0 sits on deposit slots →
+ *  0; housing sits on the separate people-land budget → 0 (only factories/academies/complexes/
+ *  centres draw industry land, mirroring `industryLandUsed`). */
 function queuedSpace(buildingType: string, levels: number): number {
+  if (buildingType === HOUSING_TYPE) return 0;
   if (BUILDING_TYPES[buildingType]?.resource) return 0;
   return levels * effectiveSpaceCost(buildingType);
 }
@@ -83,7 +86,7 @@ export function planCentreProposal(
   let site: { systemId: string; spare: number; space: number } | null = null;
   for (const s of systems) {
     if (!isEconomicallyActive(s.control)) continue;
-    const space = s.generalSpace - generalSpaceUsed(s.buildings) - (committedSpace.get(s.systemId) ?? 0);
+    const space = s.generalSpace - industryLandUsed(s.buildings) - (committedSpace.get(s.systemId) ?? 0);
     if (space < footprint) continue;
     const spare = Math.max(0, s.population - labourDemand(s.buildings));
     if (

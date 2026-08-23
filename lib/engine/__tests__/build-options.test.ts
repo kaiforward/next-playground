@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeBuildOptions } from "@/lib/engine/build-options";
-import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, CONSTRUCTION_CENTRE_TYPE, BUILDING_TYPES } from "@/lib/constants/industry";
+import { HOUSING_TYPE, VOCATIONAL_SCHOOL_TYPE, CONSTRUCTION_CENTRE_TYPE, BUILDING_TYPES, effectiveSpaceCost } from "@/lib/constants/industry";
 import { workCostPerLevel } from "@/lib/constants/construction";
 import { emptyResourceVector } from "@/lib/engine/resources";
 
@@ -13,7 +13,7 @@ function sys(over: Partial<Parameters<typeof computeBuildOptions>[0]> = {}) {
 const byType = (opts: ReturnType<typeof computeBuildOptions>, t: string) => opts.find((o) => o.buildingType === t)!;
 
 describe("computeBuildOptions", () => {
-  it("caps housing by the tighter of habitable and general space, net of committed levels", () => {
+  it("caps housing by people land (habitableSpace) alone, net of committed levels", () => {
     // habitable 4 → 4 housing levels max; 2 built + 1 committed → 1 addable.
     const opts = computeBuildOptions(sys({ buildings: { [HOUSING_TYPE]: 2 } }), { [HOUSING_TYPE]: 1 });
     const h = byType(opts, HOUSING_TYPE);
@@ -22,11 +22,21 @@ describe("computeBuildOptions", () => {
     expect(h.workPerLevel).toBe(workCostPerLevel(HOUSING_TYPE));
   });
 
-  it("hard-blocks a general-space type when no footprint remains", () => {
-    const full = sys({ generalSpace: 2, buildings: { [HOUSING_TYPE]: 2 } }); // habitable 4, general full
+  it("hard-blocks a general-space type when no industry-land footprint remains", () => {
+    // Housing bills people land alone (build rule separation) — standing housing never eats
+    // industry land, so exhaust industry land directly with a non-housing build instead.
+    const schoolCost = effectiveSpaceCost(VOCATIONAL_SCHOOL_TYPE);
+    const full = sys({ generalSpace: 2, buildings: { [VOCATIONAL_SCHOOL_TYPE]: Math.ceil(2 / schoolCost) } });
     const c = byType(computeBuildOptions(full, {}), CONSTRUCTION_CENTRE_TYPE);
     expect(c.maxLevels).toBe(0);
     expect(c.blocked).toBe("no_space");
+  });
+
+  it("housing standing at full people-land occupancy does not block a general-space type (build rule separation)", () => {
+    const full = sys({ generalSpace: 10, habitableSpace: 4, buildings: { [HOUSING_TYPE]: 4 } }); // people land full
+    const c = byType(computeBuildOptions(full, {}), CONSTRUCTION_CENTRE_TYPE);
+    expect(c.maxLevels).toBeGreaterThan(0);
+    expect(c.blocked).toBeNull();
   });
 
   it("caps an extractor by its deposit slots and reports no_deposit_slots at zero", () => {

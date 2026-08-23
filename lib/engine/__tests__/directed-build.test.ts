@@ -265,6 +265,28 @@ describe("buildableUnits / buildableOutput", () => {
     // "not_a_real_good" is not in GOOD_TIER_BY_KEY; should return 0, not divide by default footprint
     expect(buildableUnits(sys, "not_a_real_good")).toBe(0);
   });
+
+  // Proves (3): factories never bill people land — a tier-1+ good's buildable capacity is
+  // identical whether the system's people-land budget is zero or generous.
+  it("is unaffected by people land (habitableSpace) — a factory never draws on it", () => {
+    const noPeopleLand: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
+      slotCap: unitResourceVector(), generalSpace: 100, habitableSpace: 0, goods: [],
+    };
+    const generousPeopleLand: BuildSystemState = { ...noPeopleLand, habitableSpace: 100000 };
+    expect(buildableUnits(noPeopleLand, "metals")).toBeCloseTo(buildableUnits(generousPeopleLand, "metals"), 6);
+  });
+
+  // Proves (4): extractors bill neither budget — N tier-0 extractors leave both used-readings
+  // unchanged (industry land's remaining capacity for a tier-1+ good is untouched by them).
+  it("a tier-0 extractor never eats into a tier-1+ good's industry-land capacity", () => {
+    const bare: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
+      slotCap: makeResourceVector({ ore: 1000 }), generalSpace: 100, habitableSpace: 50, goods: [],
+    };
+    const withExtractors: BuildSystemState = { ...bare, buildings: { food: 30 } }; // 30 tier-0 extractors
+    expect(buildableUnits(withExtractors, "metals")).toBeCloseTo(buildableUnits(bare, "metals"), 6);
+  });
 });
 
 function countFor(builds: PlannedBuild[], systemId: string, type: string): number {
@@ -712,18 +734,25 @@ describe("fed", () => {
 });
 
 describe("habitableHousingHeadroom", () => {
-  it("returns the min of remaining habitable and remaining general, in housing units", () => {
+  it("returns the remaining people-land budget alone, in housing units", () => {
     expect(habitableHousingHeadroom(sysWith({ generalSpace: 100, habitableSpace: 40 }))).toBeCloseTo(40);
   });
 
-  it("subtracts existing housing from both habitable and general", () => {
+  it("subtracts existing housing from people land", () => {
     const sys = sysWith({ generalSpace: 100, habitableSpace: 40, buildings: { housing: 10 } });
-    expect(habitableHousingHeadroom(sys)).toBeCloseTo(30); // habitable 40 - 10 = 30 binds
+    expect(habitableHousingHeadroom(sys)).toBeCloseTo(30); // habitable 40 - 10 = 30
   });
 
-  it("is bounded by remaining general space when factories crowd it", () => {
-    const sys = sysWith({ generalSpace: 20, habitableSpace: 50, buildings: { metals: 15 } });
-    expect(habitableHousingHeadroom(sys)).toBeCloseTo(5); // general 20 - 15 = 5 binds
+  // Proves (1): a system with industry land exactly full still builds housing given free people land.
+  it("is unaffected by industry land being exactly full — housing and industry no longer compete for space", () => {
+    const sys = sysWith({ generalSpace: 20, habitableSpace: 50, buildings: { metals: 20 } }); // industry land 20/20 used
+    expect(habitableHousingHeadroom(sys)).toBeCloseTo(50); // people land 50, untouched by the full industry land
+  });
+
+  // Proves (2): people land full blocks housing despite vast free industry land.
+  it("reads zero headroom when people land is full, no matter how much industry land is free", () => {
+    const sys = sysWith({ generalSpace: 100000, habitableSpace: 10, buildings: { housing: 10 } }); // people land 10/10 used
+    expect(habitableHousingHeadroom(sys)).toBe(0);
   });
 });
 
@@ -2356,19 +2385,21 @@ describe("relief housing and land accounting — boundaries", () => {
     }))).toBe(1);
   });
 
-  it("charges standing housing against general space rather than crediting it", () => {
-    // general 20 − 10 housing = 10 binds; habitable 100 − 10 = 90 does not.
+  it("charges standing housing against people land alone — industry land never binds it (build rule separation)", () => {
+    // habitable 100 − 10 housing = 90; generalSpace's value is irrelevant to this bound now.
     expect(habitableHousingHeadroom(sysWith({
       generalSpace: 20, habitableSpace: 100, buildings: { housing: 10 },
-    }))).toBeCloseTo(10);
+    }))).toBeCloseTo(90);
   });
 
-  it("charges a factory its own footprint, not its reciprocal", () => {
-    // machinery's footprint is 2.5, so four of them use 10 of the 20 general units.
+  it("charges a factory its own footprint, not its reciprocal, against INDUSTRY land — never against housing headroom", () => {
+    // machinery's footprint is 2.5, so four of them use 10 of the 20 industry-land units —
+    // buildableUnits reflects that; habitableHousingHeadroom (a people-land-only read) doesn't move.
     expect(effectiveSpaceCost("machinery")).toBeGreaterThan(1);
-    expect(habitableHousingHeadroom(sysWith({
-      generalSpace: 20, habitableSpace: 100, buildings: { machinery: 4 },
-    }))).toBeCloseTo(20 - 4 * effectiveSpaceCost("machinery"));
+    const sys = sysWith({ generalSpace: 20, habitableSpace: 100, buildings: { machinery: 4 } });
+    expect(buildableUnits(sys, "machinery"))
+      .toBeCloseTo((20 - 4 * effectiveSpaceCost("machinery")) / effectiveSpaceCost("machinery"));
+    expect(habitableHousingHeadroom(sys)).toBeCloseTo(100);
   });
 
   it("divides remaining general space BY the footprint when sizing a tier-1+ build", () => {
@@ -3073,10 +3104,12 @@ describe("planFactionBuilds — the tier-1+ input gate reads EVERY input", () =>
   });
 });
 
-describe("planFactionBuilds — relief housing takes its land before industry does", () => {
-  it("charges the housing it just committed against the general space industry then sees", () => {
-    // The housing pass runs first and its levels occupy general space. If they were not charged to
-    // the working copy, the industry pass would plan into land the housing already holds.
+describe("planFactionBuilds — relief housing and the industry pass draw from disjoint budgets", () => {
+  it("commits housing without shrinking the industry pass's land — the two no longer compete for the same pool", () => {
+    // Historically the housing pass's committed levels ate into the same general-space pool the
+    // industry pass then planned into. Housing now bills people land alone (industryLandUsed
+    // excludes it outright), so the industry pass sees the FULL industry-land budget regardless
+    // of how much standing housing this site already carries.
     const standingHousing = 100;
     const site: BuildSystemState = {
       systemId: "B", factionId: "f1", population: 2500, control: "developed",
@@ -3090,12 +3123,12 @@ describe("planFactionBuilds — relief housing takes its land before industry do
       goods: [{ goodId: "metals", stock: 0, demand: 1e6, production: 0, capacityProduction: 0 }],
     };
     const builds = planFactionBuilds([consumer, site], selfAndNeighbourRoute, DEV_REFS);
-    const standingUse = standingHousing * effectiveSpaceCost(HOUSING_TYPE); // ore is tier-0, on deposit slots
     const footprint = builds
       .filter((b) => b.systemId === "B" && GOOD_TIER_BY_KEY[b.buildingType] !== 0)
       .reduce((sum, b) => sum + b.count * effectiveSpaceCost(b.buildingType), 0);
     expect(countFor(builds, "B", HOUSING_TYPE)).toBeGreaterThan(0);
     expect(countFor(builds, "B", "metals")).toBeGreaterThan(0);
-    expect(footprint).toBeLessThanOrEqual(site.generalSpace - standingUse + 1e-9);
+    // Bounded by the FULL industry-land budget — no standing-housing deduction any more.
+    expect(footprint).toBeLessThanOrEqual(site.generalSpace + 1e-9);
   });
 });
