@@ -14,7 +14,7 @@ Sizes: **S** (hours), **M** (1-2 sessions), **L** (multi-session), **XL** (multi
 ## In progress
 
 - **Queued row 1 (habitability seeding)** is in flight on `feat/habitability-seeding` — spec
-  v2.1 in `docs/build-plans/habitability-seeding.md`, next step `/build-plan`. The row stays
+  v2.1 in `docs/build-plans/habitability-seeding.md`, next step `/implement-plan`. The row stays
   below as the item of record.
 
 ---
@@ -49,7 +49,7 @@ The attention layer — how the player finds what to do — is two surfaces, bot
    dead, and they compose with (rather than replace) the viability cut. Overlaps the control-shaped
    **claim pricing** item in [player-seat-roadmap.md](./planned/player-seat-roadmap.md) — settle the
    two together, not twice.
-   *Next step:* `/build-plan` from spec v2.1 (`docs/build-plans/habitability-seeding.md` — the
+   *Next step:* `/implement-plan` from the committed build plan (`docs/build-plans/habitability-seeding.md` — the
    measure/spec/review trail lives there). The feature absorbed the deposit/general-space
    rationalisation and the habitability score/threshold/quality model by owner decision.
    *Don't:* re-propose barren-but-alive (tiny artificial habitation on dead worlds so they read as
