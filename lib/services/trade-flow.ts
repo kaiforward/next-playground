@@ -9,7 +9,7 @@ import type {
   TradeFlowEdges,
   SystemLogisticsData,
 } from "@/lib/types/api";
-import { yieldsOf } from "@/lib/engine/resources";
+import { yieldsOf, effOf } from "@/lib/engine/resources";
 import { capacityGoodRates } from "@/lib/engine/industry";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
 import {
@@ -68,6 +68,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
 
   const buildings: Record<string, number> = buildingsBySystem().get(systemId) ?? {};
   const yields = yieldsOf(system);
+  const extractionEff = effOf(system);
   // The strike × maintenance scalar the economy persisted on the system's rows (all carry the
   // same one; absent reads as unsuppressed). Production and the recipe draw below both carry it,
   // so every term of a row's internalNet describes the same operating state — a striking world
@@ -75,7 +76,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   const marketRows = marketsBySystem().get(systemId) ?? [];
   const productionSuppress = marketRows.find((m) => typeof m.productionSuppressRate === "number")
     ?.productionSuppressRate ?? 1;
-  const rates = capacityGoodRates(buildings, system.population, yields);
+  const rates = capacityGoodRates(buildings, system.population, yields, extractionEff);
   const prodCon = rates.map((r) => ({ ...r, production: r.production * productionSuppress }));
   // Manufacturing input demand per good (recipe draw from local factories) — also local
   // consumption, but distinct from the civilian per-capita need carried in prodCon.consumption.
@@ -84,7 +85,7 @@ export function getSystemLogistics(systemId: string): SystemLogisticsData {
   // come to disagree about what a world draws.
   const inputDemandByGood = new Map<string, number>();
   for (const [goodId, use] of useRatesByGood({
-    buildings, population: system.population, yields, productionSuppress, rates,
+    buildings, population: system.population, yields, extractionEff, productionSuppress, rates,
   })) {
     if (use.industrial > 0) inputDemandByGood.set(goodId, use.industrial);
   }

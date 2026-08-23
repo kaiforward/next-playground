@@ -1,14 +1,14 @@
 import type {
-  BodyArchetypeId, ResourceType, ResourceVector, SunClass,
+  BodyArchetypeId, ResourceType, SunClass,
 } from "@/lib/types/game";
-import { makeResourceVector, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { RESOURCE_TYPES } from "@/lib/engine/resources";
 
 export { RESOURCE_TYPES };
 
 // ── Body archetypes ───────────────────────────────────────────────
-// Each body is a climate class on a freezing→volcanic spectrum. Every row now authors three
-// independent budgets (people land, industry land, per-resource deposit counts) plus a
-// habitability score, alongside the legacy partition columns kept transitionally below.
+// Each body is a climate class on a freezing→volcanic spectrum. Every row authors three
+// independent budgets — people land, industry land, per-resource deposit counts — plus a
+// habitability score, an extraction work modifier and a tech lock.
 
 /** An authored [min, max] range, drawn uniform-in-range at generation. */
 export interface CountRange {
@@ -41,15 +41,6 @@ export interface BodyArchetype {
   techLocked: boolean;
   /** Body-type danger contribution — summed into each system's body danger baseline. */
   dangerBaseline: number;
-
-  // ── Legacy partition columns — superseded by the authored budgets; deleted when generation
-  // reads the budget columns. ────────────────────────────────────────────────────────────────
-  habitable: boolean;
-  resourceBase: ResourceVector;
-  /** Relative weight of fungible/buildable general space on this body type (higher = more land to develop). */
-  generalWeight: number;
-  /** Fraction of general space that is habitable (supports population centres). Range [0, 1]. */
-  habitableFraction: number;
 }
 
 export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
@@ -63,9 +54,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
       biomass: { min: 3, max: 12 }, arable: { min: 18, max: 40 }, water: { min: 13, max: 29 },
     },
     extractionModifier: 1.0, techLocked: false, dangerBaseline: 0,
-    habitable: true,
-    resourceBase: makeResourceVector({ minerals: 1, ore: 1, biomass: 2, arable: 3, water: 2 }),
-    generalWeight: 9, habitableFraction: 0.7,
   },
   gaia_world: {
     id: "gaia_world", name: "Gaia World",
@@ -76,9 +64,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
       arable: { min: 6, max: 14 }, water: { min: 7, max: 16 }, biomass: { min: 2, max: 6 },
     },
     extractionModifier: 1.0, techLocked: false, dangerBaseline: 0,
-    habitable: true,
-    resourceBase: makeResourceVector({ arable: 1, water: 1, biomass: 1 }),
-    generalWeight: 10, habitableFraction: 0.9,
   },
   jungle_world: {
     id: "jungle_world", name: "Jungle World",
@@ -90,9 +75,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
       arable: { min: 12, max: 26 }, water: { min: 13, max: 29 },
     },
     extractionModifier: 0.85, techLocked: false, dangerBaseline: 0,
-    habitable: true,
-    resourceBase: makeResourceVector({ ore: 1, biomass: 3, arable: 2, water: 2 }),
-    generalWeight: 7, habitableFraction: 0.5,
   },
   ocean_world: {
     id: "ocean_world", name: "Ocean World",
@@ -103,9 +85,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
       biomass: { min: 3, max: 12 }, arable: { min: 6, max: 14 }, water: { min: 20, max: 45 },
     },
     extractionModifier: 0.9, techLocked: false, dangerBaseline: 0,
-    habitable: true,
-    resourceBase: makeResourceVector({ biomass: 2, arable: 1, water: 3 }),
-    generalWeight: 6, habitableFraction: 0.45,
   },
   boreal_world: {
     id: "boreal_world", name: "Boreal World",
@@ -117,9 +96,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
       arable: { min: 12, max: 26 }, ore: { min: 1, max: 4 },
     },
     extractionModifier: 0.85, techLocked: false, dangerBaseline: 0,
-    habitable: true,
-    resourceBase: makeResourceVector({ biomass: 2, water: 2, arable: 2, ore: 1 }),
-    generalWeight: 6, habitableFraction: 0.4,
   },
   arid_world: {
     id: "arid_world", name: "Arid World",
@@ -132,9 +108,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
       arable: { min: 6, max: 14 }, radioactive: { min: 2, max: 7 },
     },
     extractionModifier: 0.8, techLocked: false, dangerBaseline: 0,
-    habitable: true,
-    resourceBase: makeResourceVector({ minerals: 2, ore: 2, arable: 1, radioactive: 1 }),
-    generalWeight: 5, habitableFraction: 0.22,
   },
   tundra_world: {
     id: "tundra_world", name: "Tundra World",
@@ -146,9 +119,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
       water: { min: 13, max: 29 }, biomass: { min: 2, max: 6 }, arable: { min: 6, max: 14 },
     },
     extractionModifier: 0.75, techLocked: false, dangerBaseline: 0,
-    habitable: false,
-    resourceBase: makeResourceVector({ water: 2, biomass: 1, arable: 1 }),
-    generalWeight: 4, habitableFraction: 0.05,
   },
   frozen_world: {
     id: "frozen_world", name: "Frozen World",
@@ -159,9 +129,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
       gas: { min: 2, max: 6 }, ore: { min: 1, max: 4 }, water: { min: 20, max: 45 },
     },
     extractionModifier: 0.6, techLocked: false, dangerBaseline: 0,
-    habitable: false,
-    resourceBase: makeResourceVector({ gas: 1, ore: 1, water: 3 }),
-    generalWeight: 3, habitableFraction: 0.03,
   },
   volcanic_world: {
     id: "volcanic_world", name: "Volcanic World",
@@ -174,9 +141,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     },
     // Hostile — the stated hostile case: locked until a future technology.
     extractionModifier: 0.4, techLocked: true, dangerBaseline: 0.05,
-    habitable: false,
-    resourceBase: makeResourceVector({ gas: 1, minerals: 2, ore: 3, radioactive: 2 }),
-    generalWeight: 2, habitableFraction: 0.02,
   },
   barren_rock: {
     id: "barren_rock", name: "Barren Rock",
@@ -189,9 +153,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     // The mining-outpost backbone — deliberately NOT tech-locked (claim-1 evidence: dead-body deposits
     // carry colonisability today).
     extractionModifier: 0.7, techLocked: false, dangerBaseline: 0,
-    habitable: false,
-    resourceBase: makeResourceVector({ minerals: 2, ore: 2, radioactive: 1 }),
-    generalWeight: 3, habitableFraction: 0.03,
   },
   asteroid_belt: {
     id: "asteroid_belt", name: "Asteroid Belt",
@@ -204,9 +165,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     // The mining-outpost backbone — deliberately NOT tech-locked (claim-1 evidence: dead-body deposits
     // carry colonisability today).
     extractionModifier: 0.6, techLocked: false, dangerBaseline: 0,
-    habitable: false,
-    resourceBase: makeResourceVector({ minerals: 3, ore: 3, radioactive: 1 }),
-    generalWeight: 2, habitableFraction: 0.02,
   },
   gas_giant: {
     id: "gas_giant", name: "Gas Giant",
@@ -218,9 +176,6 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     },
     // Gas giant deposits are locked until a future technology.
     extractionModifier: 0.3, techLocked: true, dangerBaseline: 0,
-    habitable: false,
-    resourceBase: makeResourceVector({ gas: 3, water: 1 }),
-    generalWeight: 1, habitableFraction: 0,
   },
 };
 

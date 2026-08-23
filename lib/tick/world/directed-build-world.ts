@@ -24,6 +24,8 @@ export interface SystemBuildRow {
   buildings: Record<string, number>;
   /** Per-resource effective yields, for the shared market-state derivation. */
   yields: ResourceVector;
+  /** Per-resource extraction-work efficiency, threaded alongside `yields`; absent ⇒ neutral 1.0. */
+  extractionEff?: ResourceVector;
   /** Per-resource deposit-slot cap — caps tier-0 extractor builds. */
   slotCap: ResourceVector;
   /** Fungible general build space — tier-1+ factories + housing. */

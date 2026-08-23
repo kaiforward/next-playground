@@ -4,7 +4,7 @@ import { ServiceError } from "./errors";
 import { isEconomicallyActive } from "@/lib/engine/control";
 import type { UniverseData } from "@/lib/types/game";
 import type { SystemDetailData, SystemSubstrateData, SystemIndustryData, BodyView } from "@/lib/types/api";
-import { slotCapOf, qualityOf } from "@/lib/engine/resources";
+import { slotCapOf, qualityOf, effOf } from "@/lib/engine/resources";
 import {
   capacityGoodRates,
   extractorsByResource,
@@ -149,7 +149,7 @@ export function getSystemIndustry(systemId: string): SystemIndustryData {
     ...readout,
     space: summariseSpace(system.availableSpace, system.generalSpace, system.habitableSpace, buildings),
     deposits: summariseDeposits(slotCap, worked, yields),
-    goods: capacityGoodRates(buildings, system.population, yields),
+    goods: capacityGoodRates(buildings, system.population, yields, effOf(system)),
     popNeeds,
   };
 }

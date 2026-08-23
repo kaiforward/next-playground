@@ -367,6 +367,7 @@ export function generateSystems(
       habitableSpace: substrate.habitableSpace,
       slotCap: substrate.slotCap,
       yieldMult: substrate.yieldMult,
+      extractionEfficiency: substrate.extractionEfficiency,
       x: points[i].x,
       y: points[i].y,
       regionIndex,
@@ -626,6 +627,7 @@ export function stampHomeworldPrefabs(
     s.habitableSpace = agg.habitableSpace;
     s.availableSpace = agg.availableSpace;
     s.yieldMult = agg.yieldMult;
+    s.extractionEfficiency = agg.extractionEfficiency;
     s.bodyDanger = agg.bodyDanger;
     s.buildings = computeHomeworldBuildings(HOME_SYSTEM_POP);
     s.population = HOME_SYSTEM_POP;

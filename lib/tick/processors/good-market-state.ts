@@ -76,6 +76,9 @@ export interface MarketStateSource {
   buildings: Record<string, number>;
   population: number;
   yields: ResourceVector;
+  /** Per-resource extraction-work efficiency, threaded alongside `yields`; absent ⇒ neutral 1.0
+   *  (the same convention `capacityGoodRates`'s own default carries). */
+  extractionEff?: ResourceVector;
   markets: MarketRowForLogistics[];
 }
 
@@ -83,7 +86,7 @@ export function toGoodMarketStates(
   row: MarketStateSource,
   opts?: { withDraw?: boolean; drawBrakeCeiling?: DrawBrakeCeiling },
 ): GoodMarketState[] {
-  const rates = capacityGoodRates(row.buildings, row.population, row.yields);
+  const rates = capacityGoodRates(row.buildings, row.population, row.yields, row.extractionEff);
   const consByKey = new Map(rates.map((r) => [r.goodId, r.consumption]));
   const prodByKey = new Map(rates.map((r) => [r.goodId, r.production]));
 
@@ -99,6 +102,7 @@ export function toGoodMarketStates(
       buildings: row.buildings,
       population: row.population,
       yields: row.yields,
+      extractionEff: row.extractionEff,
       productionSuppress,
       rates,
     });
@@ -152,6 +156,7 @@ export function toGoodMarketStates(
       buildings: row.buildings,
       population: row.population,
       yields: row.yields,
+      extractionEff: row.extractionEff,
       productionSuppress,
       rates,
       brakeCeilingOf: (goodId) => brakeByGood.get(goodId) ?? 1,

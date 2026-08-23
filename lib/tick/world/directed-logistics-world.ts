@@ -50,6 +50,8 @@ export interface SystemLogisticsRow {
   buildings: Record<string, number>;
   /** Per-resource effective yields, for inputDemandForGood / capacityGoodRates. */
   yields: ResourceVector;
+  /** Per-resource extraction-work efficiency, threaded alongside `yields`; absent ⇒ neutral 1.0. */
+  extractionEff?: ResourceVector;
   markets: MarketRowForLogistics[];
 }
 

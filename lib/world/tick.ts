@@ -51,7 +51,7 @@ import { DIRECTED_BUILD } from "@/lib/constants/directed-build";
 import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
-import { slotCapOf, yieldsOf, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { slotCapOf, yieldsOf, effOf, RESOURCE_TYPES } from "@/lib/engine/resources";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -232,6 +232,7 @@ export function toTickSystems(world: World): TickSystem[] {
       buildOpportunity: s.buildOpportunity,
       colonyOpportunity: s.colonyOpportunity,
       yields: yieldsOf(s),
+      extractionEff: effOf(s),
       slotCap: slotCapOf(s),
       generalSpace: s.generalSpace,
       habitableSpace: s.habitableSpace,
@@ -355,6 +356,7 @@ function buildLogisticsRows(
     population: s.population,
     buildings: s.buildings,
     yields: s.yields,
+    extractionEff: s.extractionEff,
     markets: marketsBySystem.get(s.id) ?? [],
   }));
 }
@@ -370,6 +372,7 @@ function buildBuildRows(
     population: s.population,
     buildings: s.buildings,
     yields: s.yields,
+    extractionEff: s.extractionEff,
     slotCap: s.slotCap,
     generalSpace: s.generalSpace,
     habitableSpace: s.habitableSpace,

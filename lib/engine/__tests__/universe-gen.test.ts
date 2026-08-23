@@ -40,6 +40,7 @@ function mkSys(p: Partial<GeneratedSystem> & { index: number }): GeneratedSystem
     bodies: [], popCap: 0, population: 0, bodyDanger: 0, buildings: {},
     availableSpace: 0, generalSpace: 0, habitableSpace: 0,
     slotCap: emptyResourceVector(), yieldMult: emptyResourceVector(),
+    extractionEfficiency: emptyResourceVector(),
     x: 0, y: 0, regionIndex: 0, isGateway: false, description: "",
     ...p,
   };

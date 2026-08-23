@@ -6,7 +6,7 @@ import { ServiceError } from "@/lib/services/errors";
 import { economyShardOrder, factionShardKeys } from "@/lib/engine/shard-order";
 import { InMemoryEconomyWorld } from "@/lib/tick/adapters/memory/economy";
 import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directed-logistics";
-import { emptyResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import type { World, WorldSystem } from "@/lib/world/types";
 import type { TickSystem } from "@/lib/tick/rows";
 import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-world";
@@ -66,6 +66,7 @@ function makeTickSystem(id: string, factionId: string | null): TickSystem {
     buildingIdleCycles: {},
     collapseDebt: 0,
     yields: emptyResourceVector(),
+    extractionEff: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 100,
     habitableSpace: 50,

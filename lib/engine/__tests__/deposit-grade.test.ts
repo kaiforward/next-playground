@@ -2,10 +2,10 @@ import { describe, it, expect } from "vitest";
 import { depositGrade, depositGradeVector, type GradedBody } from "../deposit-grade";
 import { makeResourceVector, unitResourceVector, RESOURCE_TYPES } from "../resources";
 
-/** A body with the given ore slot count + quality (all other resources empty). */
-function oreBody(slots: number, quality: number): GradedBody {
+/** A body with the given ore deposit count + quality (all other resources empty). */
+function oreBody(count: number, quality: number): GradedBody {
   return {
-    slots: makeResourceVector({ ore: slots }),
+    counts: makeResourceVector({ ore: count }),
     quality: { ...unitResourceVector(), ore: quality },
   };
 }
@@ -37,7 +37,7 @@ describe("depositGrade", () => {
 describe("depositGradeVector", () => {
   it("grades every resource, neutral where absent", () => {
     const bodies: GradedBody[] = [
-      { slots: makeResourceVector({ ore: 4, water: 2 }), quality: { ...unitResourceVector(), ore: 1.5, water: 2.0 } },
+      { counts: makeResourceVector({ ore: 4, water: 2 }), quality: { ...unitResourceVector(), ore: 1.5, water: 2.0 } },
     ];
     const v = depositGradeVector(bodies);
     expect(v.ore).toBeCloseTo(1.5, 6);

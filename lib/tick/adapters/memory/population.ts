@@ -101,9 +101,11 @@ export class InMemoryPopulationWorld implements PopulationWorld {
     const rowBySystem = new Map(pops.map((p) => [p.systemId, p]));
     const buildingsBySystemId = new Map<string, Record<string, number>>();
     const yieldsBySystemId = new Map<string, ResourceVector>();
+    const effBySystemId = new Map<string, ResourceVector>();
     for (const s of this.systems) {
       buildingsBySystemId.set(s.id, s.buildings);
       yieldsBySystemId.set(s.id, s.yields);
+      effBySystemId.set(s.id, s.extractionEff);
     }
     // Cache the labour snapshot and the whole-system use map per system — both scan the
     // building set once and are shared across all of that system's markets.
@@ -114,6 +116,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
       if (row == null) return m;
       const buildings = buildingsBySystemId.get(m.systemId) ?? {};
       const yields = yieldsBySystemId.get(m.systemId) ?? unitResourceVector();
+      const extractionEff = effBySystemId.get(m.systemId) ?? unitResourceVector();
       let snap = labourBySystem.get(m.systemId);
       if (snap === undefined) {
         snap = computeSystemLabourSnapshot(buildings, row.population);
@@ -125,6 +128,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
           buildings,
           population: row.population,
           yields,
+          extractionEff,
           productionSuppress: row.productionSuppress,
         });
         useBySystem.set(m.systemId, uses);
@@ -134,7 +138,7 @@ export class InMemoryPopulationWorld implements PopulationWorld {
         ...m,
         // Two figures, two jobs: the floored capacity anchor prices the good, the unfloored
         // use figure sizes its warehousing. Neither is derived from the other.
-        demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state),
+        demandRate: totalDemandRateForGood(m.goodId, snap.basis, buildings, yields, snap.state, extractionEff),
       };
       // A corrupt compute leaves the field absent — the readers' documented live-recompute path —
       // never 0 (which would make the row un-sinkable and fully drawable at once), and never the

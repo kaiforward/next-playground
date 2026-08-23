@@ -2,8 +2,9 @@
  * Pure capacity-driven production math — zero DB dependency.
  *
  * Production derives from the built industrial base:
- *   production_g = Σ_{t: outputGood_t = g} count_t × outputPerUnit_t × effectiveFulfilment(tier_g) × yieldMult
- * where yieldMult = yields[resource] for tier-0 goods, 1 for tier-1+.
+ *   production_g = Σ_{t: outputGood_t = g} count_t × outputPerUnit_t × effectiveFulfilment(tier_g) × yieldMult × effMult
+ * where yieldMult = yields[resource] and effMult = extractionEff[resource] for tier-0 goods, 1 for tier-1+
+ * (two independent deposit properties — ground grade vs per-body extraction difficulty).
  * Labour is a system-wide `LabourState` (uniform proportional allocation) split into
  * a headcount gate and two skill-ceiling gates:
  *   labourFulfil = min(1, population / Σ count_t × labourTotal_t)
@@ -44,7 +45,7 @@ import { ECONOMY_CONSTANTS, ECONOMY_SIM_PARAMS } from "@/lib/constants/economy";
 import { inputGate, inputDrawRatio } from "@/lib/engine/supply-chain";
 import { brakeKnee, productionCeiling } from "@/lib/engine/tick";
 import { USED_SLACK, VACANCY_SLACK } from "@/lib/constants/infrastructure";
-import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
+import { RESOURCE_TYPES, emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import { bandForMultiplier } from "@/lib/engine/substrate-space";
 
 /** Σ count × labourTotal across types that demand labour (production + academies). Housing demands none. */
@@ -457,13 +458,17 @@ export function computeUtilisation(buildingType: string, count: number, ctx: Uti
 /**
  * Capacity-driven production rate for one good. Sums every production type
  * whose outputGood matches (1:1 today, many-to-one ready).
- * Tier-0 goods are multiplied by `yields[resource]`; tier-1+ goods use ×1.
+ * Tier-0 goods are multiplied by `yields[resource]` × `extractionEff[resource]`; tier-1+ goods
+ * use ×1 for both (yield and extraction efficiency are deposit properties — inert past tier-0).
+ * `extractionEff` defaults to a neutral 1.0 vector when omitted, matching the "1.0 where no
+ * counts" convention `substrateAggregates` itself uses.
  */
 export function buildingProduction(
   buildings: Record<string, number>,
   goodId: string,
   state: LabourState,
   yields: ResourceVector,
+  extractionEff: ResourceVector = unitResourceVector(),
 ): number {
   const fulfilment = effectiveFulfilment(state, GOOD_TIER_BY_KEY[goodId] ?? 0);
   let rate = 0;
@@ -473,12 +478,16 @@ export function buildingProduction(
     if (def?.outputGood !== goodId) continue;
     rate += count * (def.outputPerUnit ?? 0) * fulfilment;
   }
-  // Tier-0 yield term: multiply by the per-resource yield multiplier.
+  // Tier-0 yield + extraction-efficiency term: multiply by the per-resource yield multiplier and
+  // the per-resource extraction-work efficiency — two independent deposit properties (ground grade
+  // vs per-body difficulty), never folded into one.
   // `resource !== undefined` already implies tier-0 (only tier-0 goods set GOOD_PRODUCTION[g].resource);
   // the `GOOD_TIER_BY_KEY[goodId] === 0` check is a safety belt against future schema drift.
   const resource = GOOD_PRODUCTION[goodId]?.resource;
-  const yieldMult = (resource !== undefined && GOOD_TIER_BY_KEY[goodId] === 0) ? yields[resource] : 1;
-  return rate * yieldMult * familyAnchorBuff(buildings, goodId);
+  const isTier0 = resource !== undefined && GOOD_TIER_BY_KEY[goodId] === 0;
+  const yieldMult = isTier0 ? yields[resource] : 1;
+  const effMult = isTier0 ? extractionEff[resource] : 1;
+  return rate * yieldMult * effMult * familyAnchorBuff(buildings, goodId);
 }
 
 /**
@@ -486,17 +495,18 @@ export function buildingProduction(
  * The read-service shape (one `SubstrateGoodRate` per good), capacity-driven on
  * the production axis; consumption is the civilian demand basis (per-capita
  * baseline + per-grade skilled baskets — see consumptionRate).
- * Tier-0 production is multiplied by `yields[resource]`.
+ * Tier-0 production is multiplied by `yields[resource]` × `extractionEff[resource]`.
  */
 export function capacityGoodRates(
   buildings: Record<string, number>,
   population: number,
   yields: ResourceVector,
+  extractionEff: ResourceVector = unitResourceVector(),
 ): SubstrateGoodRate[] {
   const snap = computeSystemLabourSnapshot(buildings, population);
   return GOOD_NAMES.map((goodId) => ({
     goodId,
-    production: buildingProduction(buildings, goodId, snap.state, yields),
+    production: buildingProduction(buildings, goodId, snap.state, yields, extractionEff),
     consumption: consumptionRate(goodId, snap.basis),
   }));
 }
@@ -512,10 +522,11 @@ export function inputDemandForGood(
   goodId: string,
   state: LabourState,
   yields: ResourceVector,
+  extractionEff: ResourceVector = unitResourceVector(),
 ): number {
   let demand = 0;
   for (const consumer of GOOD_RECIPE_CONSUMERS[goodId] ?? []) {
-    demand += buildingProduction(buildings, consumer.goodId, state, yields) * consumer.perOutput;
+    demand += buildingProduction(buildings, consumer.goodId, state, yields, extractionEff) * consumer.perOutput;
   }
   return demand * INPUT_DEMAND_MULTIPLIER;
 }
@@ -715,8 +726,10 @@ export interface IndustryReadoutAccessors {
  * use term, `buildingProduction` the output term), so the panel and the
  * simulation cannot disagree about which producers are idle.
  *
- * `yields` threads through to `buildingProduction` but is inert for this readout:
- * supplyChain covers only tier-1+ goods, whose production is yield-independent.
+ * `yields`/`extractionEff` thread through to `buildingProduction` but are inert for the
+ * supplyChain section: it covers only tier-1+ goods, whose production is yield-independent. The
+ * per-building `output` rows below DO carry them (a tier-0 extractor's displayed output must
+ * match what the tick actually produces). `extractionEff` defaults to neutral 1.0 when omitted.
  */
 export function buildIndustryReadout(
   buildings: Record<string, number>,
@@ -724,6 +737,7 @@ export function buildIndustryReadout(
   marketStock: Record<string, number>,
   yields: ResourceVector,
   accessors: IndustryReadoutAccessors,
+  extractionEff: ResourceVector = unitResourceVector(),
 ): SystemIndustryReadout {
   const { demandRateOf, honestUseRateOf, anchorMultOf, logisticsFundingBoundOf } = accessors;
   const parts = labourParts(buildings);
@@ -744,7 +758,7 @@ export function buildIndustryReadout(
     const knee = brakeKnee(
       {
         useRate: honestUseRateOf(g),
-        capacityProduction: buildingProduction(buildings, g, state, yields),
+        capacityProduction: buildingProduction(buildings, g, state, yields, extractionEff),
         anchorMult: anchorMultOf(g),
       },
       ECONOMY_SIM_PARAMS,
@@ -826,7 +840,7 @@ export function buildIndustryReadout(
     let output: number | undefined;
     let gate = 1;
     if (outputGood !== undefined) {
-      const production = buildingProduction(buildings, outputGood, state, yields);
+      const production = buildingProduction(buildings, outputGood, state, yields, extractionEff);
       gate = GOOD_RECIPES[outputGood] ? inputGate(outputGood, production, stockOf, rationStockOf) : 1;
       output = production * gate;
     }

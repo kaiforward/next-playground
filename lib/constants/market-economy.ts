@@ -13,6 +13,7 @@ import {
   inputDemandForGood,
 } from "@/lib/engine/industry";
 import type { LabourState } from "@/lib/engine/industry";
+import { unitResourceVector } from "@/lib/engine/resources";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import type { CivilianDemandBasis } from "@/lib/engine/physical-economy";
 import { GOODS } from "@/lib/constants/goods";
@@ -66,10 +67,11 @@ export function totalDemandRateForGood(
   buildings: Record<string, number>,
   yields: ResourceVector,
   labourState?: LabourState,
+  extractionEff: ResourceVector = unitResourceVector(),
 ): number {
   const civilian = consumptionRate(goodId, basis);
   const state = labourState ?? computeLabourState(buildings, basis.population);
-  const industrial = inputDemandForGood(buildings, goodId, state, yields);
+  const industrial = inputDemandForGood(buildings, goodId, state, yields, extractionEff);
   return Math.max(civilian + industrial, MIN_DEMAND);
 }
 
@@ -84,6 +86,10 @@ export function totalDemandRateForGood(
  *
  * Uses the same building-block formula `capacityGoodRates` does, but for a
  * single good (avoids an O(goods²) seed when called per good).
+ *
+ * Reads NEUTRAL extraction efficiency (1.0) deliberately: this is a one-time
+ * bootstrap approximation for opening stock, never a per-tick rate — the live
+ * recompute paths carry the system's real `extractionEff`.
  */
 export function getInitialStock(
   buildings: Record<string, number>,

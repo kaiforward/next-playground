@@ -7,7 +7,7 @@ import { REFERENCE_INTERVAL } from "@/lib/constants/tick-cadence";
 import type { World, WorldSystem } from "@/lib/world/types";
 import { capacityGoodRates, computeSystemLabourSnapshot, inputDemandForGood } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { yieldsOf } from "@/lib/engine/resources";
+import { yieldsOf, effOf } from "@/lib/engine/resources";
 
 // Imports/exports are summed over the flow window then normalised to a
 // per-REFERENCE_INTERVAL rate (so they share units with production/consumption, which are
@@ -135,8 +135,9 @@ describe("getSystemLogistics", () => {
     }
     const snap = computeSystemLabourSnapshot(buildings, system.population);
 
+    const extractionEff = effOf(system);
     for (const row of data.rows) {
-      const expected = inputDemandForGood(buildings, row.goodId, snap.state, yieldsOf(system)) * suppress;
+      const expected = inputDemandForGood(buildings, row.goodId, snap.state, yieldsOf(system), extractionEff) * suppress;
       expect(row.inputDemand, row.goodId).toBeCloseTo(expected, 9);
     }
     // Non-vacuous: this world genuinely has industry drawing recipe inputs.
@@ -145,7 +146,7 @@ describe("getSystemLogistics", () => {
     // Production carries the same suppress scalar, so both halves of internalNet describe the
     // same operating state — a striking world must not show full output beside a gated draw.
     const capacity = new Map(
-      capacityGoodRates(buildings, system.population, yieldsOf(system))
+      capacityGoodRates(buildings, system.population, yieldsOf(system), extractionEff)
         .map((r) => [r.goodId, r.production]),
     );
     for (const row of data.rows) {

@@ -68,6 +68,7 @@ function sys(id: string, over: Partial<TickSystem> = {}): TickSystem {
     control: "developed", governmentType: "federation", population: 100, popCap: 200,
     unrest: 0, buildings: {}, buildingIdleCycles: {}, collapseDebt: 0,
     yields: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
+    extractionEff: { gas: 1, minerals: 1, ore: 1, biomass: 1, arable: 1, water: 1, radioactive: 1 },
     slotCap: { gas: 0, minerals: 0, ore: 0, biomass: 0, arable: 0, water: 0, radioactive: 0 },
     generalSpace: 100, habitableSpace: 50,
     ...over,

@@ -71,7 +71,10 @@ describe("runTickHarness: the role partition", () => {
 // and folded a DIFFERENT way (rank-then-take-first, against the runner's running-best loop).
 
 describe("runTickHarness: the region overview", () => {
-  const CONFIG: HarnessConfig = { systemCount: 20, seed: 7, tickCount: 1 };
+  // Seed 2 (over seed 7's archetype-table galaxy) is where the empty-region, tie-break and
+  // tie-break-direction branches below are all live at once — re-derived by search, not carried
+  // over from the old substrate model.
+  const CONFIG: HarnessConfig = { systemCount: 20, seed: 2, tickCount: 1 };
 
   /** Government types per region, in the order the runner would encounter them. */
   function govsByRegion(): Map<string, GovernmentType[]> {
@@ -360,7 +363,13 @@ describe("runTickHarness: the whole-run flow log", () => {
     // shifts with the archetype/sun-class tables), search forward in small steps — small enough
     // that the first hit lands well inside the 200-tick retention floor — for the first tickCount
     // with any flow rows at all, then use that same run as ground truth for the accumulator.
-    const base = { systemCount: 20, seed: 7 } as const;
+    // systemCount 60, not 20: at 20 systems this seed's minor-faction count (18) claims all but 2
+    // systems as homeworlds outright, and — under the habitability-seeding archetype tables, where
+    // colonisability is a genuine minority rather than ~97.5% of the galaxy — the two leftover
+    // systems are exactly the ones homeworld placement passed over for low habitable land, so they
+    // land uncolonisable with high (here: total) probability across seeds. No amount of searching
+    // forward in ticks recovers a transfer network that structurally has nowhere to grow into.
+    const base = { systemCount: 60, seed: 7 } as const;
     const results = await firstRunWhere(
       base,
       (r) => r.finalWorld.flowEvents.length > 0,
@@ -387,7 +396,9 @@ describe("runTickHarness: the whole-run flow log", () => {
     // stopped one tick short of it reads a zero spend fraction regardless of how colonisation
     // paced — as long as transfers are already flowing by then, which the flow-log test above
     // establishes happens far earlier than LOGISTICS_WARMUP_TICKS under the current tables.
-    const base = { systemCount: 20, seed: 7 } as const;
+    // systemCount 60 — see the flow-log test above for why 20 structurally cannot found a colony
+    // on this seed under the habitability-seeding tables.
+    const base = { systemCount: 60, seed: 7 } as const;
     const before = await runTickHarness({ ...base, tickCount: LOGISTICS_WARMUP_TICKS - 1 });
     expect(before.logisticsActivity.transferCount).toBeGreaterThan(0);
     expect(before.logisticsActivity.budgetSpentFrac).toBe(0);
@@ -433,12 +444,19 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // waiting — `sampledCount` BELOW `foundedCount` is the whole signature of the gate. A sampler
     // that fired on any other tick would have read every one of them, and read them before the
     // cycle that writes their satisfaction had ever run.
-    // 4,357 = the construction cycle at 4,344 (which founds this seed's sixth colony) plus 13 ticks,
-    // so the run stops mid-cycle: five earlier colonies have met an economy cycle and been sampled,
-    // the sixth has not. The founding ticks themselves moved with the establish duration — the first
-    // colony on this seed lands at 4,176, not at the couple-of-hundred-tick mark a faster absorption
-    // cap used to put it at.
-    const results = await runTickHarness({ systemCount: 60, seed: 7, tickCount: 4_357 });
+    // The tick a run has to stop on to land mid-cycle moves with the archetype/sun-class tables
+    // (colonisation pacing is a function of them, not a constant this suite owns — see
+    // `firstRunWhere` above), so search forward for the first tickCount where at least one colony
+    // has founded and been sampled but at least one other founded colony has not yet met its first
+    // economy cycle, rather than hardcode the boundary tick.
+    const results = await firstRunWhere(
+      { systemCount: 60, seed: 7 },
+      (r) =>
+        r.foundingStock.foundedCount > 0 &&
+        r.foundingStock.sampledCount > 0 &&
+        r.foundingStock.sampledCount < r.foundingStock.foundedCount,
+      { start: 4_000, step: 20, maxTickCount: 6_000 },
+    );
     const stock = results.foundingStock;
 
     expect(stock.foundedCount).toBeGreaterThan(0);
@@ -447,7 +465,7 @@ describe("runTickHarness: the cycle-gated samplers", () => {
     // And what it read is a colony that has lived a cycle, not one still holding its manifest.
     expect(stock.meanOpeningSatisfaction).toBeGreaterThan(0.5);
     expect(stock.openingDeprivedCount).toBeLessThan(stock.sampledCount / 2);
-  }, 60_000);
+  }, 180_000);
 
   it("takes the demand-hunting flip as a per-cycle observation", async () => {
     // flipRate's denominator is decided readings, and a reading is taken once per economy cycle.
@@ -570,8 +588,11 @@ describe("runTickHarness: founding instruments", () => {
   // it reads as a plausible number (0 stalls looks like a healthy galaxy; a concurrency mean off by
   // the cadence looks like a busier one), so each is asserted as a structural identity rather than
   // a magnitude nobody could recognise as wrong. 240 ticks is ten construction cycles on a small
-  // world — long enough that colonies are committed, staged from and held up.
-  const CONFIG: HarnessConfig = { systemCount: 20, seed: 7, tickCount: 240 };
+  // world — long enough that colonies are committed, staged from and held up. systemCount 60, not
+  // 20: at 20 this seed's minor-faction count claims all but 2 systems outright, and under the
+  // habitability-seeding tables the 2 leftover systems (passed over by homeworld placement for low
+  // habitable land) land uncolonisable — no colony_establish project is ever committed to sample.
+  const CONFIG: HarnessConfig = { systemCount: 60, seed: 7, tickCount: 240 };
 
   it("samples open colonies once per construction cycle, not once per tick", async () => {
     // The census is a per-CYCLE rate. Sampled per tick it would read the construction interval
@@ -624,9 +645,11 @@ describe("runTickHarness: logistics instruments", () => {
     // A silent wiring break reads 0.000 on every new counter — exactly the healthy-looking
     // value an ample budget produces — so the guard is a live run asserting non-zero.
     // LOGISTICS_WARMUP_TICKS + 200 (eight cycles): past the tick where ledger accumulation starts,
-    // with cycles to spare on a small world that transfers from tick 4152.
+    // with cycles to spare on a world that transfers well before then. systemCount 60, not 20 — see
+    // the flow-log test's comment for why 20 structurally cannot found a colony on this seed under
+    // the habitability-seeding tables.
     const results = await runTickHarness({
-      systemCount: 20, seed: 7, tickCount: LOGISTICS_WARMUP_TICKS + 200,
+      systemCount: 60, seed: 7, tickCount: LOGISTICS_WARMUP_TICKS + 200,
     });
     const lg = results.logisticsActivity;
     expect(lg.transferCount).toBeGreaterThan(0);

@@ -83,22 +83,25 @@ describe("homeworldGardenBody", () => {
       const r = GOOD_PRODUCTION[type]?.resource;
       if (r) need[r] += count;
     }
-    for (const r of RESOURCE_TYPES) expect(garden.slots[r], r).toBeGreaterThanOrEqual(need[r]);
+    for (const r of RESOURCE_TYPES) expect(garden.counts[r], r).toBeGreaterThanOrEqual(need[r]);
   });
 
-  it("guarantees enough habitable space for the prefab's housing", () => {
+  it("guarantees enough people land for the prefab's housing", () => {
     const housing = HOME_SYSTEM_PREFAB.buildings[HOUSING_TYPE] ?? 0;
-    expect(homeworldGardenBody().habitableSpace).toBeGreaterThanOrEqual(housing * effectiveSpaceCost(HOUSING_TYPE));
+    expect(homeworldGardenBody().peopleLand).toBeGreaterThanOrEqual(housing * effectiveSpaceCost(HOUSING_TYPE));
   });
 
-  it("guarantees enough general space for every factory, academy and housing level", () => {
-    // Extractors sit on deposit slots (asserted above); every non-tier-0 building (factories, academies,
-    // housing) draws general space. The garden must fit their whole footprint so nothing is floored.
-    let generalFootprint = 0;
+  it("guarantees enough industry land for every factory and academy (housing bills people land, not this)", () => {
+    // Extractors sit on deposit counts (asserted above); housing bills people land (asserted above);
+    // every other built type (factories, academies) draws industry land only, under the build-rule
+    // separation the three-budget model authors. The garden must fit their whole footprint so nothing
+    // is floored.
+    let industryFootprint = 0;
     for (const [type, count] of Object.entries(HOME_SYSTEM_PREFAB.buildings)) {
-      if (GOOD_TIER_BY_KEY[type] === 0 && GOOD_PRODUCTION[type]?.resource) continue; // extractor → slots, not general
-      generalFootprint += count * effectiveSpaceCost(type);
+      if (GOOD_TIER_BY_KEY[type] === 0 && GOOD_PRODUCTION[type]?.resource) continue; // extractor → counts
+      if (type === HOUSING_TYPE) continue; // housing → people land
+      industryFootprint += count * effectiveSpaceCost(type);
     }
-    expect(homeworldGardenBody().generalSpace).toBeGreaterThanOrEqual(generalFootprint);
+    expect(homeworldGardenBody().industryLand).toBeGreaterThanOrEqual(industryFootprint);
   });
 });

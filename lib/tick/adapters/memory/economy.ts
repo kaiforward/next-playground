@@ -85,6 +85,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
           buildings: sys.buildings,
           population: sys.population,
           yields: sys.yields,
+          extractionEff: sys.extractionEff,
           productionSuppress: suppressRateFor(sys.id),
         });
         recomputedUseBySystem.set(sys.id, bySystem);
@@ -111,7 +112,7 @@ export class InMemoryEconomyWorld implements EconomyWorld {
         }
         producedGoodsBySystem.set(sys.id, producedGoods);
       }
-      const production = buildingProduction(sys.buildings, m.goodId, snap.state, sys.yields);
+      const production = buildingProduction(sys.buildings, m.goodId, snap.state, sys.yields, sys.extractionEff);
       const consumption = consumptionRate(m.goodId, snap.basis);
       const squeezeCycles = typeof m.squeezeCycles === "number" && Number.isFinite(m.squeezeCycles)
         ? Math.max(0, Math.min(2, m.squeezeCycles))

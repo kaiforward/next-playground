@@ -5,25 +5,19 @@ import type { QualityBandId } from "@/lib/types/game";
  * First-draft defaults; calibrated via `npm run simulate` + scripts/substrate-coherence.ts.
  */
 export const SUBSTRATE_GEN = {
-  /** Body size multiplier band, uniform. */
-  SIZE_MIN: 0.5,
-  SIZE_MAX: 1.5,
   /** Economy-type classifier thresholds (see lib/engine/economy-type.ts). */
   ECON_POP_HIGH: 7000,        // population reference for "high population"
   ECON_POP_HIGH_FRAC: 0.6,    // popNorm ≥ this → developed economy
   ECON_RAW_DOMINANT: 0.5,     // raw share ≥ this → extraction / industrial
   ECON_FOOD_DOMINANT: 0.35,   // food share ≥ this → agricultural
   ECON_RAW_MIXED: 0.3,        // below this raw share + high pop → tech
-  /** Physical space (surface/volume units) per body size point. Sized so a developed system supports
-   * billions of people — a spacefaring civilisation's core, not a town. Scales all physical capacity
-   * (deposit slots, general + habitable space) uniformly, so every economic ratio is preserved. */
-  SPACE_PER_SIZE: 400,
-  /** Footprint consumed by one deposit extraction slot. */
+  /**
+   * Footprint consumed by one deposit extraction slot. Kept as the transitional deposit→land
+   * conversion `availableSpace` and `industryPotential` (`lib/engine/development.ts`)
+   * use to keep authored deposit counts and authored land commensurable — the surface-partition
+   * geometry it once fed (SIZE_MIN/MAX, SPACE_PER_SIZE) died with `partitionBody`.
+   */
   DEPOSIT_SLOT_FOOTPRINT: 1.0,
-  /** Probability a body rolls deposit volatility. */
-  VOLATILITY_CHANCE: 0.04,
-  /** Volatility spike multiplier on affected deposits. */
-  VOLATILITY_SPIKE: 6,
   /** Population baseline floor per body. */
   POP_BASELINE_FLOOR: 0,
 } as const;

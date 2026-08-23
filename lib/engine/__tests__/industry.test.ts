@@ -167,6 +167,31 @@ describe("buildingProduction", () => {
     const withYield = buildingProduction(buildings, "metals", FULL, yields);
     expect(withYield).toBeCloseTo(base, 6);
   });
+
+  it("defaults extractionEff to a neutral 1.0 vector when omitted", () => {
+    const buildings = { ore: 4 };
+    const withoutArg = buildingProduction(buildings, "ore", FULL, unitResourceVector());
+    const withUnitEff = buildingProduction(buildings, "ore", FULL, unitResourceVector(), unitResourceVector());
+    expect(withoutArg).toBeCloseTo(withUnitEff, 10);
+  });
+
+  it("Proves (5): an extractionModifier-style efficiency of 0.5 halves tier-0 output", () => {
+    const buildings = { ore: 4 };
+    const yields = unitResourceVector();
+    const fullEff = unitResourceVector();
+    const halfEff = makeResourceVector({ ore: 0.5 });
+    const base = buildingProduction(buildings, "ore", FULL, yields, fullEff);
+    const halved = buildingProduction(buildings, "ore", FULL, yields, halfEff);
+    expect(halved).toBeCloseTo(base * 0.5, 6);
+  });
+
+  it("Proves (5): the same 0.5 efficiency leaves tier-1+ output untouched", () => {
+    const buildings = { metals: 3 };
+    const halfOreEff = makeResourceVector({ ore: 0.5 });
+    const base = buildingProduction(buildings, "metals", FULL, unitResourceVector(), unitResourceVector());
+    const withHalvedOreEff = buildingProduction(buildings, "metals", FULL, unitResourceVector(), halfOreEff);
+    expect(withHalvedOreEff).toBeCloseTo(base, 6);
+  });
 });
 
 describe("capacityGoodRates", () => {

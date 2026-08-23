@@ -11,24 +11,25 @@
 import type { ResourceType, ResourceVector } from "@/lib/types/game";
 import { RESOURCE_TYPES, unitResourceVector } from "@/lib/engine/resources";
 
-/** Minimal per-body view the grade needs: deposit slots + quality band, per resource. */
+/** Minimal per-body view the grade needs: authored deposit counts + quality band, per resource. */
 export interface GradedBody {
-  slots: ResourceVector;
+  counts: ResourceVector;
   quality: ResourceVector;
 }
 
 /**
- * Capacity-weighted mean deposit quality for one resource: Σ(slots·quality) / Σ slots over the bodies
- * that host the resource. Returns 1.0 (a neutral multiplier) where the system has no slots for it.
+ * Capacity-weighted mean deposit quality for one resource: Σ(counts·quality) / Σ counts over the
+ * bodies that host the resource. Returns 1.0 (a neutral multiplier) where the system has no
+ * deposit counts for it.
  */
 export function depositGrade(bodies: GradedBody[], resource: ResourceType): number {
   let weighted = 0;
   let total = 0;
   for (const b of bodies) {
-    const s = b.slots[resource];
-    if (s <= 0) continue;
-    weighted += s * b.quality[resource];
-    total += s;
+    const c = b.counts[resource];
+    if (c <= 0) continue;
+    weighted += c * b.quality[resource];
+    total += c;
   }
   return total > 0 ? weighted / total : 1;
 }

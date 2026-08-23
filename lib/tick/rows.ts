@@ -86,6 +86,9 @@ export interface TickSystem {
   colonyOpportunity?: { value: number; work: number };
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
+  /** Per-resource extraction-work efficiency — deposit-count-weighted mean of the contributing
+   *  bodies' extractionModifier; feeds tier-0 production alongside `yields` (never folded into it). */
+  extractionEff: ResourceVector;
   /** Body-derived deposit-slot capacity per resource — caps tier-0 extractor builds. */
   slotCap: ResourceVector;
   /** Body-derived fungible build space — tier-1+ factories + housing draw here. */

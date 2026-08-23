@@ -145,8 +145,35 @@ describe("serialiseWorld / deserialiseWorld", () => {
   // NOT throw: every market would silently price against nameplate capacity instead of realised
   // output. Nothing but this constant stands between the two, which is why the number is pinned
   // rather than left to drift.
-  it("is at save format version 15 (the persisted realised production rate's spelling)", () => {
-    expect(SAVE_FORMAT_VERSION).toBe(15);
+  it("is at save format version 16 (the three-budget body model + extraction-efficiency columns)", () => {
+    expect(SAVE_FORMAT_VERSION).toBe(16);
+  });
+
+  it("rejects a v15 (pre-habitability-seeding) save with the clean version error", () => {
+    // v15 systems/bodies carry the retired partition columns (habitableSpace/generalSpace/slot* under
+    // the OLD semantics) and no eff* columns at all — the version bump is what makes this fail cleanly
+    // instead of loading a stale shape the structural spot-checks below `meta` cannot see.
+    const json = JSON.stringify({ formatVersion: 15, world });
+    const result = deserialiseWorld(json);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe(`Unsupported save formatVersion (expected ${SAVE_FORMAT_VERSION})`);
+  });
+
+  it("a fresh world round-trips through serialise/deserialise with the new extraction-efficiency columns finite", () => {
+    const fresh = generateWorld({ systemCount: 60, seed: 21 });
+    const result = deserialiseWorld(serialiseWorld(fresh));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.world).toStrictEqual(fresh);
+    for (const s of result.world.systems) {
+      for (const col of [
+        "effGas", "effMinerals", "effOre", "effBiomass", "effArable", "effWater", "effRadioactive",
+      ] as const) {
+        expect(Number.isFinite(s[col]), col).toBe(true);
+        expect(s[col]).toBeGreaterThan(0);
+      }
+    }
   });
 
   it("rejects a prior-version (v11) save — saves break on the shape bump", () => {

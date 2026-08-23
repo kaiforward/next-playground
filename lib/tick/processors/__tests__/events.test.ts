@@ -55,6 +55,7 @@ function makeSystem(
     buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
+    extractionEff: unitResourceVector(),
     slotCap: emptyResourceVector(),
     generalSpace: 0,
     habitableSpace: 0,

@@ -229,13 +229,15 @@ export interface WorldSystem {
   colonyOpportunity?: { value: number; work: number };
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
-  /** SPACE_PER_SIZE × Σ size. */
+  /** Transitional identity: Σ(peopleLand + industryLand + Σcounts × DEPOSIT_SLOT_FOOTPRINT) over
+   *  the system's bodies (`lib/engine/body-gen.ts` substrateAggregates) — retained only until its
+   *  remaining readers migrate off it. */
   availableSpace: number;
-  /** Fungible (non-deposit) space. */
+  /** Fungible (non-deposit) space — Σ industry land over unlocked bodies. */
   generalSpace: number;
-  /** Habitable fraction of general space — caps population centres. */
+  /** Habitable fraction of general space — Σ people land over above-threshold, unlocked bodies. */
   habitableSpace: number;
-  /** Extractor-slot caps, one per resource. */
+  /** Extractor-slot caps, one per resource — Σ authored deposit counts over unlocked bodies. */
   slotGas: number;
   slotMinerals: number;
   slotOre: number;
@@ -243,7 +245,7 @@ export interface WorldSystem {
   slotArable: number;
   slotWater: number;
   slotRadioactive: number;
-  /** Effective quality multipliers, one per resource. */
+  /** Effective quality multipliers, one per resource — deposit grade, a pure property of the ground. */
   yieldGas: number;
   yieldMinerals: number;
   yieldOre: number;
@@ -251,6 +253,16 @@ export interface WorldSystem {
   yieldArable: number;
   yieldWater: number;
   yieldRadioactive: number;
+  /** Effective per-resource extraction-work efficiency — deposit-count-weighted mean of the
+   *  contributing bodies' `extractionModifier` (1.0 where the system has no counts for that
+   *  resource). Kept as its OWN aggregate, never folded into yield*. */
+  effGas: number;
+  effMinerals: number;
+  effOre: number;
+  effBiomass: number;
+  effArable: number;
+  effWater: number;
+  effRadioactive: number;
 }
 
 // ── Bodies ──────────────────────────────────────────────────────
@@ -259,11 +271,14 @@ export interface WorldBody {
   id: string;
   systemId: string;
   bodyType: BodyArchetypeId;
+  /** True when this body's default-pop habitability score ≥ HABITABILITY_THRESHOLD — the ONE
+   *  consistent answer to "habitable"; retained only until readers move to the score band. */
   habitable: boolean;
+  /** Display flavour only — carries no budget meaning. */
   size: number;
-  /** This body's general (non-deposit) space. */
+  /** This body's authored industry-land budget. */
   generalSpace: number;
-  /** This body's habitable space. */
+  /** This body's authored people-land budget (dark land when below threshold or locked). */
   habitableSpace: number;
   /** Per-body slot counts, one per resource (0 = no deposit). */
   slotGas: number;

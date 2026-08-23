@@ -55,6 +55,7 @@ function devSys(
     buildingIdleCycles: {},
     collapseDebt: 0,
     yields: unitResourceVector(),
+    extractionEff: unitResourceVector(),
     slotCap: opts.slotCap ?? emptyResourceVector(),
     generalSpace: 0, habitableSpace: 0,
   };

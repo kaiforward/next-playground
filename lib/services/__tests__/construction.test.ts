@@ -6,6 +6,11 @@ import { orderBuild } from "@/lib/services/construction-orders";
 import { seatWorld } from "./seat-world";
 import { ServiceError } from "@/lib/services/errors";
 import { CONSTRUCTION_CENTRE_TYPE, VOCATIONAL_SCHOOL_TYPE, HOUSING_TYPE } from "@/lib/constants/industry";
+import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import { toGoodMarketStates } from "@/lib/tick/processors/good-market-state";
+import { marketRowsBySystem } from "@/lib/world/tick";
+import { buildingsBySystem } from "@/lib/services/world-index";
+import { yieldsOf, effOf } from "@/lib/engine/resources";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 let world: World;
@@ -361,13 +366,30 @@ describe("getSystemConstruction", () => {
     const stalled = world.constructionProjects.map((p) =>
       p.kind === "colony_establish" ? { ...p, stalledCycles: 3 } : p,
     );
+    // Per-good stock at the source's OWN demand × the midpoint of the exporter and ordinary-donor
+    // reserve covers — derived from the source's real (rich) production/demand, not a flat absolute
+    // figure, so it sits between the two reserves whatever scale world-gen authors for this system.
+    // An exporting source (production > demand, the rich case below) can spare stock down to the
+    // exporter reserve; a non-exporting one (barren: no buildings, or no yields) cannot spare past
+    // the higher ordinary-donor reserve — that is the branch `surplusDrawable` actually chooses
+    // between, and the one this test pins.
+    const reserveMidCover =
+      (DIRECTED_LOGISTICS.EXPORT_RESERVE_COVER + DIRECTED_LOGISTICS.DONOR_RESERVE_COVER) / 2;
+    const richStates = toGoodMarketStates({
+      buildings: buildingsBySystem().get(dev.id) ?? {},
+      population: dev.population,
+      yields: yieldsOf(dev),
+      extractionEff: effOf(dev),
+      markets: marketRowsBySystem(world.markets).get(dev.id) ?? [],
+    });
+    const stockByGood = new Map(richStates.map((s) => [s.goodId, s.demand * reserveMidCover]));
     const reading = (over: Partial<World>) => {
       setWorld({
         ...world,
         constructionProjects: stalled,
-        // Stock held between the exporter reserve and the donor margin, so which branch
-        // `surplusDrawable` takes — a production question — decides what is drawable.
-        markets: world.markets.map((m) => (m.systemId === dev.id ? { ...m, stock: 200 } : m)),
+        markets: world.markets.map((m) =>
+          m.systemId === dev.id ? { ...m, stock: stockByGood.get(m.goodId) ?? m.stock } : m,
+        ),
         treasuries: world.treasuries.map((t) =>
           t.factionId === factionId ? { ...t, balance: 0, pendingFounding: 0 } : t,
         ),

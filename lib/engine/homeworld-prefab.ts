@@ -28,7 +28,6 @@ import { GOOD_RECIPES, PRODUCTION_GOOD_ORDER } from "@/lib/constants/recipes";
 import { GOOD_TIER_BY_KEY } from "@/lib/constants/goods";
 import { labourDemand, skill1Demand, skill2Demand } from "@/lib/engine/industry";
 import { consumptionRate } from "@/lib/engine/physical-economy";
-import { SUBSTRATE_GEN } from "@/lib/constants/substrate-gen";
 import { RESOURCE_TYPES, emptyResourceVector } from "@/lib/engine/resources";
 import type { GeneratedBody } from "@/lib/engine/body-gen";
 
@@ -131,38 +130,44 @@ export const HOME_SYSTEM_PREFAB: { buildings: Record<string, number>; population
 const GARDEN_MARGIN = 1.5;
 /** Deposit quality of the capital's garden world — a good, all-round field. */
 const GARDEN_QUALITY = 1.3;
+/** Display flavour only — the garden body's authored budgets, not its cosmetic size, are what fit the prefab. */
+const GARDEN_DISPLAY_SIZE = 1.0;
 
 /**
- * The guaranteed garden world a faction capital sits on: one deterministic body with a habitable span,
- * general space, and a spread of deposit slots all sized `GARDEN_MARGIN`× the prefab's footprint, so the
- * whole prefab (housing + factories + extractors) always fits with headroom — no flooring, ever.
- * Prepended to the homeworld's procedural bodies (which stay as varied scenery + extra deposits).
+ * The guaranteed garden world a faction capital sits on: one deterministic body authoring people
+ * land, industry land and a spread of deposit counts all sized `GARDEN_MARGIN`× the prefab's exact
+ * footprint, so the whole prefab (housing + factories + extractors) always fits with headroom — no
+ * flooring, ever. Prepended to the homeworld's procedural bodies (which stay as varied scenery +
+ * extra deposits). Temperate class, score 1.0 — authored directly, never back-solved from buildings.
  */
 export function homeworldGardenBody(): GeneratedBody {
   const b = computeHomeworldBuildings(HOME_SYSTEM_POP);
-  const slots = emptyResourceVector();
-  let housingHabitable = 0;
-  let factoryGeneral = 0;
+  const counts = emptyResourceVector();
+  let housingPeopleLand = 0;
+  let factoryIndustryLand = 0;
   for (const [type, count] of Object.entries(b)) {
     if (GOOD_TIER_BY_KEY[type] === 0) {
-      const r = GOOD_PRODUCTION[type]?.resource; // tier-0 extractors sit on deposit slots for their resource
-      if (r) slots[r] += count;
+      const r = GOOD_PRODUCTION[type]?.resource; // tier-0 extractors sit on deposit counts for their resource
+      if (r) counts[r] += count;
     } else if (type === HOUSING_TYPE) {
-      housingHabitable += count * effectiveSpaceCost(HOUSING_TYPE); // housing draws habitable space
+      housingPeopleLand += count * effectiveSpaceCost(HOUSING_TYPE); // housing draws people land only
     } else {
-      factoryGeneral += count * effectiveSpaceCost(type); // factories + academies draw general space
+      factoryIndustryLand += count * effectiveSpaceCost(type); // factories + academies draw industry land only
     }
   }
-  for (const r of RESOURCE_TYPES) slots[r] = Math.ceil(slots[r] * GARDEN_MARGIN);
+  for (const r of RESOURCE_TYPES) counts[r] = Math.ceil(counts[r] * GARDEN_MARGIN);
 
-  const habitableSpace = housingHabitable * GARDEN_MARGIN;
-  const generalSpace = (housingHabitable + factoryGeneral) * GARDEN_MARGIN; // habitable ⊆ general
+  const peopleLand = housingPeopleLand * GARDEN_MARGIN;
+  const industryLand = factoryIndustryLand * GARDEN_MARGIN;
   const quality = emptyResourceVector();
-  for (const r of RESOURCE_TYPES) if (slots[r] > 0) quality[r] = GARDEN_QUALITY;
+  for (const r of RESOURCE_TYPES) if (counts[r] > 0) quality[r] = GARDEN_QUALITY;
 
-  // Keep availableSpace (SPACE_PER_SIZE × size) consistent with the body's slots + general footprint.
-  const slotsFootprint = RESOURCE_TYPES.reduce((s, r) => s + slots[r], 0) * SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT;
-  const size = (slotsFootprint + generalSpace) / SUBSTRATE_GEN.SPACE_PER_SIZE;
-
-  return { bodyType: "temperate_world", habitable: true, size, slots, quality, generalSpace, habitableSpace };
+  return {
+    bodyType: "temperate_world",
+    size: GARDEN_DISPLAY_SIZE,
+    peopleLand,
+    industryLand,
+    counts,
+    quality,
+  };
 }

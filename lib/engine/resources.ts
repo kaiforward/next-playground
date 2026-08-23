@@ -60,6 +60,16 @@ export type YieldColumns = {
   yieldArable: number; yieldWater: number; yieldRadioactive: number;
 };
 
+/**
+ * A system's per-resource extraction-work efficiency — the deposit-count-weighted mean of the
+ * contributing bodies' `extractionModifier`, kept as its OWN aggregate never folded into
+ * `yieldMult` (see `lib/constants/bodies.ts` and `substrateAggregates`).
+ */
+export type EffColumns = {
+  effGas: number; effMinerals: number; effOre: number; effBiomass: number;
+  effArable: number; effWater: number; effRadioactive: number;
+};
+
 /** Spread a vector onto the SystemBody deposit-slot columns (slot*). */
 export function slotColumns(v: ResourceVector): SlotColumns {
   return {
@@ -81,6 +91,14 @@ export function yieldColumns(v: ResourceVector): YieldColumns {
   return {
     yieldGas: v.gas, yieldMinerals: v.minerals, yieldOre: v.ore, yieldBiomass: v.biomass,
     yieldArable: v.arable, yieldWater: v.water, yieldRadioactive: v.radioactive,
+  };
+}
+
+/** Spread a vector onto the WorldSystem per-resource extraction-efficiency columns (eff*). */
+export function effColumns(v: ResourceVector): EffColumns {
+  return {
+    effGas: v.gas, effMinerals: v.minerals, effOre: v.ore, effBiomass: v.biomass,
+    effArable: v.arable, effWater: v.water, effRadioactive: v.radioactive,
   };
 }
 
@@ -117,15 +135,16 @@ const TRACE_FRACTION = 0.05;
  *   "slot"  — reads slotGas…slotRadioactive (deposit-slot counts)
  *   "qual"  — reads qualGas…qualRadioactive (quality-band values)
  *   "yield" — reads yieldGas…yieldRadioactive (yield multipliers)
+ *   "eff"   — reads effGas…effRadioactive (extraction-efficiency multipliers)
  *
- * Missing columns default to 0 for all prefixes EXCEPT "yield", where the
- * schema default is @default(1) and an absent multiplier means a neutral ×1.
+ * Missing columns default to 0 for all prefixes EXCEPT "yield" and "eff", where the schema
+ * default is @default(1) and an absent multiplier means a neutral ×1.
  */
 export function resourceVectorFromColumns(
   source: Record<string, number>,
-  prefix: "slot" | "qual" | "yield",
+  prefix: "slot" | "qual" | "yield" | "eff",
 ): ResourceVector {
-  const fallback = prefix === "yield" ? 1 : 0;
+  const fallback = prefix === "yield" || prefix === "eff" ? 1 : 0;
   const v = emptyResourceVector();
   for (const type of RESOURCE_TYPES) {
     const key = `${prefix}${type.charAt(0).toUpperCase()}${type.slice(1)}`;
@@ -154,6 +173,11 @@ export function qualityOf(row: QualColumns): ResourceVector {
 /** Read a row's per-resource yield-multiplier columns as a ResourceVector. */
 export function yieldsOf(row: YieldColumns): ResourceVector {
   return resourceVectorFromColumns(row, "yield");
+}
+
+/** Read a row's per-resource extraction-efficiency columns as a ResourceVector. */
+export function effOf(row: EffColumns): ResourceVector {
+  return resourceVectorFromColumns(row, "eff");
 }
 
 /**

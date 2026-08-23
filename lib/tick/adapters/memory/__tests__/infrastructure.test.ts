@@ -8,7 +8,8 @@ function sys(id: string, buildings: Record<string, number>, idle: Record<string,
   return {
     id, name: id, economyType: "extraction", regionId: "r1", factionId: "f1", control: "developed",
     governmentType: "federation", population: 100, popCap: 200,
-    unrest: 0.3, buildings, buildingIdleCycles: idle, collapseDebt: debt, yields: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
+    unrest: 0.3, buildings, buildingIdleCycles: idle, collapseDebt: debt, yields: unitResourceVector(),
+    extractionEff: unitResourceVector(), slotCap: emptyResourceVector(), generalSpace: 0, habitableSpace: 0,
   };
 }
 

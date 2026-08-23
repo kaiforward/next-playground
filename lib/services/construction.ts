@@ -21,7 +21,7 @@ import {
 } from "@/lib/engine/construction-readout";
 import { orderOpenProjects } from "@/lib/engine/construction";
 import { surplusDrawable } from "@/lib/engine/directed-logistics";
-import { yieldsOf } from "@/lib/engine/resources";
+import { yieldsOf, effOf } from "@/lib/engine/resources";
 import { foundingWorkingBalance } from "@/lib/engine/treasury";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { CONSTRUCTION_INTERVAL, CYCLE_LENGTH } from "@/lib/constants/tick-cadence";
@@ -58,6 +58,7 @@ function foundingSupplyBySource(
       buildings: buildings.get(sourceId) ?? {},
       population: source.population,
       yields: yieldsOf(source),
+      extractionEff: effOf(source),
       markets: marketRows.get(sourceId) ?? [],
     });
     supply.set(
