@@ -227,6 +227,22 @@ export interface WorldSystem {
    *  on abandonment or redevelopment so a founded colony never inherits its own candidacy reading.
    *  Nothing inside the tick reads it. */
   colonyOpportunity?: { value: number; work: number };
+  /**
+   * Cached fill-best-first habitability quality (`systemHabitabilityQuality`,
+   * `lib/engine/habitability.ts`) — the people-land-weighted mean score over the prefix this
+   * system's population currently occupies, best-body-first. Written by the population
+   * processor's world adapter through the generic per-system row-mutation path (unlike
+   * `buildBlocked`/`buildOpportunity`/`colonyOpportunity` above, which bypass it). Recomputed only
+   * when the occupied prefix crosses a body boundary (`frontierIndex` changing) — population
+   * movement within the same body leaves this field's value untouched, so most systems (one
+   * contributing body) write it once and never again. Absent means the population processor has
+   * never assessed this system (a frontier/controlled system it hasn't visited, or a pre-change
+   * save); cleared — not carried forward — on abandonment or redevelopment
+   * (`applyAbandonments`/`applyDevelopments`, both `lib/world/tick.ts`) so a re-founded colony
+   * never inherits its predecessor's reading. Task 8 wires this into `populationDelta`'s growth
+   * term; nothing reads it yet.
+   */
+  habitabilityQuality?: { quality: number; frontierIndex: number };
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
   /** Fungible (non-deposit) space — Σ industry land over unlocked bodies. */

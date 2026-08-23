@@ -84,6 +84,23 @@ export interface TickSystem {
    *  as `buildBlocked` above, written directly by the directed-build processor's own
    *  `applyColonyOpportunityUpdates` (`lib/tick/world/directed-build-world.ts`). */
   colonyOpportunity?: { value: number; work: number };
+  /**
+   * Static per-body {score, peopleLand} summary for this system's people-land-contributing bodies
+   * (unlocked, above `HABITABILITY_THRESHOLD`) — the fill-best-first quality fold's input
+   * (`systemHabitabilityQuality`, `lib/engine/habitability.ts`). Unsorted; the fold sorts
+   * internally. Sourced from `World.bodies` by the `toTickSystems` join — unlike `peopleLand`
+   * below (a system-row aggregate), the fold needs the PER-BODY breakdown the aggregate discards.
+   * Optional so a fixture built before this field existed (most processors' test `sys()` helpers
+   * never touch habitability) reads as no contributing bodies, never a required literal every
+   * TickSystem construction site must supply. */
+  habitabilityBodies?: { score: number; peopleLand: number }[];
+  /** Cached fill-best-first habitability quality, optional — the `toTickSystems` join passes
+   *  `WorldSystem.habitabilityQuality` through UNCOERCED, same absence convention as `provision`/
+   *  `supplyBand`/`criticalWeight` above: absent means never assessed. Written directly onto this
+   *  row by the population processor's world adapter via the generic row-mutation path
+   *  (`applyPopulationUpdates`, `lib/tick/adapters/memory/population.ts`), merged back the same way
+   *  `provisionExpectation` is (see `lib/world/types.ts` for the field's full docstring). */
+  habitabilityQuality?: { quality: number; frontierIndex: number };
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Per-resource extraction-work efficiency — deposit-count-weighted mean of the contributing

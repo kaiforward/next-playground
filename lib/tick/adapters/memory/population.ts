@@ -30,6 +30,8 @@ export class InMemoryPopulationWorld implements PopulationWorld {
       out.push({
         systemId: s.id, population: s.population, popCap: s.popCap, unrest: s.unrest,
         provisionExpectation: s.provisionExpectation,
+        habitabilityBodies: s.habitabilityBodies,
+        habitabilityQuality: s.habitabilityQuality,
       });
     }
     return Promise.resolve(out);
@@ -88,6 +90,19 @@ export class InMemoryPopulationWorld implements PopulationWorld {
         next.criticalWeight = Math.max(0, u.criticalWeight);
       } else {
         delete next.criticalWeight;
+      }
+      // `habitabilityQuality` is a MEMORY, not a snapshot — same never-write-a-lie treatment as
+      // `provisionExpectation` above: a corrupt write keeps the row's existing cached value rather
+      // than dropping straight to absent (a genuinely never-assessed system has no prior value to
+      // fall back to, so it stays absent in that one case).
+      if (u.habitabilityQuality
+          && Number.isFinite(u.habitabilityQuality.quality)
+          && Number.isFinite(u.habitabilityQuality.frontierIndex)) {
+        next.habitabilityQuality = u.habitabilityQuality;
+      } else if (s.habitabilityQuality !== undefined) {
+        next.habitabilityQuality = s.habitabilityQuality;
+      } else {
+        delete next.habitabilityQuality;
       }
       return next;
     });

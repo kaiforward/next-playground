@@ -1311,3 +1311,102 @@ describe("population processor: abandonment reporting (Rule 2)", () => {
     expect(result.abandonedSystems).toEqual(["dying"]);
   });
 });
+
+// ── Fill-best-first habitability quality: the fold-site cache (lib/engine/habitability.ts) ──
+// The cached value only advances when the occupied prefix crosses a body boundary
+// (frontierIndex changing) — population movement within the same body must leave it untouched,
+// even though the honest fold would compute a different number for it. Observable at the cache
+// itself (the persisted system-row reading), never via a spy on internal call counts.
+
+describe("population processor: fill-best-first habitability quality", () => {
+  // Three bodies, out-of-score order on purpose (the fold sorts internally): A (score 1.0, land
+  // 100), B (score 0.6, land 50), C (score 0.3, land 50) — total 200.
+  const BODIES = [
+    { score: 0.3, peopleLand: 50 }, // C
+    { score: 1.0, peopleLand: 100 }, // A
+    { score: 0.6, peopleLand: 50 }, // B
+  ];
+
+  function sysWithBodies(population: number): TickSystem {
+    return { ...sys("h", population, 100_000, 0), habitabilityBodies: BODIES };
+  }
+
+  // FROZEN_POP: growth/decline/overshoot all zero, so a run leaves population exactly where the
+  // fixture set it — isolates the quality cache from the growth dynamics entirely.
+  const runOnce = (world: InMemoryPopulationWorld) => runPopulationProcessor(world, ctxWithD(new Map([["h", 0]])), {
+    unrest: RATES,
+    population: FROZEN_POP,
+    expectation: EXPECTATION_PARAMS,
+    interval: 24,
+  });
+
+  it("computes and caches on the FIRST cycle a never-before-assessed system is resolved", async () => {
+    // occupiedLand = 2200/20 = 110: A fully occupied (100) + 10 of B's 50 — the mid-prefix arm.
+    const world = new InMemoryPopulationWorld({ systems: [sysWithBodies(2200)], markets: [] });
+    await runOnce(world);
+    const h = world.systems.find((s) => s.id === "h")!;
+    // weighted = 1.0*100 + 0.6*10 = 106; quality = 106/110.
+    expect(h.habitabilityQuality?.quality).toBeCloseTo(106 / 110, 12);
+    expect(h.habitabilityQuality?.frontierIndex).toBe(1); // B (index 1 after sort) is marginal
+  });
+
+  it("leaves the cached quality UNCHANGED while population moves within the same marginal body", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sysWithBodies(2200)], markets: [] });
+    await runOnce(world);
+    const afterFirst = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    if (afterFirst === undefined) throw new Error("Expected a cached reading after the first run");
+
+    // Move population to occupiedLand = 140 (still inside B: A full 100 + 40 of B's 50) —
+    // frontierIndex stays 1. The HONEST fold at this population reads a different number
+    // ((100*1.0 + 40*0.6) / 140 = 124/140 ≈ 0.8857), so a passing test here proves the cache
+    // really did skip the recompute rather than coincidentally landing on the same figure.
+    const honestAtSecondPopulation = (100 * 1.0 + 40 * 0.6) / 140;
+    expect(honestAtSecondPopulation).not.toBeCloseTo(afterFirst.quality, 6);
+
+    world.systems[0].population = 2800; // occupiedLand 140
+    await runOnce(world);
+    const afterSecond = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterSecond?.frontierIndex).toBe(1); // still inside B — no boundary crossed
+    expect(afterSecond?.quality).toBe(afterFirst.quality); // byte-identical: the cache never moved
+  });
+
+  it("recomputes the cached quality once the occupied prefix crosses a body boundary", async () => {
+    const world = new InMemoryPopulationWorld({ systems: [sysWithBodies(2200)], markets: [] });
+    await runOnce(world);
+    const afterFirst = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    if (afterFirst === undefined) throw new Error("Expected a cached reading after the first run");
+
+    // Push past B entirely into C: occupiedLand = 180 (A 100 + B 50 + 30 of C's 50).
+    // frontierIndex becomes 2 (C, the sorted list's last index) — a genuine boundary crossing.
+    world.systems[0].population = 3600;
+    await runOnce(world);
+    const afterThird = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterThird?.frontierIndex).toBe(2);
+    expect(afterThird?.frontierIndex).not.toBe(afterFirst.frontierIndex);
+    // weighted = 1.0*100 + 0.6*50 + 0.3*30 = 139; quality = 139/180.
+    expect(afterThird?.quality).toBeCloseTo(139 / 180, 12);
+    expect(afterThird?.quality).not.toBeCloseTo(afterFirst.quality, 6);
+  });
+
+  it("computes once for the dominant single-people-land-body case: quality stays exactly the top body's score at every population level", async () => {
+    const oneBody = [{ score: 0.6, peopleLand: 50 }];
+    const world = new InMemoryPopulationWorld({
+      systems: [{ ...sys("h", 200, 100_000, 0), habitabilityBodies: oneBody }],
+      markets: [],
+    });
+    await runOnce(world);
+    const afterFirst = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterFirst?.quality).toBe(0.6);
+    expect(afterFirst?.frontierIndex).toBe(0);
+
+    // Grow well past the single body's land (occupiedLand 200 vs land 50 — the clamp arm) and
+    // rerun: frontierIndex is STILL 0 (the sorted list's only, and therefore last, index) both
+    // before and after, so this is the "never recomputes" path too — and correctly so, since the
+    // honest clamp-arm mean for a single body is that body's own score again.
+    world.systems[0].population = 4000;
+    await runOnce(world);
+    const afterSecond = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterSecond?.frontierIndex).toBe(0);
+    expect(afterSecond?.quality).toBe(0.6);
+  });
+});

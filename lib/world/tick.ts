@@ -52,6 +52,7 @@ import { CONSTRUCTION } from "@/lib/constants/construction";
 import { EXPANSION } from "@/lib/constants/expansion";
 import { RELATIONS_FREQUENCY } from "@/lib/constants/relations";
 import { depositCountsOf, yieldsOf, effOf, RESOURCE_TYPES } from "@/lib/engine/resources";
+import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
 import { hopRouteCost, type ColonyEstablishCandidate } from "@/lib/engine/directed-build";
 import type { ClaimCandidate } from "@/lib/engine/expansion";
 import { housingPopCap } from "@/lib/engine/industry";
@@ -187,6 +188,20 @@ export function toTickSystems(world: World): TickSystem[] {
     roster.idleCycles[b.buildingType] = b.idleCycles;
   }
 
+  // Per-system {score, peopleLand} breakdown for the fill-best-first quality fold
+  // (lib/engine/habitability.ts) — the population processor's only reader. Same unlocked/
+  // above-threshold filter substrateAggregates (lib/engine/body-gen.ts) uses to build the
+  // peopleLand aggregate, but here the PER-BODY rows survive instead of collapsing into a sum.
+  const habitabilityBodiesBySystem = new Map<string, { score: number; peopleLand: number }[]>();
+  for (const b of world.bodies) {
+    const arch = BODY_ARCHETYPES[b.bodyType];
+    if (arch.techLocked || arch.scores.default < HABITABILITY_THRESHOLD) continue;
+    const entry = { score: arch.scores.default, peopleLand: b.peopleLand };
+    const list = habitabilityBodiesBySystem.get(b.systemId);
+    if (list) list.push(entry);
+    else habitabilityBodiesBySystem.set(b.systemId, [entry]);
+  }
+
   return world.systems.map((s) => {
     const roster = rosterBySystem.get(s.id);
     return {
@@ -231,6 +246,11 @@ export function toTickSystems(world: World): TickSystem[] {
       // lib/world/types.ts).
       buildOpportunity: s.buildOpportunity,
       colonyOpportunity: s.colonyOpportunity,
+      habitabilityBodies: habitabilityBodiesBySystem.get(s.id) ?? [],
+      // Same pass-through-uncoerced treatment as provision/supplyBand/criticalWeight above: written
+      // directly by the population processor's world adapter via the generic row-mutation path
+      // (see the field's own docstring, lib/world/types.ts).
+      habitabilityQuality: s.habitabilityQuality,
       yields: yieldsOf(s),
       extractionEff: effOf(s),
       depositCounts: depositCountsOf(s),
@@ -293,6 +313,12 @@ function mergeSystemsIntoWorld(worldSystems: WorldSystem[], tickSystems: TickSys
     else merged.buildOpportunity = tickSystem.buildOpportunity;
     if (tickSystem.colonyOpportunity === undefined) delete merged.colonyOpportunity;
     else merged.colonyOpportunity = tickSystem.colonyOpportunity;
+    // Same delete/assign treatment, same reason: written directly onto this row by the population
+    // processor's world adapter via the generic row-mutation path (applyPopulationUpdates,
+    // lib/tick/adapters/memory/population.ts) — a true absence (never assessed) must not become a
+    // present key holding `undefined`.
+    if (tickSystem.habitabilityQuality === undefined) delete merged.habitabilityQuality;
+    else merged.habitabilityQuality = tickSystem.habitabilityQuality;
     return merged;
   });
 }
@@ -706,6 +732,7 @@ function clearPreviousLifeReadings(next: TickSystem): void {
   delete next.buildBlocked;
   delete next.buildOpportunity;
   delete next.colonyOpportunity;
+  delete next.habitabilityQuality;
 }
 
 /**

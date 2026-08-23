@@ -4,6 +4,7 @@ import {
   type UnrestParams,
 } from "@/lib/engine/population";
 import { ABANDON_POP_FLOOR, CROWDING } from "@/lib/constants/population";
+import { systemHabitabilityQuality } from "@/lib/engine/habitability";
 import { readExpectation, updateExpectation } from "@/lib/engine/expectation";
 import { catchUpFactor } from "@/lib/tick/shard";
 import { clamp } from "@/lib/utils/math";
@@ -134,6 +135,19 @@ export async function runPopulationProcessor(
     );
     const growth = (delta - deltaWithoutGrowth) * catchUp;
     if (growth > 0) growthBySystem.set(s.systemId, growth);
+    // Fill-best-first habitability quality (lib/engine/habitability.ts): computed fresh every
+    // cycle from this cycle's post-delta population, but only APPLIED to the persisted cache when
+    // the occupied prefix crosses a body boundary (frontierIndex changing) — population movement
+    // within the same body keeps whatever the system opened this cycle with. That is exactly
+    // correct (not merely a cheap approximation) for the dominant single-people-land-body case:
+    // with one body in the prefix, quality is mathematically the top body's score at every
+    // population level, so re-applying a fresh compute there would always be a no-op anyway. A
+    // never-before-assessed system (habitabilityQuality absent) always takes the fresh reading.
+    const freshQuality = systemHabitabilityQuality(s.habitabilityBodies ?? [], population);
+    const habitabilityQuality = (s.habitabilityQuality === undefined
+        || s.habitabilityQuality.frontierIndex !== freshQuality.frontierIndex)
+      ? freshQuality
+      : s.habitabilityQuality;
     // The memory advances only now that this cycle's unrest has already been judged against it.
     // An emptying world's Provision-1 reading is a denominator artifact, not an experience to
     // normalise toward, so the update is skipped and the stored value (post-seed, pre-floor)
@@ -157,6 +171,7 @@ export async function runPopulationProcessor(
       provision: P,
       supplyBand: rawSupply?.regime,
       criticalWeight: rawSupply?.criticalWeight,
+      habitabilityQuality,
     });
     // The scalar the economy actually applied this cycle, not a recompute: the strike params and
     // the treasury-fed maintenance malus never reach this processor, and the unrest just written
