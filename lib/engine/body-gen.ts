@@ -7,10 +7,10 @@ import type {
   BodyArchetypeId, ResourceVector, SunClass,
 } from "@/lib/types/game";
 import {
-  BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_DAMPING, SUN_CLASSES,
+  BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_LADDER, SUN_CLASSES,
   type SunClassDef,
 } from "@/lib/constants/bodies";
-import { emptyResourceVector, sumResourceVectors, unitResourceVector, RESOURCE_TYPES } from "./resources";
+import { emptyResourceVector, sumResourceVectors, unitResourceVector, RESOURCE_TYPES, countWeightedMean } from "./resources";
 import type { RNG } from "./universe-gen";
 import { randInt } from "./universe-gen";
 import { depositGradeVector } from "@/lib/engine/deposit-grade";
@@ -77,7 +77,7 @@ function rollSunClass(rng: RNG): SunClass {
  * Weighted archetype roll among the sun class's positive-weight archetypes. `aboveThresholdCount`
  * is the count of above-threshold (default-pop score ≥ HABITABILITY_THRESHOLD) bodies already
  * rolled in this system this generation pass — every above-threshold candidate's weight is
- * multiplied by `HABITABLE_COUNT_DAMPING[min(aboveThresholdCount, ladder length − 1)]` BEFORE the
+ * multiplied by `HABITABLE_COUNT_LADDER[min(aboveThresholdCount, ladder length − 1)]` BEFORE the
  * `w > 0` filter, so a damped-to-zero class drops out of the roll entirely at that count (the
  * ladder's fixed terminal 0 makes a 4th above-threshold body impossible by table). Dead classes
  * are never damped and so remain rollable at every ladder step.
@@ -87,8 +87,8 @@ function rollArchetype(rng: RNG, sun: SunClassDef, aboveThresholdCount: number):
   for (const arch of Object.values(BODY_ARCHETYPES)) {
     let w = sun.archetypeWeights[arch.id] ?? 0;
     if (arch.scores.default >= HABITABILITY_THRESHOLD) {
-      const idx = Math.min(aboveThresholdCount, HABITABLE_COUNT_DAMPING.length - 1);
-      w *= HABITABLE_COUNT_DAMPING[idx];
+      const idx = Math.min(aboveThresholdCount, HABITABLE_COUNT_LADDER.length - 1);
+      w *= HABITABLE_COUNT_LADDER[idx];
     }
     if (w > 0) candidates.push({ id: arch.id, weight: w });
   }
@@ -190,15 +190,9 @@ export function substrateAggregates(bodies: GeneratedBody[]): {
 function extractionEfficiencyVector(bodies: GeneratedBody[]): ResourceVector {
   const out = unitResourceVector();
   for (const r of RESOURCE_TYPES) {
-    let weighted = 0;
-    let total = 0;
-    for (const b of bodies) {
-      const c = b.counts[r];
-      if (c <= 0) continue;
-      weighted += c * BODY_ARCHETYPES[b.bodyType].extractionModifier;
-      total += c;
-    }
-    out[r] = total > 0 ? weighted / total : 1;
+    out[r] = countWeightedMean(
+      bodies, (b) => b.counts[r], (b) => BODY_ARCHETYPES[b.bodyType].extractionModifier,
+    );
   }
   return out;
 }

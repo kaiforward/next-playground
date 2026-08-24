@@ -20,6 +20,7 @@ import type { EconomyType, GovernmentType, ResourceVector } from "@/lib/types/ga
 import type { SystemControl } from "@/lib/world/types";
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
+import type { SystemHabitabilityQuality } from "@/lib/engine/habitability";
 
 export interface TickSystem {
   id: string;
@@ -100,7 +101,7 @@ export interface TickSystem {
    *  row by the population processor's world adapter via the generic row-mutation path
    *  (`applyPopulationUpdates`, `lib/tick/adapters/memory/population.ts`), merged back the same way
    *  `provisionExpectation` is (see `lib/world/types.ts` for the field's full docstring). */
-  habitabilityQuality?: { quality: number; frontierIndex: number };
+  habitabilityQuality?: SystemHabitabilityQuality;
   /** Per-resource yield multiplier (deposit quality) — feeds tier-0 production. */
   yields: ResourceVector;
   /** Per-resource extraction-work efficiency — deposit-count-weighted mean of the contributing

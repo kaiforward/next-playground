@@ -143,7 +143,7 @@ is the commitment. In `lib/constants/industry.ts`:
   (engineer-heavy shipyards, labour-heavy consumer goods).
 - `SKILL1_PER_SCHOOL`, `SKILL2_PER_INSTITUTE` — licensing per academy (large, so one academy serves several
   factories → academies stay lumpy/concentrated).
-- `SPACE_OVERRIDES` — per-good general-space footprint for the biggest tier-1/2 factories.
+- `SPACE_OVERRIDES` — per-good `spaceCost` override; vestigial (see above) — a positive/zero existence check only, not a land bill.
 - `INPUT_DEMAND_MULTIPLIER` — magnitude knob on recipe input-demand draws (neutral `1.0` until calibrated).
 
 ---
@@ -151,8 +151,8 @@ is the commitment. In `lib/constants/industry.ts`:
 ## Scope boundaries
 
 **In (S1):** per-good 3-grade labour vector; two academy building types + skill-ceiling gates threaded
-through production / forecast / decay / seed / build; per-good general-space cost; `INPUT_DEMAND_MULTIPLIER`
-knob; the `"skill"` idle reason + academies group in the Industry panel.
+through production / forecast / decay / seed / build; the vestigial per-good `spaceCost` field;
+`INPUT_DEMAND_MULTIPLIER` knob; the `"skill"` idle reason + academies group in the Industry panel.
 
 **Deferred (later stages of the track, all agency-free):**
 - **S2 — specialisation complexes** (anchor buildings: built comparative advantage + economies-of-scale).

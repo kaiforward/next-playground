@@ -869,7 +869,7 @@ describe("computeWorldCohorts", () => {
       const assessed = sys("s1", {
         population: 50,
         habitabilityBodies: [{ score: 0.7, peopleLand: 40 }],
-        habitabilityQuality: { quality: 0.7, frontierIndex: 0 },
+        habitabilityQuality: { quality: 0.7, frontierIndex: 0, partial: true },
       });
       const unassessed = sys("s2", {
         population: 50,

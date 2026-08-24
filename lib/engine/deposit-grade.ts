@@ -9,7 +9,7 @@
  * field realises this same average grade.
  */
 import type { ResourceType, ResourceVector } from "@/lib/types/game";
-import { RESOURCE_TYPES, unitResourceVector } from "@/lib/engine/resources";
+import { RESOURCE_TYPES, unitResourceVector, countWeightedMean } from "@/lib/engine/resources";
 
 /** Minimal per-body view the grade needs: authored deposit counts + quality band, per resource. */
 export interface GradedBody {
@@ -23,15 +23,7 @@ export interface GradedBody {
  * deposit counts for it.
  */
 export function depositGrade(bodies: GradedBody[], resource: ResourceType): number {
-  let weighted = 0;
-  let total = 0;
-  for (const b of bodies) {
-    const c = b.counts[resource];
-    if (c <= 0) continue;
-    weighted += c * b.quality[resource];
-    total += c;
-  }
-  return total > 0 ? weighted / total : 1;
+  return countWeightedMean(bodies, (b) => b.counts[resource], (b) => b.quality[resource]);
 }
 
 /** Per-resource deposit-grade vector (see `depositGrade`). */

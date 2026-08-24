@@ -46,12 +46,13 @@ export function habitabilityScoreBand(score: number): QualityBandId {
   return "poor";
 }
 
-/** One body's static occupancy inputs — score, people land, and lock state, exactly what the
- *  fill-best-first fold (`lib/engine/habitability.ts`) sorts on. */
+/** One body's static occupancy inputs — score and lock state, exactly what the fill-best-first
+ *  fold's contributing-body filter+sort (`lib/engine/habitability.ts`) reads. `occupiedBodyIds`
+ *  itself never reads people land — it only needs WHICH bodies are contributing and their sort
+ *  order, then slices by the cached `frontierIndex` — so it is not part of this shape. */
 export interface OccupancyBody {
   id: string;
   score: number;
-  peopleLand: number;
   locked: boolean;
 }
 
@@ -88,14 +89,17 @@ export interface FillOrderBody {
 }
 
 /** One row of the Population tab's growth-multiplier decomposition — a fill-order-sorted body plus
- *  whether it sits inside the occupied prefix and whether it IS the marginal (partially-filled)
- *  body the fold names `frontierIndex`. */
+ *  whether it sits inside the occupied prefix, whether it IS the marginal body the fold names
+ *  `frontierIndex`, and — only meaningful when `frontier` is true — whether that body is genuinely
+ *  mid-fill (`partial`) rather than the zero-occupancy or all-bodies-full arms, which also name a
+ *  `frontierIndex` but are not a partially-filled body. No `peopleLand`: nothing downstream of this
+ *  row reads it (the tooltip shows score and occupancy only). */
 export interface FillOrderRow {
   className: string;
   score: number;
-  peopleLand: number;
   occupied: boolean;
   frontier: boolean;
+  partial: boolean;
 }
 
 /**
@@ -109,15 +113,18 @@ export interface FillOrderRow {
  */
 export function habitabilityFillOrder(
   bodies: FillOrderBody[],
-  habitabilityQuality: { quality: number; frontierIndex: number } | undefined,
+  habitabilityQuality: { quality: number; frontierIndex: number; partial: boolean } | undefined,
 ): FillOrderRow[] {
   const contributing = contributingBodiesSorted(bodies);
-  return contributing.map((b, i) => ({
-    className: b.className,
-    score: b.score,
-    peopleLand: b.peopleLand,
-    occupied: habitabilityQuality !== undefined && i <= habitabilityQuality.frontierIndex,
-    frontier: habitabilityQuality !== undefined && i === habitabilityQuality.frontierIndex,
-  }));
+  return contributing.map((b, i) => {
+    const frontier = habitabilityQuality !== undefined && i === habitabilityQuality.frontierIndex;
+    return {
+      className: b.className,
+      score: b.score,
+      occupied: habitabilityQuality !== undefined && i <= habitabilityQuality.frontierIndex,
+      frontier,
+      partial: frontier && (habitabilityQuality?.partial ?? false),
+    };
+  });
 }
 

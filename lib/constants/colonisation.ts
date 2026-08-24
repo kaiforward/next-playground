@@ -22,7 +22,7 @@ export const COLONISATION = {
    * ~171 mean `habitableSpace` (recreating the pre-rewrite `partitionBody` formula —
    * `SPACE_PER_SIZE` 400 / `habitableFraction` / `generalWeight`, commit 9dd8fe5c^ — on today's
    * generated bodies) now read ~558 mean `peopleLand` (measured: 1,220 natural-gen candidate
-   * systems ≥ the T4 floor, seed 42/1337/7/2026/99/555 × 600 systems, `temp/task11-scale-derive.ts`).
+   * systems ≥ the T4 floor, seed 42/1337/7/2026/99/555 × 600 systems).
    * That is a 3.26× scale-up, not the ~6× a per-body (not per-candidate-system) comparison would
    * suggest — the measured per-SYSTEM ratio is what matters here since `LAND_PREMIUM` multiplies
    * a candidate's system-level `peopleLand`. `3.0 / 3.26 ≈ 0.92` keeps the premium sub-term

@@ -102,6 +102,31 @@ export function effColumns(v: ResourceVector): EffColumns {
   };
 }
 
+/**
+ * Count-weighted mean of `valueOf(body)` over `bodies`, weighted by `countOf(body)` —
+ * Σ(count·value) / Σ count, skipping any body whose count is non-positive. Returns 1 (a neutral
+ * multiplier) when the total count is 0 — the shared "nothing here, read neutral" convention every
+ * per-resource deposit/extraction-quality reader shares (`depositGradeVector`,
+ * `extractionEfficiencyVector`). The value accessor is what lets one fold serve both: a per-body
+ * quality band keyed by resource (deposit grade) and a per-body constant keyed only by archetype
+ * (extraction efficiency) are the same shape of aggregate with different `valueOf`s.
+ */
+export function countWeightedMean<T>(
+  bodies: T[],
+  countOf: (body: T) => number,
+  valueOf: (body: T) => number,
+): number {
+  let weighted = 0;
+  let total = 0;
+  for (const b of bodies) {
+    const c = countOf(b);
+    if (c <= 0) continue;
+    weighted += c * valueOf(b);
+    total += c;
+  }
+  return total > 0 ? weighted / total : 1;
+}
+
 /** Element-wise sum of resource vectors (the system aggregate from its bodies). */
 export function sumResourceVectors(vectors: ResourceVector[]): ResourceVector {
   const acc = emptyResourceVector();
@@ -156,7 +181,7 @@ export function resourceVectorFromColumns(
 /**
  * Read a row's deposit-slot columns as a ResourceVector — the extractor-slot cap per resource.
  *
- * These three readers are the only supported way to get a vector off a row's columns. Writing the
+ * These four readers are the only supported way to get a vector off a row's columns. Writing the
  * column bag out by hand at the call site is how a resource type added to `RESOURCE_TYPES` reads as
  * an empty deposit (or a neutral ×1 yield) forever: the reader iterates the types, so it would pick
  * the new one up, but a hand-written bag never carries its column and nothing errors.

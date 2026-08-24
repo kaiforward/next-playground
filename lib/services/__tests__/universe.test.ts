@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { generateWorld } from "@/lib/world/gen";
 import { setWorld, clearWorld } from "@/lib/world/store";
 import { getUniverse, getSystemDetail, getSystemSubstrate } from "@/lib/services/universe";
+import { getSystemPopulation } from "@/lib/services/system-population";
 import { ServiceError } from "@/lib/services/errors";
 import { regionInfos } from "@/lib/services/world-index";
 import { BODY_ARCHETYPES, HABITABILITY_THRESHOLD } from "@/lib/constants/bodies";
@@ -156,7 +157,7 @@ describe("getSystemSubstrate", () => {
       ...world,
       bodies: [...world.bodies, best, worse],
       systems: world.systems.map((s) =>
-        s.id === system.id ? { ...s, habitabilityQuality: { quality: 1, frontierIndex: 0 } } : s),
+        s.id === system.id ? { ...s, habitabilityQuality: { quality: 1, frontierIndex: 0, partial: true } } : s),
     };
     setWorld(patched);
 
@@ -166,8 +167,18 @@ describe("getSystemSubstrate", () => {
     expect(data.bodies.find((b) => b.id === "occ-worse")!.occupied).toBe(false);
   });
 
-  it("marks no body occupied when the system has never been assessed (no cached habitabilityQuality)", () => {
-    const system = world.systems.find((s) => world.bodies.filter((b) => b.systemId === s.id).length > 0)!;
+  it("marks NO body occupied on an empty, never-assessed system — even one with land to occupy", () => {
+    // Select a system with at least one contributing body (unlocked, above threshold) AND zero
+    // population, so this genuinely exercises the resolver's population gate rather than passing
+    // vacuously on a system with no contributing body at all. The fresh-compute tier of
+    // `resolveEffectiveHabitabilityQuality` requires a real population: the fold's zero-occupancy
+    // arm names the best body "next to fill" (frontierIndex 0), so an ungated fresh read would
+    // stamp an Occupied badge on the best body of every unclaimed system in the galaxy. Nobody
+    // lives here; nothing is occupied.
+    const system = world.systems.find((s) => s.population === 0 && world.bodies.some((b) => b.systemId === s.id
+      && !BODY_ARCHETYPES[b.bodyType].techLocked
+      && BODY_ARCHETYPES[b.bodyType].scores.default >= HABITABILITY_THRESHOLD))!;
+    expect(system).toBeDefined();
     const patched: World = {
       ...world,
       systems: world.systems.map((s) => (s.id === system.id ? { ...s, habitabilityQuality: undefined } : s)),
@@ -176,7 +187,43 @@ describe("getSystemSubstrate", () => {
 
     const data = getSystemSubstrate(system.id);
     if (data.visibility !== "visible") throw new Error("expected visible");
-    expect(data.bodies.every((b) => !b.occupied)).toBe(true);
+    const contributing = data.bodies.filter((b) => !b.locked
+      && BODY_ARCHETYPES[b.bodyType]?.scores.default >= HABITABILITY_THRESHOLD);
+    expect(contributing.length).toBeGreaterThan(0);
+    expect(data.bodies.filter((b) => b.occupied)).toEqual([]);
+  });
+
+  it("shows occupancy consistent with the population panel's growth multiplier on a colonised-but-uncached system", () => {
+    // A colonised system (real population, contributing bodies) whose fold hasn't run yet — the
+    // exact one-cycle window MAJOR 2 found: the population panel's growthMultiplier resolves a real
+    // (non-neutral) fresh quality here, so the substrate panel's occupied badges must resolve
+    // through the SAME shared fold, not the raw (absent) cache, or a founding colony would show a
+    // real percentage with zero bodies marked occupied.
+    const system = [...world.systems]
+      .filter((s) => s.population > 0 && world.bodies.some((b) => b.systemId === s.id
+        && !BODY_ARCHETYPES[b.bodyType].techLocked
+        && BODY_ARCHETYPES[b.bodyType].scores.default >= HABITABILITY_THRESHOLD))
+      .sort((a, b) => b.population - a.population)[0];
+    expect(system).toBeDefined();
+
+    const patched: World = {
+      ...world,
+      systems: world.systems.map((s) => (s.id === system.id ? { ...s, habitabilityQuality: undefined } : s)),
+    };
+    setWorld(patched);
+
+    const substrate = getSystemSubstrate(system.id);
+    if (substrate.visibility !== "visible") throw new Error("expected visible");
+    const population = getSystemPopulation(system.id);
+    if (population.visibility !== "visible") throw new Error("expected visible");
+
+    // The population panel reads a real, non-neutral quality — proving the fresh tier actually
+    // fired, not the "no bodies" undefined-quality fallback.
+    expect(population.fillOrder.some((row) => row.occupied)).toBe(true);
+    const occupiedInSubstrate = substrate.bodies.filter((b) => b.occupied).length;
+    const occupiedInFillOrder = population.fillOrder.filter((row) => row.occupied).length;
+    expect(occupiedInSubstrate).toBe(occupiedInFillOrder);
+    expect(occupiedInSubstrate).toBeGreaterThan(0);
   });
 
   it("reads absolute people land, 0 for a system with none — never NaN", () => {

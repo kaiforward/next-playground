@@ -918,6 +918,7 @@ export function addMarketsForSettledSystems(
       systemId: sys.id,
       buildings: sys.buildings,
       yields: sys.yields,
+      extractionEff: sys.extractionEff,
       population: sys.population,
       seedStock: false,
     });

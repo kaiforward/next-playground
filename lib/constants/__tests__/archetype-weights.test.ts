@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  BODY_ARCHETYPES, SUN_CLASSES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_DAMPING,
+  BODY_ARCHETYPES, SUN_CLASSES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_LADDER,
 } from "../bodies";
 import type { BodyArchetypeId, SunClass } from "@/lib/types/game";
 
@@ -41,12 +41,12 @@ describe("BODY_ARCHETYPES — habitability-seeding budgets", () => {
   });
 
   it("the habitable-count damping ladder's terminal entry is exactly 0 — a 4th habitable is impossible by table", () => {
-    expect(HABITABLE_COUNT_DAMPING.length).toBeGreaterThanOrEqual(4);
-    expect(HABITABLE_COUNT_DAMPING[3]).toBe(0);
+    expect(HABITABLE_COUNT_LADDER.length).toBeGreaterThanOrEqual(4);
+    expect(HABITABLE_COUNT_LADDER[3]).toBe(0);
   });
 
   it("the ladder's first entry is 1 — the first habitable body is never damped", () => {
-    expect(HABITABLE_COUNT_DAMPING[0]).toBe(1);
+    expect(HABITABLE_COUNT_LADDER[0]).toBe(1);
   });
 
   it("gaia_world holds the top people-land band of every archetype", () => {
@@ -58,18 +58,8 @@ describe("BODY_ARCHETYPES — habitability-seeding budgets", () => {
     }
   });
 
-  it("every authored count range (people land, deposit counts) is an integer with min <= max", () => {
-    // Vacuity guard: fails outright if the table is empty or a range family is unauthored.
-    expect(ARCHETYPE_IDS.length).toBeGreaterThan(0);
-    for (const id of ARCHETYPE_IDS) {
-      const a = BODY_ARCHETYPES[id];
-      for (const range of [a.peopleLand, ...Object.values(a.depositCounts)]) {
-        expect(Number.isInteger(range.min)).toBe(true);
-        expect(Number.isInteger(range.max)).toBe(true);
-        expect(range.min).toBeLessThanOrEqual(range.max);
-      }
-    }
-  });
+  // Range-shape invariants (integer, min <= max, valid resource keys) for peopleLand and
+  // depositCounts live in bodies.test.ts (`BODY_ARCHETYPES` describe block) — not duplicated here.
 
   it("the water band contains the spec's anchor derivation (~35 extractors at 10,000 pops)", () => {
     const waterBands = ARCHETYPE_IDS
@@ -79,19 +69,8 @@ describe("BODY_ARCHETYPES — habitability-seeding budgets", () => {
     expect(waterBands.some((range) => range.min <= 35 && 35 <= range.max)).toBe(true);
   });
 
-  it("every archetype's default score is in [0, 1]", () => {
-    for (const id of ARCHETYPE_IDS) {
-      expect(BODY_ARCHETYPES[id].scores.default).toBeGreaterThanOrEqual(0);
-      expect(BODY_ARCHETYPES[id].scores.default).toBeLessThanOrEqual(1);
-    }
-  });
-
-  it("every archetype's extractionModifier is in (0, 1]", () => {
-    for (const id of ARCHETYPE_IDS) {
-      expect(BODY_ARCHETYPES[id].extractionModifier).toBeGreaterThan(0);
-      expect(BODY_ARCHETYPES[id].extractionModifier).toBeLessThanOrEqual(1);
-    }
-  });
+  // scores.default in [0,1] and extractionModifier in (0,1] are asserted in bodies.test.ts
+  // (`BODY_ARCHETYPES` describe block) — not duplicated here.
 
   it("gas_giant and volcanic_world are tech-locked; the mining-outpost backbone is not", () => {
     expect(BODY_ARCHETYPES.gas_giant.techLocked).toBe(true);

@@ -24,8 +24,11 @@ export interface SystemBuildRow {
   buildings: Record<string, number>;
   /** Per-resource effective yields, for the shared market-state derivation. */
   yields: ResourceVector;
-  /** Per-resource extraction-work efficiency, threaded alongside `yields`; absent ⇒ neutral 1.0. */
-  extractionEff?: ResourceVector;
+  /** Per-resource extraction-work efficiency, threaded alongside `yields` — required, matching
+   *  `TickSystem.extractionEff` (`lib/tick/rows.ts`): a fixture that omits it is a type error
+   *  rather than a silent neutral-1.0 fallback that could mask a real deposit-grade effect. Pass
+   *  `unitResourceVector()` when a fixture genuinely wants the neutral reading. */
+  extractionEff: ResourceVector;
   /** Per-resource deposit-slot cap — caps tier-0 extractor builds. */
   depositCounts: ResourceVector;
   /** Habitable land — caps housing. Factories, academies, complexes and construction centres bill

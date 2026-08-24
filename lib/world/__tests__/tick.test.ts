@@ -1298,6 +1298,16 @@ async function deriveFoundingFixture(base: World, maxTicks = 20_000): Promise<Fo
   );
 }
 
+/** All three founding-fixture tests below derive from the identical seed-11/90-system galaxy, and
+ *  `deriveFoundingFixture` is deterministic given that base — so the walk-forward (thousands of real
+ *  ticks) only needs to run once per test-file invocation, not once per test. Memoized rather than
+ *  computed at module load so it still only pays the cost when a test actually needs it. */
+let foundingFixtureCache: Promise<FoundingFixture> | null = null;
+function foundingFixture(): Promise<FoundingFixture> {
+  foundingFixtureCache ??= deriveFoundingFixture(generateWorld({ systemCount: 90, seed: 11 }));
+  return foundingFixtureCache;
+}
+
 /** A developed homeworld reduced to housing alone (mirrors `populationFixture`), at a chosen
  *  occupancy and unrest, with no treasury override — used where the test needs the source system's
  *  starting row to be byte-identical across two worlds that only then diverge elsewhere. */
@@ -1555,8 +1565,7 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
   // donor's populationChange exactly, with no other system's dynamics free to differ between the
   // two branches.
   it("includes a colony-founding donation: the donor's populationChange is NOT short by the seed it gave away", async () => {
-    const base = generateWorld({ systemCount: 90, seed: 11 });
-    const { sourceSystemId, targetSystemId, completionPreWorld: preWorld } = await deriveFoundingFixture(base);
+    const { sourceSystemId, targetSystemId, completionPreWorld: preWorld } = await foundingFixture();
 
     const withDonation = (await runWorldTick(preWorld)).world;
     const withoutDonation = (await runWorldTick(preWorld, {
@@ -1606,10 +1615,9 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
   }, 30_000);
 
   it("a system founded, abandoned and later redeveloped reports populationChange absent, not its predecessor's value — driven through runWorldTick across real cycles", async () => {
-    const base = generateWorld({ systemCount: 90, seed: 11 });
     // Same programmatic derivation the donation test above uses, rather than a hardcoded colony/tick
     // pair — which project completes first, and when, shifts with the archetype/sun-class tables.
-    const fixture = await deriveFoundingFixture(base);
+    const fixture = await foundingFixture();
     let world = fixture.completionWorld; // the colony above completes here
 
     const colonyId = fixture.targetSystemId;
@@ -1627,10 +1635,16 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     // budget. Cadence buys nothing: reference cycles per tick are interval-invariant by construction,
     // so 3,000 ticks is ~125 reference cycles at ANY cadence.
     const savedConnections = world.connections;
+    // Plant a habitabilityQuality reading before the death line — a fixture value, since the real
+    // fold wouldn't have crossed a body boundary yet at this population, and the point here is only
+    // to prove `applyAbandonments` clears whatever the row is carrying, not to derive an honest one.
+    const PLANTED_QUALITY = { quality: 0.42, frontierIndex: 0, partial: true };
     world = {
       ...world,
       systems: world.systems.map((s): WorldSystem =>
-        s.id === colonyId ? { ...s, unrest: 0.9, population: 1.02, popCap: 20 } : s,
+        s.id === colonyId
+          ? { ...s, unrest: 0.9, population: 1.02, popCap: 20, habitabilityQuality: PLANTED_QUALITY }
+          : s,
       ),
       buildings: world.buildings.filter((b) => b.systemId !== colonyId),
       markets: world.markets.map((m): WorldMarket =>
@@ -1648,6 +1662,9 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     expect(abandoned).toBe(true); // non-vacuous: the fixture actually reaches the death line
     expect(fixtureSystem(world, colonyId).control).toBe("unclaimed");
     expect(fixtureSystem(world, colonyId).populationChange).toBeUndefined();
+    // applyAbandonments' clear (lib/world/tick.ts:845): the planted reading does not survive the
+    // reset — a re-founded colony must never inherit its predecessor's habitability quality.
+    expect(fixtureSystem(world, colonyId).habitabilityQuality).toBeUndefined();
 
     // Reclaim: restore connectivity to the original seed source and flip control back to
     // `controlled` under the same faction, so the real develop provider considers it again — the
@@ -1657,7 +1674,13 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
       ...world,
       connections: savedConnections,
       systems: world.systems.map((s): WorldSystem =>
-        s.id === colonyId ? { ...s, control: "controlled", factionId: sourceFactionId } : s,
+        // Plant a SECOND reading while the system is merely `controlled` — the population processor
+        // never touches a controlled (not-yet-developed) system (`isEconomicallyActive`), so this can
+        // only be a fixture value, exercising `applyDevelopments`' clear (lib/world/tick.ts:792)
+        // when this same reclaim later completes into `developed`.
+        s.id === colonyId
+          ? { ...s, control: "controlled", factionId: sourceFactionId, habitabilityQuality: PLANTED_QUALITY }
+          : s,
       ),
       treasuries: world.treasuries.map((t): WorldFactionTreasury =>
         t.factionId === sourceFactionId ? { ...t, balance: t.balance + 1_000_000, pendingFounding: 0 } : t,
@@ -1677,6 +1700,10 @@ describe("runWorldTick — the realised per-cycle population change (WorldSystem
     const refounded = fixtureSystem(world, colonyId);
     expect(refounded.populationChange).toBeUndefined();
     expect("populationChange" in refounded).toBe(false);
+    // applyDevelopments' clear (lib/world/tick.ts:792): the second planted reading, carried on the
+    // row while merely `controlled`, does not survive into the newly `developed` colony either.
+    expect(refounded.habitabilityQuality).toBeUndefined();
+    expect("habitabilityQuality" in refounded).toBe(false);
   }, 300_000);
 });
 
@@ -1911,8 +1938,7 @@ describe("runWorldTick — the realised per-cycle survival-good stock change (Wo
   // cycles-to-empty countdown, so a drain outside the figure would quote the donor a longer runway
   // than it has, on the cycle it can least afford one.
   it("includes a colony-founding staging draw: the donor's stockChange covers the survival goods it shipped out", async () => {
-    const base = generateWorld({ systemCount: 90, seed: 11 });
-    const { stagingSourceSystemId: donorId, stagingPreWorld: preWorld } = await deriveFoundingFixture(base);
+    const { stagingSourceSystemId: donorId, stagingPreWorld: preWorld } = await foundingFixture();
 
     const staged = await runWorldTick(preWorld);
     const withStaging = staged.world;

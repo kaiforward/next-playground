@@ -50,8 +50,11 @@ export interface SystemLogisticsRow {
   buildings: Record<string, number>;
   /** Per-resource effective yields, for inputDemandForGood / capacityGoodRates. */
   yields: ResourceVector;
-  /** Per-resource extraction-work efficiency, threaded alongside `yields`; absent ⇒ neutral 1.0. */
-  extractionEff?: ResourceVector;
+  /** Per-resource extraction-work efficiency, threaded alongside `yields` — required, matching
+   *  `TickSystem.extractionEff` (`lib/tick/rows.ts`): a fixture that omits it is a type error
+   *  rather than a silent neutral-1.0 fallback that could mask a real deposit-grade effect. Pass
+   *  `unitResourceVector()` when a fixture genuinely wants the neutral reading. */
+  extractionEff: ResourceVector;
   markets: MarketRowForLogistics[];
 }
 

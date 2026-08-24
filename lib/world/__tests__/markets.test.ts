@@ -1,11 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createSystemMarkets } from "@/lib/world/markets";
 import { classifyMarketState, surplusDrawable } from "@/lib/engine/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
+import * as honestDemand from "@/lib/engine/honest-demand";
 import { useRatesByGood } from "@/lib/engine/honest-demand";
 import { consumptionRate } from "@/lib/engine/physical-economy";
 import { computeSystemLabourSnapshot } from "@/lib/engine/industry";
-import { unitResourceVector } from "@/lib/engine/resources";
+import { unitResourceVector, makeResourceVector } from "@/lib/engine/resources";
 import type { WorldMarket } from "@/lib/world/types";
 
 /** A colony at the moment of founding: seed population, no industry, empty warehouses. */
@@ -67,6 +68,27 @@ describe("createSystemMarkets: the seeded use figure", () => {
     if (oreExpected === undefined) throw new Error("Expected an ore use rate");
     expect(oreExpected.industrial).toBeGreaterThan(0); // the smelter's draw, or this is vacuous
     expect(useRateOf(ore)).toBeCloseTo(oreExpected.total, 9);
+  });
+
+  it("threads the system's own extraction efficiency into the seeded use-rate call, not a bare neutral read", () => {
+    // No fixture in this suite makes extractionEff move the SEEDED FIGURE itself: today's recipe
+    // graph (recipes.ts) never has one tier-0 good consume another, so a tier-0 good's own
+    // extraction efficiency (which only scales that good's OWN production, per
+    // `buildingProduction`'s isTier0 branch) never reaches any good's `civilian + industrial` USE
+    // total — extractionEff is a supply-side term, use is demand-side, and they only meet through a
+    // consumer's recipe draw, which no tier-0 good has. That makes a purely behavioural test
+    // vacuous, so this asserts the WIRING directly: `createSystemMarkets` must pass `seed.extractionEff`
+    // through to `useRatesByGood` verbatim, not silently drop it (the exact bug this test guards
+    // against would compile and pass every value-based test in this file, since the value never
+    // moves under today's recipe graph either way).
+    const eff = makeResourceVector({ ore: 0.4 });
+    const spy = vi.spyOn(honestDemand, "useRatesByGood");
+    try {
+      createSystemMarkets({ ...ESTABLISHED, extractionEff: eff });
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ extractionEff: eff }));
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("leaves an empty founding row a deficit sink, not an un-sinkable market", () => {

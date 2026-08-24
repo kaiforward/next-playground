@@ -84,7 +84,7 @@ const HEALTH: Record<IndustryHealth, { label: string; badge: BadgeColor; text: s
 // Faint light hatch = idle labour capacity; red hatch = skill jobs no academy can license; copper
 // hatch = free habitable land (housing can still grow here); dim grey hatch = free deposit slots —
 // its own, dimmer tone (distinct from the copper land hatch) so the two budget bars read as separate
-// stories at a glance, per the approved prototype (temp/industry-bars-prototype.html, variant A).
+// stories at a glance, per the approved prototype (variant A).
 const IDLE_HATCH = "repeating-linear-gradient(135deg, transparent 0 4px, rgba(201,209,217,0.06) 4px 8px)";
 const GAP_HATCH = "repeating-linear-gradient(135deg, rgba(240,97,109,0.45) 0 4px, transparent 4px 8px)";
 const COPPER_HATCH = "repeating-linear-gradient(135deg, rgba(208,106,66,0.45) 0 2px, transparent 2px 6px)";

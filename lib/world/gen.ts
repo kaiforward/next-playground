@@ -186,6 +186,7 @@ export function generateWorld(options: GenerateWorldOptions): World {
       systemId: systemIds[i],
       buildings: s.buildings,
       yields: s.yieldMult,
+      extractionEff: s.extractionEfficiency,
       population: s.population,
       seedStock: true,
     });

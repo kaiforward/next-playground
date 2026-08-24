@@ -916,9 +916,9 @@ export function buildingStorageForGood(buildings: Record<string, number>, goodId
 }
 
 // ── Substrate display summaries (system-panel view helpers) ──────────────────
-// The three disjoint budgets industry is built against: tier-0 extractors sit on dedicated deposit
-// slots; tier-1+ factories, academies, complexes and construction centres bill industry land;
-// housing bills people land alone — none of the three bounds another. These pure helpers turn the
+// The two disjoint budgets industry is built against: tier-0 extractors sit on dedicated deposit
+// slots; housing bills people land alone. Tier-1+ factories, academies, complexes and construction
+// centres bill neither — labour, demand and decay bound them instead. These pure helpers turn the
 // denormalised substrate columns + built base into the shapes the system panels render.
 
 /**

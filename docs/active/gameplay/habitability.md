@@ -55,7 +55,7 @@ range on its table row; it just sits **dark** (present but non-functional) below
 waiting for a future adapted population type or terraforming to light it up. Truly dead classes
 (frozen, volcanic, barren rock, asteroid, gas giant) author zero. A third, general-purpose land
 budget existed on every class's table row through most of this feature's development — see "Why
-industry land was cut" below for why it was deleted rather than shipped.
+industry bills no land" below for why it was deleted rather than shipped.
 
 **Correction to a retired claim:** boreal worlds read yellow or orange only. Red-dwarf and
 blue-white stars carry no above-threshold class at all — by design, both wait for terraforming or
@@ -108,7 +108,7 @@ premise ("extractor count is deposit-capped") is true for the first time.
 Each authored deposit count carries its own **quality band** (poor / average / good / rich), rolled
 independently per resource per body (`rollQualityBand`, `lib/engine/substrate-space.ts`) and folded
 into `yieldMult` — the pure ground-grade multiplier a resource's worked extractors read
-(`depositGradeVector`, `lib/engine/body-gen.ts`). A deposit's display name is generated from its
+(`depositGradeVector`, `lib/engine/deposit-grade.ts`). A deposit's display name is generated from its
 band + resource (e.g. "rich ore deposit", "marginal water-ice seam") rather than drawn from a
 curated proper-noun catalog, so every band × resource pair reads naturally without hand-authoring
 one. Quality bands are unchanged by the habitability retune — only how much of each resource a body

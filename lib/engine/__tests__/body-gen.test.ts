@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mulberry32 } from "../universe-gen";
 import { generateSubstrate, substrateAggregates, type GeneratedBody } from "../body-gen";
 import {
-  SUN_CLASSES, BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_DAMPING,
+  SUN_CLASSES, BODY_ARCHETYPES, HABITABILITY_THRESHOLD, HABITABLE_COUNT_LADDER,
 } from "@/lib/constants/bodies";
 import { RESOURCE_TYPES } from "../resources";
 import type { BodyArchetypeId } from "@/lib/types/game";
@@ -206,7 +206,10 @@ describe("generateSubstrate — damping ladder: Proves (3)", () => {
         if (s.bodies.some((b) => b.bodyType === DEAD)) sawDeadRolled = true;
       }
       expect(yellowSystemsSeen).toBeGreaterThan(0); // non-vacuous
-      expect(maxAboveThreshold).toBeLessThanOrEqual(3);
+      // Measured at seed 555 / 4000 draws: the forced all-above-threshold table actually reaches
+      // the index-2 ladder step (weight 0.3, never 0), so the upper bound alone can't fail if a
+      // future change collapsed index 2 to 0 and made 3-body systems impossible.
+      expect(maxAboveThreshold).toBe(3);
       expect(sawDeadRolled).toBe(true);
     } finally {
       SUN_CLASSES.yellow.archetypeWeights = original;
@@ -214,6 +217,6 @@ describe("generateSubstrate — damping ladder: Proves (3)", () => {
   });
 
   it("the ladder's terminal entry is exactly 0 — a 4th above-threshold body is impossible by table", () => {
-    expect(HABITABLE_COUNT_DAMPING[3]).toBe(0);
+    expect(HABITABLE_COUNT_LADDER[3]).toBe(0);
   });
 });

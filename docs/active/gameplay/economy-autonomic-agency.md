@@ -276,8 +276,9 @@ is free). A faction that industrialises absorbs heads into skilled jobs and its 
 erodes automatically — nobody wrote a "rich factions build slower" rule; it falls out of eligibility once
 skilled employment exists.
 
-A **Construction Centre** (`CONSTRUCTION_CENTRE_TYPE`) is a non-producing building — normal general-space
-footprint, a tier-1-factory-like labour draw (mostly unskilled + a technician draw) — that substitutes
+A **Construction Centre** (`CONSTRUCTION_CENTRE_TYPE`) is a non-producing building — sited on spare labour
+like any production building, billing no land, with a tier-1-factory-like labour draw (mostly unskilled +
+a technician draw) — that substitutes
 capital for the labour a skilled economy has absorbed: each staffed level adds
 `CONSTRUCTION.POINTS_PER_LEVEL × min(labourFulfil, skill1Fulfil)` to the faction pool per cycle, gated by
 its own staffing (an unstaffable centre sheds levels via ordinary idle-decay like any building). A centre

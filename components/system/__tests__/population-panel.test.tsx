@@ -71,12 +71,12 @@ describe("PopulationPanel — the growth line", () => {
   it("an uninhabited system renders no growth line", () => {
     popValue = { visibility: "unknown" };
     renderPanel();
-    expect(screen.queryByText(/habitability/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Habitability/)).not.toBeInTheDocument();
   });
 
   it("a genuinely uninhabited (visible but empty) system also renders no growth line", () => {
     popValue = populated({ population: 0, popCap: 0, unrest: 0 });
     renderPanel();
-    expect(screen.queryByText(/habitability/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Habitability/)).not.toBeInTheDocument();
   });
 });

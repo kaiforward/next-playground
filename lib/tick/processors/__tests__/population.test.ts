@@ -1514,6 +1514,28 @@ describe("population processor: fill-best-first habitability quality", () => {
     expect(afterSecond?.frontierIndex).toBe(0);
     expect(afterSecond?.quality).toBe(0.6);
   });
+
+  it("keeps recomputing past the terminal crossing: frontier pinned on the last body, quality keeps falling as occupancy grows", async () => {
+    // Push into C (the sorted list's last index, frontierIndex 2) without reaching the clamp arm:
+    // occupiedLand = 180 (A 100 + B 50 + 30 of C's 50), still short of totalLand 200.
+    const world = new InMemoryPopulationWorld({ systems: [sysWithBodies(3600)], markets: [] });
+    await runOnce(world);
+    const afterFirst = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    if (afterFirst === undefined) throw new Error("Expected a cached reading after the first run");
+    expect(afterFirst.frontierIndex).toBe(2); // C, the last index — an index-only trigger can never fire again
+
+    // Grow further, still inside C (occupiedLand 195, still short of totalLand 200) — frontierIndex
+    // stays 2, so the old index-only trigger would freeze the cache here forever. The honest fold
+    // keeps sliding toward C's worse score as more of the population lands on it, so the cache must
+    // keep tracking it.
+    world.systems[0].population = 3900;
+    await runOnce(world);
+    const afterSecond = world.systems.find((s) => s.id === "h")!.habitabilityQuality;
+    expect(afterSecond?.frontierIndex).toBe(2);
+    // weighted = 1.0*100 + 0.6*50 + 0.3*45 = 143.5; quality = 143.5/195.
+    expect(afterSecond?.quality).toBeCloseTo(143.5 / 195, 12);
+    expect(afterSecond?.quality).toBeLessThan(afterFirst.quality);
+  });
 });
 
 // ── Growth coupling (Task 8): quality multiplies the growth term only. Decline/death and the
@@ -1574,7 +1596,7 @@ describe("population processor: growth-quality coupling", () => {
       unrest: NO_RELAX, population: FROZEN_POP, expectation: EXPECTATION_PARAMS, interval: 24,
     });
     const seeded = world.systems.find((s) => s.id === "a")!;
-    expect(seeded.habitabilityQuality).toEqual({ quality: 1, frontierIndex: 0 });
+    expect(seeded.habitabilityQuality).toEqual({ quality: 1, frontierIndex: 0, partial: true });
 
     // Now grow hard for one cycle: r stays tiny (popCap 100_000) so crowdFactor = 1 throughout.
     const params = {

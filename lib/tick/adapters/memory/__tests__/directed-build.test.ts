@@ -2,12 +2,12 @@ import { describe, it, expect } from "vitest";
 import { MemoryDirectedBuildWorld } from "@/lib/tick/adapters/memory/directed-build";
 import type { SystemBuildRow, SystemClaim, SystemDevelopment, ProposalPersistenceUpdate } from "@/lib/tick/world/directed-build-world";
 import type { WorldConstructionProject } from "@/lib/world/types";
-import { emptyResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 
 function row(systemId: string, factionId: string | null): SystemBuildRow {
   return {
     systemId, factionId, control: "unclaimed", population: 100, buildings: {},
-    yields: emptyResourceVector(), depositCounts: emptyResourceVector(),
+    yields: emptyResourceVector(), extractionEff: unitResourceVector(), depositCounts: emptyResourceVector(),
  peopleLand: 0, markets: [],
   };
 }

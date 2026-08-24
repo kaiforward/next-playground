@@ -29,6 +29,17 @@ export interface SystemHabitabilityQuality {
    * change in this value as its sole recompute trigger.
    */
   frontierIndex: number;
+  /**
+   * True only when `frontierIndex` names a body genuinely mid-fill — some but not all of its land
+   * occupied, with land still unoccupied beyond it. False for the two arms that also produce a
+   * `frontierIndex` but are NOT a marginal body in that sense: the zero-occupancy arm (nobody has
+   * landed anywhere yet — `frontierIndex` 0 just names the best body as next-to-fill, not
+   * partially filled) and the clamp arm (population has overrun every body's land — the last body
+   * is fully occupied, not partial). Read-side consumers (`habitabilityFillOrder`,
+   * `habitability-tooltip-content.tsx`) use this to avoid labelling a saturated system's last body
+   * or a zero-pop system's first body "Partial".
+   */
+  partial: boolean;
 }
 
 /**
@@ -52,18 +63,18 @@ export function systemHabitabilityQuality(
   population: number,
 ): SystemHabitabilityQuality {
   if (bodies.length === 0) {
-    return { quality: 0, frontierIndex: -1 };
+    return { quality: 0, frontierIndex: -1, partial: false };
   }
   const sorted = [...bodies].sort((a, b) => b.score - a.score);
   const totalLand = sorted.reduce((sum, b) => sum + b.peopleLand, 0);
   const occupiedLand = Math.max(0, population) / POP_CENTRE_DENSITY;
 
   if (totalLand <= 0 || occupiedLand <= 0) {
-    return { quality: sorted[0].score, frontierIndex: 0 };
+    return { quality: sorted[0].score, frontierIndex: 0, partial: false };
   }
   if (occupiedLand >= totalLand) {
     const weighted = sorted.reduce((sum, b) => sum + b.score * b.peopleLand, 0);
-    return { quality: weighted / totalLand, frontierIndex: sorted.length - 1 };
+    return { quality: weighted / totalLand, frontierIndex: sorted.length - 1, partial: false };
   }
 
   let cumulative = 0;
@@ -73,12 +84,12 @@ export function systemHabitabilityQuality(
     weighted += sorted[i].score * landHere;
     cumulative += landHere;
     if (cumulative >= occupiedLand) {
-      return { quality: weighted / occupiedLand, frontierIndex: i };
+      return { quality: weighted / occupiedLand, frontierIndex: i, partial: true };
     }
   }
   // Unreachable given occupiedLand < totalLand above (the walk must cross occupiedLand before
   // exhausting every body's land) — kept as a defensive fallback, never a silent NaN.
-  return { quality: weighted / cumulative, frontierIndex: sorted.length - 1 };
+  return { quality: weighted / cumulative, frontierIndex: sorted.length - 1, partial: true };
 }
 
 /**
@@ -102,4 +113,32 @@ export function isContributingBody(body: { score: number; locked: boolean }): bo
  */
 export function contributingBodiesSorted<T extends { score: number; locked: boolean }>(bodies: T[]): T[] {
   return bodies.filter(isContributingBody).sort((a, b) => b.score - a.score);
+}
+
+/**
+ * THE shared three-tier effective-quality resolution every read-side consumer of habitability
+ * quality shares: the persisted fold-site cache if present; else a fresh compute
+ * (`systemHabitabilityQuality`) over this system's contributing bodies at its current population —
+ * a just-founded or just-crossed colony's first read, before the tick has had a cycle to cache one;
+ * else `undefined`. The fresh tier requires a real population as well as a contributing body:
+ * the fold's zero-occupancy arm names the best body as "next to fill" (`frontierIndex` 0), so
+ * computing it for an EMPTY system would mark that body occupied on every unclaimed system in the
+ * galaxy — nobody lives there, nothing is occupied, the resolution is `undefined`. Callers apply
+ * their own neutral default on top of `undefined` (population growth reads 1×, occupancy shows
+ * nothing occupied) — this function never fabricates one, so two call sites can never silently
+ * choose different defaults. `lib/services/system-population.ts` (the growth-multiplier read) and
+ * `lib/services/universe.ts`'s `getSystemSubstrate` (the occupied-body-id read) both resolve
+ * through this rather than either reading the raw cache alone — a system whose fold hasn't run yet
+ * would otherwise show a real percentage with zero bodies marked occupied.
+ */
+export function resolveEffectiveHabitabilityQuality<T extends HabitabilityBody & { locked: boolean }>(
+  cached: SystemHabitabilityQuality | undefined,
+  bodies: T[],
+  population: number,
+): SystemHabitabilityQuality | undefined {
+  if (cached !== undefined) return cached;
+  if (population <= 0) return undefined;
+
+  const contributing = contributingBodiesSorted(bodies);
+  return contributing.length > 0 ? systemHabitabilityQuality(contributing, population) : undefined;
 }

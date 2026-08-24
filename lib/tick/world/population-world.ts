@@ -7,6 +7,7 @@
  */
 import type { UnrestParams, PopulationParams, SupplyRegime } from "@/lib/engine/population";
 import type { ExpectationParams } from "@/lib/engine/expectation";
+import type { SystemHabitabilityQuality } from "@/lib/engine/habitability";
 export interface PopulationStateView {
   systemId: string;
   population: number;
@@ -26,7 +27,7 @@ export interface PopulationStateView {
    *  `TickSystem.habitabilityQuality` UNCOERCED — absent means the population processor has never
    *  assessed this system before. The fold-site caching policy (recompute the persisted value
    *  only when `frontierIndex` changes) lives in the processor, not here. */
-  habitabilityQuality?: { quality: number; frontierIndex: number };
+  habitabilityQuality?: SystemHabitabilityQuality;
 }
 
 export interface PopulationUpdate {
@@ -66,7 +67,7 @@ export interface PopulationUpdate {
    *  hand-built `PopulationUpdate` fixture that predates this field (and isn't testing
    *  habitability at all) still type-checks — same no-write-a-lie fallback as `provisionExpectation`
    *  handles an absent write. */
-  habitabilityQuality?: { quality: number; frontierIndex: number };
+  habitabilityQuality?: SystemHabitabilityQuality;
 }
 
 export interface PopulationWorld {

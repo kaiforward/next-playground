@@ -265,7 +265,7 @@ export function cohortsForSystem(s: TickSystem, homeworldIds: Set<string>): Worl
     // A colonisable system always carries at least one people-land-contributing body (only
     // threshold-clearing bodies contribute to the peopleLand aggregate the floor above tests), so
     // this split is exhaustive over the colonisable membership — single- vs multi-people-land-body,
-    // target 5's live audience for the fill-best-first quality fold.
+    // the live audience for the fill-best-first quality fold.
     const bodies = s.habitabilityBodies ?? [];
     if (bodies.length === 1) cohorts.push("quality: single-body");
     else if (bodies.length > 1) cohorts.push("quality: multi-body");

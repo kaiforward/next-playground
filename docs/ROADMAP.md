@@ -30,6 +30,16 @@ The attention layer — how the player finds what to do — is two surfaces, bot
   logistics mechanics build on bodies, so this discussion lands first.
   *Don't:* re-litigate the two-budget generation model or the deleted industry-land budget; both
   are settled and orthogonal to where industry physically sits.
+2. **[S] Abandonment warning for non-famine decline — a let-through bug, not a feature ask.**
+  Found at the habitability-seeding uber-review (2026-08-24): Abandonment Rule 2 fires on
+  below-floor population alone, but the player-facing countdown (`lib/services/alerts.ts`, the
+  famine branch) is famine-gated — a well-fed colony declining to empty under unrest dies with
+  no warning ever raised. Direction (Kai, 2026-08-24): trigger on steep population decline
+  (the unrest-driven case) rather than adding a new alert category — one decline-rate trigger
+  plausibly covers BOTH the famine countdown and the non-famine death, collapsing the branch
+  instead of widening it.
+  *Next step:* small design pass on the decline-rate trigger (threshold, window, how the
+  existing famine countdown folds in), then implement — sized [S], its own quick PR.
 
 ---
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { MemoryDirectedLogisticsWorld } from "@/lib/tick/adapters/memory/directed-logistics";
-import { emptyResourceVector } from "@/lib/engine/resources";
+import { emptyResourceVector, unitResourceVector } from "@/lib/engine/resources";
 import { runDirectedLogisticsProcessor } from "@/lib/tick/processors/directed-logistics";
 import { DIRECTED_LOGISTICS } from "@/lib/constants/directed-logistics";
 import { allSystemIdsReachable } from "@/lib/engine/directed-logistics";
@@ -16,8 +16,8 @@ import type { SystemLogisticsRow } from "@/lib/tick/world/directed-logistics-wor
 describe("MemoryDirectedLogisticsWorld", () => {
   it("groups systems by faction key (null = independents)", async () => {
     const world = new MemoryDirectedLogisticsWorld([
-      { systemId: "A", factionId: "f1", population: 10, buildings: {}, yields: emptyResourceVector(), markets: [] },
-      { systemId: "B", factionId: null, population: 5, buildings: {}, yields: emptyResourceVector(), markets: [] },
+      { systemId: "A", factionId: "f1", population: 10, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [] },
+      { systemId: "B", factionId: null, population: 5, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [] },
     ]);
     const keys = await world.getFactionShardKeys();
     expect(new Set(keys)).toEqual(new Set(["f1", null]));
@@ -90,11 +90,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -115,11 +115,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -139,11 +139,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -166,15 +166,15 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A1", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA1", "food", 70, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA1", "food", 70, 20)],
       },
       {
         systemId: "A2", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA2", "food", 70, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA2", "food", 70, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -204,19 +204,19 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: null, population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: null, population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
       {
         systemId: "C", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mC", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mC", "food", 95, 20)],
       },
       {
         systemId: "D", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mD", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mD", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -237,11 +237,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -261,11 +261,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -293,11 +293,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10.3, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10.3, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -330,11 +330,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -360,8 +360,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // that funds the budget alongside it.
     const EXPENSIVE = 200;
     const budgetBound = () => [
-      { systemId: "A", factionId: "f1", population: FIXTURE_POP, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 100000, 0)] },
-      { systemId: "B", factionId: "f1", population: FIXTURE_POP, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 0)] },
+      { systemId: "A", factionId: "f1", population: FIXTURE_POP, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 100000, 0)] },
+      { systemId: "B", factionId: "f1", population: FIXTURE_POP, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 0)] },
     ];
     const movedAt = async (interval: number): Promise<number> => {
       const world = new MemoryDirectedLogisticsWorld(budgetBound());
@@ -383,8 +383,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     // level-fill toward the target, interval-invariant, NOT a scaled multiple.
     const gapFill = async (interval: number): Promise<number> => {
       const systems = [
-        { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
-        { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+        { systemId: "A", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)] },
+        { systemId: "B", factionId: "f1", population: 200, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)] },
       ];
       const world = new MemoryDirectedLogisticsWorld(systems);
       await runDirectedLogisticsProcessor(world, { tick: 0 }, {
@@ -402,11 +402,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const mk = () => [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     // funded 0 → generation × 0 = no work budget → nothing moves.
@@ -440,14 +440,14 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems = [
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [
           market("mA", "food", 95, 20),
           market("mOther", "ore", 40, 20),
         ],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -465,14 +465,14 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const recoveredWorld = new MemoryDirectedLogisticsWorld([
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [
           market("mA", "food", 95, 20, true),
           market("mOther", "ore", 40, 20),
         ],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20, true)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20, true)],
       },
     ]);
     await runDirectedLogisticsProcessor(recoveredWorld, { tick: DUE_TICK }, {
@@ -492,7 +492,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const isolated = new MemoryDirectedLogisticsWorld([
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)],
       },
     ]);
     await runDirectedLogisticsProcessor(isolated, { tick: DUE_TICK }, {
@@ -511,11 +511,11 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const recovered = new MemoryDirectedLogisticsWorld([
       {
         systemId: "A", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)],
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)],
       },
       {
         systemId: "B", factionId: "f1", population: 200, buildings: {},
-        yields: emptyResourceVector(), markets: [
+        yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [
           { ...market("mB", "food", 10, 20), unservedShortfall: 38 },
         ],
       },
@@ -530,8 +530,8 @@ describe("runDirectedLogisticsProcessor (body)", () => {
 
   it("keeps unreachable pairs unmarked", async () => {
     const systems = [
-      { systemId: "A", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mA", "food", 95, 20)] },
-      { systemId: "B", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 10, 20)] },
+      { systemId: "A", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mA", "food", 95, 20)] },
+      { systemId: "B", factionId: "f1", population: 0, buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 10, 20)] },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
     await runDirectedLogisticsProcessor(world, { tick: DUE_TICK }, {
@@ -545,12 +545,12 @@ describe("runDirectedLogisticsProcessor (body)", () => {
     const systems: SystemLogisticsRow[] = [
       {
         systemId: "A", factionId: "f1", population: 200,
-        buildings: { food: 3 }, yields: emptyResourceVector(),
+        buildings: { food: 3 }, yields: emptyResourceVector(), extractionEff: unitResourceVector(),
         markets: [{ ...market("mA", "food", 10, 20), realisedProductionRate: 0 }],
       },
       {
         systemId: "B", factionId: "f1", population: 200,
-        buildings: {}, yields: emptyResourceVector(), markets: [market("mB", "food", 95, 20)],
+        buildings: {}, yields: emptyResourceVector(), extractionEff: unitResourceVector(), markets: [market("mB", "food", 95, 20)],
       },
     ];
     const world = new MemoryDirectedLogisticsWorld(systems);
@@ -605,12 +605,12 @@ describe("runDirectedLogisticsProcessor (body)", () => {
       return new MemoryDirectedLogisticsWorld([
         {
           systemId: "D", factionId: "f1", population: 0, buildings: {},
-          yields: emptyResourceVector(),
+          yields: emptyResourceVector(), extractionEff: unitResourceVector(),
           markets: [{ id: "mD", goodId: "ore", stock: 100_000, anchorMult: 1, demandRate: 1, storageCapacity: 0 }],
         },
         {
           systemId: "R1", factionId: "f1", population: METALS_POP, buildings: METALS_BUILDINGS,
-          yields: emptyResourceVector(),
+          yields: emptyResourceVector(), extractionEff: unitResourceVector(),
           markets: [
             // demandRate is set well above oreWant so the PRICING band's maxStock (a different,
             // demandRate-denominated ceiling) never clips a delivery below the logistics shortfall
@@ -621,7 +621,7 @@ describe("runDirectedLogisticsProcessor (body)", () => {
         },
         {
           systemId: "R2", factionId: "f1", population: R2_POP, buildings: {},
-          yields: emptyResourceVector(),
+          yields: emptyResourceVector(), extractionEff: unitResourceVector(),
           markets: [
             { id: "mR2ore", goodId: "ore", stock: 0, anchorMult: 1, demandRate: 1000, storageCapacity: 0, honestUseRate: oreWant },
           ],

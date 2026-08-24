@@ -27,6 +27,7 @@ import type { TrackerSections } from "@/lib/types/tracker";
 import type { MaintenanceBillLine, TreasuryBands } from "@/lib/engine/treasury";
 import type { SupplyRegime } from "@/lib/engine/population";
 import type { BuildDropReason } from "@/lib/engine/directed-build";
+import type { SystemHabitabilityQuality } from "@/lib/engine/habitability";
 
 // ── Meta ────────────────────────────────────────────────────────
 
@@ -239,13 +240,13 @@ export interface WorldSystem {
    * never assessed this system (a frontier/controlled system it hasn't visited, or a pre-change
    * save); cleared — not carried forward — on abandonment or redevelopment
    * (`applyAbandonments`/`applyDevelopments`, both `lib/world/tick.ts`) so a re-founded colony
-   * never inherits its predecessor's reading. Task 8 wires this into `populationDelta`'s growth
-   * term; nothing reads it yet.
+   * never inherits its predecessor's reading. Read by `populationDelta`'s growth term (the
+   * population processor).
    */
-  habitabilityQuality?: { quality: number; frontierIndex: number };
+  habitabilityQuality?: SystemHabitabilityQuality;
   /** Sum of body-archetype danger baselines. */
   bodyDanger: number;
-  /** Habitable fraction of general space — Σ people land over above-threshold, unlocked bodies. */
+  /** The people-land budget housing bills against — Σ per-body authored peopleLand over above-threshold, unlocked bodies. */
   peopleLand: number;
   /** Extractor-slot caps, one per resource — Σ authored deposit counts over unlocked bodies. */
   countGas: number;

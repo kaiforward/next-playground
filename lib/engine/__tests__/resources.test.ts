@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   emptyResourceVector, makeResourceVector,
   sumResourceVector, sumResourceVectors, resourceVectorFromColumns, prepareResourceBars,
-  countColumns, qualColumns, yieldColumns, unitResourceVector,
-  depositCountsOf, qualityOf, yieldsOf, RESOURCE_TYPES,
+  countColumns, qualColumns, yieldColumns, effColumns, unitResourceVector,
+  depositCountsOf, qualityOf, yieldsOf, effOf, RESOURCE_TYPES,
 } from "../resources";
 import type { ResourceType, ResourceVector } from "@/lib/types/game";
 
@@ -195,9 +195,29 @@ describe("yieldColumns", () => {
   });
 });
 
+describe("effColumns", () => {
+  it("maps a vector to the eff* columns", () => {
+    const cols = effColumns(makeResourceVector({ gas: 1.5, minerals: 0.8 }));
+    expect(cols).toEqual({
+      effGas: 1.5, effMinerals: 0.8, effOre: 0, effBiomass: 0,
+      effArable: 0, effWater: 0, effRadioactive: 0,
+    });
+  });
+
+  it("round-trips with resourceVectorFromColumns (eff prefix)", () => {
+    const v = makeResourceVector({ gas: 1.2, arable: 0.9, water: 1.5 });
+    expect(resourceVectorFromColumns(effColumns(v), "eff")).toEqual(v);
+  });
+});
+
 describe("resourceVectorFromColumns — new prefixes and yield default", () => {
   it("yield prefix: missing columns default to 1", () => {
     const v = resourceVectorFromColumns({}, "yield");
+    for (const t of ALL) expect(v[t]).toBe(1);
+  });
+
+  it("eff prefix: missing columns default to 1 — a 0 default would silently zero every extractor's output", () => {
+    const v = resourceVectorFromColumns({}, "eff");
     for (const t of ALL) expect(v[t]).toBe(1);
   });
 
@@ -251,6 +271,10 @@ describe("resource column coverage", () => {
     expect(Object.keys(yieldColumns(emptyResourceVector())).sort()).toEqual(columnKeys("yield"));
   });
 
+  it("effColumns emits exactly one column per resource type", () => {
+    expect(Object.keys(effColumns(emptyResourceVector())).sort()).toEqual(columnKeys("eff"));
+  });
+
   it("depositCountsOf reads back every resource type's own value", () => {
     const v = distinct();
     expect(depositCountsOf(countColumns(v))).toEqual(v);
@@ -264,5 +288,10 @@ describe("resource column coverage", () => {
   it("yieldsOf reads back every resource type's own value", () => {
     const v = distinct();
     expect(yieldsOf(yieldColumns(v))).toEqual(v);
+  });
+
+  it("effOf reads back every resource type's own value", () => {
+    const v = distinct();
+    expect(effOf(effColumns(v))).toEqual(v);
   });
 });

@@ -179,10 +179,10 @@ export interface WorldCohortEntry {
   staleExpectationCount: number;
   /** Distribution of the cached fill-best-first habitability quality (`s.habitabilityQuality.
    *  quality`, `lib/engine/habitability.ts`) over the cohort's systems that carry a reading —
-   *  target 5's live read, most meaningful on the `quality: single-body` / `quality: multi-body`
-   *  cohorts (the fold's live audience) but reported for every cohort on the same basis as
-   *  `expectationLevels`. A system never assessed (no cached reading — should not occur for a
-   *  colonisable, settled system past its first cycle) is excluded, not folded in as 0. */
+   *  most meaningful on the `quality: single-body` / `quality: multi-body` cohorts (the fold's
+   *  live audience) but reported for every cohort on the same basis as `expectationLevels`. A
+   *  system never assessed (no cached reading — should not occur for a colonisable, settled
+   *  system past its first cycle) is excluded, not folded in as 0. */
   qualityLevels: QuantileLevels;
   /** Cohort systems excluded from `qualityLevels` for carrying no cached `habitabilityQuality`
    *  reading at all. */
@@ -265,7 +265,7 @@ export interface RatchetCheckSummary {
 // ── Abandonment by cause ────────────────────────────────────────
 //
 // Abandonment Rule 2 (`ABANDON_POP_FLOOR`, `lib/tick/processors/population.ts`) fires on
-// below-floor population alone since Task 8 — famine or not. `TickProcessorResult.
+// below-floor population alone — famine or not. `TickProcessorResult.
 // abandonedSystemsByCause` tags each finding with whether that system's supply state carried
 // `survivalShortfall` this cycle, so the two paths (famine-driven collapse vs a marginal-land
 // system declining to empty under non-famine stress) stay distinguishable in the aggregate.
@@ -570,8 +570,8 @@ export interface HarnessResults {
   /** Supply and unrest per world cohort. Cohorts overlap; each row carries its own denominator. */
   worldCohorts: WorldCohortEntry[];
   /** Whole-run abandonment counts split by cause — famine-collapse (Rule 1's crisis term drove the
-   *  decline) vs decline-to-empty (Task 8's dropped famine conjunct: a marginal-land system that
-   *  never cleared unrest, no famine involved). */
+   *  decline) vs decline-to-empty (Rule 2 fires without a famine conjunct: a marginal-land system
+   *  that never cleared unrest, no famine involved). */
   abandonmentByCause: AbandonmentCauseSummary;
   /** Impact measurement for each event that occurred. */
   eventImpacts: EventImpact[];

@@ -424,7 +424,7 @@ describe("getSystemPopulation — growthMultiplier / fillOrder", () => {
     setWorld({
       ...world,
       systems: world.systems.map((s) =>
-        s.id === system.id ? { ...s, habitabilityQuality: { quality: 0.93, frontierIndex: 0 } } : s,
+        s.id === system.id ? { ...s, habitabilityQuality: { quality: 0.93, frontierIndex: 0, partial: true } } : s,
       ),
     });
 
@@ -460,12 +460,8 @@ describe("getSystemPopulation — growthMultiplier / fillOrder", () => {
       return !arch.techLocked && arch.scores.default >= HABITABILITY_THRESHOLD;
     }).length;
     expect(data.fillOrder.length).toBe(contributingCount);
-    // Not a vacuous check: the fixture actually carries at least one non-contributing body, or this
-    // system doesn't exercise the filter at all.
-    if (bodyCount === contributingCount) {
-      expect(data.fillOrder.length).toBe(bodyCount);
-    } else {
-      expect(data.fillOrder.length).toBeLessThan(bodyCount);
-    }
+    // Premise: the fixture actually carries at least one locked or below-threshold body, so the
+    // exclusion above is genuinely exercised rather than passing on a system with nothing to filter.
+    expect(bodyCount).toBeGreaterThan(contributingCount);
   });
 });

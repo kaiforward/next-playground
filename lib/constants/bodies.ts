@@ -21,7 +21,7 @@ export interface BodyArchetype {
   id: BodyArchetypeId;
   name: string;
 
-  // ── Score / land / deposit model (habitability-seeding) ──────────
+  // ── Score / land / deposit model ──────────────────────────────────
   /** Habitability score per pop type, in [0, 1]. One column ships (the default temperate preference). */
   scores: { default: number };
   /** People-land range — authored on every class that could ever host people (dark below threshold). */
@@ -139,8 +139,8 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     depositCounts: {
       minerals: { min: 2, max: 7 }, ore: { min: 2, max: 7 }, radioactive: { min: 2, max: 7 },
     },
-    // The mining-outpost backbone — deliberately NOT tech-locked (claim-1 evidence: dead-body deposits
-    // carry colonisability today).
+    // The mining-outpost backbone — deliberately NOT tech-locked: dead-body deposits carry
+    // colonisability today.
     extractionModifier: 0.7, techLocked: false, dangerBaseline: 0,
   },
   asteroid_belt: {
@@ -150,8 +150,8 @@ export const BODY_ARCHETYPES: Record<BodyArchetypeId, BodyArchetype> = {
     depositCounts: {
       minerals: { min: 3, max: 10 }, ore: { min: 3, max: 10 }, radioactive: { min: 2, max: 7 },
     },
-    // The mining-outpost backbone — deliberately NOT tech-locked (claim-1 evidence: dead-body deposits
-    // carry colonisability today).
+    // The mining-outpost backbone — deliberately NOT tech-locked: dead-body deposits carry
+    // colonisability today.
     extractionModifier: 0.6, techLocked: false, dangerBaseline: 0,
   },
   gas_giant: {
@@ -174,8 +174,8 @@ export const HABITABILITY_THRESHOLD = 0.5;
 /**
  * Multiplies an above-threshold class's roll weight by the count of above-threshold bodies
  * already rolled in the system, applied BEFORE the `w > 0` candidate filter. Index 0 (the
- * first habitable body) is always 1 — not calibration-owned. Indices 1-2 are Gate A
- * calibration outputs: index 0 sets ≥1-habitable share alone (it never touches indices 1-2,
+ * first habitable body) is always 1 — not calibration-owned. Indices 1-2 are calibrated
+ * outputs: index 0 sets ≥1-habitable share alone (it never touches indices 1-2,
  * so the two bands tune independently), while indices 1-2 set the ≥2/=3 shares against the
  * yellow/orange archetype weights below. A closed-form per-body-roll model UNDERSTATES the
  * real ≥2/=3 shares — 600 systems share one continuous PRNG stream per seed, so a table
@@ -186,7 +186,7 @@ export const HABITABILITY_THRESHOLD = 0.5;
  * FIXED hard 0 — not tunable — so a 4th above-threshold body is impossible by table, never by
  * chance.
  */
-export const HABITABLE_COUNT_DAMPING: readonly number[] = [1, 1.1, 0.3, 0] as const;
+export const HABITABLE_COUNT_LADDER: readonly number[] = [1, 1.1, 0.3, 0] as const;
 
 // ── Sun classes ───────────────────────────────────────────────────
 // weight = selection weight; archetypeWeights absent/0 = suppressed.
@@ -202,7 +202,7 @@ export interface SunClassDef {
 export const SUN_CLASSES: Record<SunClass, SunClassDef> = {
   yellow: {
     id: "yellow", name: "Yellow (Sol-like)", weight: 45, bodyCount: { min: 4, max: 8 },
-    // Above-threshold weights retuned at Gate A (from 9/6/6/3.5/0.8 = 25.3): the class needed to fall
+    // Above-threshold weights retuned (from 9/6/6/3.5/0.8 = 25.3): the class needed to fall
     // from ~81% to ~50% single-class ≥1-habitable share (bodyCount 4-8, dead sum 74 unchanged),
     // solved as aboveSum/(aboveSum+74) ≈ 0.11, aboveSum ≈ 9.2 — same proportions, scaled by ~0.36.
     archetypeWeights: {
@@ -220,7 +220,7 @@ export const SUN_CLASSES: Record<SunClass, SunClassDef> = {
   },
   orange_dwarf: {
     id: "orange_dwarf", name: "Orange dwarf (cool)", weight: 30, bodyCount: { min: 3, max: 7 },
-    // Above-threshold weights retuned at Gate A (from 5/8/5/9/0.8 = 27.8): same derivation as
+    // Above-threshold weights retuned (from 5/8/5/9/0.8 = 27.8): same derivation as
     // yellow — dead sum 71.5 unchanged, aboveSum/(aboveSum+71.5) ≈ 0.11, aboveSum ≈ 8.8, same
     // proportions scaled by ~0.318, landing single-class ≥1 at ~43%.
     archetypeWeights: {

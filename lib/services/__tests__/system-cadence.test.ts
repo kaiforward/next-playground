@@ -79,6 +79,7 @@ function makeLogisticsRow(systemId: string, factionId: string | null): SystemLog
     population: 100,
     buildings: {},
     yields: emptyResourceVector(),
+    extractionEff: unitResourceVector(),
     markets: [],
   };
 }

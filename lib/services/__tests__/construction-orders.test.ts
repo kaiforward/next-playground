@@ -215,6 +215,15 @@ describe("construction order services", () => {
     expect(orderBuild({ systemId: h.id, buildingType: "ore", levels: 3 }).ok).toBe(true);
   });
 
+  it("allows ordering the schema's own max level count (100) for a tier-1+ factory — it bills no land, so there is no ceiling to hit", () => {
+    // metals is tier-1 (bills no land: buildableUnits returns Infinity). If the null-ceiling guard
+    // were dropped or inverted, a request at the schema's own maxLevels would wrongly reject on
+    // "not enough space".
+    const h = playerHome();
+    const r = orderBuild({ systemId: h.id, buildingType: "metals", levels: 100 });
+    expect(r.ok).toBe(true);
+  });
+
   it("rejects builds at systems the player does not control", () => {
     const w = getWorld();
     const foreign = w.systems.find(

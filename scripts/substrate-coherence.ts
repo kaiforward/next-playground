@@ -1,14 +1,14 @@
 /**
- * Tracked generation census for the two-budget substrate (habitability-seeding).
+ * Tracked generation census for the two-budget substrate.
  * Run: npm run report:coherence
  *
  * Reads the gen-time calibration targets (docs/build-plans/habitability-seeding.md,
  * "Calibration targets" 1-3 and 6) over a fixed multi-seed cohort, capitals separated from
  * natural-gen systems throughout. Reports bands; does not fail on a band miss — the constant
- * retune loop is Gate A's, against this script's own numbers.
+ * retune loop runs against this script's own numbers.
  *
  * INVARIANTS are the only fatal thing here (non-zero exit): they replace the retired
- * partition-exhaustiveness identity (`partitionBody`/`SPACE_PER_SIZE`, deleted T2) with the
+ * partition-exhaustiveness identity (`partitionBody`/`SPACE_PER_SIZE`, since deleted) with the
  * two-budget model's own guarantees — dead classes contribute zero people land, deposit
  * counts are integer and in-table-range, system aggregates equal the sum of their contributing
  * unlocked bodies, and no below-floor system reads as colony-sizeable.

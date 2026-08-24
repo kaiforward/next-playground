@@ -590,6 +590,26 @@ describe("runTickHarness: episode costs, founding trajectory, the ratchet check"
     expect(results.episodeCosts.totalTeardownLevels).toBe(0);
     expect(results.foundingTrajectory.buckets[0].n).toBeGreaterThan(0); // colonies founded in-window
     expect(results.provisionRatchet.buckets.length).toBeGreaterThan(0);
+
+    // abandonmentByCause: the sum identity holds regardless of regime, and — like
+    // totalTeardownLevels above — both counts are pinned at 0 on BUSY's calm regime (measured):
+    // Rule 1 (famine-collapse) and Rule 2 without a famine conjunct (decline-to-empty) both need
+    // sustained unrest/shortfall this run's horizon never reaches. The counter's own wiring — that
+    // an abandonment actually reaches `abandonedSystemsByCause` — is proven at unit level where it
+    // can be forced to fire: lib/tick/processors/__tests__/population.test.ts "Abandonment by
+    // cause" describe block tags both a famine-present and a non-famine abandonment. A future
+    // nonzero reading here is real abandonment pressure, not a regression in this instrument.
+    const ac = results.abandonmentByCause;
+    expect(ac.total).toBe(ac.famineCollapse + ac.declineToEmpty);
+    expect(ac.famineCollapse).toBe(0);
+    expect(ac.declineToEmpty).toBe(0);
+
+    // colonistDeliveryTotals: BUSY founds colonies and runs long enough for colonist delivery to
+    // resolve, so the accumulated per-system totals (folded into each world cohort's
+    // colonistDeliveryInflow) must be genuinely nonzero here — unlike the two calm-regime channels
+    // above.
+    const totalDeliveryInflow = results.worldCohorts.reduce((sum, c) => sum + c.colonistDeliveryInflow, 0);
+    expect(totalDeliveryInflow).toBeGreaterThan(0);
   }, 180_000);
 });
 

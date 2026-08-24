@@ -4,6 +4,7 @@ import { setWorld, clearWorld } from "@/lib/world/store";
 import { getSystemIndustry } from "@/lib/services/universe";
 import { ServiceError } from "@/lib/services/errors";
 import { BUILDING_TYPES } from "@/lib/constants/industry";
+import { depositCountsOf, RESOURCE_TYPES } from "@/lib/engine/resources";
 import type { World, WorldSystem } from "@/lib/world/types";
 
 const VALID_BANDS = ["poor", "average", "good", "rich"];
@@ -31,6 +32,8 @@ describe("getSystemIndustry", () => {
 
     // Two independent budgets mirror the world columns' totals.
     expect(data.space.people.total).toBe(system.peopleLand);
+    const authoredDepositTotal = RESOURCE_TYPES.reduce((sum, r) => sum + depositCountsOf(system)[r], 0);
+    expect(data.space.deposit.total).toBe(authoredDepositTotal);
     for (const budget of [data.space.people, data.space.deposit]) {
       expect(Number.isFinite(budget.used)).toBe(true);
       expect(budget.used).toBeGreaterThanOrEqual(0);

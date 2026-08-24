@@ -237,13 +237,13 @@ describe("buildableUnits / buildableOutput", () => {
     expect(buildableUnits(sys, "food")).toBe(0);
   });
 
-  it("caps a tier-1+ factory by remaining general space ÷ footprint", () => {
-    // metals is tier-1 (recipe { ore: 1 }); industryLand 100, no buildings → 100 / spaceCost units.
+  it("returns Infinity capacity for a tier-1+ factory with no buildings standing — no land budget bounds it", () => {
+    // metals is tier-1 (recipe { ore: 1 }); bills no land at all, so an empty site is already unbounded.
     const sys: BuildSystemState = {
       systemId: "A", factionId: "f1", population: 100, control: "unclaimed", buildings: {},
       depositCounts: unitResourceVector(), peopleLand: 50, goods: [],
     };
-    expect(buildableUnits(sys, "metals")).toBeGreaterThan(0);
+    expect(buildableUnits(sys, "metals")).toBe(Infinity);
   });
 
   it("never reduces tier-1+ capacity by space already used by existing buildings — there is no land budget left to exhaust", () => {
@@ -3095,13 +3095,18 @@ describe("planFactionBuilds — nearest-first allocation and buffed ranking", ()
   // covers the surviving claim (an equidistant complex-anchored site outranks a bare greenfield one)
   // against the new cost-to-create-output signal; nothing here would exercise a different code path.
 
-  // Regression pin: tier-0 (deposit-slot) scoring is UNTOUCHED by the construction-cost score — ore
-  // still ranks on `min(capOutput, short) / routeCost`, capacity-weighted, not the tier-1+ cost
-  // formula. S carries 3x T's deposit slots but sits twice as far; against a deficit exactly large
-  // enough for S's full capacity (3 levels' output), S's capacity edge (score 12/2=6) still beats T's
-  // proximity edge (score 4/1=4) — S takes the WHOLE deficit and T is left with nothing, exactly the
-  // capacity+proximity blend the tier-0 branch has always computed.
-  it("tier-0 (deposit-slot) ranking is unchanged: capacity still outweighs proximity the same way", () => {
+  // Mechanism check, re-anchored off the old numeric pin (MAJOR 3, PR #261): tier-0's real physics —
+  // the capacity cap — still binds, and ordering among extractors still follows a capacity+proximity
+  // blend. What's no longer true is that the blend is `min(capOutput, short) / routeCost` verbatim:
+  // tier-0 now shares the tier-1+ score UNIT (demand served ÷ marginal-construction-work-per-unit,
+  // staffing-scaled), so the raw numbers below (score 12/2=6 vs 4/1=4 pre-unification) don't hold —
+  // only the ORDERING they produced does, because S and T here are identically staffed, same-good
+  // miners, so the shared marginalWorkPerUnit/staffingFactor terms are the SAME constant multiplier
+  // on both sides and cannot flip which one wins. S carries 3x T's deposit slots but sits twice as
+  // far; against a deficit exactly large enough for S's full capacity (3 levels' output), S's
+  // capacity edge still beats T's proximity edge — S takes the WHOLE deficit and T is left with
+  // nothing.
+  it("tier-0 (deposit-slot) ranking still follows the capacity+proximity blend under the unified score unit", () => {
     const routes: RouteCost = (from, to) => {
       if (from === "S") return to === "A" ? 2 : null;
       if (from === "T") return to === "A" ? 1 : null;
@@ -3110,6 +3115,30 @@ describe("planFactionBuilds — nearest-first allocation and buffed ranking", ()
     const builds = planFactionBuilds([consumer("A", 3), miner("S", 3), miner("T", 1)], routes, DEV_REFS);
     expect(countFor(builds, "S", "ore")).toBe(3);
     expect(countFor(builds, "T", "ore")).toBe(0);
+  });
+
+  // The unification's actual behavioural change: tier-0 scoring used to ignore staffing entirely
+  // (capacity+proximity only). Under the shared score unit it now folds the same staffing factor
+  // tier-1+ always has — two otherwise-identical tier-0 sites (same capacity, same proximity) must
+  // score differently once their staffing headroom differs, which the old capacity+proximity-only
+  // formula could never produce (it would score them identically).
+  it("folds staffing into tier-0 scoring too: an otherwise-identical miner with less staffing headroom scores lower", () => {
+    const site = (population: number): BuildSystemState => ({
+      systemId: "B", factionId: "f1", population, control: "developed", buildings: {},
+      depositCounts: makeResourceVector({ ore: 3 }), peopleLand: 0, goods: [],
+    });
+    const sink: BuildSystemState = {
+      systemId: "A", factionId: "f1", population: 0, control: "developed", buildings: {},
+      depositCounts: emptyResourceVector(), peopleLand: 0,
+      goods: [{ goodId: "ore", stock: 0, demand: 5000, capacityProduction: 0, proposalCycles: 1 }],
+    };
+    const wellStaffed = planFactionProposals([sink, site(1e6 * oreLabour)], () => 1, [], DEV_REFS);
+    const barelyStaffed = planFactionProposals([sink, site(oreLabour / 100)], () => 1, [], DEV_REFS);
+    const wellScore = wellStaffed.buildOpportunities.find((o) => o.systemId === "B")?.score ?? 0;
+    const barelyScore = barelyStaffed.buildOpportunities.find((o) => o.systemId === "B")?.score ?? 0;
+    expect(wellScore).toBeGreaterThan(0);
+    expect(barelyScore).toBeGreaterThan(0);
+    expect(barelyScore).toBeLessThan(wellScore);
   });
 });
 

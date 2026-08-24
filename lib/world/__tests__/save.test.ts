@@ -443,12 +443,12 @@ describe("serialiseWorld / deserialiseWorld", () => {
     const marked: World = {
       ...world,
       systems: world.systems.map((system, index) =>
-        index === 0 ? { ...system, habitabilityQuality: { quality: 0.68, frontierIndex: 1 } } : system),
+        index === 0 ? { ...system, habitabilityQuality: { quality: 0.68, frontierIndex: 1, partial: true } } : system),
     };
     const result = deserialiseWorld(serialiseWorld(marked));
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.world.systems[0].habitabilityQuality).toEqual({ quality: 0.68, frontierIndex: 1 });
+    expect(result.world.systems[0].habitabilityQuality).toEqual({ quality: 0.68, frontierIndex: 1, partial: true });
   });
 
   it("accepts generated systems without habitabilityQuality (never assessed by the population processor)", () => {

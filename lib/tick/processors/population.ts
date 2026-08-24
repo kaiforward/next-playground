@@ -70,7 +70,7 @@ export async function runPopulationProcessor(
   // Calibration-only: the same finding tagged with its cause, read at the SAME cycle the trigger
   // fires — `supply.survivalShortfall` (already computed above from this cycle's supply state) is
   // Rule 1's own famine flag, so a system abandoning while it holds is a famine-collapse and one
-  // abandoning without it declined to empty on non-famine stress alone (Task 8's dropped conjunct).
+  // abandoning without it declined to empty on non-famine stress alone (Rule 2 has no famine conjunct).
   // Never applied, never gates a `control` write — purely observational, unlike `abandonedSystems`.
   const abandonedSystemsByCause = new Map<string, "famine-collapse" | "decline-to-empty">();
   for (const s of states) {
@@ -171,12 +171,21 @@ export async function runPopulationProcessor(
     // never-before-assessed system (habitabilityQuality absent) always takes the fresh reading.
     // With no body summary there is nothing to fold: the cache stays unwritten (same rule as
     // supplyBand/provision below — an unclassifiable reading is left absent, never fabricated).
+    // EXCEPTION: once the frontier sits on the LAST body (index sorted.length - 1), it can never
+    // again change — both the mid-body walk that reaches the final body and the all-bodies clamp
+    // arm report that same index, so an index-only trigger freezes quality forever from that point
+    // on even though population (and therefore the weighted mean over that final body) keeps
+    // moving. The fresh reading is always applied while the frontier is on the last body, matching
+    // the never-assessed case above rather than adding a second, drift-prone "index changed OR
+    // quality changed" comparison.
     const bodies = s.habitabilityBodies ?? [];
     const freshQuality = bodies.length > 0
       ? systemHabitabilityQuality(bodies, population)
       : undefined;
+    const onLastBody = freshQuality !== undefined && freshQuality.frontierIndex === bodies.length - 1;
     const habitabilityQuality = freshQuality !== undefined
-        && (s.habitabilityQuality === undefined
+        && (onLastBody
+          || s.habitabilityQuality === undefined
           || s.habitabilityQuality.frontierIndex !== freshQuality.frontierIndex)
       ? freshQuality
       : s.habitabilityQuality;

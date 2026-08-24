@@ -22,12 +22,20 @@ describe("habitabilityScoreBand", () => {
   it("bands the top score as rich", () => {
     expect(habitabilityScoreBand(1.0)).toBe("rich");
   });
+  it("bands the rich/good boundary at 0.9 — 0.9 rich, 0.89 good", () => {
+    expect(habitabilityScoreBand(0.9)).toBe("rich");
+    expect(habitabilityScoreBand(0.89)).toBe("good");
+  });
   it("bands a score at the habitability threshold as good — never bare average", () => {
     expect(habitabilityScoreBand(HABITABILITY_THRESHOLD)).toBe("good");
     expect(habitabilityScoreBand(0.6)).toBe("good");
   });
   it("bands a sub-threshold-but-authored score as average, not poor", () => {
     expect(habitabilityScoreBand(0.35)).toBe("average");
+  });
+  it("bands the average/poor boundary at 0.2 — 0.2 average, 0.19 poor", () => {
+    expect(habitabilityScoreBand(0.2)).toBe("average");
+    expect(habitabilityScoreBand(0.19)).toBe("poor");
   });
   it("bands an effectively-dead score as poor, including zero", () => {
     expect(habitabilityScoreBand(0.05)).toBe("poor");
@@ -36,10 +44,10 @@ describe("habitabilityScoreBand", () => {
 });
 
 describe("occupiedBodyIds", () => {
-  const best: OccupancyBody = { id: "best", score: 1.0, peopleLand: 500, locked: false };
-  const worse: OccupancyBody = { id: "worse", score: 0.6, peopleLand: 500, locked: false };
-  const deadWorld: OccupancyBody = { id: "dead", score: 0, peopleLand: 0, locked: false };
-  const lockedHabitable: OccupancyBody = { id: "locked", score: 0.05, peopleLand: 0, locked: true };
+  const best: OccupancyBody = { id: "best", score: 1.0, locked: false };
+  const worse: OccupancyBody = { id: "worse", score: 0.6, locked: false };
+  const deadWorld: OccupancyBody = { id: "dead", score: 0, locked: false };
+  const lockedHabitable: OccupancyBody = { id: "locked", score: 0.05, locked: true };
 
   it("marks only the prefix up to frontierIndex occupied, score-descending — never every people-land body", () => {
     const occupied = occupiedBodyIds(

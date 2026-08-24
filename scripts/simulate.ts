@@ -476,8 +476,8 @@ function formatTable(results: HarnessResults): string {
       ]),
     ));
 
-    // Target 5: quality distribution + the pump watch, cohorted single- vs multi-people-land-body —
-    // the fill-best-first fold's live audience. netPopulationChange and colonistDeliveryInflow are
+    // Quality distribution + the pump watch, cohorted single- vs multi-people-land-body — the
+    // fill-best-first fold's live audience. netPopulationChange and colonistDeliveryInflow are
     // deliberately both absolute (not a ratio) so a cohort with positive inflow and negative net
     // population reads as a visible sign disagreement, not a value a smoothing ratio could mask.
     const qualityCohorts = worldCohorts.filter(
@@ -505,8 +505,8 @@ function formatTable(results: HarnessResults): string {
     }
   }
 
-  // Abandonment by cause (whole run) — Rule 2 fires on below-floor population alone since Task 8;
-  // this splits which of the two paths actually drove each abandonment: famine-collapse (Rule 1's
+  // Abandonment by cause (whole run) — Rule 2 fires on below-floor population alone, no famine
+  // conjunct; this splits which of the two paths actually drove each abandonment: famine-collapse (Rule 1's
   // crisis term) vs decline-to-empty (marginal-land stress alone, no famine). Printed
   // unconditionally, like episode costs — 0/0 is itself evidence, not a skipped section.
   {

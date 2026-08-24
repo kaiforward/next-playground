@@ -205,11 +205,16 @@ export type SystemPopulationData =
       provision: SystemProvisionRead;
       /** The unrest floor's contributor breakdown and trend — see `SystemUnrestRead`. */
       unrestBreakdown: SystemUnrestRead;
-      /** The cached fill-best-first habitability quality (`lib/engine/habitability.ts`) as it
-       *  multiplies the growth term (`populationDelta`'s `quality` parameter) — 1 (neutral) for a
-       *  system whose fold has never run, matching the population processor's own fallback
-       *  (`lib/tick/processors/population.ts`'s `growthQuality`). Never recomputed here — the
-       *  read-side and the tick must show the SAME number. */
+      /** The fill-best-first habitability quality (`lib/engine/habitability.ts`) as it multiplies
+       *  the growth term (`populationDelta`'s `quality` parameter), resolved through the SAME
+       *  shared three-tier contract every consumer shares (`resolveEffectiveHabitabilityQuality`):
+       *  the persisted fold-site cache if present; else a fresh compute over this system's
+       *  contributing bodies at its current population (a just-founded or just-crossed colony's
+       *  first read, before the tick has cached one); 1 (neutral) only when there is no
+       *  contributing body to fold over at all — matching the population processor's own fallback
+       *  (`lib/tick/processors/population.ts`'s `growthQuality`). `lib/services/universe.ts`'s
+       *  `getSystemSubstrate` resolves its occupied-body badges through the same function, so the
+       *  two panels can never disagree. */
       growthMultiplier: number;
       /** Every people-land-contributing body in fill-best-first order, decomposing
        *  `growthMultiplier` into the bodies it comes from (spec §3: quality is always a story about
@@ -311,7 +316,7 @@ export type SystemIndustryData =
       visibility: "visible";
       /** Stored unrest integral 0…1. Drives the decay-loop and the coarse health read. */
       unrest: number;
-      /** The three disjoint land/deposit budgets (people, industry, deposit) and built-out use of each. */
+      /** The two disjoint land/deposit budgets (people, deposit) and built-out use of each. */
       space: SubstrateSpace;
       /** Per-resource deposit-fill rows: slot cap, worked slots, effective yield + band. */
       deposits: SystemDepositSummary[];

@@ -16,11 +16,14 @@ describe("systemHabitabilityQuality", () => {
       { score: 1.0, peopleLand: 100 },
       { score: 0.6, peopleLand: 300 },
     ];
-    const { quality, frontierIndex } = systemHabitabilityQuality(bodies, 0);
+    const { quality, frontierIndex, partial } = systemHabitabilityQuality(bodies, 0);
     expect(quality).toBe(1.0);
     expect(quality).not.toBe((0.3 + 1.0 + 0.6) / 3); // not a plain mean
     expect(quality).not.toBe(0);
     expect(frontierIndex).toBe(0);
+    // The zero-occupancy arm: frontierIndex names the best body as next-to-fill, but nobody has
+    // landed anywhere yet — not partially filled.
+    expect(partial).toBe(false);
   });
 
   it("reads the all-bodies people-land-weighted mean once population overruns every body's land (the clamp arm)", () => {
@@ -30,10 +33,12 @@ describe("systemHabitabilityQuality", () => {
     ];
     // Occupied land (population / POP_CENTRE_DENSITY) far past the 400 total.
     const population = 10_000 * POP_CENTRE_DENSITY;
-    const { quality, frontierIndex } = systemHabitabilityQuality(bodies, population);
+    const { quality, frontierIndex, partial } = systemHabitabilityQuality(bodies, population);
     const expected = (1.0 * 100 + 0.6 * 300) / 400;
     expect(quality).toBeCloseTo(expected, 12);
     expect(frontierIndex).toBe(1); // the sorted list's last index
+    // The clamp arm: every body is fully occupied, not partially — the last body is not "mid-fill".
+    expect(partial).toBe(false);
   });
 
   it("weights a partial last body by its OCCUPIED land only (pinned boundary arithmetic)", () => {
@@ -46,12 +51,14 @@ describe("systemHabitabilityQuality", () => {
     ];
     const occupiedLand = 120;
     const population = occupiedLand * POP_CENTRE_DENSITY;
-    const { quality, frontierIndex } = systemHabitabilityQuality(bodies, population);
+    const { quality, frontierIndex, partial } = systemHabitabilityQuality(bodies, population);
     // weighted = 1.0*100 (all of A) + 0.6*20 (only the occupied slice of B) = 112
     const expected = (1.0 * 100 + 0.6 * 20) / 120;
     expect(expected).toBeCloseTo(0.933333333, 9);
     expect(quality).toBeCloseTo(expected, 12);
     expect(frontierIndex).toBe(1); // B is the marginal body
+    // B is genuinely mid-fill: 20 of its 50 land occupied, 30 still unoccupied.
+    expect(partial).toBe(true);
   });
 
   it("folds best-first even when the input list is unsorted (vacuity check — the sort is inside the seam)", () => {
@@ -73,9 +80,10 @@ describe("systemHabitabilityQuality", () => {
   });
 
   it("reads a neutral 0 for an empty body list (defensive — real play always has ≥1 contributing body)", () => {
-    const { quality, frontierIndex } = systemHabitabilityQuality([], 500);
+    const { quality, frontierIndex, partial } = systemHabitabilityQuality([], 500);
     expect(quality).toBe(0);
     expect(frontierIndex).toBe(-1);
+    expect(partial).toBe(false);
   });
 });
 
