@@ -1566,10 +1566,6 @@ export async function runWorldTick(
           candidates.push({
             systemId: s.id,
             peopleLand: s.peopleLand,
-            // industryLand no longer exists on the world model (habitability-seeding cut it) — the
-            // colonisation-value L(c) term it fed is still authored for it (LAND_GENERAL_WEIGHT), so
-            // this stays a compile-preserving 0 until that term is deleted with the axis (Task 16).
-            industryLand: 0,
             depositCounts: s.depositCounts,
             sourceSystemId,
           });
@@ -1614,7 +1610,6 @@ export async function runWorldTick(
           candidateProvider: developProvider,
           params: {
             landPremium: COLONISATION.LAND_PREMIUM,
-            landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
             landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
             sigmaFloor: COLONISATION.SIGMA_FLOOR,
             establishWork: COLONISATION.COLONY_ESTABLISH_WORK,

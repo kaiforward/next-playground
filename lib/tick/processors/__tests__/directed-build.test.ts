@@ -528,7 +528,6 @@ const EXP_PARAMS: ExpansionParams = {
 };
 const COLONY_PARAMS: ColonyEstablishParams = {
   landPremium: COLONISATION.LAND_PREMIUM,
-  landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
   landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
   sigmaFloor: COLONISATION.SIGMA_FLOOR,
   establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
@@ -556,9 +555,7 @@ function saturatedHome(population: number): SystemBuildRow {
 }
 
 function colonyCand(systemId: string, peopleLand = 100): ColonyEstablishCandidate {
-  // industryLand is a compile-preserving 0 — ColonyEstablishCandidate still carries the field
-  // pending Task 16's deletion of the LAND_GENERAL_WEIGHT term it feeds.
-  return { systemId, peopleLand, industryLand: 0, depositCounts: emptyResourceVector(), sourceSystemId: "home" };
+  return { systemId, peopleLand, depositCounts: emptyResourceVector(), sourceSystemId: "home" };
 }
 
 // One developed owned system so the faction is in the shard, with no build needs.
@@ -826,8 +823,8 @@ function homeWithFoodDeficit(population = 1000): SystemBuildRow {
   };
 }
 
-function colonyOf(systemId: string, peopleLand: number, industryLand = 0): ColonyEstablishCandidate {
-  return { systemId, peopleLand, industryLand, depositCounts: emptyResourceVector(), sourceSystemId: "home" };
+function colonyOf(systemId: string, peopleLand: number): ColonyEstablishCandidate {
+  return { systemId, peopleLand, depositCounts: emptyResourceVector(), sourceSystemId: "home" };
 }
 
 describe("runDirectedBuildProcessor: build-vs-colony ROI arbitration (one shared pool)", () => {
@@ -2284,7 +2281,7 @@ describe("runDirectedBuildProcessor — the founding gate record", () => {
 describe("runDirectedBuildProcessor — what the colony planner is shown", () => {
   /** A candidate seeded from an arbitrary source system. */
   const candFrom = (systemId: string, sourceSystemId: string): ColonyEstablishCandidate => ({
-    systemId, peopleLand: 100, industryLand: 0, depositCounts: emptyResourceVector(), sourceSystemId,
+    systemId, peopleLand: 100, depositCounts: emptyResourceVector(), sourceSystemId,
   });
 
   it("shows the planner only economically-active systems", async () => {

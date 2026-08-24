@@ -54,19 +54,10 @@ export interface DevelopmentRefs {
   industryRef: number;
 }
 
-/**
- * The static substrate a system contributes to the universe-wide reference maxima.
- *
- * `industryLand` is a compile-preserving deviation: the habitability-seeding amendment deleted the
- * industry-land budget everywhere (Task 15), leaving this axis reading 0 from every caller until
- * Task 16 re-derives the industry term as worked levels ÷ authored deposit counts and drops the
- * field from this interface entirely.
- */
+/** The static substrate a system contributes to the universe-wide reference maxima. */
 export interface DevelopmentRefSystem {
   /** Habitable land — drives the system's pop potential. */
   peopleLand: number;
-  /** Deviation placeholder — always 0 pending Task 16 (see interface doc comment). */
-  industryLand: number;
   /** Total worked-able deposit counts across all resources (Σ per-resource counts). */
   depositCounts: number;
 }
@@ -92,12 +83,13 @@ export function habitablePotentialPop(peopleLand: number): number {
  * units `systemDevelopment` measures `staffedIndustry` in. The absolute industry ceiling the
  * universe-wide `industryRef` is a max over.
  *
- * `industryLand` is a compile-preserving deviation (always 0 — see `DevelopmentRefSystem`'s doc
- * comment): factories bill no land after the habitability-seeding cut, so this term drops out until
- * Task 16 re-derives the axis as worked levels ÷ authored deposit counts.
+ * Extraction-only: factories bill no land after the habitability-seeding cut, and with the
+ * industry-land budget gone there is no static industry-capacity number left to normalise factory
+ * levels against, so the industry axis is worked extractor levels weighed against authored deposit
+ * counts alone.
  */
-export function industryPotential(depositCounts: number, industryLand: number): number {
-  return Math.max(0, depositCounts) + Math.max(0, industryLand);
+export function industryPotential(depositCounts: number): number {
+  return Math.max(0, depositCounts);
 }
 
 /**
@@ -111,7 +103,7 @@ export function developmentRefs(systems: DevelopmentRefSystem[]): DevelopmentRef
   let industryRef = 0;
   for (const s of systems) {
     popRef = Math.max(popRef, habitablePotentialPop(s.peopleLand));
-    industryRef = Math.max(industryRef, industryPotential(s.depositCounts, s.industryLand));
+    industryRef = Math.max(industryRef, industryPotential(s.depositCounts));
   }
   return { popRef, industryRef };
 }
@@ -134,10 +126,10 @@ export function systemDevelopment(input: DevelopmentInput, refs: DevelopmentRefs
   const { buildings, population, peopleLand } = input;
 
   // Staffed industry (absolute): extraction sits on worked deposit slots. Factories/academies/
-  // complexes bill no land after the habitability-seeding cut and are not yet counted here — a
-  // compile-preserving deviation pending Task 16's worked-levels-÷-authored-counts re-derivation
-  // (see `DevelopmentRefSystem`'s doc comment). The whole built base is discounted by headcount
-  // staffing — idle-because-understaffed capacity is not counted as development (used, not built).
+  // complexes bill no land after the habitability-seeding cut and stay out of this reading —
+  // there is no static industry-capacity number left to normalise factory levels against, so the
+  // industry axis is extraction-only. The whole built base is discounted by headcount staffing —
+  // idle-because-understaffed capacity is not counted as development (used, not built).
   const extraction = extractorLevels(buildings);
   const staffing = labourFulfilment(population, labourDemand(buildings));
   const staffedIndustry = extraction * staffing;

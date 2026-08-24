@@ -4,7 +4,7 @@ import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
- * Repo-wide grep red-proof for Task 15 (habitability-seeding amendment, 2026-08-24): the
+ * Repo-wide grep red-proof: the
  * industry-land budget is deleted everywhere it was authored, generated, aggregated, or gated on.
  * A handful of `industryLand` mentions legitimately remain — each is a compile-preserving deviation
  * this task recorded for a LATER task (16 or 17) to finish deleting, and each carries its own
@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
  * `industryLand` reference (a reintroduced gate, a copy-pasted fixture field, a careless revert)
  * fails loudly instead of slipping back in silently.
  */
-describe("industryLand — repo-wide sweep (Task 15 grep red-proof)", () => {
+describe("industryLand — repo-wide sweep", () => {
   const here = fileURLToPath(import.meta.url);
   const repoRoot = join(dirname(here), "..", "..", "..");
 
@@ -27,16 +27,6 @@ describe("industryLand — repo-wide sweep (Task 15 grep red-proof)", () => {
    * instrument, not shipped product code.
    */
   const ALLOWED_FILES = new Set([
-    // Task 16 — development axis re-derivation (worked levels ÷ authored deposit counts).
-    "lib/constants/colonisation.ts",
-    "lib/engine/colonisation-value.ts",
-    "lib/engine/development-points.ts",
-    "lib/engine/development.ts",
-    "lib/services/system-development.ts",
-    "lib/tick/adapters/memory/directed-build.ts",
-    "lib/world/tick.ts",
-    // ColonyEstablishCandidate.industryLand — same Task 16 term (LAND_GENERAL_WEIGHT).
-    "lib/engine/directed-build.ts",
     // Task 17 — BodyView / astrography UI cleanup.
     "lib/types/api.ts",
     "lib/services/universe.ts",
@@ -80,5 +70,25 @@ describe("industryLand — repo-wide sweep (Task 15 grep red-proof)", () => {
     let total = 0;
     for (const dir of SCAN_DIRS) total += listFiles(join(repoRoot, dir)).length;
     expect(total).toBeGreaterThan(100);
+  });
+
+  /**
+   * The "one shared coefficient" grep check, re-stated for the deleted
+   * LAND_GENERAL_WEIGHT term): with the industry-land budget gone, `colonyValue`'s L(c) carries only
+   * `landPremium` and `landDepositWeight` — no second land coefficient (general-space weight, or any
+   * other disagreeing constant) may reappear anywhere in shipped source, undocumented or not.
+   */
+  it("landGeneralWeight / LAND_GENERAL_WEIGHT have zero hits repo-wide", () => {
+    const hits: string[] = [];
+    for (const dir of SCAN_DIRS) {
+      const abs = join(repoRoot, dir);
+      for (const file of listFiles(abs)) {
+        const src = readFileSync(file, "utf8");
+        if (/\blandGeneralWeight\b|\bLAND_GENERAL_WEIGHT\b/.test(src)) {
+          hits.push(relative(repoRoot, file).split("\\").join("/"));
+        }
+      }
+    }
+    expect(hits).toEqual([]);
   });
 });

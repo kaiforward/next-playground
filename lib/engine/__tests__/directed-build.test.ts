@@ -1997,7 +1997,6 @@ describe("hopRouteCost", () => {
 
 const COLONY_PARAMS: ColonyEstablishParams = {
   landPremium: COLONISATION.LAND_PREMIUM,
-  landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
   landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
   sigmaFloor: COLONISATION.SIGMA_FLOOR,
   establishWork: COLONISATION.COLONY_ESTABLISH_WORK,
@@ -2032,14 +2031,11 @@ function homeState(opts: {
 
 /** A controlled colony candidate with a seed source. */
 function candidate(opts: {
-  systemId?: string; peopleLand?: number; industryLand?: number; depositCounts?: ResourceVector;
+  systemId?: string; peopleLand?: number; depositCounts?: ResourceVector;
 }): ColonyEstablishCandidate {
   return {
     systemId: opts.systemId ?? "c1",
     peopleLand: opts.peopleLand ?? 100,
-    // industryLand is a compile-preserving 0 — ColonyEstablishCandidate still carries the field
-    // pending Task 16's deletion of the LAND_GENERAL_WEIGHT term it feeds.
-    industryLand: opts.industryLand ?? 0,
     depositCounts: opts.depositCounts ?? emptyResourceVector(),
     sourceSystemId: "home",
   };
@@ -2063,7 +2059,7 @@ describe("factionGoodDeficits", () => {
 
 describe("planFactionColonyProposals", () => {
   it("scores a candidate's land value and rises with faction saturation σ (the crossover driver)", () => {
-    const c = candidate({ peopleLand: 100, industryLand: 40 });
+    const c = candidate({ peopleLand: 100 });
     // Unsaturated home: lots of unbuilt habitable land (σ ≈ 0) → land premium mostly dormant.
     const loose = planFactionColonyProposals("f1", [homeState({ housing: 1, peopleLand: 1000 })], [c], [], COLONY_PARAMS);
     // Saturated home: housing fills all habitable land (σ = 1) → full land premium live.

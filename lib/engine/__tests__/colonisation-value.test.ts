@@ -129,13 +129,12 @@ describe("unblockedDemandByResource", () => {
 
 const PARAMS: ColonyValueParams = {
   landPremium: 0.4,
-  landGeneralWeight: 0.1,
   landDepositWeight: 0.15,
   sigmaFloor: 0.25,
 };
 
 function candidate(over: Partial<ColonyCandidate>): ColonyCandidate {
-  return { peopleLand: 0, industryLand: 0, depositCounts: emptyResourceVector(), ...over };
+  return { peopleLand: 0, depositCounts: emptyResourceVector(), ...over };
 }
 
 describe("colonyValue", () => {
@@ -165,11 +164,10 @@ describe("colonyValue", () => {
     expect(rush).toBeCloseTo(40, 5);
   });
 
-  it("sums only supplied resources into U, weights all three L terms, and clamps σ", () => {
+  it("sums only supplied resources into U, weights both L terms, and clamps σ", () => {
     // Candidate supplies ore but NOT gas, so only ore's unblocked demand reaches U.
     const c = candidate({
       peopleLand: 10,
-      industryLand: 20,
       depositCounts: { ...emptyResourceVector(), ore: 2 },
     });
     const unblocked = new Map<ResourceType, number>([
@@ -177,11 +175,11 @@ describe("colonyValue", () => {
       ["gas", 100], // NOT supplied → excluded by the depositCounts[r] > 0 filter
     ]);
     // U = 8 (ore only; gas is filtered out despite its large demand)
-    // L = landPremium·10 + landGeneralWeight·20 + landDepositWeight·depositRichness(2)
-    //   = 0.4·10 + 0.1·20 + 0.15·2 = 4 + 2 + 0.3 = 6.3
+    // L = landPremium·10 + landDepositWeight·depositRichness(2)
+    //   = 0.4·10 + 0.15·2 = 4 + 0.3 = 4.3
     // σ = clamp(1.5) = 1 → landGate = 0.25 + 0.75·1 = 1
-    // value = 8 + 6.3·1 = 14.3
-    expect(colonyValue(c, unblocked, 1.5, PARAMS)).toBeCloseTo(14.3, 5);
+    // value = 8 + 4.3·1 = 12.3
+    expect(colonyValue(c, unblocked, 1.5, PARAMS)).toBeCloseTo(12.3, 5);
   });
 });
 
@@ -245,9 +243,7 @@ describe("colonyValue: U leads, L is secondary (real coefficients, real candidat
       if (s.peopleLand < floor) continue;
       const depositCounts = emptyResourceVector();
       for (const r of RESOURCE_TYPES) depositCounts[r] = s[countColumn[r]];
-      // WorldSystem no longer carries industryLand (habitability-seeding cut it, Task 15) — compile-
-      // preserving 0 until Task 16 deletes the LAND_GENERAL_WEIGHT term this candidate set feeds.
-      candidates.push({ peopleLand: s.peopleLand, industryLand: 0, depositCounts });
+      candidates.push({ peopleLand: s.peopleLand, depositCounts });
     }
   }
   it("has a non-trivial representative candidate set (sanity, not the claim)", () => {
@@ -273,7 +269,6 @@ describe("colonyValue: U leads, L is secondary (real coefficients, real candidat
         if (c.depositCounts[missResource] <= 0) continue; // candidate doesn't supply it → U=0, not the claim under test
         const value = colonyValue(c, unblocked, sigma, {
           landPremium: COLONISATION.LAND_PREMIUM,
-          landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
           landDepositWeight: COLONISATION.LAND_DEPOSIT_WEIGHT,
           sigmaFloor: COLONISATION.SIGMA_FLOOR,
         });
@@ -298,11 +293,11 @@ describe("colonyValue: U leads, L is secondary (real coefficients, real candidat
  * SAME candidate and σ, `landGate` recovered as `(value − U) / L` must be identical.
  */
 describe("colonyValue: σ-gate arithmetic is independent of the land coefficients", () => {
-  const c = candidate({ peopleLand: 200, industryLand: 90, depositCounts: makeVec({ ore: 5, water: 12 }) });
+  const c = candidate({ peopleLand: 200, depositCounts: makeVec({ ore: 5, water: 12 }) });
   const unblocked = new Map<ResourceType, number>([["ore", 30]]);
 
   function landGateOf(params: ColonyValueParams, sigma: number): number {
-    const l = params.landPremium * c.peopleLand + params.landGeneralWeight * c.industryLand
+    const l = params.landPremium * c.peopleLand
       + params.landDepositWeight * (c.depositCounts.ore + c.depositCounts.water);
     const value = colonyValue(c, unblocked, sigma, params);
     const u = c.depositCounts.ore > 0 ? (unblocked.get("ore") ?? 0) : 0;
@@ -310,11 +305,10 @@ describe("colonyValue: σ-gate arithmetic is independent of the land coefficient
   }
 
   const RETIRED_PARAMS: ColonyValueParams = {
-    landPremium: 3.0, landGeneralWeight: 0.5, landDepositWeight: 4.0, sigmaFloor: COLONISATION.SIGMA_FLOOR,
+    landPremium: 3.0, landDepositWeight: 4.0, sigmaFloor: COLONISATION.SIGMA_FLOOR,
   };
   const NEW_PARAMS: ColonyValueParams = {
     landPremium: COLONISATION.LAND_PREMIUM,
-    landGeneralWeight: COLONISATION.LAND_GENERAL_WEIGHT,
     landDepositWeight: 39.5,
     sigmaFloor: COLONISATION.SIGMA_FLOOR,
   };

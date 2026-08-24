@@ -216,10 +216,12 @@ all — the keystone-deposit case colonisation exists to grab early.
 ### L and σ — land option value and territory saturation
 
 `L(c)` is the value of the land *itself* — new habitable land → future population → future labour → future
-production and demand, compounding independently of any current deficit:
+production and demand, compounding independently of any current deficit. Industry buildings bill no land of
+their own (labour, demand and decay bound them instead), so `L(c)` carries only the habitable-land premium and
+a small deposit-richness weight:
 
 ```
-L(c) = LAND_PREMIUM · peopleLand  +  LAND_GENERAL_WEIGHT · industryLand  +  LAND_DEPOSIT_WEIGHT · depositRichness
+L(c) = LAND_PREMIUM · peopleLand  +  LAND_DEPOSIT_WEIGHT · depositRichness
 ```
 
 How much of `L` is live is gated by **territory saturation** `σ ∈ [0,1]` — the fraction of the faction's
@@ -684,7 +686,7 @@ lookup can feed them later without changing any formula.
 | Constant | Meaning | Value |
 |---|---|---|
 | `COLONY_ESTABLISH_WORK` | Base settle work, before the bundled seed housing's build cost | 60 |
-| `LAND_PREMIUM` / `LAND_GENERAL_WEIGHT` / `LAND_DEPOSIT_WEIGHT` | Land option-value weights | 3.0 / 0.5 / 4.0 |
+| `LAND_PREMIUM` / `LAND_DEPOSIT_WEIGHT` | Land option-value weights | 0.92 / 1.2 |
 | `SIGMA_FLOOR` | Share of land value live before saturation — the expansionist dial | 0.25 |
 | `SEED_POP_COST_WEIGHT` | Weight on the seed's forgone-output cost | 1.0 |
 | `MIN_SETTLER_SUPPLY` | Releasable settler flow required per hungry absorber | 5 |

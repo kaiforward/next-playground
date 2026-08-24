@@ -30,21 +30,6 @@ export const COLONISATION = {
    */
   LAND_PREMIUM: 0.92,
   /**
-   * Small secondary weight on fungible general space (factories, not pop) — kept small the same
-   * way it was authored: as a FRACTION of `LAND_PREMIUM`, not by matching `industryLand`'s own
-   * scale to `peopleLand`'s. The two land counts now run close together in magnitude (candidate
-   * systems: ~558 mean `peopleLand` vs ~595 mean `industryLand`, 1,220 natural-gen candidates ≥
-   * the T4 floor, seed 42/1337/7/2026/99/555 × 600 systems, `temp/task11-scale-derive.ts`) — the
-   * scale-ratio-preserving `0.5 / 0.70 ≈ 0.72` tried first left the general-space sub-term
-   * COMPARABLE to the premium sub-term at typical candidates (industryLand's authored range runs
-   * generous — bodies.ts: "labour and logistics bind, not land" — so it is NOT secondary in raw
-   * magnitude the way `habitableSpace` vs `generalSpace` happened to be pre-rewrite). Preserving
-   * the ORIGINAL coefficient RATIO to `LAND_PREMIUM` instead (`0.5 / 3.0 = 1/6`) keeps the
-   * per-unit valuation claim — industry land is worth a sixth of habitable land, per unit — true
-   * regardless of how the two land counts' own scales moved: `0.1667 × 0.92 ≈ 0.15`.
-   */
-  LAND_GENERAL_WEIGHT: 0.15,
-  /**
    * Small secondary weight on deposit richness (Σ deposit counts).
    *
    * The scale-ratio-preserving derivation — old system-level deposit total (Σ `slots[r]` over
@@ -61,8 +46,9 @@ export const COLONISATION = {
    * on the old ~1,460 deposit-total scale already outweighed `LAND_PREMIUM` on `habitableSpace`
    * (~171) by ~11×, a pre-existing imbalance the rewrite would have carried forward, not fixed.
    *
-   * Same fix as `LAND_GENERAL_WEIGHT`: preserve the coefficient's ORIGINAL ratio to `LAND_PREMIUM`
-   * (`4.0 / 3.0 = 4/3`) instead of its absolute term magnitude: `1.333 × 0.92 ≈ 1.2`. Re-checked
+   * Same fix applied to the (since-deleted) general-space weight: preserve the coefficient's
+   * ORIGINAL ratio to `LAND_PREMIUM` (`4.0 / 3.0 = 4/3`) instead of its absolute term magnitude:
+   * `1.333 × 0.92 ≈ 1.2`. Re-checked
    * against that bound at this value: every resource's median stays comfortably < 1 (worst case
    * `radioactive` at σ=0.6: median 0.44, max 0.86 across 204 candidates) — U leads with margin,
    * not just on the pooled median.
@@ -80,10 +66,10 @@ export const COLONISATION = {
    * so founding naturally prefers a job-short source; this dial bridges that lost-production figure into
    * the value scalar. Coarse first-cut (per-doctrine later), calibrated against LAND_PREMIUM/σ.
    *
-   * Re-checked when the land coefficients above were re-authored to the three-budget scale:
+   * Re-checked when the land coefficients above were re-authored to the two-budget scale:
    * unaffected. `popCost = SEED_POP_COST_WEIGHT · employedSeed · (source output / staffed heads)` reads
    * only population and production-rate quantities (`EXPANSION.COLONY_SEED_POP`, source labour and
-   * output) — none of `peopleLand` / `industryLand` / `depositCounts`, which is what the rewrite
+   * output) — none of `peopleLand` / `depositCounts`, which is what the rewrite
    * rescaled. Left at 1.0.
    */
   SEED_POP_COST_WEIGHT: 1.0,

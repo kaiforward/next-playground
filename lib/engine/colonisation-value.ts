@@ -10,8 +10,8 @@
  * - U(c) — unblocking value: unmet demand the colony's deposits unblock, traced down each blocked
  *   good's recipe chain to the missing deposits that gate it (split fractionally across a good's
  *   gating missing deposits). Coefficient-free — already in demand-rate units.
- * - L(c) — land option value: LAND_PREMIUM·peopleLand + small general-space + deposit-richness
- *   weights. Forward-looking; independent of any current deficit.
+ * - L(c) — land option value: LAND_PREMIUM·peopleLand + a small deposit-richness weight.
+ *   Forward-looking; independent of any current deficit.
  * - σ — faction territory saturation in [0,1]: built housing pop-cap ÷ habitable-potential pop-cap.
  */
 import type { ResourceType, ResourceVector } from "@/lib/types/game";
@@ -122,14 +122,12 @@ export function unblockedDemandByResource(
 /** A colony candidate's substrate — the physical inputs to its valuation. */
 export interface ColonyCandidate {
   peopleLand: number;
-  industryLand: number;
   depositCounts: ResourceVector;
 }
 
 /** Tunable colony-valuation coefficients (global defaults now; per-doctrine later). */
 export interface ColonyValueParams {
   landPremium: number;
-  landGeneralWeight: number;
   landDepositWeight: number;
   sigmaFloor: number;
 }
@@ -158,10 +156,9 @@ export function colonyValue(
   for (const r of RESOURCE_TYPES) {
     if (candidate.depositCounts[r] > 0) u += unblockedByResource.get(r) ?? 0;
   }
-  // L: land option value — habitable space plus small general-space and deposit-richness weights.
+  // L: land option value — habitable space plus a small deposit-richness weight.
   const l =
     params.landPremium * Math.max(0, candidate.peopleLand) +
-    params.landGeneralWeight * Math.max(0, candidate.industryLand) +
     params.landDepositWeight * depositRichness(candidate.depositCounts);
   const sigma = clamp(saturation, 0, 1);
   const landGate = params.sigmaFloor + (1 - params.sigmaFloor) * sigma;

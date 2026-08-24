@@ -6,6 +6,7 @@ import {
   type DevelopmentPointsInput,
   type DevelopmentPotentialInput,
 } from "@/lib/engine/development-points";
+import { HOUSING_TYPE, POP_CENTRE_DENSITY, effectiveSpaceCost } from "@/lib/constants/industry";
 
 /**
  * Fixture: a system's development-points inputs. Defaults are empty (no pop, no buildings) so each
@@ -133,68 +134,89 @@ describe("developmentPoints — map-only raw tier-weighted score", () => {
  * the fields it exercises.
  */
 function potentialInput(partial: Partial<DevelopmentPotentialInput>): DevelopmentPotentialInput {
-  return { peopleLand: 0, depositCounts: 0, industryLand: 0, ...partial };
+  return { peopleLand: 0, depositCounts: 0, ...partial };
 }
 
 describe("developmentPotential — full-build-out dev-points ceiling", () => {
+  // Pinned against a hand-computed value (populationTerm + industryTerm +
+  // complexTerm from the documented formula, computed independently of `industryPotential` /
+  // `habitablePotentialPop` themselves) — not just asserted "> 0".
+  it("pins a hand-computed value for a capital-scale fixture (populationTerm + industryTerm + complexTerm)", () => {
+    const peopleLand = 400;
+    const depositCounts = 150;
+    const housingFootprint = effectiveSpaceCost(HOUSING_TYPE);
+    const expectedPopulationTerm = (peopleLand / housingFootprint) * POP_CENTRE_DENSITY / POP_CENTRE_DENSITY;
+    const expectedIndustryTerm = depositCounts * DEVELOPMENT_POINTS.TIER_WEIGHT[1];
+    const expectedComplexTerm = DEVELOPMENT_POINTS.COMPLEX_POINTS;
+    const expected = expectedPopulationTerm + expectedIndustryTerm + expectedComplexTerm;
+
+    const potential = developmentPotential(potentialInput({ peopleLand, depositCounts }));
+    expect(potential).toBeCloseTo(expected, 10);
+    expect(Number.isFinite(potential)).toBe(true);
+    expect(potential).toBeGreaterThan(0);
+  });
+
   it("exceeds a partially-built real system's developmentPoints (pct sits in a legible 0-100 band)", () => {
     // A moderately built (not maxed) system: some housing, some staffed tier-0 extraction, well short
-    // of the habitable land / deposit slots / general space it could theoretically fill.
+    // of the habitable land / deposit slots it could theoretically fill.
     const population = 300;
     const currentPoints = developmentPoints(pointsInput({ population, buildings: { ore: 10 } }));
-    const potential = developmentPotential(
-      potentialInput({ peopleLand: 400, depositCounts: 20, industryLand: 100 }),
-    );
+    const potential = developmentPotential(potentialInput({ peopleLand: 400, depositCounts: 20 }));
     expect(potential).toBeGreaterThan(currentPoints);
   });
 
-  it("is exactly 0 for a system with no habitable land, no deposit slots, and no general space", () => {
+  it("is exactly 0 for a system with no habitable land and no deposit slots", () => {
     expect(developmentPotential(potentialInput({}))).toBe(0);
   });
 
   it("rises with peopleLand (monotonic)", () => {
-    const base = { depositCounts: 5, industryLand: 10 };
+    const base = { depositCounts: 5 };
     const small = developmentPotential(potentialInput({ ...base, peopleLand: 100 }));
     const large = developmentPotential(potentialInput({ ...base, peopleLand: 200 }));
     expect(large).toBeGreaterThan(small);
   });
 
   it("rises with depositCounts (monotonic)", () => {
-    const base = { peopleLand: 100, industryLand: 10 };
+    const base = { peopleLand: 100 };
     const few = developmentPotential(potentialInput({ ...base, depositCounts: 2 }));
     const many = developmentPotential(potentialInput({ ...base, depositCounts: 20 }));
     expect(many).toBeGreaterThan(few);
   });
 
-  it("rises with industryLand (monotonic)", () => {
-    const base = { peopleLand: 100, depositCounts: 5 };
-    const small = developmentPotential(potentialInput({ ...base, industryLand: 5 }));
-    const large = developmentPotential(potentialInput({ ...base, industryLand: 50 }));
-    expect(large).toBeGreaterThan(small);
-  });
-
   it("stays finite and non-negative for a huge, fully substrate-rich system", () => {
     const potential = developmentPotential(
-      potentialInput({ peopleLand: 1_000_000, depositCounts: 10_000, industryLand: 100_000 }),
+      potentialInput({ peopleLand: 1_000_000, depositCounts: 10_000 }),
     );
     expect(Number.isFinite(potential)).toBe(true);
     expect(potential).toBeGreaterThanOrEqual(0);
   });
 
   it("clamps negative/degenerate inputs to 0 rather than going negative or non-finite", () => {
-    const potential = developmentPotential(
-      potentialInput({ peopleLand: -100, depositCounts: -5, industryLand: -10 }),
-    );
+    const potential = developmentPotential(potentialInput({ peopleLand: -100, depositCounts: -5 }));
     expect(Number.isFinite(potential)).toBe(true);
     expect(potential).toBeGreaterThanOrEqual(0);
     expect(potential).toBe(0);
   });
+
+  // The complexTerm gate (`peopleLand > 0 || depositCounts > 0`,
+  // was `industryLand > 0`) cannot silently become `true` — a zero-substrate system must read a
+  // true 0, not a phantom complex bump.
+  it("gates the complex bump on ANY substrate — zero peopleLand AND zero depositCounts reads exactly 0", () => {
+    expect(developmentPotential(potentialInput({ peopleLand: 0, depositCounts: 0 }))).toBe(0);
+  });
+
+  it("awards the complex bump on EITHER substrate alone — peopleLand-only or depositCounts-only", () => {
+    const depositsOnly = developmentPotential(potentialInput({ peopleLand: 0, depositCounts: 5 }));
+    const landOnly = developmentPotential(potentialInput({ peopleLand: 100, depositCounts: 0 }));
+    expect(depositsOnly).toBeGreaterThan(0);
+    expect(landOnly).toBeGreaterThan(0);
+  });
 });
 
-// The habitability-seeding amendment (2026-08-24) deleted SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT and
-// the industry-land budget it converted (Task 15) — this file's old "Prove 3" (one shared
-// deposit→land coefficient) no longer has a coefficient to be about. `industryPotential` and
-// `systemDevelopment`'s industry term are left as a compile-preserving 0-contribution stub (see
-// lib/engine/development.ts's doc comments) pending Task 16's worked-levels-÷-authored-counts
-// re-derivation of the whole industry axis, which owns re-proving whatever this axis's new shared
-// coefficient (if any) turns out to be.
+// The habitability-seeding amendment deleted SUBSTRATE_GEN.DEPOSIT_SLOT_FOOTPRINT and the
+// industry-land budget it converted — this file's old "Prove 3" (one shared deposit→land
+// coefficient) no longer has a coefficient to be about. `industryPotential` and
+// `systemDevelopment`'s industry term are worked deposit slots alone (extraction-only, see
+// lib/engine/development.ts's doc comments); `lib/engine/__tests__/industry-land-sweep.test.ts`
+// re-proves the "no second land coefficient" claim as a repo-wide grep now that the deposit→land
+// coefficient the old Prove 3 pinned no longer exists to compare against.

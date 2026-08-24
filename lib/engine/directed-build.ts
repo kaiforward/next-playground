@@ -1252,7 +1252,6 @@ export function planFactionProposals(
 export interface ColonyEstablishCandidate {
   systemId: string;
   peopleLand: number;
-  industryLand: number;
   depositCounts: ResourceVector;
   /** Nearest developed same-faction system — the conserved seed source (non-null; the provider drops sourceless). */
   sourceSystemId: string;
